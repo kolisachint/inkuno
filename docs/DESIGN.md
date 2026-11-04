@@ -404,7 +404,8 @@ Four spikes run before the corresponding implementation phases. Each spike ends 
 3. **Export.** Not in v1. Formats and scope are undecided.
 4. **Render host approach.** Hidden WKWebView or offscreen NSWindow. Decided by spike S1.
 5. **Pinned versions.** The exact versions of mermaid.js and MathJax v3. Chosen during S1.
-6. **GPUI revision.** The exact Zed revision to pin. Chosen during S2.
+6. **GPUI revision.** The exact Zed revision to pin. Chosen during S2. The revision is now recorded in the root `Cargo.toml` (`c7bea343838f42b4c14151393e41f0bbe033c95e`, 2026-11-04); it is still to be confirmed by S2 on macOS.
 7. **Editor base.** `gpui-component` editor or Zed `editor` crate. Chosen by spike S4.
 8. **Mermaid debounce interval.** The delay before a re-render after an edit. Chosen in Phase 7.
 9. **Settings storage.** The location and format of the settings file. Undecided.
+10. **Rope backend.** md_core currently uses `ropey` behind its own `Buffer` API instead of Zed's `text`/`rope`/`sum_tree` crates (§3.2), to keep md_core free of git dependencies. Switching back is a backend swap behind `Buffer`. Undecided.
