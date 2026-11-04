@@ -1,0 +1,19 @@
+name: md_core
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  md_core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup show
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy -p md_core --all-targets -- -D warnings
+      - name: Test
+        run: cargo test -p md_core
