@@ -75,12 +75,54 @@ pub enum ImageLocation {
     Local(PathBuf),
 }
 
+/// Percent-decode an image source (`%20` to a space, `%25` to `%`, ...). Upper- and
+/// lowercase hex digits both decode, and multibyte UTF-8 sequences decode when the bytes
+/// form valid UTF-8. A `%` that is not followed by two hex digits (`%2G`, a trailing `%`)
+/// is left as-is, as is a decoded result that is not valid UTF-8 (e.g. `%FF`). `+` is kept:
+/// it only means a space in form encoding, not in a path. Pure, unit-tested.
+pub fn percent_decode(src: &str) -> String {
+    if !src.contains('%') {
+        return src.to_string();
+    }
+    let bytes = src.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            if let (Some(&hi), Some(&lo)) = (bytes.get(i + 1), bytes.get(i + 2)) {
+                if let (Some(h), Some(l)) = (hex_val(hi), hex_val(lo)) {
+                    out.push(h << 4 | l);
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| src.to_string())
+}
+
+/// The value of one ASCII hex digit, or `None`.
+fn hex_val(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 /// Resolve an image source against the note's folder. Pure, unit-tested.
 pub fn resolve(src: &str, base_dir: Option<&Path>) -> ImageLocation {
     if src.starts_with("http://") || src.starts_with("https://") {
         return ImageLocation::Remote;
     }
-    let path = Path::new(src);
+    // Only local paths are decoded: a remote address is never loaded, so its escapes are
+    // left untouched. `<...>` destinations arrive here with the brackets already stripped
+    // by `parse_image`, so they decode the same way.
+    let decoded = percent_decode(src);
+    let path = Path::new(&decoded);
     match base_dir {
         Some(dir) if path.is_relative() => ImageLocation::Local(dir.join(path)),
         _ => ImageLocation::Local(path.to_path_buf()),
@@ -280,6 +322,75 @@ mod tests {
         assert_eq!(parse_image("![a](b.png)\nmore text"), None, "two lines");
         assert_eq!(parse_image("plain paragraph"), None);
         assert_eq!(parse_image("![a]()"), None, "no source");
+    }
+
+    #[test]
+    fn percent_decode_handles_spaces_escapes_and_case() {
+        assert_eq!(percent_decode("my%20pic.png"), "my pic.png");
+        assert_eq!(percent_decode("a%2fb.png"), "a/b.png");
+        assert_eq!(percent_decode("a%2Fb.png"), "a/b.png");
+        assert_eq!(percent_decode("100%25.png"), "100%.png");
+        assert_eq!(percent_decode("plain.png"), "plain.png");
+        // `+` is not a space in a path.
+        assert_eq!(percent_decode("a+b.png"), "a+b.png");
+    }
+
+    #[test]
+    fn percent_decode_leaves_invalid_escapes_as_is() {
+        assert_eq!(percent_decode("a%2G.png"), "a%2G.png");
+        assert_eq!(percent_decode("a%.png"), "a%.png");
+        assert_eq!(percent_decode("a%2.png"), "a%2.png");
+        assert_eq!(percent_decode("100%.png"), "100%.png");
+        assert_eq!(percent_decode("%",), "%");
+    }
+
+    #[test]
+    fn percent_decode_handles_multibyte_utf8() {
+        // "café.png": é is U+00E9 (C3 A9 in UTF-8).
+        assert_eq!(percent_decode("caf%C3%A9.png"), "caf\u{e9}.png");
+        assert_eq!(percent_decode("caf%c3%a9.png"), "caf\u{e9}.png");
+        // A decoded result that is not valid UTF-8 is left as-is.
+        assert_eq!(percent_decode("a%FF.png"), "a%FF.png");
+    }
+
+    #[test]
+    fn resolve_decodes_local_paths_but_leaves_remote_addresses_untouched() {
+        let dir = Path::new("/vault");
+        assert_eq!(
+            resolve("my%20pic.png", Some(dir)),
+            ImageLocation::Local(PathBuf::from("/vault/my pic.png"))
+        );
+        assert_eq!(
+            resolve("100%25.png", Some(dir)),
+            ImageLocation::Local(PathBuf::from("/vault/100%.png"))
+        );
+        assert_eq!(
+            resolve("/abs/my%20pic.png", Some(dir)),
+            ImageLocation::Local(PathBuf::from("/abs/my pic.png"))
+        );
+        assert_eq!(
+            resolve("img/a%2G.png", Some(dir)),
+            ImageLocation::Local(PathBuf::from("/vault/img/a%2G.png"))
+        );
+        assert_eq!(
+            resolve("https://example.com/a%20b.png", Some(dir)),
+            ImageLocation::Remote
+        );
+        assert_eq!(
+            resolve("http://example.com/a%20b.png", None),
+            ImageLocation::Remote
+        );
+    }
+
+    #[test]
+    fn resolve_decodes_angle_bracket_destinations() {
+        // `<...>` destinations from pasted links (9.5) arrive with brackets stripped.
+        let parsed = parse_image("![a](<my%20pic.png>)").expect("angle brackets parse");
+        assert_eq!(parsed.src, "my%20pic.png");
+        assert_eq!(
+            resolve(&parsed.src, Some(Path::new("/vault"))),
+            ImageLocation::Local(PathBuf::from("/vault/my pic.png"))
+        );
     }
 
     #[test]
