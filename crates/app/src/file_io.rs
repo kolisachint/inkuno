@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
     actions, div, prelude::*, px, rgb, App, ClickEvent, Context, Div, Entity, Focusable,
-    IntoElement, KeyBinding, Render, Stateful, Window,
+    IntoElement, Render, Stateful, Window,
 };
 use md_editor::editor::{Editor, SAMPLE_TEXT};
 use md_editor::selection::Selection;
@@ -374,16 +374,6 @@ fn banner_button(id: &'static str, label: &'static str) -> Stateful<Div> {
         .cursor_pointer()
         .hover(|style| style.bg(rgb(0xf3f4f6)))
         .child(label)
-}
-
-/// Register the Save action and its key binding (Cmd+S). Called from `main`.
-pub fn init(cx: &mut App) {
-    // Cmd+S on macOS, Ctrl+S on Linux (`cmd-` is Super+S there).
-    #[cfg(target_os = "macos")]
-    let save_key = "cmd-s";
-    #[cfg(not(target_os = "macos"))]
-    let save_key = "ctrl-s";
-    cx.bind_keys([KeyBinding::new(save_key, Save, None)]);
 }
 
 #[cfg(test)]

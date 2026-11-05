@@ -26,22 +26,6 @@ actions!(file_ops_ui, [NewNote, RenameNote, DeleteNote]);
 /// Name used for a new note before a number is added.
 pub const UNTITLED: &str = "Untitled";
 
-/// Registers the file operation actions and their key bindings. Called from `main`.
-pub fn init(cx: &mut gpui::App) {
-    use gpui::KeyBinding;
-    // Cmd on macOS, Ctrl on Linux. Ctrl+Backspace is bound in the sidebar context only,
-    // because the editor binds it to delete a word.
-    #[cfg(target_os = "macos")]
-    let (new_key, delete_key) = ("cmd-n", "cmd-backspace");
-    #[cfg(not(target_os = "macos"))]
-    let (new_key, delete_key) = ("ctrl-n", "ctrl-backspace");
-    cx.bind_keys([
-        KeyBinding::new(new_key, NewNote, None),
-        KeyBinding::new("f2", RenameNote, None),
-        KeyBinding::new(delete_key, DeleteNote, Some("Sidebar")),
-    ]);
-}
-
 /// The first free name `Untitled`, `Untitled 2`, `Untitled 3`, ... `taken` says whether a stem
 /// is already used in the folder.
 pub fn untitled_stem(taken: impl Fn(&str) -> bool) -> String {

@@ -18,9 +18,10 @@
 use std::path::{Path, PathBuf};
 
 use gpui::{
-    div, prelude::*, px, rgb, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, Render, Window,
+    div, prelude::*, px, rgb, ClickEvent, Context, Entity, EntityId, FocusHandle, Focusable,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, Render, Subscription, Window,
 };
+use md_editor::modes::Modes;
 use md_editor::selection::Selection;
 use workspace::tree::{visible_rows, Expansion, Node, Vault};
 use workspace::watcher::{plan_buffer_updates, OpenBuffer};
@@ -71,6 +72,20 @@ impl SidebarItem {
 /// Left padding in pixels for a row at `depth`.
 pub fn indent_px(depth: usize) -> f32 {
     BASE_PADDING + depth as f32 * INDENT_STEP
+}
+
+/// The bottom-right status text for the modes that are on, such as `Source · Focus`, or `None`
+/// when every mode is off (task 8.5). Pure, unit-tested.
+pub fn mode_status(modes: Modes) -> Option<String> {
+    let names: Vec<&str> = [
+        (modes.source, "Source"),
+        (modes.focus, "Focus"),
+        (modes.typewriter, "Typewriter"),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    (!names.is_empty()).then(|| names.join(" \u{00B7} "))
 }
 
 /// The sidebar rows for `root`, top to bottom, as owned data (see [`visible_rows`]).
@@ -146,6 +161,10 @@ pub struct WorkspaceView {
     pub(crate) file_edit: Option<FileEdit>,
     /// Keyboard focus for the sidebar, so it sees the keys of a rename or delete (task 9.3).
     pub(crate) sidebar_focus: FocusHandle,
+    /// The editor whose mode changes this view observes, and the subscription (task 8.5). The
+    /// mode status text reads the modes, so the view redraws when they change. It follows the
+    /// open document, see [`WorkspaceView::watch_modes`].
+    mode_watch: Option<(EntityId, Subscription)>,
 }
 
 impl WorkspaceView {
@@ -155,6 +174,22 @@ impl WorkspaceView {
         let view = Self::from_args(cx);
         Self::start_polling(cx);
         view
+    }
+
+    /// Redraws this view when the open document's editor changes, such as when a mode is
+    /// toggled. The subscription is kept for the editor it observes, so it is replaced when the
+    /// open document is replaced (task 8.5).
+    fn watch_modes(&mut self, cx: &mut Context<Self>) {
+        let editor = self.document.read(cx).editor.clone();
+        if self
+            .mode_watch
+            .as_ref()
+            .is_some_and(|(seen, _)| *seen == editor.entity_id())
+        {
+            return;
+        }
+        let subscription = cx.observe(&editor, |_, _, cx| cx.notify());
+        self.mode_watch = Some((editor.entity_id(), subscription));
     }
 
     /// Polls the vault watcher on the window thread every [`POLL_INTERVAL`]. The loop ends
@@ -229,6 +264,7 @@ impl WorkspaceView {
                 search_open: false,
                 file_edit: None,
                 sidebar_focus: cx.focus_handle(),
+                mode_watch: None,
             };
         };
         if arg.is_dir() {
@@ -239,6 +275,7 @@ impl WorkspaceView {
                 search_open: false,
                 file_edit: None,
                 sidebar_focus: cx.focus_handle(),
+                mode_watch: None,
             };
         }
         let dir = match arg.parent() {
@@ -265,6 +302,7 @@ impl WorkspaceView {
             search_open: false,
             file_edit: None,
             sidebar_focus: cx.focus_handle(),
+            mode_watch: None,
         }
     }
 
@@ -529,6 +567,8 @@ impl WorkspaceView {
 
 impl Render for WorkspaceView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.watch_modes(cx);
+        let modes = self.document.read(cx).editor.read(cx).modes();
         let root = div()
             .size_full()
             .flex()
@@ -554,19 +594,49 @@ impl Render for WorkspaceView {
                 None => root,
             }
         };
-        root.child(
+        let root = root.child(
             div()
                 .flex_1()
                 .min_w_0()
                 .h_full()
                 .child(self.document.clone()),
-        )
+        );
+        // Muted status for the modes that are on, at the window's bottom right (task 8.5).
+        match mode_status(modes) {
+            Some(text) => root.child(
+                div()
+                    .absolute()
+                    .bottom(px(6.))
+                    .right(px(12.))
+                    .text_xs()
+                    .text_color(rgb(0x9ca3af))
+                    .child(text),
+            ),
+            None => root,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mode_status_lists_the_modes_that_are_on() {
+        let off = Modes::default();
+        assert_eq!(mode_status(off), None);
+        let all = Modes {
+            source: true,
+            focus: true,
+            typewriter: true,
+        };
+        assert_eq!(
+            mode_status(all).as_deref(),
+            Some("Source \u{00B7} Focus \u{00B7} Typewriter")
+        );
+        let focus_only = Modes { focus: true, ..off };
+        assert_eq!(mode_status(focus_only).as_deref(), Some("Focus"));
+    }
 
     fn note(name: &str, path: &str) -> Node {
         Node::Note {
