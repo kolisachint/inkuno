@@ -12,8 +12,10 @@
 use std::ops::Range;
 
 use gpui::{actions, App, Context, Div, Entity, KeyBinding};
+use md_core::input_rules::Input;
 
 use crate::editor::Editor;
+use crate::input_rules::try_input_rule;
 use crate::keys::{self, Motion};
 use crate::selection::Selection;
 
@@ -88,6 +90,9 @@ impl Editor {
 
     /// Backspace: delete the selection, or the character before the caret.
     pub fn delete_backward(&mut self, cx: &mut Context<Self>) {
+        if try_input_rule(self, Input::Backspace, cx) {
+            return;
+        }
         let range = backward_delete_range(&self.text(), self.selection.selection);
         self.delete_range(range, cx);
     }
@@ -105,8 +110,12 @@ impl Editor {
         self.delete_range(range, cx);
     }
 
-    /// Enter: replace the selection with a newline.
+    /// Enter: an input rule may take it (list continue or exit, code fence, thematic break).
+    /// Otherwise replace the selection with a newline.
     pub fn insert_newline(&mut self, cx: &mut Context<Self>) {
+        if try_input_rule(self, Input::Enter, cx) {
+            return;
+        }
         self.replace_selection(NEWLINE_TEXT, cx);
     }
 
