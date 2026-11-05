@@ -2,13 +2,17 @@
 //!
 //! A vault is a folder of plain `.md` files. The tree shows folders and notes.
 //! A note's `name` is its file name without the `.md` extension.
-//! Hidden entries (names starting with `.`) and symbolic links are skipped.
+//! Hidden entries (names starting with `.`), symbolic links and anything matched
+//! by a `.gitignore` are skipped. Full-text search uses the same walker
+//! (`note_walker`), so the tree and search always list the same notes.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use ignore::WalkBuilder;
 
 /// One entry in the vault tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,20 +67,20 @@ impl Vault {
 
     /// Tree of the vault. The root is always present, even when it holds no notes.
     pub fn tree(&self) -> io::Result<Node> {
-        let children = scan_dir(&self.root)?;
+        let mut top = Dir::new(self.root.clone());
+        for note in note_files(&self.root)? {
+            top.insert(&note);
+        }
         Ok(Node::Folder {
             name: folder_name(&self.root),
             path: self.root.clone(),
-            children,
+            children: top.into_children(),
         })
     }
 
-    /// Every `.md` file below the root, sorted by path.
+    /// Every `.md` file below the root, sorted by path. Same set as `tree()` and search.
     pub fn notes(&self) -> io::Result<Vec<PathBuf>> {
-        let mut out = Vec::new();
-        collect_notes(&self.root, &mut out)?;
-        out.sort();
-        Ok(out)
+        note_files(&self.root)
     }
 }
 
@@ -87,65 +91,111 @@ pub(crate) fn is_note_path(path: &Path) -> bool {
         .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
 }
 
-/// Visible entries of a directory. Entries with non-UTF-8 or hidden names are skipped.
-fn visible_entries(dir: &Path) -> io::Result<Vec<(String, PathBuf, fs::FileType)>> {
-    let mut out = Vec::new();
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let file_name = entry.file_name();
-        let Some(name) = file_name.to_str() else {
-            continue;
-        };
-        if name.starts_with('.') {
-            continue;
-        }
-        out.push((name.to_owned(), entry.path(), entry.file_type()?));
-    }
-    Ok(out)
+/// The walker for vault notes. Both the tree and full-text search use it, so they
+/// agree on which files are notes. Hidden entries are skipped, and `.gitignore`
+/// files apply at every level below `root`, also without a `.git` directory.
+/// `.ignore`, git-global and `.git/info/exclude` rules are not used, and symbolic
+/// links are not followed.
+pub(crate) fn note_walker(root: &Path) -> ignore::Walk {
+    WalkBuilder::new(root)
+        .hidden(true)
+        .require_git(false)
+        .git_global(false)
+        .git_exclude(false)
+        .ignore(false)
+        .parents(false)
+        .build()
 }
 
-/// Children of a folder: subfolders that contain notes (folders first), then notes.
-/// Both groups are sorted case-insensitively by name.
-fn scan_dir(dir: &Path) -> io::Result<Vec<Node>> {
-    let mut folders = Vec::new();
-    let mut notes = Vec::new();
-    for (name, path, file_type) in visible_entries(dir)? {
-        if file_type.is_dir() {
-            let children = scan_dir(&path)?;
-            if !children.is_empty() {
-                folders.push(Node::Folder {
-                    name,
-                    path,
-                    children,
-                });
-            }
-        } else if file_type.is_file() && is_note_path(&path) {
-            let stem = path
+/// Every `.md` file below `root` that `note_walker` yields, sorted by path.
+/// Files with a non-UTF-8 name in their path are skipped, since the tree cannot show them.
+pub(crate) fn note_files(root: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in note_walker(root) {
+        let entry = entry.map_err(io::Error::other)?;
+        let is_file = entry.file_type().is_some_and(|t| t.is_file());
+        if is_file && is_note_path(entry.path()) && has_utf8_names(root, entry.path()) {
+            files.push(entry.into_path());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+/// True when every component of `path` below `root` is valid UTF-8.
+fn has_utf8_names(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root)
+        .is_ok_and(|rel| rel.iter().all(|c| c.to_str().is_some()))
+}
+
+/// A folder while the tree is built from the flat note list. A folder is only
+/// created when it holds a note, so empty folders never appear.
+struct Dir {
+    path: PathBuf,
+    folders: BTreeMap<String, Dir>,
+    notes: Vec<Node>,
+}
+
+impl Dir {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            folders: BTreeMap::new(),
+            notes: Vec::new(),
+        }
+    }
+
+    /// Adds `note`, an absolute path below this folder.
+    fn insert(&mut self, note: &Path) {
+        let Ok(rest) = note.strip_prefix(&self.path) else {
+            return;
+        };
+        if rest.components().count() == 1 {
+            let name = note
                 .file_stem()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            notes.push(Node::Note { name: stem, path });
+            self.notes.push(Node::Note {
+                name,
+                path: note.to_path_buf(),
+            });
+            return;
         }
+        let Some(folder) = rest.iter().next().and_then(OsStr::to_str) else {
+            return;
+        };
+        let child_path = self.path.join(folder);
+        self.folders
+            .entry(folder.to_owned())
+            .or_insert_with(|| Dir::new(child_path))
+            .insert(note);
     }
-    folders.sort_by_cached_key(sort_key);
-    notes.sort_by_cached_key(sort_key);
-    folders.extend(notes);
-    Ok(folders)
+
+    /// Children of this folder: subfolders first, then notes. Each group is sorted
+    /// case-insensitively by name.
+    fn into_children(self) -> Vec<Node> {
+        let mut folders: Vec<Node> = self
+            .folders
+            .into_iter()
+            .map(|(name, dir)| {
+                let path = dir.path.clone();
+                Node::Folder {
+                    name,
+                    path,
+                    children: dir.into_children(),
+                }
+            })
+            .collect();
+        let mut notes = self.notes;
+        folders.sort_by_cached_key(sort_key);
+        notes.sort_by_cached_key(sort_key);
+        folders.extend(notes);
+        folders
+    }
 }
 
 fn sort_key(node: &Node) -> (String, String) {
     (node.name().to_lowercase(), node.name().to_owned())
-}
-
-fn collect_notes(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
-    for (_, path, file_type) in visible_entries(dir)? {
-        if file_type.is_dir() {
-            collect_notes(&path, out)?;
-        } else if file_type.is_file() && is_note_path(&path) {
-            out.push(path);
-        }
-    }
-    Ok(())
 }
 
 fn folder_name(root: &Path) -> String {
@@ -371,6 +421,28 @@ mod tests {
         };
         assert_eq!(children.len(), 1);
         assert_eq!(children[0].name(), "visible");
+    }
+
+    #[test]
+    fn gitignored_notes_are_absent_from_the_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        write(&r.join(".gitignore"), "draft.md\nprivate/\n");
+        write(&r.join("draft.md"), "");
+        write(&r.join("private/p.md"), "");
+        write(&r.join("keep.md"), "");
+        write(&r.join("sub/b.md"), "");
+
+        let vault = Vault::open(r).unwrap();
+        assert_eq!(
+            vault.notes().unwrap(),
+            vec![r.join("keep.md"), r.join("sub/b.md")]
+        );
+        let Node::Folder { children, .. } = vault.tree().unwrap() else {
+            panic!("root must be a folder");
+        };
+        let names: Vec<&str> = children.iter().map(Node::name).collect();
+        assert_eq!(names, vec!["sub", "keep"]);
     }
 
     #[test]

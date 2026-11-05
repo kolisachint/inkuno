@@ -7,12 +7,18 @@
 //!
 //! The tree is always rebuilt from disk with [`Vault::tree`], so a change
 //! only needs to tell the caller that something under the vault moved.
+//!
+//! Paths that a `.gitignore` excludes are not reported, as they are hidden from
+//! the tree and from search. A change to a `.gitignore` reloads the rules and
+//! reports a [`Change::Rescan`].
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use ignore::{Match, WalkBuilder};
 use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -68,9 +74,95 @@ pub(crate) struct Scope<'a> {
     pub reported: &'a Path,
 }
 
+/// The `.gitignore` rules of a vault: one matcher per `.gitignore` file. As in git,
+/// a file's rules apply only to paths below the folder that holds it.
+#[derive(Debug, Default)]
+pub(crate) struct Rules {
+    /// Folder holding a `.gitignore`, and the rules read from it. Deepest folders come first.
+    files: Vec<(PathBuf, Gitignore)>,
+}
+
+impl Rules {
+    /// Reads every `.gitignore` below `root`. Hidden folders are skipped, as the
+    /// note walker skips them, so the rules match what the tree and search see.
+    pub(crate) fn load(root: &Path) -> Self {
+        let walker = WalkBuilder::new(root)
+            .hidden(false)
+            .ignore(false)
+            .git_ignore(false)
+            .git_global(false)
+            .git_exclude(false)
+            .parents(false)
+            .require_git(false)
+            .filter_entry(|entry| {
+                let hidden_folder = entry.depth() > 0
+                    && entry.file_type().is_some_and(|t| t.is_dir())
+                    && entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|name| name.starts_with('.'));
+                !hidden_folder
+            })
+            .build();
+        let mut files: Vec<(PathBuf, Gitignore)> = Vec::new();
+        for entry in walker.flatten() {
+            let is_file = entry.file_type().is_some_and(|t| t.is_file());
+            if !is_file || entry.file_name().to_str() != Some(".gitignore") {
+                continue;
+            }
+            let file = entry.into_path();
+            let Some(dir) = file.parent().map(Path::to_path_buf) else {
+                continue;
+            };
+            let mut builder = GitignoreBuilder::new(&dir);
+            // A line that does not parse is skipped; the other lines still apply.
+            let _ = builder.add(&file);
+            if let Ok(gitignore) = builder.build() {
+                files.push((dir, gitignore));
+            }
+        }
+        files.sort_by_key(|(dir, _)| std::cmp::Reverse(dir.components().count()));
+        Self { files }
+    }
+
+    /// True when a `.gitignore` excludes `path`, or one of its parent folders.
+    /// `entry` is what the path is on disk. A removed path has no entry kind, so
+    /// both readings are tried.
+    fn excludes(&self, path: &Path, entry: Entry) -> bool {
+        match entry {
+            Entry::Dir => self.matches(path, true),
+            Entry::File => self.matches(path, false),
+            Entry::Missing | Entry::Other => self.matches(path, false) || self.matches(path, true),
+        }
+    }
+
+    fn matches(&self, path: &Path, is_dir: bool) -> bool {
+        for (dir, gitignore) in &self.files {
+            let Ok(rel) = path.strip_prefix(dir) else {
+                continue;
+            };
+            if rel.as_os_str().is_empty() {
+                continue;
+            }
+            match gitignore.matched_path_or_any_parents(rel, is_dir) {
+                Match::Ignore(_) => return true,
+                Match::Whitelist(_) => return false,
+                Match::None => {}
+            }
+        }
+        false
+    }
+}
+
 /// Maps an event path to the vault path the caller sees. Returns `None` for the
-/// root itself, paths outside the root, and paths with a hidden or non-UTF-8 component.
-fn visible_path(scope: Scope<'_>, path: &Path) -> Option<PathBuf> {
+/// root itself, paths outside the root, paths with a hidden or non-UTF-8 component,
+/// and paths that a `.gitignore` excludes.
+fn visible_path(
+    scope: Scope<'_>,
+    rules: &Rules,
+    probe: &dyn Fn(&Path) -> Entry,
+    path: &Path,
+) -> Option<PathBuf> {
     let rel = path.strip_prefix(scope.watched).ok()?;
     if rel.as_os_str().is_empty() {
         return None;
@@ -81,7 +173,23 @@ fn visible_path(scope: Scope<'_>, path: &Path) -> Option<PathBuf> {
             _ => return None,
         }
     }
+    if rules.excludes(path, probe(path)) {
+        return None;
+    }
     Some(scope.reported.join(rel))
+}
+
+/// True when a create, remove or modify event names a `.gitignore` inside the vault.
+fn changes_gitignore(scope: Scope<'_>, event: &Event) -> bool {
+    let content_event = matches!(
+        event.kind,
+        EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_)
+    );
+    content_event
+        && event.paths.iter().any(|path| {
+            path.strip_prefix(scope.watched).is_ok()
+                && path.file_name().and_then(|name| name.to_str()) == Some(".gitignore")
+        })
 }
 
 /// True when a path appeared (was created or renamed in) and the tree should show it.
@@ -94,27 +202,45 @@ fn appeared(probe: &dyn Fn(&Path) -> Entry, path: &Path) -> bool {
 }
 
 /// Turns one raw event into vault changes. `probe` reports what a path is on disk
-/// now. It is used only where the event kind alone is ambiguous.
+/// now. It is used only where the event kind alone is ambiguous. A change to a
+/// `.gitignore` reloads `rules` from disk and returns a rescan.
 pub(crate) fn classify(
     scope: Scope<'_>,
+    rules: &mut Rules,
     event: &Event,
     probe: &dyn Fn(&Path) -> Entry,
 ) -> Vec<Change> {
     if event.need_rescan() {
         return vec![Change::Rescan];
     }
+    if changes_gitignore(scope, event) {
+        *rules = Rules::load(scope.watched);
+        return vec![Change::Rescan];
+    }
+    classify_paths(scope, rules, event, probe)
+}
+
+fn classify_paths(
+    scope: Scope<'_>,
+    rules: &Rules,
+    event: &Event,
+    probe: &dyn Fn(&Path) -> Entry,
+) -> Vec<Change> {
     let mut out = Vec::new();
     match &event.kind {
         EventKind::Create(_) => {
             for path in &event.paths {
-                if let (Some(v), true) = (visible_path(scope, path), appeared(probe, path)) {
+                if let (Some(v), true) = (
+                    visible_path(scope, rules, probe, path),
+                    appeared(probe, path),
+                ) {
                     out.push(Change::Created(v));
                 }
             }
         }
         EventKind::Remove(_) => {
             for path in &event.paths {
-                if let Some(v) = visible_path(scope, path) {
+                if let Some(v) = visible_path(scope, rules, probe, path) {
                     out.push(Change::Removed(v));
                 }
             }
@@ -122,6 +248,7 @@ pub(crate) fn classify(
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) if event.paths.len() == 2 => {
             out.extend(classify_rename(
                 scope,
+                rules,
                 &event.paths[0],
                 &event.paths[1],
                 probe,
@@ -129,14 +256,17 @@ pub(crate) fn classify(
         }
         EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
             for path in &event.paths {
-                if let Some(v) = visible_path(scope, path) {
+                if let Some(v) = visible_path(scope, rules, probe, path) {
                     out.push(Change::Removed(v));
                 }
             }
         }
         EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
             for path in &event.paths {
-                if let (Some(v), true) = (visible_path(scope, path), appeared(probe, path)) {
+                if let (Some(v), true) = (
+                    visible_path(scope, rules, probe, path),
+                    appeared(probe, path),
+                ) {
                     out.push(Change::Created(v));
                 }
             }
@@ -144,7 +274,7 @@ pub(crate) fn classify(
         EventKind::Modify(ModifyKind::Name(_)) => {
             // Ambiguous rename events: the path either exists now or it does not.
             for path in &event.paths {
-                let Some(v) = visible_path(scope, path) else {
+                let Some(v) = visible_path(scope, rules, probe, path) else {
                     continue;
                 };
                 if probe(path) == Entry::Missing {
@@ -160,7 +290,7 @@ pub(crate) fn classify(
             for path in &event.paths {
                 let is_file = matches!(probe(path), Entry::File | Entry::Missing);
                 if is_file && is_note_path(path) {
-                    if let Some(v) = visible_path(scope, path) {
+                    if let Some(v) = visible_path(scope, rules, probe, path) {
                         out.push(Change::Modified(v));
                     }
                 }
@@ -173,11 +303,15 @@ pub(crate) fn classify(
 
 fn classify_rename(
     scope: Scope<'_>,
+    rules: &Rules,
     from: &Path,
     to: &Path,
     probe: &dyn Fn(&Path) -> Entry,
 ) -> Vec<Change> {
-    match (visible_path(scope, from), visible_path(scope, to)) {
+    match (
+        visible_path(scope, rules, probe, from),
+        visible_path(scope, rules, probe, to),
+    ) {
         (Some(f), Some(t)) => {
             if appeared(probe, to) {
                 vec![Change::Renamed { from: f, to: t }]
@@ -318,6 +452,7 @@ impl VaultWatcher {
         let watched = fs::canonicalize(&reported).map_err(notify::Error::io)?;
         let (tx, rx) = mpsc::channel();
         let (cb_watched, cb_reported) = (watched.clone(), reported.clone());
+        let mut rules = Rules::load(&watched);
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             let changes = match res {
                 Ok(event) => {
@@ -325,7 +460,7 @@ impl VaultWatcher {
                         watched: &cb_watched,
                         reported: &cb_reported,
                     };
-                    classify(scope, &event, &probe_fs)
+                    classify(scope, &mut rules, &event, &probe_fs)
                 }
                 Err(_) => vec![Change::Rescan],
             };
@@ -394,8 +529,35 @@ mod tests {
     }
 
     fn run(kind: EventKind, paths: &[&str], entries: &[(&str, Entry)]) -> Vec<Change> {
+        run_with(&mut Rules::default(), kind, paths, entries)
+    }
+
+    fn run_with(
+        rules: &mut Rules,
+        kind: EventKind,
+        paths: &[&str],
+        entries: &[(&str, Entry)],
+    ) -> Vec<Change> {
         let probe = fake(entries);
-        classify(scope(), &ev(kind, paths), &probe)
+        classify(scope(), rules, &ev(kind, paths), &probe)
+    }
+
+    impl Rules {
+        /// Rules built from `(folder, lines of its .gitignore)` pairs, without a disk read.
+        fn from_lines(files: &[(&str, &[&str])]) -> Self {
+            let mut out: Vec<(PathBuf, Gitignore)> = files
+                .iter()
+                .map(|(dir, lines)| {
+                    let mut builder = GitignoreBuilder::new(dir);
+                    for line in lines.iter() {
+                        builder.add_line(None, line).unwrap();
+                    }
+                    (PathBuf::from(dir), builder.build().unwrap())
+                })
+                .collect();
+            out.sort_by_key(|(dir, _)| std::cmp::Reverse(dir.components().count()));
+            Self { files: out }
+        }
     }
 
     fn created(p: &str) -> Change {
@@ -567,7 +729,7 @@ mod tests {
     #[test]
     fn rescan_flag_yields_only_a_rescan() {
         let event = ev(EventKind::Other, &["/v/a.md"]).set_flag(notify::event::Flag::Rescan);
-        let changes = classify(scope(), &event, &fake(&[]));
+        let changes = classify(scope(), &mut Rules::default(), &event, &fake(&[]));
         assert_eq!(changes, vec![Change::Rescan]);
     }
 
@@ -583,7 +745,7 @@ mod tests {
         );
         let probe = fake(&[("/canon/vault/sub/n.md", Entry::File)]);
         assert_eq!(
-            classify(scope, &event, &probe),
+            classify(scope, &mut Rules::default(), &event, &probe),
             vec![Change::Created(PathBuf::from("/link/vault/sub/n.md"))]
         );
     }
@@ -692,6 +854,177 @@ mod tests {
                 BufferUpdate::Reload(PathBuf::from("/v/a.md")),
                 BufferUpdate::KeepUnsaved(PathBuf::from("/v/b.md")),
             ]
+        );
+    }
+
+    #[test]
+    fn gitignored_notes_and_folders_are_not_reported() {
+        let mut rules = Rules::from_lines(&[("/v", &["*.draft.md", "private/"])]);
+        let create = || EventKind::Create(CreateKind::File);
+        let modify = || EventKind::Modify(ModifyKind::Data(DataChange::Content));
+        let file = Entry::File;
+
+        assert!(run_with(
+            &mut rules,
+            create(),
+            &["/v/a.draft.md"],
+            &[("/v/a.draft.md", file)]
+        )
+        .is_empty());
+        assert!(run_with(
+            &mut rules,
+            modify(),
+            &["/v/a.draft.md"],
+            &[("/v/a.draft.md", file)]
+        )
+        .is_empty());
+        assert!(run_with(
+            &mut rules,
+            create(),
+            &["/v/private/p.md"],
+            &[("/v/private/p.md", file)]
+        )
+        .is_empty());
+        assert!(run_with(
+            &mut rules,
+            EventKind::Create(CreateKind::Folder),
+            &["/v/private"],
+            &[("/v/private", Entry::Dir)]
+        )
+        .is_empty());
+        assert!(run_with(
+            &mut rules,
+            EventKind::Remove(RemoveKind::File),
+            &["/v/private/p.md"],
+            &[]
+        )
+        .is_empty());
+        assert!(run_with(
+            &mut rules,
+            EventKind::Remove(RemoveKind::Folder),
+            &["/v/private"],
+            &[]
+        )
+        .is_empty());
+        assert!(run_with(
+            &mut rules,
+            EventKind::Remove(RemoveKind::File),
+            &["/v/a.draft.md"],
+            &[]
+        )
+        .is_empty());
+
+        // A visible note is still reported.
+        assert_eq!(
+            run_with(&mut rules, create(), &["/v/a.md"], &[("/v/a.md", file)]),
+            vec![created("/v/a.md")]
+        );
+        // Renaming a note to an ignored name removes it from the tree.
+        assert_eq!(
+            run_with(
+                &mut rules,
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                &["/v/a.md", "/v/a.draft.md"],
+                &[("/v/a.draft.md", file)]
+            ),
+            vec![removed("/v/a.md")]
+        );
+    }
+
+    #[test]
+    fn nested_gitignore_applies_only_below_its_folder() {
+        let mut rules = Rules::from_lines(&[("/v/sub", &["secret.md"])]);
+        let create = || EventKind::Create(CreateKind::File);
+
+        assert!(run_with(
+            &mut rules,
+            create(),
+            &["/v/sub/secret.md"],
+            &[("/v/sub/secret.md", Entry::File)]
+        )
+        .is_empty());
+        assert_eq!(
+            run_with(
+                &mut rules,
+                create(),
+                &["/v/other/secret.md"],
+                &[("/v/other/secret.md", Entry::File)]
+            ),
+            vec![created("/v/other/secret.md")]
+        );
+        assert_eq!(
+            run_with(
+                &mut rules,
+                create(),
+                &["/v/sub/b.md"],
+                &[("/v/sub/b.md", Entry::File)]
+            ),
+            vec![created("/v/sub/b.md")]
+        );
+    }
+
+    #[test]
+    fn changing_a_gitignore_reloads_the_rules_and_rescans() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        let scope = Scope {
+            watched: &root,
+            reported: &root,
+        };
+        let probe = |_: &Path| Entry::File;
+        let event = |kind: EventKind, path: PathBuf| Event::new(kind).add_path(path);
+        let modify = || EventKind::Modify(ModifyKind::Data(DataChange::Content));
+        let create = || EventKind::Create(CreateKind::File);
+        let gitignore = root.join(".gitignore");
+        let draft = root.join("a.draft.md");
+        let note = root.join("a.md");
+        let mut rules = Rules::default();
+
+        // Writing the file rescans, and its patterns apply from then on.
+        fs::write(&gitignore, "*.draft.md\n").unwrap();
+        let changes = classify(
+            scope,
+            &mut rules,
+            &event(modify(), gitignore.clone()),
+            &probe,
+        );
+        assert_eq!(changes, vec![Change::Rescan]);
+        assert!(classify(scope, &mut rules, &event(create(), draft.clone()), &probe).is_empty());
+        assert_eq!(
+            classify(scope, &mut rules, &event(create(), note.clone()), &probe),
+            vec![Change::Created(note.clone())]
+        );
+
+        // A nested .gitignore applies below its own folder.
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("sub/.gitignore"), "x.md\n").unwrap();
+        let changes = classify(
+            scope,
+            &mut rules,
+            &event(create(), root.join("sub/.gitignore")),
+            &probe,
+        );
+        assert_eq!(changes, vec![Change::Rescan]);
+        assert!(classify(
+            scope,
+            &mut rules,
+            &event(create(), root.join("sub/x.md")),
+            &probe
+        )
+        .is_empty());
+
+        // Removing the root .gitignore rescans and stops excluding its matches.
+        fs::remove_file(&gitignore).unwrap();
+        let changes = classify(
+            scope,
+            &mut rules,
+            &event(EventKind::Remove(RemoveKind::File), gitignore.clone()),
+            &probe,
+        );
+        assert_eq!(changes, vec![Change::Rescan]);
+        assert_eq!(
+            classify(scope, &mut rules, &event(create(), draft.clone()), &probe),
+            vec![Change::Created(draft)]
         );
     }
 
@@ -832,5 +1165,26 @@ mod tests {
         });
         assert!(tree_paths(&vault).contains(&to));
         assert!(!tree_paths(&vault).contains(&from));
+    }
+
+    #[test]
+    fn gitignored_file_on_disk_is_not_reported() {
+        let (dir, vault) = setup();
+        fs::write(dir.path().join(".gitignore"), "*.draft.md\n").unwrap();
+        let watcher = VaultWatcher::start(&vault).unwrap();
+        let draft = dir.path().join("x.draft.md");
+        let visible = dir.path().join("x.md");
+        fs::write(&draft, "hidden").unwrap();
+        fs::write(&visible, "shown").unwrap();
+
+        let mut seen = Vec::new();
+        wait_until(&watcher, &mut seen, |s| {
+            s.iter().any(|c| c.touches(&visible))
+        });
+        seen.extend(watcher.next_changes(Duration::from_millis(300)));
+        assert!(
+            !seen.iter().any(|c| c.touches(&draft)),
+            "gitignored file was reported: {seen:?}"
+        );
     }
 }
