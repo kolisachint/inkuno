@@ -1,4 +1,3 @@
-# Move this file to .github/workflows/release.yml to enable it (needs a GitHub credential with workflow scope).
 name: release
 
 on:
