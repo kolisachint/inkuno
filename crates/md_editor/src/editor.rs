@@ -82,13 +82,8 @@ impl Render for Editor {
         let root = crate::keys::attach(root, &editor);
         // HOOK 3.7 (edit_keys.rs): attach Backspace, Delete, Enter, Tab, undo, redo and select all.
         let root = crate::edit_keys::attach(root, &editor);
-        // HOOK 3.1 (element.rs): draw the whole buffer as plain text.
-        let root = root.child(crate::element::TextElement::new(
-            editor.clone(),
-            0..self.buffer.len(),
-        ));
-        // HOOK 3.5 (block_list.rs): replaces the 3.1 line above with the virtualized list.
-        // let root = root.child(crate::block_list::render_blocks(&editor, cx));
+        // HOOK 3.5 (block_list.rs): the virtualized block list (replaced the 3.1 whole-buffer TextElement).
+        let root = root.child(crate::block_list::render_blocks(&editor, cx));
         let _ = &editor;
         root
     }
