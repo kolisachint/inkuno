@@ -8,6 +8,9 @@ mod file_io;
 mod search_panel;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod watch;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod workspace_view;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
