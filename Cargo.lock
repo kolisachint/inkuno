@@ -176,6 +176,7 @@ version = "0.1.0"
 dependencies = [
  "gpui",
  "gpui_platform",
+ "md_editor",
 ]
 
 [[package]]
@@ -2983,6 +2984,7 @@ name = "md_editor"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "md_core",
 ]
 
 [[package]]
