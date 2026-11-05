@@ -16,7 +16,7 @@ use crate::element::Layouts;
 use crate::ime::ImeState;
 use crate::selection::SelectionState;
 
-/// Text shown when the app starts without a file (used by `file_io::open_initial`).
+/// Text shown when the app starts without a file (used by the app's `Document::sample`).
 pub const SAMPLE_TEXT: &str = "# Sample\n\nThis is a sample note.\n";
 
 /// The editor view. It is the root of the editor window and an entity like any other view.
