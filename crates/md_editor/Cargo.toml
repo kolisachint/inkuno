@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 md_core = { path = "../md_core" }
+md_render = { path = "../md_render" }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 gpui = { workspace = true }

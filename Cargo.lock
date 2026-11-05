@@ -2986,6 +2986,7 @@ version = "0.1.0"
 dependencies = [
  "gpui",
  "md_core",
+ "md_render",
  "tempfile",
 ]
 

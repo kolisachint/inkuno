@@ -14,6 +14,7 @@ use crate::editor::Editor;
 use crate::element::TextElement;
 
 pub mod basic;
+pub mod code_fence;
 pub mod image;
 pub mod list;
 pub mod table;
