@@ -120,3 +120,49 @@ The screenshot is `docs/screenshots/10.4-followup-typed.png`. It shows the typed
 Verdict: the per-character pure work is now about 0.8 ms smaller, but that is about 8% of the median and is within the run-to-run spread. The keystroke target (p90 under 16 ms) is still missed on this rig, and the cost is still in layout, paint and software raster. Caret moves were not timed in Xvfb. Their pure cost is about 3.5 ms smaller per arrow key. The before and after Xvfb numbers come from different files and single runs, so treat them as indicative.
 
 The remaining item on the list is the double layout per block (measure and prepaint), listed in the iteration 2 open items. It is not changed here.
+
+## Double layout per block removed (perf task 3)
+
+`crates/md_editor/src/element.rs` laid out every block twice per frame: `request_layout`
+shaped all its rows to measure the height, then `prepaint` shaped them all again at the same
+width. `BlockInputs` now keeps the rows shaped while measuring (`MeasuredRows`, keyed by the
+measure width). Prepaint reuses them when its bounds width matches, shifted from the measure
+origin to the element's bounds origin (`rebased_row`: line origins, list-marker glyph origins
+and task checkbox bounds; the shaped text itself is origin-independent). Any other width lays
+the block out again, so behaviour is unchanged (soft wrap, inline reveal, focus/typewriter
+modes, code fences, tables, images).
+
+The cache lives in the per-frame `BlockInputs`, which is rebuilt on every `request_layout`,
+so it cannot outlive the frame: an edit, a caret move or a style change gathers fresh inputs
+and the old rows are dropped. Taking clears the cache, so rows are reused at most once. Unit
+tests cover hit-only-at-the-measured-width, take-once, indefinite-measure-width miss, and the
+origin shift (`element::tests::measured_rows_hit_only_at_the_measured_width`,
+`measured_rows_miss_when_measure_width_was_indefinite`,
+`rebased_point_moves_to_the_bounds_origin`).
+
+### Criterion `cargo bench -p md_editor` (this change, macOS arm64)
+
+`benches/pure.rs` exercises only window-free paths (buffer, block list, hidden ranges), so it
+cannot show the layout saving: shaping needs a `Window` and is not called by the bench. The
+numbers below confirm the pure paths are unaffected by construction (the change touches only
+`element.rs` layout caching). `--warm-up-time 1 --measurement-time 3`, medians.
+
+| Work | This change, macOS arm64 | Follow-up "after", Linux Xeon VM |
+|---|---|---|
+| `Editor::text()` copy (`editor_text_copy`) | 24.2 µs | 6.7 µs |
+| Full hidden ranges (`document_hidden_ranges`) | 5.46 ms | 4.05 ms |
+| Input rule check (`input_rule_check_full_text`) | 26.9 ns | 27 ns |
+| Full block list rebuild (`block_list_sync_hashes`) | 0.90 ms | 0.79 ms |
+| Incremental edit pair (`block_list_incremental_edit_pair`, two edits) | 67.7 µs | 44.7 µs |
+| Cached caret hidden ranges (`hidden_ranges_cached_caret`) | 82.2 µs | 52 µs |
+
+The macOS column and the Linux column come from different machines and single runs, so
+treat cross-column gaps as machine and run-to-run spread, not as a regression: none of these
+paths calls the changed code.
+
+### Xvfb keystroke-to-paint
+
+Not re-measured. The Linux xdotool method from above needs Xvfb, which is not available on
+this macOS machine. Still pending: repeat the 10k-line xdotool run on Linux the same way as
+above (same generated document, same `xdotool type --delay 120` method), record median/p90
+here, and then re-measure on a real GPU and on macOS.
