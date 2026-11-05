@@ -14,6 +14,7 @@ use gpui::{div, prelude::*, App, Context, FocusHandle, Focusable, IntoElement, R
 use md_core::buffer::Buffer;
 
 use crate::block_list::BlockListState;
+use crate::blocks::code_fence::CodeCache;
 use crate::element::Layouts;
 use crate::ime::ImeState;
 use crate::selection::SelectionState;
@@ -41,6 +42,8 @@ pub struct Editor {
     pub(crate) blocks: BlockListState,
     /// The folder of the note. Relative image paths resolve against it (task 4.3). Set by the app.
     pub(crate) base_dir: Option<PathBuf>,
+    /// Highlighted code fence blocks, so that a frame does not highlight them again (task 5.3).
+    pub(crate) code_cache: CodeCache,
 }
 
 impl Editor {
@@ -54,6 +57,7 @@ impl Editor {
             ime: ImeState::default(),
             blocks: BlockListState::default(),
             base_dir: None,
+            code_cache: CodeCache::default(),
         }
     }
 

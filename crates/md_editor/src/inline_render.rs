@@ -18,6 +18,7 @@ use md_core::inline::{hidden_ranges, inline_spans};
 use md_core::BlockKind;
 
 use crate::blocks::basic::shows_inline_styles;
+use crate::blocks::code_fence;
 use crate::blocks::list::parse_list_lines;
 
 /// Hidden byte ranges of one top-level block, as absolute offsets, sorted and merged.
@@ -29,6 +30,8 @@ use crate::blocks::list::parse_list_lines;
 ///   space after each blockquote line, and the whole text of a thematic break (drawn as a rule);
 /// - the inline markers of every span are hidden, except those of spans that contain the caret
 ///   (DESIGN §4.1). Only blocks that show inline styles have inline spans.
+///
+/// A code fence hides its opening and closing fence lines while the caret is outside (task 5.3).
 ///
 /// A list block hides the markers of each line whose caret is not on it (task 4.2). An item
 /// line with the caret keeps its marker and hides only its indentation, since the element draws
@@ -49,6 +52,7 @@ pub fn block_hidden_ranges(
             BlockKind::Heading(_) => hidden.extend(heading_marker(block_text, base)),
             BlockKind::BlockQuote => hidden.extend(quote_markers(block_text, base)),
             BlockKind::ThematicBreak => hidden.push(base..end),
+            BlockKind::CodeFence => hidden.extend(code_fence::fence_lines(block_text, base)),
             _ => {}
         }
     }

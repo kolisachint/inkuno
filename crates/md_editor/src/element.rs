@@ -6,9 +6,10 @@
 
 use std::ops::Range;
 use std::panic::Location;
+use std::rc::Rc;
 
 use gpui::{
-    fill, point, px, relative, size, App, Bounds, ElementId, Entity, Font, FontFallbacks,
+    fill, point, px, relative, rgb, size, App, Bounds, ElementId, Entity, Font, FontFallbacks,
     FontStyle, FontWeight, GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId,
     Pixels, Point, ShapedLine, StrikethroughStyle, Style, TextAlign, TextRun, UnderlineStyle,
     Window,
@@ -17,9 +18,13 @@ use gpui::{
 use md_core::display_map::{Bias, DisplayMap};
 use md_core::inline::inline_spans;
 use md_core::BlockKind;
+use md_render::highlight::Token;
 
 use crate::blocks::basic::{
     block_style, line_runs, shows_inline_styles, BlockStyle, Decoration, RunStyle, TextColor,
+};
+use crate::blocks::code_fence::{
+    self, token_color, CODE_BLOCK_BACKGROUND, CODE_BLOCK_RADIUS_PX, CODE_PAD_X_PX, CODE_PAD_Y_PX,
 };
 use crate::blocks::list::{self, ListGutter, ListLine, ListMarker};
 use crate::cursor::{self, hit_test};
@@ -286,6 +291,17 @@ pub struct TextElement {
 }
 
 impl TextElement {
+    /// The fence lines of this block that take no height and are not drawn: the fence lines of a
+    /// code fence while the caret is outside it (task 5.3). Empty for every other block.
+    fn collapsed_lines(&self, text: &str, caret: usize) -> Vec<Range<usize>> {
+        let revealed = self.source.start <= caret && caret <= self.source.end;
+        if self.kind == BlockKind::CodeFence && !revealed {
+            code_fence::fence_lines(text, self.source.start)
+        } else {
+            Vec::new()
+        }
+    }
+
     /// An element that draws `source` of the editor's buffer as a block of `kind`. The style and
     /// the inline spans follow the kind (task 4.1). Markers are hidden unless the caret is in
     /// the block or in their span (task 4.4).
@@ -308,6 +324,54 @@ fn body_font(mut font: Font) -> Font {
     font
 }
 
+/// The monospace font of code: `base` with the code family and its fallbacks.
+fn code_font(base: &Font) -> Font {
+    let mut font = base.clone();
+    font.family = CODE_FAMILY.into();
+    font.fallbacks = Some(FontFallbacks::from_fonts(
+        CODE_FALLBACKS.iter().map(|name| name.to_string()).collect(),
+    ));
+    font
+}
+
+/// The runs of one source line of a code fence block (task 5.3). `line` is absolute and
+/// `code_base` is the absolute start of the highlighted code. A fence line is muted. A code line
+/// takes the colour of each token, and plain text the base colour `base_color`.
+fn code_runs(
+    line: Range<usize>,
+    is_fence: bool,
+    code_base: usize,
+    tokens: &[Token],
+    font: &Font,
+    base_color: Hsla,
+) -> Vec<TextRun> {
+    let font = code_font(font);
+    let run = |len: usize, color: Hsla| TextRun {
+        len,
+        font: font.clone(),
+        color,
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    if is_fence {
+        return vec![run(line.len(), MUTED_COLOR)];
+    }
+    code_fence::line_segments(line, code_base, tokens)
+        .into_iter()
+        .map(|(len, kind)| {
+            let color = kind.map_or(base_color, |kind| Hsla::from(rgb(token_color(kind))));
+            run(len, color)
+        })
+        .collect()
+}
+
+/// Paint the background of a code block: a light rounded box behind the whole block (task 5.3).
+fn paint_code_background(bounds: Bounds<Pixels>, window: &mut Window) {
+    let background = Hsla::from(rgb(CODE_BLOCK_BACKGROUND));
+    window.paint_quad(fill(bounds, background).corner_radii(px(CODE_BLOCK_RADIUS_PX)));
+}
+
 /// Convert one styled part of a line into a GPUI run. `base` is the font and `base_color` the
 /// colour of plain text. `style` supplies the block's bold and colour.
 fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, base_color: Hsla) -> TextRun {
@@ -319,10 +383,7 @@ fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, base_color: Hsla) -
         font.style = FontStyle::Italic;
     }
     if run.code {
-        font.family = CODE_FAMILY.into();
-        font.fallbacks = Some(FontFallbacks::from_fonts(
-            CODE_FALLBACKS.iter().map(|name| name.to_string()).collect(),
-        ));
+        font = code_font(&font);
     }
     let color = if run.link {
         LINK_COLOR
@@ -426,13 +487,21 @@ impl gpui::Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let text = self.editor.read(cx).buffer().slice(self.source.clone());
-        let line_count = line_ranges(&text).len();
+        let editor = self.editor.read(cx);
+        let text = editor.buffer().slice(self.source.clone());
+        let caret = editor.selection.selection.head;
+        let collapsed = self.collapsed_lines(&text, caret);
+        let line_count = line_ranges(&text).len() - collapsed.len();
         let line_height = window.line_height() * self.style.font_scale;
+        let padding = if self.kind == BlockKind::CodeFence {
+            px(2. * CODE_PAD_Y_PX)
+        } else {
+            px(0.)
+        };
 
         let mut style = Style::default();
         style.size.width = relative(1.).into();
-        style.size.height = (line_height * line_count as f32).into();
+        style.size.height = (line_height * line_count as f32 + padding).into();
         (window.request_layout(style, [], cx), ())
     }
 
@@ -453,6 +522,14 @@ impl gpui::Element for TextElement {
         let caret = editor.selection.selection.head;
         let revealed = self.source.start <= caret && caret <= self.source.end;
         let hidden = block_hidden_ranges(&text, self.source.start, &self.kind, Some(caret));
+        // A code fence (task 5.3): its fence lines, and the parsed fence for the code runs.
+        let is_code = self.kind == BlockKind::CodeFence;
+        let collapsed = self.collapsed_lines(&text, caret);
+        let fence = if is_code {
+            code_fence::parse_fence(&text, self.source.start)
+        } else {
+            None
+        };
 
         let style = window.text_style();
         let font = body_font(style.font());
@@ -467,6 +544,21 @@ impl gpui::Element for TextElement {
             Vec::new()
         };
         let indent = px(self.style.indent_px);
+        // The highlighted tokens of the code, from the editor's cache (task 5.3). The editor is
+        // no longer borrowed here, so it can be updated.
+        let code_tokens: Rc<[Token]> = match &fence {
+            Some(fence) => {
+                let code =
+                    &text[fence.code.start - self.source.start..fence.code.end - self.source.start];
+                let lang = fence.language();
+                self.editor
+                    .update(cx, |editor, _cx| editor.code_cache.tokens(code, lang))
+            }
+            None => Rc::from(Vec::new()),
+        };
+        // Code blocks are inset from their background (task 5.3).
+        let pad_x = if is_code { CODE_PAD_X_PX } else { 0. };
+        let pad_y = if is_code { CODE_PAD_Y_PX } else { 0. };
         // The items of a list block, one per line (task 4.2). Empty for other blocks.
         let items = if self.kind == BlockKind::List {
             list::parse_list_lines(&text, self.source.start)
@@ -484,17 +576,21 @@ impl gpui::Element for TextElement {
         };
 
         let mut lines = Vec::new();
-        let mut top = bounds.top();
+        let mut top = bounds.top() + px(pad_y);
         for (index, range) in line_ranges(&text).into_iter().enumerate() {
             // Line ranges are relative to `text`, which starts at `source.start` in the buffer.
             let source = (self.source.start + range.start)..(self.source.start + range.end);
+            // A hidden fence line takes no height (task 5.3).
+            if collapsed.contains(&source) {
+                continue;
+            }
             let line = &text[range];
             // A list line shows its markers only while the caret is on it (task 4.2).
             let item = items.get(index);
             let line_revealed = source.start <= caret && caret <= source.end;
             let text_x = match item {
                 Some(item) => list::text_indent(item, line_revealed),
-                None => f32::from(indent),
+                None => f32::from(indent) + pad_x,
             };
             let line_origin = point(bounds.left() + px(text_x), top);
             // A checked task item is muted and struck through, from its text on.
@@ -506,17 +602,31 @@ impl gpui::Element for TextElement {
                 }) => Some(*text_start - source.start),
                 _ => None,
             };
-            let styled: Vec<TextRun> = split_done(line_runs(line, source.start, &spans), done_from)
-                .into_iter()
-                .map(|(mut run, done)| {
-                    if done {
-                        run.strike = true;
-                        text_run(&run, &done_style, &font, color)
-                    } else {
-                        text_run(&run, &self.style, &font, color)
-                    }
-                })
-                .collect();
+            let styled: Vec<TextRun> = match &fence {
+                Some(fence) => {
+                    let is_fence =
+                        fence.open_line == source || fence.close_line.as_ref() == Some(&source);
+                    code_runs(
+                        source.clone(),
+                        is_fence,
+                        fence.code.start,
+                        &code_tokens,
+                        &font,
+                        color,
+                    )
+                }
+                None => split_done(line_runs(line, source.start, &spans), done_from)
+                    .into_iter()
+                    .map(|(mut run, done)| {
+                        if done {
+                            run.strike = true;
+                            text_run(&run, &done_style, &font, color)
+                        } else {
+                            text_run(&run, &self.style, &font, color)
+                        }
+                    })
+                    .collect(),
+            };
             // Zero-length runs are dropped, so an empty line is shaped with no runs. The runs
             // still cover the source line here, so the IME marked range is applied first.
             let runs: Vec<TextRun> = ime::decorate_runs(styled, source.clone(), marked.clone())
@@ -581,6 +691,11 @@ impl gpui::Element for TextElement {
         let editor = self.editor.clone();
         let focus = editor.read(cx).focus_handle.clone();
         let focused = focus.is_focused(window);
+
+        // 0. The background of a code block, behind the selection and the text (task 5.3).
+        if self.kind == BlockKind::CodeFence {
+            paint_code_background(snapshot.bounds, window);
+        }
 
         // 1. Selection behind the text, for the part of it that lies in this block.
         selection::paint_selection(editor.read(cx), &snapshot, window);
