@@ -80,13 +80,8 @@ impl Render for Editor {
             .key_context("MdEditor");
         // HOOK 3.3 (keys.rs): attach movement, copy, cut and paste handlers to the root.
         // let root = crate::keys::attach(root, &editor);
-        // HOOK 3.1 (element.rs): draw the whole buffer as plain text.
-        let root = root.child(crate::element::TextElement::new(
-            editor.clone(),
-            0..self.buffer.len(),
-        ));
-        // HOOK 3.5 (block_list.rs): replaces the 3.1 line above with the virtualized list.
-        // let root = root.child(crate::block_list::render_blocks(&editor, cx));
+        // HOOK 3.5 (block_list.rs): the virtualized block list.
+        let root = root.child(crate::block_list::render_blocks(&editor, cx));
         let _ = &editor;
         root
     }
