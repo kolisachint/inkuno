@@ -1,8 +1,9 @@
 //! Workspace search (task 9.4).
 //!
-//! Full-text search over the vault's `.md` files. Each search walks the vault
-//! with `ignore` (respecting `.gitignore`, skipping hidden entries) and scans
-//! files with `grep-searcher`. No index is written, so nothing is added to the vault.
+//! Full-text search over the vault's `.md` files. Each search lists the notes
+//! with `tree::note_files` (the same walker the folder tree uses, so both see
+//! the same notes) and scans them with `grep-searcher`. No index is written,
+//! so nothing is added to the vault.
 
 use std::io;
 use std::ops::Range;
@@ -11,9 +12,8 @@ use std::path::{Path, PathBuf};
 use grep_matcher::Matcher;
 use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 use grep_searcher::{BinaryDetection, Searcher, SearcherBuilder, Sink, SinkMatch};
-use ignore::WalkBuilder;
 
-use crate::tree::{is_note_path, Vault};
+use crate::tree::{note_files, Vault};
 
 /// One matching line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,7 +80,9 @@ pub fn search_with_report(
     }
     let matcher = build_matcher(query, opts)?;
     let mut searcher = build_searcher();
-    let files = note_files(vault.root())?;
+    let mut files = note_files(vault.root())?;
+    // Hits are listed case-insensitively by path, as the sidebar sorts.
+    files.sort_by_cached_key(|p| (p.to_string_lossy().to_lowercase(), p.clone()));
     Ok(scan_files(
         &files,
         &matcher,
@@ -138,29 +140,6 @@ fn scan_files(
     report
 }
 
-/// Every `.md` file below `root`, sorted case-insensitively by path.
-/// Honours `.gitignore` and skips hidden entries.
-fn note_files(root: &Path) -> io::Result<Vec<PathBuf>> {
-    let walker = WalkBuilder::new(root)
-        .hidden(true)
-        .require_git(false)
-        .git_global(false)
-        .git_exclude(false)
-        .ignore(false)
-        .parents(false)
-        .build();
-    let mut files = Vec::new();
-    for entry in walker {
-        let entry = entry.map_err(io::Error::other)?;
-        let is_file = entry.file_type().is_some_and(|t| t.is_file());
-        if is_file && is_note_path(entry.path()) {
-            files.push(entry.into_path());
-        }
-    }
-    files.sort_by_cached_key(|p| (p.to_string_lossy().to_lowercase(), p.clone()));
-    Ok(files)
-}
-
 /// Escapes regex metacharacters so the query matches literally.
 fn escape_literal(query: &str) -> String {
     const META: &str = "\\.+*?()|[]{}^$#&-~";
@@ -215,6 +194,7 @@ impl Sink for Collector<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tree::Node;
     use std::fs;
 
     fn write(path: &Path, text: &str) {
@@ -450,6 +430,58 @@ mod tests {
         let hits = search(&vault, "needle", &opts()).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].path, dir.path().join("keep.md"));
+    }
+
+    fn flatten(node: &Node, out: &mut Vec<PathBuf>) {
+        match node {
+            Node::Note { path, .. } => out.push(path.clone()),
+            Node::Folder { children, .. } => {
+                for child in children {
+                    flatten(child, out);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tree_and_search_list_the_same_notes_with_nested_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        write(&r.join(".gitignore"), "*.draft.md\nprivate/\n");
+        write(&r.join("sub/.gitignore"), "secret.md\n");
+        for rel in [
+            "a.md",
+            "a.draft.md",
+            "private/p.md",
+            "sub/secret.md",
+            "sub/b.md",
+            "sub/c.draft.md",
+            "other/secret.md",
+            "other/d.md",
+        ] {
+            write(&r.join(rel), "needle\n");
+        }
+        let vault = Vault::open(r).unwrap();
+        let expected = vec![
+            r.join("a.md"),
+            r.join("other/d.md"),
+            r.join("other/secret.md"),
+            r.join("sub/b.md"),
+        ];
+        assert_eq!(vault.notes().unwrap(), expected);
+
+        let mut from_tree = Vec::new();
+        flatten(&vault.tree().unwrap(), &mut from_tree);
+        from_tree.sort();
+        assert_eq!(from_tree, expected);
+
+        // One line per file, so each hit is one note.
+        let from_search: Vec<PathBuf> = search(&vault, "needle", &opts())
+            .unwrap()
+            .into_iter()
+            .map(|h| h.path)
+            .collect();
+        assert_eq!(from_search, expected);
     }
 
     #[test]
