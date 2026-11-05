@@ -4,4 +4,5 @@ pub mod cache;
 pub mod highlight;
 pub mod lang;
 pub mod queue;
+pub mod raster;
 pub mod traits;
