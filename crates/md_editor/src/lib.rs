@@ -30,6 +30,8 @@ pub mod keys; // task 3.3
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod modes; // phase 8 (8.4)
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod perf; // task 10.4: optional NOTEAPP_PERF keystroke timing
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod selection; // task 3.2
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod theme; // task 10.1

@@ -10,3 +10,11 @@ ropey = "1.6.1"
 
 [dev-dependencies]
 proptest = "1"
+
+[dev-dependencies.criterion]
+version = "0.8"
+default-features = false
+
+[[bench]]
+name = "core"
+harness = false
