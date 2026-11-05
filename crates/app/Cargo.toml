@@ -6,6 +6,11 @@ license.workspace = true
 
 [dependencies]
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 gpui = { workspace = true }
 gpui_platform = { workspace = true }
+
+# gpui_linux is built with default features off in zed's workspace, so without these
+# the Linux platform has no windowing backend and runs headless. Match gpui_linux's defaults.
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui_platform = { workspace = true, features = ["x11", "wayland"] }

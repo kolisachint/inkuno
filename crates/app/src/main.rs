@@ -1,20 +1,20 @@
 // S2 hello window. Structure mirrors zed's crates/gpui/examples/hello_world.rs at the
 // pinned rev (see Cargo.toml). GPUI is only compiled on macOS; other platforms print a notice.
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use gpui::{
     div, prelude::*, px, rgb, size, App, Bounds, Context, SharedString, TitlebarOptions, Window,
     WindowBounds, WindowOptions,
 };
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use gpui_platform::application;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 struct HelloNoteapp {
     text: SharedString,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 impl Render for HelloNoteapp {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
@@ -34,7 +34,7 @@ impl Render for HelloNoteapp {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn main() {
     application().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(500.), px(500.0)), cx);
@@ -58,7 +58,7 @@ fn main() {
     });
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn main() {
     println!("noteapp targets macOS; GPUI window disabled on this platform.");
 }
