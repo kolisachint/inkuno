@@ -80,6 +80,8 @@ impl Render for Editor {
             .key_context("MdEditor");
         // HOOK 3.3 (keys.rs): attach movement, copy, cut and paste handlers to the root.
         let root = crate::keys::attach(root, &editor);
+        // HOOK 3.7 (edit_keys.rs): attach Backspace, Delete, Enter, Tab, undo, redo and select all.
+        let root = crate::edit_keys::attach(root, &editor);
         // HOOK 3.1 (element.rs): draw the whole buffer as plain text.
         let root = root.child(crate::element::TextElement::new(
             editor.clone(),
@@ -96,5 +98,7 @@ impl Render for Editor {
 pub fn init(cx: &mut App) {
     // HOOK 3.3 (keys.rs): register the default key bindings for the "MdEditor" context.
     crate::keys::bind_keys(cx);
+    // HOOK 3.7 (edit_keys.rs): register the editing key bindings for the "MdEditor" context.
+    crate::edit_keys::bind_keys(cx);
     let _ = cx;
 }

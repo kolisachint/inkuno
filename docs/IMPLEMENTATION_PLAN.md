@@ -26,7 +26,7 @@ Iteration 1 ends at Phase 3. It delivers a plain-markdown editor and nothing bey
 - P0 Scaffold
 - P1 Spikes S1 to S4
 - P2 md_core
-- P3 md_editor basic (tasks 3.1 to 3.6)
+- P3 md_editor basic (tasks 3.1 to 3.7)
 
 The bare minimum this iteration delivers: open, edit, select, navigate, IME, scroll and save a plain `.md` file, on macOS and Linux, released as nightly binaries by `.github/workflows/release.yml`.
 
@@ -64,6 +64,7 @@ P0 Scaffold
          |                               \--> 3.4 IME
          |--> 3.5 Virtualized block list
          |--> 3.6 File open and save
+         |--> 3.7 Editing keys (after 3.2, 3.3)
 ```
 
 ---
@@ -241,6 +242,13 @@ Requires P1 spikes S2 and S4, and Phase 2.
 - **Crate / files:** `app/src/file_io.rs`.
 - **Depends on:** 3.1.
 - **Acceptance:** open then save without edits leaves the file byte-identical; Cmd+S writes edits to disk; the window shows a dirty marker after an edit and clears it after save.
+
+### 3.7 Editing keys
+- **Status:** DONE. Screenshots: `docs/screenshots/p3-3.7-*.png` (Linux, Xvfb display 87, xdotool). Undo is per keystroke: typing is not coalesced into one undo step.
+- **Goal:** Backspace, Delete, Enter, Tab (four spaces), word delete, undo and redo, and select all, with the caret left at the edit position.
+- **Crate / files:** `md_editor/src/edit_keys.rs`.
+- **Depends on:** 3.2, 3.3.
+- **Acceptance:** Backspace and Delete remove one character (or the selection) across ASCII, accented, emoji and CJK text; Enter and Tab replace the selection with a newline or four spaces, with no doubled newline from IME input; Cmd+Z / Cmd+Shift+Z (Ctrl+Z / Ctrl+Shift+Z, Ctrl+Y on Linux) undo and redo through the md_core buffer; Cmd+A (Ctrl+A) selects all; Option+Backspace (Ctrl+Backspace) deletes a word; typing over a selection replaces it.
 
 ---
 

@@ -12,6 +12,8 @@ pub mod clipboard; // task 3.3
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod cursor; // task 3.2
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod edit_keys; // task 3.7
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod editor; // shared skeleton, owned by the phase
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod element; // task 3.1

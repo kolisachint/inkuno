@@ -257,7 +257,7 @@ impl Editor {
 }
 
 /// Wire `f` to the root as the handler for action `A`. The handler receives the editor entity.
-fn on<A: Action>(
+pub(crate) fn on<A: Action>(
     root: Div,
     editor: &Entity<Editor>,
     f: impl Fn(&mut Editor, &mut Context<Editor>) + 'static,
