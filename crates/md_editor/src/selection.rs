@@ -54,6 +54,9 @@ pub struct SelectionState {
     pub selection: Selection,
     /// Column to keep across vertical moves, in bytes from the start of the line.
     pub goal_column: Option<usize>,
+    /// Horizontal position, in pixels from the row's text start, to keep across Up and Down
+    /// moves between visual rows (task: soft wrap). Cleared like `goal_column`.
+    pub goal_x: Option<f32>,
     /// True between mouse down and mouse up while a drag selection is in progress.
     pub dragging: bool,
 }
@@ -96,6 +99,7 @@ impl Editor {
     pub fn replace_range(&mut self, range: Range<usize>, text: &str, cx: &mut Context<Self>) {
         self.selection.selection = apply_replace(&mut self.buffer, range, text);
         self.selection.goal_column = None;
+        self.selection.goal_x = None;
         cx.notify();
     }
 
@@ -120,6 +124,7 @@ impl Editor {
             head: selection.head.min(len),
         };
         self.selection.goal_column = None;
+        self.selection.goal_x = None;
         cx.notify();
     }
 }
@@ -146,7 +151,10 @@ pub fn paint_selection(editor: &Editor, layout: &LayoutSnapshot, window: &mut Wi
     for line in &layout.lines {
         let start = range.start.max(line.source.start);
         let end = range.end.min(line.source.end);
-        let includes_newline = range.start <= line.source.end && range.end > line.source.end;
+        // Only the last row of a source line has a line break after it. The end of a wrapped row
+        // is not a break, so the selection continues on the next row.
+        let includes_newline =
+            line.last_row && range.start <= line.source.end && range.end > line.source.end;
         if start > end || (start == end && !includes_newline) {
             continue;
         }

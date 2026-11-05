@@ -9,22 +9,23 @@ use std::panic::Location;
 use std::rc::Rc;
 
 use gpui::{
-    fill, point, px, relative, rgb, size, App, Bounds, ElementId, Entity, Font, FontFallbacks,
-    FontStyle, FontWeight, GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId,
-    Pixels, Point, ShapedLine, StrikethroughStyle, Style, TextAlign, TextRun, UnderlineStyle,
-    Window,
+    fill, point, px, relative, rgb, size, App, AvailableSpace, Bounds, ElementId, Entity, Font,
+    FontFallbacks, FontStyle, FontWeight, GlobalElementId, Hsla, InspectorElementId, IntoElement,
+    LayoutId, Pixels, Point, ShapedLine, StrikethroughStyle, Style, TextAlign, TextRun,
+    UnderlineStyle, Window,
 };
 
 use md_core::display_map::{Bias, DisplayMap};
 use md_core::inline::inline_spans;
-use md_core::BlockKind;
+use md_core::{BlockKind, InlineSpan};
 use md_render::highlight::Token;
 
 use crate::blocks::basic::{
     block_style, line_runs, shows_inline_styles, BlockStyle, Decoration, RunStyle, TextColor,
 };
 use crate::blocks::code_fence::{
-    self, token_color, CODE_BLOCK_BACKGROUND, CODE_BLOCK_RADIUS_PX, CODE_PAD_X_PX, CODE_PAD_Y_PX,
+    self, token_color, Fence, CODE_BLOCK_BACKGROUND, CODE_BLOCK_RADIUS_PX, CODE_PAD_X_PX,
+    CODE_PAD_Y_PX,
 };
 use crate::blocks::list::{self, ListGutter, ListLine, ListMarker};
 use crate::cursor::{self, hit_test};
@@ -95,25 +96,32 @@ pub fn line_ranges(text: &str) -> Vec<Range<usize>> {
     ranges
 }
 
-/// One laid-out source line.
+/// One laid-out visual row.
+///
+/// A source line that wraps takes several rows, each with its own `LineLayout`. Rows are in
+/// buffer order and all have the block's line height.
 ///
 /// Written during paint by `TextElement` and read by selection (3.2), hit testing (3.2) and IME
-/// bounds (3.4). The shaped text is the line without its hidden bytes (task 4.4), so a source
+/// bounds (3.4). The shaped text is the row without its hidden bytes (task 4.4), so a source
 /// offset is converted with [`LineLayout::source_to_shaped`] before it indexes `shaped`, and an
 /// index is converted back with [`LineLayout::shaped_to_source`].
 #[derive(Clone)]
 pub struct LineLayout {
-    /// Byte range of the line in the buffer, excluding its `\n`.
+    /// Byte range of the row in the buffer. For the last row of a source line it excludes the
+    /// `\n`. The end of a row that is not the last one is the start of the next row.
     pub source: Range<usize>,
-    /// The shaped text of the line: its visible bytes only.
+    /// The shaped text of the row: its visible bytes only.
     pub shaped: ShapedLine,
-    /// Top-left corner of the line in window coordinates.
+    /// Top-left corner of the row in window coordinates.
     pub origin: Point<Pixels>,
-    /// Hidden byte ranges of the line, absolute and inside `source` (task 4.4).
+    /// Hidden byte ranges of the row, absolute and inside `source` (task 4.4).
     pub hidden: Vec<Range<usize>>,
     /// The bullet, number, tick or checkbox drawn in the gutter of a list line whose markers
-    /// are hidden (task 4.2). Clicks on a checkbox are found through it.
+    /// are hidden (task 4.2). Clicks on a checkbox are found through it. Only the first row of
+    /// a line has one.
     pub gutter: Option<ListGutter>,
+    /// Whether this is the last visual row of its source line, so a line break follows it.
+    pub last_row: bool,
 }
 
 impl LineLayout {
@@ -211,6 +219,13 @@ impl Layouts {
         index_for_y(&self.blocks, f32::from(y)).map(|index| &self.blocks[index])
     }
 
+    /// Every visible visual row, in buffer order.
+    pub fn rows(&self) -> impl Iterator<Item = &LineLayout> {
+        self.blocks
+            .iter()
+            .flat_map(|block| block.snapshot.lines.iter())
+    }
+
     /// The source offset under `point` (window coordinates), found in the block under the
     /// point, or in the nearest visible block when the point is between blocks or past them.
     /// Returns 0 when no block is visible.
@@ -260,6 +275,22 @@ pub(crate) fn index_for_y(blocks: &[BlockLayout], y: f32) -> Option<usize> {
         Some(previous)
     } else {
         Some(after)
+    }
+}
+
+/// Index of the visual row that Up (`down` false) or Down (`down` true) moves to from row
+/// `current`, among `rows` (their source ranges, in buffer order). Only a row that follows
+/// directly is taken: the next row of the same source line, or the first row of the next line.
+/// Otherwise (a table, an image or hidden fence lines lie between) there is none and `None` is
+/// returned. Pure, unit-tested.
+pub(crate) fn adjacent_row(rows: &[Range<usize>], current: usize, down: bool) -> Option<usize> {
+    let row = rows.get(current)?;
+    if down {
+        let next = rows.get(current + 1)?;
+        (next.start == row.end || next.start == row.end + 1).then_some(current + 1)
+    } else {
+        let prev = rows.get(current.checked_sub(1)?)?;
+        (row.start == prev.end || row.start == prev.end + 1).then_some(current - 1)
     }
 }
 
@@ -460,60 +491,41 @@ fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &
     }
 }
 
-impl IntoElement for TextElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
+/// What the layout of one block reads from the editor. It is gathered once per frame in
+/// `request_layout`. The measure of the block (which needs the wrap width) and `prepaint` lay out
+/// the same inputs, so the height reported to the list matches the rows that are painted.
+pub struct BlockInputs {
+    /// Byte range of the block in the buffer.
+    source: Range<usize>,
+    /// The text of the block.
+    text: String,
+    kind: BlockKind,
+    style: BlockStyle,
+    /// Whether the caret is in the block, so its markers show (task 4.4).
+    revealed: bool,
+    caret: usize,
+    marked: Option<Range<usize>>,
+    /// Hidden byte ranges of the block (task 4.4).
+    hidden: Vec<Range<usize>>,
+    /// Inline spans of the block, with absolute offsets.
+    spans: Vec<InlineSpan>,
+    /// Fence lines that take no height (task 5.3).
+    collapsed: Vec<Range<usize>>,
+    fence: Option<Fence>,
+    code_tokens: Rc<[Token]>,
+    /// The items of a list block, one per line (task 4.2). Empty for other blocks.
+    items: Vec<ListLine>,
+    font: Font,
+    font_size: Pixels,
+    color: Hsla,
+    line_height: Pixels,
+    marker_text: list::MarkerText,
+    done_style: BlockStyle,
 }
 
-impl gpui::Element for TextElement {
-    type RequestLayoutState = ();
-    type PrepaintState = LayoutSnapshot;
-
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        let editor = self.editor.read(cx);
-        let text = editor.buffer().slice(self.source.clone());
-        let caret = editor.selection.selection.head;
-        let collapsed = self.collapsed_lines(&text, caret);
-        let line_count = line_ranges(&text).len() - collapsed.len();
-        let line_height = window.line_height() * self.style.font_scale;
-        let padding = if self.kind == BlockKind::CodeFence {
-            px(2. * CODE_PAD_Y_PX)
-        } else {
-            px(0.)
-        };
-
-        let mut style = Style::default();
-        style.size.width = relative(1.).into();
-        style.size.height = (line_height * line_count as f32 + padding).into();
-        (window.request_layout(style, [], cx), ())
-    }
-
-    fn prepaint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self::PrepaintState {
+impl TextElement {
+    /// Gather the layout inputs of the block for this frame (see [`BlockInputs`]).
+    fn gather(&self, window: &mut Window, cx: &mut App) -> BlockInputs {
         let editor = self.editor.read(cx);
         let text = editor.buffer().slice(self.source.clone());
         let marked = editor.ime.marked.clone();
@@ -543,7 +555,6 @@ impl gpui::Element for TextElement {
         } else {
             Vec::new()
         };
-        let indent = px(self.style.indent_px);
         // The highlighted tokens of the code, from the editor's cache (task 5.3). The editor is
         // no longer borrowed here, so it can be updated.
         let code_tokens: Rc<[Token]> = match &fence {
@@ -556,9 +567,6 @@ impl gpui::Element for TextElement {
             }
             None => Rc::from(Vec::new()),
         };
-        // Code blocks are inset from their background (task 5.3).
-        let pad_x = if is_code { CODE_PAD_X_PX } else { 0. };
-        let pad_y = if is_code { CODE_PAD_Y_PX } else { 0. };
         // The items of a list block, one per line (task 4.2). Empty for other blocks.
         let items = if self.kind == BlockKind::List {
             list::parse_list_lines(&text, self.source.start)
@@ -574,106 +582,324 @@ impl gpui::Element for TextElement {
             color: TextColor::Muted,
             ..self.style
         };
+        BlockInputs {
+            source: self.source.clone(),
+            text,
+            kind: self.kind,
+            style: self.style,
+            revealed,
+            caret,
+            marked,
+            hidden,
+            spans,
+            collapsed,
+            fence,
+            code_tokens,
+            items,
+            font,
+            font_size,
+            color,
+            line_height,
+            marker_text,
+            done_style,
+        }
+    }
+}
 
-        let mut lines = Vec::new();
-        let mut top = bounds.top() + px(pad_y);
-        for (index, range) in line_ranges(&text).into_iter().enumerate() {
-            // Line ranges are relative to `text`, which starts at `source.start` in the buffer.
-            let source = (self.source.start + range.start)..(self.source.start + range.end);
-            // A hidden fence line takes no height (task 5.3).
-            if collapsed.contains(&source) {
-                continue;
+/// Lay out the visual rows of a block whose top-left corner is `origin`. A source line that is
+/// wider than its text area takes several rows, wrapped at `width` (`None` does not wrap). Each
+/// row is one `LineLayout`, with its own source range, hidden ranges and shaped text, so the
+/// caret, hit testing, selection and IME work row by row.
+fn layout_rows(
+    inputs: &BlockInputs,
+    window: &mut Window,
+    origin: Point<Pixels>,
+    width: Option<Pixels>,
+) -> Vec<LineLayout> {
+    let text = inputs.text.as_str();
+    let is_code = inputs.kind == BlockKind::CodeFence;
+    let pad_x = if is_code { CODE_PAD_X_PX } else { 0. };
+    let pad_y = if is_code { CODE_PAD_Y_PX } else { 0. };
+    let indent = px(inputs.style.indent_px);
+    let mut lines = Vec::new();
+    let mut top = origin.y + px(pad_y);
+    for (index, range) in line_ranges(text).into_iter().enumerate() {
+        // Line ranges are relative to `text`, which starts at `source.start` in the buffer.
+        let source = (inputs.source.start + range.start)..(inputs.source.start + range.end);
+        // A hidden fence line takes no height (task 5.3).
+        if inputs.collapsed.contains(&source) {
+            continue;
+        }
+        let line = &text[range];
+        // A list line shows its markers only while the caret is on it (task 4.2).
+        let item = inputs.items.get(index);
+        let line_revealed = source.start <= inputs.caret && inputs.caret <= source.end;
+        let text_x = match item {
+            Some(item) => list::text_indent(item, line_revealed),
+            None => f32::from(indent) + pad_x,
+        };
+        let line_origin = point(origin.x + px(text_x), top);
+        // A checked task item is muted and struck through, from its text on.
+        let done_from = match item {
+            Some(ListLine {
+                marker: Some(ListMarker::Task { checked: true }),
+                text_start,
+                ..
+            }) => Some(*text_start - source.start),
+            _ => None,
+        };
+        let styled: Vec<TextRun> = match &inputs.fence {
+            Some(fence) => {
+                let is_fence =
+                    fence.open_line == source || fence.close_line.as_ref() == Some(&source);
+                code_runs(
+                    source.clone(),
+                    is_fence,
+                    fence.code.start,
+                    &inputs.code_tokens,
+                    &inputs.font,
+                    inputs.color,
+                )
             }
-            let line = &text[range];
-            // A list line shows its markers only while the caret is on it (task 4.2).
-            let item = items.get(index);
-            let line_revealed = source.start <= caret && caret <= source.end;
-            let text_x = match item {
-                Some(item) => list::text_indent(item, line_revealed),
-                None => f32::from(indent) + pad_x,
-            };
-            let line_origin = point(bounds.left() + px(text_x), top);
-            // A checked task item is muted and struck through, from its text on.
-            let done_from = match item {
-                Some(ListLine {
-                    marker: Some(ListMarker::Task { checked: true }),
-                    text_start,
-                    ..
-                }) => Some(*text_start - source.start),
-                _ => None,
-            };
-            let styled: Vec<TextRun> = match &fence {
-                Some(fence) => {
-                    let is_fence =
-                        fence.open_line == source || fence.close_line.as_ref() == Some(&source);
-                    code_runs(
-                        source.clone(),
-                        is_fence,
-                        fence.code.start,
-                        &code_tokens,
-                        &font,
-                        color,
-                    )
-                }
-                None => split_done(line_runs(line, source.start, &spans), done_from)
-                    .into_iter()
-                    .map(|(mut run, done)| {
-                        if done {
-                            run.strike = true;
-                            text_run(&run, &done_style, &font, color)
-                        } else {
-                            text_run(&run, &self.style, &font, color)
-                        }
-                    })
-                    .collect(),
-            };
-            // Zero-length runs are dropped, so an empty line is shaped with no runs. The runs
-            // still cover the source line here, so the IME marked range is applied first.
-            let runs: Vec<TextRun> = ime::decorate_runs(styled, source.clone(), marked.clone())
+            None => split_done(line_runs(line, source.start, &inputs.spans), done_from)
                 .into_iter()
-                .filter(|run| run.len > 0)
-                .collect();
-            // Only the visible bytes are shaped (task 4.4). A run that loses all its bytes is dropped.
-            let (visible, hidden_line) = visible_text(line, source.start, &hidden);
-            let lens: Vec<usize> = runs.iter().map(|run| run.len).collect();
-            let runs: Vec<TextRun> = visible_run_lengths(&lens, source.start, &hidden_line)
+                .map(|(mut run, done)| {
+                    if done {
+                        run.strike = true;
+                        text_run(&run, &inputs.done_style, &inputs.font, inputs.color)
+                    } else {
+                        text_run(&run, &inputs.style, &inputs.font, inputs.color)
+                    }
+                })
+                .collect(),
+        };
+        // Zero-length runs are dropped, so an empty line is shaped with no runs. The runs
+        // still cover the source line here, so the IME marked range is applied first.
+        let runs: Vec<TextRun> = ime::decorate_runs(styled, source.clone(), inputs.marked.clone())
+            .into_iter()
+            .filter(|run| run.len > 0)
+            .collect();
+        // Only the visible bytes are shaped (task 4.4). A run that loses all its bytes is dropped.
+        let (visible, hidden_line) = visible_text(line, source.start, &inputs.hidden);
+        let lens: Vec<usize> = runs.iter().map(|run| run.len).collect();
+        let runs: Vec<TextRun> = visible_run_lengths(&lens, source.start, &hidden_line)
+            .into_iter()
+            .map(|(index, len)| TextRun {
+                len,
+                ..runs[index].clone()
+            })
+            .collect();
+        // The text area is the width less the line's indent, and the right inset of a code block.
+        let wrap_width = width.map(|width| (width - px(text_x) - px(pad_x)).max(px(1.)));
+        let starts = wrap_starts(window, &visible, inputs.font_size, &runs, wrap_width);
+        let visible_lens: Vec<usize> = runs.iter().map(|run| run.len).collect();
+        // The marker of an item whose markers are hidden goes in the gutter (task 4.2).
+        let mut gutter = match item {
+            Some(item) if item.marker.is_some() && !line_revealed => Some(list::gutter(
+                item,
+                line,
+                source.start,
+                line_origin,
+                inputs.line_height,
+                &inputs.marker_text,
+                window,
+            )),
+            _ => None,
+        };
+        let row_sources = row_source_ranges(source.clone(), &starts, &hidden_line);
+        let last = row_sources.len() - 1;
+        for (row, row_source) in row_sources.into_iter().enumerate() {
+            let visible_start = starts[row];
+            let visible_end = starts.get(row + 1).copied().unwrap_or(visible.len());
+            let row_runs: Vec<TextRun> = run_pieces(&visible_lens, visible_start..visible_end)
                 .into_iter()
                 .map(|(index, len)| TextRun {
                     len,
                     ..runs[index].clone()
                 })
                 .collect();
-            let shaped = window
-                .text_system()
-                .shape_line(visible.into(), font_size, &runs, None);
-            // The marker of an item whose markers are hidden goes in the gutter (task 4.2).
-            let gutter = match item {
-                Some(item) if item.marker.is_some() && !line_revealed => Some(list::gutter(
-                    item,
-                    line,
-                    source.start,
-                    line_origin,
-                    line_height,
-                    &marker_text,
-                    window,
-                )),
-                _ => None,
-            };
+            let shaped = window.text_system().shape_line(
+                visible[visible_start..visible_end].into(),
+                inputs.font_size,
+                &row_runs,
+                None,
+            );
+            let row_hidden = intersect_ranges(&hidden_line, &row_source);
             lines.push(LineLayout {
-                source,
+                source: row_source,
                 shaped,
-                origin: line_origin,
-                hidden: hidden_line,
-                gutter,
+                origin: point(line_origin.x, top),
+                hidden: row_hidden,
+                gutter: if row == 0 { gutter.take() } else { None },
+                last_row: row == last,
             });
-            top += line_height;
+            top += inputs.line_height;
         }
+    }
+    lines
+}
 
+/// Visible offsets where the visual rows of one line start, for the visible text `text` of the
+/// line shaped with `runs` and wrapped at `wrap_width`. The first row starts at 0. Without a
+/// wrap width, for empty text, or when shaping fails, the line is one row.
+fn wrap_starts(
+    window: &mut Window,
+    text: &str,
+    font_size: Pixels,
+    runs: &[TextRun],
+    wrap_width: Option<Pixels>,
+) -> Vec<usize> {
+    let Some(wrap_width) = wrap_width else {
+        return vec![0];
+    };
+    if text.is_empty() {
+        return vec![0];
+    }
+    match window.text_system().shape_text(
+        text.to_string().into(),
+        font_size,
+        runs,
+        Some(wrap_width),
+        None,
+    ) {
+        Ok(lines) => {
+            let mut starts = vec![0];
+            if let Some(line) = lines.first() {
+                // A wrap boundary names the glyph that starts the next row.
+                let glyph_runs = line.runs();
+                for boundary in line.wrap_boundaries() {
+                    if let Some(glyph) = glyph_runs
+                        .get(boundary.run_ix)
+                        .and_then(|run| run.glyphs.get(boundary.glyph_ix))
+                    {
+                        starts.push(glyph.index);
+                    }
+                }
+            }
+            starts.dedup();
+            starts
+        }
+        Err(err) => {
+            eprintln!("md_editor: failed to wrap line: {err}");
+            vec![0]
+        }
+    }
+}
+
+/// Source ranges of the visual rows of `line`, given the visible offsets where each row after
+/// the first starts (`starts`, from [`wrap_starts`]) and the hidden ranges of the line. Each row
+/// runs from its start to the next row's start, so the rows tile the line. A hidden range at a
+/// wrap point belongs to the row after it. Pure, unit-tested.
+pub(crate) fn row_source_ranges(
+    line: Range<usize>,
+    starts: &[usize],
+    hidden: &[Range<usize>],
+) -> Vec<Range<usize>> {
+    let mut rows = Vec::with_capacity(starts.len());
+    let mut begin = line.start;
+    for &start in starts.iter().skip(1) {
+        let end = display_to_source(start, line.start, hidden, false);
+        rows.push(begin..end);
+        begin = end;
+    }
+    rows.push(begin..line.end);
+    rows
+}
+
+/// The pieces of runs of `lens` bytes that lie in `range`, as `(run index, bytes)`. Runs that
+/// do not reach `range` are left out, and so are empty pieces. Pure, unit-tested.
+pub(crate) fn run_pieces(lens: &[usize], range: Range<usize>) -> Vec<(usize, usize)> {
+    let mut pieces = Vec::new();
+    let mut run_start = 0;
+    for (index, &len) in lens.iter().enumerate() {
+        let run = run_start..run_start + len;
+        let overlap = run
+            .end
+            .min(range.end)
+            .saturating_sub(run.start.max(range.start));
+        if overlap > 0 {
+            pieces.push((index, overlap));
+        }
+        run_start += len;
+    }
+    pieces
+}
+
+/// The parts of `ranges` that lie in `within`, as absolute ranges. Pure.
+fn intersect_ranges(ranges: &[Range<usize>], within: &Range<usize>) -> Vec<Range<usize>> {
+    ranges
+        .iter()
+        .map(|range| range.start.max(within.start)..range.end.min(within.end))
+        .filter(|range| range.start < range.end)
+        .collect()
+}
+
+impl IntoElement for TextElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl gpui::Element for TextElement {
+    type RequestLayoutState = Rc<BlockInputs>;
+    type PrepaintState = LayoutSnapshot;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let inputs = Rc::new(self.gather(window, cx));
+        let padding = if self.kind == BlockKind::CodeFence {
+            px(2. * CODE_PAD_Y_PX)
+        } else {
+            px(0.)
+        };
+        // The height depends on the wrap width, which is only known once the width is laid out,
+        // so the block is measured at that width (as gpui's text element does).
+        let line_height = inputs.line_height;
+        let measured = Rc::clone(&inputs);
+        let mut style = Style::default();
+        style.size.width = relative(1.).into();
+        let layout_id =
+            window.request_measured_layout(style, move |known, available, window, _cx| {
+                let width = known.width.or(match available.width {
+                    AvailableSpace::Definite(width) => Some(width),
+                    _ => None,
+                });
+                let rows = layout_rows(&measured, window, point(px(0.), px(0.)), width).len();
+                size(width.unwrap_or(px(0.)), line_height * rows as f32 + padding)
+            });
+        (layout_id, inputs)
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        inputs: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        _cx: &mut App,
+    ) -> Self::PrepaintState {
+        let lines = layout_rows(inputs, window, bounds.origin, Some(bounds.size.width));
         LayoutSnapshot {
             lines,
             bounds,
-            line_height,
-            revealed,
+            line_height: inputs.line_height,
+            revealed: inputs.revealed,
         }
     }
 
@@ -856,6 +1082,74 @@ mod tests {
         assert_eq!(layouts.blocks[1].source, 2..9);
         layouts.clear();
         assert!(layouts.block_for_offset(0).is_none());
+    }
+
+    #[test]
+    fn row_source_ranges_tile_the_line() {
+        // "**ab cd ef**" with its two markers hidden, so the visible text is "ab cd ef" (8 bytes).
+        // Rows wrap at visible 3 and 6: "ab " | "cd " | "ef".
+        let hidden = [0..2, 10..12];
+        assert_eq!(
+            row_source_ranges(0..12, &[0, 3, 6], &hidden),
+            vec![0..5, 5..8, 8..12],
+            "a hidden range at the start of a row belongs to that row"
+        );
+        // No wrap points: one row for the whole line.
+        assert_eq!(row_source_ranges(4..9, &[0], &[]), vec![4..9]);
+        // Plain text: the rows are the visible offsets.
+        assert_eq!(
+            row_source_ranges(10..20, &[0, 4, 9], &[]),
+            vec![10..14, 14..19, 19..20]
+        );
+    }
+
+    #[test]
+    fn run_pieces_split_runs_at_the_range() {
+        // Runs of 2, 3 and 4 bytes: 0..2, 2..5, 5..9.
+        let lens = [2, 3, 4];
+        assert_eq!(run_pieces(&lens, 0..9), vec![(0, 2), (1, 3), (2, 4)]);
+        assert_eq!(run_pieces(&lens, 1..6), vec![(0, 1), (1, 3), (2, 1)]);
+        assert_eq!(run_pieces(&lens, 2..5), vec![(1, 3)]);
+        assert_eq!(run_pieces(&lens, 5..5), vec![]);
+        assert_eq!(run_pieces(&[2, 0, 3], 1..4), vec![(0, 1), (2, 2)]);
+    }
+
+    #[test]
+    fn intersect_ranges_clips_to_the_row() {
+        let hidden = [0..2, 10..12];
+        assert_eq!(intersect_ranges(&hidden, &(0..5)), vec![0..2]);
+        assert_eq!(intersect_ranges(&hidden, &(8..12)), vec![10..12]);
+        assert!(intersect_ranges(&hidden, &(3..9)).is_empty());
+    }
+
+    #[test]
+    fn adjacent_row_follows_wrapped_rows_and_lines() {
+        // Row 0 and 1 wrap one source line "abcdef" (0..6). Row 2 is the next line "gh" (7..9),
+        // and row 3 is a blank line (10..10) that follows it.
+        let rows = [0..3, 3..6, 7..9, 10..10];
+        assert_eq!(
+            adjacent_row(&rows, 0, true),
+            Some(1),
+            "next row of the same line"
+        );
+        assert_eq!(
+            adjacent_row(&rows, 1, true),
+            Some(2),
+            "first row of the next line"
+        );
+        assert_eq!(adjacent_row(&rows, 2, true), Some(3));
+        assert_eq!(adjacent_row(&rows, 3, true), None, "last row");
+        assert_eq!(adjacent_row(&rows, 0, false), None, "first row");
+        assert_eq!(adjacent_row(&rows, 2, false), Some(1));
+        assert_eq!(adjacent_row(&rows, 1, false), Some(0));
+    }
+
+    #[test]
+    fn adjacent_row_skips_nothing_across_a_gap() {
+        // A gap of source that has no rows (a table or hidden fence lines) between 0..4 and 20..25.
+        let rows = [0..4, 20..25];
+        assert_eq!(adjacent_row(&rows, 0, true), None);
+        assert_eq!(adjacent_row(&rows, 1, false), None);
     }
 
     #[test]
