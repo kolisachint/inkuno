@@ -32,7 +32,7 @@ Read this first, then `docs/IMPLEMENTATION_PLAN.md` (task list, Definition of Do
 | P6 render host / math | 6.2 done; 6.4 core done (`md_render::raster`; screenshot with bundled fonts waits on 6.3); 6.1, 6.3, 6.5, 6.6 not started. |
 | P7 Mermaid | 7.3 core done (debounce 300 ms, last-good fallback, `BlockView`); 7.3 UI part, 7.1, 7.2 not started. |
 | P8 modes | Not started (GPUI). |
-| P9 workspace | 9.3 done; 9.1, 9.4 core done (`Expansion`, `visible_rows`, `MatchSpan`; sidebar and search panel UI left); 9.2 in progress; 9.5 not started. |
+| P9 workspace | 9.3 done; 9.1, 9.4 core done (`Expansion`, `visible_rows`, `MatchSpan`; sidebar and search panel UI left); 9.2 core done (`watcher::VaultWatcher`, `plan_buffer_updates`; app must apply updates; 1 s latency not asserted in tests); 9.5 not started. |
 | P10 theming | Not started. |
 
 ## Blockers and open items
@@ -56,7 +56,7 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 
 ## Next tasks to dispatch (in order)
 
-1. Merge any in-progress worktree branches (GPUI on Linux, 9.2) after they pass the checks above.
+1. Merge any in-progress worktree branches (GPUI on Linux) after they pass the checks above.
 2. Spike notes S1 and S3 (blocker 3).
 3. P3: 3.1 to 3.6, md_editor basic. Interfaces first, then one Haiku task each, verified with Linux screenshots.
 4. Then P4, then P5.3, P6, P7, P8, P9 UI, P10, following the plan's dependency graph.
