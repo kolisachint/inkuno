@@ -145,11 +145,11 @@ pub fn paint_selection(editor: &Editor, layout: &LayoutSnapshot, window: &mut Wi
         if start > end || (start == end && !includes_newline) {
             continue;
         }
-        let x0 = line.shaped.x_for_index(start - line.source.start);
+        let x0 = line.x_for_source(start);
         let x1 = if includes_newline {
             line.shaped.width + newline_width
         } else {
-            line.shaped.x_for_index(end - line.source.start)
+            line.x_for_source(end)
         };
         let origin = point(line.origin.x + x0, line.origin.y);
         let bounds = Bounds::new(origin, size(x1 - x0, layout.line_height));

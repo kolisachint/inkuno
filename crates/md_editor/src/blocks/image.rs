@@ -239,6 +239,7 @@ impl gpui::Element for ImageBlock {
                     lines: Vec::new(),
                     bounds,
                     line_height,
+                    revealed: false,
                 },
             );
         });

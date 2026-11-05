@@ -9,8 +9,11 @@
 
 use gpui::{actions, prelude::*, Action, App, Context, Div, Entity, KeyBinding, Window};
 
+use md_core::display_map::{Direction, DisplayMap};
+
 use crate::clipboard::{Copy, Cut, Paste};
 use crate::editor::Editor;
+use crate::inline_render::document_hidden_ranges;
 use crate::selection::Selection;
 
 actions!(
@@ -229,6 +232,13 @@ impl Editor {
             motion,
             Motion::Left | Motion::Right | Motion::WordLeft | Motion::WordRight
         );
+        let text = self.text();
+        // The hidden markers as drawn for the current caret (task 4.4). Left and Right skip them,
+        // and the other motions snap onto a caret stop, so the caret never rests inside one.
+        let map = DisplayMap::new(
+            text.len(),
+            document_hidden_ranges(&text, Some(current.head)),
+        );
         let moved = if !extend && !current.is_empty() && collapses {
             let range = current.range();
             let offset = match motion {
@@ -236,12 +246,28 @@ impl Editor {
                 _ => range.end,
             };
             Moved {
-                offset,
+                offset: map.clip(offset),
                 goal_column: None,
             }
         } else {
-            let text = self.text();
-            move_offset(&text, current.head, motion, self.selection.goal_column)
+            match motion {
+                Motion::Left => Moved {
+                    offset: map.move_caret(&text, current.head, Direction::Left),
+                    goal_column: None,
+                },
+                Motion::Right => Moved {
+                    offset: map.move_caret(&text, current.head, Direction::Right),
+                    goal_column: None,
+                },
+                Motion::WordLeft | Motion::WordRight => {
+                    let word = move_offset(&text, current.head, motion, None);
+                    Moved {
+                        offset: map.clip(word.offset),
+                        goal_column: None,
+                    }
+                }
+                _ => move_offset(&text, current.head, motion, self.selection.goal_column),
+            }
         };
         let anchor = if extend { current.anchor } else { moved.offset };
         // set_selection clears goal_column, so the goal is restored after it.

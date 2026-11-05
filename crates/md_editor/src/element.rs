@@ -10,17 +10,23 @@ use std::panic::Location;
 use gpui::{
     fill, point, px, relative, size, App, Bounds, ElementId, Entity, Font, FontFallbacks,
     FontStyle, FontWeight, GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId,
-    Pixels, Point, ShapedLine, SharedString, StrikethroughStyle, Style, TextAlign, TextRun,
-    UnderlineStyle, Window,
+    Pixels, Point, ShapedLine, StrikethroughStyle, Style, TextAlign, TextRun, UnderlineStyle,
+    Window,
 };
 
-use md_core::display_map::DisplayMap;
+use md_core::display_map::{Bias, DisplayMap};
 use md_core::inline::inline_spans;
+use md_core::BlockKind;
 
-use crate::blocks::basic::{line_runs, BlockStyle, Decoration, RunStyle, TextColor};
+use crate::blocks::basic::{
+    block_style, line_runs, shows_inline_styles, BlockStyle, Decoration, RunStyle, TextColor,
+};
 use crate::cursor::{self, hit_test};
 use crate::editor::Editor;
 use crate::ime;
+use crate::inline_render::{
+    block_hidden_ranges, display_to_source, source_to_display, visible_run_lengths, visible_text,
+};
 use crate::selection;
 
 /// Monospace family for inline code: the macOS system face, or the common Linux one. The
@@ -30,6 +36,15 @@ const CODE_FAMILY: &str = "Menlo";
 #[cfg(not(target_os = "macos"))]
 const CODE_FAMILY: &str = "DejaVu Sans Mono";
 const CODE_FALLBACKS: &[&str] = &["Consolas", "Liberation Mono", "Courier New"];
+/// Body family on Linux (task 4.4). GPUI maps the default `.SystemUIFont` to "IBM Plex Sans",
+/// which is often not installed, and the fallback then has one regular face, so bold and italic
+/// runs look regular. Liberation Sans is widely packaged and has regular, bold, italic and
+/// bold-italic faces. DejaVu Sans has no italic face on some installs, so it is not used. macOS
+/// keeps the system font.
+#[cfg(not(target_os = "macos"))]
+const BODY_FAMILY: Option<&str> = Some("Liberation Sans");
+#[cfg(target_os = "macos")]
+const BODY_FAMILY: Option<&str> = None;
 /// Colours of the block styles (DESIGN §9 will move these into the theme).
 const LINK_COLOR: Hsla = Hsla {
     h: 0.61,
@@ -77,15 +92,37 @@ pub fn line_ranges(text: &str) -> Vec<Range<usize>> {
 /// One laid-out source line.
 ///
 /// Written during paint by `TextElement` and read by selection (3.2), hit testing (3.2) and IME
-/// bounds (3.4).
+/// bounds (3.4). The shaped text is the line without its hidden bytes (task 4.4), so a source
+/// offset is converted with [`LineLayout::source_to_shaped`] before it indexes `shaped`, and an
+/// index is converted back with [`LineLayout::shaped_to_source`].
 #[derive(Clone)]
 pub struct LineLayout {
     /// Byte range of the line in the buffer, excluding its `\n`.
     pub source: Range<usize>,
-    /// The shaped text of the line.
+    /// The shaped text of the line: its visible bytes only.
     pub shaped: ShapedLine,
     /// Top-left corner of the line in window coordinates.
     pub origin: Point<Pixels>,
+    /// Hidden byte ranges of the line, absolute and inside `source` (task 4.4).
+    pub hidden: Vec<Range<usize>>,
+}
+
+impl LineLayout {
+    /// The index into `shaped` for source offset `source` of this line.
+    pub fn source_to_shaped(&self, source: usize) -> usize {
+        source_to_display(source, self.source.start, &self.hidden)
+    }
+
+    /// The source offset for index `index` into `shaped`. `Bias::Left` gives the start of a
+    /// hidden range at a collapse point, `Bias::Right` its end.
+    pub fn shaped_to_source(&self, index: usize, bias: Bias) -> usize {
+        display_to_source(index, self.source.start, &self.hidden, bias == Bias::Right)
+    }
+
+    /// The x position, relative to the line origin, of source offset `source`.
+    pub fn x_for_source(&self, source: usize) -> Pixels {
+        self.shaped.x_for_index(self.source_to_shaped(source))
+    }
 }
 
 /// Geometry of one painted block: the lines of one `TextElement`.
@@ -96,6 +133,9 @@ pub struct LayoutSnapshot {
     pub bounds: Bounds<Pixels>,
     /// Height of one line.
     pub line_height: Pixels,
+    /// Whether the caret is in this block, so its markers show (task 4.4). A thematic break
+    /// draws its rule only while it is not revealed, since the rule would cross its text.
+    pub revealed: bool,
 }
 
 /// One painted block. `source` is the block's byte range in the buffer (its trailing newline
@@ -233,6 +273,8 @@ pub struct TextElement {
     editor: Entity<Editor>,
     /// Byte range of the buffer to draw.
     source: Range<usize>,
+    /// Kind of the block. It decides the markers and inline spans (task 4.4).
+    kind: BlockKind,
     /// How the block is drawn (task 4.1): font scale, bold, colour, indent and decoration.
     style: BlockStyle,
     /// Whether the inline spans of the block are drawn with their styles (task 4.1).
@@ -240,21 +282,26 @@ pub struct TextElement {
 }
 
 impl TextElement {
-    /// An element that draws `source` of the editor's buffer with `style`. `inline_styles`
-    /// turns on the inline spans (bold, italic, code, link, ...) of the text.
-    pub fn new(
-        editor: Entity<Editor>,
-        source: Range<usize>,
-        style: BlockStyle,
-        inline_styles: bool,
-    ) -> Self {
+    /// An element that draws `source` of the editor's buffer as a block of `kind`. The style and
+    /// the inline spans follow the kind (task 4.1). Markers are hidden unless the caret is in
+    /// the block or in their span (task 4.4).
+    pub fn new(editor: Entity<Editor>, source: Range<usize>, kind: BlockKind) -> Self {
         Self {
             editor,
             source,
-            style,
-            inline_styles,
+            style: block_style(&kind),
+            inline_styles: shows_inline_styles(&kind),
+            kind,
         }
     }
+}
+
+/// The font of body text: the window's font, with the body family on Linux (see `BODY_FAMILY`).
+fn body_font(mut font: Font) -> Font {
+    if let Some(family) = BODY_FAMILY {
+        font.family = family.into();
+    }
+    font
 }
 
 /// Convert one styled part of a line into a GPUI run. `base` is the font and `base_color` the
@@ -313,7 +360,7 @@ fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &
             );
             window.paint_quad(fill(bar, MUTED_COLOR));
         }
-        Decoration::Rule => {
+        Decoration::Rule if !snapshot.revealed => {
             let top = snapshot.bounds.top() + snapshot.line_height * 0.5;
             let rule = Bounds::new(
                 point(snapshot.bounds.left(), top),
@@ -321,6 +368,7 @@ fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &
             );
             window.paint_quad(fill(rule, MARKER_COLOR));
         }
+        Decoration::Rule => {}
     }
 }
 
@@ -373,9 +421,14 @@ impl gpui::Element for TextElement {
         let editor = self.editor.read(cx);
         let text = editor.buffer().slice(self.source.clone());
         let marked = editor.ime.marked.clone();
+        // The caret decides what is revealed: a block that holds it shows its block markers, and
+        // a span that holds it shows its inline markers (task 4.4). Other markers are hidden.
+        let caret = editor.selection.selection.head;
+        let revealed = self.source.start <= caret && caret <= self.source.end;
+        let hidden = block_hidden_ranges(&text, self.source.start, &self.kind, Some(caret));
 
         let style = window.text_style();
-        let font = style.font();
+        let font = body_font(style.font());
         let font_size = style.font_size.to_pixels(window.rem_size()) * self.style.font_scale;
         let color = style.color;
         let line_height = window.line_height() * self.style.font_scale;
@@ -394,23 +447,34 @@ impl gpui::Element for TextElement {
             // Line ranges are relative to `text`, which starts at `source.start` in the buffer.
             let source = (self.source.start + range.start)..(self.source.start + range.end);
             let line = &text[range];
-            let line_text: SharedString = line.to_string().into();
             let styled: Vec<TextRun> = line_runs(line, source.start, &spans)
                 .iter()
                 .map(|run| text_run(run, &self.style, &font, color))
                 .collect();
-            // Zero-length runs are dropped, so an empty line is shaped with no runs.
+            // Zero-length runs are dropped, so an empty line is shaped with no runs. The runs
+            // still cover the source line here, so the IME marked range is applied first.
             let runs: Vec<TextRun> = ime::decorate_runs(styled, source.clone(), marked.clone())
                 .into_iter()
                 .filter(|run| run.len > 0)
                 .collect();
+            // Only the visible bytes are shaped (task 4.4). A run that loses all its bytes is dropped.
+            let (visible, hidden_line) = visible_text(line, source.start, &hidden);
+            let lens: Vec<usize> = runs.iter().map(|run| run.len).collect();
+            let runs: Vec<TextRun> = visible_run_lengths(&lens, source.start, &hidden_line)
+                .into_iter()
+                .map(|(index, len)| TextRun {
+                    len,
+                    ..runs[index].clone()
+                })
+                .collect();
             let shaped = window
                 .text_system()
-                .shape_line(line_text, font_size, &runs, None);
+                .shape_line(visible.into(), font_size, &runs, None);
             lines.push(LineLayout {
                 source,
                 shaped,
                 origin: point(bounds.left() + indent, top),
+                hidden: hidden_line,
             });
             top += line_height;
         }
@@ -419,6 +483,7 @@ impl gpui::Element for TextElement {
             lines,
             bounds,
             line_height,
+            revealed,
         }
     }
 

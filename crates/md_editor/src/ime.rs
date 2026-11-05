@@ -274,13 +274,13 @@ impl EntityInputHandler for Editor {
         let range = utf16_to_utf8_range(&self.text(), range_utf16);
         let block = self.layouts.block_for_offset(range.start)?;
         let line = block.line_for_offset(range.start)?;
-        let start = range.start.clamp(line.source.start, line.source.end) - line.source.start;
-        let end = range.end.clamp(line.source.start, line.source.end) - line.source.start;
+        let start = range.start.clamp(line.source.start, line.source.end);
+        let end = range.end.clamp(line.source.start, line.source.end);
         let top = line.origin.y;
         Some(Bounds::from_corners(
-            point(line.origin.x + line.shaped.x_for_index(start), top),
+            point(line.origin.x + line.x_for_source(start), top),
             point(
-                line.origin.x + line.shaped.x_for_index(end),
+                line.origin.x + line.x_for_source(end),
                 top + block.snapshot.line_height,
             ),
         ))

@@ -22,6 +22,8 @@ pub mod element; // task 3.1
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod ime; // task 3.4
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod inline_render; // task 4.4
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod input_rules; // task 4.5
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod keys; // task 3.3

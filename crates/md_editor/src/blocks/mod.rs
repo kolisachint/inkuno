@@ -10,7 +10,6 @@ use std::path::Path;
 use gpui::{AnyElement, App, Entity, IntoElement};
 use md_core::BlockKind;
 
-use crate::blocks::basic::{block_style, shows_inline_styles};
 use crate::editor::Editor;
 use crate::element::TextElement;
 
@@ -59,11 +58,5 @@ pub fn item_element(
             _ => {}
         }
     }
-    TextElement::new(
-        editor.clone(),
-        range,
-        block_style(&kind),
-        shows_inline_styles(&kind),
-    )
-    .into_any_element()
+    TextElement::new(editor.clone(), range, kind).into_any_element()
 }

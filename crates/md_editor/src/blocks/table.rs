@@ -399,6 +399,7 @@ impl gpui::Element for TableElement {
                     lines: Vec::new(),
                     bounds,
                     line_height,
+                    revealed: false,
                 },
             );
         });
