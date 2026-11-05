@@ -16,6 +16,8 @@ use md_core::buffer::Buffer;
 use crate::block_list::BlockListState;
 use crate::element::Layouts;
 use crate::ime::ImeState;
+use crate::modes::typewriter::TypewriterState;
+use crate::modes::Modes;
 use crate::selection::SelectionState;
 
 /// Text shown when the app starts without a file (used by the app's `Document::sample`).
@@ -41,6 +43,10 @@ pub struct Editor {
     pub(crate) blocks: BlockListState,
     /// The folder of the note. Relative image paths resolve against it (task 4.3). Set by the app.
     pub(crate) base_dir: Option<PathBuf>,
+    /// The mode flags (phase 8). Read and set through `Editor::modes` and `Editor::set_modes`.
+    pub(crate) modes: Modes,
+    /// Typewriter Mode scroll state (task 8.4).
+    pub(crate) typewriter: TypewriterState,
 }
 
 impl Editor {
@@ -54,6 +60,8 @@ impl Editor {
             ime: ImeState::default(),
             blocks: BlockListState::default(),
             base_dir: None,
+            modes: crate::modes::startup_modes(),
+            typewriter: TypewriterState::default(),
         }
     }
 
@@ -99,6 +107,8 @@ impl Render for Editor {
         let root = crate::keys::attach(root, &editor);
         // HOOK 3.7 (edit_keys.rs): attach Backspace, Delete, Enter, Tab, undo, redo and select all.
         let root = crate::edit_keys::attach(root, &editor);
+        // HOOK 8.4 (modes/mod.rs): attach the mode toggle actions (Source, Focus, Typewriter).
+        let root = crate::modes::attach(root, &editor);
         // HOOK 3.5 (block_list.rs): the virtualized block list (replaced the 3.1 whole-buffer TextElement).
         let root = root.child(crate::block_list::render_blocks(&editor, cx));
         let _ = &editor;

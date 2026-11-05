@@ -15,7 +15,7 @@ use std::panic::Location;
 use std::rc::Rc;
 
 use gpui::{
-    list, px, relative, AnyElement, App, Bounds, Context, ElementId, Entity, GlobalElementId,
+    div, list, px, relative, AnyElement, App, Bounds, Context, ElementId, Entity, GlobalElementId,
     InspectorElementId, IntoElement, LayoutId, ListAlignment, ListOffset, ListState, Pixels, Style,
     Styled, Window,
 };
@@ -47,6 +47,25 @@ pub struct BlockListState {
     /// Buffer version and caret offset at the last caret reveal. The list scrolls to the caret
     /// again only when one of them changes, so wheel scrolling away from the caret is kept.
     revealed: Option<(u64, usize)>,
+    /// Whether Typewriter Mode's spacer items are in the list: one blank item before the first
+    /// block and one after the last (task 8.4). When they are, the list holds two more items
+    /// than `items`.
+    spacers: bool,
+    /// Height of each spacer, in pixels. Zero while `spacers` is off.
+    spacer_px: f32,
+}
+
+impl BlockListState {
+    /// Number of spacer items before the first block: 1 while the spacers are in the list.
+    fn lead(&self) -> usize {
+        usize::from(self.spacers)
+    }
+
+    /// The list item that holds byte `offset` of the buffer, counting the leading spacer, if any
+    /// (task 8.4).
+    pub(crate) fn item_index_at(&self, offset: usize) -> Option<usize> {
+        item_index_for_offset(&self.items, offset).map(|ix| ix + self.lead())
+    }
 }
 
 impl Default for BlockListState {
@@ -59,6 +78,8 @@ impl Default for BlockListState {
             kinds: Vec::new(),
             hashes: Vec::new(),
             revealed: None,
+            spacers: false,
+            spacer_px: 0.,
         }
     }
 }
@@ -89,7 +110,7 @@ fn reveal_caret(editor: &Entity<Editor>, window: &mut Window, cx: &mut App) {
     if revealed == Some((version, head)) {
         return;
     }
-    if let Some(index) = item_index_for_offset(&editor.read(cx).blocks.items, head) {
+    if let Some(index) = editor.read(cx).blocks.item_index_at(head) {
         let list = editor.read(cx).blocks.list.clone();
         let before = list.logical_scroll_top();
         let laid_out = list.bounds_for_item(index).is_some();
@@ -183,9 +204,34 @@ fn hash_item(kind: &BlockKind, text: &str) -> u64 {
 /// unchanged, so a re-render without edits does not re-split the document.
 fn sync(editor: &Entity<Editor>, cx: &mut App) {
     let version = editor.read(cx).buffer().version();
-    if editor.read(cx).blocks.version == Some(version) {
-        return;
+    if editor.read(cx).blocks.version != Some(version) {
+        sync_items(editor, version, cx);
     }
+    let want = editor.read(cx).modes().typewriter;
+    if editor.read(cx).blocks.spacers != want {
+        set_spacers(editor, want, cx);
+    }
+}
+
+/// Add or remove the Typewriter Mode spacer items at both ends of the list (task 8.4). Called
+/// after the block items are up to date, so `items` gives the count to splice around.
+fn set_spacers(editor: &Entity<Editor>, on: bool, cx: &mut App) {
+    editor.update(cx, |editor, _cx| {
+        let state = &mut editor.blocks;
+        let n = state.items.len();
+        if on {
+            state.list.splice(0..0, 1);
+            state.list.splice(n + 1..n + 1, 1);
+        } else {
+            state.list.splice(n + 1..n + 2, 0);
+            state.list.splice(0..1, 0);
+        }
+        state.spacers = on;
+    });
+}
+
+/// Bring the block items up to date with the buffer at `version`.
+fn sync_items(editor: &Entity<Editor>, version: u64, cx: &mut App) {
     let text = editor.read(cx).text();
     let blocks = blocks_for(&text);
     let items = item_ranges(&text, &blocks);
@@ -198,7 +244,8 @@ fn sync(editor: &Entity<Editor>, cx: &mut App) {
     editor.update(cx, |editor, _cx| {
         let state = &mut editor.blocks;
         let (old, count) = changed_span(&state.hashes, &hashes);
-        state.list.splice(old, count);
+        let lead = state.lead();
+        state.list.splice(old.start + lead..old.end + lead, count);
         state.items = items;
         state.kinds = kinds;
         state.hashes = hashes;
@@ -258,12 +305,39 @@ impl gpui::Element for BlockHost {
         // The items are laid out after this point in the same frame, so the counter then holds
         // this frame's count.
         layouts.set(0);
+        // Typewriter Mode (8.4) spacers are half the viewport tall, so the first and last blocks
+        // can be centred. The viewport height is the last frame's. A changed height is measured
+        // again, since the spacers are list items.
+        let spacer_px = if self.editor.read(cx).modes().typewriter {
+            crate::modes::typewriter::spacer_height(f32::from(state.viewport_bounds().size.height))
+        } else {
+            0.
+        };
+        if self.editor.read(cx).blocks.spacer_px != spacer_px {
+            self.editor.update(cx, |editor, _cx| {
+                let state = &mut editor.blocks;
+                state.spacer_px = spacer_px;
+                if state.spacers {
+                    let n = state.items.len();
+                    state.list.remeasure_items(0..1);
+                    state.list.remeasure_items(n + 1..n + 2);
+                }
+            });
+        }
 
         let editor = self.editor.clone();
         let counter = layouts.clone();
         // The item closure cannot borrow the editor, so it holds its own clone of the entity.
         let mut child = list(state, move |ix, _window, cx| {
             counter.set(counter.get() + 1);
+            let (lead, count) = {
+                let state = &editor.read(cx).blocks;
+                (state.lead(), state.items.len())
+            };
+            if lead == 1 && (ix == 0 || ix == count + 1) {
+                return div().w_full().h(px(spacer_px)).into_any_element();
+            }
+            let ix = ix - lead;
             let (range, kind) = {
                 let state = &editor.read(cx).blocks;
                 (
@@ -296,8 +370,11 @@ impl gpui::Element for BlockHost {
         cx: &mut App,
     ) -> Self::PrepaintState {
         request_layout.0.prepaint(window, cx);
-        // After the visible items are laid out, so the caret block's height is known.
-        reveal_caret(&self.editor, window, cx);
+        // After the visible items are laid out, so the caret block's height is known. In
+        // Typewriter Mode the caret is centred after paint instead (`paint` below).
+        if !self.editor.read(cx).modes().typewriter {
+            reveal_caret(&self.editor, window, cx);
+        }
     }
 
     fn paint(
@@ -311,6 +388,8 @@ impl gpui::Element for BlockHost {
         cx: &mut App,
     ) {
         request_layout.0.paint(window, cx);
+        // Typewriter Mode (8.4): the caret's block is painted now, so its line position is known.
+        crate::modes::typewriter::step(&self.editor, window, cx);
         // Mouse and input handlers are registered once for the whole list, not per block, so
         // each mouse event and each IME call is handled once.
         cursor::register_mouse_handlers(&self.editor, bounds, window);
