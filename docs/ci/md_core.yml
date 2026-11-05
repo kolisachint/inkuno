@@ -1,4 +1,3 @@
-# Move this file to .github/workflows/md_core.yml to enable CI (it was kept out of .github/ because the pushing session lacked GitHub workflow scope).
 name: md_core
 
 on:

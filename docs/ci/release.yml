@@ -1,0 +1,200 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # Tag builds get their own group; all branch/dispatch builds share one global
+  # group so two branches cannot race on the single `nightly` release and tag.
+  group: ${{ startsWith(github.ref, 'refs/tags/') && github.ref || 'release-nightly' }}
+  cancel-in-progress: true
+
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release -p app
+
+      - name: Package noteapp.app bundle and archives
+        run: |
+          set -euo pipefail
+          VERSION=$(awk -F'"' '/^version/ {print $2; exit}' Cargo.toml)
+          echo "Workspace version: ${VERSION}"
+
+          rm -rf dist
+          mkdir -p dist
+
+          # Raw binary archive (tar.gz containing only `noteapp`).
+          cp target/release/app dist/noteapp
+          tar -C dist -czf dist/noteapp-macos-arm64.tar.gz noteapp
+          rm dist/noteapp
+
+          # App bundle.
+          BUNDLE=dist/noteapp.app
+          mkdir -p "${BUNDLE}/Contents/MacOS"
+          cp target/release/app "${BUNDLE}/Contents/MacOS/noteapp"
+          cat > "${BUNDLE}/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>noteapp</string>
+            <key>CFBundleDisplayName</key>
+            <string>noteapp</string>
+            <key>CFBundleIdentifier</key>
+            <string>dev.noteapp.noteapp</string>
+            <key>CFBundleExecutable</key>
+            <string>noteapp</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${VERSION}</string>
+            <key>CFBundleVersion</key>
+            <string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>11.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          # Ad-hoc signature (no Developer ID; not notarized).
+          codesign --force --deep -s - "${BUNDLE}"
+          codesign --verify --deep --strict "${BUNDLE}"
+
+          # Zip the bundle with ditto so macOS metadata and symlinks survive.
+          (cd dist && ditto -c -k --keepParent noteapp.app noteapp-macos-arm64.zip)
+
+          ls -la dist
+
+      - name: Upload macOS archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: noteapp-macos-arm64
+          path: |
+            dist/noteapp-macos-arm64.zip
+            dist/noteapp-macos-arm64.tar.gz
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GPUI system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libfontconfig-dev \
+            libfreetype-dev \
+            libssl-dev \
+            libzstd-dev \
+            libasound2-dev \
+            pkg-config \
+            clang
+
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release -p app
+
+      - name: Package Linux archive
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
+          cp target/release/app dist/noteapp
+          tar -C dist -czf dist/noteapp-linux-x86_64.tar.gz noteapp
+          rm dist/noteapp
+          ls -la dist
+
+      - name: Upload Linux archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: noteapp-linux-x86_64
+          path: dist/noteapp-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: [macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List archives
+        run: ls -la dist
+
+      - name: Delete previous nightly release and tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: gh release delete nightly --cleanup-tag -y || true
+
+      - name: Publish tagged release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          prerelease: false
+          files: |
+            dist/noteapp-macos-arm64.zip
+            dist/noteapp-macos-arm64.tar.gz
+            dist/noteapp-linux-x86_64.tar.gz
+
+      - name: Publish nightly release
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "Nightly (${{ github.sha }})"
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          body: |
+            Nightly build from commit ${{ github.sha }} (ref ${{ github.ref_name }}).
+
+            The macOS build is unsigned and ad-hoc signed (not notarized by Apple).
+            After unzipping noteapp-macos-arm64.zip, run the following before opening the app:
+
+                xattr -dr com.apple.quarantine noteapp.app
+
+            noteapp-macos-arm64.tar.gz and noteapp-linux-x86_64.tar.gz each contain
+            only the `noteapp` executable (Apple Silicon macOS and Linux x86_64).
+          files: |
+            dist/noteapp-macos-arm64.zip
+            dist/noteapp-macos-arm64.tar.gz
+            dist/noteapp-linux-x86_64.tar.gz
