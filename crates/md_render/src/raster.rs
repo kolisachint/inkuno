@@ -245,7 +245,13 @@ mod tests {
 </svg>"##
         );
         let img = rasterize_svg(&svg, 1.0, fonts).unwrap();
-        let painted = img.rgba.chunks_exact(4).filter(|p| p[3] > 0).count();
+        let painted = img
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 0)
+            .count();
         assert!(painted > 0, "text produced no pixels");
     }
 }
