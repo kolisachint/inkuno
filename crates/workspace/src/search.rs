@@ -46,6 +46,20 @@ pub struct SearchOptions {
     pub max_results: Option<usize>,
 }
 
+/// In-memory text that replaces one file on disk during a search.
+///
+/// The open note may hold unsaved edits, so byte offsets computed from the
+/// file on disk would land in the wrong place when the user jumps to a
+/// result. Passing the open note's buffer text keeps its hits (line numbers,
+/// line text and match offsets) in buffer coordinates.
+#[derive(Debug, Clone, Copy)]
+pub struct BufferOverride<'a> {
+    /// The note's path, as the open document knows it.
+    pub path: &'a Path,
+    /// The buffer text to scan instead of the file.
+    pub text: &'a str,
+}
+
 /// Outcome of [`search_with_report`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SearchReport {
@@ -75,6 +89,26 @@ pub fn search_with_report(
     query: &str,
     opts: &SearchOptions,
 ) -> io::Result<SearchReport> {
+    search_with_report_and_buffers(vault, query, opts, &[])
+}
+
+/// Like [`search_with_report`], but each file with a [`BufferOverride`] is
+/// scanned from the override's in-memory text instead of from disk. The hit
+/// keeps the file's path and its place in the ordering; only the scanned
+/// text (and therefore the line numbers, line text and match offsets) comes
+/// from the buffer.
+///
+/// Pass the currently open note's buffer text so its results stay correct
+/// while it has unsaved edits. An override for a path that is not one of the
+/// vault's notes is ignored.
+///
+/// An empty query returns no hits and never touches the overrides.
+pub fn search_with_report_and_buffers(
+    vault: &Vault,
+    query: &str,
+    opts: &SearchOptions,
+    buffers: &[BufferOverride<'_>],
+) -> io::Result<SearchReport> {
     if query.is_empty() || opts.max_results == Some(0) {
         return Ok(SearchReport::default());
     }
@@ -83,12 +117,47 @@ pub fn search_with_report(
     let mut files = note_files(vault.root())?;
     // Hits are listed case-insensitively by path, as the sidebar sorts.
     files.sort_by_cached_key(|p| (p.to_string_lossy().to_lowercase(), p.clone()));
+    // The open note's path may differ textually (symlinks, `..`) from the
+    // walker's path to the same file, so resolve once for the fallback check.
+    let canonical: Vec<(PathBuf, &str)> = buffers
+        .iter()
+        .map(|b| (canonical_or_original(b.path), b.text))
+        .collect();
     Ok(scan_files(
         &files,
         &matcher,
         &mut searcher,
         opts.max_results,
+        buffers,
+        &canonical,
     ))
+}
+
+/// `path` canonicalized, or the path itself when it cannot be resolved
+/// (a note created but not yet saved, for example).
+fn canonical_or_original(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// The override text for `file`, if one of the open buffers is that file.
+fn buffer_for<'a>(
+    file: &Path,
+    buffers: &[BufferOverride<'a>],
+    canonical: &[(PathBuf, &'a str)],
+) -> Option<&'a str> {
+    if let Some(text) = buffers
+        .iter()
+        .find_map(|b| (b.path == file).then_some(b.text))
+    {
+        return Some(text);
+    }
+    if canonical.is_empty() {
+        return None;
+    }
+    let file = canonical_or_original(file);
+    canonical
+        .iter()
+        .find_map(|(path, text)| (path == &file).then_some(*text))
 }
 
 fn build_matcher(query: &str, opts: &SearchOptions) -> io::Result<RegexMatcher> {
@@ -119,6 +188,8 @@ fn scan_files(
     matcher: &RegexMatcher,
     searcher: &mut Searcher,
     max_results: Option<usize>,
+    buffers: &[BufferOverride<'_>],
+    canonical: &[(PathBuf, &str)],
 ) -> SearchReport {
     let mut report = SearchReport::default();
     for file in files {
@@ -132,7 +203,13 @@ fn scan_files(
             hits: &mut report.hits,
             max: max_results,
         };
-        if let Err(err) = searcher.search_path(matcher, file, &mut sink) {
+        // The open note is scanned from its buffer, so its hits stay in
+        // buffer coordinates while it has unsaved edits.
+        let searched = match buffer_for(file, buffers, canonical) {
+            Some(text) => searcher.search_slice(matcher, text.as_bytes(), &mut sink),
+            None => searcher.search_path(matcher, file, &mut sink),
+        };
+        if let Err(err) = searched {
             report.hits.truncate(before);
             report.skipped.push((file.clone(), err.to_string()));
         }
@@ -418,6 +495,54 @@ mod tests {
     }
 
     #[test]
+    fn open_dirty_note_is_searched_from_its_buffer() {
+        // On disk the match is on line 1 at byte 0 ...
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("n.md");
+        write(&path, "needle here\nnothing else\n");
+        let vault = Vault::open(dir.path()).unwrap();
+        // ... but the open buffer has unsaved edits that moved it.
+        let buffer = "changed first line\nneedle here\n";
+        let buffers = [BufferOverride {
+            path: &path,
+            text: buffer,
+        }];
+        let report = search_with_report_and_buffers(&vault, "needle", &opts(), &buffers).unwrap();
+        assert!(report.skipped.is_empty());
+        assert_eq!(report.hits.len(), 1);
+        let hit = &report.hits[0];
+        assert_eq!(hit.line_number, 2);
+        assert_eq!(hit.line, "needle here");
+        assert_eq!(hit.byte_offset, buffer.find("needle here").unwrap() as u64);
+        // The span points at the match in the buffer text, not the disk text.
+        assert_eq!(hit.matches.len(), 1);
+        let span = &hit.matches[0].byte_range;
+        assert_eq!(&buffer[span.start as usize..span.end as usize], "needle");
+        // And the plain disk search shows the stale offset the jump used to get.
+        let stale = search(&vault, "needle", &opts()).unwrap();
+        assert_eq!(stale.len(), 1);
+        assert_eq!(stale[0].byte_offset, 0);
+        assert_ne!(stale[0].byte_offset, hit.byte_offset);
+    }
+
+    #[test]
+    fn buffer_override_hides_matches_saved_on_disk() {
+        // The buffer deleted the only disk match, so the note has no hits.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("n.md");
+        write(&path, "needle here\n");
+        write(&dir.path().join("other.md"), "needle there\n");
+        let vault = Vault::open(dir.path()).unwrap();
+        let buffers = [BufferOverride {
+            path: &path,
+            text: "no match anymore\n",
+        }];
+        let report = search_with_report_and_buffers(&vault, "needle", &opts(), &buffers).unwrap();
+        assert_eq!(report.hits.len(), 1);
+        assert_eq!(report.hits[0].path, dir.path().join("other.md"));
+    }
+
+    #[test]
     fn gitignored_and_hidden_files_are_skipped() {
         let dir = tempfile::tempdir().unwrap();
         write(&dir.path().join(".gitignore"), "skip.md\nignored/\n");
@@ -501,7 +626,7 @@ mod tests {
 
         let matcher = build_matcher("beta", &opts()).unwrap();
         let mut searcher = build_searcher();
-        let report = scan_files(&listed, &matcher, &mut searcher, None);
+        let report = scan_files(&listed, &matcher, &mut searcher, None, &[], &[]);
 
         assert_eq!(report.skipped.len(), 1);
         assert_eq!(report.skipped[0].0, gone);

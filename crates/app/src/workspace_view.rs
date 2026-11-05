@@ -239,7 +239,7 @@ impl WorkspaceView {
             }
         }
         if self.search_open {
-            self.search.refresh(Some(&sidebar.vault));
+            self.refresh_search(cx);
         }
         let (path, dirty) = {
             let document = self.document.read(cx);
@@ -377,6 +377,27 @@ impl WorkspaceView {
         true
     }
 
+    /// The open note's path and buffer text, so the search scans the buffer and
+    /// its hits land on the right offset while the note has unsaved edits.
+    /// `None` when the open document has no file (the sample document).
+    fn open_buffer(&self, cx: &App) -> Option<(PathBuf, String)> {
+        let document = self.document.read(cx);
+        let path = document.path.clone()?;
+        let text = document.editor.read(cx).text();
+        Some((path, text))
+    }
+
+    /// Reruns the search over the vault, with the open note scanned from its
+    /// buffer instead of from disk (see [`WorkspaceView::open_buffer`]).
+    fn refresh_search(&mut self, cx: &mut Context<Self>) {
+        let buffer = self.open_buffer(cx);
+        let buffer = buffer
+            .as_ref()
+            .map(|(path, text)| (path.as_path(), text.as_str()));
+        self.search
+            .refresh_with_buffer(self.sidebar.as_ref().map(|s| &s.vault), buffer);
+    }
+
     /// Shows or hides the search panel (ToggleSearch). Opening it focuses the query input.
     fn toggle_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.search_open {
@@ -384,7 +405,7 @@ impl WorkspaceView {
             return;
         }
         self.search_open = true;
-        self.search.refresh(self.sidebar.as_ref().map(|s| &s.vault));
+        self.refresh_search(cx);
         window.focus(&self.search.focus, cx);
         cx.notify();
     }
@@ -427,7 +448,7 @@ impl WorkspaceView {
                 self.search.query.push_str(text);
             }
         }
-        self.search.refresh(self.sidebar.as_ref().map(|s| &s.vault));
+        self.refresh_search(cx);
         cx.notify();
     }
 
