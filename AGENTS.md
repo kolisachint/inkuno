@@ -29,10 +29,10 @@ Read this first, then `docs/IMPLEMENTATION_PLAN.md` (task list, Definition of Do
 | P2 md_core | 2.1–2.8 done (156 unit tests + 5 proptests). |
 | P3–P4 editor, live preview | Not started (GPUI). |
 | P5 code fences | 5.1, 5.2 done; 5.3 not started (GPUI). |
-| P6 render host / math | 6.2 done; 6.4 in progress; 6.1, 6.3, 6.5, 6.6 not started. |
+| P6 render host / math | 6.2 done; 6.4 core done (`md_render::raster`; screenshot with bundled fonts waits on 6.3); 6.1, 6.3, 6.5, 6.6 not started. |
 | P7 Mermaid | 7.3 core done (debounce 300 ms, last-good fallback, `BlockView`); 7.3 UI part, 7.1, 7.2 not started. |
 | P8 modes | Not started (GPUI). |
-| P9 workspace | 9.3 done; 9.1, 9.4 core in progress; 9.2 in progress; 9.5 not started. |
+| P9 workspace | 9.3 done; 9.1, 9.4 core done (`Expansion`, `visible_rows`, `MatchSpan`; sidebar and search panel UI left); 9.2 in progress; 9.5 not started. |
 | P10 theming | Not started. |
 
 ## Blockers and open items
@@ -49,10 +49,14 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
    Unblock: check the Linux section of `docs/spikes/S2-gpui-hello.md`.
 5. **macOS signing.** Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
+6. **Decision: gitignored notes.** Search honours `.gitignore` but the sidebar tree does not, so a gitignored note shows in the sidebar and can't be found by search. Pick one: hide those notes from the tree, or include them in search.
+   Unblock: a decision by the repo owner, then a small change in `crates/workspace` (`tree.rs` or `search.rs`).
+7. **Search aborts on one unreadable file.** A per-file read error stops the whole search. It should skip that file and carry on.
+   Unblock: a small fix in `crates/workspace/src/search.rs`. No decision needed.
 
 ## Next tasks to dispatch (in order)
 
-1. Merge any in-progress worktree branches (GPUI on Linux, 9.2, 6.4, 9.1/9.4) after they pass the checks above.
+1. Merge any in-progress worktree branches (GPUI on Linux, 9.2) after they pass the checks above.
 2. Spike notes S1 and S3 (blocker 3).
 3. P3: 3.1 to 3.6, md_editor basic. Interfaces first, then one Haiku task each, verified with Linux screenshots.
 4. Then P4, then P5.3, P6, P7, P8, P9 UI, P10, following the plan's dependency graph.
