@@ -5,7 +5,14 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+md_editor = { path = "../md_editor" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui = { workspace = true }
 gpui_platform = { workspace = true }
+
+# gpui_platform's default features do not enable a Linux windowing backend, so without these
+# the app starts headless and opens no window.
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui = { workspace = true }
+gpui_platform = { workspace = true, features = ["wayland", "x11"] }
