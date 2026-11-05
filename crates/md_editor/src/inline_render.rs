@@ -18,6 +18,7 @@ use md_core::inline::{hidden_ranges, inline_spans};
 use md_core::BlockKind;
 
 use crate::blocks::basic::shows_inline_styles;
+use crate::blocks::list::parse_list_lines;
 
 /// Hidden byte ranges of one top-level block, as absolute offsets, sorted and merged.
 ///
@@ -28,6 +29,10 @@ use crate::blocks::basic::shows_inline_styles;
 ///   space after each blockquote line, and the whole text of a thematic break (drawn as a rule);
 /// - the inline markers of every span are hidden, except those of spans that contain the caret
 ///   (DESIGN §4.1). Only blocks that show inline styles have inline spans.
+///
+/// A list block hides the markers of each line whose caret is not on it (task 4.2). An item
+/// line with the caret keeps its marker and hides only its indentation, since the element draws
+/// it at its depth.
 ///
 /// A block containing the caret keeps all its markers visible.
 pub fn block_hidden_ranges(
@@ -47,10 +52,33 @@ pub fn block_hidden_ranges(
             _ => {}
         }
     }
+    if matches!(kind, BlockKind::List) {
+        hidden.extend(list_hidden_ranges(block_text, base, caret));
+    }
     if shows_inline_styles(kind) {
         hidden.extend(hidden_ranges(&inline_spans(block_text, base), caret));
     }
     merge_ranges(hidden)
+}
+
+/// The hidden ranges of a list block, one per line (task 4.2). `caret` is already inside the
+/// block or `None`. A line holds the caret when the caret is in its source, end included.
+fn list_hidden_ranges(text: &str, base: usize, caret: Option<usize>) -> Vec<Range<usize>> {
+    let mut hidden = Vec::new();
+    let mut line_start = 0;
+    for (line, item) in text.split('\n').zip(parse_list_lines(text, base)) {
+        let abs = base + line_start;
+        let revealed = caret.is_some_and(|caret| (abs..=abs + line.len()).contains(&caret));
+        if item.marker.is_some() && revealed {
+            // The indentation goes; the marker stays in the source.
+            let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+            hidden.push(abs..abs + indent);
+        } else {
+            hidden.push(item.marker_range);
+        }
+        line_start += line.len() + 1;
+    }
+    hidden
 }
 
 /// Hidden byte ranges of every top-level block of `text`, as absolute offsets, sorted and
@@ -551,6 +579,51 @@ mod tests {
             map.move_caret(text, 4, Direction::Left),
             1,
             "past the opening marker, over the space"
+        );
+    }
+
+    #[test]
+    fn list_markers_hide_on_every_line_without_the_caret() {
+        let text = "- a\n  - b\n1. c";
+        assert_eq!(
+            block_hidden_ranges(text, 0, &BlockKind::List, None),
+            vec![0..2, 4..8, 10..13]
+        );
+        assert_eq!(visible_of(text, &BlockKind::List, None), "a\nb\nc");
+    }
+
+    #[test]
+    fn list_caret_line_keeps_its_marker_and_hides_its_indent() {
+        let text = "- a\n  - b\n1. c";
+        // Caret on the nested item: its indent hides, its marker shows. Other lines hide.
+        assert_eq!(
+            block_hidden_ranges(text, 0, &BlockKind::List, Some(8)),
+            vec![0..2, 4..6, 10..13]
+        );
+        // Caret on the first item keeps its marker, the others hide theirs.
+        assert_eq!(
+            block_hidden_ranges(text, 0, &BlockKind::List, Some(0)),
+            vec![4..8, 10..13]
+        );
+    }
+
+    #[test]
+    fn list_continuation_indent_hides_even_with_the_caret_on_it() {
+        let text = "- a\n  more";
+        assert_eq!(
+            block_hidden_ranges(text, 0, &BlockKind::List, Some(7)),
+            vec![0..2, 4..6],
+        );
+    }
+
+    #[test]
+    fn list_task_box_hides_with_its_marker() {
+        let text = "- [x] done";
+        assert_eq!(visible_of(text, &BlockKind::List, None), "done");
+        assert_eq!(
+            visible_of(text, &BlockKind::List, Some(10)),
+            "- [x] done",
+            "the caret line keeps its marker"
         );
     }
 
