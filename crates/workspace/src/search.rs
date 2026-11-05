@@ -5,9 +5,11 @@
 //! files with `grep-searcher`. No index is written, so nothing is added to the vault.
 
 use std::io;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use grep_regex::RegexMatcherBuilder;
+use grep_matcher::Matcher;
+use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 use grep_searcher::{BinaryDetection, Searcher, SearcherBuilder, Sink, SinkMatch};
 use ignore::WalkBuilder;
 
@@ -23,6 +25,17 @@ pub struct SearchHit {
     pub line: String,
     /// Byte offset of the start of the line in the file.
     pub byte_offset: u64,
+    /// Every match on the line, in order. Never empty for a hit from `search`.
+    pub matches: Vec<MatchSpan>,
+}
+
+/// Where one match sits, precisely enough to place a caret on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchSpan {
+    /// Byte range of the match in the file. Use `byte_range.start` as the caret position.
+    pub byte_range: Range<u64>,
+    /// 1-based column of the match start, counted in characters from the start of the line.
+    pub column: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -34,7 +47,11 @@ pub struct SearchOptions {
 }
 
 /// Full-text search over vault `.md` files.
-/// Results are ordered by path, then by line. An empty query returns no hits.
+///
+/// Each hit is one line that matches, with every match on that line in
+/// `SearchHit::matches`. Hits are ordered by file path (case-insensitively, as the
+/// sidebar sorts), then by line number. `max_results` caps the number of hits.
+/// An empty query returns no hits.
 pub fn search(vault: &Vault, query: &str, opts: &SearchOptions) -> io::Result<Vec<SearchHit>> {
     if query.is_empty() || opts.max_results == Some(0) {
         return Ok(Vec::new());
@@ -61,6 +78,7 @@ pub fn search(vault: &Vault, query: &str, opts: &SearchOptions) -> io::Result<Ve
         }
         let mut sink = Collector {
             path: &file,
+            matcher: &matcher,
             hits: &mut hits,
             max: opts.max_results,
         };
@@ -69,7 +87,8 @@ pub fn search(vault: &Vault, query: &str, opts: &SearchOptions) -> io::Result<Ve
     Ok(hits)
 }
 
-/// Every `.md` file below `root`, sorted by path. Honours `.gitignore`, skips hidden entries.
+/// Every `.md` file below `root`, sorted case-insensitively by path.
+/// Honours `.gitignore` and skips hidden entries.
 fn note_files(root: &Path) -> io::Result<Vec<PathBuf>> {
     let walker = WalkBuilder::new(root)
         .hidden(true)
@@ -87,7 +106,7 @@ fn note_files(root: &Path) -> io::Result<Vec<PathBuf>> {
             files.push(entry.into_path());
         }
     }
-    files.sort();
+    files.sort_by_cached_key(|p| (p.to_string_lossy().to_lowercase(), p.clone()));
     Ok(files)
 }
 
@@ -106,6 +125,7 @@ fn escape_literal(query: &str) -> String {
 
 struct Collector<'a> {
     path: &'a Path,
+    matcher: &'a RegexMatcher,
     hits: &'a mut Vec<SearchHit>,
     max: Option<usize>,
 }
@@ -114,14 +134,28 @@ impl Sink for Collector<'_> {
     type Error = io::Error;
 
     fn matched(&mut self, _searcher: &Searcher, mat: &SinkMatch<'_>) -> Result<bool, io::Error> {
-        let line = String::from_utf8_lossy(mat.bytes())
+        let raw = mat.bytes();
+        let base = mat.absolute_byte_offset();
+        let mut matches = Vec::new();
+        self.matcher
+            .find_iter(raw, |m| {
+                let column = String::from_utf8_lossy(&raw[..m.start()]).chars().count() + 1;
+                matches.push(MatchSpan {
+                    byte_range: base + m.start() as u64..base + m.end() as u64,
+                    column,
+                });
+                true
+            })
+            .map_err(io::Error::other)?;
+        let line = String::from_utf8_lossy(raw)
             .trim_end_matches(['\n', '\r'])
             .to_owned();
         self.hits.push(SearchHit {
             path: self.path.to_path_buf(),
             line_number: mat.line_number().unwrap_or(0),
             line,
-            byte_offset: mat.absolute_byte_offset(),
+            byte_offset: base,
+            matches,
         });
         Ok(self.max.is_none_or(|max| self.hits.len() < max))
     }
@@ -178,15 +212,111 @@ mod tests {
                     line_number: 2,
                     line: "beta gamma".into(),
                     byte_offset: 6,
+                    matches: vec![span(6..10, 1)],
                 },
                 SearchHit {
                     path: dir.path().join("sub/b.md"),
                     line_number: 2,
                     line: "beta".into(),
                     byte_offset: 8,
+                    matches: vec![span(8..12, 1)],
                 },
             ]
         );
+    }
+
+    fn span(byte_range: Range<u64>, column: usize) -> MatchSpan {
+        MatchSpan { byte_range, column }
+    }
+
+    #[test]
+    fn every_match_on_a_line_gets_a_span_into_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        write(&dir.path().join("n.md"), "one two one\nzzz\nxx one\n");
+        let vault = Vault::open(dir.path()).unwrap();
+        let hits = search(&vault, "one", &opts()).unwrap();
+        assert_eq!(hits.len(), 2);
+        // First line: two matches, columns 1 and 9.
+        assert_eq!(hits[0].matches, vec![span(0..3, 1), span(8..11, 9)]);
+        // Third line starts at byte 16; "one" begins at column 4.
+        assert_eq!(hits[1].byte_offset, 16);
+        assert_eq!(hits[1].matches, vec![span(19..22, 4)]);
+        // Each span points at the matched text in the file.
+        let bytes = fs::read(dir.path().join("n.md")).unwrap();
+        for hit in &hits {
+            for m in &hit.matches {
+                let slice = &bytes[m.byte_range.start as usize..m.byte_range.end as usize];
+                assert_eq!(slice, b"one");
+            }
+        }
+    }
+
+    #[test]
+    fn column_counts_characters_while_span_counts_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        // "é" is two bytes, so the match is at byte 7 but column 7.
+        write(&dir.path().join("u.md"), "héllo needle\n");
+        let vault = Vault::open(dir.path()).unwrap();
+        let hits = search(&vault, "needle", &opts()).unwrap();
+        assert_eq!(hits[0].matches, vec![span(7..13, 7)]);
+    }
+
+    #[test]
+    fn regex_match_spans_cover_the_matched_text_only() {
+        let dir = tempfile::tempdir().unwrap();
+        write(&dir.path().join("r.md"), "id=42 and id=7\n");
+        let vault = Vault::open(dir.path()).unwrap();
+        let o = SearchOptions {
+            regex: true,
+            ..opts()
+        };
+        let hits = search(&vault, r"id=\d+", &o).unwrap();
+        // "id=42" is bytes 0..5; the second "id=7" starts at byte 10, column 11.
+        assert_eq!(hits[0].matches, vec![span(0..5, 1), span(10..14, 11)]);
+    }
+
+    #[test]
+    fn hits_are_ordered_by_path_case_insensitively_then_line() {
+        let dir = tempfile::tempdir().unwrap();
+        write(&dir.path().join("b.md"), "x\nx\n");
+        write(&dir.path().join("A.md"), "x\n");
+        write(&dir.path().join("c/z.md"), "x\n");
+        write(&dir.path().join("c/a.md"), "x\n");
+        let vault = Vault::open(dir.path()).unwrap();
+        let hits = search(&vault, "x", &opts()).unwrap();
+        let order: Vec<(String, u64)> = hits
+            .iter()
+            .map(|h| {
+                let rel = h.path.strip_prefix(dir.path()).unwrap();
+                (rel.to_string_lossy().into_owned(), h.line_number)
+            })
+            .collect();
+        assert_eq!(
+            order,
+            vec![
+                ("A.md".to_owned(), 1),
+                ("b.md".to_owned(), 1),
+                ("b.md".to_owned(), 2),
+                ("c/a.md".to_owned(), 1),
+                ("c/z.md".to_owned(), 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn max_results_stops_in_the_middle_of_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        write(&dir.path().join("a.md"), "x\nx\nx\n");
+        write(&dir.path().join("b.md"), "x\n");
+        let vault = Vault::open(dir.path()).unwrap();
+        let o = SearchOptions {
+            max_results: Some(2),
+            ..opts()
+        };
+        let hits = search(&vault, "x", &o).unwrap();
+        let lines: Vec<u64> = hits.iter().map(|h| h.line_number).collect();
+        assert_eq!(lines, vec![1, 2]);
+        assert!(hits.iter().all(|h| h.path.ends_with("a.md")));
     }
 
     #[test]
