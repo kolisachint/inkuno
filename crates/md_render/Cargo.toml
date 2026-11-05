@@ -14,3 +14,10 @@ tree-sitter-md = "0.5.4"
 tree-sitter-python = "0.25.0"
 tree-sitter-rust = "0.24.2"
 tree-sitter-toml-ng = "0.7.0"
+# S1 spike only (docs/spikes/S1-render-host.md). Optional; not used by the render queue.
+rquickjs = { version = "0.14.0", optional = true }
+resvg = { version = "0.46.0", optional = true }
+
+[features]
+spike-quickjs = ["dep:rquickjs"]
+spike-resvg = ["dep:resvg"]
