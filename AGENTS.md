@@ -29,7 +29,7 @@ Read this first, then `docs/IMPLEMENTATION_PLAN.md` (task list, Definition of Do
 | Area | State |
 |------|-------|
 | P0 scaffold | Done. CI workflows enabled in `.github/workflows/`. |
-| P1 spikes | S4 done (provisional GO). S2: runs on Linux (X11/Xvfb, screenshot in `docs/spikes/`), no macOS run yet. S1 and S3 notes in progress. |
+| P1 spikes | S4 done (provisional GO). S2: runs on Linux (X11/Xvfb, screenshot in `docs/spikes/`), no macOS run yet. S1 GO (split host: MathJax in embedded QuickJS, Mermaid needs a WebView). S3 GO (conditional on the IME check). |
 | P2 md_core | 2.1–2.8 done (156 unit tests + 5 proptests). |
 | P3–P4 editor, live preview | Not started (GPUI). |
 | P5 code fences | 5.1, 5.2 done; 5.3 not started (GPUI). |
@@ -47,15 +47,18 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
    Unblock: check the latest `release` workflow run on GitHub Actions.
 2. **S2 go/no-go pending.** `docs/spikes/S2-gpui-hello.md` needs a macOS run and a screenshot. CI cannot take an interactive screenshot.
    Unblock: run the `nightly` macOS build on a Mac (`xattr -dr com.apple.quarantine noteapp.app`) and attach a screenshot. Alternatively, accept the Linux run plus a green macOS CI build as the gate.
-3. **S1 (render host) and S3 (display map) spike notes missing.** These gate P6/P7 (S1) and formally gate 2.6 (S3, already implemented).
-   Unblock: write `docs/spikes/S1-render-host.md` and `docs/spikes/S3-display-map.md`, each with a go/no-go line.
+3. **macOS-only checks from S1/S3.** (a) The hidden WKWebView host that Mermaid needs (DESIGN §14 item 1) is unverified. (b) IME composition across hidden markup ranges is not evaluated, since md_core has no UTF-16 or marked-text API.
+   Unblock: a macOS run during 6.1/7.1 for (a), and during 3.4 for (b). See `docs/spikes/S1-render-host.md` and `S3-display-map.md`.
 4. **macOS signing.** Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
 5. **Decision: gitignored notes.** Search honours `.gitignore` but the sidebar tree does not, so a gitignored note shows in the sidebar and can't be found by search. Pick one: hide those notes from the tree, or include them in search.
    Unblock: a decision by the repo owner, then a small change in `crates/workspace` (`tree.rs` or `search.rs`).
+6. **DESIGN amendment pending (from S1).** DESIGN §6.1 and §6.8 still describe a single WebView render host. S1 recommends running MathJax in-process (rquickjs + resvg, about 2–9 ms per formula) and using the WebView for Mermaid only.
+   Unblock: the owner approves, then DESIGN §6.1/§6.8 are updated before task 6.1.
+7. **Decision: MathJax v3 or v4.** `mathjax-full` 3.2.2 is the last v3 release and is deprecated on npm in favour of v4 `@mathjax/src`. DESIGN chose v3.
+   Unblock: an owner decision before task 6.3.
 
 ## Next tasks to dispatch (in order)
 
-1. Merge the S1/S3 spike-note branch if it isn't merged yet (blocker 3).
-2. P3: 3.1 to 3.6, md_editor basic. Interfaces first, then one Haiku task each, verified with Linux screenshots.
-3. Then P4, then P5.3, P6, P7, P8, P9 UI, P10, following the plan's dependency graph.
+1. P3: 3.1 to 3.6, md_editor basic. Interfaces first, then one Haiku task each, verified with Linux screenshots.
+2. Then P4, then P5.3, P6, P7, P8, P9 UI, P10, following the plan's dependency graph.
