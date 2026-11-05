@@ -32,7 +32,7 @@ Read this first, then `docs/IMPLEMENTATION_PLAN.md` (task list, Definition of Do
 | P0 scaffold | Done. CI workflows enabled in `.github/workflows/`. |
 | P1 spikes | S4 done (provisional GO). S2: runs on Linux (X11/Xvfb, screenshot in `docs/spikes/`), no macOS run yet. S1 GO (split host: MathJax in embedded QuickJS, Mermaid needs a WebView). S3 GO (conditional on the IME check). |
 | P2 md_core | 2.1–2.8 done (156 unit tests + 5 proptests). |
-| P3 editor basic | Interfaces merged (`docs/P3-interfaces.md`); the app opens an empty Editor window. 3.1 done (text renders, screenshot in `docs/screenshots/`); 3.6, 3.2, 3.5 in progress. |
+| P3 editor basic | Interfaces merged (`docs/P3-interfaces.md`); the app opens an empty Editor window. 3.1 done (text renders, screenshot in `docs/screenshots/`); 3.6 done (atomic save, dirty dot; save is bound to `cmd-s`, which is Super+S on Linux, so Ctrl+S on Linux is left for 3.3/8.5 key bindings); 3.2 and 3.5 in progress. |
 | P4 live preview | Not started (GPUI). |
 | P5 code fences | 5.1, 5.2 done; 5.3 not started (GPUI). |
 | P6 render host / math | Decided: split host (MathJax v4 in QuickJS in-process, WebView for Mermaid only; DESIGN §6.1). 6.2 done; 6.4 core done (`md_render::raster`; screenshot with bundled fonts waits on 6.3); 6.1, 6.3, 6.5, 6.6 not started. |
