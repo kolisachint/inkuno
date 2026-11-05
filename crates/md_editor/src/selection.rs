@@ -133,6 +133,38 @@ impl Editor {
     }
 }
 
+/// Coverage of a read-only block (table, image) by the selection.
+///
+/// A caret alone never covers a block, and a selection that only touches the block's edge
+/// does not cover it either. Any other overlap highlights the whole block: `Full` when the
+/// selection covers the block's source range end to end, `Partial` otherwise. Pure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockCoverage {
+    None,
+    Partial,
+    Full,
+}
+
+/// How much of the block at `block` the `selection` covers. Pure, unit-tested.
+///
+/// `selection` is the editor selection (caret-aware: `Selection::caret` gives `None`), and
+/// `block` is the block's source byte range. Edge-touching does not count: a selection that
+/// ends exactly at `block.start` or starts exactly at `block.end` is `None`.
+pub fn block_coverage(selection: Selection, block: Range<usize>) -> BlockCoverage {
+    if selection.is_empty() {
+        return BlockCoverage::None;
+    }
+    let selected = selection.range();
+    if selected.end <= block.start || selected.start >= block.end {
+        return BlockCoverage::None;
+    }
+    if selected.start <= block.start && selected.end >= block.end {
+        BlockCoverage::Full
+    } else {
+        BlockCoverage::Partial
+    }
+}
+
 /// Width of the highlight drawn for a selected line break.
 const NEWLINE_WIDTH: f32 = 0.4;
 
@@ -267,5 +299,54 @@ mod tests {
         assert_eq!(buffer.text(), "aXYZc");
         assert!(buffer.undo());
         assert_eq!(buffer.text(), "abc");
+    }
+
+    #[test]
+    fn block_coverage_caret_alone_is_none() {
+        // A caret never highlights a block, even when it sits inside it.
+        assert_eq!(
+            block_coverage(Selection::caret(5), 0..10),
+            BlockCoverage::None
+        );
+        assert_eq!(
+            block_coverage(Selection::caret(0), 0..10),
+            BlockCoverage::None
+        );
+    }
+
+    #[test]
+    fn block_coverage_edge_touching_is_none() {
+        // A selection that ends where the block starts, or starts where it ends, misses it.
+        assert_eq!(block_coverage(sel(0, 10), 10..20), BlockCoverage::None);
+        assert_eq!(block_coverage(sel(20, 30), 10..20), BlockCoverage::None);
+        assert_eq!(block_coverage(sel(10, 10), 10..20), BlockCoverage::None);
+    }
+
+    #[test]
+    fn block_coverage_full_needs_the_whole_source_range() {
+        assert_eq!(block_coverage(sel(10, 20), 10..20), BlockCoverage::Full);
+        assert_eq!(
+            block_coverage(sel(5, 25), 10..20),
+            BlockCoverage::Full,
+            "a wider selection still fully covers"
+        );
+        assert_eq!(
+            block_coverage(sel(20, 10), 10..20),
+            BlockCoverage::Full,
+            "reversed selections normalize first"
+        );
+    }
+
+    #[test]
+    fn block_coverage_any_overlap_short_of_full_is_partial() {
+        // The block still highlights as a whole; the variant only records the overlap.
+        assert_eq!(block_coverage(sel(5, 15), 10..20), BlockCoverage::Partial);
+        assert_eq!(block_coverage(sel(15, 25), 10..20), BlockCoverage::Partial);
+        assert_eq!(
+            block_coverage(sel(12, 18), 10..20),
+            BlockCoverage::Partial,
+            "a selection inside the block highlights it too"
+        );
+        assert_eq!(block_coverage(sel(18, 12), 10..20), BlockCoverage::Partial);
     }
 }
