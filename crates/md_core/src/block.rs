@@ -462,7 +462,11 @@ impl BlockMap {
     /// scanning until a fresh block boundary past the edit coincides with an old
     /// boundary. Blocks before the start are kept as they are, and blocks after
     /// the realigned boundary are kept with their ranges shifted.
-    pub fn apply_edit(&mut self, edit: &Edit, new_text: &str) {
+    ///
+    /// Returns the span of blocks that changed: the old block indices that were
+    /// replaced, and how many new blocks replace them. Blocks outside the span
+    /// keep their kind and text, so their index moves only by the span's size change.
+    pub fn apply_edit(&mut self, edit: &Edit, new_text: &str) -> (Range<usize>, usize) {
         let (s, e) = (edit.range.start, edit.range.end);
         let delta = edit.text.len() as isize - (e - s) as isize;
         let old_len = self.blocks.last().map_or(0, |b| b.range.end);
@@ -471,7 +475,7 @@ impl BlockMap {
         if self.blocks.is_empty() {
             self.blocks = split_blocks(new_text);
             self.resplit_count += self.blocks.len();
-            return;
+            return (0..0, self.blocks.len());
         }
 
         let new_edit_end = s + edit.text.len();
@@ -516,14 +520,17 @@ impl BlockMap {
         }
 
         self.resplit_count += fresh.len();
-        let mut out = Vec::with_capacity(lo + fresh.len() + self.blocks.len() - resume);
+        let fresh_count = fresh.len();
+        let mut out = Vec::with_capacity(lo + fresh_count + self.blocks.len() - resume);
         out.extend_from_slice(&self.blocks[..lo]);
         out.extend(fresh);
         out.extend(self.blocks[resume..].iter().map(|b| Block {
             kind: b.kind,
             range: shift(&b.range, delta),
         }));
+        let old_span = lo..resume;
         self.blocks = out;
+        (old_span, fresh_count)
     }
 }
 

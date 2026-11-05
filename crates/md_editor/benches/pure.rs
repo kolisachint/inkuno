@@ -10,7 +10,8 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use md_core::buffer::Buffer;
 use md_core::input_rules::{apply_input_rule, Input};
-use md_editor::block_list::sync_hashes;
+use md_core::Edit;
+use md_editor::block_list::{sync_hashes, ItemIndex};
 use md_editor::inline_render::document_hidden_ranges;
 
 /// Target size of the benchmark document, in lines.
@@ -71,9 +72,43 @@ fn bench_pure_keystroke(c: &mut Criterion) {
         b.iter(|| black_box(apply_input_rule(&text, at, &Input::Char('x'))))
     });
 
-    // `block_list::sync_items` after an edit: re-split and re-hash every item.
+    // `block_list::sync_items` after an edit: re-split and re-hash every item (full rebuild, used
+    // after undo and redo).
     group.bench_function("block_list_sync_hashes", |b| {
         b.iter(|| black_box(sync_hashes(&new_text)))
+    });
+
+    // The per-edit path of the block list (10.4): insert a character and delete it again, both
+    // through `ItemIndex::apply_edit`. Each iteration is two edits.
+    let mut buffer = Buffer::new(&text);
+    let mut index = ItemIndex::default();
+    index.build(&text, buffer.version());
+    group.bench_function("block_list_incremental_edit_pair", |b| {
+        b.iter(|| {
+            let before = buffer.version();
+            buffer.edit(Edit::insert(at, "x"));
+            black_box(
+                index
+                    .apply_edit(before, &buffer, at..at, "x")
+                    .expect("incremental path"),
+            );
+            let before = buffer.version();
+            buffer.edit(Edit::delete(at..at + 1));
+            black_box(
+                index
+                    .apply_edit(before, &buffer, at..at + 1, "")
+                    .expect("incremental path"),
+            );
+        })
+    });
+
+    // Caret movement with the list's cached hidden ranges (10.4), warm: the blocks the caret is
+    // not in reuse their cached ranges.
+    let mut cached = ItemIndex::default();
+    cached.build(&text, 0);
+    black_box(cached.hidden_ranges(&text, Some(at)));
+    group.bench_function("hidden_ranges_cached_caret", |b| {
+        b.iter(|| black_box(cached.hidden_ranges(&text, Some(at))))
     });
 
     group.finish();

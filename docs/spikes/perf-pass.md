@@ -71,8 +71,8 @@ The open cost is well under any target, and DESIGN §12 sets none for it.
 
 ## Hot spots
 
-1. **The editor re-splits the whole document on every edit.** `block_list.rs` `sync_items` calls `item_state` (`blocks_for`, then hashing every item) each time the buffer version changes. That is 0.8 ms per edit and grows with the document. `md_core::BlockMap::apply_edit` already does the incremental work (3 blocks re-split), but nothing in `md_editor` calls it. Fix: keep a `BlockMap` in `BlockListState` and apply the edits from `Buffer::edits_since`. Not done here: the target passes at this size, and the change touches the list state model.
-2. **Caret moves re-parse the inline spans of every block.** `document_hidden_ranges` (called from `keys.rs` `move_caret`) costs 3.8 ms per arrow key, which is the largest pure cost on the keystroke path. Fix: cache spans per block, keyed by block text hash (similar to `md_core::parse::ParseCache`), or compute hidden ranges only for blocks near the caret. Not small, so not done.
+1. **The editor re-splits the whole document on every edit.** `block_list.rs` `sync_items` calls `item_state` (`blocks_for`, then hashing every item) each time the buffer version changes. That is 0.8 ms per edit and grows with the document. `md_core::BlockMap::apply_edit` already does the incremental work (3 blocks re-split), but nothing in `md_editor` calls it. Fix: keep a `BlockMap` in `BlockListState` and apply the edits from `Buffer::edits_since`. Not done in this pass. Fixed in the follow-up fixes below.
+2. **Caret moves re-parse the inline spans of every block.** `document_hidden_ranges` (called from `keys.rs` `move_caret`) costs 3.8 ms per arrow key, which is the largest pure cost on the keystroke path. Fix: cache spans per block, keyed by block text hash (similar to `md_core::parse::ParseCache`), or compute hidden ranges only for blocks near the caret. Not small, so not done in this pass. Fixed in the follow-up fixes below.
 3. **Whole-text copies per keystroke are not a hot spot.** `Editor::text()` costs 6.6 µs at 169 KB. No change.
 4. **Double layout per block (measure and prepaint).** The task brief says each block is laid out twice per frame. This run did not measure it. Not changed.
 
@@ -83,3 +83,40 @@ No optimization was made in this task. Hot spots 1 and 2 are the candidates if a
 - `cargo bench -p md_core --bench core -- --warm-up-time 1 --measurement-time 3`
 - `cargo bench -p md_editor --bench pure -- --warm-up-time 1 --measurement-time 3`
 - App run: build with `cargo build --release -p app`, then, inside `xvfb-run -n 97 -s "-screen 0 1280x800x24"`, start `NOTEAPP_PERF=1 target/release/app <10k-line file.md>`, scroll to the middle with `xdotool click --repeat 3100 --delay 2 5`, and type with `xdotool type --delay 120 "<58 chars>"`. Read the `NOTEAPP_PERF` lines from stderr.
+
+## Follow-up fixes
+
+Hot spots 1 and 2 above are fixed. Both paths keep the old output: `ItemIndex::apply_edit` and `ItemIndex::build` produce the same items as a full rebuild, and `ItemIndex::hidden_ranges` the same hidden ranges as `document_hidden_ranges`. Tests check both after 200 pseudo-random edits on a mixed document, and at every caret position.
+
+### What changed
+
+1. **Block list (hot spot 1).** `BlockMap` (md_core) is kept in the editor's block list state. `Editor::replace_range` passes each edit to `BlockListState::note_edit`, which calls `ItemIndex::apply_edit`. That re-splits only the blocks the edit touched, and the list gets one splice for those items. `BlockMap::apply_edit` now returns the changed block span, which is what makes the splice possible. The full rebuild (`ItemIndex::build`) still runs for undo, redo, the first sync, and any edit the incremental path declines: a whole-text replacement (load and reload), an emptied text, or a change to the trailing newline.
+2. **Hidden ranges (hot spot 2).** `Editor::hidden_ranges_for_caret` (used by `keys.rs` `move_caret`) asks the index. The index keeps, for each item, its hidden ranges with the caret elsewhere, relative to the item start. It fills them on demand and drops them for the items an edit changed. The caret's own item is computed each time. When the list is out of step with the buffer, the old full computation runs.
+
+### Criterion, before and after (medians, `--warm-up-time 1 --measurement-time 3`)
+
+| Work | Before | After | Note |
+|---|---|---|---|
+| Per-edit block list, full rebuild (`block_list_sync_hashes`) | 0.84 ms | 0.79 ms | Unchanged code path, now used only for undo, redo and rebuilds |
+| Per-edit block list, incremental (`block_list_incremental_edit_pair`) | not measured | 44.7 µs for two edits, so about 22 µs each | New bench: insert one character and delete it, through `apply_edit` |
+| Caret move, full (`document_hidden_ranges`) | 3.45 ms | 4.05 ms | Same function. The change is run-to-run noise in this run (the core bench gave 3.86 ms after and 3.56 ms before) |
+| Caret move, cached (`hidden_ranges_cached_caret`) | not measured | 52 µs | New bench: warm cache, caret in the middle |
+| `Editor::text()` copy | 6.2 µs | 6.7 µs | Noise. Not changed |
+| md_core reparse, one character (`reparse/insert_char_buffer_and_blockmap`) | 51.0 µs | 48.6 µs | `BlockMap::apply_edit` path unchanged apart from its return value. Noise |
+
+The two hot spots drop from about 0.8 ms per typed character and about 3.5 ms per caret move to about 22 µs and about 52 µs. Those were the two largest pure costs on the keystroke path.
+
+### Xvfb keystroke_to_paint (after)
+
+Release build of `-p app` with this change. Document: `perf10k.md`, generated with the bench generator (`crates/md_editor/benches/pure.rs` `generate`) to 10,017 lines and 371 sections. The file is not kept in the repo. The caret was in the middle (Section 181, roughly line 4,900, about 49%). Typing was done with `xdotool type --delay 120`. The log holds 61 characters, not the 58 planned.
+
+| Run | Median ms | p90 ms | Max ms | Under 16 ms |
+|---|---|---|---|---|
+| Follow-up, this change (one run) | 9.42 | 16.73 | 32.46 | 52 of 61 |
+| Previous pass, run 4 (`perf-pass.md` above, different file) | 10.1 | 17.1 | 20.0 | 47 of 58 |
+
+The screenshot is `docs/screenshots/10.4-followup-typed.png`. It shows the typed text in the middle of the paragraph, with the caret placed.
+
+Verdict: the per-character pure work is now about 0.8 ms smaller, but that is about 8% of the median and is within the run-to-run spread. The keystroke target (p90 under 16 ms) is still missed on this rig, and the cost is still in layout, paint and software raster. Caret moves were not timed in Xvfb. Their pure cost is about 3.5 ms smaller per arrow key. The before and after Xvfb numbers come from different files and single runs, so treat them as indicative.
+
+The remaining item on the list is the double layout per block (measure and prepaint), listed in the iteration 2 open items. It is not changed here.
