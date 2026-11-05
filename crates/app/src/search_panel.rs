@@ -20,7 +20,7 @@ use gpui::{
     actions, div, prelude::*, px, ClickEvent, Context, FocusHandle, FontWeight, IntoElement,
     KeyDownEvent,
 };
-use workspace::search::{search_with_report, SearchHit, SearchOptions};
+use workspace::search::{search_with_report_and_buffers, BufferOverride, SearchHit, SearchOptions};
 use workspace::tree::Vault;
 
 use crate::text_input;
@@ -203,6 +203,14 @@ impl SearchPanel {
 
     /// Reruns the search for the current query. Without a vault there are no results.
     pub fn refresh(&mut self, vault: Option<&Vault>) {
+        self.refresh_with_buffer(vault, None);
+    }
+
+    /// Reruns the search for the current query, scanning the open note's buffer
+    /// text instead of its file when `buffer` holds that note's path and text.
+    /// Pass the open note so its hits (and the caret offset a jump uses) stay
+    /// correct while it has unsaved edits. Without a vault there are no results.
+    pub fn refresh_with_buffer(&mut self, vault: Option<&Vault>, buffer: Option<(&Path, &str)>) {
         self.hits.clear();
         self.skipped = 0;
         self.error = None;
@@ -215,7 +223,12 @@ impl SearchPanel {
             regex: false,
             max_results: Some(MAX_RESULTS),
         };
-        match search_with_report(vault, &self.query, &opts) {
+        let override_ = buffer.map(|(path, text)| BufferOverride { path, text });
+        let buffers: &[BufferOverride<'_>] = match &override_ {
+            Some(o) => std::slice::from_ref(o),
+            None => &[],
+        };
+        match search_with_report_and_buffers(vault, &self.query, &opts, buffers) {
             Ok(report) => {
                 self.hits = report.hits;
                 self.skipped = report.skipped.len();
