@@ -16,7 +16,8 @@ concurrency:
   # Tag builds get their own group; all branch/dispatch builds share one global
   # group so two branches cannot race on the single `nightly` release and tag.
   group: ${{ startsWith(github.ref, 'refs/tags/') && github.ref || 'release-nightly' }}
-  cancel-in-progress: true
+  # Let a running build finish; only a queued (pending) run is replaced by a newer push.
+  cancel-in-progress: false
 
 env:
   GITHUB_TOKEN: ${{ github.token }}
