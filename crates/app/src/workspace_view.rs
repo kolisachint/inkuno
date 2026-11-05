@@ -18,14 +18,17 @@
 use std::path::{Path, PathBuf};
 
 use gpui::{
-    div, prelude::*, px, rgb, Context, Entity, Focusable, IntoElement, KeyDownEvent, Render, Window,
+    div, prelude::*, px, rgb, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, Render, Window,
 };
 use md_editor::selection::Selection;
 use workspace::tree::{visible_rows, Expansion, Node, Vault};
 use workspace::watcher::{plan_buffer_updates, OpenBuffer};
 
 use crate::file_io::{read_file, Document};
+use crate::file_ops_ui::{edit_message, renaming_text, DeleteNote, FileEdit, NewNote, RenameNote};
 use crate::search_panel::{self, hit_offset, SearchPanel, ToggleSearch};
+use crate::text_input;
 use crate::watch::{changes_for_open_note, needs_tree_refresh, WatchFeed, POLL_INTERVAL};
 
 /// Width of the sidebar in pixels.
@@ -84,9 +87,9 @@ pub fn sidebar_items(root: &Node, expansion: &Expansion) -> Vec<SidebarItem> {
 }
 
 /// The vault shown in the sidebar, with its tree and which folders are open.
-struct Sidebar {
-    vault: Vault,
-    tree: Node,
+pub(crate) struct Sidebar {
+    pub(crate) vault: Vault,
+    pub(crate) tree: Node,
     expansion: Expansion,
     /// Changes on disk under the vault (9.2). `None` when the watch could not start.
     watch: Option<WatchFeed>,
@@ -133,12 +136,16 @@ impl Sidebar {
 
 /// The root view: the sidebar (when there is a vault) and the open document.
 pub struct WorkspaceView {
-    sidebar: Option<Sidebar>,
-    document: Entity<Document>,
+    pub(crate) sidebar: Option<Sidebar>,
+    pub(crate) document: Entity<Document>,
     /// Search state (task 9.4). Kept between opens so the query survives a close.
     pub(crate) search: SearchPanel,
     /// True while the sidebar shows the search panel instead of the folder tree.
-    search_open: bool,
+    pub(crate) search_open: bool,
+    /// The rename or delete question in the sidebar, if one is open (task 9.3).
+    pub(crate) file_edit: Option<FileEdit>,
+    /// Keyboard focus for the sidebar, so it sees the keys of a rename or delete (task 9.3).
+    pub(crate) sidebar_focus: FocusHandle,
 }
 
 impl WorkspaceView {
@@ -220,6 +227,8 @@ impl WorkspaceView {
                 document: cx.new(Document::sample),
                 search: SearchPanel::new(cx.focus_handle()),
                 search_open: false,
+                file_edit: None,
+                sidebar_focus: cx.focus_handle(),
             };
         };
         if arg.is_dir() {
@@ -228,6 +237,8 @@ impl WorkspaceView {
                 document: cx.new(|cx| Document::with_text(cx, "", None)),
                 search: SearchPanel::new(cx.focus_handle()),
                 search_open: false,
+                file_edit: None,
+                sidebar_focus: cx.focus_handle(),
             };
         }
         let dir = match arg.parent() {
@@ -252,11 +263,13 @@ impl WorkspaceView {
             document,
             search: SearchPanel::new(cx.focus_handle()),
             search_open: false,
+            file_edit: None,
+            sidebar_focus: cx.focus_handle(),
         }
     }
 
     /// Flips a folder row between expanded and collapsed.
-    fn toggle_folder(&mut self, folder: &Path, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_folder(&mut self, folder: &Path, cx: &mut Context<Self>) {
         if let Some(sidebar) = self.sidebar.as_mut() {
             sidebar.expansion.toggle(folder);
             cx.notify();
@@ -266,7 +279,12 @@ impl WorkspaceView {
     /// Opens `path` in place of the current document. Unsaved edits in the current document
     /// are saved first. If that save fails, the switch is refused. Returns true when `path` is
     /// the open note afterwards.
-    fn open_note(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    pub(crate) fn open_note(
+        &mut self,
+        path: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if self.document.read(cx).path.as_deref() == Some(path.as_path()) {
             return true;
         }
@@ -375,8 +393,18 @@ impl WorkspaceView {
             .map(|(index, item)| {
                 let selected =
                     !item.is_folder() && open_path.as_deref() == Some(item.path.as_path());
-                let path = item.path.clone();
-                let is_folder = item.is_folder();
+                let renaming = renaming_text(&self.file_edit, &item.path);
+                let label = match &renaming {
+                    Some(text) => text_input::field("sidebar-rename", text, "", 20.)
+                        .flex_1()
+                        .min_w_0()
+                        .into_any_element(),
+                    None => div()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .child(item.label.clone())
+                        .into_any_element(),
+                };
                 let row = div()
                     .id(("sidebar-row", index))
                     .h(px(ROW_HEIGHT))
@@ -387,51 +415,136 @@ impl WorkspaceView {
                     .gap_1()
                     .pl(px(indent_px(item.depth)))
                     .pr(px(BASE_PADDING))
+                    .text_color(rgb(0x1f2937))
+                    .when(selected, |style| style.bg(rgb(0xdbeafe)))
+                    .child(div().w(px(12.)).child(item.marker()))
+                    .child(label);
+                if renaming.is_some() {
+                    // The row being renamed takes keys and clicks in its field only.
+                    return row.into_any_element();
+                }
+                let is_folder = item.is_folder();
+                let path = item.path.clone();
+                let label = item.label.clone();
+                let delete_path = item.path.clone();
+                let delete_name = item.label.clone();
+                row.cursor_pointer()
+                    .hover(|style| style.bg(rgb(0xe5e7eb)))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                            this.ask_delete(delete_path.clone(), delete_name.clone(), window, cx);
+                        }),
+                    )
+                    .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+                        // A double-click starts a rename. The first click has already opened
+                        // the note or toggled the folder, so the second one changes nothing else.
+                        if event.click_count() >= 2 {
+                            this.start_rename(path.clone(), label.clone(), !is_folder, window, cx);
+                            return;
+                        }
+                        this.file_edit = None;
+                        if is_folder {
+                            this.toggle_folder(&path, cx);
+                        } else {
+                            this.open_note(path.clone(), window, cx);
+                        }
+                    }))
+                    .into_any_element()
+            })
+            .collect::<Vec<_>>();
+
+        // The header holds the title and the "+" button for a new note (task 9.3).
+        let header = div()
+            .flex_none()
+            .h(px(28.))
+            .px_2()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .child(div().text_xs().text_color(rgb(0x6b7280)).child("Files"))
+            .child(
+                div()
+                    .id("sidebar-new-note")
+                    .w(px(20.))
+                    .h(px(20.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_sm()
                     .cursor_pointer()
                     .text_color(rgb(0x1f2937))
                     .hover(|style| style.bg(rgb(0xe5e7eb)))
-                    .when(selected, |style| style.bg(rgb(0xdbeafe)))
-                    .child(div().w(px(12.)).child(item.marker()))
-                    .child(
-                        div()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .child(item.label),
-                    );
-                let row = if is_folder {
-                    row.on_click(cx.listener(move |this, _event, _window, cx| {
-                        this.toggle_folder(&path, cx);
-                    }))
-                } else {
-                    row.on_click(cx.listener(move |this, _event, window, cx| {
-                        this.open_note(path.clone(), window, cx);
-                    }))
-                };
-                row
-            })
-            .collect::<Vec<_>>();
+                    .child("+")
+                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                        this.new_note(window, cx);
+                    })),
+            );
+        // The rename hint, the delete question, or the rename error (task 9.3).
+        let message = edit_message(&self.file_edit).map(|text| {
+            div()
+                .flex_none()
+                .px_2()
+                .pb_1()
+                .text_xs()
+                .text_color(rgb(0x6b7280))
+                .child(text)
+        });
 
         div()
             .id("sidebar")
             .h_full()
             .w(px(SIDEBAR_WIDTH))
             .flex_none()
-            .overflow_y_scroll()
-            .py_2()
+            .flex()
+            .flex_col()
             .bg(rgb(0xf3f4f6))
             .border_r_1()
             .border_color(rgb(0xd1d5db))
-            .children(rows)
+            .key_context("Sidebar")
+            .track_focus(&self.sidebar_focus)
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                    window.focus(&this.sidebar_focus, cx);
+                }),
+            )
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                this.file_edit_key_down(event, window, cx);
+            }))
+            .child(header)
+            .children(message)
+            .child(
+                div()
+                    .id("sidebar-rows")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .py_2()
+                    .children(rows),
+            )
     }
 }
 
 impl Render for WorkspaceView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let root = div().size_full().flex().flex_row().on_action(cx.listener(
-            |this, _: &ToggleSearch, window, cx| {
+        let root = div()
+            .size_full()
+            .flex()
+            .flex_row()
+            .on_action(cx.listener(|this, _: &ToggleSearch, window, cx| {
                 this.toggle_search(window, cx);
-            },
-        ));
+            }))
+            .on_action(cx.listener(|this, _: &NewNote, window, cx| {
+                this.new_note(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &RenameNote, window, cx| {
+                this.rename_open_note(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &DeleteNote, window, cx| {
+                this.ask_delete_open(window, cx);
+            }));
         let root = if self.search_open {
             let has_vault = self.sidebar.is_some();
             root.child(search_panel::render_panel(&self.search, has_vault, cx))

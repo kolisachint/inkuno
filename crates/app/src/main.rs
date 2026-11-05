@@ -5,7 +5,13 @@
 mod file_io;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod file_ops_ui;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod search_panel;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod text_input;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod watch;
@@ -25,6 +31,7 @@ fn main() {
     application().run(|cx: &mut App| {
         md_editor::editor::init(cx);
         file_io::init(cx);
+        file_ops_ui::init(cx);
         // Ctrl+Shift+F on Linux, Cmd+Shift+F on macOS (ToggleSearch, task 9.4).
         #[cfg(target_os = "macos")]
         let search_key = "cmd-shift-f";
