@@ -18,7 +18,8 @@ use gpui::{
 use md_core::display_map::{Bias, DisplayMap};
 use md_core::inline::inline_spans;
 use md_core::{BlockKind, InlineSpan};
-use md_render::highlight::Token;
+use md_render::highlight::{Token, TokenKind};
+use md_render::lang::Language;
 
 use crate::blocks::basic::{
     block_style, line_runs, shows_inline_styles, BlockStyle, Decoration, RunStyle, TextColor,
@@ -32,8 +33,9 @@ use crate::cursor::{self, hit_test};
 use crate::editor::Editor;
 use crate::ime;
 use crate::inline_render::{
-    block_hidden_ranges, display_to_source, source_to_display, visible_run_lengths, visible_text,
+    display_to_source, source_to_display, visible_run_lengths, visible_text,
 };
+use crate::modes::source;
 use crate::selection;
 
 /// Monospace family for inline code: the macOS system face, or the common Linux one. The
@@ -319,6 +321,8 @@ pub struct TextElement {
     style: BlockStyle,
     /// Whether the inline spans of the block are drawn with their styles (task 4.1).
     inline_styles: bool,
+    /// Source Mode (task 8.1): the block is drawn as plain source. See [`TextElement::in_source_mode`].
+    source_mode: bool,
 }
 
 impl TextElement {
@@ -343,7 +347,22 @@ impl TextElement {
             style: block_style(&kind),
             inline_styles: shows_inline_styles(&kind),
             kind,
+            source_mode: false,
         }
+    }
+
+    /// Draw the block as plain source text (Source Mode, task 8.1): no hidden markers, the body
+    /// size, and markdown token colours. The kind becomes a paragraph, so no kind-specific drawing
+    /// applies (tables, code backgrounds, list gutters, collapsed fence lines). `on` false does
+    /// nothing.
+    pub fn in_source_mode(mut self, on: bool) -> Self {
+        if on {
+            self.kind = BlockKind::Paragraph;
+            self.style = source::source_style();
+            self.inline_styles = false;
+            self.source_mode = true;
+        }
+        self
     }
 }
 
@@ -375,6 +394,7 @@ fn code_runs(
     tokens: &[Token],
     font: &Font,
     base_color: Hsla,
+    colors: fn(TokenKind) -> u32,
 ) -> Vec<TextRun> {
     let font = code_font(font);
     let run = |len: usize, color: Hsla| TextRun {
@@ -391,7 +411,7 @@ fn code_runs(
     code_fence::line_segments(line, code_base, tokens)
         .into_iter()
         .map(|(len, kind)| {
-            let color = kind.map_or(base_color, |kind| Hsla::from(rgb(token_color(kind))));
+            let color = kind.map_or(base_color, |kind| Hsla::from(rgb(colors(kind))));
             run(len, color)
         })
         .collect()
@@ -507,6 +527,8 @@ pub struct BlockInputs {
     marked: Option<Range<usize>>,
     /// Hidden byte ranges of the block (task 4.4).
     hidden: Vec<Range<usize>>,
+    /// Source Mode (task 8.1): runs are coloured from `code_tokens` in monospace.
+    source_mode: bool,
     /// Inline spans of the block, with absolute offsets.
     spans: Vec<InlineSpan>,
     /// Fence lines that take no height (task 5.3).
@@ -533,7 +555,13 @@ impl TextElement {
         // a span that holds it shows its inline markers (task 4.4). Other markers are hidden.
         let caret = editor.selection.selection.head;
         let revealed = self.source.start <= caret && caret <= self.source.end;
-        let hidden = block_hidden_ranges(&text, self.source.start, &self.kind, Some(caret));
+        let hidden = source::block_hidden_in_mode(
+            self.source_mode,
+            &text,
+            self.source.start,
+            &self.kind,
+            Some(caret),
+        );
         // A code fence (task 5.3): its fence lines, and the parsed fence for the code runs.
         let is_code = self.kind == BlockKind::CodeFence;
         let collapsed = self.collapsed_lines(&text, caret);
@@ -565,6 +593,10 @@ impl TextElement {
                 self.editor
                     .update(cx, |editor, _cx| editor.code_cache.tokens(code, lang))
             }
+            // Source Mode colours the whole block with the markdown grammar (task 8.1).
+            None if self.source_mode => self.editor.update(cx, |editor, _cx| {
+                editor.code_cache.tokens(&text, Language::Markdown)
+            }),
             None => Rc::from(Vec::new()),
         };
         // The items of a list block, one per line (task 4.2). Empty for other blocks.
@@ -591,6 +623,7 @@ impl TextElement {
             caret,
             marked,
             hidden,
+            source_mode: self.source_mode,
             spans,
             collapsed,
             fence,
@@ -659,8 +692,18 @@ fn layout_rows(
                     &inputs.code_tokens,
                     &inputs.font,
                     inputs.color,
+                    token_color,
                 )
             }
+            None if inputs.source_mode => code_runs(
+                source.clone(),
+                false,
+                inputs.source.start,
+                &inputs.code_tokens,
+                &inputs.font,
+                inputs.color,
+                source::token_color,
+            ),
             None => split_done(line_runs(line, source.start, &inputs.spans), done_from)
                 .into_iter()
                 .map(|(mut run, done)| {

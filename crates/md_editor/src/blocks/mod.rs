@@ -54,17 +54,19 @@ fn block_element(
     kind: BlockKind,
     cx: &App,
 ) -> AnyElement {
-    let (head, base_dir, text) = {
+    let (head, base_dir, text, source_mode) = {
         let editor = editor.read(cx);
         (
             editor.selection.selection.head,
             editor.base_dir().map(Path::to_path_buf),
             editor.buffer().slice(range.clone()),
+            editor.modes().source,
         )
     };
     // The caret is in the block when it lies within its range, end included.
     let caret_inside = focus::caret_in_block(&range, head);
-    if !caret_inside {
+    // Source Mode (task 8.1) draws every block as source text, so no table or image is drawn.
+    if !caret_inside && !source_mode {
         match kind {
             BlockKind::Table => {
                 if let Some(parsed) = table::parse_table(&text) {
@@ -85,5 +87,7 @@ fn block_element(
             _ => {}
         }
     }
-    TextElement::new(editor.clone(), range, kind).into_any_element()
+    TextElement::new(editor.clone(), range, kind)
+        .in_source_mode(source_mode)
+        .into_any_element()
 }
