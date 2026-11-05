@@ -93,6 +93,7 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
 4. **Dev Mac cannot build the `app` crate locally.** Only Command Line Tools are installed, so the gpui_apple build script fails on the `metal` shader step. The library crates build and test fine.
    Unblock: install Xcode, or confirm the macOS CI build is green after each push, or adopt GPUI's `runtime_shaders` feature as a local workaround (not adopted).
+5. **macOS: text is invisible.** The owner ran the nightly build 8d8e124 on an Apple Silicon Mac: the text colour matches the background, so nothing is readable. Not yet diagnosed. Suspects: theme colour tokens or Auto theme resolution on macOS (`md_editor/src/theme.rs`, `app/src/theme.rs`), or font fallback. Unblock: reproduce on a Mac and fix. Do not tag v0.1.0 until this is fixed.
 
 ### Iteration 2 open items (no blocker)
 
@@ -105,14 +106,15 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 
 ## Next tasks to dispatch (in order)
 
-1. **Push `claude/pending-work` and confirm CI is green.** `release.yml` (macOS + Linux builds) and the new `workspace.yml` have not run on this branch (not pushed). The app-crate changes (`search_panel.rs`, `workspace_view.rs`, `file_ops_ui.rs`) were never compiled locally, so do not call them done until CI passes.
-2. **macOS verification on a real Mac (owner).** Run the `nightly` build (`xattr -dr com.apple.quarantine noteapp.app`). Record the S2 screenshot and the P3 gate (blockers 1 and 2b). Check iteration 2 on macOS:
+1. **Fix invisible text on macOS** (see the blocker above). This comes before any release tag.
+2. **Push `claude/pending-work` and confirm CI is green.** `release.yml` (macOS + Linux builds) and the new `workspace.yml` have not run on this branch (not pushed). The app-crate changes (`search_panel.rs`, `workspace_view.rs`, `file_ops_ui.rs`) were never compiled locally, so do not call them done until CI passes.
+3. **macOS verification on a real Mac (owner).** Run the `nightly` build (`xattr -dr com.apple.quarantine noteapp.app`). Record the S2 screenshot and the P3 gate (blockers 1 and 2b). Check iteration 2 on macOS:
    - system font bold and italic (see the Linux font note);
    - Cmd keys: Cmd+/, Cmd+K Cmd+T, Cmd+N, Cmd+Shift+F;
    - Auto theme following the macOS appearance live (10.2 acceptance: the window updates within one frame);
    - image paste from the macOS clipboard (9.5);
    - settings file at `~/Library/Application Support/noteapp/settings.json` (10.3, `app/src/settings.rs`).
-3. **Performance: re-measure keystroke-to-paint.** The double layout is removed. Re-measure the same way as in `docs/spikes/perf-pass.md` (same generated 10k-line document, same `xdotool` method) and record the result there. Then re-measure on a real GPU and on macOS.
-4. **Open items worth doing (from the list above).** Remote images; reload as one undo step; watcher FSEvents timing tests; IME bounds across wrap rows (needs the macOS check in 2); Typewriter far-jump blank frame.
-5. **Owner decisions pending.** Mode keys (DESIGN §16 item 1; implemented as Ctrl/Cmd+/, F8, F9 in `crates/app/src/keymap.rs`); settings location (DESIGN §16 item 9, provisional); New Folder key binding (the `NewFolder` action exists unbound); Linux scope (DESIGN §1.2); macOS signing (blocker 3); lifting the math and Mermaid hold.
-6. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.
+4. **Performance: re-measure keystroke-to-paint.** The double layout is removed. Re-measure the same way as in `docs/spikes/perf-pass.md` (same generated 10k-line document, same `xdotool` method) and record the result there. Then re-measure on a real GPU and on macOS.
+5. **Open items worth doing (from the list above).** Remote images; reload as one undo step; watcher FSEvents timing tests; IME bounds across wrap rows (needs the macOS check in 2); Typewriter far-jump blank frame.
+6. **Owner decisions pending.** Mode keys (DESIGN §16 item 1; implemented as Ctrl/Cmd+/, F8, F9 in `crates/app/src/keymap.rs`); settings location (DESIGN §16 item 9, provisional); New Folder key binding (the `NewFolder` action exists unbound); Linux scope (DESIGN §1.2); macOS signing (blocker 3); lifting the math and Mermaid hold.
+7. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.
