@@ -5,6 +5,9 @@
 mod file_io;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod workspace_view;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use gpui::{px, size, App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use gpui_platform::application;
@@ -24,7 +27,7 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(file_io::open_initial),
+            |_, cx| cx.new(workspace_view::WorkspaceView::new),
         )
         .unwrap();
         cx.activate(true);

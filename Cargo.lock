@@ -177,6 +177,7 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "md_editor",
+ "workspace",
 ]
 
 [[package]]

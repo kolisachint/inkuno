@@ -1,7 +1,8 @@
 //! File open and save for the app window (plan task 3.6). Owner: task 3.6.
 //!
-//! The window's root view is a [`Document`]: the editor plus file state (path and the saved
-//! buffer version, used for the dirty marker).
+//! A [`Document`] is the editor plus file state (path and the saved buffer version, used for
+//! the dirty marker). The window's root view is the workspace view (task 9.1), which shows a
+//! [`Document`] beside the vault sidebar.
 
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions};
@@ -106,7 +107,7 @@ impl Document {
     }
 
     /// A document holding `text`, clean (not dirty), with `path` as its file.
-    fn with_text(cx: &mut Context<Self>, text: &str, path: Option<PathBuf>) -> Self {
+    pub fn with_text(cx: &mut Context<Self>, text: &str, path: Option<PathBuf>) -> Self {
         let editor = cx.new(|cx| Editor::new(cx, text));
         let saved_version = editor.read(cx).buffer().version();
         Self {
@@ -193,22 +194,6 @@ pub fn init(cx: &mut App) {
     #[cfg(not(target_os = "macos"))]
     let save_key = "ctrl-s";
     cx.bind_keys([KeyBinding::new(save_key, Save, None)]);
-}
-
-/// The document shown at start-up: the file named on the command line when one is given and
-/// readable, otherwise the sample. A file that cannot be read is reported on stderr.
-pub fn open_initial(cx: &mut Context<Document>) -> Document {
-    let Some(arg) = std::env::args_os().nth(1) else {
-        return Document::sample(cx);
-    };
-    let path = PathBuf::from(arg);
-    match read_file(&path) {
-        Ok(text) => Document::with_text(cx, &text, Some(path)),
-        Err(err) => {
-            eprintln!("noteapp: cannot open {}: {err}", path.display());
-            Document::sample(cx)
-        }
-    }
 }
 
 #[cfg(test)]
