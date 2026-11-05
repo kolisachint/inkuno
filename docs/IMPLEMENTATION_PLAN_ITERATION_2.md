@@ -83,7 +83,8 @@ Status as of the iteration 2 branch, all verified on Linux (Xvfb). Screenshots a
 - **P8 modes:** 8.1 Source Mode (`8.1.png`), 8.2 caret and scroll preservation (tests; `8.1.png`), 8.3 Focus Mode (`8.3.png`, `8.3-moved.png`), 8.4 Typewriter Mode (`8.4.png`). 8.5 mode keys in progress: the keymap table is not on the branch yet.
 - **P9 workspace:** 9.1 sidebar (`9.1.png`), 9.2 watcher updates applied in the app (`9.2.png`), 9.3 create, rename and delete UI (`9.3-ui.png`), 9.4 search panel (`9.4.png`), 9.5 image paste (`9.5.png`). Done.
 - **Extra, not a plan task:** soft word wrap (`wrap.png`, `wrap-selection.png`). Up and Down move by visual row with an x goal.
-- **Not started:** P10 theming (10.1 to 10.4).
+- **P10 theming:** 10.1 colour tokens (`10.1-light.png`, `10.1-dark.png`), 10.2 Auto (follows the window appearance; not checked on macOS yet), 10.3 settings persistence (`10.3-restart.png`, `10.3-vault-restart.png`; JSON in the config dir, provisional per DESIGN §16 item 9), 10.4 performance part (`10.4-perf.png`, `10.4-followup-typed.png`; results and follow-up fixes in `docs/spikes/perf-pass.md`). The p90 keystroke-to-paint target of 16 ms is not met on this Xvfb rig (about 16.7 ms). The math and diagram part of 10.4 is on hold with P6 and P7.
+- **Iteration 2 is complete on Linux for every task that is not on hold.** Merged to `main` via a PR from `claude/iteration2-live-preview`.
 - **Still on hold, not touched:** 6.1, 6.3, 6.5, 6.6, 7.1, 7.2 and the 7.3 UI part.
 
 ---
@@ -110,8 +111,8 @@ From AGENTS.md, the spike notes and the Linux P3 gate (`docs/P3-gate-linux.md`).
 - **Resolved: watcher updates are applied in the app** (9.2, `cb04e55`). The 1 s latency was checked by hand on Xvfb, not asserted in tests.
 - **Resolved: image paste** (9.5, `2ca53b7`).
 - **Iteration 2 open items from the 8.x and 9.x work** (sidebar delete is permanent, IME bounds across wrap rows, double layout per frame, table cells without inline markdown, `%20` paths, remote images, reload undo step, search offset on a dirty note, Typewriter far-jump blank frame) are listed in AGENTS.md.
-- **Settings storage** location and format (DESIGN §16 item 9; 10.3) is undecided.
-- **Performance targets** (DESIGN §12) need measuring in 10.4; the results go to `docs/spikes/perf-pass.md`, which does not exist yet.
+- **Settings storage** location and format (DESIGN §16 item 9; 10.3) is provisional: a JSON file in the config dir (`~/Library/Application Support/noteapp/settings.json` on macOS). Owner decision pending. Not checked on macOS.
+- **Performance targets** (DESIGN §12): measured in 10.4, results in `docs/spikes/perf-pass.md`. The 16 ms p90 keystroke-to-paint target is not met on this Xvfb rig. Re-measure after the double layout fix (AGENTS.md next task 3) and on a real GPU and macOS.
 - **Rope backend** (DESIGN §16 item 10). md_core uses `ropey` behind `Buffer`. Undecided; not phase-specific.
 - **Linux scope conflict.** DESIGN §1.2 lists Linux as a v1 non-goal, but iteration 1 and AGENTS treat Linux as a target. The owner decides and updates DESIGN §1.2.
 - **macOS signing and notarization** (AGENTS blocker 3). Release item, not phase-specific. Stays in AGENTS.md.

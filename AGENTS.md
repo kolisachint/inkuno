@@ -8,13 +8,14 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 
 - **Iteration 1 = P0 to P3:** a plain-markdown editor. It opens, edits, selects, navigates, takes IME input, scrolls and saves a `.md` file, on macOS and Linux, released as nightly binaries.
 - **Iteration 1 is done apart from the macOS gate run** (Linux gate passed, see `docs/P3-gate-linux.md`).
-- **Iteration 2 (P4 to P10) is in progress.** Done on Linux: P4 live preview (4.1 to 4.5), P5 code fences (5.1 to 5.3), P8 modes (8.1 to 8.5), P9 workspace (9.1 to 9.5), P10 theme tokens and Auto (10.1, 10.2), settings persistence (10.3, see below), and soft word wrap. Next: 10.4 perf pass. P6 and P7 stay on hold. The plan is `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`.
+- **Iteration 2 (P4 to P10) is complete on Linux for every task that is not on hold.** Done: P4 live preview (4.1 to 4.5), P5 code fences (5.1 to 5.3), P8 modes (8.1 to 8.5), P9 workspace (9.1 to 9.5), P10 theme tokens and Auto (10.1, 10.2), settings persistence (10.3, see below), the performance part of 10.4, and soft word wrap. The performance part of 10.4 has benchmarks in `crates/md_core/benches/core.rs` and `crates/md_editor/benches/pure.rs`. Results and follow-up fixes are in `docs/spikes/perf-pass.md` (incremental block list and cached caret hidden ranges landed). The math and diagram part of 10.4 is on hold with P6 and P7. P6 and P7 stay on hold. Iteration 2 was merged to `main` via a PR from `claude/iteration2-live-preview`. The plan is `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`.
 
 ## How work is done here
 
 - Dispatch small-scoped **Haiku** subagents, one plan task each, using the template at the end of the plan file.
-- Run each subagent in its own git worktree, then review and merge it into the working branch.
-- Worktrees can start from a stale commit. Tell every subagent to first run `git merge --ff-only <working branch>` (or `git reset --hard <working branch>` while it has no work yet), and to run `cargo clean` when done, because disk space is limited.
+- Each session's working branch is created from `main` and named `claude/<topic>`. Run each subagent in its own git worktree. Review each worktree commit, then merge it into the working branch in the main checkout.
+- Worktrees can start from a stale commit. Tell every subagent to first run `git merge --ff-only <working branch>` (or `git reset --hard <working branch>` while it has no work yet).
+- Subagents share one target directory, `CARGO_TARGET_DIR=/home/user/noteapp/target`, to save disk and build time. Subagents must **not** run `cargo clean`. When done, they remove any app binary copies they made, and keep only one.
 - Every task ends with these passing at the workspace root:
   `cargo build`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check`.
 - Do not change the GPUI git rev (root `Cargo.toml`) except in a dedicated bump change.
@@ -32,6 +33,14 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
   - Assets: `noteapp-macos-arm64.zip` (ad-hoc signed `.app`), `noteapp-macos-arm64.tar.gz`, `noteapp-linux-x86_64.tar.gz`.
 - `.github/workflows/md_core.yml` runs fmt, clippy and tests for `md_core` on every push.
 - Pushing changes under `.github/workflows/` needs a GitHub credential with **workflow** scope. If a push is rejected for that reason, park the file under `docs/ci/` and add a line to Blockers below.
+
+## CI
+
+- **`release.yml`** runs on push to `main`, `claude/**` and `v*` tags, and on manual dispatch. The `macos` job (`macos-14`) and the `linux` job (`ubuntu-22.04`) each run `cargo build --release -p app` and package the assets. The `publish` job then replaces the `nightly` pre-release, or creates a versioned release for a tag. Both build jobs use `Swatinem/rust-cache@v2`.
+- **`md_core.yml`** runs on every push and pull request (`ubuntu-latest`): `cargo fmt --all --check`, `cargo clippy -p md_core --all-targets -- -D warnings` and `cargo test -p md_core`. It has no cache step.
+- **macOS code is compiled only in CI.** After each push, check that the release run for the branch is green on the GitHub Actions page for that branch. Do not call a change that touches macOS code done until it is.
+- **Gap:** CI does not run tests or clippy for `md_editor`, `md_render`, `workspace` or `app`. The release jobs only build. `cargo fmt --all --check` does cover the whole workspace.
+- **Next step:** add a workspace job on `ubuntu-22.04`. It installs the apt packages from the `linux` job in `release.yml`, then runs `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings`, with `Swatinem/rust-cache@v2`. Add the same cache step to `md_core.yml`. This edits `.github/workflows/`, so it needs a credential with workflow scope. If the push is rejected, park it under `docs/ci/` and add a line to Blockers.
 
 ## Status
 
@@ -59,7 +68,7 @@ Screenshots are in `docs/screenshots/`. All rows are verified on Linux (Xvfb) un
 | P8 modes | 8.1 Source Mode, 8.2 caret and scroll preservation, 8.3 Focus Mode, 8.4 Typewriter Mode, 8.5 mode keys done (see below). | `8.1.png` (also 8.2), `8.3.png`, `8.3-moved.png`, `8.4.png` |
 | Soft word wrap | Done (not a plan task). Up and Down move by visual row with an x goal. | `wrap.png`, `wrap-selection.png` |
 | P9 workspace | 9.1 sidebar, 9.2 watcher applied in the app, 9.3 create, rename and delete UI, 9.4 search panel, 9.5 image paste all done. | `9.1.png`, `9.2.png`, `9.3-ui.png`, `9.4.png`, `9.5.png` |
-| P10 theming | 10.1 colour tokens (Light and Dark, `md_editor/src/theme.rs`) and 10.2 Auto (`app/src/theme.rs`, follows the window appearance) done. Cycle the theme with Ctrl+K Ctrl+T (Cmd+K Cmd+T). 10.3 settings persistence (`app/src/settings.rs`): a JSON file in the config dir (provisional, DESIGN §16 item 9). Theme mode, last vault, Focus and Typewriter are saved and restored; Source Mode is not. `NOTEAPP_CONFIG_DIR` overrides the dir. 10.4 not started. | `10.1-light.png`, `10.1-dark.png`, `10.3-restart.png`, `10.3-vault-restart.png` |
+| P10 theming | 10.1 colour tokens (Light and Dark, `md_editor/src/theme.rs`) and 10.2 Auto (`app/src/theme.rs`, follows the window appearance) done. Cycle the theme with Ctrl+K Ctrl+T (Cmd+K Cmd+T). 10.3 settings persistence (`app/src/settings.rs`): a JSON file in the config dir (provisional, DESIGN §16 item 9). Theme mode, last vault, Focus and Typewriter are saved and restored; Source Mode is not. `NOTEAPP_CONFIG_DIR` overrides the dir. 10.4 perf part done. Keystroke-to-paint on Xvfb/llvmpipe, 4 vCPU, 10k-line document: median ~9.4 ms, p90 ~16.7 ms. The 16 ms p90 target is NOT met on this rig. Reparse touches only dirty blocks: pass. Only visible blocks are laid out: pass. Results in `docs/spikes/perf-pass.md`. The math and diagram part of 10.4 is on hold with P6/P7. | `10.1-light.png`, `10.1-dark.png`, `10.3-restart.png`, `10.3-vault-restart.png`, `10.4-perf.png`, `10.4-followup-typed.png` |
 
 8.5 (mode keys) is done: Source on Ctrl+/ (Linux) or Cmd+/ (macOS), Focus on F8, Typewriter on F9, and the Cycle Theme chord, all in one table in `crates/app/src/keymap.rs`. The `NOTEAPP_SOURCE`, `NOTEAPP_FOCUS` and `NOTEAPP_TYPEWRITER` env vars were removed. Focus and Typewriter can be on together, and both work in Source Mode.
 
@@ -86,7 +95,7 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 
 - **Delete in the sidebar is permanent.** There is no trash.
 - **IME bounds across a wrap row** cover only the first row.
-- **Each block is laid out twice per frame** (measure and prepaint). Profile in 10.4.
+- **Each block is laid out twice per frame** (measure and prepaint). Measured in 10.4; fix is next task 3.
 - **Table cells do not render inline markdown.**
 - **Image paths with `%20` are not decoded.**
 - **Remote images are not loaded.**
@@ -96,6 +105,14 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 
 ## Next tasks to dispatch (in order)
 
-1. **Iteration 1.** Done apart from the macOS gate run (blockers 1 and 2b). Nothing to dispatch here until a Mac run is recorded.
-2. **Iteration 2.** Next: 10.4 performance pass, which records its benchmark results in `docs/spikes/perf-pass.md`.
-3. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.
+1. **CI: workspace test and clippy job.** See the CI section above. Needs a credential with workflow scope, or park under `docs/ci/` and add a Blocker.
+2. **macOS verification on a real Mac (owner).** Run the `nightly` build (`xattr -dr com.apple.quarantine noteapp.app`). Record the S2 screenshot and the P3 gate (blockers 1 and 2b). Check iteration 2 on macOS:
+   - system font bold and italic (see the Linux font note);
+   - Cmd keys: Cmd+/, Cmd+K Cmd+T, Cmd+N, Cmd+Shift+F;
+   - Auto theme following the macOS appearance live (10.2 acceptance: the window updates within one frame);
+   - image paste from the macOS clipboard (9.5);
+   - settings file at `~/Library/Application Support/noteapp/settings.json` (10.3, `app/src/settings.rs`).
+3. **Performance: remove the double layout per block.** Remove the measure and prepaint double layout in `crates/md_editor/src/element.rs`. Then re-measure keystroke-to-paint the same way as in `docs/spikes/perf-pass.md` (same generated 10k-line document, same `xdotool` method) and record the result there. Then re-measure on a real GPU and on macOS.
+4. **Open items worth doing (from the list above).** Table cells with inline markdown; `%20` in image paths; sidebar delete to trash (needs the owner decision in 5 first); IME bounds across wrap rows (needs the macOS check in 2); search caret offset on dirty notes; folder creation in the sidebar; selection highlight over rendered tables and images. The last two are not yet in the open items list above. Add them there when picked up.
+5. **Owner decisions pending.** Mode keys (DESIGN §16 item 1; implemented as Ctrl/Cmd+/, F8, F9 in `crates/app/src/keymap.rs`); settings location (DESIGN §16 item 9, provisional); Linux scope (DESIGN §1.2); macOS signing (blocker 3); lifting the math and Mermaid hold.
+6. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.
