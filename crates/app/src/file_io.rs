@@ -187,7 +187,12 @@ impl Render for Document {
 
 /// Register the Save action and its key binding (Cmd+S). Called from `main`.
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("cmd-s", Save, None)]);
+    // Cmd+S on macOS, Ctrl+S on Linux (`cmd-` is Super+S there).
+    #[cfg(target_os = "macos")]
+    let save_key = "cmd-s";
+    #[cfg(not(target_os = "macos"))]
+    let save_key = "ctrl-s";
+    cx.bind_keys([KeyBinding::new(save_key, Save, None)]);
 }
 
 /// The document shown at start-up: the file named on the command line when one is given and

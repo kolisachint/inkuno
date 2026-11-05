@@ -79,7 +79,7 @@ impl Render for Editor {
             .track_focus(&self.focus_handle)
             .key_context("MdEditor");
         // HOOK 3.3 (keys.rs): attach movement, copy, cut and paste handlers to the root.
-        // let root = crate::keys::attach(root, &editor);
+        let root = crate::keys::attach(root, &editor);
         // HOOK 3.1 (element.rs): draw the whole buffer as plain text.
         let root = root.child(crate::element::TextElement::new(
             editor.clone(),
@@ -95,6 +95,6 @@ impl Render for Editor {
 /// App-wide setup for the editor. Call once at start-up, before opening a window.
 pub fn init(cx: &mut App) {
     // HOOK 3.3 (keys.rs): register the default key bindings for the "MdEditor" context.
-    // crate::keys::bind_keys(cx);
+    crate::keys::bind_keys(cx);
     let _ = cx;
 }
