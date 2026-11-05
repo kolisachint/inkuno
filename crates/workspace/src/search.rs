@@ -46,45 +46,96 @@ pub struct SearchOptions {
     pub max_results: Option<usize>,
 }
 
+/// Outcome of [`search_with_report`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchReport {
+    pub hits: Vec<SearchHit>,
+    /// Files that could not be read, with the error message. Each was skipped
+    /// and the search carried on with the remaining files.
+    pub skipped: Vec<(PathBuf, String)>,
+}
+
 /// Full-text search over vault `.md` files.
 ///
 /// Each hit is one line that matches, with every match on that line in
 /// `SearchHit::matches`. Hits are ordered by file path (case-insensitively, as the
 /// sidebar sorts), then by line number. `max_results` caps the number of hits.
 /// An empty query returns no hits.
+///
+/// Files that cannot be read are skipped silently; use [`search_with_report`]
+/// to learn which ones were skipped.
 pub fn search(vault: &Vault, query: &str, opts: &SearchOptions) -> io::Result<Vec<SearchHit>> {
+    search_with_report(vault, query, opts).map(|report| report.hits)
+}
+
+/// Like [`search`], but also reports the files that were skipped because they
+/// could not be read (permission denied, deleted mid-search, and so on).
+pub fn search_with_report(
+    vault: &Vault,
+    query: &str,
+    opts: &SearchOptions,
+) -> io::Result<SearchReport> {
     if query.is_empty() || opts.max_results == Some(0) {
-        return Ok(Vec::new());
+        return Ok(SearchReport::default());
     }
+    let matcher = build_matcher(query, opts)?;
+    let mut searcher = build_searcher();
+    let files = note_files(vault.root())?;
+    Ok(scan_files(
+        &files,
+        &matcher,
+        &mut searcher,
+        opts.max_results,
+    ))
+}
+
+fn build_matcher(query: &str, opts: &SearchOptions) -> io::Result<RegexMatcher> {
     let pattern = if opts.regex {
         query.to_owned()
     } else {
         escape_literal(query)
     };
-    let matcher = RegexMatcherBuilder::new()
+    RegexMatcherBuilder::new()
         .case_insensitive(opts.case_insensitive)
         .line_terminator(Some(b'\n'))
         .build(&pattern)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let mut searcher = SearcherBuilder::new()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+}
+
+fn build_searcher() -> Searcher {
+    SearcherBuilder::new()
         .line_number(true)
         .binary_detection(BinaryDetection::quit(b'\x00'))
-        .build();
+        .build()
+}
 
-    let mut hits = Vec::new();
-    for file in note_files(vault.root())? {
-        if opts.max_results.is_some_and(|max| hits.len() >= max) {
+/// Scans each file in order. A file that fails to open or read is recorded in
+/// `skipped` and its partial hits are dropped, so each file contributes either
+/// all of its hits or none.
+fn scan_files(
+    files: &[PathBuf],
+    matcher: &RegexMatcher,
+    searcher: &mut Searcher,
+    max_results: Option<usize>,
+) -> SearchReport {
+    let mut report = SearchReport::default();
+    for file in files {
+        if max_results.is_some_and(|max| report.hits.len() >= max) {
             break;
         }
+        let before = report.hits.len();
         let mut sink = Collector {
-            path: &file,
-            matcher: &matcher,
-            hits: &mut hits,
-            max: opts.max_results,
+            path: file,
+            matcher,
+            hits: &mut report.hits,
+            max: max_results,
         };
-        searcher.search_path(&matcher, &file, &mut sink)?;
+        if let Err(err) = searcher.search_path(matcher, file, &mut sink) {
+            report.hits.truncate(before);
+            report.skipped.push((file.clone(), err.to_string()));
+        }
     }
-    Ok(hits)
+    report
 }
 
 /// Every `.md` file below `root`, sorted case-insensitively by path.
@@ -405,6 +456,60 @@ mod tests {
     fn empty_query_returns_nothing() {
         let (_dir, vault) = fixture();
         assert!(search(&vault, "", &opts()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn file_deleted_after_listing_is_skipped() {
+        let (dir, _vault) = fixture();
+        let gone = dir.path().join("gone.md");
+        write(&gone, "beta\n");
+        let listed = note_files(dir.path()).unwrap();
+        assert!(listed.contains(&gone));
+        fs::remove_file(&gone).unwrap();
+
+        let matcher = build_matcher("beta", &opts()).unwrap();
+        let mut searcher = build_searcher();
+        let report = scan_files(&listed, &matcher, &mut searcher, None);
+
+        assert_eq!(report.skipped.len(), 1);
+        assert_eq!(report.skipped[0].0, gone);
+        assert!(!report.skipped[0].1.is_empty());
+        let paths: Vec<PathBuf> = report.hits.iter().map(|h| h.path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![dir.path().join("a.md"), dir.path().join("sub/b.md")]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_file_is_skipped_and_others_are_returned() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (dir, vault) = fixture();
+        let locked = dir.path().join("locked.md");
+        write(&locked, "beta behind a lock\n");
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        if fs::read(&locked).is_ok() {
+            // Running as root (or with CAP_DAC_OVERRIDE): mode 0o000 does not
+            // stop a read, so there is nothing to test.
+            fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+            eprintln!("skipped: process can read mode 0o000 files");
+            return;
+        }
+
+        let report = search_with_report(&vault, "beta", &opts()).unwrap();
+        assert_eq!(report.skipped.len(), 1);
+        assert_eq!(report.skipped[0].0, locked);
+        let paths: Vec<PathBuf> = report.hits.iter().map(|h| h.path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![dir.path().join("a.md"), dir.path().join("sub/b.md")]
+        );
+
+        // The plain `search` API returns the same hits while the file is still locked.
+        assert_eq!(search(&vault, "beta", &opts()).unwrap(), report.hits);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
     }
 
     #[test]
