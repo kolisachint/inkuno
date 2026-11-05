@@ -229,6 +229,7 @@ impl EntityInputHandler for Editor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        crate::perf::key_received();
         // A plain typed character at the caret may trigger an input rule (task 4.5). A rule
         // applies its own edit; otherwise the default insertion below runs.
         if range.is_none()

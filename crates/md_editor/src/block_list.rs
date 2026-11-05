@@ -245,17 +245,31 @@ fn set_spacers(editor: &Entity<Editor>, on: bool, cx: &mut App) {
     });
 }
 
-/// Bring the block items up to date with the buffer at `version`.
-fn sync_items(editor: &Entity<Editor>, version: u64, cx: &mut App) {
-    let text = editor.read(cx).text();
-    let blocks = blocks_for(&text);
-    let items = item_ranges(&text, &blocks);
-    let kinds = item_kinds(&text, &blocks);
+/// Items, item kinds and item hashes for `text`, as the list stores them. Pure. This is the
+/// work every buffer edit costs the list, because it re-splits and re-hashes the whole text.
+fn item_state(text: &str) -> (Vec<Range<usize>>, Vec<BlockKind>, Vec<u64>) {
+    let blocks = blocks_for(text);
+    let items = item_ranges(text, &blocks);
+    let kinds = item_kinds(text, &blocks);
     let hashes: Vec<u64> = items
         .iter()
         .zip(&kinds)
         .map(|(range, kind)| hash_item(kind, &text[range.clone()]))
         .collect();
+    (items, kinds, hashes)
+}
+
+/// The item hashes [`sync_items`] computes for `text`. Public only so `benches/pure.rs` can
+/// time the per-edit pure work; the editor does not call it.
+#[doc(hidden)]
+pub fn sync_hashes(text: &str) -> Vec<u64> {
+    item_state(text).2
+}
+
+/// Bring the block items up to date with the buffer at `version`.
+fn sync_items(editor: &Entity<Editor>, version: u64, cx: &mut App) {
+    let text = editor.read(cx).text();
+    let (items, kinds, hashes) = item_state(&text);
     editor.update(cx, |editor, _cx| {
         let state = &mut editor.blocks;
         let (old, count) = changed_span(&state.hashes, &hashes);
@@ -417,6 +431,7 @@ impl gpui::Element for BlockHost {
             let items = self.editor.read(cx).blocks.items.len();
             eprintln!("md_editor: block layouts this frame={laid_out} items={items}");
         }
+        crate::perf::painted();
     }
 }
 
