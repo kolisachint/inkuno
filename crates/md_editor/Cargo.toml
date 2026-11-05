@@ -9,3 +9,6 @@ md_core = { path = "../md_core" }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 gpui = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.27.0"
