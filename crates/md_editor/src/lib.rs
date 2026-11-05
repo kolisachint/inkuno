@@ -8,6 +8,8 @@
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod block_list; // task 3.5
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod blocks; // task 4.1
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod clipboard; // task 3.3
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod cursor; // task 3.2

@@ -8,17 +8,56 @@ use std::ops::Range;
 use std::panic::Location;
 
 use gpui::{
-    point, relative, App, Bounds, ElementId, Entity, GlobalElementId, InspectorElementId,
-    IntoElement, LayoutId, Pixels, Point, ShapedLine, SharedString, Style, TextAlign, TextRun,
-    Window,
+    fill, point, px, relative, size, App, Bounds, ElementId, Entity, Font, FontFallbacks,
+    FontStyle, FontWeight, GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId,
+    Pixels, Point, ShapedLine, SharedString, StrikethroughStyle, Style, TextAlign, TextRun,
+    UnderlineStyle, Window,
 };
 
 use md_core::display_map::DisplayMap;
+use md_core::inline::inline_spans;
 
+use crate::blocks::basic::{line_runs, BlockStyle, Decoration, RunStyle, TextColor};
 use crate::cursor::{self, hit_test};
 use crate::editor::Editor;
 use crate::ime;
 use crate::selection;
+
+/// Monospace family for inline code: the macOS system face, or the common Linux one. The
+/// fallbacks are tried when the family is missing.
+#[cfg(target_os = "macos")]
+const CODE_FAMILY: &str = "Menlo";
+#[cfg(not(target_os = "macos"))]
+const CODE_FAMILY: &str = "DejaVu Sans Mono";
+const CODE_FALLBACKS: &[&str] = &["Consolas", "Liberation Mono", "Courier New"];
+/// Colours of the block styles (DESIGN §9 will move these into the theme).
+const LINK_COLOR: Hsla = Hsla {
+    h: 0.61,
+    s: 0.75,
+    l: 0.50,
+    a: 1.0,
+};
+const MUTED_COLOR: Hsla = Hsla {
+    h: 0.0,
+    s: 0.0,
+    l: 0.45,
+    a: 1.0,
+};
+const MARKER_COLOR: Hsla = Hsla {
+    h: 0.0,
+    s: 0.0,
+    l: 0.70,
+    a: 1.0,
+};
+const CODE_BACKGROUND: Hsla = Hsla {
+    h: 0.0,
+    s: 0.0,
+    l: 0.50,
+    a: 0.15,
+};
+/// Width of the blockquote bar, and the thickness of a thematic break, in pixels.
+const QUOTE_BAR_WIDTH: f32 = 3.0;
+const RULE_THICKNESS: f32 = 1.0;
 
 /// Byte range of each line in `text`, split on `\n`. Ranges exclude the `\n`. A trailing
 /// newline gives a final empty range. Pure function, unit-tested in 3.1.
@@ -180,8 +219,12 @@ pub(crate) fn index_for_y(blocks: &[BlockLayout], y: f32) -> Option<usize> {
 /// Each block (one list item, see `block_list.rs`) gets its own `TextElement`. Paint order
 /// within one block:
 /// 1. `selection::paint_selection`, for the part of the selection in this block
-/// 2. the text lines, each with `ime::decorate_runs` applied to its runs
-/// 3. `cursor::paint_caret`, which draws only when the caret is in this block
+/// 2. the block decoration (`paint_decoration`: blockquote bar, thematic break)
+/// 3. the text lines, each with `ime::decorate_runs` applied to its runs
+/// 4. `cursor::paint_caret`, which draws only when the caret is in this block
+///
+/// Each line's runs come from `blocks::basic::line_runs` (inline styles, task 4.1). The block's
+/// `BlockStyle` sets the font scale, indent and colour, and scales the line height.
 ///
 /// Mouse handlers and the input handler are not registered here. `BlockHost` registers them
 /// once for the whole list. After the text is painted, the element inserts this block's
@@ -190,12 +233,94 @@ pub struct TextElement {
     editor: Entity<Editor>,
     /// Byte range of the buffer to draw.
     source: Range<usize>,
+    /// How the block is drawn (task 4.1): font scale, bold, colour, indent and decoration.
+    style: BlockStyle,
+    /// Whether the inline spans of the block are drawn with their styles (task 4.1).
+    inline_styles: bool,
 }
 
 impl TextElement {
-    /// An element that draws `source` of the editor's buffer.
-    pub fn new(editor: Entity<Editor>, source: Range<usize>) -> Self {
-        Self { editor, source }
+    /// An element that draws `source` of the editor's buffer with `style`. `inline_styles`
+    /// turns on the inline spans (bold, italic, code, link, ...) of the text.
+    pub fn new(
+        editor: Entity<Editor>,
+        source: Range<usize>,
+        style: BlockStyle,
+        inline_styles: bool,
+    ) -> Self {
+        Self {
+            editor,
+            source,
+            style,
+            inline_styles,
+        }
+    }
+}
+
+/// Convert one styled part of a line into a GPUI run. `base` is the font and `base_color` the
+/// colour of plain text. `style` supplies the block's bold and colour.
+fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, base_color: Hsla) -> TextRun {
+    let mut font = base.clone();
+    if run.bold || style.bold {
+        font.weight = FontWeight::BOLD;
+    }
+    if run.italic {
+        font.style = FontStyle::Italic;
+    }
+    if run.code {
+        font.family = CODE_FAMILY.into();
+        font.fallbacks = Some(FontFallbacks::from_fonts(
+            CODE_FALLBACKS.iter().map(|name| name.to_string()).collect(),
+        ));
+    }
+    let color = if run.link {
+        LINK_COLOR
+    } else {
+        match style.color {
+            TextColor::Normal => base_color,
+            TextColor::Muted => MUTED_COLOR,
+            TextColor::Link => LINK_COLOR,
+            TextColor::Marker => MARKER_COLOR,
+        }
+    };
+    TextRun {
+        len: run.range.len(),
+        font,
+        color,
+        background_color: run.code.then_some(CODE_BACKGROUND),
+        underline: run.link.then_some(UnderlineStyle {
+            thickness: px(1.),
+            color: Some(LINK_COLOR),
+            wavy: false,
+        }),
+        strikethrough: run.strike.then_some(StrikethroughStyle {
+            thickness: px(1.),
+            color: Some(color),
+        }),
+    }
+}
+
+/// Paint the block's decoration: a bar on the left for a blockquote, a line across for a
+/// thematic break. Drawn before the text, so the text sits on top.
+fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &mut Window) {
+    let height = snapshot.line_height * snapshot.lines.len() as f32;
+    match decoration {
+        Decoration::None => {}
+        Decoration::QuoteBar => {
+            let bar = Bounds::new(
+                point(snapshot.bounds.left(), snapshot.bounds.top()),
+                size(px(QUOTE_BAR_WIDTH), height),
+            );
+            window.paint_quad(fill(bar, MUTED_COLOR));
+        }
+        Decoration::Rule => {
+            let top = snapshot.bounds.top() + snapshot.line_height * 0.5;
+            let rule = Bounds::new(
+                point(snapshot.bounds.left(), top),
+                size(snapshot.bounds.size.width, px(RULE_THICKNESS)),
+            );
+            window.paint_quad(fill(rule, MARKER_COLOR));
+        }
     }
 }
 
@@ -228,7 +353,7 @@ impl gpui::Element for TextElement {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let text = self.editor.read(cx).buffer().slice(self.source.clone());
         let line_count = line_ranges(&text).len();
-        let line_height = window.line_height();
+        let line_height = window.line_height() * self.style.font_scale;
 
         let mut style = Style::default();
         style.size.width = relative(1.).into();
@@ -251,26 +376,31 @@ impl gpui::Element for TextElement {
 
         let style = window.text_style();
         let font = style.font();
-        let font_size = style.font_size.to_pixels(window.rem_size());
+        let font_size = style.font_size.to_pixels(window.rem_size()) * self.style.font_scale;
         let color = style.color;
-        let line_height = window.line_height();
+        let line_height = window.line_height() * self.style.font_scale;
+        // Inline spans of the whole block, with absolute offsets, so that a span that crosses a
+        // line break is styled on each of its lines.
+        let spans = if self.inline_styles {
+            inline_spans(&text, self.source.start)
+        } else {
+            Vec::new()
+        };
+        let indent = px(self.style.indent_px);
 
         let mut lines = Vec::new();
         let mut top = bounds.top();
         for range in line_ranges(&text) {
             // Line ranges are relative to `text`, which starts at `source.start` in the buffer.
             let source = (self.source.start + range.start)..(self.source.start + range.end);
-            let line_text: SharedString = text[range].to_string().into();
-            let run = TextRun {
-                len: line_text.len(),
-                font: font.clone(),
-                color,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            };
+            let line = &text[range];
+            let line_text: SharedString = line.to_string().into();
+            let styled: Vec<TextRun> = line_runs(line, source.start, &spans)
+                .iter()
+                .map(|run| text_run(run, &self.style, &font, color))
+                .collect();
             // Zero-length runs are dropped, so an empty line is shaped with no runs.
-            let runs: Vec<TextRun> = ime::decorate_runs(vec![run], source.clone(), marked.clone())
+            let runs: Vec<TextRun> = ime::decorate_runs(styled, source.clone(), marked.clone())
                 .into_iter()
                 .filter(|run| run.len > 0)
                 .collect();
@@ -280,7 +410,7 @@ impl gpui::Element for TextElement {
             lines.push(LineLayout {
                 source,
                 shaped,
-                origin: point(bounds.left(), top),
+                origin: point(bounds.left() + indent, top),
             });
             top += line_height;
         }
@@ -310,7 +440,26 @@ impl gpui::Element for TextElement {
         // 1. Selection behind the text, for the part of it that lies in this block.
         selection::paint_selection(editor.read(cx), &snapshot, window);
 
-        // 2. The text, one line at a time.
+        // 2. The block decoration (blockquote bar, thematic break), behind the text.
+        paint_decoration(self.style.decoration, &snapshot, window);
+
+        // 3. The text, one line at a time. Run backgrounds (inline code) go first, since
+        // `ShapedLine::paint` draws the glyphs only.
+        for line in &snapshot.lines {
+            if let Err(err) = line.shaped.paint_background(
+                line.origin,
+                snapshot.line_height,
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            ) {
+                eprintln!(
+                    "md_editor: failed to paint background {:?}: {err}",
+                    line.source
+                );
+            }
+        }
         for line in &snapshot.lines {
             if let Err(err) = line.shaped.paint(
                 line.origin,
@@ -324,7 +473,7 @@ impl gpui::Element for TextElement {
             }
         }
 
-        // 3. The caret, only when it is in this block.
+        // 4. The caret, only when it is in this block.
         cursor::paint_caret(editor.read(cx), &snapshot, focused, window);
 
         // Keep this block's geometry for hit testing, caret reveal and IME bounds.
