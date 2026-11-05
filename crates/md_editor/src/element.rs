@@ -397,8 +397,9 @@ fn paint_code_background(bounds: Bounds<Pixels>, background: Hsla, window: &mut 
 }
 
 /// Convert one styled part of a line into a GPUI run. `base` is the font and the theme gives the
-/// colour of plain text. `style` supplies the block's bold and colour.
-fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, theme: &Theme) -> TextRun {
+/// colour of plain text. `style` supplies the block's bold and colour. Shared with the table
+/// cells (`blocks::table`), which style their runs the same way paragraphs do.
+pub(crate) fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, theme: &Theme) -> TextRun {
     let mut font = base.clone();
     if run.bold || style.bold {
         font.weight = FontWeight::BOLD;
