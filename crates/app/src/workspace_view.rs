@@ -12,13 +12,17 @@
 
 use std::path::{Path, PathBuf};
 
-use gpui::{div, prelude::*, px, rgb, Context, Entity, Focusable, IntoElement, Render, Window};
+use gpui::{
+    div, prelude::*, px, rgb, Context, Entity, Focusable, IntoElement, KeyDownEvent, Render, Window,
+};
+use md_editor::selection::Selection;
 use workspace::tree::{visible_rows, Expansion, Node, Vault};
 
 use crate::file_io::{read_file, Document};
+use crate::search_panel::{self, hit_offset, SearchPanel, ToggleSearch};
 
 /// Width of the sidebar in pixels.
-const SIDEBAR_WIDTH: f32 = 240.;
+pub(crate) const SIDEBAR_WIDTH: f32 = 240.;
 /// Height of one sidebar row in pixels.
 const ROW_HEIGHT: f32 = 24.;
 /// Left padding of a depth-0 row, and the extra indent per depth level, in pixels.
@@ -111,6 +115,10 @@ impl Sidebar {
 pub struct WorkspaceView {
     sidebar: Option<Sidebar>,
     document: Entity<Document>,
+    /// Search state (task 9.4). Kept between opens so the query survives a close.
+    pub(crate) search: SearchPanel,
+    /// True while the sidebar shows the search panel instead of the folder tree.
+    search_open: bool,
 }
 
 impl WorkspaceView {
@@ -121,12 +129,16 @@ impl WorkspaceView {
             return Self {
                 sidebar: None,
                 document: cx.new(Document::sample),
+                search: SearchPanel::new(cx.focus_handle()),
+                search_open: false,
             };
         };
         if arg.is_dir() {
             return Self {
                 sidebar: Sidebar::open(&arg),
                 document: cx.new(|cx| Document::with_text(cx, "", None)),
+                search: SearchPanel::new(cx.focus_handle()),
+                search_open: false,
             };
         }
         let dir = match arg.parent() {
@@ -146,7 +158,12 @@ impl WorkspaceView {
                 cx.new(Document::sample)
             }
         };
-        Self { sidebar, document }
+        Self {
+            sidebar,
+            document,
+            search: SearchPanel::new(cx.focus_handle()),
+            search_open: false,
+        }
     }
 
     /// Flips a folder row between expanded and collapsed.
@@ -158,22 +175,23 @@ impl WorkspaceView {
     }
 
     /// Opens `path` in place of the current document. Unsaved edits in the current document
-    /// are saved first. If that save fails, the switch is refused.
-    fn open_note(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+    /// are saved first. If that save fails, the switch is refused. Returns true when `path` is
+    /// the open note afterwards.
+    fn open_note(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if self.document.read(cx).path.as_deref() == Some(path.as_path()) {
-            return;
+            return true;
         }
         if self.document.read(cx).is_dirty(cx) {
             if let Err(err) = self.document.update(cx, |doc, cx| doc.save(None, cx)) {
                 eprintln!("noteapp: not switching notes, save failed: {err}");
-                return;
+                return false;
             }
         }
         let text = match read_file(&path) {
             Ok(text) => text,
             Err(err) => {
                 eprintln!("noteapp: cannot open {}: {err}", path.display());
-                return;
+                return false;
             }
         };
         let document = cx.new(|cx| Document::with_text(cx, &text, Some(path)));
@@ -181,6 +199,83 @@ impl WorkspaceView {
         window.focus(&focus, cx);
         self.document = document;
         cx.notify();
+        true
+    }
+
+    /// Shows or hides the search panel (ToggleSearch). Opening it focuses the query input.
+    fn toggle_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.search_open {
+            self.close_search(window, cx);
+            return;
+        }
+        self.search_open = true;
+        self.search.refresh(self.sidebar.as_ref().map(|s| &s.vault));
+        window.focus(&self.search.focus, cx);
+        cx.notify();
+    }
+
+    /// Hides the search panel and gives keyboard focus back to the open note's editor.
+    pub(crate) fn close_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.search_open = false;
+        let focus = self.document.read(cx).editor.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
+    /// Keys typed while the search panel has focus. Printable text (without Ctrl, Alt or Cmd)
+    /// goes to the query. Backspace deletes a character, Enter opens the first result, and
+    /// Escape closes the panel.
+    pub(crate) fn search_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let keystroke = &event.keystroke;
+        match keystroke.key.as_str() {
+            "escape" => return self.close_search(window, cx),
+            "enter" => return self.open_search_hit(0, window, cx),
+            "backspace" => {
+                self.search.query.pop();
+            }
+            _ => {
+                let m = keystroke.modifiers;
+                if m.control || m.alt || m.platform || m.function {
+                    return;
+                }
+                let Some(text) = keystroke.key_char.as_deref() else {
+                    return;
+                };
+                if text.chars().any(char::is_control) {
+                    return;
+                }
+                self.search.query.push_str(text);
+            }
+        }
+        self.search.refresh(self.sidebar.as_ref().map(|s| &s.vault));
+        cx.notify();
+    }
+
+    /// Opens the note of search result `index` with the caret on the match, then closes the
+    /// panel. A result whose note cannot be opened keeps the panel open.
+    pub(crate) fn open_search_hit(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(hit) = self.search.hits.get(index).cloned() else {
+            return;
+        };
+        if !self.open_note(hit.path.clone(), window, cx) {
+            return;
+        }
+        let offset = hit_offset(&hit);
+        let editor = self.document.read(cx).editor.clone();
+        editor.update(cx, |editor, cx| {
+            editor.set_selection(Selection::caret(offset), cx);
+        });
+        self.close_search(window, cx);
     }
 
     fn render_sidebar(&self, sidebar: &Sidebar, cx: &mut Context<Self>) -> impl IntoElement {
@@ -243,10 +338,19 @@ impl WorkspaceView {
 
 impl Render for WorkspaceView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let root = div().size_full().flex().flex_row();
-        let root = match self.sidebar.as_ref() {
-            Some(sidebar) => root.child(self.render_sidebar(sidebar, cx)),
-            None => root,
+        let root = div().size_full().flex().flex_row().on_action(cx.listener(
+            |this, _: &ToggleSearch, window, cx| {
+                this.toggle_search(window, cx);
+            },
+        ));
+        let root = if self.search_open {
+            let has_vault = self.sidebar.is_some();
+            root.child(search_panel::render_panel(&self.search, has_vault, cx))
+        } else {
+            match self.sidebar.as_ref() {
+                Some(sidebar) => root.child(self.render_sidebar(sidebar, cx)),
+                None => root,
+            }
         };
         root.child(
             div()

@@ -5,10 +5,15 @@
 mod file_io;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod search_panel;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod workspace_view;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-use gpui::{px, size, App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions};
+use gpui::{
+    px, size, App, AppContext, Bounds, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
+};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use gpui_platform::application;
 
@@ -17,6 +22,16 @@ fn main() {
     application().run(|cx: &mut App| {
         md_editor::editor::init(cx);
         file_io::init(cx);
+        // Ctrl+Shift+F on Linux, Cmd+Shift+F on macOS (ToggleSearch, task 9.4).
+        #[cfg(target_os = "macos")]
+        let search_key = "cmd-shift-f";
+        #[cfg(not(target_os = "macos"))]
+        let search_key = "ctrl-shift-f";
+        cx.bind_keys([KeyBinding::new(
+            search_key,
+            search_panel::ToggleSearch,
+            None,
+        )]);
         let bounds = Bounds::centered(None, size(px(800.), px(600.)), cx);
         cx.open_window(
             WindowOptions {
