@@ -7,7 +7,7 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 ## Current iteration
 
 - **Iteration 1 = P0 to P3:** a plain-markdown editor. It opens, edits, selects, navigates, takes IME input, scrolls and saves a `.md` file, on macOS and Linux, released as nightly binaries.
-- **Next session starts from `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`** once iteration 1's gate holds.
+- **Iteration 1 is done apart from the macOS gate run** (Linux gate passed, see `docs/P3-gate-linux.md`). The next session starts from `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`, in its suggested order.
 
 ## How work is done here
 
@@ -41,9 +41,9 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 | P0 scaffold | Done. CI workflows enabled in `.github/workflows/`. |
 | P1 spikes | S4 done (provisional GO). S3 GO (conditional; IME check open, macOS-only). S1 GO (split host; math path on hold). S2 runs on Linux (X11/Xvfb, `docs/spikes/S2-linux-hello.png`); macOS run and go/no-go still PENDING (blocker 1). |
 | P2 md_core | 2.1–2.8 done (156 unit tests + 5 proptests). |
-| P3 editor basic | 3.1 done (`dbf67cd`), 3.6 done (`56537e9`). 3.2 to 3.5 are being finished and merged at the end of iteration 1; the coordinator confirms. Save is `cmd-s` (Super+S on Linux); Ctrl+S on Linux is left for 3.3 and 8.5. |
+| P3 editor basic | 3.1 to 3.7 done. Linux gate passed (`docs/P3-gate-linux.md`, 11 of 11 checks). macOS gate run (screenshot, IME composition) still PENDING (blockers 1 and 2b). Save is `cmd-s` on macOS and `ctrl-s` on Linux. |
 
-Iteration 1 is done when the P3 gate holds (a plain-text file opens, edits, IME-composes and saves on macOS). The gate needs a Mac: blockers 1 and 2(b).
+Iteration 1 is complete on Linux (gate passed). The macOS gate run (screenshot, IME composition) is still pending and needs a Mac: blockers 1 and 2(b).
 
 ### Iteration 2 (P4 to P10): work already in the repo
 
@@ -62,13 +62,13 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 
 1. **S2 go/no-go pending (iteration 1).** `docs/spikes/S2-gpui-hello.md` needs a macOS run and a screenshot. CI cannot take an interactive screenshot.
    Unblock: run the `nightly` macOS build on a Mac (`xattr -dr com.apple.quarantine noteapp.app`) and attach a screenshot. Alternatively, accept the Linux run plus a green macOS CI build as the gate.
-2. **macOS-only checks from S1/S3.** (a) The hidden WKWebView host that Mermaid needs (DESIGN §14 item 1) is unverified. Held with P6/P7 (iteration 2, on hold). (b) IME composition across hidden markup ranges is not evaluated, since md_core has no UTF-16 or marked-text API. This blocks iteration 1 (3.4).
-   Unblock for (b): a macOS run during 3.4. Unblock for (a): a macOS run, only when the owner lifts the hold. See `docs/spikes/S1-render-host.md` and `S3-display-map.md`.
+2. **macOS-only checks from S1/S3.** (a) The hidden WKWebView host that Mermaid needs (DESIGN §14 item 1) is unverified. Held with P6/P7 (iteration 2, on hold). (b) IME composition across hidden markup ranges is not evaluated, since md_core has no UTF-16 or marked-text API. This blocks the macOS P3 gate (3.4).
+   Unblock for (b): a macOS run of the P3 gate. Unblock for (a): a macOS run, only when the owner lifts the hold. See `docs/spikes/S1-render-host.md` and `S3-display-map.md`.
 3. **macOS signing.** The `nightly` release publishes macOS and Linux builds (macOS compiles in CI since the 1.98.1 toolchain bump). Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
 
 ## Next tasks to dispatch (in order)
 
-1. **Iteration 1.** Finish and merge 3.2 (caret, selection, click), 3.5 (virtualized list), 3.3 (keys and clipboard) and 3.4 (IME), checking the git log for what is merged. Verify each with a Linux screenshot under `docs/screenshots/`. Then run the P3 gate on macOS (blockers 1 and 2b).
-2. **Iteration 2.** The next session starts from `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`, in this order: P4 live preview (4.1 to 4.5), then P5.3, then P8 modes, P9 workspace UI, and P10 theming.
+1. **Iteration 1.** Done apart from the macOS gate run (blockers 1 and 2b). Nothing to dispatch here until a Mac run is recorded.
+2. **Iteration 2.** The next session starts from `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`, in its suggested order: P4 live preview (4.1 to 4.5), then P5.3, then P8 modes, P9 workspace UI, and P10 theming.
 3. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.

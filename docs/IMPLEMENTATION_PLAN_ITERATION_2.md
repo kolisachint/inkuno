@@ -75,14 +75,22 @@ Held until the owner confirms: P6 math (6.1, 6.3, 6.5, 6.6) and P7 Mermaid. See 
 
 ## Open items carried over
 
-From AGENTS.md and the spike notes. Items that belong to held tasks are kept here so they are not lost.
+From AGENTS.md, the spike notes and the Linux P3 gate (`docs/P3-gate-linux.md`). Items that belong to held tasks are kept here so they are not lost.
 
+- **Undo is per keystroke.** Typing is not grouped into transactions. Group typing runs into one transaction each (2.1, 3.7).
+- **Backspace, Delete and word boundaries are char-based, not grapheme-based** (3.7).
+- **Up and Down use a byte goal column.** It drifts visually in proportional fonts. Use an x-position goal instead (3.3).
+- **A caret revealed far below the viewport is scrolled to the top, not the bottom.** The block's height is unmeasured until the list lays it out, so this needs a second frame.
+- **Drag autoscroll is implemented but unverified** (`scroll_by` in the block list).
+- **IME `bounds_for_range`, `character_index_for_point` and `text_length_utf16` are unverified** (macOS only; AGENTS blocker 2b).
+- **Each IME call copies the full document text (O(n)).**
+- **Virtualization is at block granularity**, so a giant single paragraph is laid out whole.
 - **macOS run of the WebView host** (AGENTS blocker 2a; DESIGN §14 item 1). Gates the WebView half of 6.1 and 7.1. Held with them. Unblock: a macOS run.
 - **Mermaid output without `<foreignObject>` on every diagram type** (7.1). S1 checked flowcharts only. Held with 7.1.
 - **MathJax v4 version and re-verification** (DESIGN §16 item 5; 6.3). The exact v4 version is still to be chosen. The S1 prototype ran v3.2.2 only. The v4 call that replaces `tex2svgPromise` is confirmed in 6.3. Held.
 - **Mermaid host approach** is still open: hidden WKWebView or offscreen NSWindow (DESIGN §16 item 4). Held.
 - **Screenshot with bundled fonts** (6.4) waits on 6.3. Held.
-- **Mode key bindings** (DESIGN §16 item 1). Proposals are Cmd+/, F8, F9; undecided. Task 8.5 keymap. Ctrl+S on Linux is also left for 8.5 (save is `cmd-s`, see 3.6).
+- **Mode key bindings** (DESIGN §16 item 1). Proposals are Cmd+/, F8, F9; undecided. Task 8.5 keymap. Save is `cmd-s` on macOS and `ctrl-s` on Linux (see 3.6); keep both in the 8.5 keymap.
 - **Sidebar and search panel UI** (9.1, 9.4) are not started. Watcher updates must be applied in the app (9.2); the 1 s latency is not asserted in tests.
 - **Image paste** (9.5) is not started.
 - **Settings storage** location and format (DESIGN §16 item 9; 10.3) is undecided.

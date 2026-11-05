@@ -2,7 +2,7 @@
 
 noteapp is a Markdown notes editor for plain `.md` files kept in folders. It is written in Rust on GPUI, the UI framework from Zed. The design goal is a Typora-style live preview, with Markdown kept as plain text on disk.
 
-**Current state: iteration 1, a plain-markdown editor.** It opens, edits, selects, navigates, takes IME input, scrolls and saves one `.md` file. Live preview, code fences, math, Mermaid, modes and the workspace sidebar come later (iteration 2; math and Mermaid are on hold).
+**Current state: iteration 1 is done on Linux, with macOS verification pending.** Iteration 1 is a plain-markdown editor: it opens, edits, selects, navigates, copies and pastes, undoes and redoes, scrolls and saves one `.md` file. IME input is implemented; its macOS check is pending. Live preview, code fences, math, Mermaid, modes and the workspace sidebar come later (iteration 2; math and Mermaid are on hold).
 
 **Download:** nightly builds for macOS (arm64) and Linux (x86_64) are on the [`nightly` GitHub release](https://github.com/kolisachint/noteapp/releases/tag/nightly). The macOS build is ad-hoc signed, so run `xattr -dr com.apple.quarantine noteapp.app` after unzipping.
 

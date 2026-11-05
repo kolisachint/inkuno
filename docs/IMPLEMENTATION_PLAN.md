@@ -32,7 +32,7 @@ The bare minimum this iteration delivers: open, edit, select, navigate, IME, scr
 
 Not in this iteration: live preview, code fences, math, Mermaid, modes, the workspace UI and theming. See [Deferred to iteration 2](#deferred-to-iteration-2).
 
-Status values used below: **DONE**, **PARTIAL** (some acceptance is open, reason given), and **DONE (merged at end of iteration 1)**. The last one means the merge is expected at the end of this iteration; the coordinator confirms or corrects it.
+Status values used below: **DONE** and **PARTIAL** (some acceptance is open, reason given).
 
 ## How this plan is executed
 
@@ -209,35 +209,35 @@ Requires P1 spikes S2 and S4, and Phase 2.
 - **Acceptance:** a 100-line document is drawn with correct line breaks; screenshot of the window matches the buffer text.
 
 ### 3.2 Caret, selection and click placement
-- **Status:** DONE (merged at end of iteration 1).
+- **Status:** DONE.
 - **Goal:** Draw the caret and selections, and place the caret on click through hit-testing.
 - **Crate / files:** `md_editor/src/cursor.rs`, `md_editor/src/selection.rs`.
 - **Depends on:** 3.1, 2.6.
 - **Acceptance:** a click at a given character places the caret before that character; drag selection highlights the expected range; screenshot-verified.
 
 ### 3.3 Keyboard navigation and clipboard
-- **Status:** DONE (merged at end of iteration 1).
+- **Status:** DONE.
 - **Goal:** Arrow keys, word and line movement, Home and End, Shift selection, and clipboard copy, cut and paste.
 - **Crate / files:** `md_editor/src/keys.rs`, `md_editor/src/clipboard.rs`.
 - **Depends on:** 3.2.
 - **Acceptance:** each movement key moves the caret by the expected unit in tests; Cmd+C, Cmd+X and Cmd+V round-trip plain text; copy produces Markdown source.
 
 ### 3.4 IME via EntityInputHandler
-- **Status:** DONE (merged at end of iteration 1). The macOS IME check is still open (AGENTS blocker 2b).
+- **Status:** DONE. The macOS IME check is still open (AGENTS blocker 2b).
 - **Goal:** Support IME composition and marked text.
 - **Crate / files:** `md_editor/src/ime.rs`.
 - **Depends on:** 3.2.
 - **Acceptance:** a Japanese IME composition shows marked text and commits the final text into the buffer as one edit; the marked range is cleared on commit.
 
 ### 3.5 Virtualized block list
-- **Status:** DONE (merged at end of iteration 1).
+- **Status:** DONE.
 - **Goal:** Lay out blocks in a GPUI `list()`, so only visible blocks are laid out.
 - **Crate / files:** `md_editor/src/block_list.rs`.
 - **Depends on:** 3.1, 2.4.
 - **Acceptance:** a 10,000-line document scrolls with only visible blocks laid out (verified by a counter); scrolling to the end shows the last line.
 
 ### 3.6 File open and save
-- **Status:** DONE (`56537e9`). Save is bound to `cmd-s` (Super+S on Linux); Ctrl+S on Linux is left for 3.3 and 8.5.
+- **Status:** DONE (`56537e9`). Save is bound to `cmd-s` on macOS and `ctrl-s` on Linux.
 - **Goal:** Open a `.md` file into the buffer and save the buffer back to disk.
 - **Crate / files:** `app/src/file_io.rs`.
 - **Depends on:** 3.1.
@@ -249,6 +249,12 @@ Requires P1 spikes S2 and S4, and Phase 2.
 - **Crate / files:** `md_editor/src/edit_keys.rs`.
 - **Depends on:** 3.2, 3.3.
 - **Acceptance:** Backspace and Delete remove one character (or the selection) across ASCII, accented, emoji and CJK text; Enter and Tab replace the selection with a newline or four spaces, with no doubled newline from IME input; Cmd+Z / Cmd+Shift+Z (Ctrl+Z / Ctrl+Shift+Z, Ctrl+Y on Linux) undo and redo through the md_core buffer; Cmd+A (Ctrl+A) selects all; Option+Backspace (Ctrl+Backspace) deletes a word; typing over a selection replaces it.
+
+### Integration note: per-block layout (after 3.5)
+
+- A per-block layout fix landed after 3.5. `Editor.layout` became `Editor.layouts: Layouts`, with one `BlockLayout` per visible block. Hit testing, caret placement and IME bounds use the block under the point, or the nearest visible block.
+- `cursor::register_mouse_handlers` now takes `(editor, bounds, window)`. It is called from `BlockHost::paint`, which also registers the IME input handler. The P3 interfaces doc said not to change these; they were needed to fix an integration bug.
+- The Linux gate passed: 11 of 11 checks PASS. See [P3-gate-linux.md](./P3-gate-linux.md). The macOS gate run (screenshot, IME composition) is still pending.
 
 ---
 
@@ -280,11 +286,13 @@ A phase is done when every task in it is done and the phase gate holds:
 | P0 | CI green on the scaffold commit |
 | P1 | All four spike notes exist and each has a go/no-go line |
 | P2 | `md_core` tests pass on Linux CI, including property tests |
-| P3 | Plain-text file opens, edits, IME-composes and saves on macOS |
+| P3 | Plain-text file opens, edits, IME-composes and saves on macOS. Linux gate passed (`docs/P3-gate-linux.md`); macOS run pending |
 
 ---
 
 ## Iteration 1 Definition of Done
+
+**Status: Iteration 1 complete on Linux (gate passed). The macOS gate run (screenshot, IME composition) is still pending and needs a Mac.**
 
 Iteration 1 is complete when the P3 gate holds: a plain-text file opens, edits, IME-composes and saves on macOS (gate table row P3).
 
