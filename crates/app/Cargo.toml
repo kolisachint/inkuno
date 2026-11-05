@@ -21,3 +21,7 @@ gpui_platform = { workspace = true }
 # the Linux platform has no windowing backend and runs headless. Match gpui_linux's defaults.
 [target.'cfg(target_os = "linux")'.dependencies]
 gpui_platform = { workspace = true, features = ["x11", "wayland"] }
+
+# Without font-kit, gpui_macos falls back to NoopTextSystem and renders no text at all.
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_platform = { workspace = true, features = ["font-kit"] }

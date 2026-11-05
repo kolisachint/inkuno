@@ -78,7 +78,8 @@ Screenshots are in `docs/screenshots/`. All rows are verified on Linux (Xvfb) un
 - **X auth errors.** `xvfb-run` can give X auth errors for `import` and `xdotool`. Either set `XAUTHORITY` to the auth file that `xvfb-run` created, or start `Xvfb :N -ac -nolisten tcp -screen 0 1280x800x24 &` directly and use `DISPLAY=:N`.
 - **Shared target directory.** When agents share one `CARGO_TARGET_DIR`, another build overwrites `target/debug/app`. Build with `cargo build -p app`, copy the binary at once, and keep only one copy, because disk is limited.
 - **Theme under Xvfb.** The window appearance on Xvfb is Light, so Auto always resolves to Light there. Test Dark with the Cycle Theme chord (Ctrl+K Ctrl+T) instead. Auto's resolution is covered by unit tests in `app/src/theme.rs`.
-- **Dev Mac has only Command Line Tools.** `cargo build -p app` fails locally: the gpui_apple build script needs Xcode's `metal` utility (`xcrun: unable to find utility "metal"`). The library crates build and test fine. Verify app-crate changes in CI. GPUI has a `runtime_shaders` feature as a possible local workaround (not adopted).
+- **Building the app on the dev Mac.** Xcode and its Metal Toolchain are installed, but `xcode-select` still points at Command Line Tools. Prefix builds with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`, e.g. `DEVELOPER_DIR=... cargo build --release -p app`.
+- **macOS text needs `font-kit`.** `crates/app/Cargo.toml` enables `gpui_platform`'s `font-kit` feature on macOS. Without it gpui_macos uses `NoopTextSystem` and draws no glyphs (this was the invisible-text bug).
 - **Math input rule is off.** `$$` is disabled in the editor by `HELD_RULES` in `md_editor/src/input_rules.rs` (`math_block`), while math is on hold. Keep it off until the owner confirms.
 
 ## Blockers and open items
@@ -91,9 +92,6 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
    Unblock for (b): a macOS run of the P3 gate. Unblock for (a): a macOS run, only when the owner lifts the hold. See `docs/spikes/S1-render-host.md` and `S3-display-map.md`.
 3. **macOS signing.** The `nightly` release publishes macOS and Linux builds (macOS compiles in CI since the 1.98.1 toolchain bump). Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
-4. **Dev Mac cannot build the `app` crate locally.** Only Command Line Tools are installed, so the gpui_apple build script fails on the `metal` shader step. The library crates build and test fine.
-   Unblock: install Xcode, or confirm the macOS CI build is green after each push, or adopt GPUI's `runtime_shaders` feature as a local workaround (not adopted).
-5. **macOS: text is invisible.** The owner ran the nightly build 8d8e124 on an Apple Silicon Mac: the text colour matches the background, so nothing is readable. Not yet diagnosed. Suspects: theme colour tokens or Auto theme resolution on macOS (`md_editor/src/theme.rs`, `app/src/theme.rs`), or font fallback. Unblock: reproduce on a Mac and fix. Do not tag v0.1.0 until this is fixed.
 
 ### Iteration 2 open items (no blocker)
 
@@ -106,7 +104,7 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 
 ## Next tasks to dispatch (in order)
 
-1. **Fix invisible text on macOS** (see the blocker above). This comes before any release tag.
+1. **Opening a note shows it as dirty** on macOS (title `• test.md`, orange dot) before any edit. Seen once on the local build; not investigated.
 2. **Push `claude/pending-work` and confirm CI is green.** `release.yml` (macOS + Linux builds) and the new `workspace.yml` have not run on this branch (not pushed). The app-crate changes (`search_panel.rs`, `workspace_view.rs`, `file_ops_ui.rs`) were never compiled locally, so do not call them done until CI passes.
 3. **macOS verification on a real Mac (owner).** Run the `nightly` build (`xattr -dr com.apple.quarantine noteapp.app`). Record the S2 screenshot and the P3 gate (blockers 1 and 2b). Check iteration 2 on macOS:
    - system font bold and italic (see the Linux font note);
