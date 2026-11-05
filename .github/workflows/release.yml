@@ -153,6 +153,11 @@ jobs:
     needs: [macos, linux]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -161,6 +166,56 @@ jobs:
 
       - name: List archives
         run: ls -la dist
+
+      - name: Generate SHA256SUMS and release notes
+        env:
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum noteapp-macos-arm64.zip noteapp-macos-arm64.tar.gz noteapp-linux-x86_64.tar.gz > SHA256SUMS)
+          cat dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+          {
+            echo "Build: ${GITHUB_SHA}"
+            echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo ""
+            echo "Verify downloads: \`shasum -a 256 -c SHA256SUMS\`"
+            echo ""
+            echo "The macOS build is unsigned and ad-hoc signed (not notarized by Apple)."
+            echo "After unzipping noteapp-macos-arm64.zip, run the following before opening the app:"
+            echo ""
+            echo "    xattr -dr com.apple.quarantine noteapp.app"
+            echo ""
+            echo "noteapp-macos-arm64.tar.gz and noteapp-linux-x86_64.tar.gz each contain"
+            echo "only the \`noteapp\` executable (Apple Silicon macOS and Linux x86_64)."
+            echo ""
+            echo "## Changes"
+            echo ""
+            if [ "${IS_TAG}" = "true" ]; then
+              PREV_TAG="$(git describe --tags --match 'v*' --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+              if [ -n "${PREV_TAG}" ]; then
+                echo "Commits since ${PREV_TAG}:"
+                echo ""
+                git log --no-merges --pretty='- %s (%h)' "${PREV_TAG}..${GITHUB_REF_NAME}" | head -n 200
+              else
+                echo "Commits in this release:"
+                echo ""
+                git log --no-merges --pretty='- %s (%h)' "${GITHUB_REF_NAME}" | head -n 200
+              fi
+            else
+              PREV_SHA="$(gh release view nightly --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
+              if [ -n "${PREV_SHA}" ] && git cat-file -e "${PREV_SHA}^{commit}" 2>/dev/null; then
+                echo "Commits since previous nightly (${PREV_SHA}):"
+                echo ""
+                git log --no-merges --pretty='- %s (%h)' "${PREV_SHA}..HEAD" | head -n 200
+              else
+                echo "Recent commits:"
+                echo ""
+                git log --no-merges --pretty='- %s (%h)' -n 50
+              fi
+            fi
+          } > release-notes.md
+          cat release-notes.md
 
       - name: Delete previous nightly release and tag
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -172,10 +227,12 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           prerelease: false
+          body_path: release-notes.md
           files: |
             dist/noteapp-macos-arm64.zip
             dist/noteapp-macos-arm64.tar.gz
             dist/noteapp-linux-x86_64.tar.gz
+            dist/SHA256SUMS
 
       - name: Publish nightly release
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -185,17 +242,9 @@ jobs:
           name: "Nightly (${{ github.sha }})"
           prerelease: true
           target_commitish: ${{ github.sha }}
-          body: |
-            Nightly build from commit ${{ github.sha }} (ref ${{ github.ref_name }}).
-
-            The macOS build is unsigned and ad-hoc signed (not notarized by Apple).
-            After unzipping noteapp-macos-arm64.zip, run the following before opening the app:
-
-                xattr -dr com.apple.quarantine noteapp.app
-
-            noteapp-macos-arm64.tar.gz and noteapp-linux-x86_64.tar.gz each contain
-            only the `noteapp` executable (Apple Silicon macOS and Linux x86_64).
+          body_path: release-notes.md
           files: |
             dist/noteapp-macos-arm64.zip
             dist/noteapp-macos-arm64.tar.gz
             dist/noteapp-linux-x86_64.tar.gz
+            dist/SHA256SUMS
