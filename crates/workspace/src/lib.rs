@@ -3,3 +3,4 @@
 pub mod ops;
 pub mod search;
 pub mod tree;
+pub mod watcher;
