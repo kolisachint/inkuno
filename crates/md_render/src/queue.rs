@@ -16,6 +16,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::cache::{cache_key, CacheKey, RenderCache};
+use crate::fallback::BlockView;
 use crate::traits::{RenderBackend, RenderError, RenderRequest};
 
 /// Identifies a block on screen (for last-good fallback).
@@ -205,6 +206,25 @@ impl RenderQueue {
             .slots
             .get(&slot)
             .map_or(RenderState::Pending, |s| s.state.clone())
+    }
+
+    /// The slot's last successful SVG, kept while a newer source is pending
+    /// or invalid. `None` if the slot has never rendered successfully.
+    pub fn last_good(&self, slot: SlotId) -> Option<String> {
+        lock(&self.shared.state)
+            .slots
+            .get(&slot)
+            .and_then(|s| s.last_good.clone())
+    }
+
+    /// What the UI should draw for a slot: its state and last good SVG, read
+    /// under one lock (see `fallback::BlockView`).
+    pub fn view(&self, slot: SlotId) -> BlockView {
+        let st = lock(&self.shared.state);
+        match st.slots.get(&slot) {
+            Some(s) => BlockView::from_state(&s.state, s.last_good.as_deref()),
+            None => BlockView::from_state(&RenderState::Pending, None),
+        }
     }
 
     /// Number of backend invocations (cache hits do not count).
