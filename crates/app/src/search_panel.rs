@@ -17,7 +17,7 @@ use std::ops::Range;
 use std::path::Path;
 
 use gpui::{
-    actions, div, prelude::*, px, rgb, ClickEvent, Context, FocusHandle, FontWeight, IntoElement,
+    actions, div, prelude::*, px, ClickEvent, Context, FocusHandle, FontWeight, IntoElement,
     KeyDownEvent,
 };
 use workspace::search::{search_with_report, SearchHit, SearchOptions};
@@ -33,10 +33,6 @@ pub const MAX_RESULTS: usize = 200;
 /// Characters of the line shown on each side of the first match.
 const CONTEXT_CHARS: usize = 24;
 const ELLIPSIS: &str = "\u{2026}";
-/// Highlight colour for a match (soft yellow) and the text colour of the snippet.
-const MATCH_BG: u32 = 0xfde68a;
-const SNIPPET_TEXT: u32 = 0x374151;
-const MUTED_TEXT: u32 = 0x6b7280;
 
 /// A line shortened for display. `highlights` are byte ranges into `text`, in order and on
 /// char boundaries.
@@ -251,11 +247,11 @@ pub fn render_panel(
     has_vault: bool,
     cx: &mut Context<WorkspaceView>,
 ) -> impl IntoElement {
-    let input = text_input::field("search-input", &panel.query, "Search notes", 28.).on_click(
-        cx.listener(|this, _: &ClickEvent, window, cx| {
+    let theme = md_editor::theme::current(cx);
+    let input = text_input::field(&theme, "search-input", &panel.query, "Search notes", 28.)
+        .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
             window.focus(&this.search.focus, cx);
-        }),
-    );
+        }));
 
     let rows = panel
         .hits
@@ -269,7 +265,7 @@ pub fn render_panel(
                     div()
                         .whitespace_nowrap()
                         .when(highlighted, |d| {
-                            d.bg(rgb(MATCH_BG)).font_weight(FontWeight::BOLD)
+                            d.bg(theme.ui_match).font_weight(FontWeight::BOLD)
                         })
                         .child(snip.text[range].to_string())
                 })
@@ -279,7 +275,7 @@ pub fn render_panel(
                 .px_2()
                 .py_1()
                 .cursor_pointer()
-                .hover(|style| style.bg(rgb(0xe5e7eb)))
+                .hover(|style| style.bg(theme.ui_hover))
                 .on_click(cx.listener(move |this, _event, window, cx| {
                     this.open_search_hit(index, window, cx);
                 }))
@@ -289,7 +285,7 @@ pub fn render_panel(
                         .whitespace_nowrap()
                         .text_sm()
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(rgb(0x1f2937))
+                        .text_color(theme.ui_text)
                         .child(format!("{} : {}", note_label(&hit.path), hit.line_number)),
                 )
                 .child(
@@ -298,7 +294,7 @@ pub fn render_panel(
                         .flex_row()
                         .overflow_hidden()
                         .text_xs()
-                        .text_color(rgb(SNIPPET_TEXT))
+                        .text_color(theme.ui_text_secondary)
                         .children(pieces),
                 )
         })
@@ -311,9 +307,9 @@ pub fn render_panel(
         .flex_none()
         .flex()
         .flex_col()
-        .bg(rgb(0xf3f4f6))
+        .bg(theme.ui_surface)
         .border_r_1()
-        .border_color(rgb(0xd1d5db))
+        .border_color(theme.ui_border)
         .track_focus(&panel.focus)
         .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
             this.search_key_down(event, window, cx);
@@ -324,7 +320,7 @@ pub fn render_panel(
                 .px_2()
                 .pb_1()
                 .text_xs()
-                .text_color(rgb(MUTED_TEXT))
+                .text_color(theme.ui_muted)
                 .child(panel.status(has_vault)),
         )
         .child(

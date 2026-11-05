@@ -11,21 +11,13 @@ use std::path::{Path, PathBuf};
 
 use gpui::{
     div, img, prelude::*, px, relative, AnyElement, App, Bounds, ElementId, Entity,
-    GlobalElementId, Hsla, ImgResourceLoader, InspectorElementId, IntoElement, LayoutId, Pixels,
+    GlobalElementId, ImgResourceLoader, InspectorElementId, IntoElement, LayoutId, Pixels,
     Resource, Style, Window,
 };
 
-use crate::blocks::table::{BORDER_COLOR, HEADER_BACKGROUND};
 use crate::editor::Editor;
 use crate::element::LayoutSnapshot;
-
-/// Text colour of the placeholder's note line.
-const MUTED_TEXT: Hsla = Hsla {
-    h: 0.0,
-    s: 0.0,
-    l: 0.45,
-    a: 1.0,
-};
+use crate::theme::Theme;
 
 /// An image that is the whole text of a paragraph.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,11 +121,12 @@ pub struct ImageBlock {
 impl ImageBlock {
     /// The picture, or a placeholder when the file is missing, remote or still loading.
     fn content(&self, window: &mut Window, cx: &mut App) -> AnyElement {
+        let theme = crate::theme::current(cx);
         let Some(path) = &self.path else {
-            return placeholder(&self.alt, "remote images are not loaded yet");
+            return placeholder(&self.alt, "remote images are not loaded yet", &theme);
         };
         if !path.is_file() {
-            return placeholder(&self.alt, "image not found");
+            return placeholder(&self.alt, "image not found", &theme);
         }
         let resource = Resource::from(path.clone());
         match window.use_asset::<ImgResourceLoader>(&resource, cx) {
@@ -151,24 +144,24 @@ impl ImageBlock {
                     .child(img(path.as_path()).w_full().h_full())
                     .into_any_element()
             }
-            Some(Err(_)) => placeholder(&self.alt, "image could not be loaded"),
-            None => placeholder(&self.alt, "loading image"),
+            Some(Err(_)) => placeholder(&self.alt, "image could not be loaded", &theme),
+            None => placeholder(&self.alt, "loading image", &theme),
         }
     }
 }
 
 /// The placeholder box: the alt text, and a line that says why the picture is not shown.
-fn placeholder(alt: &str, note: &str) -> AnyElement {
+fn placeholder(alt: &str, note: &str, theme: &Theme) -> AnyElement {
     let label = if alt.is_empty() { "Image" } else { alt };
     div()
         .w_full()
         .px_3()
         .py_2()
         .border_1()
-        .border_color(BORDER_COLOR)
-        .bg(HEADER_BACKGROUND)
+        .border_color(theme.table_border)
+        .bg(theme.table_header_bg)
         .child(div().child(label.to_string()))
-        .child(div().text_color(MUTED_TEXT).child(note.to_string()))
+        .child(div().text_color(theme.text_muted).child(note.to_string()))
         .into_any_element()
 }
 

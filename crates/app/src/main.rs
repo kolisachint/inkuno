@@ -17,6 +17,9 @@ mod search_panel;
 mod text_input;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod theme;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod watch;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -33,6 +36,8 @@ fn main() {
         md_editor::editor::init(cx);
         // Every app-level and mode key binding is in `keymap::bindings` (task 8.5).
         keymap::init(cx);
+        // The theme mode and its Cycle Theme action (task 10.2).
+        theme::init(cx);
         let bounds = Bounds::centered(None, size(px(800.), px(600.)), cx);
         cx.open_window(
             WindowOptions {
@@ -43,7 +48,10 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(workspace_view::WorkspaceView::new),
+            |window, cx| {
+                theme::watch_window(window, cx);
+                cx.new(workspace_view::WorkspaceView::new)
+            },
         )
         .unwrap();
         cx.activate(true);

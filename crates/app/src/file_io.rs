@@ -11,11 +11,12 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
-    actions, div, prelude::*, px, rgb, App, ClickEvent, Context, Div, Entity, Focusable,
-    IntoElement, Render, Stateful, Window,
+    actions, div, prelude::*, px, App, ClickEvent, Context, Div, Entity, Focusable, IntoElement,
+    Render, Stateful, Window,
 };
 use md_editor::editor::{Editor, SAMPLE_TEXT};
 use md_editor::selection::Selection;
+use md_editor::theme::Theme;
 use workspace::watcher::BufferUpdate;
 
 use crate::watch::{banner_after, clip_caret, is_own_write, settle, text_hash, Banner, Settled};
@@ -246,6 +247,7 @@ impl Document {
 
     /// The banner over the editor: a message and its buttons.
     fn render_banner(banner: Banner, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = md_editor::theme::current(cx);
         let message = match banner {
             Banner::Conflict => "File changed on disk",
             Banner::Deleted => "File deleted on disk",
@@ -259,22 +261,24 @@ impl Document {
             .flex_row()
             .items_center()
             .gap_2()
-            .bg(rgb(0xfef3c7))
+            .bg(theme.banner_bg)
             .border_b_1()
-            .border_color(rgb(0xf59e0b))
-            .text_color(rgb(0x1f2937))
+            .border_color(theme.banner_border)
+            .text_color(theme.ui_text)
             .child(div().flex_1().child(message));
         match banner {
             Banner::Conflict => bar
-                .child(banner_button("banner-reload", "Reload").on_click(
+                .child(banner_button("banner-reload", "Reload", &theme).on_click(
                     cx.listener(|this, _: &ClickEvent, _window, cx| this.reload_from_disk(cx)),
                 ))
-                .child(banner_button("banner-keep", "Keep mine").on_click(
+                .child(banner_button("banner-keep", "Keep mine", &theme).on_click(
                     cx.listener(|this, _: &ClickEvent, _window, cx| this.dismiss_banner(cx)),
                 )),
-            Banner::Deleted => bar.child(banner_button("banner-dismiss", "Dismiss").on_click(
-                cx.listener(|this, _: &ClickEvent, _window, cx| this.dismiss_banner(cx)),
-            )),
+            Banner::Deleted => {
+                bar.child(banner_button("banner-dismiss", "Dismiss", &theme).on_click(
+                    cx.listener(|this, _: &ClickEvent, _window, cx| this.dismiss_banner(cx)),
+                ))
+            }
         }
     }
 
@@ -317,6 +321,7 @@ impl Document {
 impl Render for Document {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let dirty = self.is_dirty(cx);
+        let theme = md_editor::theme::current(cx);
         // Give the editor keyboard focus when nothing has it yet, so Cmd+S and typing reach it.
         let focus = self.editor.read(cx).focus_handle(cx);
         if window.focused(cx).is_none() {
@@ -354,7 +359,7 @@ impl Render for Document {
                     .right(px(8.))
                     .size(px(8.))
                     .rounded_full()
-                    .bg(rgb(0xd97706)),
+                    .bg(theme.banner_accent),
             );
         }
         root.child(body)
@@ -362,17 +367,17 @@ impl Render for Document {
 }
 
 /// A small clickable button for the banner.
-fn banner_button(id: &'static str, label: &'static str) -> Stateful<Div> {
+fn banner_button(id: &'static str, label: &'static str, theme: &Theme) -> Stateful<Div> {
     div()
         .id(id)
         .px_2()
         .py_1()
         .rounded_sm()
         .border_1()
-        .border_color(rgb(0x9ca3af))
-        .bg(rgb(0xffffff))
+        .border_color(theme.ui_faint)
+        .bg(theme.ui_surface_raised)
         .cursor_pointer()
-        .hover(|style| style.bg(rgb(0xf3f4f6)))
+        .hover(|style| style.bg(theme.ui_surface))
         .child(label)
 }
 

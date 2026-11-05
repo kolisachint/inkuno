@@ -12,8 +12,8 @@ use std::panic::Location;
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, ContentMask, ElementId, Entity, FontWeight,
-    GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId, Pixels, ShapedLine,
-    SharedString, Style, TextAlign, TextRun, Window,
+    GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, ShapedLine, SharedString,
+    Style, TextAlign, TextRun, Window,
 };
 
 use crate::editor::Editor;
@@ -25,19 +25,6 @@ const CELL_PAD_Y: f32 = 4.0;
 /// Thickness of the thin grid lines and of the line under the header row, in pixels.
 const LINE_THIN: f32 = 1.0;
 const LINE_THICK: f32 = 2.0;
-/// Colours of the grid (DESIGN §9 will move these into the theme).
-pub(crate) const BORDER_COLOR: Hsla = Hsla {
-    h: 0.0,
-    s: 0.0,
-    l: 0.80,
-    a: 1.0,
-};
-pub(crate) const HEADER_BACKGROUND: Hsla = Hsla {
-    h: 0.0,
-    s: 0.0,
-    l: 0.96,
-    a: 1.0,
-};
 
 /// Column alignment from the delimiter row (`:---`, `:---:`, `---:`, `---`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -330,20 +317,21 @@ impl gpui::Element for TableElement {
         let row_count = grid.cells.len();
         let row_height = grid.row_height;
 
+        let theme = crate::theme::current(cx);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             // Header background, then the grid lines: a line above each row, one below the last
             // row, and a vertical line at each column edge. The line under the header is heavier.
             let header_height = px(row_height);
             window.paint_quad(fill(
                 Bounds::new(point(left, top), size(px(table_width), header_height)),
-                HEADER_BACKGROUND,
+                theme.table_header_bg,
             ));
             for row in 0..=row_count {
                 let thickness = if row == 1 { LINE_THICK } else { LINE_THIN };
                 let y = top + px(row_height * row as f32);
                 window.paint_quad(fill(
                     Bounds::new(point(left, y), size(px(table_width), px(thickness))),
-                    BORDER_COLOR,
+                    theme.table_border,
                 ));
             }
             let column_edges = grid
@@ -358,7 +346,7 @@ impl gpui::Element for TableElement {
                         point(left + px(edge), top),
                         size(px(LINE_THIN), px(table_height)),
                     ),
-                    BORDER_COLOR,
+                    theme.table_border,
                 ));
             }
 

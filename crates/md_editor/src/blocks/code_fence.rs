@@ -21,8 +21,6 @@ use crate::element::line_ranges;
 /// Padding inside a code block, in pixels: left and right, and top and bottom.
 pub const CODE_PAD_X_PX: f32 = 12.0;
 pub const CODE_PAD_Y_PX: f32 = 8.0;
-/// Background of a code block (GitHub light `canvas.subtle`).
-pub const CODE_BLOCK_BACKGROUND: u32 = 0xf6f8fa;
 /// Corner radius of the code block background, in pixels.
 pub const CODE_BLOCK_RADIUS_PX: f32 = 6.0;
 /// Highlighted blocks kept in the cache. The cache is cleared when it is full.
@@ -125,21 +123,6 @@ fn indent(line: &str) -> Option<usize> {
     (spaces <= 3).then_some(spaces)
 }
 
-/// The colour of a token kind, as `0xRRGGBB`. The palette is GitHub light.
-pub fn token_color(kind: TokenKind) -> u32 {
-    use TokenKind::*;
-    match kind {
-        Keyword | Operator => 0xcf222e,
-        String => 0x0a3069,
-        Comment => 0x6e7781,
-        Number | Constant | Property | Attribute | Heading => 0x0550ae,
-        Function => 0x8250df,
-        Type => 0x953800,
-        Link => 0x0969da,
-        Variable | Punctuation | Emphasis | Other => 0x24292f,
-    }
-}
-
 /// The colour runs of one source line of a code block. `line` is an absolute range and
 /// `tokens` are relative to `code_base`, the absolute start of the highlighted code. The
 /// result gives each run's length and token kind (`None` for unhighlighted text), and covers
@@ -211,6 +194,7 @@ impl CodeCache {
 mod tests {
     use super::*;
     use crate::inline_render::block_hidden_ranges;
+    use crate::theme::{code_token_color, CodeColors};
     use md_core::BlockKind;
 
     #[test]
@@ -307,21 +291,14 @@ mod tests {
 
     #[test]
     fn token_colours_are_distinct_for_the_main_kinds() {
-        assert_eq!(token_color(TokenKind::Keyword), 0xcf222e);
-        assert_eq!(token_color(TokenKind::String), 0x0a3069);
-        assert_eq!(token_color(TokenKind::Comment), 0x6e7781);
-        assert_ne!(
-            token_color(TokenKind::Keyword),
-            token_color(TokenKind::String)
-        );
-        assert_ne!(
-            token_color(TokenKind::Function),
-            token_color(TokenKind::Type)
-        );
-        assert_eq!(
-            token_color(TokenKind::Number),
-            token_color(TokenKind::Constant)
-        );
+        let colors = CodeColors::light();
+        let token = |kind| code_token_color(kind, &colors);
+        assert_eq!(token(TokenKind::Keyword), colors.keyword);
+        assert_eq!(token(TokenKind::String), colors.string);
+        assert_eq!(token(TokenKind::Comment), colors.comment);
+        assert_ne!(token(TokenKind::Keyword), token(TokenKind::String));
+        assert_ne!(token(TokenKind::Function), token(TokenKind::Type));
+        assert_eq!(token(TokenKind::Number), token(TokenKind::Constant));
     }
 
     #[test]

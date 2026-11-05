@@ -31,3 +31,5 @@ pub mod keys; // task 3.3
 pub mod modes; // phase 8 (8.4)
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod selection; // task 3.2
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod theme; // task 10.1

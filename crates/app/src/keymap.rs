@@ -20,6 +20,7 @@ use md_editor::modes::{ToggleFocusMode, ToggleSourceMode, ToggleTypewriterMode};
 use crate::file_io::Save;
 use crate::file_ops_ui::{DeleteNote, NewNote, RenameNote};
 use crate::search_panel::ToggleSearch;
+use crate::theme::CycleTheme;
 
 /// One key binding: the keystroke on each platform, the action it runs, and the key context it
 /// applies in (`None` for the whole window).
@@ -95,6 +96,13 @@ pub fn bindings() -> Vec<Binding> {
             mac: "f9",
             linux: "f9",
             action: || Box::new(ToggleTypewriterMode),
+            context: None,
+        },
+        // A chord, so it does not clash with the editor's single keys (task 10.2).
+        Binding {
+            mac: "cmd-k cmd-t",
+            linux: "ctrl-k ctrl-t",
+            action: || Box::new(CycleTheme),
             context: None,
         },
     ]

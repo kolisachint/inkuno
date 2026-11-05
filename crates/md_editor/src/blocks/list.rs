@@ -20,6 +20,7 @@ use gpui::{
 
 use crate::editor::Editor;
 use crate::selection::map_through_edit;
+use crate::theme::Theme;
 
 /// Left padding of the list gutter, in pixels.
 pub const LIST_LEFT_PX: f32 = 16.0;
@@ -35,20 +36,6 @@ const TICK_LIFT_PX: f32 = 4.0;
 const BOX_LINE_PX: f32 = 1.5;
 /// Gap between the end of a number and the text that follows it, in pixels.
 const NUMBER_GAP_PX: f32 = 6.0;
-
-/// Colours of the list gutter (DESIGN §9 will move these into the theme).
-const BOX_BORDER: Hsla = Hsla {
-    h: 0.0,
-    s: 0.0,
-    l: 0.55,
-    a: 1.0,
-};
-const BOX_CHECKED: Hsla = Hsla {
-    h: 0.61,
-    s: 0.75,
-    l: 0.50,
-    a: 1.0,
-};
 
 /// The marker of one list line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,9 +83,9 @@ pub struct CheckBox {
 
 impl ListGutter {
     /// Paint the checkbox square, then the glyph on top of it.
-    pub fn paint(&self, line_height: Pixels, window: &mut Window, cx: &mut App) {
+    pub fn paint(&self, line_height: Pixels, theme: &Theme, window: &mut Window, cx: &mut App) {
         if let Some(checkbox) = &self.checkbox {
-            paint_checkbox(checkbox.bounds, checkbox.checked, window);
+            paint_checkbox(checkbox.bounds, checkbox.checked, theme, window);
         }
         if let Some((glyph, origin)) = &self.glyph {
             if let Err(err) = glyph.paint(*origin, line_height, TextAlign::Left, None, window, cx) {
@@ -237,7 +224,7 @@ pub(crate) fn gutter(
                 size(px(CHECKBOX_PX), px(CHECKBOX_PX)),
             );
             if *checked {
-                let tick = shape(window, "✔", gpui::white(), px(TICK_PX));
+                let tick = shape(window, "✔", text.on_accent, px(TICK_PX));
                 let x = bounds.left() + px((CHECKBOX_PX - f32::from(tick.width)) / 2.0);
                 glyph = Some((tick, point(x, box_top - px(TICK_LIFT_PX))));
             }
@@ -256,17 +243,18 @@ pub(crate) fn gutter(
     ListGutter { glyph, checkbox }
 }
 
-/// The font and colour of the markers of a list block.
+/// The font and colour of the markers of a list block. `on_accent` is the tick of a checked box.
 pub(crate) struct MarkerText {
     pub font: Font,
     pub size: Pixels,
     pub color: Hsla,
+    pub on_accent: Hsla,
 }
 
 /// Paint a checkbox: a square outline, or a filled square when checked.
-fn paint_checkbox(bounds: Bounds<Pixels>, checked: bool, window: &mut Window) {
+fn paint_checkbox(bounds: Bounds<Pixels>, checked: bool, theme: &Theme, window: &mut Window) {
     if checked {
-        window.paint_quad(fill(bounds, BOX_CHECKED));
+        window.paint_quad(fill(bounds, theme.accent));
         return;
     }
     let (left, top) = (bounds.left(), bounds.top());
@@ -278,7 +266,7 @@ fn paint_checkbox(bounds: Bounds<Pixels>, checked: bool, window: &mut Window) {
         Bounds::new(point(left, top), size(line, height)),
         Bounds::new(point(left + width - line, top), size(line, height)),
     ] {
-        window.paint_quad(fill(edge, BOX_BORDER));
+        window.paint_quad(fill(edge, theme.box_border));
     }
 }
 
