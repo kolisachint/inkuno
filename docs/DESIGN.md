@@ -201,12 +201,12 @@ Key bindings for modes are an open question (§16).
 
 ### 6.1 Render host
 
-One shared hidden WKWebView, called the **render host**, runs:
+**Decided (split host, [S1](spikes/S1-render-host.md#decision)).** Math and Mermaid run on different engines. MathJax needs no DOM, so it does not need WebKit. Mermaid does.
 
-- Bundled `mermaid.js`.
-- Bundled MathJax v3.
+- **WebView host (Mermaid only).** One shared hidden WKWebView, called the **render host**, runs bundled `mermaid.js`. It uses the system WebKit, reached through `wry` or `objc2`. It is the only place WebKit is used.
+- **In-process math host.** MathJax v4 (`@mathjax/src`) runs in an embedded QuickJS engine (rquickjs) with the liteAdaptor. It needs no DOM and no WebView. Its SVG is rasterized with resvg (§6.5).
 
-It uses the system WebKit, reached through `wry` or `objc2`. Both libraries are bundled with the app and pinned to exact versions. The render host is the only place WebKit is used.
+Both hosts are bundled with the app and pinned to exact versions.
 
 ### 6.2 Request contract
 
@@ -231,7 +231,7 @@ const { svg } = await mermaid.render(id, src)
 
 ### 6.4 Math
 
-- MathJax v3 renders with `tex2svgPromise`.
+- **Decided:** MathJax v4 (`@mathjax/src`), in-process in QuickJS (§6.1). The v3 `tex2svgPromise` call does not apply. The S1 prototype used the synchronous document conversion (`doc.convert`). Confirm the exact v4 call in task 6.3.
 - `fontCache: 'none'` is set so each SVG is standalone.
 - The math fill colour comes from the active theme.
 
@@ -254,13 +254,13 @@ Code fences are highlighted with tree-sitter grammars, through the `Highlighter`
 | Trait | Purpose | v1 implementation | Future |
 |-------|---------|-------------------|--------|
 | `DiagramRenderer` | Renders diagram source to SVG | Mermaid | PlantUML, opt-in via local JAR (§1.2) |
-| `MathRenderer` | Renders LaTeX to SVG | MathJax v3 | Native mitex to Typst (§6.8) |
+| `MathRenderer` | Renders LaTeX to SVG | MathJax v4 in QuickJS | Native mitex to Typst (§6.8) |
 | `Highlighter` | Tokenizes code for highlighting | tree-sitter | none planned |
 
 ### 6.8 Fallbacks
 
-- **Render host.** If the hidden WKWebView proves unreliable (UNVERIFIED, §14), attach the webview to a real NSWindow positioned offscreen.
-- **Math only.** Run MathJax v3 in embedded rquickjs with liteAdaptor, which needs no DOM.
+- **Render host (Mermaid).** If the hidden WKWebView proves unreliable (UNVERIFIED, §14), attach the webview to a real NSWindow positioned offscreen. Still open until a macOS run.
+- **Math.** Not a fallback any more. MathJax v4 in embedded rquickjs with liteAdaptor is the primary math path, decided in [S1](spikes/S1-render-host.md#decision). It needs no DOM.
 - **Mermaid.** No non-DOM fallback exists.
 - **Future.** A native mitex to Typst path, placed behind `MathRenderer`.
 
@@ -361,7 +361,7 @@ Four spikes run before the corresponding implementation phases. Each spike ends 
 
 | Spike | Question | Decides |
 |-------|----------|---------|
-| **S1** Render host | Hidden WKWebView (`wry` with `with_visible(false)`) or offscreen NSWindow? Do Mermaid and MathJax produce SVG? Does Mermaid output contain no `<foreignObject>` with `htmlLabels: false`? Does resvg render the output correctly, given that `foreignObject` support is believed absent but unverified? What is the round-trip latency? | §6.1, §6.8 |
+| **S1** Render host | Hidden WKWebView (`wry` with `with_visible(false)`) or offscreen NSWindow? Do Mermaid and MathJax produce SVG? Does Mermaid output contain no `<foreignObject>` with `htmlLabels: false`? Does resvg render the output correctly, given that `foreignObject` support is believed absent but unverified? What is the round-trip latency? **Decided:** split host, MathJax v4 in QuickJS, WebView for Mermaid only ([S1 Decision](spikes/S1-render-host.md#decision)). | §6.1, §6.4, §6.8 |
 | **S2** GPUI | Does a pinned git dependency on GPUI build, and does a hello window run on macOS? | Pinned revision (§10) |
 | **S3** Display map | Can caret movement and IME work across hidden `**` markers? | Display map design (§3.2, §4.1) |
 | **S4** Editor base | Is the `gpui-component` editor or the Zed `editor` crate the better base for `md_editor`? | §7 |
@@ -380,6 +380,7 @@ Four spikes run before the corresponding implementation phases. Each spike ends 
 
 **UNVERIFIED (must be settled in spike S1):**
 
+- Note: the split-host decision ([S1](spikes/S1-render-host.md#decision)) takes math off the WebView. These items now gate only Mermaid (tasks 6.1 and 7.1).
 - Layout behaviour of a hidden WKWebView.
 - resvg support for `<foreignObject>`. It is believed absent.
 - Whether `htmlLabels: false` removes all `<foreignObject>` elements from Mermaid output.
@@ -402,8 +403,8 @@ Four spikes run before the corresponding implementation phases. Each spike ends 
 1. **Mode key bindings.** The proposals are Cmd+/ for Source Code Mode, F8 for Focus Mode, and F9 for Typewriter Mode. None of these is decided.
 2. **Table editing UX.** Should tables use a Typora-style grid, or reveal source when the caret enters the table? Undecided.
 3. **Export.** Not in v1. Formats and scope are undecided.
-4. **Render host approach.** Hidden WKWebView or offscreen NSWindow. Decided by spike S1.
-5. **Pinned versions.** The exact versions of mermaid.js and MathJax v3. Chosen during S1.
+4. **Render host approach.** **Partly decided:** split host (math in-process in QuickJS, Mermaid in a WebView), per [S1](spikes/S1-render-host.md#decision). Still open: hidden WKWebView or offscreen NSWindow for the Mermaid host, which needs a macOS run (§14).
+5. **Pinned versions.** **Partly decided:** MathJax v4 (`@mathjax/src`), not v3, by owner decision ([S1](spikes/S1-render-host.md#decision)). mermaid.js 12.3.0 is pinned in S1. The exact MathJax v4 version is still to be chosen in task 6.3.
 6. **GPUI revision.** The exact Zed revision to pin. Chosen during S2. The revision is now recorded in the root `Cargo.toml` (`c7bea343838f42b4c14151393e41f0bbe033c95e`, 2026-11-04); it is still to be confirmed by S2 on macOS.
 7. **Editor base.** `gpui-component` editor or Zed `editor` crate. Chosen by spike S4.
 8. **Mermaid debounce interval.** The delay before a re-render after an edit. Decided: 300 ms (`md_render::queue::DEFAULT_MERMAID_DEBOUNCE`, task 7.3).

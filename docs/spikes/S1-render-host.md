@@ -132,3 +132,13 @@ Split the render host by engine. The current DESIGN §6.1 puts both engines in o
 - The MathJax bundle in the app (size, embedding, licence notices for the bundled JS) and the `base`/`ams` subset.
 
 Go/no-go: GO (split host). MathJax runs in embedded QuickJS with no DOM, and its output is SVG with no `<foreignObject>`, so 6.3 can go ahead without a WebView. Mermaid needs a DOM, so 7.1 depends on the hidden WKWebView host, which is still UNVERIFIED on macOS (DESIGN §14), and that check remains a blocker for 6.1 and 7.1.
+
+## Decision
+
+The owner chose the split host and MathJax v4. This section records that decision. DESIGN §6.1, §6.4 and §6.8 are amended to match.
+
+- **Split host.** Math runs in process: MathJax in embedded QuickJS (rquickjs) with the liteAdaptor, rasterized by resvg (`md_render::raster`). A hidden WebView runs Mermaid only, because Mermaid needs a DOM. Option C is the math path, and option A is the Mermaid path.
+- **MathJax v4.** Bundle the v4 `@mathjax/src` package instead of v3 `mathjax-full`. The MathJax v3.2.2 pin in the table above is superseded for the app. The v3 numbers in this note are measurements of v3 only and do not carry over to v4.
+- **Verification gap.** The QuickJS path was prototyped with v3 only. It must be re-verified with v4 in task 6.3 (bundle, output shape, error handling, and the v4 call that replaces `tex2svgPromise`).
+- **Still open.** Hidden WKWebView or offscreen NSWindow, WebKit layout behaviour, and the macOS round-trip measurement (DESIGN §14). These gate Mermaid only (tasks 6.1 and 7.1).
+- **Unchanged.** mermaid.js 12.3.0 remains the pinned Mermaid version.

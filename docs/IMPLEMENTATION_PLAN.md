@@ -42,7 +42,7 @@ P0 Scaffold
  |      |  S2 -> pinned GPUI rev     (needed by P3)
  |      |  S3 -> display map go/no-go (needed by 2.6)
  |      |  S4 -> editor base          (needed by P3)
- |      |  S1 -> render host approach (needed by P6, P7)
+ |      |  S1 -> split render host: QuickJS math, WebView for Mermaid (needed by P6, P7)
  |
  +--> P2 md_core  (2.1 .. 2.8; no GPUI; runs in parallel with P1)
         |
@@ -284,11 +284,11 @@ Requires P1 spikes S2 and S4, and Phase 2.
 
 Requires P1 spike S1 and Phase 4.
 
-### 6.1 Render host service
-- **Goal:** Run the hidden WKWebView (or the offscreen NSWindow chosen in S1) as a service that accepts requests.
-- **Crate / files:** `md_render/src/host.rs`.
+### 6.1 Mermaid WebView host plus an in-process QuickJS math host
+- **Goal:** Run two services behind one request interface (split host, S1 Decision): the hidden WKWebView (or the offscreen NSWindow, UNVERIFIED on macOS) for Mermaid, and an in-process rquickjs host for MathJax v4 with no WebView.
+- **Crate / files:** `md_render/src/host.rs` (WebView host), `md_render/src/math_host.rs` (QuickJS host).
 - **Depends on:** 1.1, 4.1.
-- **Acceptance:** a request for a fixed test string returns an SVG string; the call runs off the UI thread (verified by thread assertion); the service starts and stops cleanly.
+- **Acceptance:** a fixed Mermaid test string returns an SVG string from the WebView host, and a fixed TeX string returns an SVG string from the QuickJS host; the WebView call runs off the UI thread (verified by thread assertion); both services start and stop cleanly.
 
 ### 6.2 Request queue and cache
 - **Goal:** Queue requests and cache results by `hash(kind, source, theme)`.
@@ -296,11 +296,11 @@ Requires P1 spike S1 and Phase 4.
 - **Depends on:** 6.1.
 - **Acceptance:** an identical second request is served from cache (verified by a counter); the same source under a different theme is a separate cache entry; a placeholder is returned while a render is pending.
 
-### 6.3 MathRenderer with MathJax v3
-- **Goal:** Implement `MathRenderer` on top of MathJax v3 `tex2svgPromise`, with `fontCache: 'none'`.
-- **Crate / files:** `md_render/src/math.rs`, `md_render/assets/mathjax/` (pinned bundle).
-- **Depends on:** 6.2.
-- **Acceptance:** the SVG for `\frac{a}{b}` is produced in a test; the output has no shared font-cache references; the fill colour follows the requested theme.
+### 6.3 MathRenderer with MathJax v4 in QuickJS
+- **Goal:** Implement `MathRenderer` on MathJax v4 (`@mathjax/src`) running in the in-process QuickJS host from 6.1, with the liteAdaptor and `fontCache: 'none'`. No WebView. The v3 `tex2svgPromise` name does not apply; the v4 equivalent of the synchronous conversion is confirmed in this task.
+- **Crate / files:** `md_render/src/math.rs`, `md_render/assets/mathjax/` (pinned v4 bundle built from `@mathjax/src`).
+- **Depends on:** 6.1 (QuickJS host), 6.2.
+- **Acceptance:** the SVG for `\frac{a}{b}` is produced in a test, on v4 (the S1 prototype ran v3 only, so it is re-verified); the output has no `<foreignObject>` and no shared font-cache references; the fill colour follows the requested theme; invalid input gives an inline error.
 
 ### 6.4 resvg rasterization
 - **Goal:** Rasterize SVG to pixels and hand the result to GPUI as an image.
@@ -329,8 +329,8 @@ Requires Phase 6.
 ### 7.1 DiagramRenderer with Mermaid
 - **Goal:** Implement `DiagramRenderer` on Mermaid, with top-level `htmlLabels: false` and the theme mapping in DESIGN §6.3.
 - **Crate / files:** `md_render/src/diagram.rs`, `md_render/assets/mermaid/` (pinned bundle).
-- **Depends on:** 6.2.
-- **Acceptance:** a flowchart source produces SVG in a test; the SVG contains no `<foreignObject>` element; `default` and `dark` themes produce different output.
+- **Depends on:** 6.1 (WebView host), 6.2.
+- **Acceptance:** a flowchart source produces SVG in a test, on the WebView host; the SVG contains no `<foreignObject>` element, checked on every diagram type and not only flowcharts (S1 checked flowcharts only); `default` and `dark` themes produce different output.
 
 ### 7.2 Mermaid block element and enter-to-edit
 - **Goal:** Render Mermaid blocks, and on caret entry show source with the live preview below (DESIGN §4.2).
