@@ -105,6 +105,11 @@ impl Editor {
         self.replace_range(range, text, cx);
     }
 
+    /// The current selection. The app reads the caret to keep it across a reload from disk (9.2).
+    pub fn current_selection(&self) -> Selection {
+        self.selection.selection
+    }
+
     /// Set the selection. `anchor` stays where it is when `extend` is used from keys and
     /// shift-click; the caller passes the full new value. Offsets are clamped to the buffer.
     /// The goal column is cleared; a vertical move sets it again after this call.

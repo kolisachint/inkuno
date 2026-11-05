@@ -11,10 +11,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
-    actions, div, prelude::*, px, rgb, App, Context, Entity, Focusable, IntoElement, KeyBinding,
-    Render, Window,
+    actions, div, prelude::*, px, rgb, App, ClickEvent, Context, Div, Entity, Focusable,
+    IntoElement, KeyBinding, Render, Stateful, Window,
 };
 use md_editor::editor::{Editor, SAMPLE_TEXT};
+use md_editor::selection::Selection;
+use workspace::watcher::BufferUpdate;
+
+use crate::watch::{banner_after, clip_caret, is_own_write, settle, text_hash, Banner, Settled};
 
 actions!(md_editor_file_io, [Save]);
 
@@ -98,6 +102,14 @@ pub struct Document {
     /// The buffer version at the last open or save. The document is dirty when the buffer's
     /// version differs from this value.
     pub saved_version: u64,
+    /// Hash of the file content the document last wrote, read or acknowledged (9.2). An event
+    /// for a file with this content is the document's own save and is ignored.
+    pub(crate) known_hash: Option<u64>,
+    /// True after the file was deleted on disk (9.2). The document then counts as dirty, so a
+    /// save recreates the file.
+    pub(crate) force_dirty: bool,
+    /// The banner over the editor, if any (9.2).
+    pub(crate) banner: Option<Banner>,
 }
 
 impl Document {
@@ -112,14 +124,138 @@ impl Document {
         let saved_version = editor.read(cx).buffer().version();
         Self {
             editor,
+            known_hash: path.as_ref().map(|_| text_hash(text)),
             path,
             saved_version,
+            force_dirty: false,
+            banner: None,
         }
     }
 
-    /// True when the buffer has changed since the last open or save (3.6).
+    /// True when the buffer has changed since the last open or save (3.6), or the file was
+    /// deleted on disk (9.2).
     pub fn is_dirty(&self, cx: &App) -> bool {
-        version_is_dirty(self.editor.read(cx).buffer().version(), self.saved_version)
+        self.force_dirty
+            || version_is_dirty(self.editor.read(cx).buffer().version(), self.saved_version)
+    }
+
+    /// Replaces the buffer with `text` and marks it clean. The caret keeps its offset, clipped
+    /// to the new length (9.2). The replacement is one edit, so undo can step back over it.
+    fn load_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        let editor = self.editor.clone();
+        editor.update(cx, |ed, cx| {
+            let caret = ed.current_selection().head;
+            if ed.text() != text {
+                let len = ed.buffer().len();
+                ed.replace_range(0..len, text, cx);
+            }
+            ed.set_selection(Selection::caret(clip_caret(text, caret)), cx);
+        });
+        self.saved_version = editor.read(cx).buffer().version();
+        self.force_dirty = false;
+        self.banner = None;
+        cx.notify();
+    }
+
+    /// Applies one planned update for the open note (9.2). The updates come from
+    /// `plan_buffer_updates`, in order.
+    pub(crate) fn apply_disk_update(&mut self, update: &BufferUpdate, cx: &mut Context<Self>) {
+        if let BufferUpdate::Moved { to, .. } = update {
+            self.path = Some(to.clone());
+            cx.notify();
+            return;
+        }
+        let Some(path) = self.path.clone() else {
+            return;
+        };
+        let disk = match read_file(&path) {
+            Ok(text) => Some(text),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => {
+                eprintln!("noteapp: cannot read {}: {err}", path.display());
+                return;
+            }
+        };
+        if let Some(text) = &disk {
+            if is_own_write(text_hash(text), self.known_hash) {
+                return;
+            }
+        }
+        let dirty = self.is_dirty(cx);
+        let settled = settle(update, disk.is_some(), dirty);
+        if let Some(text) = &disk {
+            // The file's content is now known, so a repeat event for it is ignored.
+            self.known_hash = Some(text_hash(text));
+        }
+        match settled {
+            Settled::Reload => {
+                if let Some(text) = disk {
+                    self.load_text(&text, cx);
+                }
+            }
+            Settled::Conflict => self.banner = banner_after(&settled),
+            Settled::Deleted => {
+                self.known_hash = None;
+                self.force_dirty = true;
+                self.banner = banner_after(&settled);
+            }
+            Settled::Moved(_) => {}
+        }
+        cx.notify();
+    }
+
+    /// Banner "Reload": discards the unsaved edits and loads the file from disk.
+    fn reload_from_disk(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.path.clone() else {
+            return;
+        };
+        match read_file(&path) {
+            Ok(text) => {
+                self.known_hash = Some(text_hash(&text));
+                self.load_text(&text, cx);
+            }
+            Err(err) => eprintln!("noteapp: cannot reload {}: {err}", path.display()),
+        }
+    }
+
+    /// Banner "Keep mine" and "Dismiss": hides the banner and keeps the buffer as it is.
+    fn dismiss_banner(&mut self, cx: &mut Context<Self>) {
+        self.banner = None;
+        cx.notify();
+    }
+
+    /// The banner over the editor: a message and its buttons.
+    fn render_banner(banner: Banner, cx: &mut Context<Self>) -> impl IntoElement {
+        let message = match banner {
+            Banner::Conflict => "File changed on disk",
+            Banner::Deleted => "File deleted on disk",
+        };
+        let bar = div()
+            .flex_none()
+            .w_full()
+            .h(px(36.))
+            .px_3()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_2()
+            .bg(rgb(0xfef3c7))
+            .border_b_1()
+            .border_color(rgb(0xf59e0b))
+            .text_color(rgb(0x1f2937))
+            .child(div().flex_1().child(message));
+        match banner {
+            Banner::Conflict => bar
+                .child(banner_button("banner-reload", "Reload").on_click(
+                    cx.listener(|this, _: &ClickEvent, _window, cx| this.reload_from_disk(cx)),
+                ))
+                .child(banner_button("banner-keep", "Keep mine").on_click(
+                    cx.listener(|this, _: &ClickEvent, _window, cx| this.dismiss_banner(cx)),
+                )),
+            Banner::Deleted => bar.child(banner_button("banner-dismiss", "Dismiss").on_click(
+                cx.listener(|this, _: &ClickEvent, _window, cx| this.dismiss_banner(cx)),
+            )),
+        }
     }
 
     /// The file name shown in the title, or "Untitled" when there is no path.
@@ -145,8 +281,11 @@ impl Document {
             (editor.text(), editor.buffer().version())
         };
         write_file(&target, &text)?;
+        self.known_hash = Some(text_hash(&text));
         self.path = Some(target);
         self.saved_version = version;
+        self.force_dirty = false;
+        self.banner = None;
         cx.notify();
         Ok(())
     }
@@ -162,17 +301,30 @@ impl Render for Document {
         }
         window.set_window_title(&window_title(&self.file_name(), dirty));
 
+        // The banner sits in the column above the editor, not over it, so a click on a banner
+        // button never reaches the editor's text (the editor does not honour occlusion).
         let mut root = div()
             .size_full()
             .relative()
+            .flex()
+            .flex_col()
             .on_action(cx.listener(|this, _: &Save, _window, cx| {
                 if let Err(err) = this.save(None, cx) {
                     eprintln!("noteapp: save failed: {err}");
                 }
-            }))
+            }));
+        if let Some(banner) = self.banner {
+            root = root.child(Self::render_banner(banner, cx));
+        }
+        // The dirty dot is drawn over the editor area, below the banner.
+        let mut body = div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .w_full()
             .child(self.editor.clone());
         if dirty {
-            root = root.child(
+            body = body.child(
                 div()
                     .absolute()
                     .top(px(8.))
@@ -182,8 +334,23 @@ impl Render for Document {
                     .bg(rgb(0xd97706)),
             );
         }
-        root
+        root.child(body)
     }
+}
+
+/// A small clickable button for the banner.
+fn banner_button(id: &'static str, label: &'static str) -> Stateful<Div> {
+    div()
+        .id(id)
+        .px_2()
+        .py_1()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(0x9ca3af))
+        .bg(rgb(0xffffff))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(0xf3f4f6)))
+        .child(label)
 }
 
 /// Register the Save action and its key binding (Cmd+S). Called from `main`.

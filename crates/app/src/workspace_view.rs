@@ -9,6 +9,11 @@
 //! row opens that note in place of the current one. The open note is highlighted. If the
 //! open note has unsaved edits, it is saved first; when it cannot be saved (for example, it
 //! has no file path), the switch is refused and the reason goes to stderr.
+//!
+//! Vault changes (9.2). The sidebar watches the vault. The window polls the watcher every
+//! [`POLL_INTERVAL`] and applies what arrived: the tree is rebuilt on a create, remove or rename,
+//! the search is rerun, and the open note reloads, keeps its edits behind a banner, or is marked
+//! deleted.
 
 use std::path::{Path, PathBuf};
 
@@ -17,9 +22,11 @@ use gpui::{
 };
 use md_editor::selection::Selection;
 use workspace::tree::{visible_rows, Expansion, Node, Vault};
+use workspace::watcher::{plan_buffer_updates, OpenBuffer};
 
 use crate::file_io::{read_file, Document};
 use crate::search_panel::{self, hit_offset, SearchPanel, ToggleSearch};
+use crate::watch::{changes_for_open_note, needs_tree_refresh, WatchFeed, POLL_INTERVAL};
 
 /// Width of the sidebar in pixels.
 pub(crate) const SIDEBAR_WIDTH: f32 = 240.;
@@ -81,6 +88,8 @@ struct Sidebar {
     vault: Vault,
     tree: Node,
     expansion: Expansion,
+    /// Changes on disk under the vault (9.2). `None` when the watch could not start.
+    watch: Option<WatchFeed>,
 }
 
 impl Sidebar {
@@ -103,10 +112,21 @@ impl Sidebar {
                 return None;
             }
         };
+        let watch = match WatchFeed::start(&vault) {
+            Ok(feed) => Some(feed),
+            Err(err) => {
+                eprintln!(
+                    "noteapp: cannot watch vault {}: {err}",
+                    vault.root().display()
+                );
+                None
+            }
+        };
         Some(Self {
             vault,
             tree,
             expansion: Expansion::new(),
+            watch,
         })
     }
 }
@@ -122,8 +142,77 @@ pub struct WorkspaceView {
 }
 
 impl WorkspaceView {
-    /// Builds the start-up state from the command line (see the module docs).
+    /// Builds the start-up state from the command line (see the module docs) and starts
+    /// applying vault changes.
     pub fn new(cx: &mut Context<Self>) -> Self {
+        let view = Self::from_args(cx);
+        Self::start_polling(cx);
+        view
+    }
+
+    /// Polls the vault watcher on the window thread every [`POLL_INTERVAL`]. The loop ends
+    /// when the view is dropped.
+    fn start_polling(cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(POLL_INTERVAL).await;
+            if this
+                .update(cx, |view, cx| view.apply_watch_changes(cx))
+                .is_err()
+            {
+                break;
+            }
+        })
+        .detach();
+    }
+
+    /// Applies the changes the watcher reported since the last poll (9.2).
+    fn apply_watch_changes(&mut self, cx: &mut Context<Self>) {
+        let Some(sidebar) = self.sidebar.as_mut() else {
+            return;
+        };
+        let Some(feed) = sidebar.watch.as_ref() else {
+            return;
+        };
+        let batch = feed.drain();
+        if batch.is_empty() {
+            return;
+        }
+        if needs_tree_refresh(&batch) {
+            // The expansion state is kept; only the tree is rebuilt from disk.
+            match sidebar.vault.tree() {
+                Ok(tree) => sidebar.tree = tree,
+                Err(err) => eprintln!(
+                    "noteapp: cannot list vault {}: {err}",
+                    sidebar.vault.root().display()
+                ),
+            }
+        }
+        if self.search_open {
+            self.search.refresh(Some(&sidebar.vault));
+        }
+        let (path, dirty) = {
+            let document = self.document.read(cx);
+            (document.path.clone(), document.is_dirty(cx))
+        };
+        if let Some(path) = path {
+            let open = [OpenBuffer {
+                path: path.clone(),
+                dirty,
+            }];
+            let plan = plan_buffer_updates(&changes_for_open_note(&batch, &path), &open);
+            if !plan.is_empty() {
+                self.document.update(cx, |doc, cx| {
+                    for update in &plan {
+                        doc.apply_disk_update(update, cx);
+                    }
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// Builds the start-up state from the command line.
+    fn from_args(cx: &mut Context<Self>) -> Self {
         let arg = std::env::args_os().nth(1).map(PathBuf::from);
         let Some(arg) = arg else {
             return Self {
