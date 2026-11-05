@@ -110,7 +110,7 @@ From AGENTS.md, the spike notes and the Linux P3 gate (`docs/P3-gate-linux.md`).
 - **Resolved: sidebar and search panel UI** (9.1, 9.4) are done (`bc8fe65`, `dec521b`).
 - **Resolved: watcher updates are applied in the app** (9.2, `cb04e55`). The 1 s latency was checked by hand on Xvfb, not asserted in tests.
 - **Resolved: image paste** (9.5, `2ca53b7`).
-- **Iteration 2 open items from the 8.x and 9.x work** (sidebar delete is permanent, IME bounds across wrap rows, double layout per frame, table cells without inline markdown, `%20` paths, remote images, reload undo step, search offset on a dirty note, Typewriter far-jump blank frame) are listed in AGENTS.md.
+- **Iteration 2 open items from the 8.x and 9.x work** (IME bounds across wrap rows, remote images, reload undo step, Typewriter far-jump blank frame) are listed in AGENTS.md. Resolved since: sidebar delete moves to the system Trash, the double layout per frame is removed, table cells render inline markdown, `%20` paths decode, and search on a dirty note uses its buffer.
 - **Settings storage** location and format (DESIGN §16 item 9; 10.3) is provisional: a JSON file in the config dir (`~/Library/Application Support/noteapp/settings.json` on macOS). Owner decision pending. Not checked on macOS.
 - **Performance targets** (DESIGN §12): measured in 10.4, results in `docs/spikes/perf-pass.md`. The 16 ms p90 keystroke-to-paint target is not met on this Xvfb rig. Re-measure after the double layout fix (AGENTS.md next task 3) and on a real GPU and macOS.
 - **Rope backend** (DESIGN §16 item 10). md_core uses `ropey` behind `Buffer`. Undecided; not phase-specific.

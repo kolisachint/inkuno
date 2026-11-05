@@ -37,10 +37,10 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 ## CI
 
 - **`release.yml`** runs on push to `main`, `claude/**` and `v*` tags, and on manual dispatch. The `macos` job (`macos-14`) and the `linux` job (`ubuntu-22.04`) each run `cargo build --release -p app` and package the assets. The `publish` job then replaces the `nightly` pre-release, or creates a versioned release for a tag. Both build jobs use `Swatinem/rust-cache@v2`.
-- **`md_core.yml`** runs on every push and pull request (`ubuntu-latest`): `cargo fmt --all --check`, `cargo clippy -p md_core --all-targets -- -D warnings` and `cargo test -p md_core`. It has no cache step.
+- **`md_core.yml`** runs on every push and pull request (`ubuntu-latest`): `cargo fmt --all --check`, `cargo clippy -p md_core --all-targets -- -D warnings` and `cargo test -p md_core`, with `Swatinem/rust-cache@v2`.
+- **`workspace.yml`** runs on every push and pull request (`ubuntu-22.04`): it installs the apt packages from the `linux` job in `release.yml`, then runs `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings`, with `Swatinem/rust-cache@v2`.
 - **macOS code is compiled only in CI.** After each push, check that the release run for the branch is green on the GitHub Actions page for that branch. Do not call a change that touches macOS code done until it is.
-- **Gap:** CI does not run tests or clippy for `md_editor`, `md_render`, `workspace` or `app`. The release jobs only build. `cargo fmt --all --check` does cover the whole workspace.
-- **Next step:** add a workspace job on `ubuntu-22.04`. It installs the apt packages from the `linux` job in `release.yml`, then runs `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings`, with `Swatinem/rust-cache@v2`. Add the same cache step to `md_core.yml`. This edits `.github/workflows/`, so it needs a credential with workflow scope. If the push is rejected, park it under `docs/ci/` and add a line to Blockers.
+- **New workflows have not run yet.** `workspace.yml` was added on a branch that has not been pushed, so neither it nor the affected `release.yml` builds have run. Confirm both are green after the push.
 
 ## Status
 
@@ -61,14 +61,14 @@ Screenshots are in `docs/screenshots/`. All rows are verified on Linux (Xvfb) un
 
 | Area | State | Screenshots |
 |------|-------|-------------|
-| P4 live preview | 4.1 to 4.5 done: styled basic blocks, lists and task items, read-only tables and images, inline reveal, input rules. | `4.1.png`, `4.2.png`, `4.3.png`, `4.4.png`, `4.4-caret-in-bold.png`, `4.5.png` |
+| P4 live preview | 4.1 to 4.5 done: styled basic blocks, lists and task items, read-only tables and images, inline reveal, input rules. Follow-ups landed: table cells render inline markdown, `%20` image paths decode (`md_editor/src/blocks/image.rs`). | `4.1.png`, `4.2.png`, `4.3.png`, `4.4.png`, `4.4-caret-in-bold.png`, `4.5.png` |
 | P5 code fences | 5.1 to 5.3 done (`md_render::highlight`, `lang`, fence element with fence reveal). | `5.3.png`, `5.3-caret-inside.png` |
 | P6 render host, ON HOLD | 6.2 done (`cache`, `queue`, render traits); 6.4 core done (`md_render::raster`). 6.1, 6.3, 6.5, 6.6 are on hold and must not be touched. | none |
 | P7 Mermaid, ON HOLD | 7.3 core done (`queue` debounce 300 ms, `fallback` last-good). 7.1, 7.2 and the 7.3 UI part are on hold. | none |
 | P8 modes | 8.1 Source Mode, 8.2 caret and scroll preservation, 8.3 Focus Mode, 8.4 Typewriter Mode, 8.5 mode keys done (see below). | `8.1.png` (also 8.2), `8.3.png`, `8.3-moved.png`, `8.4.png` |
 | Soft word wrap | Done (not a plan task). Up and Down move by visual row with an x goal. | `wrap.png`, `wrap-selection.png` |
-| P9 workspace | 9.1 sidebar, 9.2 watcher applied in the app, 9.3 create, rename and delete UI, 9.4 search panel, 9.5 image paste all done. | `9.1.png`, `9.2.png`, `9.3-ui.png`, `9.4.png`, `9.5.png` |
-| P10 theming | 10.1 colour tokens (Light and Dark, `md_editor/src/theme.rs`) and 10.2 Auto (`app/src/theme.rs`, follows the window appearance) done. Cycle the theme with Ctrl+K Ctrl+T (Cmd+K Cmd+T). 10.3 settings persistence (`app/src/settings.rs`): a JSON file in the config dir (provisional, DESIGN §16 item 9). Theme mode, last vault, Focus and Typewriter are saved and restored; Source Mode is not. `NOTEAPP_CONFIG_DIR` overrides the dir. 10.4 perf part done. Keystroke-to-paint on Xvfb/llvmpipe, 4 vCPU, 10k-line document: median ~9.4 ms, p90 ~16.7 ms. The 16 ms p90 target is NOT met on this rig. Reparse touches only dirty blocks: pass. Only visible blocks are laid out: pass. Results in `docs/spikes/perf-pass.md`. The math and diagram part of 10.4 is on hold with P6/P7. | `10.1-light.png`, `10.1-dark.png`, `10.3-restart.png`, `10.3-vault-restart.png`, `10.4-perf.png`, `10.4-followup-typed.png` |
+| P9 workspace | 9.1 sidebar, 9.2 watcher applied in the app, 9.3 create, rename and delete UI, 9.4 search panel, 9.5 image paste all done. Follow-ups landed: sidebar delete moves to the system Trash (`trash` crate), empty folders show in the tree, a Folder button creates folders, search on a dirty open note uses its buffer (`workspace::search` `BufferOverride`), and selection highlights over whole table and image blocks (painted over the content, whole block bounds). | `9.1.png`, `9.2.png`, `9.3-ui.png`, `9.4.png`, `9.5.png` |
+| P10 theming | 10.1 colour tokens (Light and Dark, `md_editor/src/theme.rs`) and 10.2 Auto (`app/src/theme.rs`, follows the window appearance) done. Cycle the theme with Ctrl+K Ctrl+T (Cmd+K Cmd+T). 10.3 settings persistence (`app/src/settings.rs`): a JSON file in the config dir (provisional, DESIGN §16 item 9). Theme mode, last vault, Focus and Typewriter are saved and restored; Source Mode is not. `NOTEAPP_CONFIG_DIR` overrides the dir. 10.4 perf part done. Keystroke-to-paint on Xvfb/llvmpipe, 4 vCPU, 10k-line document: median ~9.4 ms, p90 ~16.7 ms. The 16 ms p90 target is NOT met on this rig. Reparse touches only dirty blocks: pass. Only visible blocks are laid out: pass. Results in `docs/spikes/perf-pass.md`. The measure+prepaint double layout is removed (`MeasuredRows` cache in `md_editor/src/element.rs`); the Xvfb re-measure is still pending, plus a real GPU and macOS. The math and diagram part of 10.4 is on hold with P6/P7. | `10.1-light.png`, `10.1-dark.png`, `10.3-restart.png`, `10.3-vault-restart.png`, `10.4-perf.png`, `10.4-followup-typed.png` |
 
 8.5 (mode keys) is done: Source on Ctrl+/ (Linux) or Cmd+/ (macOS), Focus on F8, Typewriter on F9, and the Cycle Theme chord, all in one table in `crates/app/src/keymap.rs`. The `NOTEAPP_SOURCE`, `NOTEAPP_FOCUS` and `NOTEAPP_TYPEWRITER` env vars were removed. Focus and Typewriter can be on together, and both work in Source Mode.
 
@@ -78,6 +78,7 @@ Screenshots are in `docs/screenshots/`. All rows are verified on Linux (Xvfb) un
 - **X auth errors.** `xvfb-run` can give X auth errors for `import` and `xdotool`. Either set `XAUTHORITY` to the auth file that `xvfb-run` created, or start `Xvfb :N -ac -nolisten tcp -screen 0 1280x800x24 &` directly and use `DISPLAY=:N`.
 - **Shared target directory.** When agents share one `CARGO_TARGET_DIR`, another build overwrites `target/debug/app`. Build with `cargo build -p app`, copy the binary at once, and keep only one copy, because disk is limited.
 - **Theme under Xvfb.** The window appearance on Xvfb is Light, so Auto always resolves to Light there. Test Dark with the Cycle Theme chord (Ctrl+K Ctrl+T) instead. Auto's resolution is covered by unit tests in `app/src/theme.rs`.
+- **Dev Mac has only Command Line Tools.** `cargo build -p app` fails locally: the gpui_apple build script needs Xcode's `metal` utility (`xcrun: unable to find utility "metal"`). The library crates build and test fine. Verify app-crate changes in CI. GPUI has a `runtime_shaders` feature as a possible local workaround (not adopted).
 - **Math input rule is off.** `$$` is disabled in the editor by `HELD_RULES` in `md_editor/src/input_rules.rs` (`math_block`), while math is on hold. Keep it off until the owner confirms.
 
 ## Blockers and open items
@@ -90,29 +91,28 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
    Unblock for (b): a macOS run of the P3 gate. Unblock for (a): a macOS run, only when the owner lifts the hold. See `docs/spikes/S1-render-host.md` and `S3-display-map.md`.
 3. **macOS signing.** The `nightly` release publishes macOS and Linux builds (macOS compiles in CI since the 1.98.1 toolchain bump). Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
+4. **Dev Mac cannot build the `app` crate locally.** Only Command Line Tools are installed, so the gpui_apple build script fails on the `metal` shader step. The library crates build and test fine.
+   Unblock: install Xcode, or confirm the macOS CI build is green after each push, or adopt GPUI's `runtime_shaders` feature as a local workaround (not adopted).
 
 ### Iteration 2 open items (no blocker)
 
-- **Delete in the sidebar is permanent.** There is no trash.
 - **IME bounds across a wrap row** cover only the first row.
-- **Each block is laid out twice per frame** (measure and prepaint). Measured in 10.4; fix is next task 3.
-- **Table cells do not render inline markdown.**
-- **Image paths with `%20` are not decoded.**
 - **Remote images are not loaded.**
 - **A reload after an external change is one undo step.**
-- **Search results on a dirty open note may be offset.**
 - **Typewriter Mode caret far-jump** may show one blank frame.
+- **Two workspace watcher tests fail on macOS** (FSEvents timing; they pass on Linux): `external_edit_reloads_clean_buffer_and_keeps_dirty_one` and `removed_file_is_reported_and_marks_buffer_missing`.
+- **New Folder has no key binding** (owner decision; the `NewFolder` action exists unbound).
 
 ## Next tasks to dispatch (in order)
 
-1. **CI: workspace test and clippy job.** See the CI section above. Needs a credential with workflow scope, or park under `docs/ci/` and add a Blocker.
+1. **Push `claude/pending-work` and confirm CI is green.** `release.yml` (macOS + Linux builds) and the new `workspace.yml` have not run on this branch (not pushed). The app-crate changes (`search_panel.rs`, `workspace_view.rs`, `file_ops_ui.rs`) were never compiled locally, so do not call them done until CI passes.
 2. **macOS verification on a real Mac (owner).** Run the `nightly` build (`xattr -dr com.apple.quarantine noteapp.app`). Record the S2 screenshot and the P3 gate (blockers 1 and 2b). Check iteration 2 on macOS:
    - system font bold and italic (see the Linux font note);
    - Cmd keys: Cmd+/, Cmd+K Cmd+T, Cmd+N, Cmd+Shift+F;
    - Auto theme following the macOS appearance live (10.2 acceptance: the window updates within one frame);
    - image paste from the macOS clipboard (9.5);
    - settings file at `~/Library/Application Support/noteapp/settings.json` (10.3, `app/src/settings.rs`).
-3. **Performance: remove the double layout per block.** Remove the measure and prepaint double layout in `crates/md_editor/src/element.rs`. Then re-measure keystroke-to-paint the same way as in `docs/spikes/perf-pass.md` (same generated 10k-line document, same `xdotool` method) and record the result there. Then re-measure on a real GPU and on macOS.
-4. **Open items worth doing (from the list above).** Table cells with inline markdown; `%20` in image paths; sidebar delete to trash (needs the owner decision in 5 first); IME bounds across wrap rows (needs the macOS check in 2); search caret offset on dirty notes; folder creation in the sidebar; selection highlight over rendered tables and images. The last two are not yet in the open items list above. Add them there when picked up.
-5. **Owner decisions pending.** Mode keys (DESIGN §16 item 1; implemented as Ctrl/Cmd+/, F8, F9 in `crates/app/src/keymap.rs`); settings location (DESIGN §16 item 9, provisional); Linux scope (DESIGN §1.2); macOS signing (blocker 3); lifting the math and Mermaid hold.
+3. **Performance: re-measure keystroke-to-paint.** The double layout is removed. Re-measure the same way as in `docs/spikes/perf-pass.md` (same generated 10k-line document, same `xdotool` method) and record the result there. Then re-measure on a real GPU and on macOS.
+4. **Open items worth doing (from the list above).** Remote images; reload as one undo step; watcher FSEvents timing tests; IME bounds across wrap rows (needs the macOS check in 2); Typewriter far-jump blank frame.
+5. **Owner decisions pending.** Mode keys (DESIGN §16 item 1; implemented as Ctrl/Cmd+/, F8, F9 in `crates/app/src/keymap.rs`); settings location (DESIGN §16 item 9, provisional); New Folder key binding (the `NewFolder` action exists unbound); Linux scope (DESIGN §1.2); macOS signing (blocker 3); lifting the math and Mermaid hold.
 6. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.
