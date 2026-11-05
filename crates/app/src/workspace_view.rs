@@ -27,7 +27,9 @@ use workspace::tree::{visible_rows, Expansion, Node, Vault};
 use workspace::watcher::{plan_buffer_updates, OpenBuffer};
 
 use crate::file_io::{read_file, Document};
-use crate::file_ops_ui::{edit_message, renaming_text, DeleteNote, FileEdit, NewNote, RenameNote};
+use crate::file_ops_ui::{
+    edit_message, renaming_text, DeleteNote, FileEdit, NewFolder, NewNote, RenameNote,
+};
 use crate::search_panel::{self, hit_offset, SearchPanel, ToggleSearch};
 use crate::settings;
 use crate::text_input;
@@ -158,9 +160,9 @@ pub struct WorkspaceView {
     pub(crate) search: SearchPanel,
     /// True while the sidebar shows the search panel instead of the folder tree.
     pub(crate) search_open: bool,
-    /// The rename or delete question in the sidebar, if one is open (task 9.3).
+    /// The rename or Trash question in the sidebar, if one is open (task 9.3).
     pub(crate) file_edit: Option<FileEdit>,
-    /// Keyboard focus for the sidebar, so it sees the keys of a rename or delete (task 9.3).
+    /// Keyboard focus for the sidebar, so it sees the keys of a rename or Trash move (task 9.3).
     pub(crate) sidebar_focus: FocusHandle,
     /// The editor whose mode changes this view observes, and the subscription (task 8.5). The
     /// mode status text reads the modes, so the view redraws when they change. It follows the
@@ -523,7 +525,8 @@ impl WorkspaceView {
             })
             .collect::<Vec<_>>();
 
-        // The header holds the title and the "+" button for a new note (task 9.3).
+        // The header holds the title and the buttons for a new note ("+") and a new
+        // folder ("Folder") (task 9.3).
         let header = div()
             .flex_none()
             .h(px(28.))
@@ -535,22 +538,47 @@ impl WorkspaceView {
             .child(div().text_xs().text_color(theme.ui_muted).child("Files"))
             .child(
                 div()
-                    .id("sidebar-new-note")
-                    .w(px(20.))
-                    .h(px(20.))
                     .flex()
+                    .flex_row()
                     .items_center()
-                    .justify_center()
-                    .rounded_sm()
-                    .cursor_pointer()
-                    .text_color(theme.ui_text)
-                    .hover(|style| style.bg(theme.ui_hover))
-                    .child("+")
-                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                        this.new_note(window, cx);
-                    })),
+                    .gap_1()
+                    .child(
+                        div()
+                            .id("sidebar-new-folder")
+                            .h(px(20.))
+                            .px_2()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_sm()
+                            .cursor_pointer()
+                            .text_xs()
+                            .text_color(theme.ui_text)
+                            .hover(|style| style.bg(theme.ui_hover))
+                            .child("Folder")
+                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                                this.new_folder(window, cx);
+                            })),
+                    )
+                    .child(
+                        div()
+                            .id("sidebar-new-note")
+                            .w(px(20.))
+                            .h(px(20.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_sm()
+                            .cursor_pointer()
+                            .text_color(theme.ui_text)
+                            .hover(|style| style.bg(theme.ui_hover))
+                            .child("+")
+                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                                this.new_note(window, cx);
+                            })),
+                    ),
             );
-        // The rename hint, the delete question, or the rename error (task 9.3).
+        // The rename hint, the Trash question, or the rename error (task 9.3).
         let message = edit_message(&self.file_edit).map(|text| {
             div()
                 .flex_none()
@@ -610,6 +638,9 @@ impl Render for WorkspaceView {
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| {
                 this.new_note(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &NewFolder, window, cx| {
+                this.new_folder(window, cx);
             }))
             .on_action(cx.listener(|this, _: &RenameNote, window, cx| {
                 this.rename_open_note(window, cx);
