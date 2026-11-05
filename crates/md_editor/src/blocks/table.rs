@@ -4,6 +4,11 @@
 //! as a grid. When the caret is inside, the source text is drawn instead, so the table stays
 //! editable. [`parse_table`] and [`max_widths`] are pure and unit-tested on every platform.
 //!
+//! Cells render inline markdown (bold, italic, code, strikethrough, links) with the same runs
+//! the editor uses for paragraphs: [`cell_visible`] splits each cell into [`RunStyle`]s, hides
+//! the markers (the caret is always outside a drawn table) and [`element::text_run`] turns them
+//! into GPUI runs. Inline `$...$` stays plain text while math is on hold.
+//!
 //! A table has no text lines in the layout map, so a click on it puts the caret at the start of
 //! the block (see `cursor::offset_at`). The caret then moves into the block and shows the source.
 
@@ -11,13 +16,18 @@ use std::ops::Range;
 use std::panic::Location;
 
 use gpui::{
-    fill, point, px, relative, size, App, Bounds, ContentMask, ElementId, Entity, FontWeight,
-    GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, ShapedLine, SharedString,
-    Style, TextAlign, TextRun, Window,
+    fill, point, px, relative, size, App, Bounds, ContentMask, ElementId, Entity, GlobalElementId,
+    InspectorElementId, IntoElement, LayoutId, Pixels, ShapedLine, SharedString, Style, TextAlign,
+    TextRun, Window,
 };
 
+use md_core::inline::{hidden_ranges, inline_spans};
+use md_core::{InlineSpan, SpanKind};
+
+use crate::blocks::basic::{line_runs, BlockStyle, RunStyle, PARAGRAPH};
 use crate::editor::Editor;
-use crate::element::LayoutSnapshot;
+use crate::element::{text_run, LayoutSnapshot};
+use crate::inline_render::{visible_run_lengths, visible_text};
 
 /// Padding inside a cell, left and right, and above and below the text, in pixels.
 const CELL_PAD_X: f32 = 8.0;
@@ -123,6 +133,39 @@ fn alignment_of(cell: &str) -> Option<Alignment> {
     })
 }
 
+/// Inline spans of one cell, with offsets relative to the cell. Math spans are dropped, so
+/// inline `$...$` in cells stays plain text while math is on hold.
+pub(crate) fn cell_spans(cell: &str) -> Vec<InlineSpan> {
+    inline_spans(cell, 0)
+        .into_iter()
+        .filter(|span| span.kind != SpanKind::Math)
+        .collect()
+}
+
+/// Visible text of one cell and the runs that cover it. The markers of every span are hidden,
+/// since the caret is always outside a drawn table. The runs tile the visible text with no gaps
+/// or overlaps, styled the same way paragraph runs are ([`line_runs`]). An empty cell gives no
+/// runs.
+pub(crate) fn cell_visible(cell: &str) -> (String, Vec<RunStyle>) {
+    if cell.is_empty() {
+        return (String::new(), Vec::new());
+    }
+    let spans = cell_spans(cell);
+    let runs = line_runs(cell, 0, &spans);
+    let hidden = hidden_ranges(&spans, None);
+    let (visible, clipped) = visible_text(cell, 0, &hidden);
+    let lens: Vec<usize> = runs.iter().map(|run| run.range.len()).collect();
+    let mut start = 0;
+    let mut out = Vec::new();
+    for (index, len) in visible_run_lengths(&lens, 0, &clipped) {
+        let mut run = runs[index].clone();
+        run.range = start..start + len;
+        start += len;
+        out.push(run);
+    }
+    (visible, out)
+}
+
 /// The widest value in each column of `rows`, where `rows[r][c]` is the width of one cell.
 /// Rows may be ragged: a missing cell counts as 0. Pure, unit-tested.
 pub fn max_widths(rows: &[Vec<f32>]) -> Vec<f32> {
@@ -212,34 +255,28 @@ impl gpui::Element for TableElement {
         let text_style = window.text_style();
         let font = text_style.font();
         let font_size = text_style.font_size.to_pixels(window.rem_size());
-        let color = text_style.color;
+        let theme = crate::theme::current(cx);
         let line_height = window.line_height();
+        let header = BlockStyle {
+            bold: true,
+            ..PARAGRAPH
+        };
 
         let mut cells = Vec::with_capacity(self.table.rows.len() + 1);
         let all_rows = std::iter::once(&self.table.header).chain(self.table.rows.iter());
         for (row_index, row) in all_rows.enumerate() {
+            let style = if row_index == 0 { &header } else { &PARAGRAPH };
             let mut shaped_row = Vec::with_capacity(row.len());
             for text in row {
-                let mut cell_font = font.clone();
-                if row_index == 0 {
-                    cell_font.weight = FontWeight::BOLD;
-                }
-                let runs = if text.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![TextRun {
-                        len: text.len(),
-                        font: cell_font,
-                        color,
-                        background_color: None,
-                        underline: None,
-                        strikethrough: None,
-                    }]
-                };
+                let (visible, runs) = cell_visible(text);
+                let text_runs: Vec<TextRun> = runs
+                    .iter()
+                    .map(|run| text_run(run, style, &font, &theme))
+                    .collect();
                 shaped_row.push(window.text_system().shape_line(
-                    SharedString::from(text.clone()),
+                    SharedString::from(visible),
                     font_size,
-                    &runs,
+                    &text_runs,
                     None,
                 ));
             }
@@ -472,6 +509,94 @@ mod tests {
         let rows = vec![vec![10.0, 5.0], vec![3.0, 20.0, 7.0], vec![12.0]];
         assert_eq!(max_widths(&rows), vec![12.0, 20.0, 7.0]);
         assert_eq!(max_widths(&[]), Vec::<f32>::new());
+    }
+
+    /// Runs of `cell`: the visible text with its markers hidden, and the styles of each run.
+    fn visible_runs(cell: &str) -> (String, Vec<RunStyle>) {
+        cell_visible(cell)
+    }
+
+    /// Assert that `runs` tile `visible` exactly, with no gaps or overlaps.
+    fn assert_covers(runs: &[RunStyle], visible: &str) {
+        let mut next = 0;
+        for run in runs {
+            assert_eq!(run.range.start, next, "gap or overlap in {runs:?}");
+            assert!(run.range.start < run.range.end, "empty run in {runs:?}");
+            next = run.range.end;
+        }
+        assert_eq!(next, visible.len(), "runs do not reach the end");
+    }
+
+    #[test]
+    fn cell_styles_bold_italic_code_strike_and_link() {
+        let cases = [
+            ("**bold**", "bold", (true, false, false, false, false)),
+            ("*it*", "it", (false, true, false, false, false)),
+            ("`code`", "code", (false, false, true, false, false)),
+            ("~~gone~~", "gone", (false, false, false, true, false)),
+        ];
+        for (cell, visible, style) in cases {
+            let (text, runs) = visible_runs(cell);
+            assert_eq!(text, visible, "cell {cell:?}");
+            assert_eq!(runs.len(), 1, "cell {cell:?}: one run, got {runs:?}");
+            let run = &runs[0];
+            assert_eq!(
+                (run.bold, run.italic, run.code, run.strike, run.link),
+                style,
+                "cell {cell:?}"
+            );
+            assert_eq!(run.range, 0..visible.len());
+        }
+        let (text, runs) = visible_runs("[docs](https://example.com)");
+        assert_eq!(text, "docs");
+        assert_eq!(runs.len(), 1);
+        assert!(runs[0].link);
+        assert_eq!(runs[0].range, 0..4);
+    }
+
+    #[test]
+    fn cell_runs_tile_the_visible_text() {
+        let (visible, runs) = visible_runs("a **b** and `c`");
+        assert_eq!(visible, "a b and c");
+        assert_covers(&runs, &visible);
+        assert!(runs
+            .iter()
+            .any(|run| run.bold && &visible[run.range.clone()] == "b"));
+        assert!(runs
+            .iter()
+            .any(|run| run.code && &visible[run.range.clone()] == "c"));
+    }
+
+    #[test]
+    fn cell_math_stays_plain_text() {
+        let (visible, runs) = visible_runs("$x$");
+        assert_eq!(visible, "$x$", "math markers stay visible");
+        assert_covers(&runs, &visible);
+        assert!(
+            runs.iter().all(|run| !run.bold
+                && !run.italic
+                && !run.code
+                && !run.strike
+                && !run.link),
+            "no styling, got {runs:?}"
+        );
+        assert!(cell_spans("$x$").is_empty());
+    }
+
+    #[test]
+    fn escaped_pipe_inside_code_stays_one_styled_cell() {
+        let table = parse_table("| `a\\|b` | c |\n|---|---|\n").expect("a table");
+        assert_eq!(table.header, cells(&["`a|b`", "c"]));
+        let (visible, runs) = visible_runs(&table.header[0]);
+        assert_eq!(visible, "a|b");
+        assert_eq!(runs.len(), 1);
+        assert!(runs[0].code, "got {runs:?}");
+        assert_eq!(runs[0].range, 0..3);
+    }
+
+    #[test]
+    fn empty_cell_has_no_runs() {
+        assert_eq!(cell_visible(""), (String::new(), Vec::new()));
     }
 
     #[test]
