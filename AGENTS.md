@@ -30,7 +30,7 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 - `.github/workflows/release.yml` builds `-p app` on `macos-14` (arm64) and `ubuntu-22.04` (x86_64).
   - A push to `main` or `claude/**` replaces the `nightly` pre-release.
   - A push of a `v*` tag creates a versioned release.
-  - Assets: `noteapp-macos-arm64.zip` (ad-hoc signed `.app`), `noteapp-macos-arm64.tar.gz`, `noteapp-linux-x86_64.tar.gz`.
+  - Assets: `noteapp-macos-arm64.zip` (ad-hoc signed `.app`), `noteapp-macos-arm64.tar.gz`, `noteapp-linux-x86_64.tar.gz`, plus `SHA256SUMS` checksums and auto-generated release notes.
 - `.github/workflows/md_core.yml` runs fmt, clippy and tests for `md_core` on every push.
 - Pushing changes under `.github/workflows/` needs a GitHub credential with **workflow** scope. If a push is rejected for that reason, park the file under `docs/ci/` and add a line to Blockers below.
 
