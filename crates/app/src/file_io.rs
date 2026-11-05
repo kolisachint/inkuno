@@ -79,6 +79,14 @@ fn finish_write(mut file: File, temp: &Path, target: &Path, text: &str) -> io::R
     fs::rename(temp, target)
 }
 
+/// The folder that relative image paths of a note resolve against: the note's own folder, or
+/// `None` for an unsaved note (task 4.3).
+fn note_folder(path: Option<&Path>) -> Option<PathBuf> {
+    path.and_then(Path::parent)
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+}
+
 /// True when the buffer version differs from the version saved on disk (3.6).
 fn version_is_dirty(current: u64, saved: u64) -> bool {
     current != saved
@@ -110,6 +118,8 @@ impl Document {
     pub fn with_text(cx: &mut Context<Self>, text: &str, path: Option<PathBuf>) -> Self {
         let editor = cx.new(|cx| Editor::new(cx, text));
         let saved_version = editor.read(cx).buffer().version();
+        let base_dir = note_folder(path.as_deref());
+        editor.update(cx, |editor, cx| editor.set_base_dir(base_dir, cx));
         Self {
             editor,
             path,
@@ -145,6 +155,9 @@ impl Document {
             (editor.text(), editor.buffer().version())
         };
         write_file(&target, &text)?;
+        let base_dir = note_folder(Some(&target));
+        self.editor
+            .update(cx, |editor, cx| editor.set_base_dir(base_dir, cx));
         self.path = Some(target);
         self.saved_version = version;
         cx.notify();
