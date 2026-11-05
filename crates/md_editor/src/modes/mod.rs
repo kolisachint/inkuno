@@ -1,13 +1,14 @@
 //! Editor modes (phase 8). Modes are views over the same buffer (DESIGN §5).
 //!
 //! 8.4 adds the skeleton: the [`Modes`] flags on `Editor`, the three toggle actions, and the
-//! Typewriter Mode implementation in [`typewriter`]. Only Typewriter does anything yet. Source
-//! Mode (8.1) and Focus Mode (8.3) only flip their flags. Key bindings come in 8.5, so the
-//! toggles are not bound to any key here.
+//! Typewriter Mode implementation in [`typewriter`]. 8.3 adds Focus Mode in [`focus`]. Source
+//! Mode (8.1) only flips its flag. Key bindings come in 8.5, so the toggles are not bound to any
+//! key here.
 //!
-//! Debug aid until 8.5: `NOTEAPP_TYPEWRITER=1` starts the editor with Typewriter Mode on
-//! ([`startup_modes`]). Remove it when 8.5 binds the key.
+//! Debug aids until 8.5: `NOTEAPP_TYPEWRITER=1` and `NOTEAPP_FOCUS=1` start the editor with
+//! Typewriter Mode or Focus Mode on ([`startup_modes`]). Remove them when 8.5 binds the keys.
 
+pub mod focus;
 pub mod typewriter;
 
 use gpui::{actions, Div, Entity};
@@ -28,10 +29,13 @@ pub struct Modes {
     pub typewriter: bool,
 }
 
-/// The modes an editor starts with. All off, except Typewriter when `NOTEAPP_TYPEWRITER=1`.
+/// The modes an editor starts with. All off, except Typewriter when `NOTEAPP_TYPEWRITER=1` and
+/// Focus when `NOTEAPP_FOCUS=1`.
 pub fn startup_modes() -> Modes {
+    let on = |key: &str| std::env::var_os(key).is_some_and(|v| v.to_str() == Some("1"));
     Modes {
-        typewriter: std::env::var_os("NOTEAPP_TYPEWRITER").is_some_and(|v| v.to_str() == Some("1")),
+        typewriter: on("NOTEAPP_TYPEWRITER"),
+        focus: on("NOTEAPP_FOCUS"),
         ..Modes::default()
     }
 }
