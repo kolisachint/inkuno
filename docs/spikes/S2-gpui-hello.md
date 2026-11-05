@@ -40,3 +40,14 @@ Plan task 1.2 (code part). DESIGN §13 S2, §10.
 - A screenshot is attached to the note once captured on macOS.
 
 Go/no-go: PENDING — needs macOS run.
+
+## Linux
+
+Verified on Linux (Ubuntu, Xvfb with llvmpipe Vulkan), same pinned rev.
+
+- Dependencies: `crates/app` and `crates/md_editor` now depend on `gpui` under `cfg(any(target_os = "macos", target_os = "linux"))`. `crates/app/Cargo.toml` also enables `gpui_platform` features `x11` and `wayland` for `target_os = "linux"` only. The workspace builds `gpui_linux` with default features off, so without them the Linux platform has no windowing backend and the app runs headless, with no window.
+- `main.rs`: the hello window path is compiled for macOS and Linux. The fallback notice is compiled only on other platforms.
+- Build: `cargo build -p app` succeeds on Linux (GPUI compiled, no API drift against the pinned rev).
+- Run: under `xvfb-run` (display `:99`), the process opens an X11 window titled `noteapp`, 500x500, and renders `Hello, noteapp`. Screenshot: `docs/spikes/S2-linux-hello.png`.
+- Checks: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` pass.
+- Not verified: Wayland (only the X11 path was run), and any real GPU driver (only llvmpipe was available).
