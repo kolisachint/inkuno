@@ -8,6 +8,8 @@
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod block_list; // task 3.5
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod blocks; // task 4.1
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod clipboard; // task 3.3
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod cursor; // task 3.2
@@ -20,6 +22,16 @@ pub mod element; // task 3.1
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod ime; // task 3.4
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod inline_render; // task 4.4
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod input_rules; // task 4.5
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod keys; // task 3.3
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod modes; // phase 8 (8.4)
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod perf; // task 10.4: optional NOTEAPP_PERF keystroke timing
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod selection; // task 3.2
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod theme; // task 10.1

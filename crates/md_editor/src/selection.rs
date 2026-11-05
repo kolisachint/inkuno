@@ -11,6 +11,7 @@ use md_core::Edit;
 
 use crate::editor::Editor;
 use crate::element::LayoutSnapshot;
+use crate::theme::Theme;
 
 /// A selection in source byte offsets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -54,6 +55,9 @@ pub struct SelectionState {
     pub selection: Selection,
     /// Column to keep across vertical moves, in bytes from the start of the line.
     pub goal_column: Option<usize>,
+    /// Horizontal position, in pixels from the row's text start, to keep across Up and Down
+    /// moves between visual rows (task: soft wrap). Cleared like `goal_column`.
+    pub goal_x: Option<f32>,
     /// True between mouse down and mouse up while a drag selection is in progress.
     pub dragging: bool,
 }
@@ -94,8 +98,12 @@ impl Editor {
     /// of the inserted text. This is the only path that changes the buffer from input code
     /// (keys, clipboard and IME all call it).
     pub fn replace_range(&mut self, range: Range<usize>, text: &str, cx: &mut Context<Self>) {
-        self.selection.selection = apply_replace(&mut self.buffer, range, text);
+        let before = self.buffer.version();
+        self.selection.selection = apply_replace(&mut self.buffer, range.clone(), text);
+        // The block list follows the edit by splitting only the blocks it touched (10.4).
+        self.blocks.note_edit(before, &self.buffer, range, text);
         self.selection.goal_column = None;
+        self.selection.goal_x = None;
         cx.notify();
     }
 
@@ -103,6 +111,11 @@ impl Editor {
     pub fn replace_selection(&mut self, text: &str, cx: &mut Context<Self>) {
         let range = self.selection.selection.range();
         self.replace_range(range, text, cx);
+    }
+
+    /// The current selection. The app reads the caret to keep it across a reload from disk (9.2).
+    pub fn current_selection(&self) -> Selection {
+        self.selection.selection
     }
 
     /// Set the selection. `anchor` stays where it is when `extend` is used from keys and
@@ -115,12 +128,11 @@ impl Editor {
             head: selection.head.min(len),
         };
         self.selection.goal_column = None;
+        self.selection.goal_x = None;
         cx.notify();
     }
 }
 
-/// Colour of the selection highlight: translucent blue.
-const SELECTION_COLOR: u32 = 0x3366_FF40;
 /// Width of the highlight drawn for a selected line break.
 const NEWLINE_WIDTH: f32 = 0.4;
 
@@ -129,27 +141,35 @@ const NEWLINE_WIDTH: f32 = 0.4;
 /// Called by `TextElement::paint` before the text is painted (3.1 makes the call). Each line
 /// that the selection touches gets one rectangle over the selected characters. A line whose
 /// line break is selected also gets a short rectangle past its end.
-pub fn paint_selection(editor: &Editor, layout: &LayoutSnapshot, window: &mut Window) {
+pub fn paint_selection(
+    editor: &Editor,
+    layout: &LayoutSnapshot,
+    theme: &Theme,
+    window: &mut Window,
+) {
     let selection = editor.selection.selection;
     if selection.is_empty() {
         return;
     }
     let range = selection.range();
-    let color = gpui::rgba(SELECTION_COLOR);
+    let color = theme.selection;
     let newline_width = layout.line_height * NEWLINE_WIDTH;
 
     for line in &layout.lines {
         let start = range.start.max(line.source.start);
         let end = range.end.min(line.source.end);
-        let includes_newline = range.start <= line.source.end && range.end > line.source.end;
+        // Only the last row of a source line has a line break after it. The end of a wrapped row
+        // is not a break, so the selection continues on the next row.
+        let includes_newline =
+            line.last_row && range.start <= line.source.end && range.end > line.source.end;
         if start > end || (start == end && !includes_newline) {
             continue;
         }
-        let x0 = line.shaped.x_for_index(start - line.source.start);
+        let x0 = line.x_for_source(start);
         let x1 = if includes_newline {
             line.shaped.width + newline_width
         } else {
-            line.shaped.x_for_index(end - line.source.start)
+            line.x_for_source(end)
         };
         let origin = point(line.origin.x + x0, line.origin.y);
         let bounds = Bounds::new(origin, size(x1 - x0, layout.line_height));

@@ -5,6 +5,30 @@
 mod file_io;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod file_ops_ui;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod keymap;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod search_panel;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod settings;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod text_input;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod theme;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod watch;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod workspace_view;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use gpui::{px, size, App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use gpui_platform::application;
@@ -13,7 +37,13 @@ use gpui_platform::application;
 fn main() {
     application().run(|cx: &mut App| {
         md_editor::editor::init(cx);
-        file_io::init(cx);
+        // Every app-level and mode key binding is in `keymap::bindings` (task 8.5).
+        keymap::init(cx);
+        // Settings are loaded first: the theme mode and the modes start from them (task 10.3).
+        settings::init(cx);
+        // The theme mode and its Cycle Theme action (task 10.2).
+        let mode = settings::current(cx).theme;
+        theme::init(cx, mode);
         let bounds = Bounds::centered(None, size(px(800.), px(600.)), cx);
         cx.open_window(
             WindowOptions {
@@ -24,7 +54,10 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(file_io::open_initial),
+            |window, cx| {
+                theme::watch_window(window, cx);
+                cx.new(workspace_view::WorkspaceView::new)
+            },
         )
         .unwrap();
         cx.activate(true);

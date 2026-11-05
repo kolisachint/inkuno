@@ -17,6 +17,7 @@ use gpui::{
 };
 
 use md_core::display_map::DisplayMap;
+use md_core::input_rules::Input;
 
 use crate::editor::Editor;
 use crate::selection::Selection;
@@ -228,6 +229,16 @@ impl EntityInputHandler for Editor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        crate::perf::key_received();
+        // A plain typed character at the caret may trigger an input rule (task 4.5). A rule
+        // applies its own edit; otherwise the default insertion below runs.
+        if range.is_none()
+            && self.ime.marked.is_none()
+            && crate::input_rules::try_input_rule(self, Input::Text(text.to_string()), cx)
+        {
+            window.notify_text_input_changed(&self.focus_handle);
+            return;
+        }
         // A commit (or a plain typed character) is one edit. The marked range ends here.
         let target = self.input_target(range);
         self.ime.marked = None;
@@ -264,13 +275,13 @@ impl EntityInputHandler for Editor {
         let range = utf16_to_utf8_range(&self.text(), range_utf16);
         let block = self.layouts.block_for_offset(range.start)?;
         let line = block.line_for_offset(range.start)?;
-        let start = range.start.clamp(line.source.start, line.source.end) - line.source.start;
-        let end = range.end.clamp(line.source.start, line.source.end) - line.source.start;
+        let start = range.start.clamp(line.source.start, line.source.end);
+        let end = range.end.clamp(line.source.start, line.source.end);
         let top = line.origin.y;
         Some(Bounds::from_corners(
-            point(line.origin.x + line.shaped.x_for_index(start), top),
+            point(line.origin.x + line.x_for_source(start), top),
             point(
-                line.origin.x + line.shaped.x_for_index(end),
+                line.origin.x + line.x_for_source(end),
                 top + block.snapshot.line_height,
             ),
         ))

@@ -9,8 +9,14 @@
 
 use gpui::{actions, prelude::*, Action, App, Context, Div, Entity, KeyBinding, Window};
 
+use std::ops::Range;
+
+use gpui::px;
+use md_core::display_map::{Bias, Direction, DisplayMap};
+
 use crate::clipboard::{Copy, Cut, Paste};
 use crate::editor::Editor;
+use crate::element::{adjacent_row, LineLayout};
 use crate::selection::Selection;
 
 actions!(
@@ -217,6 +223,29 @@ fn vertical(text: &str, offset: usize, down: bool, goal_column: Option<usize>) -
 }
 
 impl Editor {
+    /// The offset that Up (`down` false) or Down moves the caret to, one visual row away, and the
+    /// x position it keeps (pixels from the row's text start). `goal_x` is the x of an earlier
+    /// vertical move, when there is one. Returns `None` when no adjacent row is laid out, so the
+    /// caller moves by source line.
+    fn visual_vertical(
+        &self,
+        head: usize,
+        down: bool,
+        goal_x: Option<f32>,
+    ) -> Option<(usize, f32)> {
+        let rows: Vec<&LineLayout> = self.layouts.rows().collect();
+        let ranges: Vec<Range<usize>> = rows.iter().map(|row| row.source.clone()).collect();
+        let current = rows
+            .iter()
+            .position(|row| row.source.start <= head && head <= row.source.end)?;
+        let next = adjacent_row(&ranges, current, down)?;
+        let x = goal_x.unwrap_or_else(|| f32::from(rows[current].x_for_source(head)));
+        let target = rows[next];
+        let local = target.shaped.closest_index_for_x(px(x));
+        let offset = target.shaped_to_source(local, Bias::Left);
+        Some((offset, x))
+    }
+
     /// Move the caret by `motion`, or move the selection head when `extend` is true.
     /// Called by the action handlers that [`attach`] wires (3.3).
     ///
@@ -229,6 +258,14 @@ impl Editor {
             motion,
             Motion::Left | Motion::Right | Motion::WordLeft | Motion::WordRight
         );
+        let text = self.text();
+        // The hidden markers as drawn for the current caret (task 4.4). Left and Right skip them,
+        // and the other motions snap onto a caret stop, so the caret never rests inside one.
+        // In Source Mode nothing is hidden, so the caret steps through every marker (task 8.1).
+        let hidden = self.hidden_ranges_for_caret(&text, Some(current.head));
+        let map = DisplayMap::new(text.len(), hidden);
+        // The x position kept by Up and Down across visual rows, when they move by row.
+        let mut goal_x = None;
         let moved = if !extend && !current.is_empty() && collapses {
             let range = current.range();
             let offset = match motion {
@@ -236,15 +273,47 @@ impl Editor {
                 _ => range.end,
             };
             Moved {
-                offset,
+                offset: map.clip(offset),
                 goal_column: None,
             }
         } else {
-            let text = self.text();
-            move_offset(&text, current.head, motion, self.selection.goal_column)
+            match motion {
+                Motion::Left => Moved {
+                    offset: map.move_caret(&text, current.head, Direction::Left),
+                    goal_column: None,
+                },
+                Motion::Right => Moved {
+                    offset: map.move_caret(&text, current.head, Direction::Right),
+                    goal_column: None,
+                },
+                Motion::WordLeft | Motion::WordRight => {
+                    let word = move_offset(&text, current.head, motion, None);
+                    Moved {
+                        offset: map.clip(word.offset),
+                        goal_column: None,
+                    }
+                }
+                Motion::Up | Motion::Down => {
+                    let down = matches!(motion, Motion::Down);
+                    match self.visual_vertical(current.head, down, self.selection.goal_x) {
+                        Some((offset, x)) => {
+                            goal_x = Some(x);
+                            Moved {
+                                offset: map.clip(offset),
+                                goal_column: None,
+                            }
+                        }
+                        // No adjacent visual row is laid out: move by source line.
+                        None => {
+                            move_offset(&text, current.head, motion, self.selection.goal_column)
+                        }
+                    }
+                }
+                _ => move_offset(&text, current.head, motion, self.selection.goal_column),
+            }
         };
         let anchor = if extend { current.anchor } else { moved.offset };
-        // set_selection clears goal_column, so the goal is restored after it.
+        // set_selection clears goal_column and goal_x, so both are restored after it.
         self.set_selection(
             Selection {
                 anchor,
@@ -253,6 +322,7 @@ impl Editor {
             cx,
         );
         self.selection.goal_column = moved.goal_column;
+        self.selection.goal_x = goal_x;
     }
 }
 

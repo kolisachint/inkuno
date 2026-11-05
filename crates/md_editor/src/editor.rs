@@ -8,15 +8,20 @@
 //! Edits must go through `Editor::replace_range` (task 3.2, in `selection.rs`), never through
 //! the buffer directly, so that the selection stays valid.
 
+use std::path::{Path, PathBuf};
+
 use gpui::{div, prelude::*, App, Context, FocusHandle, Focusable, IntoElement, Render, Window};
 use md_core::buffer::Buffer;
 
 use crate::block_list::BlockListState;
+use crate::blocks::code_fence::CodeCache;
 use crate::element::Layouts;
 use crate::ime::ImeState;
+use crate::modes::typewriter::TypewriterState;
+use crate::modes::Modes;
 use crate::selection::SelectionState;
 
-/// Text shown when the app starts without a file (used by `file_io::open_initial`).
+/// Text shown when the app starts without a file (used by the app's `Document::sample`).
 pub const SAMPLE_TEXT: &str = "# Sample\n\nThis is a sample note.\n";
 
 /// The editor view. It is the root of the editor window and an entity like any other view.
@@ -37,6 +42,14 @@ pub struct Editor {
     pub(crate) ime: ImeState,
     /// Block list state for the virtualized list (task 3.5).
     pub(crate) blocks: BlockListState,
+    /// The folder of the note. Relative image paths resolve against it (task 4.3). Set by the app.
+    pub(crate) base_dir: Option<PathBuf>,
+    /// Highlighted code fence blocks, so that a frame does not highlight them again (task 5.3).
+    pub(crate) code_cache: CodeCache,
+    /// The mode flags (phase 8). Read and set through `Editor::modes` and `Editor::set_modes`.
+    pub(crate) modes: Modes,
+    /// Typewriter Mode scroll state (task 8.4).
+    pub(crate) typewriter: TypewriterState,
 }
 
 impl Editor {
@@ -49,7 +62,23 @@ impl Editor {
             layouts: Layouts::default(),
             ime: ImeState::default(),
             blocks: BlockListState::default(),
+            base_dir: None,
+            code_cache: CodeCache::default(),
+            modes: crate::modes::Modes::default(),
+            typewriter: TypewriterState::default(),
         }
+    }
+
+    /// Set the folder that relative image paths resolve against: the folder of the note, or
+    /// `None` for an unsaved note (task 4.3).
+    pub fn set_base_dir(&mut self, dir: Option<PathBuf>, cx: &mut Context<Self>) {
+        self.base_dir = dir;
+        cx.notify();
+    }
+
+    /// The folder that relative image paths resolve against, if one is set.
+    pub fn base_dir(&self) -> Option<&Path> {
+        self.base_dir.as_deref()
     }
 
     /// The buffer, for reading (text, length, version). Edits go through `replace_range`.
@@ -72,16 +101,20 @@ impl Focusable for Editor {
 impl Render for Editor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor = cx.entity();
+        let theme = crate::theme::current(cx);
         // The background proves in a screenshot that the view is painted, even with no content.
         let root = div()
             .size_full()
-            .bg(gpui::white())
+            .bg(theme.bg)
+            .text_color(theme.text)
             .track_focus(&self.focus_handle)
             .key_context("MdEditor");
         // HOOK 3.3 (keys.rs): attach movement, copy, cut and paste handlers to the root.
         let root = crate::keys::attach(root, &editor);
         // HOOK 3.7 (edit_keys.rs): attach Backspace, Delete, Enter, Tab, undo, redo and select all.
         let root = crate::edit_keys::attach(root, &editor);
+        // HOOK 8.4 (modes/mod.rs): attach the mode toggle actions (Source, Focus, Typewriter).
+        let root = crate::modes::attach(root, &editor);
         // HOOK 3.5 (block_list.rs): the virtualized block list (replaced the 3.1 whole-buffer TextElement).
         let root = root.child(crate::block_list::render_blocks(&editor, cx));
         let _ = &editor;
@@ -95,5 +128,6 @@ pub fn init(cx: &mut App) {
     crate::keys::bind_keys(cx);
     // HOOK 3.7 (edit_keys.rs): register the editing key bindings for the "MdEditor" context.
     crate::edit_keys::bind_keys(cx);
-    let _ = cx;
+    // Task 10.1: the palette in use, Light until the app sets another.
+    crate::theme::init(cx);
 }
