@@ -21,10 +21,9 @@ use gpui::{
 };
 use md_core::{Block, BlockKind};
 
-use crate::blocks::basic::{block_style, shows_inline_styles};
 use crate::cursor;
 use crate::editor::Editor;
-use crate::element::{index_containing, TextElement};
+use crate::element::index_containing;
 use crate::ime;
 
 /// Block list state held by `Editor` (field `blocks`). Owned by 3.5.
@@ -272,13 +271,7 @@ impl gpui::Element for BlockHost {
                     state.kinds.get(ix).copied().unwrap_or(BlockKind::Blank),
                 )
             };
-            TextElement::new(
-                editor.clone(),
-                range,
-                block_style(&kind),
-                shows_inline_styles(&kind),
-            )
-            .into_any_element()
+            crate::blocks::item_element(&editor, range, kind, cx)
         })
         .size_full()
         .into_any_element();

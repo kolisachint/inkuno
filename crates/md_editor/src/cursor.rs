@@ -109,6 +109,13 @@ pub fn paint_caret(editor: &Editor, layout: &LayoutSnapshot, focused: bool, wind
 /// blocks or past the first or last one (a drag may leave the list). Pure geometry, so it reads
 /// the editor's `layouts` only.
 pub(crate) fn offset_at(editor: &Editor, position: Point<Pixels>) -> usize {
+    // A rendered block with no text lines (a table or an image, task 4.3) puts the caret at its
+    // start, so that the next frame shows its source.
+    if let Some(block) = editor.layouts.block_for_y(position.y) {
+        if block.snapshot.lines.is_empty() {
+            return block.source.start;
+        }
+    }
     let display = DisplayMap::new(editor.buffer().len(), vec![]);
     editor.layouts.offset_at(&display, position)
 }

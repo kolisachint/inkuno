@@ -8,6 +8,8 @@
 //! Edits must go through `Editor::replace_range` (task 3.2, in `selection.rs`), never through
 //! the buffer directly, so that the selection stays valid.
 
+use std::path::{Path, PathBuf};
+
 use gpui::{div, prelude::*, App, Context, FocusHandle, Focusable, IntoElement, Render, Window};
 use md_core::buffer::Buffer;
 
@@ -37,6 +39,8 @@ pub struct Editor {
     pub(crate) ime: ImeState,
     /// Block list state for the virtualized list (task 3.5).
     pub(crate) blocks: BlockListState,
+    /// The folder of the note. Relative image paths resolve against it (task 4.3). Set by the app.
+    pub(crate) base_dir: Option<PathBuf>,
 }
 
 impl Editor {
@@ -49,7 +53,20 @@ impl Editor {
             layouts: Layouts::default(),
             ime: ImeState::default(),
             blocks: BlockListState::default(),
+            base_dir: None,
         }
+    }
+
+    /// Set the folder that relative image paths resolve against: the folder of the note, or
+    /// `None` for an unsaved note (task 4.3).
+    pub fn set_base_dir(&mut self, dir: Option<PathBuf>, cx: &mut Context<Self>) {
+        self.base_dir = dir;
+        cx.notify();
+    }
+
+    /// The folder that relative image paths resolve against, if one is set.
+    pub fn base_dir(&self) -> Option<&Path> {
+        self.base_dir.as_deref()
     }
 
     /// The buffer, for reading (text, length, version). Edits go through `replace_range`.
