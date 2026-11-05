@@ -103,26 +103,30 @@ pub fn paint_caret(editor: &Editor, layout: &LayoutSnapshot, focused: bool, wind
     window.paint_quad(fill(bounds, black()));
 }
 
-/// Source offset of `position` in the editor's current display map (no hidden ranges).
-fn offset_at(layout: &LayoutSnapshot, editor: &Editor, position: Point<Pixels>) -> usize {
+/// Source offset of `position` (window coordinates), from the blocks painted in the last frame.
+///
+/// The block under the point is used, or the nearest visible block when the point is between
+/// blocks or past the first or last one (a drag may leave the list). Pure geometry, so it reads
+/// the editor's `layouts` only.
+pub(crate) fn offset_at(editor: &Editor, position: Point<Pixels>) -> usize {
     let display = DisplayMap::new(editor.buffer().len(), vec![]);
-    hit_test(layout, &display, position)
+    editor.layouts.offset_at(&display, position)
 }
 
-/// Register mouse handlers for the text element: mouse down places the caret, a drag extends
-/// the selection, shift-click extends it once, and mouse up ends the drag.
+/// Register the mouse handlers for the whole block list: mouse down places the caret, shift
+/// click extends the selection, a drag extends it across blocks and mouse up ends the drag.
 ///
-/// Called by `TextElement::paint` during paint (3.1 makes the call). Handlers are registered
-/// for each frame, so they always see the layout from the frame they were registered in.
+/// Called once per frame by `BlockHost::paint` (3.5), not once per block, so each mouse event is
+/// handled once. The handlers read the block layouts at event time, so they see the frame that
+/// was last painted. A mouse down outside `bounds` (the list) is ignored. A drag that leaves the
+/// list above or below scrolls it by the distance outside.
 pub fn register_mouse_handlers(
     editor: &Entity<Editor>,
-    layout: &LayoutSnapshot,
     bounds: Bounds<Pixels>,
     window: &mut Window,
 ) {
-    // Mouse down inside the element: focus, place the caret, or extend with shift.
+    // Mouse down inside the list: focus, place the caret, or extend with shift.
     let down_editor = editor.clone();
-    let down_layout = layout.clone();
     window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
         if !phase.bubble() || event.button != MouseButton::Left {
             return;
@@ -132,7 +136,7 @@ pub fn register_mouse_handlers(
         }
         let focus = down_editor.read(cx).focus_handle.clone();
         window.focus(&focus, cx);
-        let head = offset_at(&down_layout, down_editor.read(cx), event.position);
+        let head = offset_at(down_editor.read(cx), event.position);
         down_editor.update(cx, |editor, cx| {
             let anchor = if event.modifiers.shift {
                 editor.selection.selection.anchor
@@ -144,9 +148,8 @@ pub fn register_mouse_handlers(
         });
     });
 
-    // Drag: move the head while the left button is held after a mouse down in the element.
+    // Drag: move the head while the left button is held after a mouse down in the list.
     let move_editor = editor.clone();
-    let move_layout = layout.clone();
     window.on_mouse_event(move |event: &MouseMoveEvent, phase, _window, cx| {
         if !phase.bubble() || !move_editor.read(cx).selection.dragging {
             return;
@@ -156,7 +159,15 @@ pub fn register_mouse_handlers(
             move_editor.update(cx, |editor, _cx| editor.selection.dragging = false);
             return;
         }
-        let head = offset_at(&move_layout, move_editor.read(cx), event.position);
+        let head = offset_at(move_editor.read(cx), event.position);
+        let list = move_editor.read(cx).blocks.list.clone();
+        // Dragging above or below the list scrolls it, so the head can reach further blocks.
+        let y = event.position.y;
+        if y < bounds.top() {
+            list.scroll_by(y - bounds.top());
+        } else if y > bounds.bottom() {
+            list.scroll_by(y - bounds.bottom());
+        }
         move_editor.update(cx, |editor, cx| {
             let anchor = editor.selection.selection.anchor;
             editor.set_selection(Selection { anchor, head }, cx);

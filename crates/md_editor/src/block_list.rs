@@ -16,13 +16,15 @@ use std::rc::Rc;
 
 use gpui::{
     list, px, relative, AnyElement, App, Bounds, Context, ElementId, Entity, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, ListAlignment, ListState, Pixels, Style, Styled,
-    Window,
+    InspectorElementId, IntoElement, LayoutId, ListAlignment, ListOffset, ListState, Pixels, Style,
+    Styled, Window,
 };
 use md_core::Block;
 
+use crate::cursor;
 use crate::editor::Editor;
-use crate::element::TextElement;
+use crate::element::{index_containing, TextElement};
+use crate::ime;
 
 /// Block list state held by `Editor` (field `blocks`). Owned by 3.5.
 pub struct BlockListState {
@@ -40,6 +42,9 @@ pub struct BlockListState {
     items: Vec<Range<usize>>,
     /// Hash of each item's text, so a re-sync only replaces the items that changed.
     hashes: Vec<u64>,
+    /// Buffer version and caret offset at the last caret reveal. The list scrolls to the caret
+    /// again only when one of them changes, so wheel scrolling away from the caret is kept.
+    revealed: Option<(u64, usize)>,
 }
 
 impl Default for BlockListState {
@@ -50,8 +55,58 @@ impl Default for BlockListState {
             version: None,
             items: Vec::new(),
             hashes: Vec::new(),
+            revealed: None,
         }
     }
+}
+
+/// Index of the item that holds byte `offset`, for items drawn in buffer order. Pure,
+/// unit-tested.
+pub(crate) fn item_index_for_offset(items: &[Range<usize>], offset: usize) -> Option<usize> {
+    index_containing(items, |item| item.clone(), offset)
+}
+
+/// Scroll the list so the block holding the caret is in view, when the caret or the text has
+/// changed since the last reveal.
+///
+/// Called from `BlockHost::prepaint` after the list has laid out its visible items. A block that
+/// was laid out in this frame is revealed with `scroll_to_reveal_item`, which needs measured
+/// heights. A block beyond the laid-out range (typically pasted text below the screen) has no
+/// measured height yet, so it is put at the top of the list instead. The list was already
+/// painted this frame, so the editor is notified for the next frame to show the new scroll.
+fn reveal_caret(editor: &Entity<Editor>, window: &mut Window, cx: &mut App) {
+    let (version, head, revealed) = {
+        let editor = editor.read(cx);
+        (
+            editor.buffer().version(),
+            editor.selection.selection.head,
+            editor.blocks.revealed,
+        )
+    };
+    if revealed == Some((version, head)) {
+        return;
+    }
+    if let Some(index) = item_index_for_offset(&editor.read(cx).blocks.items, head) {
+        let list = editor.read(cx).blocks.list.clone();
+        let before = list.logical_scroll_top();
+        let laid_out = list.bounds_for_item(index).is_some();
+        if laid_out || index < before.item_ix {
+            list.scroll_to_reveal_item(index);
+        } else {
+            list.scroll_to(ListOffset {
+                item_ix: index,
+                offset_in_item: px(0.),
+            });
+        }
+        if list.logical_scroll_top() != before {
+            // The list has already been painted this frame, so paint again to show the scroll.
+            let entity = editor.entity_id();
+            window.on_next_frame(move |_window, cx| cx.notify(entity));
+        }
+    }
+    editor.update(cx, |editor, _cx| {
+        editor.blocks.revealed = Some((version, head));
+    });
 }
 
 /// Top-level md_core blocks for `text`. Pure function, unit-tested in 3.5. 3.5 may cache the
@@ -170,6 +225,8 @@ impl gpui::Element for BlockHost {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         sync(&self.editor, cx);
+        // Each block's TextElement writes its layout during paint, so this frame's map starts empty.
+        self.editor.update(cx, |editor, _cx| editor.layouts.clear());
         let state = self.editor.read(cx).blocks.list.clone();
         let layouts = self.editor.read(cx).blocks.layouts.clone();
         // The items are laid out after this point in the same frame, so the counter then holds
@@ -213,19 +270,26 @@ impl gpui::Element for BlockHost {
         cx: &mut App,
     ) -> Self::PrepaintState {
         request_layout.0.prepaint(window, cx);
+        // After the visible items are laid out, so the caret block's height is known.
+        reveal_caret(&self.editor, window, cx);
     }
 
     fn paint(
         &mut self,
         _id: Option<&GlobalElementId>,
         _inspector_id: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         _prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
         request_layout.0.paint(window, cx);
+        // Mouse and input handlers are registered once for the whole list, not per block, so
+        // each mouse event and each IME call is handled once.
+        cursor::register_mouse_handlers(&self.editor, bounds, window);
+        let focus = self.editor.read(cx).focus_handle.clone();
+        ime::register_input_handler(&self.editor, &focus, bounds, window, cx);
         // Debug aid for the 3.5 acceptance counter: `MD_EDITOR_LAYOUT_LOG=1` prints, for each
         // frame, the number of items laid out and the total item count.
         if std::env::var_os("MD_EDITOR_LAYOUT_LOG").is_some() {
@@ -307,6 +371,31 @@ mod tests {
         let items = item_ranges(&text, &blocks_for(&text));
         assert_eq!(items.len(), 10_000 + 1, "plus the final empty line");
         assert_eq!(item_lines(&text), whole_text_lines(&text));
+    }
+
+    #[test]
+    fn item_index_for_offset_finds_the_item_holding_a_caret() {
+        // "# T" 0..3, a blank line at 4, "para" 5..9, text ends with a newline at 9, so a final
+        // empty item sits at 10.
+        let items = item_ranges("# T\n\npara\n", &blocks_for("# T\n\npara\n"));
+        assert_eq!(item_index_for_offset(&items, 0), Some(0));
+        assert_eq!(
+            item_index_for_offset(&items, 3),
+            Some(0),
+            "the line break of the heading"
+        );
+        assert_eq!(item_index_for_offset(&items, 5), Some(2));
+        assert_eq!(
+            item_index_for_offset(&items, 9),
+            Some(2),
+            "end of the paragraph"
+        );
+        assert_eq!(
+            item_index_for_offset(&items, 10),
+            Some(3),
+            "the empty last line"
+        );
+        assert_eq!(item_index_for_offset(&items, 11), None);
     }
 
     #[test]

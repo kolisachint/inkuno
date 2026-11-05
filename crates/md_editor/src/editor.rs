@@ -12,7 +12,7 @@ use gpui::{div, prelude::*, App, Context, FocusHandle, Focusable, IntoElement, R
 use md_core::buffer::Buffer;
 
 use crate::block_list::BlockListState;
-use crate::element::LayoutSnapshot;
+use crate::element::Layouts;
 use crate::ime::ImeState;
 use crate::selection::SelectionState;
 
@@ -30,9 +30,9 @@ pub struct Editor {
     pub(crate) focus_handle: FocusHandle,
     /// Selection and caret state (task 3.2). Owns `goal_column`, which 3.3 uses.
     pub(crate) selection: SelectionState,
-    /// Geometry of the last painted text (task 3.1 writes it during paint). Read by hit
-    /// testing (3.2) and by IME bounds (3.4).
-    pub(crate) layout: LayoutSnapshot,
+    /// Geometry of every visible block in the last frame (each block's `TextElement` writes its
+    /// own entry during paint). Read by hit testing (3.2) and by IME bounds (3.4).
+    pub(crate) layouts: Layouts,
     /// IME marked-text state (task 3.4).
     pub(crate) ime: ImeState,
     /// Block list state for the virtualized list (task 3.5).
@@ -46,7 +46,7 @@ impl Editor {
             buffer: Buffer::new(text),
             focus_handle: cx.focus_handle(),
             selection: SelectionState::default(),
-            layout: LayoutSnapshot::default(),
+            layouts: Layouts::default(),
             ime: ImeState::default(),
             blocks: BlockListState::default(),
         }

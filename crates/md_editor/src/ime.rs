@@ -16,6 +16,8 @@ use gpui::{
     Pixels, TextRun, UTF16Selection, UnderlineStyle, Window,
 };
 
+use md_core::display_map::DisplayMap;
+
 use crate::editor::Editor;
 use crate::selection::Selection;
 
@@ -148,8 +150,8 @@ pub fn decorate_runs(
 
 /// Register `editor` as the window's text input handler for `focus`.
 ///
-/// Called by `TextElement::paint` during paint (3.1 makes the call). The platform then calls the
-/// `EntityInputHandler` methods below for the focused editor.
+/// Called once per frame by `BlockHost::paint` (3.5), for the whole block list. The platform
+/// then calls the `EntityInputHandler` methods below for the focused editor.
 pub fn register_input_handler(
     editor: &Entity<Editor>,
     focus: &FocusHandle,
@@ -172,14 +174,6 @@ impl Editor {
                 .clone()
                 .unwrap_or_else(|| self.selection.selection.range()),
         }
-    }
-
-    /// The laid-out line that contains byte `offset`, if any.
-    fn layout_line_for_offset(&self, offset: usize) -> Option<&crate::element::LineLayout> {
-        self.layout
-            .lines
-            .iter()
-            .find(|line| line.source.start <= offset && offset <= line.source.end)
     }
 }
 
@@ -266,8 +260,10 @@ impl EntityInputHandler for Editor {
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         // Layout origins are already in window coordinates, so the element bounds are not needed.
+        // The range is measured on the line that holds its start, in the block that holds it.
         let range = utf16_to_utf8_range(&self.text(), range_utf16);
-        let line = self.layout_line_for_offset(range.start)?;
+        let block = self.layouts.block_for_offset(range.start)?;
+        let line = block.line_for_offset(range.start)?;
         let start = range.start.clamp(line.source.start, line.source.end) - line.source.start;
         let end = range.end.clamp(line.source.start, line.source.end) - line.source.start;
         let top = line.origin.y;
@@ -275,7 +271,7 @@ impl EntityInputHandler for Editor {
             point(line.origin.x + line.shaped.x_for_index(start), top),
             point(
                 line.origin.x + line.shaped.x_for_index(end),
-                top + self.layout.line_height,
+                top + block.snapshot.line_height,
             ),
         ))
     }
@@ -286,13 +282,8 @@ impl EntityInputHandler for Editor {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
-        let line_height = self.layout.line_height;
-        let line =
-            self.layout.lines.iter().find(|line| {
-                position.y >= line.origin.y && position.y < line.origin.y + line_height
-            })?;
-        let column = line.shaped.closest_index_for_x(position.x - line.origin.x);
-        let offset = line.source.start + column.min(line.source.len());
+        let display = DisplayMap::new(self.buffer.len(), vec![]);
+        let offset = self.layouts.offset_at(&display, position);
         Some(utf8_to_utf16_range(&self.text(), 0..offset).end)
     }
 }

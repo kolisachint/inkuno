@@ -13,7 +13,9 @@ use gpui::{
     Window,
 };
 
-use crate::cursor;
+use md_core::display_map::DisplayMap;
+
+use crate::cursor::{self, hit_test};
 use crate::editor::Editor;
 use crate::ime;
 use crate::selection;
@@ -47,7 +49,7 @@ pub struct LineLayout {
     pub origin: Point<Pixels>,
 }
 
-/// Geometry of the last painted text, held by `Editor` (field `layout`).
+/// Geometry of one painted block: the lines of one `TextElement`.
 #[derive(Default, Clone)]
 pub struct LayoutSnapshot {
     pub lines: Vec<LineLayout>,
@@ -57,16 +59,133 @@ pub struct LayoutSnapshot {
     pub line_height: Pixels,
 }
 
+/// One painted block. `source` is the block's byte range in the buffer (its trailing newline
+/// excluded), the same range its `TextElement` draws.
+#[derive(Clone)]
+pub struct BlockLayout {
+    pub source: Range<usize>,
+    pub snapshot: LayoutSnapshot,
+}
+
+impl BlockLayout {
+    /// The line that contains byte `offset`. A line break belongs to the line before it, so the
+    /// offset at the end of a line is found on that line.
+    pub fn line_for_offset(&self, offset: usize) -> Option<&LineLayout> {
+        self.snapshot
+            .lines
+            .iter()
+            .find(|line| line.source.start <= offset && offset <= line.source.end)
+    }
+}
+
+/// Layouts of the visible blocks from the most recent frame, held by `Editor` (field
+/// `layouts`), in buffer order.
+///
+/// Every block is painted by its own `TextElement`. `TextElement::paint` inserts its block
+/// here, and `BlockHost` clears the map at the start of each frame (3.5). A block scrolled out
+/// of view has no entry, so offsets there have no position until they are scrolled back in.
+/// Points and offsets are mapped through this map, never through one block's layout.
+#[derive(Default, Clone)]
+pub struct Layouts {
+    blocks: Vec<BlockLayout>,
+}
+
+impl Layouts {
+    /// Forget every block. Called at the start of each frame.
+    pub fn clear(&mut self) {
+        self.blocks.clear();
+    }
+
+    /// Record a painted block. Blocks are kept in buffer order whatever the paint order is. A
+    /// block painted twice in one frame replaces its earlier entry.
+    pub fn insert(&mut self, source: Range<usize>, snapshot: LayoutSnapshot) {
+        let index = self
+            .blocks
+            .partition_point(|block| block.source.start < source.start);
+        let block = BlockLayout { source, snapshot };
+        match self.blocks.get(index) {
+            Some(existing) if existing.source.start == block.source.start => {
+                self.blocks[index] = block;
+            }
+            _ => self.blocks.insert(index, block),
+        }
+    }
+
+    /// The visible block whose source contains byte `offset`, if the block is on screen.
+    pub fn block_for_offset(&self, offset: usize) -> Option<&BlockLayout> {
+        index_containing(&self.blocks, |block| block.source.clone(), offset)
+            .map(|index| &self.blocks[index])
+    }
+
+    /// The visible block under window-space height `y`. Above the first block or below the last
+    /// one this is that end block, and between two blocks it is the nearer one.
+    pub fn block_for_y(&self, y: Pixels) -> Option<&BlockLayout> {
+        index_for_y(&self.blocks, f32::from(y)).map(|index| &self.blocks[index])
+    }
+
+    /// The source offset under `point` (window coordinates), found in the block under the
+    /// point, or in the nearest visible block when the point is between blocks or past them.
+    /// Returns 0 when no block is visible.
+    pub fn offset_at(&self, display: &DisplayMap, point: Point<Pixels>) -> usize {
+        match self.block_for_y(point.y) {
+            Some(block) => hit_test(&block.snapshot, display, point),
+            None => 0,
+        }
+    }
+}
+
+/// Index of the item whose range contains `offset`. `items` must be in buffer order, with
+/// ranges that do not overlap. An offset at the end of an item's range belongs to that item,
+/// since it is the position of the line break after it. Pure, unit-tested.
+pub(crate) fn index_containing<T>(
+    items: &[T],
+    range_of: impl Fn(&T) -> Range<usize>,
+    offset: usize,
+) -> Option<usize> {
+    let count = items.partition_point(|item| range_of(item).start <= offset);
+    let index = count.checked_sub(1)?;
+    (offset <= range_of(&items[index]).end).then_some(index)
+}
+
+/// Index of the block at height `y`, for blocks stacked in buffer order. Inside a block this is
+/// that block. Above the first block it is 0, below the last it is the last index, and between
+/// two blocks it is the nearer one. Pure, unit-tested.
+pub(crate) fn index_for_y(blocks: &[BlockLayout], y: f32) -> Option<usize> {
+    let top = |block: &BlockLayout| f32::from(block.snapshot.bounds.top());
+    let bottom = |block: &BlockLayout| f32::from(block.snapshot.bounds.bottom());
+    if blocks.is_empty() {
+        return None;
+    }
+    // The first block whose bottom is below `y`.
+    let after = blocks.partition_point(|block| bottom(block) <= y);
+    if after == blocks.len() {
+        return Some(blocks.len() - 1);
+    }
+    if top(&blocks[after]) <= y {
+        return Some(after);
+    }
+    if after == 0 {
+        return Some(0);
+    }
+    let previous = after - 1;
+    if y - bottom(&blocks[previous]) <= top(&blocks[after]) - y {
+        Some(previous)
+    } else {
+        Some(after)
+    }
+}
+
 /// Paints `source` (a byte range of the buffer) as plain text.
 ///
-/// Paint order, which 3.1 must follow because other tasks depend on it:
-/// 1. `selection::paint_selection`
+/// Each block (one list item, see `block_list.rs`) gets its own `TextElement`. Paint order
+/// within one block:
+/// 1. `selection::paint_selection`, for the part of the selection in this block
 /// 2. the text lines, each with `ime::decorate_runs` applied to its runs
-/// 3. `cursor::paint_caret`
-/// 4. `cursor::register_mouse_handlers`
-/// 5. `ime::register_input_handler`
+/// 3. `cursor::paint_caret`, which draws only when the caret is in this block
 ///
-/// After the text is painted, the element writes the new `LayoutSnapshot` into the editor.
+/// Mouse handlers and the input handler are not registered here. `BlockHost` registers them
+/// once for the whole list. After the text is painted, the element inserts this block's
+/// `LayoutSnapshot` into `Editor::layouts`.
 pub struct TextElement {
     editor: Entity<Editor>,
     /// Byte range of the buffer to draw.
@@ -177,7 +296,7 @@ impl gpui::Element for TextElement {
         &mut self,
         _id: Option<&GlobalElementId>,
         _inspector_id: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
+        _bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
         window: &mut Window,
@@ -188,7 +307,7 @@ impl gpui::Element for TextElement {
         let focus = editor.read(cx).focus_handle.clone();
         let focused = focus.is_focused(window);
 
-        // 1. Selection behind the text.
+        // 1. Selection behind the text, for the part of it that lies in this block.
         selection::paint_selection(editor.read(cx), &snapshot, window);
 
         // 2. The text, one line at a time.
@@ -205,19 +324,123 @@ impl gpui::Element for TextElement {
             }
         }
 
-        // 3 to 5. Caret, mouse handlers and the input handler.
+        // 3. The caret, only when it is in this block.
         cursor::paint_caret(editor.read(cx), &snapshot, focused, window);
-        cursor::register_mouse_handlers(&editor, &snapshot, bounds, window);
-        ime::register_input_handler(&editor, &focus, bounds, window, cx);
 
-        // Keep the geometry for hit testing and IME bounds.
-        editor.update(cx, |editor, _cx| editor.layout = snapshot);
+        // Keep this block's geometry for hit testing, caret reveal and IME bounds.
+        let source = self.source.clone();
+        editor.update(cx, |editor, _cx| editor.layouts.insert(source, snapshot));
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::line_ranges;
+    use super::*;
+    use gpui::{px, size, Bounds};
+
+    /// A block with no shaped lines whose box is `top..top + height` in window coordinates.
+    /// The mapping helpers only read `source` and `bounds`.
+    fn block(source: Range<usize>, top: f32, height: f32) -> BlockLayout {
+        BlockLayout {
+            source,
+            snapshot: LayoutSnapshot {
+                bounds: Bounds::new(point(px(0.), px(top)), size(px(100.), px(height))),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn index_containing_finds_the_item_for_each_offset() {
+        // "ab" 0..2, a blank line 3..3, "cd" 4..6, with the line breaks at 2, 3 and 6.
+        let items = [0..2, 3..3, 4..6];
+        assert_eq!(index_containing(&items, |r| r.clone(), 0), Some(0));
+        assert_eq!(
+            index_containing(&items, |r| r.clone(), 2),
+            Some(0),
+            "its line break"
+        );
+        assert_eq!(
+            index_containing(&items, |r| r.clone(), 3),
+            Some(1),
+            "blank line"
+        );
+        assert_eq!(index_containing(&items, |r| r.clone(), 4), Some(2));
+        assert_eq!(
+            index_containing(&items, |r| r.clone(), 6),
+            Some(2),
+            "end of text"
+        );
+        assert_eq!(
+            index_containing(&items, |r| r.clone(), 7),
+            None,
+            "past the end"
+        );
+    }
+
+    #[test]
+    fn index_containing_skips_offscreen_items() {
+        // Only the items 0..2 and 6..8 are visible; offsets in the hidden 3..5 have no item.
+        let visible = [(0..2, 0), (6..8, 3)];
+        let range_of = |item: &(Range<usize>, usize)| item.0.clone();
+        assert_eq!(index_containing(&visible, range_of, 1), Some(0));
+        assert_eq!(index_containing(&visible, range_of, 4), None);
+        assert_eq!(index_containing(&visible, range_of, 7), Some(1));
+        assert_eq!(
+            index_containing::<(Range<usize>, usize)>(&[], range_of, 0),
+            None
+        );
+    }
+
+    #[test]
+    fn index_for_y_inside_above_below_and_between_blocks() {
+        // Blocks at 0..20, 20..60 and 60..80 (stacked, as the list lays them out).
+        let blocks = [
+            block(0..2, 0., 20.),
+            block(3..5, 20., 40.),
+            block(6..9, 60., 20.),
+        ];
+        assert_eq!(index_for_y(&blocks, 0.), Some(0));
+        assert_eq!(index_for_y(&blocks, 19.9), Some(0));
+        assert_eq!(index_for_y(&blocks, 20.), Some(1));
+        assert_eq!(index_for_y(&blocks, 79.), Some(2));
+        // Above the first block and below the last clamp to the end blocks.
+        assert_eq!(index_for_y(&blocks, -50.), Some(0));
+        assert_eq!(index_for_y(&blocks, 500.), Some(2));
+        assert_eq!(index_for_y(&[], 10.), None);
+    }
+
+    #[test]
+    fn index_for_y_between_blocks_takes_the_nearer_one() {
+        // A 10 px gap between 0..20 and 30..50.
+        let blocks = [block(0..2, 0., 20.), block(3..5, 30., 20.)];
+        assert_eq!(index_for_y(&blocks, 22.), Some(0));
+        assert_eq!(
+            index_for_y(&blocks, 27.),
+            Some(1),
+            "closer to the second block"
+        );
+        assert_eq!(
+            index_for_y(&blocks, 25.),
+            Some(0),
+            "exactly halfway goes up"
+        );
+    }
+
+    #[test]
+    fn layouts_insert_keeps_buffer_order_and_replaces_duplicates() {
+        let mut layouts = Layouts::default();
+        layouts.insert(4..6, LayoutSnapshot::default());
+        layouts.insert(0..2, LayoutSnapshot::default());
+        layouts.insert(2..4, LayoutSnapshot::default());
+        let starts: Vec<usize> = layouts.blocks.iter().map(|b| b.source.start).collect();
+        assert_eq!(starts, vec![0, 2, 4]);
+        layouts.insert(2..9, LayoutSnapshot::default());
+        assert_eq!(layouts.blocks.len(), 3, "same start replaces the entry");
+        assert_eq!(layouts.blocks[1].source, 2..9);
+        layouts.clear();
+        assert!(layouts.block_for_offset(0).is_none());
+    }
 
     #[test]
     fn line_ranges_of_small_inputs() {
