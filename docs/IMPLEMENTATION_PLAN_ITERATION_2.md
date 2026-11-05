@@ -9,6 +9,7 @@ Iteration 1 (P0 to P3) is in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) 
 
 - [Starting point](#starting-point)
 - [Suggested order](#suggested-order)
+- [Iteration 2 progress](#iteration-2-progress)
 - [Open items carried over](#open-items-carried-over)
 - [Dependency graph](#dependency-graph)
 - [How this plan is executed](#how-this-plan-is-executed)
@@ -39,10 +40,10 @@ What iteration 1 leaves in the repo, and what iteration 2 can reuse. Task IDs re
 | Queue | `crates/md_render/src/queue.rs` | Async request queue; `DEFAULT_MERMAID_DEBOUNCE` = 300 ms (6.2, 7.3 core) | 7.3 UI (on hold) |
 | Rasterization | `crates/md_render/src/raster.rs` | resvg SVG to pixels (6.4). The screenshot with bundled fonts waits on 6.3 (on hold) | 6.6 (on hold) |
 | Fallback | `crates/md_render/src/fallback.rs` | Last-good fallback for diagram renders (7.3 core) | 7.3 UI (on hold) |
-| Vault tree | `crates/workspace/src/tree.rs` | Tree model, `Expansion`, `visible_rows` (9.1 core) | 9.1 sidebar UI |
-| Search | `crates/workspace/src/search.rs` | Full-text search core, `MatchSpan`; skips unreadable files (9.4 core) | 9.4 search panel UI |
-| File ops | `crates/workspace/src/ops.rs` | Create, rename, delete (9.3, DONE) | 9.5 |
-| Watcher | `crates/workspace/src/watcher.rs` | `VaultWatcher` and `plan_buffer_updates` (9.2 core); gitignored notes hidden | 9.2 app side |
+| Vault tree | `crates/workspace/src/tree.rs` | Tree model, `Expansion`, `visible_rows` (9.1 core) | 9.1 sidebar UI (done, `bc8fe65`) |
+| Search | `crates/workspace/src/search.rs` | Full-text search core, `MatchSpan`; skips unreadable files (9.4 core) | 9.4 search panel UI (done, `dec521b`) |
+| File ops | `crates/workspace/src/ops.rs` | Create, rename, delete (9.3, DONE) | 9.3 UI (done, `579d05b`) |
+| Watcher | `crates/workspace/src/watcher.rs` | `VaultWatcher` and `plan_buffer_updates` (9.2 core); gitignored notes hidden | 9.2 app side (done, `cb04e55`) |
 | Editor | `crates/md_editor/src/` | Iteration 1 editor: `element.rs`, `selection.rs`, `cursor.rs`, `keys.rs`, `clipboard.rs`, `ime.rs`, `block_list.rs`, `editor.rs` | 4.x, 8.x |
 | Display map and parsing | `crates/md_core/src/` | `display_map.rs` (2.6), `block.rs` and `parse.rs` (2.3, 2.4), `inline.rs` (2.5), `input_rules.rs` (2.7) | 4.1 to 4.5, 5.3, 8.x |
 
@@ -73,13 +74,27 @@ Held until the owner confirms: P6 math (6.1, 6.3, 6.5, 6.6) and P7 Mermaid. See 
 
 ---
 
+## Iteration 2 progress
+
+Status as of the iteration 2 branch, all verified on Linux (Xvfb). Screenshots are in `docs/screenshots/`. AGENTS.md has the same status with more detail.
+
+- **P4 live preview:** 4.1 basic blocks (`4.1.png`), 4.2 lists and task items (`4.2.png`), 4.3 tables and images (`4.3.png`), 4.4 inline reveal (`4.4.png`, `4.4-caret-in-bold.png`), 4.5 input rules (`4.5.png`). Done.
+- **P5 code fences:** 5.1 and 5.2 done (tests). 5.3 code fence element and fence reveal done (`5.3.png`, `5.3-caret-inside.png`).
+- **P8 modes:** 8.1 Source Mode (`8.1.png`), 8.2 caret and scroll preservation (tests; `8.1.png`), 8.3 Focus Mode (`8.3.png`, `8.3-moved.png`), 8.4 Typewriter Mode (`8.4.png`). 8.5 mode keys in progress: the keymap table is not on the branch yet.
+- **P9 workspace:** 9.1 sidebar (`9.1.png`), 9.2 watcher updates applied in the app (`9.2.png`), 9.3 create, rename and delete UI (`9.3-ui.png`), 9.4 search panel (`9.4.png`), 9.5 image paste (`9.5.png`). Done.
+- **Extra, not a plan task:** soft word wrap (`wrap.png`, `wrap-selection.png`). Up and Down move by visual row with an x goal.
+- **Not started:** P10 theming (10.1 to 10.4).
+- **Still on hold, not touched:** 6.1, 6.3, 6.5, 6.6, 7.1, 7.2 and the 7.3 UI part.
+
+---
+
 ## Open items carried over
 
 From AGENTS.md, the spike notes and the Linux P3 gate (`docs/P3-gate-linux.md`). Items that belong to held tasks are kept here so they are not lost.
 
 - **Undo is per keystroke.** Typing is not grouped into transactions. Group typing runs into one transaction each (2.1, 3.7).
 - **Backspace, Delete and word boundaries are char-based, not grapheme-based** (3.7).
-- **Up and Down use a byte goal column.** It drifts visually in proportional fonts. Use an x-position goal instead (3.3).
+- **Resolved: Up and Down use an x-position goal.** Up and Down move by visual row with an x goal (`d17dfd6`, soft word wrap). The old byte goal column is gone (3.3).
 - **A caret revealed far below the viewport is scrolled to the top, not the bottom.** The block's height is unmeasured until the list lays it out, so this needs a second frame.
 - **Drag autoscroll is implemented but unverified** (`scroll_by` in the block list).
 - **IME `bounds_for_range`, `character_index_for_point` and `text_length_utf16` are unverified** (macOS only; AGENTS blocker 2b).
@@ -90,9 +105,11 @@ From AGENTS.md, the spike notes and the Linux P3 gate (`docs/P3-gate-linux.md`).
 - **MathJax v4 version and re-verification** (DESIGN §16 item 5; 6.3). The exact v4 version is still to be chosen. The S1 prototype ran v3.2.2 only. The v4 call that replaces `tex2svgPromise` is confirmed in 6.3. Held.
 - **Mermaid host approach** is still open: hidden WKWebView or offscreen NSWindow (DESIGN §16 item 4). Held.
 - **Screenshot with bundled fonts** (6.4) waits on 6.3. Held.
-- **Mode key bindings** (DESIGN §16 item 1). Proposals are Cmd+/, F8, F9; undecided. Task 8.5 keymap. Save is `cmd-s` on macOS and `ctrl-s` on Linux (see 3.6); keep both in the 8.5 keymap.
-- **Sidebar and search panel UI** (9.1, 9.4) are not started. Watcher updates must be applied in the app (9.2); the 1 s latency is not asserted in tests.
-- **Image paste** (9.5) is not started.
+- **Mode key bindings** (DESIGN §16 item 1). Proposals are Cmd+/, F8, F9; undecided. Task 8.5 keymap. Save is `cmd-s` on macOS and `ctrl-s` on Linux (see 3.6); keep both in the 8.5 keymap. Still open: 8.5 is in progress and `crates/app/src/keymap.rs` is not on the branch yet.
+- **Resolved: sidebar and search panel UI** (9.1, 9.4) are done (`bc8fe65`, `dec521b`).
+- **Resolved: watcher updates are applied in the app** (9.2, `cb04e55`). The 1 s latency was checked by hand on Xvfb, not asserted in tests.
+- **Resolved: image paste** (9.5, `2ca53b7`).
+- **Iteration 2 open items from the 8.x and 9.x work** (sidebar delete is permanent, IME bounds across wrap rows, double layout per frame, table cells without inline markdown, `%20` paths, remote images, reload undo step, search offset on a dirty note, Typewriter far-jump blank frame) are listed in AGENTS.md.
 - **Settings storage** location and format (DESIGN §16 item 9; 10.3) is undecided.
 - **Performance targets** (DESIGN §12) need measuring in 10.4; the results go to `docs/spikes/perf-pass.md`, which does not exist yet.
 - **Rope backend** (DESIGN §16 item 10). md_core uses `ropey` behind `Buffer`. Undecided; not phase-specific.

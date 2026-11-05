@@ -7,7 +7,8 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 ## Current iteration
 
 - **Iteration 1 = P0 to P3:** a plain-markdown editor. It opens, edits, selects, navigates, takes IME input, scrolls and saves a `.md` file, on macOS and Linux, released as nightly binaries.
-- **Iteration 1 is done apart from the macOS gate run** (Linux gate passed, see `docs/P3-gate-linux.md`). The next session starts from `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`, in its suggested order.
+- **Iteration 1 is done apart from the macOS gate run** (Linux gate passed, see `docs/P3-gate-linux.md`).
+- **Iteration 2 (P4 to P10) is in progress.** Done on Linux: P4 live preview (4.1 to 4.5), P5 code fences (5.1 to 5.3), P8 modes (8.1 to 8.4), P9 workspace (9.1 to 9.5), and soft word wrap. 8.5 (mode keys) is in progress. Next: P10 theming (10.1 to 10.4). P6 and P7 stay on hold. The plan is `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`.
 
 ## How work is done here
 
@@ -45,16 +46,29 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 
 Iteration 1 is complete on Linux (gate passed). The macOS gate run (screenshot, IME composition) is still pending and needs a Mac: blockers 1 and 2(b).
 
-### Iteration 2 (P4 to P10): work already in the repo
+### Iteration 2 (P4 to P10)
 
-These pieces exist ahead of their phases. Treat them as reusable starting points, see the "Starting point" section of the iteration 2 plan.
+Screenshots are in `docs/screenshots/`. All rows are verified on Linux (Xvfb) unless noted.
 
-- P4 to P5: 5.1 and 5.2 done (`md_render::highlight`, `lang`). 5.3 not started.
-- P6, ON HOLD: 6.2 done (`cache`, `queue`, render traits); 6.4 core done (`md_render::raster`). 6.1, 6.3, 6.5, 6.6 are on hold and must not be touched.
-- P7, ON HOLD: 7.3 core done (`queue` debounce 300 ms, `fallback` last-good). 7.1, 7.2 and the 7.3 UI part are on hold.
-- P8 modes: not started.
-- P9 workspace: 9.3 done (`ops`). 9.1 and 9.4 core done (`tree`, `search`; sidebar and search panel UI not started). 9.2 core done (`watcher::VaultWatcher`, `plan_buffer_updates`; the app must apply updates). 9.5 not started.
-- P10 theming: not started.
+| Area | State | Screenshots |
+|------|-------|-------------|
+| P4 live preview | 4.1 to 4.5 done: styled basic blocks, lists and task items, read-only tables and images, inline reveal, input rules. | `4.1.png`, `4.2.png`, `4.3.png`, `4.4.png`, `4.4-caret-in-bold.png`, `4.5.png` |
+| P5 code fences | 5.1 to 5.3 done (`md_render::highlight`, `lang`, fence element with fence reveal). | `5.3.png`, `5.3-caret-inside.png` |
+| P6 render host, ON HOLD | 6.2 done (`cache`, `queue`, render traits); 6.4 core done (`md_render::raster`). 6.1, 6.3, 6.5, 6.6 are on hold and must not be touched. | none |
+| P7 Mermaid, ON HOLD | 7.3 core done (`queue` debounce 300 ms, `fallback` last-good). 7.1, 7.2 and the 7.3 UI part are on hold. | none |
+| P8 modes | 8.1 Source Mode, 8.2 caret and scroll preservation, 8.3 Focus Mode, 8.4 Typewriter Mode done. 8.5 in progress (see below). | `8.1.png` (also 8.2), `8.3.png`, `8.3-moved.png`, `8.4.png` |
+| Soft word wrap | Done (not a plan task). Up and Down move by visual row with an x goal. | `wrap.png`, `wrap-selection.png` |
+| P9 workspace | 9.1 sidebar, 9.2 watcher applied in the app, 9.3 create, rename and delete UI, 9.4 search panel, 9.5 image paste all done. | `9.1.png`, `9.2.png`, `9.3-ui.png`, `9.4.png`, `9.5.png` |
+| P10 theming | Not started. | none |
+
+8.5 (mode keys) status: the plan is Source on Ctrl+/ (Linux) or Cmd+/ (macOS), Focus on F8, Typewriter on F9, all in one table in `crates/app/src/keymap.rs`. That file is not on the branch yet, and the three toggles have actions but no keys. Until 8.5 lands, start a mode with `NOTEAPP_SOURCE=1`, `NOTEAPP_FOCUS=1` or `NOTEAPP_TYPEWRITER=1`. Focus and Typewriter can be on together, and both work in Source Mode.
+
+### Linux environment notes
+
+- **Body font.** On Linux the body text uses "Liberation Sans" (`BODY_FAMILY` in `md_editor/src/element.rs`). Install `fonts-liberation`. GPUI maps the system font to IBM Plex Sans, which is usually missing, and then there are no bold or italic faces.
+- **X auth errors.** `xvfb-run` can give X auth errors for `import` and `xdotool`. Either set `XAUTHORITY` to the auth file that `xvfb-run` created, or start `Xvfb :N -ac -nolisten tcp -screen 0 1280x800x24 &` directly and use `DISPLAY=:N`.
+- **Shared target directory.** When agents share one `CARGO_TARGET_DIR`, another build overwrites `target/debug/app`. Build with `cargo build -p app`, copy the binary at once, and keep only one copy, because disk is limited.
+- **Math input rule is off.** `$$` is disabled in the editor by `HELD_RULES` in `md_editor/src/input_rules.rs` (`math_block`), while math is on hold. Keep it off until the owner confirms.
 
 ## Blockers and open items
 
@@ -67,8 +81,21 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 3. **macOS signing.** The `nightly` release publishes macOS and Linux builds (macOS compiles in CI since the 1.98.1 toolchain bump). Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
 
+### Iteration 2 open items (no blocker)
+
+- **8.5 keymap not on the branch.** `crates/app/src/keymap.rs` does not exist yet, and the mode toggles have no keys.
+- **Delete in the sidebar is permanent.** There is no trash.
+- **IME bounds across a wrap row** cover only the first row.
+- **Each block is laid out twice per frame** (measure and prepaint). Profile in 10.4.
+- **Table cells do not render inline markdown.**
+- **Image paths with `%20` are not decoded.**
+- **Remote images are not loaded.**
+- **A reload after an external change is one undo step.**
+- **Search results on a dirty open note may be offset.**
+- **Typewriter Mode caret far-jump** may show one blank frame.
+
 ## Next tasks to dispatch (in order)
 
 1. **Iteration 1.** Done apart from the macOS gate run (blockers 1 and 2b). Nothing to dispatch here until a Mac run is recorded.
-2. **Iteration 2.** The next session starts from `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`, in its suggested order: P4 live preview (4.1 to 4.5), then P5.3, then P8 modes, P9 workspace UI, and P10 theming.
+2. **Iteration 2.** Finish 8.5 (one keymap table, see the status section). Then P10 theming (10.1 to 10.4). 10.4 records its benchmark results in `docs/spikes/perf-pass.md`.
 3. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.
