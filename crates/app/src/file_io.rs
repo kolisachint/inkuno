@@ -214,6 +214,16 @@ impl Document {
         cx.notify();
     }
 
+    /// Follows a rename of the open file to `path` (task 9.3). The text, the saved version and
+    /// the known hash do not change, so the watcher's events for the rename are ignored.
+    pub(crate) fn moved_to(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        let base_dir = note_folder(Some(&path));
+        self.editor
+            .update(cx, |editor, cx| editor.set_base_dir(base_dir, cx));
+        self.path = Some(path);
+        cx.notify();
+    }
+
     /// Banner "Reload": discards the unsaved edits and loads the file from disk.
     fn reload_from_disk(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self.path.clone() else {

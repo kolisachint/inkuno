@@ -23,6 +23,7 @@ use gpui::{
 use workspace::search::{search_with_report, SearchHit, SearchOptions};
 use workspace::tree::Vault;
 
+use crate::text_input;
 use crate::workspace_view::{WorkspaceView, SIDEBAR_WIDTH};
 
 actions!(search_panel, [ToggleSearch]);
@@ -250,40 +251,11 @@ pub fn render_panel(
     has_vault: bool,
     cx: &mut Context<WorkspaceView>,
 ) -> impl IntoElement {
-    let caret = div().w(px(1.)).h(px(14.)).bg(rgb(0x1f2937));
-    let input = div()
-        .id("search-input")
-        .h(px(28.))
-        .px_2()
-        .flex()
-        .flex_row()
-        .items_center()
-        .gap_px()
-        .overflow_hidden()
-        .bg(gpui::white())
-        .border_1()
-        .border_color(rgb(0xd1d5db))
-        .rounded_sm()
-        .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+    let input = text_input::field("search-input", &panel.query, "Search notes", 28.).on_click(
+        cx.listener(|this, _: &ClickEvent, window, cx| {
             window.focus(&this.search.focus, cx);
-        }));
-    let input = if panel.query.is_empty() {
-        input.child(caret).child(
-            div()
-                .whitespace_nowrap()
-                .text_color(rgb(MUTED_TEXT))
-                .child("Search notes"),
-        )
-    } else {
-        input
-            .child(
-                div()
-                    .whitespace_nowrap()
-                    .text_color(rgb(0x1f2937))
-                    .child(panel.query.clone()),
-            )
-            .child(caret)
-    };
+        }),
+    );
 
     let rows = panel
         .hits
