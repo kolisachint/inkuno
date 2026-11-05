@@ -201,11 +201,6 @@ impl SearchPanel {
         }
     }
 
-    /// Reruns the search for the current query. Without a vault there are no results.
-    pub fn refresh(&mut self, vault: Option<&Vault>) {
-        self.refresh_with_buffer(vault, None);
-    }
-
     /// Reruns the search for the current query, scanning the open note's buffer
     /// text instead of its file when `buffer` holds that note's path and text.
     /// Pass the open note so its hits (and the caret offset a jump uses) stay

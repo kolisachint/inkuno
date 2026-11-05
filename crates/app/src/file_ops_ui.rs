@@ -175,7 +175,9 @@ impl WorkspaceView {
     }
 
     /// Reads the folder tree from disk again, and reruns the search when it is open.
-    pub(crate) fn refresh_tree(&mut self) {
+    /// The search scans the open note from its buffer (see
+    /// [`WorkspaceView::refresh_search`]), so hits stay correct while it has unsaved edits.
+    pub(crate) fn refresh_tree(&mut self, cx: &mut Context<Self>) {
         if let Some(sidebar) = self.sidebar.as_mut() {
             match sidebar.vault.tree() {
                 Ok(tree) => sidebar.tree = tree,
@@ -186,7 +188,7 @@ impl WorkspaceView {
             }
         }
         if self.search_open {
-            self.search.refresh(self.sidebar.as_ref().map(|s| &s.vault));
+            self.refresh_search(cx);
         }
     }
 
@@ -219,7 +221,7 @@ impl WorkspaceView {
         let created = sidebar.vault.create_note(&parent, &stem);
         match created {
             Ok(path) => {
-                self.refresh_tree();
+                self.refresh_tree(cx);
                 if self.open_note(path.clone(), window, cx) {
                     self.start_rename(path, stem, true, window, cx);
                 }
@@ -256,7 +258,7 @@ impl WorkspaceView {
         let created = sidebar.vault.create_folder(&parent, &name);
         match created {
             Ok(path) => {
-                self.refresh_tree();
+                self.refresh_tree(cx);
                 self.start_rename(path, name, false, window, cx);
             }
             Err(err) => eprintln!(
@@ -414,7 +416,7 @@ impl WorkspaceView {
     /// `from` takes its new path, so it stays open. Its text and known hash do not change, so
     /// the watcher's events for our own rename do not show a "changed on disk" banner.
     fn after_move(&mut self, from: &Path, to: &Path, cx: &mut Context<Self>) {
-        self.refresh_tree();
+        self.refresh_tree(cx);
         let Some(open) = self.document.read(cx).path.clone() else {
             return;
         };
@@ -445,7 +447,7 @@ impl WorkspaceView {
             eprintln!("noteapp: cannot move {} to Trash: {err}", path.display());
             return self.cancel_file_edit(window, cx);
         }
-        self.refresh_tree();
+        self.refresh_tree(cx);
         let open = self.document.read(cx).path.clone();
         if open.is_some_and(|open| open.starts_with(&path)) {
             self.show_note_after_delete(&path, window, cx);
