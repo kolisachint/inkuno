@@ -98,7 +98,10 @@ impl Editor {
     /// of the inserted text. This is the only path that changes the buffer from input code
     /// (keys, clipboard and IME all call it).
     pub fn replace_range(&mut self, range: Range<usize>, text: &str, cx: &mut Context<Self>) {
-        self.selection.selection = apply_replace(&mut self.buffer, range, text);
+        let before = self.buffer.version();
+        self.selection.selection = apply_replace(&mut self.buffer, range.clone(), text);
+        // The block list follows the edit by splitting only the blocks it touched (10.4).
+        self.blocks.note_edit(before, &self.buffer, range, text);
         self.selection.goal_column = None;
         self.selection.goal_x = None;
         cx.notify();
