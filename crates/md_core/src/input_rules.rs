@@ -661,6 +661,16 @@ mod tests {
         none("|x", Input::Backspace);
     }
 
+    /// The acceptance cases of task 4.5, written out in full.
+    #[test]
+    fn acceptance_cases_for_task_4_5() {
+        expect("#|", space(), "# |", "heading");
+        expect("- item|", Input::Enter, "- item\n- |", "list_continue");
+        expect("- |", Input::Enter, "|", "list_exit");
+        expect("1. a|", Input::Enter, "1. a\n2. |", "list_continue");
+        expect("## |x", Input::Backspace, "|x", "demote");
+    }
+
     #[test]
     fn caret_inside_multibyte_char_is_rejected() {
         assert!(apply_input_rule("é", 1, &Input::Enter).is_none());
