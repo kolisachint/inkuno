@@ -21,7 +21,6 @@ use gpui::{
 };
 use md_core::{Block, BlockKind};
 
-use crate::blocks::basic::{block_style, shows_inline_styles};
 use crate::cursor;
 use crate::editor::Editor;
 use crate::element::{index_containing, TextElement};
@@ -272,13 +271,7 @@ impl gpui::Element for BlockHost {
                     state.kinds.get(ix).copied().unwrap_or(BlockKind::Blank),
                 )
             };
-            TextElement::new(
-                editor.clone(),
-                range,
-                block_style(&kind),
-                shows_inline_styles(&kind),
-            )
-            .into_any_element()
+            TextElement::new(editor.clone(), range, kind).into_any_element()
         })
         .size_full()
         .into_any_element();

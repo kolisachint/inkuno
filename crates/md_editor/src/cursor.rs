@@ -4,7 +4,7 @@ use gpui::{
     black, fill, point, px, size, Bounds, Entity, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, Pixels, Point, Window,
 };
-use md_core::display_map::DisplayMap;
+use md_core::display_map::{Bias, DisplayMap};
 
 use crate::editor::Editor;
 use crate::element::{LayoutSnapshot, LineLayout};
@@ -19,8 +19,8 @@ const CARET_WIDTH: f32 = 2.0;
 /// (DESIGN §3.2). The line is the one under the point's y (clamped to the first or last
 /// line). Within it, the result is the character boundary nearest the point's x: a point in
 /// the left half of a character gives the offset before it, a point in the right half gives
-/// the offset after it. In Phase 3 the display map has no hidden ranges, so `clip` does
-/// nothing; Phase 4 relies on it.
+/// the offset after it. The boundaries are visible offsets, so they go back to source offsets
+/// through the line's hidden ranges (task 4.4). `clip` then snaps the result to a caret stop.
 pub fn hit_test(layout: &LayoutSnapshot, display: &DisplayMap, point: Point<Pixels>) -> usize {
     let Some(first) = layout.lines.first() else {
         return 0;
@@ -34,8 +34,9 @@ pub fn hit_test(layout: &LayoutSnapshot, display: &DisplayMap, point: Point<Pixe
     );
     let line = &layout.lines[index];
     let x = f32::from(point.x) - f32::from(line.origin.x);
+    // The boundaries are indices into the visible text, so they are converted to source offsets.
     let local = nearest_boundary(&boundary_positions(line), x);
-    display.clip(line.source.start + local)
+    display.clip(line.shaped_to_source(local, Bias::Left))
 }
 
 /// Index of the line under `y`, for lines of `line_height` starting at `top`, clamped to
@@ -97,7 +98,7 @@ pub fn paint_caret(editor: &Editor, layout: &LayoutSnapshot, focused: bool, wind
     let Some(line) = line_containing(layout, head) else {
         return;
     };
-    let x = line.shaped.x_for_index(head - line.source.start);
+    let x = line.x_for_source(head);
     let origin = point(line.origin.x + x, line.origin.y);
     let bounds = Bounds::new(origin, size(px(CARET_WIDTH), layout.line_height));
     window.paint_quad(fill(bounds, black()));
