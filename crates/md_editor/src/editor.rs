@@ -64,7 +64,7 @@ impl Editor {
             blocks: BlockListState::default(),
             base_dir: None,
             code_cache: CodeCache::default(),
-            modes: crate::modes::startup_modes(),
+            modes: crate::modes::Modes::default(),
             typewriter: TypewriterState::default(),
         }
     }

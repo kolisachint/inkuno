@@ -3,13 +3,11 @@
 //! 8.4 adds the skeleton: the [`Modes`] flags on `Editor`, the three toggle actions, and the
 //! Typewriter Mode implementation in [`typewriter`]. Source Mode (8.1, [`source`]) draws the
 //! buffer as plain source. Focus Mode (8.3, [`focus`]) dims blocks other than the caret's. Key
-//! bindings come in 8.5, so the toggles are not bound to any key here.
+//! The keys for the toggles are in the app's keymap table (`crates/app/src/keymap.rs`, task 8.5).
+//! Every mode starts off.
 //!
 //! Task 8.2: toggling Source Mode keeps the top visible block in view, see [`ScrollAnchor`]. The
 //! caret is a source offset, so it stays where it is.
-//!
-//! Debug aids until 8.5: `NOTEAPP_TYPEWRITER=1`, `NOTEAPP_SOURCE=1` and `NOTEAPP_FOCUS=1` start
-//! the editor with that mode on ([`startup_modes`]). Remove them when 8.5 binds the keys.
 
 pub mod focus;
 pub mod source;
@@ -31,17 +29,6 @@ pub struct Modes {
     pub source: bool,
     pub focus: bool,
     pub typewriter: bool,
-}
-
-/// The modes an editor starts with. All off, except Typewriter when `NOTEAPP_TYPEWRITER=1` and
-/// Source when `NOTEAPP_SOURCE=1`, Focus when `NOTEAPP_FOCUS=1`.
-pub fn startup_modes() -> Modes {
-    let on = |name: &str| std::env::var_os(name).is_some_and(|v| v.to_str() == Some("1"));
-    Modes {
-        source: on("NOTEAPP_SOURCE"),
-        typewriter: on("NOTEAPP_TYPEWRITER"),
-        focus: on("NOTEAPP_FOCUS"),
-    }
 }
 
 /// The block at the top of the list and how far it is scrolled past its top (task 8.2). `block`
