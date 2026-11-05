@@ -19,8 +19,9 @@ use gpui::{
     InspectorElementId, IntoElement, LayoutId, ListAlignment, ListOffset, ListState, Pixels, Style,
     Styled, Window,
 };
-use md_core::Block;
+use md_core::{Block, BlockKind};
 
+use crate::blocks::basic::{block_style, shows_inline_styles};
 use crate::cursor;
 use crate::editor::Editor;
 use crate::element::{index_containing, TextElement};
@@ -40,7 +41,9 @@ pub struct BlockListState {
     /// excluded. A final empty item is added when the text ends with a newline, to match
     /// `line_ranges`.
     items: Vec<Range<usize>>,
-    /// Hash of each item's text, so a re-sync only replaces the items that changed.
+    /// Block kind of each item, in the same order as `items` (task 4.1 draws items by kind).
+    kinds: Vec<BlockKind>,
+    /// Hash of each item's kind and text, so a re-sync only replaces the items that changed.
     hashes: Vec<u64>,
     /// Buffer version and caret offset at the last caret reveal. The list scrolls to the caret
     /// again only when one of them changes, so wheel scrolling away from the caret is kept.
@@ -54,6 +57,7 @@ impl Default for BlockListState {
             layouts: Rc::new(Cell::new(0)),
             version: None,
             items: Vec::new(),
+            kinds: Vec::new(),
             hashes: Vec::new(),
             revealed: None,
         }
@@ -139,6 +143,19 @@ fn item_ranges(text: &str, blocks: &[Block]) -> Vec<Range<usize>> {
     items
 }
 
+/// Block kind of each item, in the same order as [`item_ranges`]. The extra item for a trailing
+/// newline is `Blank`. Pure, unit-tested.
+fn item_kinds(text: &str, blocks: &[Block]) -> Vec<BlockKind> {
+    if blocks.is_empty() {
+        return vec![BlockKind::Blank];
+    }
+    let mut kinds: Vec<BlockKind> = blocks.iter().map(|block| block.kind).collect();
+    if text.ends_with('\n') {
+        kinds.push(BlockKind::Blank);
+    }
+    kinds
+}
+
 /// The old items to replace and how many new items to put in their place, given the item
 /// hashes before and after an edit. Items that match at the start and at the end are kept.
 fn changed_span(old: &[u64], new: &[u64]) -> (Range<usize>, usize) {
@@ -154,8 +171,11 @@ fn changed_span(old: &[u64], new: &[u64]) -> (Range<usize>, usize) {
     (prefix..old.len() - suffix, new.len() - suffix - prefix)
 }
 
-fn hash_text(text: &str) -> u64 {
+/// Hash of one item. The kind is part of it, because a change of neighbouring text can change
+/// the kind of a block whose own text is the same.
+fn hash_item(kind: &BlockKind, text: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
+    kind.hash(&mut hasher);
     text.hash(&mut hasher);
     hasher.finish()
 }
@@ -168,13 +188,20 @@ fn sync(editor: &Entity<Editor>, cx: &mut App) {
         return;
     }
     let text = editor.read(cx).text();
-    let items = item_ranges(&text, &blocks_for(&text));
-    let hashes: Vec<u64> = items.iter().map(|r| hash_text(&text[r.clone()])).collect();
+    let blocks = blocks_for(&text);
+    let items = item_ranges(&text, &blocks);
+    let kinds = item_kinds(&text, &blocks);
+    let hashes: Vec<u64> = items
+        .iter()
+        .zip(&kinds)
+        .map(|(range, kind)| hash_item(kind, &text[range.clone()]))
+        .collect();
     editor.update(cx, |editor, _cx| {
         let state = &mut editor.blocks;
         let (old, count) = changed_span(&state.hashes, &hashes);
         state.list.splice(old, count);
         state.items = items;
+        state.kinds = kinds;
         state.hashes = hashes;
         state.version = Some(version);
     });
@@ -238,14 +265,20 @@ impl gpui::Element for BlockHost {
         // The item closure cannot borrow the editor, so it holds its own clone of the entity.
         let mut child = list(state, move |ix, _window, cx| {
             counter.set(counter.get() + 1);
-            let range = editor
-                .read(cx)
-                .blocks
-                .items
-                .get(ix)
-                .cloned()
-                .unwrap_or(0..0);
-            TextElement::new(editor.clone(), range).into_any_element()
+            let (range, kind) = {
+                let state = &editor.read(cx).blocks;
+                (
+                    state.items.get(ix).cloned().unwrap_or(0..0),
+                    state.kinds.get(ix).copied().unwrap_or(BlockKind::Blank),
+                )
+            };
+            TextElement::new(
+                editor.clone(),
+                range,
+                block_style(&kind),
+                shows_inline_styles(&kind),
+            )
+            .into_any_element()
         })
         .size_full()
         .into_any_element();
@@ -396,6 +429,28 @@ mod tests {
             "the empty last line"
         );
         assert_eq!(item_index_for_offset(&items, 11), None);
+    }
+
+    #[test]
+    fn item_kinds_match_item_ranges_and_kinds() {
+        for text in [SAMPLE, "", "a", "a\n", "# H\n"] {
+            let blocks = blocks_for(text);
+            assert_eq!(
+                item_kinds(text, &blocks).len(),
+                item_ranges(text, &blocks).len(),
+                "text {text:?}"
+            );
+        }
+        let blocks = blocks_for("# Title\n\n---\n");
+        assert_eq!(
+            item_kinds("# Title\n\n---\n", &blocks),
+            vec![
+                BlockKind::Heading(1),
+                BlockKind::Blank,
+                BlockKind::ThematicBreak,
+                BlockKind::Blank,
+            ]
+        );
     }
 
     #[test]
