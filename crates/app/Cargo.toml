@@ -7,6 +7,11 @@ license.workspace = true
 [dependencies]
 md_editor = { path = "../md_editor" }
 workspace = { path = "../workspace" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+tempfile = "3.27.0"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 gpui = { workspace = true }

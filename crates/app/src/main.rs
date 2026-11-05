@@ -14,6 +14,9 @@ mod keymap;
 mod search_panel;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod settings;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod text_input;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -36,8 +39,11 @@ fn main() {
         md_editor::editor::init(cx);
         // Every app-level and mode key binding is in `keymap::bindings` (task 8.5).
         keymap::init(cx);
+        // Settings are loaded first: the theme mode and the modes start from them (task 10.3).
+        settings::init(cx);
         // The theme mode and its Cycle Theme action (task 10.2).
-        theme::init(cx);
+        let mode = settings::current(cx).theme;
+        theme::init(cx, mode);
         let bounds = Bounds::centered(None, size(px(800.), px(600.)), cx);
         cx.open_window(
             WindowOptions {

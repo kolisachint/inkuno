@@ -29,6 +29,7 @@ use workspace::watcher::{plan_buffer_updates, OpenBuffer};
 use crate::file_io::{read_file, Document};
 use crate::file_ops_ui::{edit_message, renaming_text, DeleteNote, FileEdit, NewNote, RenameNote};
 use crate::search_panel::{self, hit_offset, SearchPanel, ToggleSearch};
+use crate::settings;
 use crate::text_input;
 use crate::watch::{changes_for_open_note, needs_tree_refresh, WatchFeed, POLL_INTERVAL};
 
@@ -188,7 +189,15 @@ impl WorkspaceView {
         {
             return;
         }
-        let subscription = cx.observe(&editor, |_, _, cx| cx.notify());
+        // Focus and Typewriter are saved when they change (task 10.3). Source Mode is not.
+        let subscription = cx.observe(&editor, |_, editor, cx| {
+            let modes = editor.read(cx).modes();
+            settings::change(cx, |s| {
+                s.focus = modes.focus;
+                s.typewriter = modes.typewriter;
+            });
+            cx.notify();
+        });
         self.mode_watch = Some((editor.entity_id(), subscription));
     }
 
@@ -253,10 +262,31 @@ impl WorkspaceView {
         cx.notify();
     }
 
-    /// Builds the start-up state from the command line.
+    /// Opens the vault at `dir` and remembers it as the last vault (task 10.3).
+    fn open_vault(dir: &Path, cx: &mut Context<Self>) -> Option<Sidebar> {
+        let sidebar = Sidebar::open(dir)?;
+        let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+        settings::change(cx, |s| s.last_vault = Some(dir));
+        Some(sidebar)
+    }
+
+    /// Builds the start-up state from the command line. With no argument, the last vault is
+    /// reopened when it still exists (task 10.3).
     fn from_args(cx: &mut Context<Self>) -> Self {
         let arg = std::env::args_os().nth(1).map(PathBuf::from);
         let Some(arg) = arg else {
+            let last = settings::current(cx).last_vault.filter(|dir| dir.is_dir());
+            if let Some(sidebar) = last.and_then(|dir| Self::open_vault(&dir, cx)) {
+                return Self {
+                    sidebar: Some(sidebar),
+                    document: cx.new(|cx| Document::with_text(cx, "", None)),
+                    search: SearchPanel::new(cx.focus_handle()),
+                    search_open: false,
+                    file_edit: None,
+                    sidebar_focus: cx.focus_handle(),
+                    mode_watch: None,
+                };
+            }
             return Self {
                 sidebar: None,
                 document: cx.new(Document::sample),
@@ -269,7 +299,7 @@ impl WorkspaceView {
         };
         if arg.is_dir() {
             return Self {
-                sidebar: Sidebar::open(&arg),
+                sidebar: Self::open_vault(&arg, cx),
                 document: cx.new(|cx| Document::with_text(cx, "", None)),
                 search: SearchPanel::new(cx.focus_handle()),
                 search_open: false,
@@ -282,7 +312,7 @@ impl WorkspaceView {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
             _ => Path::new("."),
         };
-        let mut sidebar = Sidebar::open(dir);
+        let mut sidebar = Self::open_vault(dir, cx);
         let document = match read_file(&arg) {
             Ok(text) => {
                 if let Some(sidebar) = sidebar.as_mut() {
