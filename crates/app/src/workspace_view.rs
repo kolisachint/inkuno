@@ -18,7 +18,7 @@
 use std::path::{Path, PathBuf};
 
 use gpui::{
-    div, prelude::*, px, ClickEvent, Context, Entity, EntityId, FocusHandle, Focusable,
+    div, prelude::*, px, App, ClickEvent, Context, Entity, EntityId, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, Render, Subscription, Window,
 };
 use md_editor::modes::Modes;
