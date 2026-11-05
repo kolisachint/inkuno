@@ -4,6 +4,7 @@
 //! line. It is a custom GPUI `Element` (DESIGN §7). `Editor::render` creates it for the whole
 //! buffer (HOOK 3.1); the block list (3.5) creates one per block.
 
+use std::cell::RefCell;
 use std::ops::Range;
 use std::panic::Location;
 use std::rc::Rc;
@@ -514,6 +515,10 @@ pub struct BlockInputs {
     code_tokens: Rc<[Token]>,
     /// The items of a list block, one per line (task 4.2). Empty for other blocks.
     items: Vec<ListLine>,
+    /// Rows shaped while measuring this frame, keyed by width, so prepaint reuses them
+    /// instead of shaping every row twice (perf task 3). Rebuilt with the inputs on every
+    /// `request_layout`, so it never outlives the current frame.
+    measured: RefCell<MeasuredRows>,
     font: Font,
     font_size: Pixels,
     /// The palette of this frame. Colours are read from it at layout and paint time.
@@ -614,8 +619,74 @@ impl TextElement {
             line_height,
             marker_text,
             done_style,
+            measured: RefCell::new(MeasuredRows::default()),
         }
     }
+}
+
+/// The rows shaped while measuring a block, kept so its prepaint reuses them instead of
+/// shaping every row twice per frame (perf task 3). The rows are laid out at the origin used
+/// while measuring; prepaint shifts them to the element's bounds.
+///
+/// The cache lives in [`BlockInputs`], which is rebuilt on every `request_layout`, so it only
+/// ever holds rows from the current frame: an edit, a caret move or a style change gathers
+/// fresh inputs and the old rows are dropped. The width keys the cache because wrapping
+/// depends on it: rows shaped at one width are wrong at any other.
+#[derive(Clone, Default)]
+struct MeasuredRows {
+    cached: Option<MeasuredEntry>,
+}
+
+/// Rows shaped at one measure width, at the measure origin.
+#[derive(Clone)]
+struct MeasuredEntry {
+    width: Option<Pixels>,
+    rows: Vec<LineLayout>,
+}
+
+impl MeasuredRows {
+    /// Remember `rows`, shaped at `width`.
+    fn store(&mut self, width: Option<Pixels>, rows: Vec<LineLayout>) {
+        self.cached = Some(MeasuredEntry { width, rows });
+    }
+
+    /// Take the cached rows when they were shaped at `width`, shifted from the measure
+    /// origin to `origin`. `None` when nothing was cached at that width, so the caller lays
+    /// the block out again. Taking clears the cache, so rows are reused at most once.
+    fn take_at(&mut self, width: Option<Pixels>, origin: Point<Pixels>) -> Option<Vec<LineLayout>> {
+        if self.cached.as_ref()?.width != width {
+            return None;
+        }
+        let entry = self.cached.take()?;
+        Some(
+            entry
+                .rows
+                .into_iter()
+                .map(|row| rebased_row(row, origin))
+                .collect(),
+        )
+    }
+}
+
+/// Shift `row`, laid out at the measure origin, to `to`: the element's bounds origin in
+/// prepaint. The shaped text itself does not depend on the origin, only the placed origins
+/// do, so shifting reproduces exactly what laying out at `to` would place.
+fn rebased_row(mut row: LineLayout, to: Point<Pixels>) -> LineLayout {
+    row.origin = rebased_point(row.origin, to);
+    if let Some(gutter) = row.gutter.as_mut() {
+        if let Some((_, at)) = gutter.glyph.as_mut() {
+            *at = rebased_point(*at, to);
+        }
+        if let Some(check) = gutter.checkbox.as_mut() {
+            check.bounds.origin = rebased_point(check.bounds.origin, to);
+        }
+    }
+    row
+}
+
+/// Shift `origin`, laid out at the measure origin, to `to`. Pure, unit-tested.
+fn rebased_point(origin: Point<Pixels>, to: Point<Pixels>) -> Point<Pixels> {
+    point(origin.x + to.x, origin.y + to.y)
 }
 
 /// Lay out the visual rows of a block whose top-left corner is `origin`. A source line that is
@@ -901,8 +972,13 @@ impl gpui::Element for TextElement {
                     AvailableSpace::Definite(width) => Some(width),
                     _ => None,
                 });
-                let rows = layout_rows(&measured, window, point(px(0.), px(0.)), width).len();
-                size(width.unwrap_or(px(0.)), line_height * rows as f32 + padding)
+                let rows = layout_rows(&measured, window, point(px(0.), px(0.)), width);
+                let height = line_height * rows.len() as f32 + padding;
+                // Keep the shaped rows so prepaint reuses them instead of shaping every row
+                // a second time (perf task 3). The inputs are rebuilt every frame, so the
+                // cache cannot outlive this frame.
+                measured.measured.borrow_mut().store(width, rows);
+                size(width.unwrap_or(px(0.)), height)
             });
         (layout_id, inputs)
     }
@@ -916,7 +992,14 @@ impl gpui::Element for TextElement {
         window: &mut Window,
         _cx: &mut App,
     ) -> Self::PrepaintState {
-        let lines = layout_rows(inputs, window, bounds.origin, Some(bounds.size.width));
+        // Reuse the rows shaped while measuring at this width (perf task 3): shifted to the
+        // element's bounds, they are exactly what laying out here would place. Any other
+        // width lays the block out again.
+        let lines = inputs
+            .measured
+            .borrow_mut()
+            .take_at(Some(bounds.size.width), bounds.origin)
+            .unwrap_or_else(|| layout_rows(inputs, window, bounds.origin, Some(bounds.size.width)));
         LayoutSnapshot {
             lines,
             bounds,
@@ -1191,6 +1274,64 @@ mod tests {
         assert_eq!(ranges, vec![0..2, 3..9, 10..14]);
         let lines: Vec<&str> = ranges.iter().map(|r| &text[r.clone()]).collect();
         assert_eq!(lines, vec!["é", "日本", "🎉"]);
+    }
+
+    #[test]
+    fn measured_rows_hit_only_at_the_measured_width() {
+        // Perf task 3: the rows shaped while measuring are reused by prepaint, so each block
+        // is laid out once per frame instead of twice (measure + prepaint).
+        let mut cache = MeasuredRows::default();
+        assert!(
+            cache
+                .take_at(Some(px(100.)), point(px(0.), px(0.)))
+                .is_none(),
+            "nothing cached yet"
+        );
+        // Empty rows still count as cached: a block whose lines all collapse lays out to
+        // no rows, and reusing that is the same as laying out again.
+        cache.store(Some(px(100.)), Vec::new());
+        assert!(
+            cache
+                .take_at(Some(px(200.)), point(px(0.), px(0.)))
+                .is_none(),
+            "rows shaped at one width are wrong at any other"
+        );
+        assert!(
+            cache
+                .take_at(Some(px(100.)), point(px(5.), px(7.)))
+                .is_some(),
+            "same width reuses the measured rows"
+        );
+        assert!(
+            cache
+                .take_at(Some(px(100.)), point(px(5.), px(7.)))
+                .is_none(),
+            "rows are reused at most once"
+        );
+    }
+
+    #[test]
+    fn measured_rows_miss_when_measure_width_was_indefinite() {
+        let mut cache = MeasuredRows::default();
+        cache.store(None, Vec::new());
+        assert!(
+            cache
+                .take_at(Some(px(100.)), point(px(0.), px(0.)))
+                .is_none(),
+            "an indefinite measure width never matches a real bounds width"
+        );
+    }
+
+    #[test]
+    fn rebased_point_moves_to_the_bounds_origin() {
+        assert_eq!(
+            rebased_point(point(px(3.), px(4.)), point(px(10.), px(20.))),
+            point(px(13.), px(24.))
+        );
+        assert_eq!(
+            rebased_point(point(px(0.), px(0.)), point(px(5.), px(7.))),
+            point(px(5.), px(7.))
+        );
     }
 
     #[test]
