@@ -1,5 +1,7 @@
 # S2: GPUI on macOS (hello window)
 
+> Update: GPUI now also builds and runs on Linux; see the "Linux" section at the end. Lines below that say "macOS only" describe the original state.
+
 Plan task 1.2 (code part). DESIGN §13 S2, §10.
 
 ## Pinned revision

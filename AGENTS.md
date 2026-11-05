@@ -9,7 +9,10 @@ Read this first, then `docs/IMPLEMENTATION_PLAN.md` (task list, Definition of Do
 - Every task ends with these passing at the workspace root:
   `cargo build`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check`.
 - Do not change the GPUI git rev (root `Cargo.toml`) except in a dedicated bump change.
-- Targets are **macOS and Linux**. Linux is where an agent can build, run and screenshot the app (Xvfb). macOS is built in CI only.
+- Targets are **macOS and Linux**. Linux is where an agent can build, run and screenshot the app. macOS is built in CI only.
+- Running the app headless on Linux: install the apt packages listed in `.github/workflows/release.yml` plus `xvfb mesa-vulkan-drivers imagemagick`, then
+  `xvfb-run -n 99 -s "-screen 0 1280x800x24" cargo run -p app &` and `DISPLAY=:99 import -window root shot.png`.
+  Use a fixed display number (`-n 99`); `xvfb-run -a` alone opened no window in testing. Only X11 + llvmpipe has been verified, not Wayland or a real GPU.
 
 ## Releases
 
@@ -25,7 +28,7 @@ Read this first, then `docs/IMPLEMENTATION_PLAN.md` (task list, Definition of Do
 | Area | State |
 |------|-------|
 | P0 scaffold | Done. CI workflows enabled in `.github/workflows/`. |
-| P1 spikes | S4 done (provisional GO). S2: code exists, no macOS run yet. **S1 and S3 notes missing.** |
+| P1 spikes | S4 done (provisional GO). S2: runs on Linux (X11/Xvfb, screenshot in `docs/spikes/`), no macOS run yet. S1 and S3 notes in progress. |
 | P2 md_core | 2.1–2.8 done (156 unit tests + 5 proptests). |
 | P3–P4 editor, live preview | Not started (GPUI). |
 | P5 code fences | 5.1, 5.2 done; 5.3 not started (GPUI). |
@@ -45,18 +48,13 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
    Unblock: run the `nightly` macOS build on a Mac (`xattr -dr com.apple.quarantine noteapp.app`) and attach a screenshot. Alternatively, accept the Linux run plus a green macOS CI build as the gate.
 3. **S1 (render host) and S3 (display map) spike notes missing.** These gate P6/P7 (S1) and formally gate 2.6 (S3, already implemented).
    Unblock: write `docs/spikes/S1-render-host.md` and `docs/spikes/S3-display-map.md`, each with a go/no-go line.
-4. **GPUI on Linux.** The app and md_editor previously depended on GPUI only on macOS. Making it build and run on Linux under Xvfb is in progress. If it can't run headless (for example, no Vulkan in the container), screenshot verification of UI tasks has to happen on macOS instead.
-   Unblock: check the Linux section of `docs/spikes/S2-gpui-hello.md`.
-5. **macOS signing.** Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
+4. **macOS signing.** Release builds are ad-hoc signed and not notarized, so users must clear quarantine.
    Unblock: an Apple Developer ID certificate and notarization credentials stored as repo secrets. This needs the repo owner.
-6. **Decision: gitignored notes.** Search honours `.gitignore` but the sidebar tree does not, so a gitignored note shows in the sidebar and can't be found by search. Pick one: hide those notes from the tree, or include them in search.
+5. **Decision: gitignored notes.** Search honours `.gitignore` but the sidebar tree does not, so a gitignored note shows in the sidebar and can't be found by search. Pick one: hide those notes from the tree, or include them in search.
    Unblock: a decision by the repo owner, then a small change in `crates/workspace` (`tree.rs` or `search.rs`).
-7. **Search aborts on one unreadable file.** A per-file read error stops the whole search. It should skip that file and carry on.
-   Unblock: a small fix in `crates/workspace/src/search.rs`. No decision needed.
 
 ## Next tasks to dispatch (in order)
 
-1. Merge any in-progress worktree branches (GPUI on Linux) after they pass the checks above.
-2. Spike notes S1 and S3 (blocker 3).
-3. P3: 3.1 to 3.6, md_editor basic. Interfaces first, then one Haiku task each, verified with Linux screenshots.
-4. Then P4, then P5.3, P6, P7, P8, P9 UI, P10, following the plan's dependency graph.
+1. Merge the S1/S3 spike-note branch if it isn't merged yet (blocker 3).
+2. P3: 3.1 to 3.6, md_editor basic. Interfaces first, then one Haiku task each, verified with Linux screenshots.
+3. Then P4, then P5.3, P6, P7, P8, P9 UI, P10, following the plan's dependency graph.
