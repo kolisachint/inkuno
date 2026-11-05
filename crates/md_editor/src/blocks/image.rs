@@ -10,13 +10,14 @@ use std::panic::Location;
 use std::path::{Path, PathBuf};
 
 use gpui::{
-    div, img, prelude::*, px, relative, AnyElement, App, Bounds, ElementId, Entity,
+    div, fill, img, prelude::*, px, relative, AnyElement, App, Bounds, ElementId, Entity,
     GlobalElementId, ImgResourceLoader, InspectorElementId, IntoElement, LayoutId, Pixels,
     Resource, Style, Window,
 };
 
 use crate::editor::Editor;
 use crate::element::LayoutSnapshot;
+use crate::selection::{block_coverage, BlockCoverage};
 use crate::theme::Theme;
 
 /// An image that is the whole text of a paragraph.
@@ -264,7 +265,18 @@ impl gpui::Element for ImageBlock {
         window: &mut Window,
         cx: &mut App,
     ) {
+        // A selection touching this block highlights the whole block (task: selection over
+        // rendered tables and images). Full and partial overlap highlight alike; a caret
+        // alone is `BlockCoverage::None`. The quad goes over the content because the
+        // picture and the placeholder fill are opaque, using the `selection` token.
+        let covered = {
+            let editor = self.editor.read(cx);
+            block_coverage(editor.selection.selection, self.source.clone()) != BlockCoverage::None
+        };
         request_layout.paint(window, cx);
+        if covered {
+            window.paint_quad(fill(bounds, crate::theme::current(cx).selection));
+        }
         let source = self.source.clone();
         let line_height = window.line_height();
         self.editor.update(cx, |editor, _cx| {

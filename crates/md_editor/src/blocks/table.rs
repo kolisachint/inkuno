@@ -28,6 +28,7 @@ use crate::blocks::basic::{line_runs, BlockStyle, RunStyle, PARAGRAPH};
 use crate::editor::Editor;
 use crate::element::{text_run, LayoutSnapshot};
 use crate::inline_render::{visible_run_lengths, visible_text};
+use crate::selection::{block_coverage, BlockCoverage};
 
 /// Padding inside a cell, left and right, and above and below the text, in pixels.
 const CELL_PAD_X: f32 = 8.0;
@@ -355,6 +356,14 @@ impl gpui::Element for TableElement {
         let row_height = grid.row_height;
 
         let theme = crate::theme::current(cx);
+        // A selection touching this block highlights the whole block (task: selection over
+        // rendered tables and images). Full and partial overlap highlight alike; a caret
+        // alone is `BlockCoverage::None`. The quad goes over the content because the
+        // header fill is opaque, and it uses the same `selection` token as paragraphs.
+        let covered = {
+            let editor = self.editor.read(cx);
+            block_coverage(editor.selection.selection, self.source.clone()) != BlockCoverage::None
+        };
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             // Header background, then the grid lines: a line above each row, one below the last
             // row, and a vertical line at each column edge. The line under the header is heavier.
@@ -410,6 +419,9 @@ impl gpui::Element for TableElement {
                         eprintln!("md_editor: failed to paint table cell: {err}");
                     }
                 }
+            }
+            if covered {
+                window.paint_quad(fill(bounds, theme.selection));
             }
         });
 
