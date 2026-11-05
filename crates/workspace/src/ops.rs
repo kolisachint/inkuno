@@ -9,6 +9,12 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::tree::{is_note_path, Vault};
 
+/// Moves `path` to the system Trash. `trash::delete` handles files, folders
+/// (recursively) and symbolic links (the link itself, not its target).
+fn trash_path(path: &Path) -> io::Result<()> {
+    trash::delete(path).map_err(|err| io::Error::other(err.to_string()))
+}
+
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
@@ -145,19 +151,30 @@ impl Vault {
         Ok(to)
     }
 
-    /// Deletes a note or folder. Folders are deleted recursively.
-    /// A symbolic link is removed itself, not its target.
+    /// Moves a note or folder to the system Trash (the Finder Trash on macOS,
+    /// the freedesktop.org Trash on Linux, via the `trash` crate). Folders are
+    /// trashed recursively. A symbolic link is trashed itself, not its target.
+    /// The vault root cannot be trashed.
     pub fn delete(&self, path: &Path) -> io::Result<()> {
+        self.delete_with(path, trash_path)
+    }
+
+    /// The body of [`Vault::delete`] with the mover injected. The system Trash
+    /// is awkward to assert on in tests (and may not exist in CI), so tests pass
+    /// a fake that moves the path into a temp dir instead. Production passes
+    /// [`trash_path`]. `remove` receives the contained absolute path.
+    pub(crate) fn delete_with(
+        &self,
+        path: &Path,
+        remove: impl Fn(&Path) -> io::Result<()>,
+    ) -> io::Result<()> {
         let path = self.contain(path)?;
         if self.is_vault_root(&path) {
             return Err(invalid("cannot delete the vault root"));
         }
-        let meta = fs::symlink_metadata(&path)?;
-        if meta.is_dir() {
-            fs::remove_dir_all(&path)
-        } else {
-            fs::remove_file(&path)
-        }
+        // Fails with `NotFound` when nothing is there, and the mover is not called.
+        fs::symlink_metadata(&path)?;
+        remove(&path)
     }
 }
 
@@ -263,6 +280,20 @@ mod tests {
     }
 
     #[test]
+    fn create_folder_rejects_bad_names() {
+        let (dir, vault) = fixture();
+        let r = dir.path();
+        for bad in ["", ".hidden", "a/b", "a\\b"] {
+            assert_eq!(
+                vault.create_folder(r, bad).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput,
+                "name {bad:?}"
+            );
+        }
+        assert!(!r.join(".hidden").exists());
+    }
+
+    #[test]
     fn rename_note_keeps_or_appends_md() {
         let (dir, vault) = fixture();
         let r = dir.path();
@@ -309,23 +340,106 @@ mod tests {
         assert!(a.exists());
     }
 
+    /// A test stand-in for the system Trash: moves the path into `trash_dir`,
+    /// numbering the target when a name collides, like the real Trash does.
+    fn move_to_fake_trash(trash_dir: &Path) -> impl Fn(&Path) -> io::Result<()> + '_ {
+        move |path: &Path| {
+            let name = path
+                .file_name()
+                .ok_or_else(|| invalid("path has no name"))?;
+            let mut target = trash_dir.join(name);
+            let mut n = 2u32;
+            while fs::symlink_metadata(&target).is_ok() {
+                target = trash_dir.join(format!("{} {n}", name.to_string_lossy()));
+                n += 1;
+            }
+            fs::rename(path, &target)
+        }
+    }
+
     #[test]
-    fn delete_note_and_folder() {
+    fn delete_with_moves_a_note_aside() {
         let (dir, vault) = fixture();
+        let trash_dir = tempfile::tempdir().unwrap();
+        let to_trash = move_to_fake_trash(trash_dir.path());
+        let note = vault.create_note(dir.path(), "gone").unwrap();
+
+        vault.delete_with(&note, to_trash).unwrap();
+
+        assert!(!note.exists());
+        assert!(trash_dir.path().join("gone.md").is_file());
+        assert!(!tree_paths(&vault).contains(&note));
+    }
+
+    #[test]
+    fn delete_with_moves_a_folder_with_its_notes_aside() {
+        let (dir, vault) = fixture();
+        let trash_dir = tempfile::tempdir().unwrap();
+        let to_trash = move_to_fake_trash(trash_dir.path());
         let r = dir.path();
-        let note = vault.create_note(r, "gone").unwrap();
         let folder = vault.create_folder(r, "dir").unwrap();
         vault.create_note(&folder, "inner").unwrap();
         write(&folder.join("sub/deep.md"), "");
 
-        vault.delete(&note).unwrap();
-        assert!(!note.exists());
-        assert!(!tree_paths(&vault).contains(&note));
+        vault.delete_with(&folder, to_trash).unwrap();
 
-        vault.delete(&folder).unwrap();
         assert!(!folder.exists());
+        assert!(trash_dir.path().join("dir/inner.md").is_file());
+        assert!(trash_dir.path().join("dir/sub/deep.md").is_file());
         assert!(vault.notes().unwrap().is_empty());
         assert_eq!(tree_paths(&vault), vec![r.to_path_buf()]);
+    }
+
+    #[test]
+    fn delete_with_hands_the_contained_path_to_the_mover() {
+        let (dir, vault) = fixture();
+        let note = vault.create_note(dir.path(), "a").unwrap();
+        let seen = std::cell::RefCell::new(Vec::new());
+        let fake = |path: &Path| {
+            seen.borrow_mut().push(path.to_path_buf());
+            Ok(())
+        };
+
+        vault.delete_with(&note, fake).unwrap();
+
+        // The mover got the absolute contained path, and the fake moved nothing.
+        assert_eq!(seen.borrow().as_slice(), std::slice::from_ref(&note));
+        assert!(note.exists());
+    }
+
+    #[test]
+    fn delete_with_never_calls_the_mover_outside_the_vault() {
+        let (dir, vault) = fixture();
+        let r = dir.path();
+        let outside = tempfile::tempdir().unwrap();
+        let other = outside.path().join("other.md");
+        write(&other, "");
+        let calls = std::cell::Cell::new(0u32);
+        let fake = |_path: &Path| {
+            calls.set(calls.get() + 1);
+            Ok(())
+        };
+
+        // Outside the vault and the vault root are rejected before the mover runs.
+        assert_eq!(
+            vault.delete_with(&other, fake).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            vault.delete_with(r, fake).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        // A missing path fails with `NotFound`, also without calling the mover.
+        assert_eq!(
+            vault
+                .delete_with(&r.join("nope.md"), fake)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::NotFound
+        );
+        assert_eq!(calls.get(), 0);
+        assert!(other.exists());
+        assert!(r.exists());
     }
 
     #[test]

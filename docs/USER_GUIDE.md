@@ -52,9 +52,10 @@ Linux uses Ctrl. macOS uses Cmd, and Option for word moves and word delete.
 | Close search | Escape | Escape |
 | Open the first search result | Enter (in search) | Enter (in search) |
 | New note (sidebar) | Ctrl+N | Cmd+N |
+| New folder (sidebar header button) | Folder button | Folder button |
 | Rename the open note | F2 | F2 |
-| Delete a note (sidebar focused, then Enter to confirm) | Ctrl+Backspace | Cmd+Backspace |
-| Cancel a rename or delete | Escape | Escape |
+| Move a note or folder to Trash (sidebar focused, then Enter to confirm) | Ctrl+Backspace | Cmd+Backspace |
+| Cancel a rename or Trash move | Escape | Escape |
 | Source Mode (markers shown, highlighted as source) | Ctrl+/ | Cmd+/ |
 | Focus Mode (blocks other than the caret's block are dimmed) | F8 | F8 |
 | Typewriter Mode (the caret line stays at the middle of the window) | F9 | F9 |

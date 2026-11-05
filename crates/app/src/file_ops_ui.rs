@@ -1,13 +1,16 @@
-//! File operations in the sidebar (task 9.3): new note, inline rename, and delete with a
-//! confirmation. The file system work is done by `workspace::ops`. This module decides what the
-//! user sees and keeps the open note in step with what was done on disk.
+//! File operations in the sidebar (task 9.3): new note, new folder, inline rename,
+//! and moving to the system Trash with a confirmation. The file system work is
+//! done by `workspace::ops`. This module decides what the user sees and keeps the
+//! open note in step with what was done on disk.
 //!
-//! Keys. New note is Cmd+N on macOS and Ctrl+N on Linux, and the "+" button at the top of the
-//! sidebar does the same. Rename is F2 on the open note, or a double-click on a row. Delete is
-//! a right-click on a row, or Cmd+Backspace and Ctrl+Backspace while the sidebar has keyboard
-//! focus. In the editor, Ctrl+Backspace still deletes a word, so the open note is deleted from
-//! the keyboard only after a click in the sidebar. While renaming, Enter commits, Escape cancels.
-//! While confirming a delete, Enter deletes and Escape keeps the file.
+//! Keys. New note is Cmd+N on macOS and Ctrl+N on Linux, and the "+" button at the top
+//! of the sidebar does the same. A "Folder" button beside it creates a folder the same
+//! way, with the same naming and validation. Rename is F2 on the open note, or a
+//! double-click on a row. Delete moves to the Trash: a right-click on a row asks first,
+//! as does Cmd+Backspace and Ctrl+Backspace while the sidebar has keyboard focus.
+//! In the editor, Ctrl+Backspace still deletes a word, so the open note is trashed from
+//! the keyboard only after a click in the sidebar. While renaming, Enter commits, Escape
+//! cancels. While confirming a Trash move, Enter moves and Escape keeps the file.
 //!
 //! The pure helpers ([`untitled_stem`], [`rename_input`], [`NameEdit`], [`next_note_after`])
 //! take plain values, so they are unit-tested without a window.
@@ -21,21 +24,32 @@ use crate::file_io::{read_file, Document};
 use crate::search_panel::note_label;
 use crate::workspace_view::WorkspaceView;
 
-actions!(file_ops_ui, [NewNote, RenameNote, DeleteNote]);
+actions!(file_ops_ui, [NewNote, NewFolder, RenameNote, DeleteNote]);
 
 /// Name used for a new note before a number is added.
 pub const UNTITLED: &str = "Untitled";
 
-/// The first free name `Untitled`, `Untitled 2`, `Untitled 3`, ... `taken` says whether a stem
+/// The first free name `Untitled`, `Untitled 2`, `Untitled 3`, ... `taken` says whether a name
 /// is already used in the folder.
-pub fn untitled_stem(taken: impl Fn(&str) -> bool) -> String {
+fn first_free_name(taken: impl Fn(&str) -> bool) -> String {
     if !taken(UNTITLED) {
         return UNTITLED.to_owned();
     }
     (2u32..)
         .map(|n| format!("{UNTITLED} {n}"))
-        .find(|stem| !taken(stem))
+        .find(|name| !taken(name))
         .unwrap_or_else(|| UNTITLED.to_owned())
+}
+
+/// The first free note stem. `taken` says whether a stem is already used in the folder.
+pub fn untitled_stem(taken: impl Fn(&str) -> bool) -> String {
+    first_free_name(taken)
+}
+
+/// The first free folder name, numbered like [`untitled_stem`]. `taken` says whether a name
+/// is already used in the folder.
+pub fn untitled_folder_name(taken: impl Fn(&str) -> bool) -> String {
+    first_free_name(taken)
 }
 
 /// Why a typed name cannot be used. Other problems are left to `workspace::ops`, which
@@ -73,12 +87,12 @@ pub fn rename_input(typed: &str) -> Result<String, NameError> {
     Ok(name.to_owned())
 }
 
-/// The line shown while a delete waits for an answer.
+/// The line shown while a Trash move waits for an answer.
 pub fn delete_prompt(name: &str) -> String {
-    format!("Delete {name}? Enter = yes, Esc = no")
+    format!("Move {name} to Trash? Enter = yes, Esc = no")
 }
 
-/// The note that takes the place of a deleted open note: the one after `deleted` in path
+/// The note that takes the place of a trashed open note: the one after `deleted` in path
 /// order, else the one before it. `None` when no note is left.
 pub fn next_note_after(notes: &[PathBuf], deleted: &Path) -> Option<PathBuf> {
     let mut sorted = notes.to_vec();
@@ -138,7 +152,7 @@ pub enum FileEdit {
         is_note: bool,
         error: Option<String>,
     },
-    /// Waiting for Enter (delete) or Escape (keep).
+    /// Waiting for Enter (move to Trash) or Escape (keep).
     ConfirmDelete { path: PathBuf, name: String },
 }
 
@@ -176,7 +190,7 @@ impl WorkspaceView {
         }
     }
 
-    /// Ends any rename or delete question without changing the disk.
+    /// Ends any rename or Trash question without changing the disk.
     pub(crate) fn cancel_file_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.file_edit = None;
         self.focus_editor(window, cx);
@@ -218,6 +232,41 @@ impl WorkspaceView {
         cx.notify();
     }
 
+    /// Creates an `Untitled` folder in the open note's folder (or the vault root) and starts
+    /// an inline rename. Without a vault there is nowhere to create a folder. The naming
+    /// and validation match [`WorkspaceView::new_note`]: the first free `Untitled` name, and
+    /// the rename input rules in [`rename_input`]. The watcher reports the creation, so the
+    /// tree refreshes like it does for a new note.
+    pub(crate) fn new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(sidebar) = self.sidebar.as_ref() else {
+            eprintln!("noteapp: open a folder to create a folder");
+            return;
+        };
+        let root = sidebar.vault.root().to_path_buf();
+        let parent = self
+            .document
+            .read(cx)
+            .path
+            .as_deref()
+            .and_then(Path::parent)
+            .filter(|dir| dir.starts_with(&root))
+            .map(Path::to_path_buf)
+            .unwrap_or(root);
+        let name = untitled_folder_name(|name| parent.join(name).symlink_metadata().is_ok());
+        let created = sidebar.vault.create_folder(&parent, &name);
+        match created {
+            Ok(path) => {
+                self.refresh_tree();
+                self.start_rename(path, name, false, window, cx);
+            }
+            Err(err) => eprintln!(
+                "noteapp: cannot create a folder in {}: {err}",
+                parent.display()
+            ),
+        }
+        cx.notify();
+    }
+
     /// Starts an inline rename of `path`, showing `label` in its row.
     pub(crate) fn start_rename(
         &mut self,
@@ -250,7 +299,8 @@ impl WorkspaceView {
         self.start_rename(path, label, true, window, cx);
     }
 
-    /// Asks before deleting `path`. The question is shown in the sidebar until answered.
+    /// Asks before moving `path` to the Trash. The question is shown in the sidebar until
+    /// answered.
     pub(crate) fn ask_delete(
         &mut self,
         path: PathBuf,
@@ -266,7 +316,8 @@ impl WorkspaceView {
         cx.notify();
     }
 
-    /// Ctrl/Cmd+Backspace: asks before deleting the open note. Ignored during a rename.
+    /// Ctrl/Cmd+Backspace: asks before moving the open note to the Trash. Ignored during a
+    /// rename.
     pub(crate) fn ask_delete_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if matches!(self.file_edit, Some(FileEdit::Rename { .. })) {
             return;
@@ -278,7 +329,7 @@ impl WorkspaceView {
         self.ask_delete(path, name, window, cx);
     }
 
-    /// Keys while the sidebar has focus and a rename or delete question is open.
+    /// Keys while the sidebar has focus and a rename or Trash question is open.
     pub(crate) fn file_edit_key_down(
         &mut self,
         event: &KeyDownEvent,
@@ -380,9 +431,9 @@ impl WorkspaceView {
         }
     }
 
-    /// Enter on the delete question: deletes the file. If it was the open note, another note
-    /// opens, or an empty untitled document when none is left. Unsaved edits to the deleted
-    /// note are dropped, since the user asked for the delete.
+    /// Enter on the Trash question: moves the file or folder to the Trash. If the open note
+    /// was inside it, another note opens, or an empty untitled document when none is left.
+    /// Unsaved edits to a trashed note are dropped, since the user asked for the move.
     fn delete_confirmed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(FileEdit::ConfirmDelete { path, .. }) = self.file_edit.take() else {
             return;
@@ -391,7 +442,7 @@ impl WorkspaceView {
             return;
         };
         if let Err(err) = sidebar.vault.delete(&path) {
-            eprintln!("noteapp: cannot delete {}: {err}", path.display());
+            eprintln!("noteapp: cannot move {} to Trash: {err}", path.display());
             return self.cancel_file_edit(window, cx);
         }
         self.refresh_tree();
@@ -403,7 +454,8 @@ impl WorkspaceView {
         cx.notify();
     }
 
-    /// Replaces the open document, which was just deleted, with the next note or an empty one.
+    /// Replaces the open document, which was just moved to the Trash, with the next note or
+    /// an empty one.
     fn show_note_after_delete(
         &mut self,
         deleted: &Path,
@@ -439,7 +491,7 @@ pub(crate) fn renaming_text(edit: &Option<FileEdit>, path: &Path) -> Option<Stri
     }
 }
 
-/// The line under the header while a rename or delete question is open: the prompt, or the
+/// The line under the header while a rename or Trash question is open: the prompt, or the
 /// rename error or hint.
 pub(crate) fn edit_message(edit: &Option<FileEdit>) -> Option<String> {
     match edit {
@@ -470,6 +522,18 @@ mod tests {
         // A gap is reused.
         let taken = |stem: &str| matches!(stem, "Untitled" | "Untitled 3");
         assert_eq!(untitled_stem(taken), "Untitled 2");
+    }
+
+    #[test]
+    fn untitled_folder_name_is_numbered_like_notes() {
+        assert_eq!(untitled_folder_name(|_| false), "Untitled");
+        let taken = |name: &str| name == "Untitled";
+        assert_eq!(untitled_folder_name(taken), "Untitled 2");
+        let taken = |name: &str| matches!(name, "Untitled" | "Untitled 2");
+        assert_eq!(untitled_folder_name(taken), "Untitled 3");
+        // A gap is reused.
+        let taken = |name: &str| matches!(name, "Untitled" | "Untitled 3");
+        assert_eq!(untitled_folder_name(taken), "Untitled 2");
     }
 
     #[test]
@@ -520,7 +584,7 @@ mod tests {
     fn delete_prompt_names_the_file_and_the_keys() {
         assert_eq!(
             delete_prompt("draft"),
-            "Delete draft? Enter = yes, Esc = no"
+            "Move draft to Trash? Enter = yes, Esc = no"
         );
     }
 
@@ -584,7 +648,7 @@ mod tests {
         });
         assert_eq!(
             edit_message(&ask),
-            Some("Delete a? Enter = yes, Esc = no".into())
+            Some("Move a to Trash? Enter = yes, Esc = no".into())
         );
         assert_eq!(renaming_text(&ask, Path::new("/v/a.md")), None);
         assert_eq!(edit_message(&None), None);
