@@ -8,7 +8,7 @@ Read this first. Then read the plan for the current iteration: `docs/IMPLEMENTAT
 
 - **Iteration 1 = P0 to P3:** a plain-markdown editor. It opens, edits, selects, navigates, takes IME input, scrolls and saves a `.md` file, on macOS and Linux, released as nightly binaries.
 - **Iteration 1 is done apart from the macOS gate run** (Linux gate passed, see `docs/P3-gate-linux.md`).
-- **Iteration 2 (P4 to P10) is in progress.** Done on Linux: P4 live preview (4.1 to 4.5), P5 code fences (5.1 to 5.3), P8 modes (8.1 to 8.5), P9 workspace (9.1 to 9.5), P10 theme tokens and Auto (10.1, 10.2), and soft word wrap. Next: 10.3 settings persistence, then 10.4 perf pass. P6 and P7 stay on hold. The plan is `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`.
+- **Iteration 2 (P4 to P10) is in progress.** Done on Linux: P4 live preview (4.1 to 4.5), P5 code fences (5.1 to 5.3), P8 modes (8.1 to 8.5), P9 workspace (9.1 to 9.5), P10 theme tokens and Auto (10.1, 10.2), settings persistence (10.3, see below), and soft word wrap. Next: 10.4 perf pass. P6 and P7 stay on hold. The plan is `docs/IMPLEMENTATION_PLAN_ITERATION_2.md`.
 
 ## How work is done here
 
@@ -59,7 +59,7 @@ Screenshots are in `docs/screenshots/`. All rows are verified on Linux (Xvfb) un
 | P8 modes | 8.1 Source Mode, 8.2 caret and scroll preservation, 8.3 Focus Mode, 8.4 Typewriter Mode, 8.5 mode keys done (see below). | `8.1.png` (also 8.2), `8.3.png`, `8.3-moved.png`, `8.4.png` |
 | Soft word wrap | Done (not a plan task). Up and Down move by visual row with an x goal. | `wrap.png`, `wrap-selection.png` |
 | P9 workspace | 9.1 sidebar, 9.2 watcher applied in the app, 9.3 create, rename and delete UI, 9.4 search panel, 9.5 image paste all done. | `9.1.png`, `9.2.png`, `9.3-ui.png`, `9.4.png`, `9.5.png` |
-| P10 theming | 10.1 colour tokens (Light and Dark, `md_editor/src/theme.rs`) and 10.2 Auto (`app/src/theme.rs`, follows the window appearance) done. Cycle the theme with Ctrl+K Ctrl+T (Cmd+K Cmd+T). 10.3 and 10.4 not started. | `10.1-light.png`, `10.1-dark.png` |
+| P10 theming | 10.1 colour tokens (Light and Dark, `md_editor/src/theme.rs`) and 10.2 Auto (`app/src/theme.rs`, follows the window appearance) done. Cycle the theme with Ctrl+K Ctrl+T (Cmd+K Cmd+T). 10.3 settings persistence (`app/src/settings.rs`): a JSON file in the config dir (provisional, DESIGN §16 item 9). Theme mode, last vault, Focus and Typewriter are saved and restored; Source Mode is not. `NOTEAPP_CONFIG_DIR` overrides the dir. 10.4 not started. | `10.1-light.png`, `10.1-dark.png`, `10.3-restart.png`, `10.3-vault-restart.png` |
 
 8.5 (mode keys) is done: Source on Ctrl+/ (Linux) or Cmd+/ (macOS), Focus on F8, Typewriter on F9, and the Cycle Theme chord, all in one table in `crates/app/src/keymap.rs`. The `NOTEAPP_SOURCE`, `NOTEAPP_FOCUS` and `NOTEAPP_TYPEWRITER` env vars were removed. Focus and Typewriter can be on together, and both work in Source Mode.
 
@@ -97,5 +97,5 @@ Each item names what is blocked and what unblocks it. Remove an item when it is 
 ## Next tasks to dispatch (in order)
 
 1. **Iteration 1.** Done apart from the macOS gate run (blockers 1 and 2b). Nothing to dispatch here until a Mac run is recorded.
-2. **Iteration 2.** Next: 10.3 settings persistence (the theme choice survives a restart), then 10.4 performance pass, which records its benchmark results in `docs/spikes/perf-pass.md`.
+2. **Iteration 2.** Next: 10.4 performance pass, which records its benchmark results in `docs/spikes/perf-pass.md`.
 3. **Do NOT start** math (P6 6.1, 6.3, 6.5, 6.6) or Mermaid (P7), including the existing code. These are on hold until the repo owner explicitly confirms.

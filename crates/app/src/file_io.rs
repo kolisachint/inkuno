@@ -19,6 +19,7 @@ use md_editor::selection::Selection;
 use md_editor::theme::Theme;
 use workspace::watcher::BufferUpdate;
 
+use crate::settings;
 use crate::watch::{banner_after, clip_caret, is_own_write, settle, text_hash, Banner, Settled};
 
 actions!(md_editor_file_io, [Save]);
@@ -133,6 +134,9 @@ impl Document {
         let saved_version = editor.read(cx).buffer().version();
         let base_dir = note_folder(path.as_deref());
         editor.update(cx, |editor, cx| editor.set_base_dir(base_dir, cx));
+        // Focus and Typewriter start as the user left them (task 10.3).
+        let modes = settings::restored_modes(cx);
+        editor.update(cx, |editor, cx| editor.set_modes(modes, cx));
         Self {
             editor,
             known_hash: path.as_ref().map(|_| text_hash(text)),

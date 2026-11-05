@@ -14,6 +14,7 @@ cargo run -p app -- path/to/folder    # the folder is the vault; the sidebar lis
 ```
 
 - A file argument opens that note, reveals it in the sidebar, and uses its folder as the vault.
+- With no argument, the app reopens the last vault if it still exists (see Settings below).
 - A folder argument makes it the vault. Folders in the sidebar start collapsed.
 - On Linux, install the packages listed in `.github/workflows/release.yml` and `fonts-liberation`
   (the body text font). Without `fonts-liberation`, bold and italic text may look wrong.
@@ -76,4 +77,18 @@ Typewriter can be on together, and both work in Source Mode.
 
 The theme is Light, Dark or Auto. Auto is the default and follows the system appearance, and
 the window changes at once when the system appearance changes. The Cycle the theme key steps
-Auto, Light, Dark, Auto. The choice is not saved yet, so the app starts in Auto each time.
+Auto, Light, Dark, Auto. Light and Dark are a manual override: they ignore the system
+appearance. The choice is saved, so the app starts with it again.
+
+## Settings
+
+The app saves these settings in a file named `settings.json`:
+
+- the theme (Auto, Light or Dark),
+- the last vault (reopened when you start the app with no argument),
+- Focus Mode and Typewriter Mode (on or off). Source Mode is not saved and starts off.
+
+The file is in `~/.config/noteapp/` on Linux (or `$XDG_CONFIG_HOME/noteapp/`), and in
+`~/Library/Application Support/noteapp/` on macOS. Set `NOTEAPP_CONFIG_DIR` to use another
+folder. If the file is missing or damaged, the app starts with the defaults and leaves the
+damaged file alone until you change a setting.

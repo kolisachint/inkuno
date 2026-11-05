@@ -6,16 +6,21 @@
 //! the window redraws on its next frame. The Cycle Theme key (`cmd-k cmd-t` on macOS and
 //! `ctrl-k ctrl-t` on Linux, see `keymap.rs`) steps Auto, Light, Dark, Auto.
 //!
-//! Settings persistence is task 10.3. The mode lives in memory until then, so it resets to Auto
-//! on each start.
+//! The mode is saved in the settings file (task 10.3). The start-up mode comes from the
+//! settings, and a Cycle Theme step saves the new mode. Light and Dark are a manual override:
+//! they ignore the window appearance, and only Auto follows it.
 
 use gpui::{actions, App, Global, Window, WindowAppearance};
 use md_editor::theme::{self as tokens, Theme};
+use serde::{Deserialize, Serialize};
+
+use crate::settings;
 
 actions!(app_theme, [CycleTheme]);
 
-/// What the user chose. Auto follows the window appearance.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// What the user chose. Auto follows the window appearance. Stored as `auto`, `light` or `dark`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ThemeMode {
     #[default]
     Auto,
@@ -79,13 +84,12 @@ fn apply(cx: &mut App) {
     cx.refresh_windows();
 }
 
-/// Moves to the next mode and applies it.
+/// Moves to the next mode, applies it and saves it (task 10.3).
 pub fn cycle(cx: &mut App) {
     if let Some(state) = cx.try_global::<ThemeState>().copied() {
-        cx.set_global(ThemeState {
-            mode: state.mode.next(),
-            ..state
-        });
+        let mode = state.mode.next();
+        cx.set_global(ThemeState { mode, ..state });
+        settings::change(cx, |s| s.theme = mode);
     }
     apply(cx);
 }
@@ -95,13 +99,12 @@ pub fn cycle(cx: &mut App) {
 /// as the window.
 pub fn watch_window(window: &mut Window, cx: &mut App) {
     let appearance = window.appearance();
-    if cx.try_global::<ThemeState>().is_none() {
-        cx.set_global(ThemeState {
-            mode: ThemeMode::default(),
-            appearance,
-        });
-    }
-    set_appearance(appearance, cx);
+    // The mode was set by `init`. Only the appearance is new.
+    let mode = cx
+        .try_global::<ThemeState>()
+        .map_or(ThemeMode::default(), |state| state.mode);
+    cx.set_global(ThemeState { mode, appearance });
+    apply(cx);
     window
         .observe_window_appearance(|window, cx| {
             set_appearance(window.appearance(), cx);
@@ -125,8 +128,14 @@ fn set_appearance(appearance: WindowAppearance, cx: &mut App) {
     }
 }
 
-/// Registers the Cycle Theme action. Called from `main`.
-pub fn init(cx: &mut App) {
+/// Registers the Cycle Theme action and sets the start-up mode from the settings. Called from
+/// `main`, after the settings are loaded.
+pub fn init(cx: &mut App, mode: ThemeMode) {
+    // The appearance is a placeholder until `watch_window` reads the window's own.
+    cx.set_global(ThemeState {
+        mode,
+        appearance: WindowAppearance::Light,
+    });
     cx.on_action(|_: &CycleTheme, cx| cycle(cx));
 }
 
