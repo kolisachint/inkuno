@@ -9,7 +9,7 @@ use std::panic::Location;
 use std::rc::Rc;
 
 use gpui::{
-    fill, point, px, relative, rgb, size, App, AvailableSpace, Bounds, ElementId, Entity, Font,
+    fill, point, px, relative, size, App, AvailableSpace, Bounds, ElementId, Entity, Font,
     FontFallbacks, FontStyle, FontWeight, GlobalElementId, Hsla, InspectorElementId, IntoElement,
     LayoutId, Pixels, Point, ShapedLine, StrikethroughStyle, Style, TextAlign, TextRun,
     UnderlineStyle, Window,
@@ -24,10 +24,7 @@ use md_render::lang::Language;
 use crate::blocks::basic::{
     block_style, line_runs, shows_inline_styles, BlockStyle, Decoration, RunStyle, TextColor,
 };
-use crate::blocks::code_fence::{
-    self, token_color, Fence, CODE_BLOCK_BACKGROUND, CODE_BLOCK_RADIUS_PX, CODE_PAD_X_PX,
-    CODE_PAD_Y_PX,
-};
+use crate::blocks::code_fence::{self, Fence, CODE_BLOCK_RADIUS_PX, CODE_PAD_X_PX, CODE_PAD_Y_PX};
 use crate::blocks::list::{self, ListGutter, ListLine, ListMarker};
 use crate::cursor::{self, hit_test};
 use crate::editor::Editor;
@@ -37,6 +34,7 @@ use crate::inline_render::{
 };
 use crate::modes::source;
 use crate::selection;
+use crate::theme::{code_token_color, CodeColors, Theme};
 
 /// Monospace family for inline code: the macOS system face, or the common Linux one. The
 /// fallbacks are tried when the family is missing.
@@ -54,31 +52,6 @@ const CODE_FALLBACKS: &[&str] = &["Consolas", "Liberation Mono", "Courier New"];
 const BODY_FAMILY: Option<&str> = Some("Liberation Sans");
 #[cfg(target_os = "macos")]
 const BODY_FAMILY: Option<&str> = None;
-/// Colours of the block styles (DESIGN §9 will move these into the theme).
-const LINK_COLOR: Hsla = Hsla {
-    h: 0.61,
-    s: 0.75,
-    l: 0.50,
-    a: 1.0,
-};
-const MUTED_COLOR: Hsla = Hsla {
-    h: 0.0,
-    s: 0.0,
-    l: 0.45,
-    a: 1.0,
-};
-const MARKER_COLOR: Hsla = Hsla {
-    h: 0.0,
-    s: 0.0,
-    l: 0.70,
-    a: 1.0,
-};
-const CODE_BACKGROUND: Hsla = Hsla {
-    h: 0.0,
-    s: 0.0,
-    l: 0.50,
-    a: 0.15,
-};
 /// Width of the blockquote bar, and the thickness of a thematic break, in pixels.
 const QUOTE_BAR_WIDTH: f32 = 3.0;
 const RULE_THICKNESS: f32 = 1.0;
@@ -393,8 +366,8 @@ fn code_runs(
     code_base: usize,
     tokens: &[Token],
     font: &Font,
-    base_color: Hsla,
-    colors: fn(TokenKind) -> u32,
+    theme: &Theme,
+    colors: fn(TokenKind, &CodeColors) -> Hsla,
 ) -> Vec<TextRun> {
     let font = code_font(font);
     let run = |len: usize, color: Hsla| TextRun {
@@ -406,26 +379,25 @@ fn code_runs(
         strikethrough: None,
     };
     if is_fence {
-        return vec![run(line.len(), MUTED_COLOR)];
+        return vec![run(line.len(), theme.text_muted)];
     }
     code_fence::line_segments(line, code_base, tokens)
         .into_iter()
         .map(|(len, kind)| {
-            let color = kind.map_or(base_color, |kind| Hsla::from(rgb(colors(kind))));
+            let color = kind.map_or(theme.text, |kind| colors(kind, &theme.code));
             run(len, color)
         })
         .collect()
 }
 
-/// Paint the background of a code block: a light rounded box behind the whole block (task 5.3).
-fn paint_code_background(bounds: Bounds<Pixels>, window: &mut Window) {
-    let background = Hsla::from(rgb(CODE_BLOCK_BACKGROUND));
+/// Paint the background of a code block: a rounded box behind the whole block (task 5.3).
+fn paint_code_background(bounds: Bounds<Pixels>, background: Hsla, window: &mut Window) {
     window.paint_quad(fill(bounds, background).corner_radii(px(CODE_BLOCK_RADIUS_PX)));
 }
 
-/// Convert one styled part of a line into a GPUI run. `base` is the font and `base_color` the
+/// Convert one styled part of a line into a GPUI run. `base` is the font and the theme gives the
 /// colour of plain text. `style` supplies the block's bold and colour.
-fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, base_color: Hsla) -> TextRun {
+fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, theme: &Theme) -> TextRun {
     let mut font = base.clone();
     if run.bold || style.bold {
         font.weight = FontWeight::BOLD;
@@ -437,23 +409,23 @@ fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, base_color: Hsla) -
         font = code_font(&font);
     }
     let color = if run.link {
-        LINK_COLOR
+        theme.link
     } else {
         match style.color {
-            TextColor::Normal => base_color,
-            TextColor::Muted => MUTED_COLOR,
-            TextColor::Link => LINK_COLOR,
-            TextColor::Marker => MARKER_COLOR,
+            TextColor::Normal => theme.text,
+            TextColor::Muted => theme.text_muted,
+            TextColor::Link => theme.link,
+            TextColor::Marker => theme.marker,
         }
     };
     TextRun {
         len: run.range.len(),
         font,
         color,
-        background_color: run.code.then_some(CODE_BACKGROUND),
+        background_color: run.code.then_some(theme.code_bg),
         underline: run.link.then_some(UnderlineStyle {
             thickness: px(1.),
-            color: Some(LINK_COLOR),
+            color: Some(theme.link),
             wavy: false,
         }),
         strikethrough: run.strike.then_some(StrikethroughStyle {
@@ -488,7 +460,12 @@ fn split_done(runs: Vec<RunStyle>, from: Option<usize>) -> Vec<(RunStyle, bool)>
 
 /// Paint the block's decoration: a bar on the left for a blockquote, a line across for a
 /// thematic break. Drawn before the text, so the text sits on top.
-fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &mut Window) {
+fn paint_decoration(
+    decoration: Decoration,
+    snapshot: &LayoutSnapshot,
+    theme: &Theme,
+    window: &mut Window,
+) {
     let height = snapshot.line_height * snapshot.lines.len() as f32;
     match decoration {
         Decoration::None => {}
@@ -497,7 +474,7 @@ fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &
                 point(snapshot.bounds.left(), snapshot.bounds.top()),
                 size(px(QUOTE_BAR_WIDTH), height),
             );
-            window.paint_quad(fill(bar, MUTED_COLOR));
+            window.paint_quad(fill(bar, theme.text_muted));
         }
         Decoration::Rule if !snapshot.revealed => {
             let top = snapshot.bounds.top() + snapshot.line_height * 0.5;
@@ -505,7 +482,7 @@ fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &
                 point(snapshot.bounds.left(), top),
                 size(snapshot.bounds.size.width, px(RULE_THICKNESS)),
             );
-            window.paint_quad(fill(rule, MARKER_COLOR));
+            window.paint_quad(fill(rule, theme.marker));
         }
         Decoration::Rule => {}
     }
@@ -539,7 +516,8 @@ pub struct BlockInputs {
     items: Vec<ListLine>,
     font: Font,
     font_size: Pixels,
-    color: Hsla,
+    /// The palette of this frame. Colours are read from it at layout and paint time.
+    theme: Theme,
     line_height: Pixels,
     marker_text: list::MarkerText,
     done_style: BlockStyle,
@@ -574,7 +552,7 @@ impl TextElement {
         let style = window.text_style();
         let font = body_font(style.font());
         let font_size = style.font_size.to_pixels(window.rem_size()) * self.style.font_scale;
-        let color = style.color;
+        let theme = crate::theme::current(cx);
         let line_height = window.line_height() * self.style.font_scale;
         // Inline spans of the whole block, with absolute offsets, so that a span that crosses a
         // line break is styled on each of its lines.
@@ -608,7 +586,8 @@ impl TextElement {
         let marker_text = list::MarkerText {
             font: font.clone(),
             size: font_size,
-            color: MUTED_COLOR,
+            color: theme.text_muted,
+            on_accent: theme.on_accent,
         };
         let done_style = BlockStyle {
             color: TextColor::Muted,
@@ -631,7 +610,7 @@ impl TextElement {
             items,
             font,
             font_size,
-            color,
+            theme,
             line_height,
             marker_text,
             done_style,
@@ -691,8 +670,8 @@ fn layout_rows(
                     fence.code.start,
                     &inputs.code_tokens,
                     &inputs.font,
-                    inputs.color,
-                    token_color,
+                    &inputs.theme,
+                    code_token_color,
                 )
             }
             None if inputs.source_mode => code_runs(
@@ -701,7 +680,7 @@ fn layout_rows(
                 inputs.source.start,
                 &inputs.code_tokens,
                 &inputs.font,
-                inputs.color,
+                &inputs.theme,
                 source::token_color,
             ),
             None => split_done(line_runs(line, source.start, &inputs.spans), done_from)
@@ -709,9 +688,9 @@ fn layout_rows(
                 .map(|(mut run, done)| {
                     if done {
                         run.strike = true;
-                        text_run(&run, &inputs.done_style, &inputs.font, inputs.color)
+                        text_run(&run, &inputs.done_style, &inputs.font, &inputs.theme)
                     } else {
-                        text_run(&run, &inputs.style, &inputs.font, inputs.color)
+                        text_run(&run, &inputs.style, &inputs.font, &inputs.theme)
                     }
                 })
                 .collect(),
@@ -960,17 +939,18 @@ impl gpui::Element for TextElement {
         let editor = self.editor.clone();
         let focus = editor.read(cx).focus_handle.clone();
         let focused = focus.is_focused(window);
+        let theme = crate::theme::current(cx);
 
         // 0. The background of a code block, behind the selection and the text (task 5.3).
         if self.kind == BlockKind::CodeFence {
-            paint_code_background(snapshot.bounds, window);
+            paint_code_background(snapshot.bounds, theme.code_block_bg, window);
         }
 
         // 1. Selection behind the text, for the part of it that lies in this block.
-        selection::paint_selection(editor.read(cx), &snapshot, window);
+        selection::paint_selection(editor.read(cx), &snapshot, &theme, window);
 
         // 2. The block decoration (blockquote bar, thematic break), behind the text.
-        paint_decoration(self.style.decoration, &snapshot, window);
+        paint_decoration(self.style.decoration, &snapshot, &theme, window);
 
         // 3. The text, one line at a time. Run backgrounds (inline code) go first, since
         // `ShapedLine::paint` draws the glyphs only.
@@ -1005,12 +985,12 @@ impl gpui::Element for TextElement {
         // 3b. List bullets, numbers and checkboxes in the gutter of their lines (task 4.2).
         for line in &snapshot.lines {
             if let Some(gutter) = &line.gutter {
-                gutter.paint(snapshot.line_height, window, cx);
+                gutter.paint(snapshot.line_height, &theme, window, cx);
             }
         }
 
         // 4. The caret, only when it is in this block.
-        cursor::paint_caret(editor.read(cx), &snapshot, focused, window);
+        cursor::paint_caret(editor.read(cx), &snapshot, focused, &theme, window);
 
         // Keep this block's geometry for hit testing, caret reveal and IME bounds.
         let source = self.source.clone();

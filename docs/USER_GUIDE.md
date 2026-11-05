@@ -54,6 +54,10 @@ Linux uses Ctrl. macOS uses Cmd, and Option for word moves and word delete.
 | Rename the open note | F2 | F2 |
 | Delete a note (sidebar focused, then Enter to confirm) | Ctrl+Backspace | Cmd+Backspace |
 | Cancel a rename or delete | Escape | Escape |
+| Source Mode (markers shown, highlighted as source) | Ctrl+/ | Cmd+/ |
+| Focus Mode (blocks other than the caret's block are dimmed) | F8 | F8 |
+| Typewriter Mode (the caret line stays at the middle of the window) | F9 | F9 |
+| Cycle the theme (Auto, Light, Dark) | Ctrl+K, then Ctrl+T | Cmd+K, then Cmd+T |
 
 Notes:
 
@@ -65,14 +69,11 @@ Notes:
 
 ## Display modes
 
-Modes change how the note is drawn. They are not bound to keys yet (task 8.5 is in progress).
-For now, start the app with one of these set to `1`:
+Modes change how the note is drawn. Each one has a key (see the table above). Focus and
+Typewriter can be on together, and both work in Source Mode.
 
-| Mode | Environment variable |
-|------|----------------------|
-| Source (all Markdown markers visible, highlighted as source) | `NOTEAPP_SOURCE=1` |
-| Focus (blocks other than the caret's block are dimmed) | `NOTEAPP_FOCUS=1` |
-| Typewriter (the caret line stays at the middle of the window) | `NOTEAPP_TYPEWRITER=1` |
+## Theme
 
-Planned keys, not yet bound: Source on Ctrl+/ (Linux) or Cmd+/ (macOS), Focus on F8,
-Typewriter on F9.
+The theme is Light, Dark or Auto. Auto is the default and follows the system appearance, and
+the window changes at once when the system appearance changes. The Cycle the theme key steps
+Auto, Light, Dark, Auto. The choice is not saved yet, so the app starts in Auto each time.

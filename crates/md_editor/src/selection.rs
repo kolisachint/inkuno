@@ -11,6 +11,7 @@ use md_core::Edit;
 
 use crate::editor::Editor;
 use crate::element::LayoutSnapshot;
+use crate::theme::Theme;
 
 /// A selection in source byte offsets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -129,8 +130,6 @@ impl Editor {
     }
 }
 
-/// Colour of the selection highlight: translucent blue.
-const SELECTION_COLOR: u32 = 0x3366_FF40;
 /// Width of the highlight drawn for a selected line break.
 const NEWLINE_WIDTH: f32 = 0.4;
 
@@ -139,13 +138,18 @@ const NEWLINE_WIDTH: f32 = 0.4;
 /// Called by `TextElement::paint` before the text is painted (3.1 makes the call). Each line
 /// that the selection touches gets one rectangle over the selected characters. A line whose
 /// line break is selected also gets a short rectangle past its end.
-pub fn paint_selection(editor: &Editor, layout: &LayoutSnapshot, window: &mut Window) {
+pub fn paint_selection(
+    editor: &Editor,
+    layout: &LayoutSnapshot,
+    theme: &Theme,
+    window: &mut Window,
+) {
     let selection = editor.selection.selection;
     if selection.is_empty() {
         return;
     }
     let range = selection.range();
-    let color = gpui::rgba(SELECTION_COLOR);
+    let color = theme.selection;
     let newline_width = layout.line_height * NEWLINE_WIDTH;
 
     for line in &layout.lines {

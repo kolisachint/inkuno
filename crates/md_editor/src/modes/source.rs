@@ -10,12 +10,13 @@
 
 use std::ops::Range;
 
+use gpui::Hsla;
 use md_core::BlockKind;
 use md_render::highlight::TokenKind;
 
 use crate::blocks::basic::{BlockStyle, Decoration, TextColor};
-use crate::blocks::code_fence;
 use crate::inline_render::{block_hidden_ranges, document_hidden_ranges};
+use crate::theme::{code_token_color, CodeColors};
 
 /// The style of a block in Source Mode: the body size, no bold, no indent and no decoration.
 pub fn source_style() -> BlockStyle {
@@ -66,11 +67,11 @@ pub fn hidden_range_count(source: bool, text: &str, caret: Option<usize>) -> usi
 
 /// The colour of a token in Source Mode. Markers (`#`, `*`, `-`, brackets of links) are muted, so
 /// the text they mark stands out. Other kinds use the code palette.
-pub fn token_color(kind: TokenKind) -> u32 {
+pub fn token_color(kind: TokenKind, colors: &CodeColors) -> Hsla {
     match kind {
-        TokenKind::Punctuation => 0x8c959f,
-        TokenKind::Emphasis => 0x6639ba,
-        other => code_fence::token_color(other),
+        TokenKind::Punctuation => colors.punctuation,
+        TokenKind::Emphasis => colors.emphasis,
+        other => code_token_color(other, colors),
     }
 }
 
@@ -142,14 +143,18 @@ mod tests {
 
     #[test]
     fn source_colours_mute_markers_and_keep_code_palette() {
-        assert_eq!(token_color(TokenKind::Punctuation), 0x8c959f);
+        let colors = CodeColors::light();
         assert_eq!(
-            token_color(TokenKind::Heading),
-            code_fence::token_color(TokenKind::Heading)
+            token_color(TokenKind::Punctuation, &colors),
+            colors.punctuation
         );
         assert_eq!(
-            token_color(TokenKind::Keyword),
-            code_fence::token_color(TokenKind::Keyword)
+            token_color(TokenKind::Heading, &colors),
+            code_token_color(TokenKind::Heading, &colors)
+        );
+        assert_eq!(
+            token_color(TokenKind::Keyword, &colors),
+            code_token_color(TokenKind::Keyword, &colors)
         );
     }
 }

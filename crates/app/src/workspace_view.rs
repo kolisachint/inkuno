@@ -18,7 +18,7 @@
 use std::path::{Path, PathBuf};
 
 use gpui::{
-    div, prelude::*, px, rgb, ClickEvent, Context, Entity, EntityId, FocusHandle, Focusable,
+    div, prelude::*, px, ClickEvent, Context, Entity, EntityId, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, Render, Subscription, Window,
 };
 use md_editor::modes::Modes;
@@ -424,6 +424,7 @@ impl WorkspaceView {
     }
 
     fn render_sidebar(&self, sidebar: &Sidebar, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = md_editor::theme::current(cx);
         let open_path = self.document.read(cx).path.clone();
         let rows = sidebar_items(&sidebar.tree, &sidebar.expansion)
             .into_iter()
@@ -433,7 +434,7 @@ impl WorkspaceView {
                     !item.is_folder() && open_path.as_deref() == Some(item.path.as_path());
                 let renaming = renaming_text(&self.file_edit, &item.path);
                 let label = match &renaming {
-                    Some(text) => text_input::field("sidebar-rename", text, "", 20.)
+                    Some(text) => text_input::field(&theme, "sidebar-rename", text, "", 20.)
                         .flex_1()
                         .min_w_0()
                         .into_any_element(),
@@ -453,8 +454,8 @@ impl WorkspaceView {
                     .gap_1()
                     .pl(px(indent_px(item.depth)))
                     .pr(px(BASE_PADDING))
-                    .text_color(rgb(0x1f2937))
-                    .when(selected, |style| style.bg(rgb(0xdbeafe)))
+                    .text_color(theme.ui_text)
+                    .when(selected, |style| style.bg(theme.ui_selected))
                     .child(div().w(px(12.)).child(item.marker()))
                     .child(label);
                 if renaming.is_some() {
@@ -467,7 +468,7 @@ impl WorkspaceView {
                 let delete_path = item.path.clone();
                 let delete_name = item.label.clone();
                 row.cursor_pointer()
-                    .hover(|style| style.bg(rgb(0xe5e7eb)))
+                    .hover(|style| style.bg(theme.ui_hover))
                     .on_mouse_down(
                         MouseButton::Right,
                         cx.listener(move |this, _: &MouseDownEvent, window, cx| {
@@ -501,7 +502,7 @@ impl WorkspaceView {
             .flex_row()
             .items_center()
             .justify_between()
-            .child(div().text_xs().text_color(rgb(0x6b7280)).child("Files"))
+            .child(div().text_xs().text_color(theme.ui_muted).child("Files"))
             .child(
                 div()
                     .id("sidebar-new-note")
@@ -512,8 +513,8 @@ impl WorkspaceView {
                     .justify_center()
                     .rounded_sm()
                     .cursor_pointer()
-                    .text_color(rgb(0x1f2937))
-                    .hover(|style| style.bg(rgb(0xe5e7eb)))
+                    .text_color(theme.ui_text)
+                    .hover(|style| style.bg(theme.ui_hover))
                     .child("+")
                     .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
                         this.new_note(window, cx);
@@ -526,7 +527,7 @@ impl WorkspaceView {
                 .px_2()
                 .pb_1()
                 .text_xs()
-                .text_color(rgb(0x6b7280))
+                .text_color(theme.ui_muted)
                 .child(text)
         });
 
@@ -537,9 +538,9 @@ impl WorkspaceView {
             .flex_none()
             .flex()
             .flex_col()
-            .bg(rgb(0xf3f4f6))
+            .bg(theme.ui_surface)
             .border_r_1()
-            .border_color(rgb(0xd1d5db))
+            .border_color(theme.ui_border)
             .key_context("Sidebar")
             .track_focus(&self.sidebar_focus)
             .on_mouse_down(
@@ -569,6 +570,7 @@ impl Render for WorkspaceView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.watch_modes(cx);
         let modes = self.document.read(cx).editor.read(cx).modes();
+        let theme = md_editor::theme::current(cx);
         let root = div()
             .size_full()
             .flex()
@@ -609,7 +611,7 @@ impl Render for WorkspaceView {
                     .bottom(px(6.))
                     .right(px(12.))
                     .text_xs()
-                    .text_color(rgb(0x9ca3af))
+                    .text_color(theme.ui_faint)
                     .child(text),
             ),
             None => root,

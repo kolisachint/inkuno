@@ -101,10 +101,12 @@ impl Focusable for Editor {
 impl Render for Editor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor = cx.entity();
+        let theme = crate::theme::current(cx);
         // The background proves in a screenshot that the view is painted, even with no content.
         let root = div()
             .size_full()
-            .bg(gpui::white())
+            .bg(theme.bg)
+            .text_color(theme.text)
             .track_focus(&self.focus_handle)
             .key_context("MdEditor");
         // HOOK 3.3 (keys.rs): attach movement, copy, cut and paste handlers to the root.
@@ -126,5 +128,6 @@ pub fn init(cx: &mut App) {
     crate::keys::bind_keys(cx);
     // HOOK 3.7 (edit_keys.rs): register the editing key bindings for the "MdEditor" context.
     crate::edit_keys::bind_keys(cx);
-    let _ = cx;
+    // Task 10.1: the palette in use, Light until the app sets another.
+    crate::theme::init(cx);
 }

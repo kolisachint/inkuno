@@ -1,7 +1,7 @@
 //! Caret painting, click placement and drag selection (plan task 3.2). Owner: task 3.2.
 
 use gpui::{
-    black, fill, point, px, size, Bounds, Entity, MouseButton, MouseDownEvent, MouseMoveEvent,
+    fill, point, px, size, Bounds, Entity, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, Pixels, Point, Window,
 };
 use md_core::display_map::{Bias, DisplayMap};
@@ -10,6 +10,7 @@ use crate::blocks::list;
 use crate::editor::Editor;
 use crate::element::{LayoutSnapshot, LineLayout};
 use crate::selection::Selection;
+use crate::theme::Theme;
 
 /// Width of the caret in pixels.
 const CARET_WIDTH: f32 = 2.0;
@@ -91,7 +92,13 @@ fn line_containing(layout: &LayoutSnapshot, offset: usize) -> Option<&LineLayout
 ///
 /// Called by `TextElement::paint` after the text (3.1 makes the call). The caret is a thin
 /// bar, as tall as one line, at the x position of the head.
-pub fn paint_caret(editor: &Editor, layout: &LayoutSnapshot, focused: bool, window: &mut Window) {
+pub fn paint_caret(
+    editor: &Editor,
+    layout: &LayoutSnapshot,
+    focused: bool,
+    theme: &Theme,
+    window: &mut Window,
+) {
     if !focused {
         return;
     }
@@ -102,7 +109,7 @@ pub fn paint_caret(editor: &Editor, layout: &LayoutSnapshot, focused: bool, wind
     let x = line.x_for_source(head);
     let origin = point(line.origin.x + x, line.origin.y);
     let bounds = Bounds::new(origin, size(px(CARET_WIDTH), layout.line_height));
-    window.paint_quad(fill(bounds, black()));
+    window.paint_quad(fill(bounds, theme.caret));
 }
 
 /// Source offset of `position` (window coordinates), from the blocks painted in the last frame.
