@@ -25,6 +25,7 @@ use crate::cursor;
 use crate::editor::Editor;
 use crate::element::index_containing;
 use crate::ime;
+use crate::modes::{anchor_for, offset_for, ScrollAnchor};
 
 /// Block list state held by `Editor` (field `blocks`). Owned by 3.5.
 pub struct BlockListState {
@@ -65,6 +66,20 @@ impl BlockListState {
     /// (task 8.4).
     pub(crate) fn item_index_at(&self, offset: usize) -> Option<usize> {
         item_index_for_offset(&self.items, offset).map(|ix| ix + self.lead())
+    }
+
+    /// The block at the top of the list and its scroll past that top (task 8.2).
+    pub(crate) fn top_anchor(&self) -> ScrollAnchor {
+        anchor_for(
+            self.list.logical_scroll_top(),
+            self.lead(),
+            self.items.len(),
+        )
+    }
+
+    /// Scroll the list so that `anchor` is at the top (task 8.2).
+    pub(crate) fn scroll_to_anchor(&self, anchor: ScrollAnchor) {
+        self.list.scroll_to(offset_for(anchor, self.lead()));
     }
 }
 

@@ -17,7 +17,7 @@ use md_core::display_map::{Bias, Direction, DisplayMap};
 use crate::clipboard::{Copy, Cut, Paste};
 use crate::editor::Editor;
 use crate::element::{adjacent_row, LineLayout};
-use crate::inline_render::document_hidden_ranges;
+use crate::modes::source::document_hidden_in_mode;
 use crate::selection::Selection;
 
 actions!(
@@ -262,9 +262,10 @@ impl Editor {
         let text = self.text();
         // The hidden markers as drawn for the current caret (task 4.4). Left and Right skip them,
         // and the other motions snap onto a caret stop, so the caret never rests inside one.
+        // In Source Mode nothing is hidden, so the caret steps through every marker (task 8.1).
         let map = DisplayMap::new(
             text.len(),
-            document_hidden_ranges(&text, Some(current.head)),
+            document_hidden_in_mode(self.modes().source, &text, Some(current.head)),
         );
         // The x position kept by Up and Down across visual rows, when they move by row.
         let mut goal_x = None;
