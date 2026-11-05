@@ -21,6 +21,7 @@ use md_core::BlockKind;
 use crate::blocks::basic::{
     block_style, line_runs, shows_inline_styles, BlockStyle, Decoration, RunStyle, TextColor,
 };
+use crate::blocks::list::{self, ListGutter, ListLine, ListMarker};
 use crate::cursor::{self, hit_test};
 use crate::editor::Editor;
 use crate::ime;
@@ -105,6 +106,9 @@ pub struct LineLayout {
     pub origin: Point<Pixels>,
     /// Hidden byte ranges of the line, absolute and inside `source` (task 4.4).
     pub hidden: Vec<Range<usize>>,
+    /// The bullet, number, tick or checkbox drawn in the gutter of a list line whose markers
+    /// are hidden (task 4.2). Clicks on a checkbox are found through it.
+    pub gutter: Option<ListGutter>,
 }
 
 impl LineLayout {
@@ -347,6 +351,29 @@ fn text_run(run: &RunStyle, style: &BlockStyle, base: &Font, base_color: Hsla) -
     }
 }
 
+/// Split `runs` (relative to the line) at `from`, the start of the text of a checked task item,
+/// and mark each run with whether it is after that point (task 4.2). `None` marks no run.
+fn split_done(runs: Vec<RunStyle>, from: Option<usize>) -> Vec<(RunStyle, bool)> {
+    let Some(from) = from else {
+        return runs.into_iter().map(|run| (run, false)).collect();
+    };
+    let mut out = Vec::with_capacity(runs.len() + 1);
+    for run in runs {
+        if run.range.start < from && from < run.range.end {
+            let mut head = run.clone();
+            head.range.end = from;
+            let mut tail = run;
+            tail.range.start = from;
+            out.push((head, false));
+            out.push((tail, true));
+        } else {
+            let done = run.range.start >= from;
+            out.push((run, done));
+        }
+    }
+    out
+}
+
 /// Paint the block's decoration: a bar on the left for a blockquote, a line across for a
 /// thematic break. Drawn before the text, so the text sits on top.
 fn paint_decoration(decoration: Decoration, snapshot: &LayoutSnapshot, window: &mut Window) {
@@ -440,16 +467,55 @@ impl gpui::Element for TextElement {
             Vec::new()
         };
         let indent = px(self.style.indent_px);
+        // The items of a list block, one per line (task 4.2). Empty for other blocks.
+        let items = if self.kind == BlockKind::List {
+            list::parse_list_lines(&text, self.source.start)
+        } else {
+            Vec::new()
+        };
+        let marker_text = list::MarkerText {
+            font: font.clone(),
+            size: font_size,
+            color: MUTED_COLOR,
+        };
+        let done_style = BlockStyle {
+            color: TextColor::Muted,
+            ..self.style
+        };
 
         let mut lines = Vec::new();
         let mut top = bounds.top();
-        for range in line_ranges(&text) {
+        for (index, range) in line_ranges(&text).into_iter().enumerate() {
             // Line ranges are relative to `text`, which starts at `source.start` in the buffer.
             let source = (self.source.start + range.start)..(self.source.start + range.end);
             let line = &text[range];
-            let styled: Vec<TextRun> = line_runs(line, source.start, &spans)
-                .iter()
-                .map(|run| text_run(run, &self.style, &font, color))
+            // A list line shows its markers only while the caret is on it (task 4.2).
+            let item = items.get(index);
+            let line_revealed = source.start <= caret && caret <= source.end;
+            let text_x = match item {
+                Some(item) => list::text_indent(item, line_revealed),
+                None => f32::from(indent),
+            };
+            let line_origin = point(bounds.left() + px(text_x), top);
+            // A checked task item is muted and struck through, from its text on.
+            let done_from = match item {
+                Some(ListLine {
+                    marker: Some(ListMarker::Task { checked: true }),
+                    text_start,
+                    ..
+                }) => Some(*text_start - source.start),
+                _ => None,
+            };
+            let styled: Vec<TextRun> = split_done(line_runs(line, source.start, &spans), done_from)
+                .into_iter()
+                .map(|(mut run, done)| {
+                    if done {
+                        run.strike = true;
+                        text_run(&run, &done_style, &font, color)
+                    } else {
+                        text_run(&run, &self.style, &font, color)
+                    }
+                })
                 .collect();
             // Zero-length runs are dropped, so an empty line is shaped with no runs. The runs
             // still cover the source line here, so the IME marked range is applied first.
@@ -470,11 +536,25 @@ impl gpui::Element for TextElement {
             let shaped = window
                 .text_system()
                 .shape_line(visible.into(), font_size, &runs, None);
+            // The marker of an item whose markers are hidden goes in the gutter (task 4.2).
+            let gutter = match item {
+                Some(item) if item.marker.is_some() && !line_revealed => Some(list::gutter(
+                    item,
+                    line,
+                    source.start,
+                    line_origin,
+                    line_height,
+                    &marker_text,
+                    window,
+                )),
+                _ => None,
+            };
             lines.push(LineLayout {
                 source,
                 shaped,
-                origin: point(bounds.left() + indent, top),
+                origin: line_origin,
                 hidden: hidden_line,
+                gutter,
             });
             top += line_height;
         }
@@ -535,6 +615,13 @@ impl gpui::Element for TextElement {
                 cx,
             ) {
                 eprintln!("md_editor: failed to paint line {:?}: {err}", line.source);
+            }
+        }
+
+        // 3b. List bullets, numbers and checkboxes in the gutter of their lines (task 4.2).
+        for line in &snapshot.lines {
+            if let Some(gutter) = &line.gutter {
+                gutter.paint(snapshot.line_height, window, cx);
             }
         }
 

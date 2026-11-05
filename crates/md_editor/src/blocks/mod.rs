@@ -15,6 +15,7 @@ use crate::element::TextElement;
 
 pub mod basic;
 pub mod image;
+pub mod list;
 pub mod table;
 
 /// The element for one block item of the block list (task 3.5), covering `range` of the buffer.

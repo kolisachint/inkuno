@@ -6,6 +6,7 @@ use gpui::{
 };
 use md_core::display_map::{Bias, DisplayMap};
 
+use crate::blocks::list;
 use crate::editor::Editor;
 use crate::element::{LayoutSnapshot, LineLayout};
 use crate::selection::Selection;
@@ -144,6 +145,11 @@ pub fn register_mouse_handlers(
         }
         let focus = down_editor.read(cx).focus_handle.clone();
         window.focus(&focus, cx);
+        // A click on a task checkbox toggles it and leaves the caret where it is (task 4.2).
+        if let Some(range) = list::checkbox_at(down_editor.read(cx), event.position) {
+            down_editor.update(cx, |editor, cx| editor.toggle_task(range, cx));
+            return;
+        }
         let head = offset_at(down_editor.read(cx), event.position);
         down_editor.update(cx, |editor, cx| {
             let anchor = if event.modifiers.shift {
