@@ -38,7 +38,7 @@
 | G7 | Light / Dark / Auto theme. Auto is the default and follows macOS appearance | §9 |
 | G8 | Pasted images saved into an `assets/` folder next to the note, linked relatively | §7, §8 |
 
-**Platform:** macOS first, using the GPUI Metal renderer.
+**Platform:** macOS and Linux (owner decision, iteration 1). macOS uses the GPUI Metal renderer; Linux uses GPUI's X11/Wayland backends.
 **License:** GPL-3.0-or-later.
 
 ### 1.2 Non-goals (v1)
@@ -46,7 +46,7 @@
 - Wiki-links and backlinks.
 - PlantUML. A future opt-in will run a local JAR behind the `DiagramRenderer` trait (§6.7).
 - Custom CSS themes.
-- Linux and Windows.
+- Windows.
 - Sync.
 - Export.
 
