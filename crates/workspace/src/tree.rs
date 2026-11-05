@@ -66,8 +66,12 @@ impl Vault {
     }
 
     /// Tree of the vault. The root is always present, even when it holds no notes.
+    /// Empty folders are shown, so a just-created folder has a row to rename.
     pub fn tree(&self) -> io::Result<Node> {
         let mut top = Dir::new(self.root.clone());
+        for dir in dir_paths(&self.root)? {
+            top.insert_dir(&dir);
+        }
         for note in note_files(&self.root)? {
             top.insert(&note);
         }
@@ -122,14 +126,34 @@ pub(crate) fn note_files(root: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+/// Every directory below `root` that [`note_walker`] yields, sorted by path. The
+/// walker already skips hidden and ignored directories and never follows symbolic
+/// links, so the same rules as for notes apply. Directories with a non-UTF-8 name
+/// in their path are skipped, since the tree cannot show them.
+fn dir_paths(root: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut dirs = Vec::new();
+    for entry in note_walker(root) {
+        let entry = entry.map_err(io::Error::other)?;
+        if entry.file_type().is_some_and(|t| t.is_dir())
+            && entry.path() != root
+            && has_utf8_names(root, entry.path())
+        {
+            dirs.push(entry.into_path());
+        }
+    }
+    dirs.sort();
+    Ok(dirs)
+}
+
 /// True when every component of `path` below `root` is valid UTF-8.
 fn has_utf8_names(root: &Path, path: &Path) -> bool {
     path.strip_prefix(root)
         .is_ok_and(|rel| rel.iter().all(|c| c.to_str().is_some()))
 }
 
-/// A folder while the tree is built from the flat note list. A folder is only
-/// created when it holds a note, so empty folders never appear.
+/// A folder while the tree is built from the flat note list. Folders come from
+/// directories on disk (even empty ones, so a new folder has a row) and from the
+/// parents of notes.
 struct Dir {
     path: PathBuf,
     folders: BTreeMap<String, Dir>,
@@ -169,6 +193,28 @@ impl Dir {
             .entry(folder.to_owned())
             .or_insert_with(|| Dir::new(child_path))
             .insert(note);
+    }
+
+    /// Adds `dir`, an absolute path below this folder. Intermediate folders are
+    /// created as needed, so empty folders (and chains of them) appear in the tree.
+    fn insert_dir(&mut self, dir: &Path) {
+        let Ok(rest) = dir.strip_prefix(&self.path) else {
+            return;
+        };
+        if rest.as_os_str().is_empty() {
+            return;
+        }
+        let mut current = self;
+        for component in rest.iter() {
+            let Some(name) = component.to_str() else {
+                return;
+            };
+            let child_path = current.path.join(name);
+            current = current
+                .folders
+                .entry(name.to_owned())
+                .or_insert_with(|| Dir::new(child_path));
+        }
     }
 
     /// Children of this folder: subfolders first, then notes. Each group is sorted
@@ -382,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_folders_are_omitted_but_root_is_kept() {
+    fn empty_folders_are_shown_but_root_is_kept() {
         let dir = tempfile::tempdir().unwrap();
         let r = dir.path();
         fs::create_dir_all(r.join("empty/also-empty")).unwrap();
@@ -394,8 +440,22 @@ mod tests {
             panic!("root must be a folder");
         };
         assert_eq!(path, r);
+        // Both the empty chain and the folder with a note are listed.
+        assert_eq!(children.len(), 2);
+        assert_eq!(children[0].name(), "empty");
+        assert_eq!(children[1].name(), "full");
+        // The empty chain has no notes, only nested folders down to the file's parent.
+        let Node::Folder { children, path, .. } = &children[0] else {
+            panic!("empty must be a folder");
+        };
+        assert_eq!(path, &r.join("empty"));
         assert_eq!(children.len(), 1);
-        assert_eq!(children[0].name(), "full");
+        assert_eq!(children[0].name(), "also-empty");
+        let Node::Folder { children, path, .. } = &children[0] else {
+            panic!("also-empty must be a folder");
+        };
+        assert_eq!(path, &r.join("empty/also-empty"));
+        assert!(children.is_empty());
 
         let empty = tempfile::tempdir().unwrap();
         let vault = Vault::open(empty.path()).unwrap();
@@ -403,6 +463,24 @@ mod tests {
             Node::Folder { children, .. } => assert!(children.is_empty()),
             _ => panic!("root must be a folder"),
         }
+    }
+
+    #[test]
+    fn expanded_empty_folder_lists_only_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        fs::create_dir_all(r.join("empty")).unwrap();
+
+        let vault = Vault::open(r).unwrap();
+        let tree = vault.tree().unwrap();
+        assert_eq!(tree.path(), r);
+        // Expanding a folder with no children must not panic and lists just that row.
+        let mut expansion = Expansion::new();
+        expansion.set_expanded(&r.join("empty"), true);
+        let rows = visible_rows(&tree, &expansion);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].node.path(), r.join("empty"));
+        assert!(rows[0].expanded);
     }
 
     #[test]

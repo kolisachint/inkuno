@@ -391,7 +391,7 @@ impl WorkspaceView {
 
     /// Reruns the search over the vault, with the open note scanned from its
     /// buffer instead of from disk (see [`WorkspaceView::open_buffer`]).
-    fn refresh_search(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn refresh_search(&mut self, cx: &mut Context<Self>) {
         let buffer = self.open_buffer(cx);
         let buffer = buffer
             .as_ref()

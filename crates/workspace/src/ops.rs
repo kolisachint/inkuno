@@ -271,8 +271,8 @@ mod tests {
             vault.create_folder(r, "projects").unwrap_err().kind(),
             io::ErrorKind::AlreadyExists
         );
-        // An empty folder is not shown in the tree.
-        assert!(!tree_paths(&vault).contains(&folder));
+        // An empty folder is shown in the tree, so its rename row renders.
+        assert!(tree_paths(&vault).contains(&folder));
 
         let note = vault.create_note(&folder, "plan").unwrap();
         assert!(tree_paths(&vault).contains(&folder));
