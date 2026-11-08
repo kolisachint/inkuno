@@ -1,0 +1,13 @@
+{
+  "summary": "Status: complete.\n\nWhat was done:\n- Used `/Users/sachinkoli/Downloads/Inter.zip` directly (Google Fonts Inter pack: 54 static TTFs in `static/` + 2 variable TTFs, OFL licensed, zero woff files — no downloading).\n- Extracted to `/tmp/Inter-user/` and copied all 56 TTFs to `~/Library/Fonts` (user-level, no sudo). That dir now holds 76 Inter files total (56 from your zip plus 18 OTF + 2 variable TTF installed in the prior step from the rsms/inter v4.1 release).\n- Repo (`/Users/sachinkoli/github/noteapp`), `~/github/bref`, and real `~/Library/Application Support/bref` untouched (latter only listed to confirm); no cargo run.\n\nProofs:\n- `ls ~/Library/Fonts | grep -i inter` → 76 files (e.g. `Inter_18pt-Black.ttf`, `InterVariable.ttf`, `Inter-Regular.otf`).\n- `fc-list | grep -i '^.*Inter' | head -3`:\n  - `.../Inter-ExtraBoldItalic.otf: Inter,Inter ExtraBold:style=ExtraBold Italic,Italic`\n  - `.../Inter_24pt-Medium.ttf: Inter 24pt,Inter 24pt Medium:style=Medium,Regular`\n  - `.../Inter_18pt-ExtraLightItalic.ttf: Inter 18pt,Inter 18pt ExtraLight:style=ExtraLight Italic,Italic`\n  (132 total `inter` entries in fc-list, so the app's \"Inter\"-preferred font chain will resolve.)\n- Stale `bref` pid 35822 stopped; relaunched isolated (`HOME=/tmp/fakehome ... bref` via nohup, log `/tmp/bref-review.log` empty/clean). `pgrep` proof: pid **36028** `/Users/sachinkoli/github/noteapp/target/debug/bref`.\n- Test isolation confirmed: `/tmp/fakehome/.../bref/config` first line is `/tmp/bt`; vault `/tmp/bt` holds `Welcome.md` (+ `Hi guys.md`).\n\nOne caution for future instructions: `pkill -f 'noteapp/target/debug/bref'` matches the agent's own command line (the task text is embedded in it), so I killed by exact PID / `bref$`-anchored match instead. The broad pattern should not be used for this task setup.\n\nFailures: none. The earlier GitHub-API/gfonts issues from the prior brief were moot — your local zip covered it.",
+  "files_changed": [],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 31299,
+    "output": 5756,
+    "cacheRead": 355841,
+    "cacheWrite": 0,
+    "cost": 0.004992782000000001
+  }
+}

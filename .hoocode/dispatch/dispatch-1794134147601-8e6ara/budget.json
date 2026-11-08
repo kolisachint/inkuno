@@ -1,0 +1,10 @@
+{
+  "task_id": "dispatch-1794134147601-8e6ara",
+  "agent_type": "explore",
+  "budget": 150000,
+  "used": 3589,
+  "peak_context": 24275,
+  "warned": false,
+  "exceeded": false,
+  "last_updated": 1794134189433
+}

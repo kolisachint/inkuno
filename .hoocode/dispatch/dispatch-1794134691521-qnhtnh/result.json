@@ -1,0 +1,13 @@
+{
+  "summary": "Task failed: error reading response stream: error decoding response body",
+  "files_changed": [],
+  "confidence": 0.5,
+  "status": "failed",
+  "usage": {
+    "input": 9898,
+    "output": 152,
+    "cacheRead": 113,
+    "cacheWrite": 0,
+    "cost": 0.0010204260000000003
+  }
+}
