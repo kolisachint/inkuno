@@ -17,15 +17,12 @@ def expected_assets(root: Path, tag: str) -> list[str]:
     version = tag[1:]
     if package["version"] != version:
         raise ValueError("tag and Cargo.toml versions differ")
-    if app not in {"bref", "spot", "astrolabe"}:
+    if app not in {"bref", "spot", "astrolabe", "inkuno"}:
         raise ValueError(f"unsupported application: {app}")
-    pkgrel = re.search(r"^pkgrel=([0-9]+)$", (root / "PKGBUILD").read_text(), re.M)
-    if not pkgrel:
-        raise ValueError("PKGBUILD must declare a numeric pkgrel")
-    arch = "spot-launcher" if app == "spot" else app
-    names = [f"{arch}-{version}-{pkgrel[1]}-x86_64.pkg.tar.zst", f"{arch}-x86_64.pkg.tar.zst"]
-    if app != "spot":
-        names += [f"{app}-macos.dmg", f"{app}-windows-x86_64-setup.exe", f"{app}-windows-x86_64.zip"]
+    # macOS + Linux only. Windows installers/zips and Arch packages were
+    # dropped from the pipeline; the rename crew owns the remaining `bref`
+    # asset strings, so names follow Cargo.toml instead of hardcoding them.
+    names = [f"{app}-macos.dmg", f"{app}-linux-x86_64.tar.gz"]
     return sorted(names)
 
 

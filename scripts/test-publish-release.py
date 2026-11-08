@@ -35,7 +35,6 @@ class PublicationTests(unittest.TestCase):
     def fixture(self, app):
         self.app = app
         (self.root / "Cargo.toml").write_text(f'[package]\nname = "{app}"\nversion = "1.2.3"\n')
-        (self.root / "PKGBUILD").write_text("pkgrel=1\n")
         for path in self.dist.iterdir():
             path.unlink()
         for name in release.expected_assets(self.root, "v1.2.3"):
@@ -60,10 +59,10 @@ class PublicationTests(unittest.TestCase):
 
     def assert_unpublished(self):
         self.assertFalse(self.public)
-        self.assertFalse(any(args[:2] == ("release", "edit") for args in self.calls))
+        self.assertFalse(any(args[:2] == ["release", "edit"] for args in self.calls))
 
     def test_all_native_profiles_publish_only_after_upload_and_inventory_check(self):
-        for app, count in [("bref", 6), ("astrolabe", 6), ("spot", 3)]:
+        for app, count in [("bref", 3), ("astrolabe", 3), ("spot", 3), ("inkuno", 3)]:
             with self.subTest(app=app):
                 self.fixture(app)
                 self.calls = []
@@ -153,23 +152,31 @@ class WorkflowContractTests(unittest.TestCase):
     def test_draft_visibility_and_publication_have_push_access(self):
         for name in ["validate", "publish"]:
             self.assertRegex(self.job(name), r"permissions:\n      contents: write")
-        for name in ["arch-package.yml"] + ([] if self.app == "spot" else ["release-binaries.yml"]):
+        for name in ["release-binaries.yml"]:
             source = (self.workflows / name).read_text()
             self.assertNotIn("contents: write", source)
 
     def test_publication_waits_for_every_platform_without_success_override(self):
-        expected = "[validate, arch]" if self.app == "spot" else "[validate, arch, binaries]"
+        expected = "[validate, binaries]"
         publication = self.job("publish")
         self.assertIn("needs: " + expected, publication)
         self.assertNotIn("if:", publication)
         self.assertIn("pattern: native-*", publication)
 
     def test_packaging_cannot_publish_and_supports_artifact_retry(self):
-        for name in ["arch-package.yml"] + ([] if self.app == "spot" else ["release-binaries.yml"]):
+        for name in ["release-binaries.yml"]:
             source = (self.workflows / name).read_text()
             self.assertNotRegex(source, r"(?m)^  release:")
             self.assertNotIn("gh release", source)
             self.assertEqual(source.count("uses: actions/upload-artifact@"), source.count("overwrite: true"))
+
+    def test_gate_triggers_native_with_tag_and_nothing_else_publishes(self):
+        gate = (self.workflows / "release-gate.yml").read_text()
+        self.assertIn("uses: ./.github/workflows/release-native.yml", gate)
+        self.assertIn("tag: ${{ needs.gate.outputs.tag }}", gate)
+        legacy = (self.workflows / "release.yml").read_text()
+        self.assertNotIn("gh release", legacy)
+        self.assertNotIn("nightly", legacy)
 
 
 if __name__ == "__main__":

@@ -1,73 +1,153 @@
-# Releasing Bref
+# Releasing Inkuno
 
-A version is published only after the Arch package, universal macOS DMG, Windows installer and Windows ZIP have been built and checked. Preparation creates a **draft**; the final workflow attaches the complete set of downloads, verifies their remote names and sizes, and publishes it. A failed or cancelled build leaves the draft unpublished. The pushed Git tag and its source remain publicly visible.
+Releases ship macOS + Linux downloads. There are two paths: the **label gate**
+(merge a labeled PR) and **manual preparation** with `scripts/release.sh` —
+required for the first release, `0.0.1`. Both end in `release-native.yml`,
+which builds the artifacts and publishes only after every download verifies.
 
-## Prerequisites
+> **Naming seam.** New pipeline files use `inkuno` names. Remaining `bref`
+> asset strings (bundle names, artifact files, packaging directories) are the
+> rename crew's lane and are intentionally untouched here.
 
-Run preparation on Arch Linux (Bash, Cargo, Git, curl, sha256sum, makepkg and GitHub CLI). Python 3.11 or newer runs the publication gate on the GitHub runner; the preparation script itself uses Bash. Authenticate `gh` with repository write access and permission to dispatch workflows. CI uses its ordinary `GITHUB_TOKEN`, with `contents: write` only in the draft-validation and final publication jobs. Draft visibility requires push access; packaging jobs keep read permission.
+## Label-gated releases
 
-Merge the new release scripts and workflows into `main` before making the first release with this process. `release-native.yml` must be available on the default branch and on `main`; the tag being built must contain `scripts/publish-release.py` and the packaging files. Older tags without these files cannot use this pipeline unchanged.
+Merge a PR into `main` with exactly one of `rust:patch`, `rust:minor` or
+`rust:major`. The gate (`release-gate.yml`) reads the current `Cargo.toml`
+version, applies the semver bump, commits `Cargo.toml` + `Cargo.lock`, tags
+`main` as `vX.Y.Z`, creates a **draft** release with generated notes, then
+calls `release-native.yml` with the tag. Anything else — no label, two
+labels, or an unlabeled merge — is a no-op with a summary line.
 
-Start with a clean tracked working tree on `main`, synchronized with `origin/main`, and green application CI. The generated `aur/bref-git/PKGBUILD` may differ; the script preserves it. Untracked files are not staged. The preparation script runs local application tests; it does not independently query remote CI verdicts. Check those before preparation.
+- With no previous version tag the gate stops: the first release is manual
+  (below). It never creates `0.0.1`.
+- If `main` is protected and the push is rejected, the gate pushes a
+  `chore: release X.Y.Z` branch and opens a PR instead. Label that PR with the
+  same `rust:*` label and merge it; the gate tags the existing bump rather
+  than bumping twice. Never push tags by hand.
+- Never move a released tag to fix application code. Use a new version.
 
-## Prepare and publish
+### Author notes: the `### My take` section
+
+Every release notes draft has three sections:
+
+- **Highlights** — written by the PR author. Add a `### My take` section to
+  the PR body describing the change from the user's point of view. The gate
+  copies that section verbatim; without it the notes say so.
+- **Credits** — author plus commit contributors, collected via `gh`.
+- **Changes** — commit subjects since the previous tag.
+
+## Manual releases, including the first 0.0.1
+
+### Prerequisites
+
+Bash, Cargo, Git and GitHub CLI with repository write access. Run from a clean
+tracked working tree on `main`, synchronized with `origin/main`, with green
+application CI. Set `INKUNO_REPO` (or edit `REPO` in the script) so `gh`
+targets the Inkuno repository; the default is the `OWNER/inkuno` placeholder.
+Python 3.11 or newer runs the publication gate on the GitHub runner; the
+preparation script itself uses Bash.
+
+Merge the new release scripts and workflows into `main` before making the
+first release with this process. `release-native.yml` must be available on the
+default branch and on `main`; the tag being built must contain
+`scripts/publish-release.py`. Older tags without these files cannot use this
+pipeline unchanged.
+
+### Prepare and publish
 
 ```bash
 # Safe local rehearsal, on any clean branch. Never tags, pushes or contacts GitHub.
 # Cargo runs offline: dependencies must already be cached.
 DRY_RUN=1 scripts/release.sh X.Y.Z
 
-# From synchronized main: bump, test, tag/push, pin checksums, create draft,
-# then explicitly dispatch the Native release workflow.
+# First release, then every manual release: from synchronized main.
+scripts/release.sh 0.0.1
+
+# Later manual releases (the gate normally handles these).
 scripts/release.sh X.Y.Z
 
 # Optional: supply the exact release notes in a local file.
 scripts/release.sh X.Y.Z /path/to/notes.md
 ```
 
-Notes come from the matching changelog section when present, otherwise from commit subjects since the previous tag. A first release without previous tags is supported. A supplied notes file takes precedence.
+Notes come from the matching changelog section when present, otherwise from
+commit subjects since the previous tag. A first release without previous tags
+is supported. A supplied notes file takes precedence.
 
-Simulation restores the managed version and package files on success, test failure or interruption. Normal preparation also restores an uncommitted phase if it fails. Once a version or checksum commit has succeeded, it is retained for recovery; the script does not rewrite committed history.
+Simulation restores `Cargo.toml` and `Cargo.lock` on success, test failure or
+interruption. Normal preparation also restores an uncommitted bump if it
+fails. Once a version commit has succeeded, it is retained for recovery; the
+script does not rewrite committed history.
 
-The local script returns after the workflow has been dispatched, **before publication finishes**. Follow **Actions → Native release**, or use:
+The local script returns after the workflow has been dispatched, **before
+publication finishes**. Follow **Actions → Native release**, or use:
 
 ```bash
 gh run list --workflow release-native.yml
 gh run watch RUN_ID --exit-status
 ```
 
-The orchestrator validates the numeric `vX.Y.Z` tag, its manifest version and the draft state. Reusable packaging jobs produce artifacts in that workflow run without changing a release. The final job runs only after every required job succeeds, rejects missing, empty or unexpected files, generates `SHA256SUMS`, uploads all downloads to the draft and checks their exact names and sizes remotely. Only then does it publish. Remote byte content is not independently downloaded and rehashed by this gate.
+The orchestrator validates the numeric `vX.Y.Z` tag, its manifest version and
+the draft state. Reusable packaging jobs produce artifacts in that workflow run
+without changing a release. The final job runs only after every required job
+succeeds, rejects missing, empty or unexpected files, generates `SHA256SUMS`,
+uploads the macOS DMG and Linux archive to the draft and checks their exact
+names and sizes remotely. Only then does it publish. Remote byte content is
+not independently downloaded and rehashed by this gate.
 
 ## Recover without a new version
 
-If local preparation stopped after committing or tagging, inspect its error and use:
+If local preparation stopped after committing or tagging, inspect its error
+and use:
 
 ```bash
 RESUME=1 scripts/release.sh X.Y.Z
 ```
 
-This requires the existing local tag, a checkout still carrying that version and a non-divergent `main`. It preserves the tag and existing draft notes, finishes any missing checksum/push/draft step and dispatches the workflow again. A public release is refused before local mutation. Authentication or API failure is an error, not evidence that a release is absent.
+This requires the existing local tag, a checkout still carrying that version
+and a non-divergent `main`. It preserves the tag and existing draft notes,
+finishes any missing push/draft step and dispatches the workflow again. A
+public release is refused before local mutation. Authentication or API failure
+is an error, not evidence that a release is absent.
 
-If preparation finished and only a build or upload failed, fix the environment or transient issue and **Re-run failed jobs** in the same Actions run. Successfully uploaded workflow artifacts are retained for seven days. Once they expire, rerun all jobs, or dispatch a fresh complete build:
+If preparation finished and only a build or upload failed, fix the environment
+or transient issue and **Re-run failed jobs** in the same Actions run.
+Successfully uploaded workflow artifacts are retained for seven days. Once
+they expire, rerun all jobs, or dispatch a fresh complete build:
 
 ```bash
 gh workflow run release-native.yml --ref main -f tag=vX.Y.Z
 ```
 
-Runs for the same tag are serialized. Each fresh run downloads only its own packaging artifacts. A failed upload can be retried against the draft; all expected assets are replaced and checked before publication. Unexpected stale release assets must be reviewed and removed explicitly before retrying. The workflow refuses to overwrite a release that is already public.
+Runs for the same tag are serialized. Each fresh run downloads only its own
+packaging artifacts. A failed upload can be retried against the draft; all
+expected assets are replaced and checked before publication. Unexpected stale
+release assets must be reviewed and removed explicitly before retrying. The
+workflow refuses to overwrite a release that is already public.
 
-Do not move a released tag to fix application code. Use a new version. Old public releases can still be inspected and downloaded normally; this workflow intentionally does not rebuild or overwrite them.
+Old public releases can still be inspected and downloaded normally; this
+workflow intentionally does not rebuild or overwrite them.
 
 ## Build packages without publishing
 
 ```bash
 gh workflow run release-binaries.yml --ref main -f tag=develop
-gh workflow run arch-package.yml --ref main -f tag=vX.Y.Z
+gh workflow run release.yml --ref main
 ```
 
-Standalone packaging workflows leave their output in Actions artifacts. They neither attach files to a release nor publish one. The previous `attach` input has been removed.
+Standalone packaging workflows leave their output in Actions artifacts. They
+neither attach files to a release nor publish one. `release.yml` is the manual
+raw-archive builder for macOS + Linux; it has no publish step and no nightly.
 
-The Arch job retains `--skipinteg`: the tagged PKGBUILD predates the post-tag source checksum pinned on `main`. It builds the GitHub source archive for the selected tag and inspects the package metadata and installed executable path. AUR publication remains a separate maintainer operation. This change does not claim reproducible binary output or a signed distribution.
+## Dropped from the pipeline
+
+- **Windows** (`windows-latest` in CI, the Windows packaging job): not built
+  or published. The `packaging/windows` directory remains for the rename crew.
+- **Nightly releases**: removed from `release.yml`; pushes to `main` no
+  longer create or update any release.
+- **AUR / Arch packaging** (`arch-package.yml`, root `PKGBUILD`, `aur/`):
+  removed. No Arch package is built or published; checksums are verified from
+  the uploaded macOS + Linux downloads instead of `makepkg`.
 
 ## Test the release machinery
 
@@ -77,8 +157,17 @@ python3 scripts/test-release.py
 python3 scripts/test-publish-release.py
 ```
 
-The first Python suite uses temporary repositories and mocked Cargo/GitHub/download tools. The second checks the publication gate, including incomplete builds, public releases, failed uploads and retry. Neither suite publishes or modifies the real repository history. **Release checks** runs both on relevant pushes and pull requests.
+The first Python suite uses temporary repositories and mocked Cargo/GitHub
+tools. The second checks the publication gate, including incomplete builds,
+public releases, failed uploads and retry. Neither suite publishes or modifies
+the real repository history. **Release checks** runs all three on relevant
+pushes and pull requests. CI runs on `ubuntu-latest` and `macos-latest`.
 
-These tests exercise orchestration, not a real Windows/macOS build or a live GitHub workflow. The first hosted run remains necessary to validate runner dependencies, permissions and packaging end to end.
+These tests exercise orchestration, not a real macOS/Linux build or a live
+GitHub workflow. The first hosted run remains necessary to validate runner
+dependencies, permissions and packaging end to end.
 
-The explicit dispatch avoids depending on [draft release events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release) or a recursive event generated by `GITHUB_TOKEN`. Publication uses [GitHub CLI draft editing](https://cli.github.com/manual/gh_release_edit).
+The explicit dispatch avoids depending on [draft release
+events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
+or a recursive event generated by `GITHUB_TOKEN`. Publication uses [GitHub
+CLI draft editing](https://cli.github.com/manual/gh_release_edit).

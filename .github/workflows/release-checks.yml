@@ -6,12 +6,10 @@ on:
     paths:
       - 'scripts/*release*'
       - '.github/workflows/*release*'
-      - '.github/workflows/arch-package.yml'
   pull_request:
     paths:
       - 'scripts/*release*'
       - '.github/workflows/*release*'
-      - '.github/workflows/arch-package.yml'
 permissions:
   contents: read
 concurrency:
