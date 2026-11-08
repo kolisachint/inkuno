@@ -1,0 +1,411 @@
+//! Input line: the text of a one-line field (kanban card, grid cell,
+//! palette), its cursor and its selection. The same keys everywhere: arrows, word by word, start
+//! and end, selection, erasing, clipboard. The field using it adds "Line" to its
+//! key context and wires the gestures through `keys`.
+
+use std::ops::Range;
+
+use gpui::{
+    Action, App, Bounds, ClipboardItem, Context, HighlightStyle, InteractiveElement, StyledText, TextLayout, UTF16Selection,
+    actions, canvas, div, fill, prelude::*, size,
+};
+use unicode_segmentation::UnicodeSegmentation;
+
+use crate::ui::theme::Theme;
+use crate::ui::keys::{Bind, bind};
+
+actions!(
+    line,
+    [
+        Left, Right, WordLeft, WordRight, Start, End, SelectLeft, SelectRight, SelectWordLeft, SelectWordRight, SelectStart,
+        SelectEnd, SelectAll, Backspace, Delete, DeleteWordLeft, DeleteWordRight, Copy, Cut, Paste
+    ]
+);
+
+#[derive(Clone, Copy)]
+pub enum To {
+    Left,
+    Right,
+    WordLeft,
+    WordRight,
+    Start,
+    End,
+}
+
+#[derive(Default)]
+pub struct Line {
+    pub text: String,
+    /// The cursor, and the other end of the selection (the same byte if there is none).
+    at: usize,
+    anchor: usize,
+    /// What an input method is composing (pre-edit), shown underlined until it is committed.
+    marked: Option<Range<usize>>,
+    /// The text keeps its newlines (the label of a diagram); otherwise they become spaces.
+    multiline: bool,
+}
+
+impl Line {
+    /// The text, cursor at the end.
+    pub fn new(text: impl Into<String>) -> Self {
+        let text = text.into();
+        Self { at: text.len(), anchor: text.len(), text, marked: None, multiline: false }
+    }
+
+    /// A text of several lines, cursor at the end: Enter and pasting keep their newlines,
+    /// Home and End stop at the line's ends.
+    pub fn multiline(text: impl Into<String>) -> Self {
+        Self { multiline: true, ..Self::new(text) }
+    }
+
+    /// The byte at `units` UTF-16 units from the start (the system counts in them).
+    fn byte(&self, units: usize) -> usize {
+        let mut count = 0;
+        for (i, c) in self.text.char_indices() {
+            if count >= units {
+                return i;
+            }
+            count += c.len_utf16();
+        }
+        self.text.len()
+    }
+
+    fn units(&self, bytes: usize) -> usize {
+        self.text[..bytes].encode_utf16().count()
+    }
+
+    /// The text being composed, in UTF-16 units.
+    pub fn marked_utf16(&self) -> Option<Range<usize>> {
+        self.marked.clone().map(|r| self.units(r.start)..self.units(r.end))
+    }
+
+    /// The text being composed, in bytes.
+    pub fn marked(&self) -> Option<Range<usize>> {
+        self.marked.clone()
+    }
+
+    /// The composition ends as it stands: what was composed stays, as typed text.
+    pub fn unmark(&mut self) {
+        if let Some(text) = self.marked.clone().map(|r| self.text[r].to_string()) {
+            self.commit(None, &text);
+        }
+    }
+
+    /// The text of a UTF-16 range, as an input method asks for it.
+    pub fn text_utf16(&self, range: Range<usize>) -> String {
+        self.text[self.byte(range.start)..self.byte(range.end)].to_string()
+    }
+
+    /// Where the system's text goes: its range (UTF-16), else what is being composed, else the selection.
+    fn aimed(&self, range: Option<Range<usize>>) -> Range<usize> {
+        range.map(|r| self.byte(r.start)..self.byte(r.end)).or(self.marked.clone()).unwrap_or(self.selection())
+    }
+
+    /// One step of a composition: `text` replaces the previous step and stays marked; `selected`
+    /// (UTF-16, inside `text`) is where the cursor goes, else at its end. Empty, the composition is given up.
+    pub fn compose(&mut self, range: Option<Range<usize>>, text: &str, selected: Option<Range<usize>>) {
+        let aimed = self.aimed(range);
+        self.text.replace_range(aimed.clone(), text);
+        self.marked = (!text.is_empty()).then(|| aimed.start..aimed.start + text.len());
+        // `selected` counts UTF-16 units inside `text`: the byte where that many are passed.
+        let inside = |units: usize| {
+            let mut passed = 0;
+            text.char_indices().find(|(_, c)| (passed >= units, passed += c.len_utf16()).0).map_or(text.len(), |(i, _)| i)
+        };
+        self.at = aimed.start + selected.map_or(text.len(), |r| inside(r.end));
+        self.anchor = self.at;
+    }
+
+    /// The composition is done (or text arrives without one): `text` takes the place aimed at.
+    pub fn commit(&mut self, range: Option<Range<usize>>, text: &str) {
+        let aimed = self.aimed(range);
+        (self.anchor, self.at) = (aimed.start, aimed.end);
+        self.insert(text);
+    }
+
+    pub fn cursor(&self) -> usize {
+        self.at
+    }
+
+    pub fn selection(&self) -> Range<usize> {
+        self.at.min(self.anchor)..self.at.max(self.anchor)
+    }
+
+    fn target(&self, to: To) -> usize {
+        let at = self.at;
+        match to {
+            To::Left => self.text[..at].grapheme_indices(true).next_back().map_or(0, |(i, _)| i),
+            To::Right => self.text[at..].graphemes(true).next().map_or(at, |g| at + g.len()),
+            To::WordLeft => self.text[..at].split_word_bound_indices().rev().find(|(_, w)| !w.trim().is_empty()).map_or(0, |(i, _)| i),
+            To::WordRight => self.text[at..].split_word_bound_indices().find(|(_, w)| !w.trim().is_empty()).map_or(self.text.len(), |(i, w)| at + i + w.len()),
+            // The ends of the cursor's line: of the whole text, in a one-line field.
+            To::Start => self.text[..at].rfind('\n').map_or(0, |i| i + 1),
+            To::End => self.text[at..].find('\n').map_or(self.text.len(), |i| at + i),
+        }
+    }
+
+    /// Moves the cursor; `select` extends the selection. Without it, an arrow on a selection
+    /// collapses it on its side.
+    pub fn go(&mut self, to: To, select: bool) {
+        let chosen = self.selection();
+        self.at = match to {
+            To::Left if !select && !chosen.is_empty() => chosen.start,
+            To::Right if !select && !chosen.is_empty() => chosen.end,
+            _ => self.target(to),
+        };
+        if !select {
+            self.anchor = self.at;
+        }
+    }
+
+    /// Puts the cursor at this byte, brought back to a character boundary.
+    pub fn place(&mut self, at: usize) {
+        self.at = (0..=at.min(self.text.len())).rev().find(|&i| self.text.is_char_boundary(i)).unwrap_or(0);
+        self.anchor = self.at;
+    }
+
+    /// Moves the cursor to this byte and keeps the other end of the selection where it was.
+    pub fn extend(&mut self, at: usize) {
+        let anchor = self.anchor;
+        self.place(at);
+        self.anchor = anchor;
+    }
+
+    /// Selects the word at this byte (a double click), or the blank or sign there.
+    pub fn select_word(&mut self, at: usize) {
+        let at = at.min(self.text.len());
+        let (start, word) = self.text.split_word_bound_indices().find(|(i, w)| at < i + w.len()).unwrap_or((self.text.len(), ""));
+        (self.anchor, self.at) = (start, start + word.len());
+    }
+
+    pub fn select_all(&mut self) {
+        (self.anchor, self.at) = (0, self.text.len());
+    }
+
+    /// Writes in place of the selection; a one-line field has no newline.
+    pub fn insert(&mut self, text: &str) {
+        let text = if self.multiline { text.replace("\r\n", "\n").replace('\r', "\n") } else { text.replace("\r\n", " ").replace(['\n', '\r'], " ") };
+        self.marked = None;
+        let chosen = self.selection();
+        self.text.replace_range(chosen.clone(), &text);
+        self.at = chosen.start + text.len();
+        self.anchor = self.at;
+    }
+
+    /// Erases the selection, otherwise from the cursor to `to`.
+    pub fn delete(&mut self, to: To) {
+        if self.selection().is_empty() {
+            self.anchor = self.target(to);
+        }
+        self.insert("");
+    }
+
+    pub fn selected(&self) -> &str {
+        &self.text[self.selection()]
+    }
+
+    /// The selection as the system's input asks for it (UTF-16 units).
+    pub fn utf16(&self) -> UTF16Selection {
+        let chosen = self.selection();
+        let units = |to: usize| self.text[..to].encode_utf16().count();
+        UTF16Selection { range: units(chosen.start)..units(chosen.end), reversed: self.at < self.anchor }
+    }
+
+    /// The text, its selection and its cursor; the layout is used to place the cursor on click.
+    pub fn shown(&self, t: Theme) -> (gpui::Div, TextLayout) {
+        // An empty line keeps its height, and something to place the cursor.
+        let text = if self.text.is_empty() { " ".to_string() } else { self.text.clone() };
+        let chosen = Some(self.selection()).filter(|chosen| !chosen.is_empty());
+        // What is being composed is underlined; the selection, if any, beside it.
+        let composing = self.marked.clone().map(|r| (r, HighlightStyle { underline: Some(gpui::UnderlineStyle { thickness: t.px(1.), color: Some(t.text), wavy: false }), ..Default::default() }));
+        let picked = chosen.filter(|c| self.marked.as_ref().is_none_or(|m| c.end <= m.start || c.start >= m.end)).map(|c| (c, HighlightStyle { background_color: Some(t.selection), ..Default::default() }));
+        let mut highlights: Vec<_> = composing.into_iter().chain(picked).collect();
+        highlights.sort_by_key(|(r, _)| r.start);
+        let styled = StyledText::new(text).with_highlights(highlights);
+        let (layout, at) = (styled.layout().clone(), self.at);
+        let caret = canvas(|_, _, _| (), {
+            let layout = layout.clone();
+            move |_, _, window, _| {
+                if let Some(origin) = layout.position_for_index(at) {
+                    window.paint_quad(fill(Bounds::new(origin, size(t.px(1.5), layout.line_height())), t.accent));
+                }
+            }
+        });
+        (div().relative().child(styled).child(caret.absolute().size_0()), layout)
+    }
+}
+
+/// The keys of an input line, for the "Line" context. Bind after those of the fields
+/// that use it: at equal depth, the last binding wins.
+pub fn bindings(word: &str) -> Vec<Bind> {
+    let c = Some("Line");
+    vec![
+        bind("left", &Left, c),
+        bind("right", &Right, c),
+        bind(&format!("{word}-left"), &WordLeft, c),
+        bind(&format!("{word}-right"), &WordRight, c),
+        bind("home", &Start, c),
+        bind("end", &End, c),
+        bind("shift-left", &SelectLeft, c),
+        bind("shift-right", &SelectRight, c),
+        bind(&format!("{word}-shift-left"), &SelectWordLeft, c),
+        bind(&format!("{word}-shift-right"), &SelectWordRight, c),
+        bind("shift-home", &SelectStart, c),
+        bind("shift-end", &SelectEnd, c),
+        bind("secondary-a", &SelectAll, c),
+        bind("backspace", &Backspace, c),
+        bind("delete", &Delete, c),
+        bind(&format!("{word}-backspace"), &DeleteWordLeft, c),
+        bind(&format!("{word}-delete"), &DeleteWordRight, c),
+        bind("secondary-c", &Copy, c),
+        bind("secondary-x", &Cut, c),
+        bind("secondary-v", &Paste, c),
+    ]
+}
+
+/// Wires the gestures of an input line onto a view's element `el`: `line` gives the current
+/// line (none: the gesture does nothing), `changed` is called when its text has changed.
+pub fn keys<E: InteractiveElement, V: 'static>(el: E, cx: &Context<V>, line: fn(&mut V) -> Option<&mut Line>, changed: fn(&mut V, &mut Context<V>)) -> E {
+    /// A gesture: what it does to the line; true if it changes its text.
+    type Act = fn(&mut Line, &mut App) -> bool;
+    fn on<A: Action, E: InteractiveElement, V: 'static>(el: E, cx: &Context<V>, line: fn(&mut V) -> Option<&mut Line>, changed: fn(&mut V, &mut Context<V>), act: Act) -> E {
+        el.on_action(cx.listener(move |this, _: &A, _, cx| {
+            let Some(line) = line(this) else {
+                return;
+            };
+            if act(line, cx) {
+                changed(this, cx);
+            }
+            cx.notify();
+        }))
+    }
+    // An action of the context "Line" bound on the element, and what it does to the line.
+    type Handler<E, V> = fn(E, &Context<V>, fn(&mut V) -> Option<&mut Line>, fn(&mut V, &mut Context<V>), Act) -> E;
+    let moves: [(Handler<E, V>, Act); 20] = [
+        (on::<Left, E, V>, |l, _| (l.go(To::Left, false), false).1),
+        (on::<Right, E, V>, |l, _| (l.go(To::Right, false), false).1),
+        (on::<WordLeft, E, V>, |l, _| (l.go(To::WordLeft, false), false).1),
+        (on::<WordRight, E, V>, |l, _| (l.go(To::WordRight, false), false).1),
+        (on::<Start, E, V>, |l, _| (l.go(To::Start, false), false).1),
+        (on::<End, E, V>, |l, _| (l.go(To::End, false), false).1),
+        (on::<SelectLeft, E, V>, |l, _| (l.go(To::Left, true), false).1),
+        (on::<SelectRight, E, V>, |l, _| (l.go(To::Right, true), false).1),
+        (on::<SelectWordLeft, E, V>, |l, _| (l.go(To::WordLeft, true), false).1),
+        (on::<SelectWordRight, E, V>, |l, _| (l.go(To::WordRight, true), false).1),
+        (on::<SelectStart, E, V>, |l, _| (l.go(To::Start, true), false).1),
+        (on::<SelectEnd, E, V>, |l, _| (l.go(To::End, true), false).1),
+        (on::<SelectAll, E, V>, |l, _| (l.select_all(), false).1),
+        (on::<Backspace, E, V>, |l, _| (l.delete(To::Left), true).1),
+        (on::<Delete, E, V>, |l, _| (l.delete(To::Right), true).1),
+        (on::<DeleteWordLeft, E, V>, |l, _| (l.delete(To::WordLeft), true).1),
+        (on::<DeleteWordRight, E, V>, |l, _| (l.delete(To::WordRight), true).1),
+        (on::<Copy, E, V>, |l, cx| (cx.write_to_clipboard(ClipboardItem::new_string(l.selected().to_string())), false).1),
+        (on::<Cut, E, V>, |l, cx| (cx.write_to_clipboard(ClipboardItem::new_string(l.selected().to_string())), l.insert(""), true).2),
+        (on::<Paste, E, V>, |l, cx| cx.read_from_clipboard().and_then(|item| item.text()).map(|text| l.insert(&text)).is_some()),
+    ];
+    moves.into_iter().fold(el, |el, (on, act)| on(el, cx, line, changed, act))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edits_a_line() {
+        let mut line = Line::new("Écrire le brouillon");
+        // Ctrl+Backspace: the previous word, then the space and the next word.
+        line.delete(To::WordLeft);
+        assert_eq!((line.text.as_str(), line.cursor()), ("Écrire le ", 11));
+        line.delete(To::WordLeft);
+        assert_eq!(line.text, "Écrire ");
+        // Arrows skip whole characters, accents included; Shift selects.
+        line.go(To::Start, false);
+        line.go(To::Right, true);
+        assert_eq!((line.selected(), line.utf16().range), ("É", 0..1));
+        line.insert("E");
+        assert_eq!((line.text.as_str(), line.cursor()), ("Ecrire ", 1));
+        line.go(To::WordRight, true);
+        assert_eq!(line.selected(), "crire");
+        // An arrow without Shift collapses the selection on its side.
+        line.go(To::Left, false);
+        assert_eq!((line.cursor(), line.selection()), (1, 1..1));
+        line.delete(To::Left);
+        line.delete(To::Left);
+        assert_eq!(line.text, "crire ");
+        line.select_all();
+        line.insert("a\nb");
+        assert_eq!(line.text, "a b");
+        line.place(99);
+        line.delete(To::Right);
+        assert_eq!((line.text.as_str(), line.cursor()), ("a b", 3));
+        let mut accent = Line::new("é");
+        accent.place(1);
+        assert_eq!(accent.cursor(), 0);
+    }
+
+    /// A text of several lines (a diagram's label): newlines stay, Home and End keep to the line,
+    /// a click with Shift extends the selection, a double click takes a word.
+    #[test]
+    fn edits_several_lines() {
+        let mut label = Line::multiline("Alpha\nBeta");
+        label.go(To::Start, false);
+        assert_eq!(label.cursor(), 6);
+        label.go(To::End, true);
+        assert_eq!(label.selected(), "Beta");
+        label.insert("Gamma\r\nDelta");
+        assert_eq!(label.text, "Alpha\nGamma\nDelta");
+        label.place(2);
+        label.go(To::End, false);
+        assert_eq!(label.cursor(), 5);
+        label.extend(9);
+        assert_eq!(label.selected(), "\nGam");
+        label.extend(0);
+        assert_eq!(label.selected(), "Alpha");
+        // A double click: the word, the blank between two, the last word, past the end.
+        let mut words = Line::multiline("été  très😀 fini");
+        words.select_word(3);
+        assert_eq!(words.selected(), "été");
+        words.select_word(5);
+        assert_eq!(words.selected(), "  ");
+        words.select_word(words.text.len() - 1);
+        assert_eq!(words.selected(), "fini");
+        words.select_word(999);
+        assert_eq!(words.selected(), "");
+        let mut empty = Line::multiline("");
+        empty.select_word(0);
+        empty.go(To::Start, false);
+        empty.go(To::End, true);
+        assert_eq!((empty.selected(), empty.cursor()), ("", 0));
+        // A one-line field still has its ends at those of the text.
+        let mut one = Line::new("a b");
+        one.place(1);
+        one.go(To::Start, false);
+        assert_eq!(one.cursor(), 0);
+    }
+
+    /// An input method composes: its text shows in place, marked, and each step replaces the previous
+    /// one; the last one stays. UTF-16 offsets, as the system gives them.
+    #[test]
+    fn composes_with_an_input_method() {
+        let mut line = Line::new("a ");
+        // Japanese: か, then かな, then 仮名 chosen.
+        line.compose(None, "k", None);
+        line.compose(None, "か", None);
+        assert_eq!((line.text.as_str(), line.marked_utf16()), ("a か", Some(2..3)));
+        line.compose(None, "かな", Some(2..2));
+        assert_eq!((line.text.as_str(), line.marked_utf16(), line.cursor()), ("a かな", Some(2..4), 8));
+        line.commit(None, "仮名");
+        assert_eq!((line.text.as_str(), line.marked_utf16(), line.cursor()), ("a 仮名", None, 8));
+        // A dead key: ^ then e gives ê; given up (empty), nothing is left.
+        line.compose(None, "^", None);
+        line.commit(None, "ê");
+        assert_eq!(line.text, "a 仮名ê");
+        line.compose(None, "^", None);
+        line.compose(None, "", None);
+        assert_eq!((line.text.as_str(), line.marked_utf16()), ("a 仮名ê", None));
+        // A range given by the system (emoji: two UTF-16 units) replaces exactly that.
+        let mut line = Line::new("x😀y");
+        line.commit(Some(1..3), "z");
+        assert_eq!(line.text, "xzy");
+        assert_eq!(line.text_utf16(0..2), "xz");
+    }
+}

@@ -1,4 +1,22 @@
-/target
-.DS_Store
+# Rust
+/target/
+
+# ctags index
+/tags
+
+# makepkg: build tree, downloaded sources, packages, logs
+/pkg/
+/src/bref-*
+/src/encre-*
+/*.tar.gz
+/*.pkg.tar.*
+/*.src.tar.*
+/*.log
+
+# makepkg builds of aur/*
+/aur/*/*/
+/aur/*/*.pkg.tar.*
+
+# Claude Code local caches
 /.claude/
-.claude/worktrees/
+/book/book/
