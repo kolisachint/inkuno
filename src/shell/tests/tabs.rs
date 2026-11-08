@@ -210,7 +210,7 @@ fn the_tree_previews_in_a_single_tab(cx: &mut TestAppContext) {
 /// of the window buttons, and the row stops before the buttons.
 #[gpui::test]
 fn tabs_are_pills_that_stay_clear_of_the_window_buttons(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-tab-pills-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-tab-pills-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);

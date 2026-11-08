@@ -128,7 +128,7 @@ fn isolated_config(root: &Path) -> std::sync::MutexGuard<'static, ()> {
 
 /// A shell on a fresh vault in a temporary folder.
 pub(super) fn start<'a>(cx: &'a mut TestAppContext, name: &str) -> (PathBuf, Entity<Shell>, &'a mut gpui::VisualTestContext, std::sync::MutexGuard<'static, ()>) {
-    let root = std::env::temp_dir().join(format!("bref-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let config = isolated_config(&root);

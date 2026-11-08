@@ -1,6 +1,6 @@
 //! New version: a request to GitHub's API at most once a day, then, on
 //! request, download and install. Nothing else leaves the app, and it gives
-//! only "bref" as its client name.
+//! only "inkuno" as its client name.
 
 use std::{
     fs::{DirBuilder, File},
@@ -35,18 +35,18 @@ pub fn releases_url() -> String {
     format!("{}/releases/latest", env!("CARGO_PKG_REPOSITORY"))
 }
 
-/// URL of the latest release. `BREF_RELEASES_API` replaces it: update tests
+/// URL of the latest release. `INKUNO_RELEASES_API` replaces it: update tests
 /// point it to a local file (`file://`) describing a release.
 fn api_url() -> String {
-    std::env::var("BREF_RELEASES_API").unwrap_or_else(|_| {
+    std::env::var("INKUNO_RELEASES_API").unwrap_or_else(|_| {
         let repo = env!("CARGO_PKG_REPOSITORY").replace("https://github.com/", "https://api.github.com/repos/");
         format!("{repo}/releases/latest")
     })
 }
 
-/// `BREF_RELEASES_API` is a test setting: it lifts the URL and sum checks.
+/// `INKUNO_RELEASES_API` is a test setting: it lifts the URL and sum checks.
 fn overridden() -> bool {
-    std::env::var_os("BREF_RELEASES_API").is_some()
+    std::env::var_os("INKUNO_RELEASES_API").is_some()
 }
 
 /// The file to install only comes from this repository's releases, and over HTTPS end to end
@@ -102,7 +102,7 @@ fn now() -> u64 {
 }
 
 /// The check kept in the `update` file can come from another installation on the same
-/// machine (the zip next to the installer, `bref-git` after the package): its file to install
+/// machine (the zip next to the installer, `inkuno-git` after the package): its file to install
 /// only counts if this one knows how to use it.
 fn only_if_installable(release: Release, installable: bool) -> Release {
     if installable { release } else { Release { asset: None, sha256: None, ..release } }
@@ -124,9 +124,9 @@ pub fn install(url: &str, sha256: Option<&str>) -> Result<(), String> {
         }
     }
     let dir = private_dir().map_err(|e| e.to_string())?;
-    let name = url.rsplit('/').next().filter(|n| !n.is_empty()).unwrap_or("bref-update");
+    let name = url.rsplit('/').next().filter(|n| !n.is_empty()).unwrap_or("inkuno-update");
     let file = dir.join(name);
-    let installed = run(curl().args(["-fL", "--max-time", "900", "-A", "bref", "-o"]).arg(&file).arg(url))
+    let installed = run(curl().args(["-fL", "--max-time", "900", "-A", "inkuno", "-o"]).arg(&file).arg(url))
         .and_then(|()| sha256.map_or(Ok(()), |expected| verify(&file, expected)))
         .and_then(|()| apply(&file));
     // A file refused or whose installation failed does not stay in the temporary folder;
@@ -143,7 +143,7 @@ pub fn install(url: &str, sha256: Option<&str>) -> Result<(), String> {
 fn private_dir() -> io::Result<PathBuf> {
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
     for n in 0..100 {
-        let dir = std::env::temp_dir().join(format!("bref-update-{}-{stamp:x}-{n}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("inkuno-update-{}-{stamp:x}-{n}", std::process::id()));
         let mut builder = DirBuilder::new();
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
@@ -172,7 +172,7 @@ fn verify(file: &Path, expected: &str) -> Result<(), String> {
 // the download, not the GitHub account itself. Sign the versions (minisign key) if the app grows.
 fn fetch() -> Option<Release> {
     let out = curl()
-        .args(["-fsSL", "--max-time", "10", "-A", "bref", "-H", "Accept: application/vnd.github+json"])
+        .args(["-fsSL", "--max-time", "10", "-A", "inkuno", "-H", "Accept: application/vnd.github+json"])
         .arg(api_url())
         .stdin(Stdio::null())
         .stderr(Stdio::null())
@@ -208,8 +208,8 @@ fn relaunch(program: &str, args: &[&Path]) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// Windows: the version's installer, silent. It replaces `bref.exe` (closing it
-/// if still running) then relaunches the app (`/RELAUNCH=1`, read by `packaging/windows/bref.iss`).
+/// Windows: the version's installer, silent. It replaces `inkuno.exe` (closing it
+/// if still running) then relaunches the app (`/RELAUNCH=1`, read by `packaging/windows/inkuno.iss`).
 #[cfg(windows)]
 fn apply(file: &Path) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
@@ -228,7 +228,7 @@ fn apply(file: &Path) -> Result<(), String> {
 #[cfg(windows)]
 fn asset_name() -> Option<&'static str> {
     let exe = std::env::current_exe().ok()?;
-    exe.with_file_name("unins000.exe").is_file().then_some("bref-windows-x86_64-setup.exe")
+    exe.with_file_name("unins000.exe").is_file().then_some("inkuno-windows-x86_64-setup.exe")
 }
 
 /// The `.app` bundle that contains this program.
@@ -239,10 +239,10 @@ fn app_bundle() -> Option<std::path::PathBuf> {
 
 #[cfg(target_os = "macos")]
 fn asset_name() -> Option<&'static str> {
-    app_bundle().map(|_| "bref-macos.dmg")
+    app_bundle().map(|_| "inkuno-macos.dmg")
 }
 
-/// macOS: replaces `Bref.app` with the one from the disk image, then relaunches the app.
+/// macOS: replaces `Inkuno.app` with the one from the disk image, then relaunches the app.
 #[cfg(target_os = "macos")]
 fn apply(file: &Path) -> Result<(), String> {
     let app = app_bundle().ok_or("not running from an app bundle")?;
@@ -250,20 +250,20 @@ fn apply(file: &Path) -> Result<(), String> {
     relaunch("open", &[&app])
 }
 
-/// Copies `Bref.app` from the disk image next to `app` (same volume, so the rename is
+/// Copies `Inkuno.app` from the disk image next to `app` (same volume, so the rename is
 /// atomic), then swaps it with the old one. On failure, the old one stays in place. The
 /// running program keeps running: its file is not deleted while it holds it open.
 #[cfg(target_os = "macos")]
 fn replace_app(dmg: &Path, app: &Path) -> Result<(), String> {
     let dir = app.parent().ok_or("no parent folder")?;
-    let (fresh, old) = (dir.join(".Bref.app.new"), dir.join(".Bref.app.old"));
-    let mount = std::env::temp_dir().join(format!("bref-update-mount-{}", std::process::id()));
+    let (fresh, old) = (dir.join(".Inkuno.app.new"), dir.join(".Inkuno.app.old"));
+    let mount = std::env::temp_dir().join(format!("inkuno-update-mount-{}", std::process::id()));
     std::fs::create_dir_all(&mount).map_err(|e| e.to_string())?;
     run(Command::new("hdiutil").args(["attach", "-nobrowse", "-readonly", "-noverify", "-mountpoint"]).arg(&mount).arg(dmg))?;
     let swapped = (|| {
         let _ = std::fs::remove_dir_all(&fresh);
         let _ = std::fs::remove_dir_all(&old);
-        run(Command::new("ditto").arg(mount.join("Bref.app")).arg(&fresh))?;
+        run(Command::new("ditto").arg(mount.join("Inkuno.app")).arg(&fresh))?;
         std::fs::rename(app, &old).map_err(|e| e.to_string())?;
         if let Err(e) = std::fs::rename(&fresh, app) {
             let _ = std::fs::rename(&old, app);
@@ -278,23 +278,23 @@ fn replace_app(dmg: &Path, app: &Path) -> Result<(), String> {
     swapped
 }
 
-/// Linux: only the release's Arch package (`bref`, installed in `/usr/bin`) is updated,
-/// by pacman; other installations (built, `bref-git`) have no file to install.
+/// Linux: only the release's Arch package (`inkuno`, installed in `/usr/bin`) is updated,
+/// by pacman; other installations (built, `inkuno-git`) have no file to install.
 #[cfg(target_os = "linux")]
 fn asset_name() -> Option<&'static str> {
     let owned = || {
-        let owner = Command::new("pacman").args(["-Qqo", "/usr/bin/bref"]).output().ok()?;
-        (String::from_utf8_lossy(&owner.stdout).trim() == "bref").then_some(())
+        let owner = Command::new("pacman").args(["-Qqo", "/usr/bin/inkuno"]).output().ok()?;
+        (String::from_utf8_lossy(&owner.stdout).trim() == "inkuno").then_some(())
     };
-    let here = std::env::current_exe().ok().is_some_and(|p| p == Path::new("/usr/bin/bref"));
-    (cfg!(target_arch = "x86_64") && here && owned().is_some()).then_some("bref-x86_64.pkg.tar.zst")
+    let here = std::env::current_exe().ok().is_some_and(|p| p == Path::new("/usr/bin/inkuno"));
+    (cfg!(target_arch = "x86_64") && here && owned().is_some()).then_some("inkuno-x86_64.pkg.tar.zst")
 }
 
 /// Linux: `pkexec` asks for the password in a desktop window, then pacman installs.
 #[cfg(target_os = "linux")]
 fn apply(file: &Path) -> Result<(), String> {
     run(Command::new("pkexec").args(["pacman", "-U", "--noconfirm"]).arg(file))?;
-    relaunch("/usr/bin/bref", &[])
+    relaunch("/usr/bin/inkuno", &[])
 }
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
@@ -355,20 +355,20 @@ mod tests {
     use super::*;
 
     const JSON: &str = r#"{"tag_name": "v0.2.0", "draft": false, "prerelease": false, "assets": [
-        {"name": "bref-x86_64.pkg.tar.zst", "browser_download_url": "https://x/bref-x86_64.pkg.tar.zst"},
-        {"name": "bref-macos.dmg", "browser_download_url": "https://x/bref-macos.dmg", "digest": "sha256:ab12"}]}"#;
+        {"name": "inkuno-x86_64.pkg.tar.zst", "browser_download_url": "https://x/inkuno-x86_64.pkg.tar.zst"},
+        {"name": "inkuno-macos.dmg", "browser_download_url": "https://x/inkuno-macos.dmg", "digest": "sha256:ab12"}]}"#;
 
     #[test]
     fn reads_the_published_release() {
         let release = |asset| release_of(JSON, asset).unwrap();
         assert_eq!(release(None), Release { version: "0.2.0".into(), ..Default::default() });
-        let dmg = release(Some("bref-macos.dmg"));
-        assert_eq!(dmg.asset.as_deref(), Some("https://x/bref-macos.dmg"));
+        let dmg = release(Some("inkuno-macos.dmg"));
+        assert_eq!(dmg.asset.as_deref(), Some("https://x/inkuno-macos.dmg"));
         assert_eq!(dmg.sha256.as_deref(), Some("ab12"));
         // No published sum: nothing to compare, installation will be refused.
-        assert_eq!(release(Some("bref-x86_64.pkg.tar.zst")).sha256, None);
+        assert_eq!(release(Some("inkuno-x86_64.pkg.tar.zst")).sha256, None);
         // This system's file is not (yet) published.
-        assert_eq!(release(Some("bref-windows-x86_64-setup.exe")).asset, None);
+        assert_eq!(release(Some("inkuno-windows-x86_64-setup.exe")).asset, None);
         assert_eq!(release_of(r#"{"tag_name": "0.3.1"}"#, Some("a")).unwrap().version, "0.3.1");
         assert_eq!(release_of(r#"{"tag_name": "v0.3.0-rc1", "prerelease": true}"#, None), None);
         assert_eq!(release_of(r#"{"tag_name": "v0.3.0", "draft": true}"#, None), None);
@@ -387,10 +387,10 @@ mod tests {
     #[test]
     fn only_trusts_release_files_of_this_repository() {
         let repo = env!("CARGO_PKG_REPOSITORY");
-        assert!(trusted(&format!("{repo}/releases/download/v0.2.2/bref-macos.dmg")));
+        assert!(trusted(&format!("{repo}/releases/download/v0.2.2/inkuno-macos.dmg")));
         assert!(!trusted("http://github.com/alarboulletmarin/bref/releases/download/v1/a"));
         assert!(!trusted(&format!("{repo}-evil/releases/download/v1/a")));
-        assert!(!trusted("https://github.com/autre/bref/releases/download/v1/a"));
+        assert!(!trusted("https://github.com/autre/inkuno/releases/download/v1/a"));
         assert!(!trusted("file:///tmp/a.pkg.tar.zst"));
     }
 
@@ -447,19 +447,19 @@ mod tests {
     #[test]
     fn replaces_the_app_from_a_disk_image() {
         use std::fs;
-        let dir = std::env::temp_dir().join(format!("bref-update-test-{}", std::process::id()));
-        let program = |root: &Path| root.join("Bref.app/Contents/MacOS/bref");
+        let dir = std::env::temp_dir().join(format!("inkuno-update-test-{}", std::process::id()));
+        let program = |root: &Path| root.join("Inkuno.app/Contents/MacOS/inkuno");
         let write = |root: &Path, text: &str| {
             fs::create_dir_all(program(root).parent().unwrap()).unwrap();
             fs::write(program(root), text).unwrap();
         };
         write(&dir.join("image"), "nouvelle");
         let dmg = dir.join("new.dmg");
-        run(Command::new("hdiutil").args(["create", "-volname", "Bref", "-format", "UDZO", "-srcfolder"])
+        run(Command::new("hdiutil").args(["create", "-volname", "Inkuno", "-format", "UDZO", "-srcfolder"])
             .arg(dir.join("image")).arg(&dmg))
         .unwrap();
         write(&dir.join("Applications"), "ancienne");
-        let installed = dir.join("Applications/Bref.app");
+        let installed = dir.join("Applications/Inkuno.app");
         replace_app(&dmg, &installed).unwrap();
         assert_eq!(fs::read_to_string(program(&dir.join("Applications"))).unwrap(), "nouvelle");
         let left: Vec<_> = fs::read_dir(dir.join("Applications")).unwrap().flatten().collect();

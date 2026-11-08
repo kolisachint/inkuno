@@ -169,7 +169,7 @@ fn a_corrupt_picture_opened_alone_says_so(cx: &mut TestAppContext) {
 /// A vault that is gone (the config points to a missing folder) is said on the welcome page, narrow or wide, until another is opened.
 #[gpui::test]
 fn a_missing_vault_is_said_on_the_welcome_page(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-lost-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-lost-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -310,7 +310,7 @@ fn an_empty_panel_says_so(cx: &mut TestAppContext) {
 /// A list that has something in it says nothing.
 #[gpui::test]
 fn a_panel_with_notes_says_nothing(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-full-panel-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-full-panel-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Une.md"), "# Une\n\n#tag [[Une]]\n").unwrap();

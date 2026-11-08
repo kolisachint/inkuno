@@ -15,7 +15,7 @@ pub fn tr(en: &'static str, fr: &'static str) -> &'static str {
     if *FRENCH.get_or_init(|| cfg!(test) || system_is_french()) { fr } else { en }
 }
 
-/// English from now on, whatever the system's language: `bref mcp` talks to a model, and
+/// English from now on, whatever the system's language: `inkuno mcp` talks to a model, and
 /// the library's names and templates it returns are part of what the model reads.
 pub fn speak_english() {
     let _ = FRENCH.set(false);
@@ -193,7 +193,7 @@ mod tests {
     fn tells_why_a_disk_operation_failed() {
         use std::io::{Error, ErrorKind};
         // A real system error, whatever the system: a file that is not there.
-        let os = std::fs::read(std::env::temp_dir().join("bref-absent-ici/rien")).unwrap_err();
+        let os = std::fs::read(std::env::temp_dir().join("inkuno-absent-ici/rien")).unwrap_err();
         assert_eq!(io_reason(&os), "introuvable");
         assert!(!io_reason(&os).contains("os error"));
         for (kind, said) in [(ErrorKind::PermissionDenied, "permission refusée"), (ErrorKind::NotFound, "introuvable"), (ErrorKind::StorageFull, "le disque est plein"), (ErrorKind::ReadOnlyFilesystem, "le disque est en lecture seule")] {

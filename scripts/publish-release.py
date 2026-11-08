@@ -17,7 +17,7 @@ def expected_assets(root: Path, tag: str) -> list[str]:
     version = tag[1:]
     if package["version"] != version:
         raise ValueError("tag and Cargo.toml versions differ")
-    if app not in {"bref", "spot", "astrolabe"}:
+    if app not in {"inkuno", "spot", "astrolabe"}:
         raise ValueError(f"unsupported application: {app}")
     pkgrel = re.search(r"^pkgrel=([0-9]+)$", (root / "PKGBUILD").read_text(), re.M)
     if not pkgrel:

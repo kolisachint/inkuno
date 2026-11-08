@@ -54,7 +54,7 @@ fn check_label() -> &'static str {
 }
 
 fn install_label(version: &str) -> String {
-    format!("{} {version}", tr("Update Bref to", "Mettre à jour Bref vers"))
+    format!("{} {version}", tr("Update Inkuno to", "Mettre à jour Inkuno vers"))
 }
 
 pub fn sync_label() -> &'static str {
@@ -227,7 +227,7 @@ pub enum PaletteEvent {
     CloneVault,
     /// Opens the system terminal in the vault folder.
     Terminal,
-    /// Binds capture (`bref --capture`) to a desktop shortcut.
+    /// Binds capture (`inkuno --capture`) to a desktop shortcut.
     CaptureKey,
     /// Installs the new version.
     InstallUpdate,

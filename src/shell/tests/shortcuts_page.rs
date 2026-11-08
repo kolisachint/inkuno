@@ -59,14 +59,14 @@ fn page() -> String {
     })
 }
 
-/// `make docs` (`BREF_WRITE_DOCS=1`) writes the page; otherwise a page that no longer matches
+/// `make docs` (`INKUNO_WRITE_DOCS=1`) writes the page; otherwise a page that no longer matches
 /// the help panel fails, with the command that brings it up to date.
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn shortcuts_page_is_current() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(PAGE);
     let page = page();
-    if std::env::var_os("BREF_WRITE_DOCS").is_some() {
+    if std::env::var_os("INKUNO_WRITE_DOCS").is_some() {
         std::fs::write(&path, &page).unwrap();
         return;
     }

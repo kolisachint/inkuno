@@ -1,4 +1,4 @@
-# Bref
+# Inkuno
 
 [![CI](https://github.com/alarboulletmarin/bref/actions/workflows/ci.yml/badge.svg)](https://github.com/alarboulletmarin/bref/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/alarboulletmarin/bref)](https://github.com/alarboulletmarin/bref/releases/latest)
@@ -6,11 +6,11 @@
 
 A fast, minimal note-taking app. Notes are plain Markdown files in a folder you choose, styled as you type. Written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework.
 
-![Bref, light and dark](docs/screenshots/bref.png)
+![Inkuno, light and dark](docs/screenshots/inkuno.png)
 
 **[Install](#install)** · **[User guide](book/src/introduction.md)** · [Shortcuts](book/src/shortcuts.md) · [Website](https://alarboulletmarin.github.io/bref/) · [Contributing](CONTRIBUTING.md)
 
-## Why Bref
+## Why Inkuno
 
 - **Fast.** The window opens in about 75 ms. A keystroke costs about a millisecond, even in a note of 5,000 lines. [Figures](book/src/performance.md)
 - **Plain files.** One `.md` file per note, in an ordinary folder. Sync it with git, Syncthing or a cloud folder. An existing folder of Markdown notes works as is.
@@ -18,7 +18,7 @@ A fast, minimal note-taking app. Notes are plain Markdown files in a folder you 
 - **Tables that compute.** Cells wrap, `Tab` moves between them, pasting from a spreadsheet works, and `=sum(above)` adds up a column.
 - **Linked notes.** `[[Links]]`, backlinks, tags, embedded sections, a graph, and a calendar of daily notes. The tree follows the active file, including diagrams, pictures and tables.
 - **More than notes.** Kanban boards, list pages built from front matter, UML diagrams drawn by hand and saved as SVG, and a CSV grid that opens a million rows.
-- **Agents.** `bref mcp` lets an agent read, write and draw in the vault, with Bref's links, trash and diagrams. [Guide](book/src/agents.md)
+- **Agents.** `inkuno mcp` lets an agent read, write and draw in the vault, with Inkuno's links, trash and diagrams. [Guide](book/src/agents.md)
 - **Safe tab closing.** Close a tab, the other tabs or a whole pane from a tab's right click, or every file from the palette. If saving fails, the document stays open with its edits and undo history.
 - **PDF to send.** A note saved as an A4 PDF from the palette, unsaved edits included: text you can search and copy, pictures, Mermaid diagrams and formulas drawn in. [How](book/src/writing.md#save-as-pdf)
 - **Local sharing.** Copy a whole note as Markdown or readable text, or save a separate copy. One Share / Export menu also offers SVG/PNG for diagrams and the existing table formats.
@@ -32,30 +32,30 @@ A fast, minimal note-taking app. Notes are plain Markdown files in a folder you 
 | System | Get it |
 |---|---|
 | Arch Linux | the prebuilt package, below |
-| macOS 11 or later | [`bref-macos.dmg`](https://github.com/alarboulletmarin/bref/releases/latest/download/bref-macos.dmg) |
-| Windows 10 or 11 | [installer](https://github.com/alarboulletmarin/bref/releases/latest/download/bref-windows-x86_64-setup.exe) or [zip](https://github.com/alarboulletmarin/bref/releases/latest/download/bref-windows-x86_64.zip) |
+| macOS 11 or later | [`inkuno-macos.dmg`](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-macos.dmg) |
+| Windows 10 or 11 | [installer](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64-setup.exe) or [zip](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64.zip) |
 | Ubuntu, Debian, Fedora, other Linux | build from source, below |
 
 ```bash
 # Arch Linux
-curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/bref-x86_64.pkg.tar.zst
-sudo pacman -U ./bref-x86_64.pkg.tar.zst
+curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-x86_64.pkg.tar.zst
+sudo pacman -U ./inkuno-x86_64.pkg.tar.zst
 ```
 
 ```bash
 # Other Linux: needs Rust 1.88 or later, and the libraries listed in the install guide
 git clone https://github.com/alarboulletmarin/bref.git
-cd bref
+cd inkuno
 make && sudo make install
 ```
 
 The macOS and Windows downloads are not signed. The first launch needs one extra click: see [the install guide](book/src/install.md), which also covers the packages of each distribution, building on macOS and Windows, and upgrading.
 
-Bref tells you when a new version is out. On Arch, macOS and Windows (installer), one click updates it.
+Inkuno tells you when a new version is out. On Arch, macOS and Windows (installer), one click updates it.
 
 ## Getting started
 
-1. Launch Bref and click **Start in ~/Documents/Notes**, or open a folder you already have.
+1. Launch Inkuno and click **Start in ~/Documents/Notes**, or open a folder you already have.
 2. Type. The first line is the title of the note and the name of its file. Saving is automatic.
 3. `Ctrl + P` finds or creates a note, `F10` lists every command, `F1` lists every shortcut.
 
@@ -81,9 +81,9 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | [Files on disk](book/src/vault.md) | naming, front matter, backup, configuration files |
 | [Syncing a vault](book/src/sync.md) | git in one key, or a cloud folder |
 | [Settings and appearance](book/src/settings.md) | themes, fonts, page width, changing a shortcut |
-| [Updates](book/src/updates.md) | how Bref updates itself, and what it sends |
+| [Updates](book/src/updates.md) | how Inkuno updates itself, and what it sends |
 | [Keyboard shortcuts](book/src/shortcuts.md) | every shortcut, as the help panel lists them |
-| [Agents (MCP)](book/src/agents.md) | `bref mcp`: an agent reads, writes and draws in the vault |
+| [Agents (MCP)](book/src/agents.md) | `inkuno mcp`: an agent reads, writes and draws in the vault |
 | [Compatibility](book/src/compatibility.md), [Troubleshooting](book/src/troubleshooting.md), [Performance](book/src/performance.md) | systems, known problems, measurements |
 
 ## Contributing

@@ -1,6 +1,6 @@
-# Contributing to Bref
+# Contributing to Inkuno
 
-Thank you for taking the time. Bref is a small app with a narrow goal: fast, minimal Markdown notes in a single binary. Contributions that keep it that way are welcome.
+Thank you for taking the time. Inkuno is a small app with a narrow goal: fast, minimal Markdown notes in a single binary. Contributions that keep it that way are welcome.
 
 By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). For a security problem, follow the [security policy](SECURITY.md) instead of opening an issue.
 
@@ -44,7 +44,7 @@ Each kind of reader has one place:
 
 | Reader | Place |
 |---|---|
-| someone deciding whether to try Bref | `README.md` and the website, `docs/index.html`: what it is, why, how to install. Short. |
+| someone deciding whether to try Inkuno | `README.md` and the website, `docs/index.html`: what it is, why, how to install. Short. |
 | a user | the user guide, `book/src/` (an [mdBook](https://rust-lang.github.io/mdBook/)), one page per subject |
 | a contributor | `CONTRIBUTING.md`, `ARCHITECTURE.md` |
 

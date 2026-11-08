@@ -87,7 +87,7 @@ impl Diagram {
                 }
             }
         }
-        let _ = write!(out, "<metadata id=\"bref-diagram\">\n{}</metadata>\n</svg>\n", xml(&self.source()));
+        let _ = write!(out, "<metadata id=\"inkuno-diagram\">\n{}</metadata>\n</svg>\n", xml(&self.source()));
         out
     }
 
@@ -131,9 +131,9 @@ impl Diagram {
         out
     }
 
-    /// The source a Bref diagram file carries, unescaped.
+    /// The source a Inkuno diagram file carries, unescaped.
     fn source_of(svg: &str) -> Option<String> {
-        let body = svg.split_once("<metadata id=\"bref-diagram\">")?.1.split_once("</metadata>")?.0;
+        let body = svg.split_once("<metadata id=\"inkuno-diagram\">")?.1.split_once("</metadata>")?.0;
         Some(body.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
     }
 
@@ -146,7 +146,7 @@ impl Diagram {
         }
     }
 
-    /// Whether this is a Bref diagram written by a version this one cannot read.
+    /// Whether this is a Inkuno diagram written by a version this one cannot read.
     pub fn newer(svg: &str) -> bool {
         Diagram::source_of(svg).is_some_and(|source| Diagram::version_of(&source) > VERSION)
     }
@@ -359,9 +359,9 @@ fn path_d(path: &[Cmd]) -> String {
 mod tests {
     use super::*;
 
-    /// A diagram file around `source`, as another version of Bref would have written it.
+    /// A diagram file around `source`, as another version of Inkuno would have written it.
     fn file(source: &str) -> String {
-        format!("<svg>\n<metadata id=\"bref-diagram\">\n{}</metadata>\n</svg>\n", xml(source))
+        format!("<svg>\n<metadata id=\"inkuno-diagram\">\n{}</metadata>\n</svg>\n", xml(source))
     }
 
     #[test]
@@ -404,7 +404,7 @@ mod tests {
         assert!((Diagram::from_svg(&svg), Diagram::newer(&svg)) == (None, true));
         // The version may come after the elements.
         assert!(Diagram::newer(&file(&format!("{shape}version {}\n", VERSION + 1))));
-        // Version 0, 1, none, or an empty source: opens. Not a Bref file: not "newer", just foreign.
+        // Version 0, 1, none, or an empty source: opens. Not a Inkuno file: not "newer", just foreign.
         for source in ["version 0\n", "version 1\n", "", "\n"] {
             let svg = file(&format!("{source}{shape}"));
             assert!(Diagram::from_svg(&svg).is_some_and(|d| d.shapes.len() == 1) && !Diagram::newer(&svg), "{source:?}");

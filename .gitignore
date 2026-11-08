@@ -6,7 +6,7 @@
 
 # makepkg: build tree, downloaded sources, packages, logs
 /pkg/
-/src/bref-*
+/src/inkuno-*
 /src/encre-*
 /*.tar.gz
 /*.pkg.tar.*

@@ -1,5 +1,5 @@
 //! Import of diagrams made elsewhere: Excalidraw (JSON) and draw.io
-//! (XML) files. Pure functions. We keep what Bref can draw: shapes,
+//! (XML) files. Pure functions. We keep what Inkuno can draw: shapes,
 //! texts, arrows and what they are attached to; the rest is left out.
 
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use crate::{
     lang::tr,
 };
 
-/// Index of Bref's colour closest to `#rrggbb`; black, white
+/// Index of Inkuno's colour closest to `#rrggbb`; black, white
 /// and greys give neutral.
 fn color(hex: &str) -> u8 {
     let Some(rgb) = hex.strip_prefix('#').filter(|h| h.len() == 6).and_then(|h| u32::from_str_radix(h, 16).ok()) else {
@@ -26,7 +26,7 @@ fn color(hex: &str) -> u8 {
     (1..COLORS.len()).min_by_key(|i| far(&COLORS[*i])).unwrap_or(0) as u8
 }
 
-/// A diagram read from a file, and how many of its items Bref cannot draw: free strokes, pictures, frames, arrows with
+/// A diagram read from a file, and how many of its items Inkuno cannot draw: free strokes, pictures, frames, arrows with
 /// no end to hold, cells it does not know.
 pub struct Imported {
     pub diagram: Diagram,

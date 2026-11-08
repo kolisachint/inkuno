@@ -5,7 +5,7 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=packaging/windows");
     #[cfg(windows)]
-    embed_resource::compile("packaging/windows/bref.rc", embed_resource::NONE)
+    embed_resource::compile("packaging/windows/inkuno.rc", embed_resource::NONE)
         .manifest_optional()
         .unwrap();
 }

@@ -2,14 +2,14 @@
 
 use super::*;
 
-/// Opens each file of the `BREF_CSV_DIR` folder in the table (copied, nothing of the user's
+/// Opens each file of the `INKUNO_CSV_DIR` folder in the table (copied, nothing of the user's
 /// is changed), times the opening, then chains random gestures: a crash shows here.
-/// `BREF_CSV_DIR=<folder> cargo test --release --locked sheet_fuzz -- --ignored --nocapture`.
+/// `INKUNO_CSV_DIR=<folder> cargo test --release --locked sheet_fuzz -- --ignored --nocapture`.
 #[gpui::test]
 #[ignore]
 fn sheet_fuzz(cx: &mut TestAppContext) {
-    let Ok(from) = std::env::var("BREF_CSV_DIR") else { return };
-    let root = std::env::temp_dir().join(format!("bref-fuzz-{}", std::process::id()));
+    let Ok(from) = std::env::var("INKUNO_CSV_DIR") else { return };
+    let root = std::env::temp_dir().join(format!("inkuno-fuzz-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     let mut files = Vec::new();
@@ -85,12 +85,12 @@ fn sheet_fuzz(cx: &mut TestAppContext) {
 }
 
 /// A big CSV transformed: copy and export in each format, opening of the resulting Markdown note,
-/// pasting the text into a note. `BREF_CSV=<file> cargo test --release --locked sheet_convert -- --ignored --nocapture`.
+/// pasting the text into a note. `INKUNO_CSV=<file> cargo test --release --locked sheet_convert -- --ignored --nocapture`.
 #[gpui::test]
 #[ignore]
 fn sheet_convert(cx: &mut TestAppContext) {
-    let Ok(from) = std::env::var("BREF_CSV") else { return };
-    let root = std::env::temp_dir().join(format!("bref-convert-{}", std::process::id()));
+    let Ok(from) = std::env::var("INKUNO_CSV") else { return };
+    let root = std::env::temp_dir().join(format!("inkuno-convert-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     let file = root.join("gros.csv");
@@ -169,8 +169,8 @@ fn sheet_convert(cx: &mut TestAppContext) {
 #[ignore]
 fn md_table_scale(cx: &mut TestAppContext) {
     // Tests redo the whole layout after each reuse, to check it: not here, we measure.
-    unsafe { std::env::set_var("BREF_NO_COMPARE", "1") };
-    let root = std::env::temp_dir().join(format!("bref-mdscale-{}", std::process::id()));
+    unsafe { std::env::set_var("INKUNO_NO_COMPARE", "1") };
+    let root = std::env::temp_dir().join(format!("inkuno-mdscale-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
@@ -180,13 +180,13 @@ fn md_table_scale(cx: &mut TestAppContext) {
         |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
     });
     cx.run_until_parked();
-    for n in std::env::var("BREF_ROWS").ok().map_or(vec![500usize, 1000, 2000, 5000, 10000, 20000, 50000], |v| v.split(',').filter_map(|n| n.parse().ok()).collect()) {
-        // `BREF_FORMULAS=1`: a running total (`=sum(above)`) in the last column of each line.
-        let last = |i: usize| if std::env::var("BREF_FORMULAS").is_ok() { "=sum(above)".to_string() } else { format!("note, {i}") };
+    for n in std::env::var("INKUNO_ROWS").ok().map_or(vec![500usize, 1000, 2000, 5000, 10000, 20000, 50000], |v| v.split(',').filter_map(|n| n.parse().ok()).collect()) {
+        // `INKUNO_FORMULAS=1`: a running total (`=sum(above)`) in the last column of each line.
+        let last = |i: usize| if std::env::var("INKUNO_FORMULAS").is_ok() { "=sum(above)".to_string() } else { format!("note, {i}") };
         let rows: String = (0..n).map(|i| format!("| {i} | Produit {} | {} | FR | {} |\n", i % 977, i % 99, last(i))).collect();
         let file = root.join(format!("t{n}.md"));
-        // `BREF_COMMENTS=1`: comments under the table, which each keystroke in it must keep up with.
-        let notes = if std::env::var("BREF_COMMENTS").is_ok() { "\n{>>Row \"0\": a<<}\n\n{>>Column \"id\": b<<}\n\n{>>Table: c<<}\n" } else { "" };
+        // `INKUNO_COMMENTS=1`: comments under the table, which each keystroke in it must keep up with.
+        let notes = if std::env::var("INKUNO_COMMENTS").is_ok() { "\n{>>Row \"0\": a<<}\n\n{>>Column \"id\": b<<}\n\n{>>Table: c<<}\n" } else { "" };
         fs::write(&file, format!("| id | produit | qte | pays | commentaire |\n| --- | --- | --- | --- | --- |\n{rows}{notes}")).unwrap();
         let start = Instant::now();
         shell.update_in(cx, |s, window, cx| {
@@ -215,7 +215,7 @@ fn md_table_scale(cx: &mut TestAppContext) {
             cx.run_until_parked();
         }
         println!("         scrolling: {:?} per gesture", start.elapsed() / 20);
-        if std::env::var("BREF_TYPING").is_ok() {
+        if std::env::var("INKUNO_TYPING").is_ok() {
             let start = Instant::now();
             for _ in 0..30 {
                 cx.simulate_input("a");
@@ -245,8 +245,8 @@ fn md_table_scale(cx: &mut TestAppContext) {
 #[ignore]
 fn profile_typing(cx: &mut TestAppContext) {
     // Tests redo the whole layout after each reuse, to check it: not here, we measure.
-    unsafe { std::env::set_var("BREF_NO_COMPARE", "1") };
-    let root = std::env::temp_dir().join(format!("bref-profile-{}", std::process::id()));
+    unsafe { std::env::set_var("INKUNO_NO_COMPARE", "1") };
+    let root = std::env::temp_dir().join(format!("inkuno-profile-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
@@ -256,9 +256,9 @@ fn profile_typing(cx: &mut TestAppContext) {
         |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
     });
     cx.run_until_parked();
-    // `BREF_PROFILE_LINES=n`: length of the note (5000 by default).
-    let lines = std::env::var("BREF_PROFILE_LINES").ok().and_then(|n| n.parse().ok()).unwrap_or(5000);
-    let big: String = if std::env::var("BREF_PROFILE_TABLE").is_ok() {
+    // `INKUNO_PROFILE_LINES=n`: length of the note (5000 by default).
+    let lines = std::env::var("INKUNO_PROFILE_LINES").ok().and_then(|n| n.parse().ok()).unwrap_or(5000);
+    let big: String = if std::env::var("INKUNO_PROFILE_TABLE").is_ok() {
         // A table of `lines` rows.
         let rows: String = (0..lines)
             .map(|j| format!("| Ligne {j} | texte moyen avec **gras** et `code` {j} | {}| [[Note {}]] | x | y |\n", "mot ".repeat(j % 30), j))
@@ -300,14 +300,14 @@ fn resident_mb() -> Option<u64> {
 
 /// Time for a vault of 1,000, 5,000 then 20,000 notes: scan, new scan without
 /// change, fingerprint, app startup, opening and typing in a note of
-/// 5,000 lines. `BREF_BENCH_NOTES=500,3000` changes the sizes. Outside the regular
+/// 5,000 lines. `INKUNO_BENCH_NOTES=500,3000` changes the sizes. Outside the regular
 /// suite: `cargo test --release --locked -- --ignored --nocapture bench_scale`.
 #[gpui::test]
 #[ignore]
 fn bench_scale(cx: &mut TestAppContext) {
     // Tests redo the whole layout after each reuse, to check it: not here, we measure.
-    unsafe { std::env::set_var("BREF_NO_COMPARE", "1") };
-    let sizes: Vec<usize> = std::env::var("BREF_BENCH_NOTES")
+    unsafe { std::env::set_var("INKUNO_NO_COMPARE", "1") };
+    let sizes: Vec<usize> = std::env::var("INKUNO_BENCH_NOTES")
         .map(|v| v.split(',').filter_map(|n| n.trim().parse().ok()).collect())
         .unwrap_or_else(|_| vec![1000, 5000, 20000]);
     cx.update(bind_keys);
@@ -315,7 +315,7 @@ fn bench_scale(cx: &mut TestAppContext) {
     let ms = |d: Duration| format!("{:.1}", d.as_secs_f64() * 1000.);
     let mut rows = Vec::new();
     for notes in sizes {
-        let root = std::env::temp_dir().join(format!("bref-scale-{notes}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("inkuno-scale-{notes}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         synthetic_vault(&root, notes);
         let _config = isolated_config(&root);
@@ -397,8 +397,8 @@ fn bench_scale(cx: &mut TestAppContext) {
 #[ignore]
 fn bench(cx: &mut TestAppContext) {
     // Tests redo the whole layout after each reuse, to check it: not here, we measure.
-    unsafe { std::env::set_var("BREF_NO_COMPARE", "1") };
-    let root = std::env::temp_dir().join(format!("bref-bench-{}", std::process::id()));
+    unsafe { std::env::set_var("INKUNO_NO_COMPARE", "1") };
+    let root = std::env::temp_dir().join(format!("inkuno-bench-{}", std::process::id()));
     synthetic_vault(&root, 2000);
     let _config = isolated_config(&root);
     vault::save_layout("tree split 260 0");
@@ -472,13 +472,13 @@ fn bench(cx: &mut TestAppContext) {
     fs::remove_dir_all(&root).unwrap();
 }
 
-/// Notes that embed sections of another: opening, and a keystroke next to them (`BREF_EMBEDS` = how many).
+/// Notes that embed sections of another: opening, and a keystroke next to them (`INKUNO_EMBEDS` = how many).
 /// `cargo test --release --locked embed_scale -- --ignored --nocapture`.
 #[gpui::test]
 #[ignore]
 fn embed_scale(cx: &mut TestAppContext) {
-    unsafe { std::env::set_var("BREF_NO_COMPARE", "1") };
-    let root = std::env::temp_dir().join(format!("bref-embed-{}", std::process::id()));
+    unsafe { std::env::set_var("INKUNO_NO_COMPARE", "1") };
+    let root = std::env::temp_dir().join(format!("inkuno-embed-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
@@ -490,7 +490,7 @@ fn embed_scale(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let source: String = (0..40).map(|i| format!("## Section {i}\n\nUn paragraphe assez long pour passer à la ligne dans la page, avec du *style* et du `code`.\n\n- un\n- deux\n\n| a | b |\n| - | - |\n| {i} | x |\n\n")).collect();
     fs::write(root.join("Source.md"), format!("# Source\n\n{source}")).unwrap();
-    for n in std::env::var("BREF_EMBEDS").ok().map_or(vec![1usize, 5, 20, 50], |v| v.split(',').filter_map(|n| n.parse().ok()).collect()) {
+    for n in std::env::var("INKUNO_EMBEDS").ok().map_or(vec![1usize, 5, 20, 50], |v| v.split(',').filter_map(|n| n.parse().ok()).collect()) {
         let body: String = (0..n).map(|i| format!("texte {i}\n\n![[Source#Section {}]]\n\n", i % 40)).collect();
         let file = root.join(format!("Hote{n}.md"));
         fs::write(&file, format!("# Hote\n\n{body}fin\n")).unwrap();
@@ -569,8 +569,8 @@ fn hundred_tabs(cx: &mut TestAppContext) {
 #[gpui::test]
 #[ignore]
 fn motion_cost(cx: &mut TestAppContext) {
-    unsafe { std::env::set_var("BREF_NO_COMPARE", "1") };
-    let root = std::env::temp_dir().join(format!("bref-motion-{}", std::process::id()));
+    unsafe { std::env::set_var("INKUNO_NO_COMPARE", "1") };
+    let root = std::env::temp_dir().join(format!("inkuno-motion-{}", std::process::id()));
     synthetic_vault(&root, 5000);
     let _config = isolated_config(&root);
     vault::save_layout("tree split 260 0");
@@ -624,7 +624,7 @@ fn motion_cost(cx: &mut TestAppContext) {
 #[gpui::test]
 #[ignore]
 fn board_frame(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-board-frame-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-board-frame-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -656,7 +656,7 @@ fn board_frame(cx: &mut TestAppContext) {
 #[gpui::test]
 #[ignore]
 fn comments_frame(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-comments-frame-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-comments-frame-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -689,7 +689,7 @@ fn comments_frame(cx: &mut TestAppContext) {
 #[gpui::test]
 #[ignore]
 fn graph_frame(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-graph-frame-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-graph-frame-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let notes = 5000;
     for i in 0..notes {
@@ -729,7 +729,7 @@ fn graph_frame(cx: &mut TestAppContext) {
 #[gpui::test]
 #[ignore]
 fn help_scroll(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-help-scroll-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-help-scroll-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Note.md"), "# Note\n\ntexte\n").unwrap();
@@ -792,7 +792,7 @@ fn help_scroll(cx: &mut TestAppContext) {
 #[gpui::test]
 #[ignore]
 fn listing_frame(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-listing-frame-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-listing-frame-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let dir = root.join("Mille");
     fs::create_dir_all(&dir).unwrap();

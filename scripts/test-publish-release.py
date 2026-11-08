@@ -24,7 +24,7 @@ class PublicationTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.dist = self.root / "dist"
         self.dist.mkdir()
-        self.app = "bref"
+        self.app = "inkuno"
         self.calls = []
         self.remote = {}
         self.public = False
@@ -63,7 +63,7 @@ class PublicationTests(unittest.TestCase):
         self.assertFalse(any(args[:2] == ("release", "edit") for args in self.calls))
 
     def test_all_native_profiles_publish_only_after_upload_and_inventory_check(self):
-        for app, count in [("bref", 6), ("astrolabe", 6), ("spot", 3)]:
+        for app, count in [("inkuno", 6), ("astrolabe", 6), ("spot", 3)]:
             with self.subTest(app=app):
                 self.fixture(app)
                 self.calls = []
@@ -76,13 +76,13 @@ class PublicationTests(unittest.TestCase):
                 self.assertIn("SHA256SUMS", self.remote)
 
     def test_missing_platform_download_never_contacts_github(self):
-        (self.dist / "bref-macos.dmg").unlink()
+        (self.dist / "inkuno-macos.dmg").unlink()
         with self.assertRaises(ValueError):
             self.publish()
         self.assertEqual(self.calls, [])
 
     def test_empty_download_never_contacts_github(self):
-        (self.dist / "bref-macos.dmg").write_bytes(b"")
+        (self.dist / "inkuno-macos.dmg").write_bytes(b"")
         with self.assertRaises(ValueError):
             self.publish()
         self.assertEqual(self.calls, [])
@@ -94,7 +94,7 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def test_symlink_rejected(self):
-        path = self.dist / "bref-macos.dmg"
+        path = self.dist / "inkuno-macos.dmg"
         path.unlink()
         path.symlink_to(self.root / "Cargo.toml")
         with self.assertRaises(ValueError):
@@ -115,7 +115,7 @@ class PublicationTests(unittest.TestCase):
 
     def test_incomplete_or_changed_remote_inventory_keeps_draft_private(self):
         for change in [lambda a: {k: v for k, v in a.items() if not k.endswith(".dmg")},
-                       lambda a: {**a, "bref-macos.dmg": 0},
+                       lambda a: {**a, "inkuno-macos.dmg": 0},
                        lambda a: {**a, "obsolete.exe": 123}]:
             with self.subTest(change=change):
                 self.calls = []
@@ -125,10 +125,10 @@ class PublicationTests(unittest.TestCase):
                 self.assert_unpublished()
 
     def test_partial_upload_can_be_retried(self):
-        self.remote = {"bref-macos.dmg": 1}
+        self.remote = {"inkuno-macos.dmg": 1}
         self.publish()
         self.assertTrue(self.public)
-        self.assertGreater(self.remote["bref-macos.dmg"], 1)
+        self.assertGreater(self.remote["inkuno-macos.dmg"], 1)
 
     def test_malformed_tag_and_version_mismatch_rejected(self):
         for tag in ["main", "v1.2.3; echo unsafe", "v1.2.4", "1.2.3"]:

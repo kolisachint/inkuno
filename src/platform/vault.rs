@@ -32,7 +32,7 @@ pub fn config_dir() -> PathBuf {
 }
 
 fn config_path() -> PathBuf {
-    config_dir().join("bref/config")
+    config_dir().join("inkuno/config")
 }
 
 /// (vault, open notes from most recent to oldest): one line each.
@@ -56,7 +56,7 @@ pub fn save_config(vault: &Path, recent: &[PathBuf]) {
         .map_or(Ok(()), fs::create_dir_all)
         .and_then(|_| fs::write(&path, text));
     if let Err(e) = result {
-        eprintln!("bref: {} ({}): {e}", tr("config not saved", "config non enregistrée"), path.display());
+        eprintln!("inkuno: {} ({}): {e}", tr("config not saved", "config non enregistrée"), path.display());
     }
 }
 
@@ -72,13 +72,13 @@ pub fn load_file(name: &str) -> String {
         }
     }
     // Same fallback as for the config: settings left under the old name are read again.
-    fs::read_to_string(config_dir().join("bref").join(name))
+    fs::read_to_string(config_dir().join("inkuno").join(name))
         .or_else(|_| fs::read_to_string(config_dir().join("encre").join(name)))
         .unwrap_or_default()
 }
 
 pub fn save_file(name: &str, text: &str) {
-    let path = config_dir().join("bref").join(name);
+    let path = config_dir().join("inkuno").join(name);
     // Mere convenience: if writing fails, the app will reopen with its original settings.
     let _ = path.parent().map_or(Ok(()), fs::create_dir_all).and_then(|_| fs::write(path, text));
 }
@@ -102,17 +102,17 @@ pub fn save_settings(text: &str) {
 }
 
 /// Agent-editable JSON config: `keybindings.json` (user shortcuts) and `themes.json`
-/// (custom themes). They live next to the other config files: `~/.config/bref/` on
-/// Linux, `~/Library/Application Support/bref/` on macOS, `%APPDATA%\bref\` on
+/// (custom themes). They live next to the other config files: `~/.config/inkuno/` on
+/// Linux, `~/Library/Application Support/inkuno/` on macOS, `%APPDATA%\inkuno\` on
 /// Windows. A present JSON file wins over the legacy `keys` and `settings` files; a
 /// faulty JSON entry is ignored on its own (see `ui::keys::read_json` and
 /// `ui::theme::parse_themes`).
 pub fn keybindings_path() -> PathBuf {
-    config_dir().join("bref/keybindings.json")
+    config_dir().join("inkuno/keybindings.json")
 }
 
 pub fn themes_path() -> PathBuf {
-    config_dir().join("bref/themes.json")
+    config_dir().join("inkuno/themes.json")
 }
 
 /// Contents of `keybindings.json`, empty when the file is absent.
@@ -484,7 +484,7 @@ pub fn trash(root: &Path, path: &Path) -> io::Result<PathBuf> {
 
 /// Vault file that keeps the icons: one `icon<tab>path` line per item,
 /// the path relative to the vault and written with `/`. It travels with the vault.
-const ICONS: &str = ".bref-icons";
+const ICONS: &str = ".inkuno-icons";
 
 /// Icons chosen for notes, files and folders of the vault, by path.
 pub fn load_icons(root: &Path) -> HashMap<PathBuf, String> {
@@ -542,7 +542,7 @@ pub fn open_terminal(dir: &Path) -> bool {
         && found.into_iter().any(|(program, args)| {
             // No console for the launcher (`cmd /c start`); the terminal opens its own.
             let child = crate::platform::command(&program).args(args).current_dir(dir).stdin(std::process::Stdio::null()).spawn();
-            // Once the terminal is closed, its process is reaped: no zombie while Bref runs.
+            // Once the terminal is closed, its process is reaped: no zombie while Inkuno runs.
             child.map(|mut child| std::thread::spawn(move || child.wait())).is_ok()
         })
 }
@@ -551,7 +551,7 @@ pub fn open_terminal(dir: &Path) -> bool {
 const CAPTURE_KEYS: &str = "<Super><Shift>n";
 const GNOME_KEYS: &str = "org.gnome.settings-daemon.plugins.media-keys";
 /// A path of our own in GNOME's custom shortcuts: asking again doubles nothing.
-const GNOME_PATH: &str = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/bref-capture/";
+const GNOME_PATH: &str = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/inkuno-capture/";
 
 /// What asking for a capture shortcut gave.
 #[derive(Debug, PartialEq)]
@@ -581,7 +581,7 @@ fn gsettings(args: &[&str]) -> Option<String> {
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// GNOME's custom shortcut "Bref: capture": created with `CAPTURE_KEYS` if nothing
+/// GNOME's custom shortcut "Inkuno: capture": created with `CAPTURE_KEYS` if nothing
 /// uses them, otherwise without keys. If it already exists, only its command is updated (the
 /// binary may have moved): the keys the user gave it stay.
 fn gnome_shortcut(command: &str) -> Option<Shortcut> {
@@ -599,7 +599,7 @@ fn gnome_shortcut(command: &str) -> Option<Shortcut> {
     let others = list.split('\'').skip(1).step_by(2).filter_map(|path| gsettings(&["get", &format!("{GNOME_KEYS}.custom-keybinding:{path}"), "binding"]));
     let taken = gsettings(&["list-recursively"]).is_some_and(|all| all.to_lowercase().contains(&wanted))
         || others.into_iter().any(|keys| keys.to_lowercase() == wanted);
-    gsettings(&["set", &entry, "name", &quoted(tr("Bref: capture", "Bref : capture"))])?;
+    gsettings(&["set", &entry, "name", &quoted(tr("Inkuno: capture", "Inkuno : capture"))])?;
     gsettings(&["set", &entry, "command", &quoted(command)])?;
     if !taken {
         gsettings(&["set", &entry, "binding", &quoted(CAPTURE_KEYS)])?;
@@ -830,7 +830,7 @@ fn copy_into(from: &Path, to: &Path, skipped: &mut usize) -> io::Result<usize> {
         }
         return Ok(files);
     }
-    let part = to.with_file_name(format!(".{}.bref-part", to.file_name().unwrap_or_default().to_string_lossy()));
+    let part = to.with_file_name(format!(".{}.inkuno-part", to.file_name().unwrap_or_default().to_string_lossy()));
     let copied = fs::copy(from, &part).and_then(|_| fs::rename(&part, to));
     if copied.is_err() {
         let _ = fs::remove_file(&part);
@@ -988,11 +988,11 @@ mod tests {
 
     #[test]
     fn gnome_shortcut_list_gains_the_capture_once() {
-        let path = "/org/gnome/x/bref-capture/";
-        assert_eq!(with_keybinding("@as []", path).as_deref(), Some("['/org/gnome/x/bref-capture/']"));
-        assert_eq!(with_keybinding("['/org/gnome/x/custom0/', '/org/gnome/x/custom1/']", path).as_deref(), Some("['/org/gnome/x/custom0/', '/org/gnome/x/custom1/', '/org/gnome/x/bref-capture/']"));
+        let path = "/org/gnome/x/inkuno-capture/";
+        assert_eq!(with_keybinding("@as []", path).as_deref(), Some("['/org/gnome/x/inkuno-capture/']"));
+        assert_eq!(with_keybinding("['/org/gnome/x/custom0/', '/org/gnome/x/custom1/']", path).as_deref(), Some("['/org/gnome/x/custom0/', '/org/gnome/x/custom1/', '/org/gnome/x/inkuno-capture/']"));
         // Already there: nothing to add, the request can repeat without doubling anything.
-        assert_eq!(with_keybinding("['/org/gnome/x/custom0/', '/org/gnome/x/bref-capture/']", path), None);
+        assert_eq!(with_keybinding("['/org/gnome/x/custom0/', '/org/gnome/x/inkuno-capture/']", path), None);
     }
 
     #[test]
@@ -1007,27 +1007,27 @@ mod tests {
     #[test]
     #[ignore]
     fn gnome_shortcut_is_registered() {
-        let dir = std::env::temp_dir().join(format!("bref-gsettings-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("inkuno-gsettings-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         unsafe {
             std::env::set_var("GSETTINGS_BACKEND", "keyfile");
             std::env::set_var("XDG_CONFIG_HOME", &dir);
         }
-        assert_eq!(gnome_shortcut("/usr/bin/bref --capture"), Some(Shortcut::Bound("Super+Maj+N".into())));
+        assert_eq!(gnome_shortcut("/usr/bin/inkuno --capture"), Some(Shortcut::Bound("Super+Maj+N".into())));
         let saved = fs::read_to_string(dir.join("glib-2.0/settings/keyfile")).unwrap();
-        assert!(saved.contains("command='/usr/bin/bref --capture'") && saved.contains("binding='<Super><Shift>n'"), "{saved}");
+        assert!(saved.contains("command='/usr/bin/inkuno --capture'") && saved.contains("binding='<Super><Shift>n'"), "{saved}");
         // Asked again after the binary moved: the command follows, the chosen key stays.
         gsettings(&["set", &format!("{GNOME_KEYS}.custom-keybinding:{GNOME_PATH}"), "binding", "<Super>F9"]).unwrap();
-        assert_eq!(gnome_shortcut("/opt/bref --capture"), Some(Shortcut::Bound("Super+F9".into())));
+        assert_eq!(gnome_shortcut("/opt/inkuno --capture"), Some(Shortcut::Bound("Super+F9".into())));
         let saved = fs::read_to_string(dir.join("glib-2.0/settings/keyfile")).unwrap();
-        assert!(saved.contains("command='/opt/bref --capture'") && saved.matches("bref-capture").count() == 2, "{saved}");
+        assert!(saved.contains("command='/opt/inkuno --capture'") && saved.matches("inkuno-capture").count() == 2, "{saved}");
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn capture_appends_a_line_to_the_note_of_the_day() {
-        let root = std::env::temp_dir().join(format!("bref-capture-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("inkuno-capture-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("Journal")).unwrap();
         fs::create_dir_all(root.join(".trash")).unwrap();
@@ -1100,7 +1100,7 @@ mod tests {
 
     #[test]
     fn saves_and_renames() {
-        let root = env::temp_dir().join(format!("bref-test-{}", std::process::id()));
+        let root = env::temp_dir().join(format!("inkuno-test-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         let a = save(&root, None, true, "# A\n").unwrap();
         assert_eq!(a, root.join("A.md"));
@@ -1167,7 +1167,7 @@ mod tests {
 
     #[test]
     fn keeps_icons_with_the_vault() {
-        let root = env::temp_dir().join(format!("bref-icons-{}", std::process::id()));
+        let root = env::temp_dir().join(format!("inkuno-icons-{}", std::process::id()));
         fs::create_dir_all(root.join("Projets")).unwrap();
         assert!(load_icons(&root).is_empty());
         let icons = HashMap::from([(root.join("Projets"), "rocket".to_string()), (root.join("Projets/Idées.md"), "idea".to_string())]);
@@ -1191,7 +1191,7 @@ mod tests {
 
     #[test]
     fn backs_up_the_vault() {
-        let base = env::temp_dir().join(format!("bref-backup-{}", std::process::id()));
+        let base = env::temp_dir().join(format!("inkuno-backup-{}", std::process::id()));
         let (root, out) = (base.join("Mon coffre"), base.join("sauvegardes"));
         fs::create_dir_all(root.join(".trash")).unwrap();
         fs::create_dir_all(&out).unwrap();
@@ -1216,7 +1216,7 @@ mod tests {
 
     #[test]
     fn restores_from_the_trash() {
-        let root = env::temp_dir().join(format!("bref-restore-{}", std::process::id()));
+        let root = env::temp_dir().join(format!("inkuno-restore-{}", std::process::id()));
         fs::create_dir_all(root.join("Dossier")).unwrap();
         assert!(trashed(&root).is_empty());
         for (name, text) in [("A.md", "premier"), ("Dossier/b.md", "dedans")] {
@@ -1260,7 +1260,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn scan_survives_symlink_loops() {
-        let root = env::temp_dir().join(format!("bref-loop-{}", std::process::id()));
+        let root = env::temp_dir().join(format!("inkuno-loop-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("a/b")).unwrap();
         fs::write(root.join("a/b/Note.md"), "# Note\n").unwrap();
@@ -1296,7 +1296,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("bref-import-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("inkuno-import-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -1337,7 +1337,7 @@ mod tests {
         let (third, _) = import(&[outside.join("rapport.pdf")], &vault);
         assert_eq!(third[0].to, vault.join("rapport 3.pdf"));
         // No half copy is left behind.
-        assert!(fs::read_dir(&vault).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().ends_with(".bref-part")));
+        assert!(fs::read_dir(&vault).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().ends_with(".inkuno-part")));
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -1372,7 +1372,7 @@ mod tests {
 
     #[test]
     fn watcher_reports_a_new_note() {
-        let root = env::temp_dir().join(format!("bref-watch-{}", std::process::id()));
+        let root = env::temp_dir().join(format!("inkuno-watch-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         let changed = Arc::new(Signal::default());
         let _watcher = watch(&root, changed.clone()).expect("the system must be able to watch a folder");
@@ -1392,7 +1392,7 @@ mod tests {
     #[test]
     fn reports_unreadable_folders() {
         use std::os::unix::fs::PermissionsExt;
-        let root = std::env::temp_dir().join(format!("bref-unreadable-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("inkuno-unreadable-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let deep = root.join("a/b/c/d");
         fs::create_dir_all(&deep).unwrap();
@@ -1437,7 +1437,7 @@ mod tests {
     #[test]
     fn json_config_lives_beside_the_other_files() {
         // Paths only: no file is written here, the real folder stays untouched.
-        assert_eq!(keybindings_path(), config_dir().join("bref/keybindings.json"));
-        assert_eq!(themes_path(), config_dir().join("bref/themes.json"));
+        assert_eq!(keybindings_path(), config_dir().join("inkuno/keybindings.json"));
+        assert_eq!(themes_path(), config_dir().join("inkuno/themes.json"));
     }
 }

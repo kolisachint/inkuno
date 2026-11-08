@@ -1,5 +1,5 @@
 //! A Mermaid `classDiagram`, `sequenceDiagram` or `stateDiagram` turned into a canvas diagram, to be
-//! carried on by hand. A bridge, not a renderer: what Bref can draw is kept (classes with their members
+//! carried on by hand. A bridge, not a renderer: what Inkuno can draw is kept (classes with their members
 //! and relations, lifelines with their messages and combined fragments, states with their transitions),
 //! the lines it does not understand are left out and counted. Pure functions.
 
@@ -39,7 +39,7 @@ fn body(source: &str) -> Vec<&str> {
     out
 }
 
-/// What kind of diagram this source is, if Bref can take it.
+/// What kind of diagram this source is, if Inkuno can take it.
 pub fn kind(source: &str) -> Option<Kind> {
     let first = body(source).into_iter().next()?;
     let word = first.split(|c: char| c.is_whitespace() || c == ';').next()?;

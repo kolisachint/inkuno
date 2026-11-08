@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>Bref</string>
-    <key>CFBundleDisplayName</key><string>Bref</string>
-    <key>CFBundleIdentifier</key><string>dev.andrea.Bref</string>
-    <key>CFBundleExecutable</key><string>bref</string>
-    <key>CFBundleIconFile</key><string>Bref</string>
+    <key>CFBundleName</key><string>Inkuno</string>
+    <key>CFBundleDisplayName</key><string>Inkuno</string>
+    <key>CFBundleIdentifier</key><string>com.inkuno.Inkuno</string>
+    <key>CFBundleExecutable</key><string>inkuno</string>
+    <key>CFBundleIconFile</key><string>Inkuno</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>@VERSION@</string>
     <key>CFBundleVersion</key><string>@VERSION@</string>

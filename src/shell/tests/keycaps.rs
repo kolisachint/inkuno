@@ -66,7 +66,7 @@ fn keycaps_widget(cx: &mut TestAppContext) {
 /// column, whichever line; a shortcut being typed or removed keeps the same button.
 #[gpui::test]
 fn keycaps_in_help(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-keycaps-help-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-keycaps-help-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
@@ -125,7 +125,7 @@ fn keycaps_in_help(cx: &mut TestAppContext) {
 /// narrow as it gets; an entry with no shortcut draws no badge.
 #[gpui::test]
 fn keycaps_in_menu(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-keycaps-menu-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-keycaps-menu-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Note.md"), "# Note\n").unwrap();
     let _config = isolated_config(&root);
@@ -170,7 +170,7 @@ fn keycaps_in_menu(cx: &mut TestAppContext) {
 /// of an item with no shortcut has no badge.
 #[gpui::test]
 fn keycaps_in_palette_and_empty_page(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-keycaps-palette-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-keycaps-palette-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);

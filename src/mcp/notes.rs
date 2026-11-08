@@ -608,7 +608,7 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
     }))
 }
 
-/// Asks the open Bref window to show a note or file: the user sees at once what the agent did.
+/// Asks the open Inkuno window to show a note or file: the user sees at once what the agent did.
 pub fn show(vault: &mut Vault, args: &Value) -> Outcome {
     let path = match arg_str(args, "note").map(str::to_string).and_then(|note| vault.find_file(&note)) {
         Ok(path) => path,

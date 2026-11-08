@@ -192,7 +192,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     };
     let (drawn, broken, (count, waiting)) = seen(cx);
     assert_eq!((drawn, broken, waiting), (Some((400., 120.)), None, 0));
-    for name in ["Bref Dark", "Bref Light", "Bref Dark", "Bref Light", "Bref Dark"] {
+    for name in ["Inkuno Dark", "Inkuno Light", "Inkuno Dark", "Inkuno Light", "Inkuno Dark"] {
         shell.update_in(cx, |s, window, cx| {
             s.prefs.theme = name.into();
             s.restyle(window, cx);

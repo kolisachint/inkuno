@@ -6,9 +6,9 @@ Every choice is a command of the palette: type its name, and see the result at o
 
 The half-filled circle at the bottom of the rail, or `theme` in the palette.
 
-- 13 themes: Bref Dark and Bref Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light).
+- 13 themes: Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light).
 - Each theme is applied as you move through the list, so you see it before choosing. `Enter` keeps it, `Esc` goes back to the one you had.
-- `Default` follows the light or dark setting of your system, with Bref Light or Bref Dark.
+- `Default` follows the light or dark setting of your system, with Inkuno Light or Inkuno Dark.
 - In every theme, links, secondary text and the titles of colored panels are adjusted to a contrast of at least 4.5:1 (WCAG AA).
 
 **The look.** The window is a warm ground, a little darker than the page in every theme. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart. Page titles are in a serif, while note titles follow your font.
@@ -20,7 +20,7 @@ The half-filled circle at the bottom of the rail, or `theme` in the palette.
 
 ## Fonts
 
-Bref carries IBM Plex Sans (text), IBM Plex Mono (code) and IBM Plex Serif (page titles), under the SIL Open Font License (`assets/fonts/`). So it looks the same everywhere, with nothing to install.
+Inkuno carries IBM Plex Sans (text), IBM Plex Mono (code) and IBM Plex Serif (page titles), under the SIL Open Font License (`assets/fonts/`). So it looks the same everywhere, with nothing to install.
 
 - Type `font` in the palette to choose another font, for the app or for the code, among those installed on your system. Type in the list to filter it.
 - Ideograms and emoji, which Plex does not draw, come from a font of your system.
@@ -50,7 +50,7 @@ A small table keeps its own size, and nothing goes past the window.
 
 ## Language
 
-French if the system language is French, English otherwise. Bref asks the system (Windows, macOS), or reads `LC_ALL`, `LC_MESSAGES` and `LANG` (Linux, or any system when started from a terminal).
+French if the system language is French, English otherwise. Inkuno asks the system (Windows, macOS), or reads `LC_ALL`, `LC_MESSAGES` and `LANG` (Linux, or any system when started from a terminal).
 
 ## The settings file
 

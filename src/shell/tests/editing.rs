@@ -6,7 +6,7 @@ use super::*;
 /// searches them by what they do, the view's first; help opened on the view; a table's bar.
 #[gpui::test]
 fn commands_are_found(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-commands-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-commands-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("data.csv"), "nom;age\nAna;31\nBob;27\n").unwrap();
     let _config = isolated_config(&root);
@@ -114,7 +114,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
 /// a click opens its menu, the "+" puts a block below with the `/` list; Alt+arrow moves it.
 #[gpui::test]
 fn block_handles(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-blocks-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-blocks-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
@@ -226,7 +226,7 @@ fn block_handles(cx: &mut TestAppContext) {
 /// that is not one, a link that must not target a template, the daily note, undo.
 #[gpui::test]
 fn templates_journey(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-tpl-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-tpl-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Courses.md"), "# Courses\n\n- lait #maison\n").unwrap();
@@ -371,7 +371,7 @@ fn templates_journey(cx: &mut TestAppContext) {
 /// the bottom bar, with their limits (cursor alone, blanks, several lines, code, Backspace).
 #[gpui::test]
 fn formatting_journey(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-fmt-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-fmt-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Note.md"), "x").unwrap();

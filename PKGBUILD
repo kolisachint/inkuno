@@ -1,5 +1,5 @@
 # Maintainer: Andrea Larboullet Marin <a.larboulletmarin@gmail.com>
-pkgname=bref
+pkgname=inkuno
 pkgver=0.4.7
 pkgrel=1
 pkgdesc="Fast, minimal Markdown note-taking app"
@@ -10,7 +10,7 @@ depends=('libxcb' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'vulkan-icd-loader
 makedepends=('cargo' 'fontconfig' 'freetype2')
 optdepends=('vulkan-driver: a Vulkan driver for your GPU is required to open the window')
 # The binary is stripped at build time: a -debug package would be empty, and its
-# file would clash between bref and bref-git.
+# file would clash between inkuno and inkuno-git.
 options=('!debug')
 # The app was called encre until 0.1.4.
 conflicts=('encre')

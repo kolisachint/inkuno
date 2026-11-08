@@ -99,7 +99,7 @@ impl Page {
 
 #[gpui::test]
 fn picture_formula_and_figure_enlarge_from_a_button(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-enlarge-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-enlarge-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -243,7 +243,7 @@ fn picture_formula_and_figure_enlarge_from_a_button(cx: &mut TestAppContext) {
 
     // Formulas and a note's SVG open in the SVG viewer.
     for (line, what) in [("$$\nx^2 + y^2\n$$", "display formula"), ("soit $x^2$ ici", "inline formula"), ("![](schéma.svg)", "svg")] {
-        for theme in ["Bref Light", "Bref Dark"] {
+        for theme in ["Inkuno Light", "Inkuno Dark"] {
             page.shell.update_in(cx, |s, window, cx| {
                 s.prefs.theme = theme.into();
                 s.restyle(window, cx);
@@ -290,7 +290,7 @@ fn picture_formula_and_figure_enlarge_from_a_button(cx: &mut TestAppContext) {
 /// a click there used to slice the new text with them and panic (Windows: the process aborted).
 #[gpui::test]
 fn pointer_events_between_an_edit_and_the_layout_do_not_panic(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-stale-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-stale-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);

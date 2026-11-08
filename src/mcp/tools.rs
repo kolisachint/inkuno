@@ -86,7 +86,7 @@ fn tools() -> Vec<Tool> {
         Tool {
             name: "vault_info",
             title: "Vault summary",
-            description: "The vault folder, how many notes, templates, diagrams, tables, pictures and attachments it holds, its folders, its most used tags, today's daily note name, and Bref's version. Unreadable folders are listed and the rest still counts.",
+            description: "The vault folder, how many notes, templates, diagrams, tables, pictures and attachments it holds, its folders, its most used tags, today's daily note name, and Inkuno's version. Unreadable folders are listed and the rest still counts.",
             properties: json!({}),
             required: &[],
             output: "folder, notes, templates, diagrams, tables, pictures, attachments, folders, tags, daily, version, diagram_version, unreadable",
@@ -166,8 +166,8 @@ fn tools() -> Vec<Tool> {
         },
         Tool {
             name: "show",
-            title: "Show in Bref",
-            description: "Opens a note, diagram, table or picture in the Bref window, in a tab of its own, so the user sees what you wrote. note is a name, an alias or a path in the vault. Fails when Bref is not open, or has another vault open: the files are on disk all the same. Changes nothing in the vault.",
+            title: "Show in Inkuno",
+            description: "Opens a note, diagram, table or picture in the Inkuno window, in a tab of its own, so the user sees what you wrote. note is a name, an alias or a path in the vault. Fails when Inkuno is not open, or has another vault open: the files are on disk all the same. Changes nothing in the vault.",
             properties: json!({"note": {"type": "string"}}),
             required: &["note"],
             output: "shown (path in the vault)",
@@ -320,7 +320,7 @@ fn tools() -> Vec<Tool> {
         Tool {
             name: "create_diagram",
             title: "Create a diagram",
-            description: "A canvas diagram, written by Bref, never as SVG by hand. from is one of {mermaid}, {template} or {shapes, links}. template is class, use-case, package, state, sequence, activity, component or deployment. A shape is {key, form, text, in, color, fill, dashed, x, y, w, h}; a shape without x and y is laid out by layers, and its size follows its text. in names the shape that holds it. A link is {from, to, relation or heads, route, text, start_text, end_text}; to {mid: key} attaches to the middle of a link; a link between lifelines is a message. Sequence diagram: lifelines (form lifeline, text the participant) and messages in time order, top to bottom: relation sync (a call that waits; it opens the activation bar), reply (dashed, closes it), async, create (the lifeline starts there), destroy, found, lost; bars and heights are computed by Bref. fragments is [{key, text, operands}], outer ones first: text is the operator then one [guard] line per branch (alt\n[valid]\n[else], opt\n[cache], loop\n[each item], par…), operands lists the message keys of each branch in order (messages for one branch). A flowchart cannot become a canvas: put it in a note and render that block. A taken name is refused. embed is the line to put in a note.",
+            description: "A canvas diagram, written by Inkuno, never as SVG by hand. from is one of {mermaid}, {template} or {shapes, links}. template is class, use-case, package, state, sequence, activity, component or deployment. A shape is {key, form, text, in, color, fill, dashed, x, y, w, h}; a shape without x and y is laid out by layers, and its size follows its text. in names the shape that holds it. A link is {from, to, relation or heads, route, text, start_text, end_text}; to {mid: key} attaches to the middle of a link; a link between lifelines is a message. Sequence diagram: lifelines (form lifeline, text the participant) and messages in time order, top to bottom: relation sync (a call that waits; it opens the activation bar), reply (dashed, closes it), async, create (the lifeline starts there), destroy, found, lost; bars and heights are computed by Inkuno. fragments is [{key, text, operands}], outer ones first: text is the operator then one [guard] line per branch (alt\n[valid]\n[else], opt\n[cache], loop\n[each item], par…), operands lists the message keys of each branch in order (messages for one branch). A flowchart cannot become a canvas: put it in a note and render that block. A taken name is refused. embed is the line to put in a note.",
             properties: json!({
                 "name": {"type": "string"},
                 "folder": {"type": "string"},
@@ -335,7 +335,7 @@ fn tools() -> Vec<Tool> {
         Tool {
             name: "read_diagram",
             title: "Read a diagram",
-            description: "Shapes, links, what holds what, and bounds, with stable ids. read_only is true for a diagram written by a newer version of Bref: it can be read and not edited. path is a name or a vault-relative path.",
+            description: "Shapes, links, what holds what, and bounds, with stable ids. read_only is true for a diagram written by a newer version of Inkuno: it can be read and not edited. path is a name or a vault-relative path.",
             properties: json!({"path": {"type": "string"}}),
             required: &["path"],
             output: "path, read_only, shapes, links, bounds",
@@ -346,7 +346,7 @@ fn tools() -> Vec<Tool> {
         Tool {
             name: "edit_diagram",
             title: "Edit a diagram",
-            description: "Changes a canvas diagram, all or nothing, ids kept. ops are add_shape, add_link, update, remove, move, relayout, wrap ({text, operands} as in create_diagram fragments) and reorder ({id, to}: a message to another place, from 0). read_diagram gives each message its order, the fragment it is in and its operand. A new shape or link may carry a key that later ops in the same call use; new ids come back in ids, new_shapes and new_links. Refused on a newer format. The file is written by Bref.",
+            description: "Changes a canvas diagram, all or nothing, ids kept. ops are add_shape, add_link, update, remove, move, relayout, wrap ({text, operands} as in create_diagram fragments) and reorder ({id, to}: a message to another place, from 0). read_diagram gives each message its order, the fragment it is in and its operand. A new shape or link may carry a key that later ops in the same call use; new ids come back in ids, new_shapes and new_links. Refused on a newer format. The file is written by Inkuno.",
             properties: json!({
                 "path": {"type": "string"},
                 "ops": {"type": "array", "items": {"type": "object"}},
@@ -371,7 +371,7 @@ fn tools() -> Vec<Tool> {
         Tool {
             name: "import_diagram",
             title: "Import a diagram",
-            description: "Turns Excalidraw JSON or an uncompressed draw.io file into a canvas diagram. format is excalidraw or drawio. content is the file's text. A compressed draw.io file is refused, with the way to save it again. skipped counts what Bref cannot draw.",
+            description: "Turns Excalidraw JSON or an uncompressed draw.io file into a canvas diagram. format is excalidraw or drawio. content is the file's text. A compressed draw.io file is refused, with the way to save it again. skipped counts what Inkuno cannot draw.",
             properties: json!({
                 "content": {"type": "string"},
                 "format": {"type": "string", "enum": ["excalidraw", "drawio"]},

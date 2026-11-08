@@ -1,4 +1,4 @@
-# Releasing Bref
+# Releasing Inkuno
 
 A version is published only after the Arch package, universal macOS DMG, Windows installer and Windows ZIP have been built and checked. Preparation creates a **draft**; the final workflow attaches the complete set of downloads, verifies their remote names and sizes, and publishes it. A failed or cancelled build leaves the draft unpublished. The pushed Git tag and its source remain publicly visible.
 
@@ -8,7 +8,7 @@ Run preparation on Arch Linux (Bash, Cargo, Git, curl, sha256sum, makepkg and Gi
 
 Merge the new release scripts and workflows into `main` before making the first release with this process. `release-native.yml` must be available on the default branch and on `main`; the tag being built must contain `scripts/publish-release.py` and the packaging files. Older tags without these files cannot use this pipeline unchanged.
 
-Start with a clean tracked working tree on `main`, synchronized with `origin/main`, and green application CI. The generated `aur/bref-git/PKGBUILD` may differ; the script preserves it. Untracked files are not staged. The preparation script runs local application tests; it does not independently query remote CI verdicts. Check those before preparation.
+Start with a clean tracked working tree on `main`, synchronized with `origin/main`, and green application CI. The generated `aur/inkuno-git/PKGBUILD` may differ; the script preserves it. Untracked files are not staged. The preparation script runs local application tests; it does not independently query remote CI verdicts. Check those before preparation.
 
 ## Prepare and publish
 

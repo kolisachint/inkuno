@@ -53,7 +53,7 @@ pub fn document(pages: &[Sheet], (w, h): (f32, f32), title: &str) -> Result<(Vec
     }
     pdf.catalog(catalog).pages(tree);
     pdf.pages(tree).count(kids.len() as i32).kids(kids);
-    pdf.document_info(info).title(TextStr(title)).creator(TextStr("Bref"));
+    pdf.document_info(info).title(TextStr(title)).creator(TextStr("Inkuno"));
     chunks.iter().for_each(|c| pdf.extend(c));
     Ok((pdf.finish(), outlined))
 }

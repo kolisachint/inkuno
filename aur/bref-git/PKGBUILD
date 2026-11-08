@@ -1,7 +1,7 @@
 # Maintainer: Andrea Larboullet Marin <a.larboulletmarin@gmail.com>
 # Tracks the main branch: every `makepkg -si` builds the latest commit.
-pkgname=bref-git
-_name=bref
+pkgname=inkuno-git
+_name=inkuno
 pkgver=0.4.5.r7.gfbaa930
 pkgrel=1
 pkgdesc="Fast, minimal Markdown note-taking app (development version)"
@@ -12,11 +12,11 @@ depends=('libxcb' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'vulkan-icd-loader
 makedepends=('cargo' 'git' 'fontconfig' 'freetype2')
 optdepends=('vulkan-driver: a Vulkan driver for your GPU is required to open the window')
 # The binary is stripped at build time: a -debug package would be empty, and its
-# file would clash between bref and bref-git.
+# file would clash between inkuno and inkuno-git.
 options=('!debug')
-provides=('bref')
+provides=('inkuno')
 # The app was called encre until 0.1.4.
-conflicts=('bref' 'encre' 'encre-git')
+conflicts=('inkuno' 'encre' 'encre-git')
 replaces=('encre-git')
 source=("git+$url.git")
 sha256sums=('SKIP')

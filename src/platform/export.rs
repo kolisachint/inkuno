@@ -8,7 +8,7 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let dir = path.parent().unwrap_or(Path::new("."));
     let (temp, mut file) = loop {
-        let temp = dir.join(format!(".bref-export-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let temp = dir.join(format!(".inkuno-export-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
         match fs::File::create_new(&temp) {
             Ok(file) => break (temp, file),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -31,7 +31,7 @@ mod tests {
 
     #[test]
     fn copies_never_replace_an_occupied_name() {
-        let dir = std::env::temp_dir().join(format!("bref-export-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("inkuno-export-test-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("copie été.md");
         save(&path, "é😀\nline".as_bytes()).unwrap();
@@ -62,7 +62,7 @@ mod tests {
             assert!(save(&link, b"replacement").is_err());
             assert_eq!(fs::read_to_string(&path).unwrap(), "é😀\nline");
         }
-        assert!(fs::read_dir(&dir).unwrap().all(|p| !p.unwrap().file_name().to_string_lossy().starts_with(".bref-export-")));
+        assert!(fs::read_dir(&dir).unwrap().all(|p| !p.unwrap().file_name().to_string_lossy().starts_with(".inkuno-export-")));
         fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -34,11 +34,11 @@ jobs:
           # source is the exact tag selected by the release orchestrator.
           su builder -c 'makepkg -f --noconfirm --nodeps --skipinteg'
           mkdir dist
-          cp bref-[0-9]*-x86_64.pkg.tar.zst dist/
-          cp bref-[0-9]*-x86_64.pkg.tar.zst dist/bref-x86_64.pkg.tar.zst
-          pacman -Qip dist/bref-x86_64.pkg.tar.zst
-          bsdtar -tf dist/bref-x86_64.pkg.tar.zst > /tmp/package-contents
-          grep -Fx 'usr/bin/bref' /tmp/package-contents
+          cp inkuno-[0-9]*-x86_64.pkg.tar.zst dist/
+          cp inkuno-[0-9]*-x86_64.pkg.tar.zst dist/inkuno-x86_64.pkg.tar.zst
+          pacman -Qip dist/inkuno-x86_64.pkg.tar.zst
+          bsdtar -tf dist/inkuno-x86_64.pkg.tar.zst > /tmp/package-contents
+          grep -Fx 'usr/bin/inkuno' /tmp/package-contents
       - uses: actions/upload-artifact@v4
         with:
           name: native-arch

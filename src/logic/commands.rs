@@ -35,7 +35,7 @@ impl Group {
             (Group::Go, _) => tr("Go to", "Aller à"),
             (Group::Vault, _) => tr("Vault", "Coffre"),
             (Group::Look, _) => tr("Appearance", "Apparence"),
-            (Group::App, _) => "Bref",
+            (Group::App, _) => "Inkuno",
         }
     }
 }
@@ -168,7 +168,7 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
         ("app::ZoomOut", tr("Smaller text", "Texte plus petit"), "c-zoom-out.svg", Look),
         ("app::ZoomReset", tr("Default text size", "Taille du texte d'origine"), "c-zoom-reset.svg", Look),
         ("app::ToggleHelp", tr("Keyboard shortcuts", "Raccourcis clavier"), "help.svg", App),
-        ("app::Quit", tr("Quit Bref", "Quitter Bref"), "c-quit.svg", App),
+        ("app::Quit", tr("Quit Inkuno", "Quitter Inkuno"), "c-quit.svg", App),
     ]
 }
 

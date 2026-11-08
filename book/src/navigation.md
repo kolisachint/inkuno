@@ -72,7 +72,7 @@ Right click a note, a file or a folder in the tree, then **Icon…**. Pick one o
 - Without one, every row shows a small icon of its kind (folder, note, table, diagram, picture, other file), so the names line up.
 - A file that is not a note shows its extension next to its name, lighter (`contacts.csv`). A long name is cut before its extension.
 - The icon you give replaces the default one, before the name. It follows a rename or a move.
-- Icons are kept in `.bref-icons` at the root of the vault, so they travel with it.
+- Icons are kept in `.inkuno-icons` at the root of the vault, so they travel with it.
 
 ## The graph
 

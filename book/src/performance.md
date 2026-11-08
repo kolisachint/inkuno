@@ -12,11 +12,11 @@ Measured on the author's machine (Intel Core i9-13900H, Linux, release build), o
 | A note written by another program shows up | in 0.3 to 0.45 s | in 0.3 to 0.45 s | in 0.4 to 0.55 s |
 | Memory | 62 MB | 86 MB | 180 MB |
 
-At rest, Bref uses 0.3 % of one processor core.
+At rest, Inkuno uses 0.3 % of one processor core.
 
 ## One gesture
 
-The time Bref spends between a key and the frame it hands to the graphics card, measured without a display. Drawing comes on top; a screen at 120 Hz leaves 8 ms for both.
+The time Inkuno spends between a key and the frame it hands to the graphics card, measured without a display. Drawing comes on top; a screen at 120 Hz leaves 8 ms for both.
 
 | Gesture | Work before the frame is drawn |
 |---|---|

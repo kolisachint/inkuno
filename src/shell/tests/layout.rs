@@ -6,7 +6,7 @@ use super::*;
 /// compared (in `Editor::layout`, under test) with a full layout.
 #[gpui::test]
 fn layout_reuse_matches_full_layout(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-reuse-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-reuse-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
@@ -16,8 +16,8 @@ fn layout_reuse_matches_full_layout(cx: &mut TestAppContext) {
         |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
     });
     cx.run_until_parked();
-    let mut seed = std::env::var("BREF_FUZZ_SEED").ok().and_then(|n| n.parse().ok()).unwrap_or(0x9E3779B97F4A7C15u64);
-    let steps: usize = std::env::var("BREF_FUZZ_STEPS").ok().and_then(|n| n.parse().ok()).unwrap_or(250);
+    let mut seed = std::env::var("INKUNO_FUZZ_SEED").ok().and_then(|n| n.parse().ok()).unwrap_or(0x9E3779B97F4A7C15u64);
+    let steps: usize = std::env::var("INKUNO_FUZZ_STEPS").ok().and_then(|n| n.parse().ok()).unwrap_or(250);
     let mut next = move |n: usize| {
         seed ^= seed << 13;
         seed ^= seed >> 7;

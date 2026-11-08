@@ -1,4 +1,4 @@
-pkgbase = bref
+pkgbase = inkuno
 	pkgdesc = Fast, minimal Markdown note-taking app
 	pkgver = 0.4.7
 	pkgrel = 1
@@ -19,7 +19,7 @@ pkgbase = bref
 	conflicts = encre
 	replaces = encre
 	options = !debug
-	source = bref-0.4.7.tar.gz::https://github.com/alarboulletmarin/bref/archive/refs/tags/v0.4.7.tar.gz
+	source = inkuno-0.4.7.tar.gz::https://github.com/alarboulletmarin/bref/archive/refs/tags/v0.4.7.tar.gz
 	sha256sums = 6e33f85aba5583561ebe2b1423265aedff8fb92055e69a5ce9c6341a51920d57
 
-pkgname = bref
+pkgname = inkuno

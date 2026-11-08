@@ -1317,9 +1317,9 @@ mod tests {
         assert_eq!(relink(&linked, "vieux", "Neuf").unwrap(), "---\nvoir: \"[[Vieux]]\" #non\n---\n[[Neuf]] #oui\n");
         assert_eq!(relink("---\nvoir: \"[[Vieux]]\"\n---\nrien\n", "vieux", "Neuf"), None);
                 // Front matter tags and aliases, in their three spellings.
-        let inline = "---\ntags: [projet, \"#idée\", projet]\naliases: Bref app, 'Bref'\ntagsx: [non]\n---\n#corps #projet\n";
+        let inline = "---\ntags: [projet, \"#idée\", projet]\naliases: Inkuno app, 'Inkuno'\ntagsx: [non]\n---\n#corps #projet\n";
         assert_eq!(index(inline).0, ["projet", "idée", "corps"]);
-        assert_eq!(aliases(inline), ["Bref app", "Bref"]);
+        assert_eq!(aliases(inline), ["Inkuno app", "Inkuno"]);
         let dashes = "---\naliases:\n  - \"Un nom\"\n  - Autre\ntags:\n- a\n---\n";
         assert_eq!((aliases(dashes), index(dashes).0), (vec!["Un nom".to_string(), "Autre".to_string()], vec!["a".to_string()]));
         assert!(aliases("aliases: [hors bloc]\n").is_empty() && aliases("---\naliases:\n---\n").is_empty());

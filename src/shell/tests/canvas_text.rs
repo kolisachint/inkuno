@@ -11,7 +11,7 @@ use gpui::{Modifiers, MouseButton};
 fn label_editing_goes_by_displayed_character(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "canvas-text");
     let file = root.join("Schéma.svg");
-    fs::write(&file, "<svg><metadata id=\"bref-diagram\">\nversion 1\n</metadata></svg>\n").unwrap();
+    fs::write(&file, "<svg><metadata id=\"inkuno-diagram\">\nversion 1\n</metadata></svg>\n").unwrap();
     let canvas = shell.update_in(cx, |s, window, cx| {
         s.load_note(&file, cx);
         let canvas = s.pane().drawing().cloned().unwrap();

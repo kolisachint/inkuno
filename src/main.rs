@@ -1,4 +1,4 @@
-//! Bref: a fast, minimal Markdown note-taking app. ARCHITECTURE.md maps the code.
+//! Inkuno: a fast, minimal Markdown note-taking app. ARCHITECTURE.md maps the code.
 
 // No console behind the window on Windows.
 #![cfg_attr(windows, windows_subsystem = "windows")]
@@ -18,25 +18,25 @@ use ui::{keys, theme};
 
 /// Usage, config paths and the agent-editable JSON schemas.
 fn help_text() -> String {
-    let dir = vault::config_dir().join("bref");
+    let dir = vault::config_dir().join("inkuno");
     format!(
-        "bref {} — fast, minimal Markdown notes\n\
+        "inkuno {} — fast, minimal Markdown notes\n\
          \n\
          usage:\n\
-         \u{20} bref                  open the app\n\
-         \u{20} bref --capture         open the quick-capture line\n\
-         \u{20} bref mcp               run the Model Context Protocol server on stdio\n\
-         \u{20} bref --check-config    validate the JSON config below, exit 0/1\n\
-         \u{20} bref --help            show this text\n\
+         \u{20} inkuno                  open the app\n\
+         \u{20} inkuno --capture         open the quick-capture line\n\
+         \u{20} inkuno mcp               run the Model Context Protocol server on stdio\n\
+         \u{20} inkuno --check-config    validate the JSON config below, exit 0/1\n\
+         \u{20} inkuno --help            show this text\n\
          \n\
          config dir:\n\
-         \u{20} {} (Linux ~/.config/bref/, macOS ~/Library/Application Support/bref/,\n\
-         \u{20} Windows %APPDATA%\\bref\\)\n\
+         \u{20} {} (Linux ~/.config/inkuno/, macOS ~/Library/Application Support/inkuno/,\n\
+         \u{20} Windows %APPDATA%\\inkuno\\)\n\
          \n\
          agent-editable JSON: when present, it wins over the legacy `keys` and `settings`\n\
          files; the first run without it exports the current state there (nothing is\n\
          deleted). A faulty entry is ignored on its own: startup toasts it,\n\
-         `bref --check-config` lists it. Key clashes with the defaults are checked at\n\
+         `inkuno --check-config` lists it. Key clashes with the defaults are checked at\n\
          startup; edit, save, and either restart or wait for the hot-reload below.\n\
          \n\
          keybindings.json:\n\
@@ -48,7 +48,7 @@ fn help_text() -> String {
          \u{20} action names are the stable `group::Name` rows of the help (e.g. app::Palette).\n\
          \n\
          themes.json:\n\
-         \u{20} {{\"version\": 1, \"themes\": [{{\"name\": \"My Dark\", \"base\": \"Bref Dark\",\n\
+         \u{20} {{\"version\": 1, \"themes\": [{{\"name\": \"My Dark\", \"base\": \"Inkuno Dark\",\n\
          \u{20} \u{20} \"colors\": {{\"bg\": \"#1b1a19\", \"text\": \"#e4e0da\", \"dim\": \"#77716a\",\n\
          \u{20} \u{20} \"accent\": \"#e0926b\", \"code_bg\": \"#262423\", \"panel\": \"#242221\",\n\
          \u{20} \u{20} \"border\": \"#3a3735\"}}]}}\n\
@@ -59,7 +59,7 @@ fn help_text() -> String {
          chords are canon: `secondary-` is Cmd on macOS, Ctrl elsewhere; e.g.\n\
          `secondary-p`, `secondary-shift-p`, `alt-left`, `ctrl-tab`, `f9`.\n\
          \n\
-         validation (`bref --check-config`, machine-readable `file: LEVEL: detail` lines):\n\
+         validation (`inkuno --check-config`, machine-readable `file: LEVEL: detail` lines):\n\
          JSON shape and version, readable and allowed chords, chords taken twice,\n\
          chords the system may keep, theme colors (#rrggbb) and contrast.\n\
          \n\
@@ -76,7 +76,7 @@ fn help_text() -> String {
 /// nothing else, writes nothing.
 fn check_config() -> i32 {
     let mut failed = false;
-    println!("config dir: {}", vault::config_dir().join("bref").display());
+    println!("config dir: {}", vault::config_dir().join("inkuno").display());
     // Shortcuts: JSON when present, else the legacy `keys` file, else the defaults.
     let text = vault::load_keybindings();
     if text.trim().is_empty() {
@@ -171,7 +171,7 @@ fn export_json_once() {
 }
 
 fn main() {
-    // `bref mcp` is a Model Context Protocol server on stdio: no window, no gpui.
+    // `inkuno mcp` is a Model Context Protocol server on stdio: no window, no gpui.
     if std::env::args().nth(1).as_deref() == Some("mcp") {
         std::process::exit(mcp::run());
     }
@@ -185,7 +185,7 @@ fn main() {
     // The window has no console on Windows: the last panic is kept in the config folder.
     let report = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        platform::vault::save_file("crash", &format!("bref {}\n{info}\n", env!("CARGO_PKG_VERSION")));
+        platform::vault::save_file("crash", &format!("inkuno {}\n{info}\n", env!("CARGO_PKG_VERSION")));
         report(info);
     }));
     export_json_once();

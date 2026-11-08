@@ -33,25 +33,25 @@ jobs:
       - name: The C runtime is linked in (no Visual C++ redistributable needed)
         shell: pwsh
         run: |
-          if (Select-String -Path target\release\bref.exe -Pattern 'VCRUNTIME|MSVCP' -Quiet) {
-            throw 'bref.exe still imports the Visual C++ runtime'
+          if (Select-String -Path target\release\inkuno.exe -Pattern 'VCRUNTIME|MSVCP' -Quiet) {
+            throw 'inkuno.exe still imports the Visual C++ runtime'
           }
       - name: Package
         run: |
-          BREF_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-          export BREF_VERSION
+          INKUNO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          export INKUNO_VERSION
           mkdir dist
           iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
           # Preinstalled on the runner image; install it only if that ever changes.
           [ -f "$iscc" ] || { choco install innosetup -y --no-progress; }
-          "$iscc" packaging/windows/bref.iss
-          7z a -tzip dist/bref-windows-x86_64.zip ./target/release/bref.exe LICENSE
+          "$iscc" packaging/windows/inkuno.iss
+          7z a -tzip dist/inkuno-windows-x86_64.zip ./target/release/inkuno.exe LICENSE
           ls -l dist
-      - name: The installer installs bref.exe
+      - name: The installer installs inkuno.exe
         shell: pwsh
         run: |
-          Start-Process -Wait dist\bref-windows-x86_64-setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\bref-test'
-          if (-not (Test-Path C:\bref-test\bref.exe)) { throw 'the installer did not install bref.exe' }
+          Start-Process -Wait dist\inkuno-windows-x86_64-setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\inkuno-test'
+          if (-not (Test-Path C:\inkuno-test\inkuno.exe)) { throw 'the installer did not install inkuno.exe' }
       - uses: actions/upload-artifact@v4
         with:
           name: native-windows
@@ -73,20 +73,20 @@ jobs:
         run: |
           cargo build --release --locked --target aarch64-apple-darwin
           cargo build --release --locked --target x86_64-apple-darwin
-          lipo -create -output bref-universal \
-            target/aarch64-apple-darwin/release/bref target/x86_64-apple-darwin/release/bref
-          lipo -info bref-universal
+          lipo -create -output inkuno-universal \
+            target/aarch64-apple-darwin/release/inkuno target/x86_64-apple-darwin/release/inkuno
+          lipo -info inkuno-universal
       - run: cargo test --locked
       - name: Package
         run: |
           ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-          scripts/bundle-macos.sh bref-universal "$ver" dist/bref-macos.dmg
-      - name: The disk image holds a valid Bref.app
+          scripts/bundle-macos.sh inkuno-universal "$ver" dist/inkuno-macos.dmg
+      - name: The disk image holds a valid Inkuno.app
         run: |
-          hdiutil attach dist/bref-macos.dmg -mountpoint /Volumes/Bref -nobrowse -quiet
-          codesign --verify --strict /Volumes/Bref/Bref.app
-          lipo -archs /Volumes/Bref/Bref.app/Contents/MacOS/bref
-          hdiutil detach /Volumes/Bref -quiet
+          hdiutil attach dist/inkuno-macos.dmg -mountpoint /Volumes/Inkuno -nobrowse -quiet
+          codesign --verify --strict /Volumes/Inkuno/Inkuno.app
+          lipo -archs /Volumes/Inkuno/Inkuno.app/Contents/MacOS/inkuno
+          hdiutil detach /Volumes/Inkuno -quiet
       - uses: actions/upload-artifact@v4
         with:
           name: native-macos

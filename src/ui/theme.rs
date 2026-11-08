@@ -125,10 +125,10 @@ pub struct Theme {
 }
 
 /// Offered themes: (name, [background, text, faint, accent, code background, panel, border]).
-/// The first two are Bref's, dark and light, which follow the system.
+/// The first two are Inkuno's, dark and light, which follow the system.
 pub const THEMES: &[(&str, [u32; 7])] = &[
-    ("Bref Dark", [0x1b1a19, 0xe4e0da, 0x77716a, 0xe0926b, 0x262423, 0x242221, 0x3a3735]),
-    ("Bref Light", [0xfbfaf8, 0x26231f, 0xa8a29a, 0x5f48b0, 0xf1eeea, 0xffffff, 0xe2ddd6]),
+    ("Inkuno Dark", [0x1b1a19, 0xe4e0da, 0x77716a, 0xe0926b, 0x262423, 0x242221, 0x3a3735]),
+    ("Inkuno Light", [0xfbfaf8, 0x26231f, 0xa8a29a, 0x5f48b0, 0xf1eeea, 0xffffff, 0xe2ddd6]),
     ("Dracula", [0x282a36, 0xf8f8f2, 0x6272a4, 0xbd93f9, 0x21222c, 0x343746, 0x44475a]),
     ("One Dark", [0x282c34, 0xabb2bf, 0x5c6370, 0x61afef, 0x21252b, 0x2c313a, 0x3e4451]),
     ("Gruvbox Dark", [0x282828, 0xebdbb2, 0x928374, 0xfabd2f, 0x32302f, 0x3c3836, 0x504945]),
@@ -168,7 +168,7 @@ pub fn parse_hex(text: &str) -> Option<u32> {
 fn base_seeds(base: &str) -> ([u32; 7], bool) {
     match THEMES.iter().find(|t| t.0 == base) {
         Some(theme) => (theme.1, true),
-        // Unknown base: Bref Dark, and the caller warns.
+        // Unknown base: Inkuno Dark, and the caller warns.
         None => (THEMES[0].1, false),
     }
 }
@@ -282,7 +282,7 @@ fn seeds_in(name: &str, text: &str) -> Option<[u32; 7]> {
 }
 
 impl Theme {
-    /// The chosen theme; failing that, Bref's one matching the system appearance.
+    /// The chosen theme; failing that, Inkuno's one matching the system appearance.
     pub fn of(prefs: &Prefs, appearance: WindowAppearance) -> Self {
         let dark = matches!(appearance, WindowAppearance::Dark | WindowAppearance::VibrantDark);
         let system = &THEMES[if dark { 0 } else { 1 }];
@@ -685,17 +685,17 @@ mod tests {
         assert_eq!(parse_hex("#12345"), None);
         let (themes, errors, warns) = parse_themes(
             r##"{"version": 1, "themes": [
-                {"name": "My Dark", "base": "Bref Dark", "colors": {"bg": "#1b1a19", "text": "#e4e0da", "dim": "#77716a", "accent": "#e0926b", "code_bg": "#262423", "panel": "#242221", "border": "#3a3735"}},
+                {"name": "My Dark", "base": "Inkuno Dark", "colors": {"bg": "#1b1a19", "text": "#e4e0da", "dim": "#77716a", "accent": "#e0926b", "code_bg": "#262423", "panel": "#242221", "border": "#3a3735"}},
                 {"name": "Thin", "colors": {"bg": "#ffffff"}},
                 {"name": "", "colors": {}},
-                {"name": "Bad", "base": "Bref Dark", "colors": {"bg": "red", "text": "#000000", "dim": "#000000", "accent": "#000000", "code_bg": "#000000", "panel": "#000000", "border": "#000000"}},
+                {"name": "Bad", "base": "Inkuno Dark", "colors": {"bg": "red", "text": "#000000", "dim": "#000000", "accent": "#000000", "code_bg": "#000000", "panel": "#000000", "border": "#000000"}},
                 {"name": "My Dark", "colors": {"bg": "#000000"}}
             ]}"##,
         );
         assert_eq!(themes.len(), 2);
         assert_eq!(themes[0].seeds[0], 0x1b1a19);
         // Thin inherits the six missing tokens from its base.
-        assert_eq!(themes[1].base, "Bref Dark");
+        assert_eq!(themes[1].base, "Inkuno Dark");
         assert_eq!(themes[1].seeds[0], 0xffffff);
         assert_eq!(themes[1].seeds[1], THEMES[0].1[1]);
         // Faulty themes, one by one: nameless, unreadable color, duplicate name. The dropped
@@ -705,7 +705,7 @@ mod tests {
         // Low contrast is reported, then auto-fixed by the `legible` in `of`.
         let (names, errors, warns) = check_themes(
             r##"{"version": 1, "themes": [
-                {"name": "Flat", "base": "Bref Light", "colors": {"bg": "#ffffff", "text": "#777777", "dim": "#77716a", "accent": "#e0926b", "code_bg": "#262423", "panel": "#ffffff", "border": "#3a3735"}}
+                {"name": "Flat", "base": "Inkuno Light", "colors": {"bg": "#ffffff", "text": "#777777", "dim": "#77716a", "accent": "#e0926b", "code_bg": "#262423", "panel": "#ffffff", "border": "#3a3735"}}
             ]}"##,
         );
         assert_eq!(names, vec!["Flat".to_string()]);

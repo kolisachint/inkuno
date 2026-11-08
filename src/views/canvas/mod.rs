@@ -488,7 +488,7 @@ impl Canvas {
         }
     }
 
-    /// The diagram was rewritten elsewhere (an agent through `bref mcp`, a sync): it is shown as it is now,
+    /// The diagram was rewritten elsewhere (an agent through `inkuno mcp`, a sync): it is shown as it is now,
     /// with the view and what is left of the selection kept, and one step of undo goes back to what was
     /// shown. Not in the middle of a gesture or of a text being written: `false`, and the write that ends it wins.
     pub fn replace(&mut self, diagram: Diagram, cx: &mut Context<Self>) -> bool {
@@ -667,7 +667,7 @@ mod ghost_tests {
     fn the_picture_dragged_is_centred_on_the_pointer_wherever_it_was_taken_hold_of() {
         // gpui draws it at pointer - grab; moved by `shift`, its centre is the pointer, for a button and for a wide row.
         for grab in [(0., 0.), (14., 14.), (3., 25.), (240., 12.), (600., 30.), (-4., -2.)] {
-            let placing = Placing(Tool::Select, "d-rect.svg", crate::ui::theme::Theme::of(&crate::logic::prefs::Prefs::parse("theme=Bref Light\n"), gpui::WindowAppearance::Light), point(px(grab.0), px(grab.1)));
+            let placing = Placing(Tool::Select, "d-rect.svg", crate::ui::theme::Theme::of(&crate::logic::prefs::Prefs::parse("theme=Inkuno Light\n"), gpui::WindowAppearance::Light), point(px(grab.0), px(grab.1)));
             let (dx, dy) = placing.shift();
             let (left, top) = (-grab.0 + dx, -grab.1 + dy);
             assert_eq!((left + GHOST / 2., top + GHOST / 2.), (0., 0.), "{grab:?}");

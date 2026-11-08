@@ -45,7 +45,7 @@ impl Shell {
                 self.update = Some(release);
                 cx.notify();
             }
-            Some(_) => self.say(Tone::Done, format!("{} ({})", tr("Bref is up to date", "Bref est à jour"), env!("CARGO_PKG_VERSION")), cx),
+            Some(_) => self.say(Tone::Done, format!("{} ({})", tr("Inkuno is up to date", "Inkuno est à jour"), env!("CARGO_PKG_VERSION")), cx),
         }
     }
 
@@ -95,7 +95,7 @@ impl Shell {
             // A row of the window, under the panes: it takes room instead of floating over the note.
             let row = |card: Div| div().flex_none().w_full().flex().justify_center().px_4().py_2().bg(t.ground).child(card);
             if self.updating {
-                return row(banner.pr_3().child(tr("Updating, Bref restarts…", "Mise à jour, Bref redémarre…")));
+                return row(banner.pr_3().child(tr("Updating, Inkuno restarts…", "Mise à jour, Inkuno redémarre…")));
             }
             // "Update" when the app can do it alone, otherwise the download page.
             let (action, install) = match release.asset {

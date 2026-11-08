@@ -61,7 +61,7 @@ impl Journey {
 /// Full keyboard run: typing, lists, saving, palette, wikilink.
 #[gpui::test]
 fn end_to_end(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-e2e-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-e2e-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Courses.md"), "# Courses\n\n- lait #maison\n").unwrap();
     fs::create_dir(root.join("Projets")).unwrap();

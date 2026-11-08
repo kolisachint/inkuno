@@ -11,7 +11,7 @@ impl Shell {
         self.sync(notes, dirs, images, cx);
     }
 
-    /// Opens the window's door to `bref mcp` (`platform::link`): an agent asks it to show a file of
+    /// Opens the window's door to `inkuno mcp` (`platform::link`): an agent asks it to show a file of
     /// the vault. No door (no port to be had): the agent still writes, it just cannot show.
     pub(super) fn listen(&mut self, window: &Window, cx: &mut Context<Self>) {
         if cfg!(test) {
@@ -41,14 +41,14 @@ impl Shell {
     /// window to the front.
     pub(super) fn show_asked(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) -> Result<(), String> {
         let Some(root) = self.vault.clone() else {
-            return Err("Bref has no vault open".into());
+            return Err("Inkuno has no vault open".into());
         };
         // The agent and the window may write the vault's path differently (a link, `/private` on macOS).
         let (Ok(canon_root), Ok(canon)) = (root.canonicalize(), path.canonicalize()) else {
             return Err(format!("no file at {}", path.display()));
         };
         let Ok(inside) = canon.strip_prefix(&canon_root) else {
-            return Err(format!("Bref has another vault open: {}", root.display()));
+            return Err(format!("Inkuno has another vault open: {}", root.display()));
         };
         self.open(&root.join(inside), window, cx);
         window.activate_window();

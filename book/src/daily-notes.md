@@ -50,7 +50,7 @@ Any other `{{word}}` stays as written.
 
 ## Quick capture
 
-An idea rarely comes while Bref is open. `bref --capture` opens a window that is one line and nothing else, as fast as the app itself.
+An idea rarely comes while Inkuno is open. `inkuno --capture` opens a window that is one line and nothing else, as fast as the app itself.
 
 1. Type.
 2. Press `Enter`. The line is added to the note of the day as a list item (`- call Léa`). Type `- [ ] ` first to make it a task.
@@ -59,9 +59,9 @@ The note is created if the day has none yet, and found wherever you keep your da
 
 **Put it under a key**: open the palette, type `capture` and choose **Set up the quick capture shortcut**.
 
-- **GNOME**: done. Bref adds the shortcut `Super + Shift + N` to your keyboard settings and tells you so. If those keys are taken, it adds none and says so: set your own keys in Settings › Keyboard › Custom Shortcuts, under *Bref: capture*. Asking again never adds a second one.
-- **Elsewhere** (KDE, macOS, Windows…): an app cannot take a system-wide shortcut by itself. Bref copies the command to the clipboard, ready to paste into a new shortcut of your system settings.
+- **GNOME**: done. Inkuno adds the shortcut `Super + Shift + N` to your keyboard settings and tells you so. If those keys are taken, it adds none and says so: set your own keys in Settings › Keyboard › Custom Shortcuts, under *Inkuno: capture*. Asking again never adds a second one.
+- **Elsewhere** (KDE, macOS, Windows…): an app cannot take a system-wide shortcut by itself. Inkuno copies the command to the clipboard, ready to paste into a new shortcut of your system settings.
 
-Without any setup, on Linux, right click the icon of Bref in the dock or the app grid: **Quick capture** is there.
+Without any setup, on Linux, right click the icon of Inkuno in the dock or the app grid: **Quick capture** is there.
 
-If Bref is open on today's note, the line appears there a moment later. Without a vault chosen yet, the command opens Bref as usual.
+If Inkuno is open on today's note, the line appears there a moment later. Without a vault chosen yet, the command opens Inkuno as usual.

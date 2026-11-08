@@ -7,7 +7,7 @@
 <text x="284" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Note on disk</text>
 <path d="M411 40L517 40C518.1 40 519 40.9 519 42L519 74C519 75.1 518.1 76 517 76L411 76C409.9 76 409 75.1 409 74L409 42C409 40.9 409.9 40 411 40Z" stroke="#7d8590"/>
 <path d="M464 76L464 592" stroke="#7d8590" stroke-dasharray="6 4"/>
-<text x="464" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Bref</text>
+<text x="464" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Inkuno</text>
 <path d="M591 40L697 40C698.1 40 699 40.9 699 42L699 74C699 75.1 698.1 76 697 76L591 76C589.9 76 589 75.1 589 74L589 42C589 40.9 589.9 40 591 40Z" stroke="#7d8590"/>
 <path d="M644 76L644 592" stroke="#7d8590" stroke-dasharray="6 4"/>
 <text x="644" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Editor</text>
@@ -44,12 +44,12 @@
 <path d="M289 522L464 522" stroke="#7d8590" stroke-dasharray="6 4"/>
 <path d="M454 527L464 522L454 517" stroke="#7d8590"/>
 <text x="376.5" y="516" text-anchor="middle" fill="#7d8590" stroke="none">kept</text>
-<metadata id="bref-diagram">
+<metadata id="inkuno-diagram">
 version 8
 rich 1
 shape 1 lifeline 40 40 119 552 0 0 0 Agent or sync
 shape 2 lifeline 229 40 110 552 0 0 0 Note on disk
-shape 3 lifeline 409 40 110 552 0 0 0 Bref
+shape 3 lifeline 409 40 110 552 0 0 0 Inkuno
 shape 4 lifeline 589 40 110 552 0 0 0 Editor
 shape 13 fragment 205 294 552 254 0 0 0 alt\n[merge::onto(base, ours, disk) succeeds]\n[same lines changed]
 link 5 l1 l2 none arrow straight 0 0 writes the note

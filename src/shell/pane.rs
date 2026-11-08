@@ -109,7 +109,7 @@ pub(super) struct FileView {
 pub(super) enum FileKind {
     /// A picture, drawn as is.
     Image,
-    /// A Bref diagram, open in its canvas.
+    /// A Inkuno diagram, open in its canvas.
     Drawing(Entity<Canvas>),
     /// An SVG from elsewhere, in the zoomable viewer.
     Svg(Entity<viewer::Viewer>),

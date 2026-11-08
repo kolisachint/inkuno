@@ -5,7 +5,7 @@ use super::*;
 /// the last cell; at 420, 860 and 1,600 px and at zoom 11, 16 and 32.
 #[gpui::test]
 fn the_calendar_stays_inside_its_sheet(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-calendar-head-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-calendar-head-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);

@@ -2,15 +2,15 @@
 
 ## Choose a vault
 
-On first launch, Bref asks for a **vault**: the folder that holds your notes.
+On first launch, Inkuno asks for a **vault**: the folder that holds your notes.
 
 - **Start in ~/Documents/Notes** creates it there, or in your home folder if you have no `Documents`. A folder already there is opened as it is.
 - **Open another folder…** picks an existing one. Dropping a folder on the welcome screen does the same.
 - **Clone a vault from a git address…** fetches a vault kept in git. See [Syncing a vault](sync.md).
 
-That is the only setup. Bref remembers the vault and the last note you had open. `Ctrl + O` changes the vault at any time.
+That is the only setup. Inkuno remembers the vault and the last note you had open. `Ctrl + O` changes the vault at any time.
 
-On Linux, you can put Bref one key away: bind the command `bref` in your desktop settings (GNOME: Settings → Keyboard → Custom Shortcuts).
+On Linux, you can put Inkuno one key away: bind the command `inkuno` in your desktop settings (GNOME: Settings → Keyboard → Custom Shortcuts).
 
 ## Write
 
@@ -60,7 +60,7 @@ Type to find a command by what it does, then `Enter` runs it where you were. Any
 - A link per section sits at the top.
 - Type to search, by key or by effect (`ctrl+p`, `graph`). `Esc` empties the search, then closes.
 - Click the keys of a row to [change them](settings.md#changing-a-shortcut).
-- At its foot: the version of Bref, and links to its source and to its Ko-fi page.
+- At its foot: the version of Inkuno, and links to its source and to its Ko-fi page.
 
 The full list is also in [Keyboard shortcuts](shortcuts.md).
 
@@ -74,4 +74,4 @@ The menus show, beside each action, the shortcut that does the same. Pointing at
 
 ## Quit
 
-`Ctrl + Q` quits. Bref reopens with the panel, tabs and panes as you left them.
+`Ctrl + Q` quits. Inkuno reopens with the panel, tabs and panes as you left them.

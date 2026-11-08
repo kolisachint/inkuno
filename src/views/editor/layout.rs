@@ -1238,7 +1238,7 @@ impl Editor {
                 .or(enlarge)
                 .or_else(|| made.formula.clone().map(|(source, display)| Source::Formula(source, display)));
             // An SVG is redrawn in the theme's colors, and every time its file
-            // changes: its date is part of its key. A Bref diagram takes the ink of the
+            // changes: its date is part of its key. A Inkuno diagram takes the ink of the
             // text; an SVG from elsewhere is made readable (HTML text, `light-dark()`).
             if svg
                 && let Some(file) = &file

@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bref — fast, minimal Markdown notes</title>
+<title>Inkuno — fast, minimal Markdown notes</title>
 <meta name="description" content="A fast, minimal note-taking app. Notes are plain Markdown files in a folder you choose, styled as you type. Written in Rust with GPUI.">
-<meta property="og:title" content="Bref — fast, minimal Markdown notes">
+<meta property="og:title" content="Inkuno — fast, minimal Markdown notes">
 <meta property="og:description" content="Plain Markdown files, styled as you type. Opens in about 75 ms. Rust + GPUI.">
-<meta property="og:image" content="https://alarboulletmarin.github.io/bref/screenshots/bref.png">
+<meta property="og:image" content="https://alarboulletmarin.github.io/bref/screenshots/inkuno.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
-/* The app's colours: the "Bref Light" and "Bref Dark" themes (src/ui/theme.rs). */
+/* The app's colours: the "Inkuno Light" and "Inkuno Dark" themes (src/ui/theme.rs). */
 :root {
   --bg: #fbfaf8; --text: #26231f; --dim: #a8a29a; --accent: #b4532a;
   --code: #f1eeea; --panel: #ffffff; --border: #e2ddd6;
@@ -158,7 +158,7 @@ footer a:hover { color: var(--text); }
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><img src="icon.svg" alt="">Bref</a>
+    <a class="brand" href="#"><img src="icon.svg" alt="">Inkuno</a>
     <nav>
       <a href="#features">Features</a>
       <a href="#install" class="keep">Install</a>
@@ -174,12 +174,12 @@ footer a:hover { color: var(--text); }
     <h1>Notes that open before you blink.</h1>
     <p class="sub">A fast, minimal note-taking app. Your notes are plain Markdown files in a folder you choose, styled as you type.</p>
     <div class="cta">
-      <a class="btn primary" id="dl" href="#install">Download Bref</a>
+      <a class="btn primary" id="dl" href="#install">Download Inkuno</a>
       <a class="btn" href="https://github.com/alarboulletmarin/bref">View on GitHub</a>
       <span class="os">Free and open source · Linux, macOS, Windows</span>
     </div>
 
-    <div class="shot"><img src="site/bref.png" width="1720" height="720" alt="Bref showing the same note in the light and dark themes"></div>
+    <div class="shot"><img src="site/inkuno.png" width="1720" height="720" alt="Inkuno showing the same note in the light and dark themes"></div>
 
     <div class="stats">
       <div class="stat"><b>75<small>ms</small></b><span>to put the window on screen</span></div>
@@ -208,7 +208,7 @@ footer a:hover { color: var(--text); }
         <div class="feat"><h3>Yours to dress</h3><p>Sheets on a warm ground, serif page titles, a dozen readable themes, light and dark, IBM Plex built in, English and French, following your system.</p><code>Dracula · Nord · Gruvbox</code></div>
       </div>
 
-      <p class="more"><b>And also:</b> slash commands, a formatting bar, short fades you can turn off, blocks you drag, templates, find and replace in a note or the whole vault, several cursors, comments, a note saved as a PDF to send, embedded sections, kanban boards, a folder or a tag shown as a table, split panes and tabs you drag where they belong and close in bulk from their menu (a failed save keeps the document open with its edits), the panel's views stacked in a dock left or right of the notes, dragged by their title, or opened as a tab, CSV and TSV in a grid, a Share / Export menu to copy notes as Markdown or plain text, save separate copies and find diagram and table formats, a trash you can undo, an MCP server (`bref mcp`) so an agent can read, write and draw in the vault, and messages that say what went wrong, in words, and stay until read.</p>
+      <p class="more"><b>And also:</b> slash commands, a formatting bar, short fades you can turn off, blocks you drag, templates, find and replace in a note or the whole vault, several cursors, comments, a note saved as a PDF to send, embedded sections, kanban boards, a folder or a tag shown as a table, split panes and tabs you drag where they belong and close in bulk from their menu (a failed save keeps the document open with its edits), the panel's views stacked in a dock left or right of the notes, dragged by their title, or opened as a tab, CSV and TSV in a grid, a Share / Export menu to copy notes as Markdown or plain text, save separate copies and find diagram and table formats, a trash you can undo, an MCP server (`inkuno mcp`) so an agent can read, write and draw in the vault, and messages that say what went wrong, in words, and stay until read.</p>
     </div>
   </section>
 
@@ -227,14 +227,14 @@ footer a:hover { color: var(--text); }
 
       <div class="panel" data-panel="windows" hidden>
         <p>Windows 10 or 11, 64-bit. Installs for your user only, no administrator rights needed.</p>
-        <p><a class="btn primary" href="https://github.com/alarboulletmarin/bref/releases/latest/download/bref-windows-x86_64-setup.exe">Download the installer</a>
-           &nbsp;<a href="https://github.com/alarboulletmarin/bref/releases/latest/download/bref-windows-x86_64.zip">or the .zip</a>, to install nothing</p>
+        <p><a class="btn primary" href="https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64-setup.exe">Download the installer</a>
+           &nbsp;<a href="https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64.zip">or the .zip</a>, to install nothing</p>
         <p class="fine">The files are not signed. If SmartScreen shows “Windows protected your PC”, click <b>More info</b>, then <b>Run anyway</b>.</p>
       </div>
 
       <div class="panel" data-panel="macos" hidden>
-        <p>Apple Silicon and Intel, macOS 11 or later. Open the .dmg and drag Bref to Applications.</p>
-        <p><a class="btn primary" href="https://github.com/alarboulletmarin/bref/releases/latest/download/bref-macos.dmg">Download the .dmg</a></p>
+        <p>Apple Silicon and Intel, macOS 11 or later. Open the .dmg and drag Inkuno to Applications.</p>
+        <p><a class="btn primary" href="https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-macos.dmg">Download the .dmg</a></p>
         <p class="fine">The app is not notarized, so the first launch needs <b>Open Anyway</b> in System Settings, Privacy &amp; Security.</p>
       </div>
 
@@ -247,18 +247,18 @@ footer a:hover { color: var(--text); }
         </div>
 
         <div data-distro-panel="arch">
-          <p>A prebuilt package ships with every release, no compiler needed. pacman then tracks it as <code>bref</code>.</p>
-          <div class="code"><pre><code>curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/bref-x86_64.pkg.tar.zst
-sudo pacman -U ./bref-x86_64.pkg.tar.zst</code></pre></div>
+          <p>A prebuilt package ships with every release, no compiler needed. pacman then tracks it as <code>inkuno</code>.</p>
+          <div class="code"><pre><code>curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-x86_64.pkg.tar.zst
+sudo pacman -U ./inkuno-x86_64.pkg.tar.zst</code></pre></div>
         </div>
 
         <div data-distro-panel="debian" hidden>
-          <p>Bref is compiled on your machine. Install the libraries, <a href="https://rustup.rs">Rust</a> (the one from apt is usually too old), then build.</p>
+          <p>Inkuno is compiled on your machine. Install the libraries, <a href="https://rustup.rs">Rust</a> (the one from apt is usually too old), then build.</p>
           <div class="code"><pre><code>sudo apt install build-essential pkg-config libfontconfig-dev libfreetype-dev \
   libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libvulkan1 \
   fonts-noto-color-emoji
 git clone https://github.com/alarboulletmarin/bref.git
-cd bref
+cd inkuno
 make
 sudo make install</code></pre></div>
         </div>
@@ -269,7 +269,7 @@ sudo make install</code></pre></div>
   wayland-devel libxcb-devel libxkbcommon-devel libxkbcommon-x11-devel vulkan-loader \
   google-noto-color-emoji-fonts
 git clone https://github.com/alarboulletmarin/bref.git
-cd bref
+cd inkuno
 make
 sudo make install</code></pre></div>
         </div>
@@ -277,15 +277,15 @@ sudo make install</code></pre></div>
         <div data-distro-panel="other" hidden>
           <p>You need the development files of fontconfig, freetype, Wayland, libxcb and libxkbcommon, a Vulkan driver, an emoji font and <a href="https://rustup.rs">Rust</a> 1.88 or later.</p>
           <div class="code"><pre><code>git clone https://github.com/alarboulletmarin/bref.git
-cd bref
+cd inkuno
 make
 sudo make install</code></pre></div>
         </div>
 
-        <p class="fine">With <code>make install</code>, Bref adds the <code>bref</code> command, an application menu entry and its icon; <code>sudo make uninstall</code> removes them. <a href="guide/install.html">Full steps for each system</a>.</p>
+        <p class="fine">With <code>make install</code>, Inkuno adds the <code>inkuno</code> command, an application menu entry and its icon; <code>sudo make uninstall</code> removes them. <a href="guide/install.html">Full steps for each system</a>.</p>
       </div>
 
-      <p class="fine">Bref tells you when a new version is out. On Windows, macOS and Arch, one click updates it.</p>
+      <p class="fine">Inkuno tells you when a new version is out. On Windows, macOS and Arch, one click updates it.</p>
     </div>
   </section>
 
@@ -298,7 +298,7 @@ sudo make install</code></pre></div>
 
   <div class="wrap">
     <footer>
-      <a class="brand" href="#"><img src="icon.svg" alt="">Bref</a>
+      <a class="brand" href="#"><img src="icon.svg" alt="">Inkuno</a>
       <span style="margin-right:auto">MIT licence</span>
       <a href="guide/">Guide</a>
       <a href="https://github.com/alarboulletmarin/bref">Source</a>
@@ -339,8 +339,8 @@ distroTabs.forEach(t => t.onclick = () => pick(distroTabs, "distro", distroPanel
   if (!os) return;
   pick(osTabs, "os", osPanels, "data-panel", os);
   const dl = document.getElementById("dl");
-  if (os === "windows") { dl.href = rel + "bref-windows-x86_64-setup.exe"; dl.textContent = "Download for Windows"; }
-  if (os === "macos") { dl.href = rel + "bref-macos.dmg"; dl.textContent = "Download for macOS"; }
+  if (os === "windows") { dl.href = rel + "inkuno-windows-x86_64-setup.exe"; dl.textContent = "Download for Windows"; }
+  if (os === "macos") { dl.href = rel + "inkuno-macos.dmg"; dl.textContent = "Download for macOS"; }
   if (os === "linux") dl.textContent = "Install on Linux";
 })();
 

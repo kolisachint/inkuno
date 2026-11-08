@@ -1,26 +1,26 @@
-; Windows installer of Bref. Built by .github/workflows/release-binaries.yml:
-;   BREF_VERSION=0.2.0 iscc packaging/windows/bref.iss   (makes dist/bref-windows-x86_64-setup.exe)
-#define Version GetEnv("BREF_VERSION")
+; Windows installer of Inkuno. Built by .github/workflows/release-binaries.yml:
+;   INKUNO_VERSION=0.2.0 iscc packaging/windows/inkuno.iss   (makes dist/inkuno-windows-x86_64-setup.exe)
+#define Version GetEnv("INKUNO_VERSION")
 
 [Setup]
 AppId={{9A5A9701-FBF2-446B-8861-E78C81C9CA55}
-AppName=Bref
+AppName=Inkuno
 AppVersion={#Version}
 AppPublisher=Andrea Larboullet Marin
 AppPublisherURL=https://github.com/alarboulletmarin/bref
-DefaultDirName={autopf}\Bref
-DefaultGroupName=Bref
-; Installed for the current user only (%LOCALAPPDATA%\Programs\Bref): no administrator prompt.
+DefaultDirName={autopf}\Inkuno
+DefaultGroupName=Inkuno
+; Installed for the current user only (%LOCALAPPDATA%\Programs\Inkuno): no administrator prompt.
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 MinVersion=10.0
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-SetupIconFile=bref.ico
-UninstallDisplayIcon={app}\bref.exe
+SetupIconFile=inkuno.ico
+UninstallDisplayIcon={app}\inkuno.exe
 LicenseFile=..\..\LICENSE
 OutputDir=..\..\dist
-OutputBaseFilename=bref-windows-x86_64-setup
+OutputBaseFilename=inkuno-windows-x86_64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -34,17 +34,17 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; Flags: unchecked
 
 [Files]
-Source: "..\..\target\release\bref.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\target\release\inkuno.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Bref"; Filename: "{app}\bref.exe"
-Name: "{autodesktop}\Bref"; Filename: "{app}\bref.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Inkuno"; Filename: "{app}\inkuno.exe"
+Name: "{autodesktop}\Inkuno"; Filename: "{app}\inkuno.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\bref.exe"; Description: "{cm:LaunchProgram,Bref}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\inkuno.exe"; Description: "{cm:LaunchProgram,Inkuno}"; Flags: nowait postinstall skipifsilent
 ; Update started by the app (setup /VERYSILENT ... /RELAUNCH=1): the app opens again by itself.
-Filename: "{app}\bref.exe"; Flags: nowait runasoriginaluser; Check: Relaunch
+Filename: "{app}\inkuno.exe"; Flags: nowait runasoriginaluser; Check: Relaunch
 
 [Code]
 function Relaunch: Boolean;

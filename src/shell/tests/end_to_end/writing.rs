@@ -83,7 +83,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(shell.read_with(cx, |s, _| !s.updating && s.told(Tone::Failed, "Mise à jour impossible")));
     shell.update(cx, |s, _| (s.update, s.toasts) = (None, Vec::new()));
 
-    // Manual check: the palette starts it, then the answer says Bref is up to date,
+    // Manual check: the palette starts it, then the answer says Inkuno is up to date,
     // that GitHub does not answer, or shows the banner.
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("maintenant");

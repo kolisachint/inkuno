@@ -194,7 +194,7 @@ fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
 #[gpui::test]
 fn sharing_menu_fits_themes_and_narrow_windows(cx: &mut TestAppContext) {
     let (_root, shell, cx, _config) = start(cx, "sharing-layout");
-    for name in ["Bref Light", "Bref Dark", "Nord"] {
+    for name in ["Inkuno Light", "Inkuno Dark", "Nord"] {
         shell.update_in(cx, |s, window, cx| { s.prefs.theme = name.into(); s.restyle(window, cx); });
         for width in [240., 320., 420., 860., 1600.] {
             cx.simulate_resize(size(px(width), px(720.)));

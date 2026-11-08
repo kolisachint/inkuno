@@ -35,7 +35,7 @@ fn event_of(path: &Path) -> Option<ConfigEvent> {
     }
 }
 
-/// Watches the config folder (`~/.config/bref/`, …): `try_recv` reports the files
+/// Watches the config folder (`~/.config/inkuno/`, …): `try_recv` reports the files
 /// changed since the last call. Watching stops when this is dropped. Without a possible
 /// watcher, no event ever comes: the next restart still reads the files.
 pub struct ConfigWatcher {
@@ -96,7 +96,7 @@ mod tests {
     use std::env;
 
     fn watched_dir(name: &str) -> PathBuf {
-        let dir = env::temp_dir().join(format!("bref-config-{name}-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!("inkuno-config-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }

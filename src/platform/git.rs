@@ -187,7 +187,7 @@ fn call(root: &Path, args: &[&str]) -> Result<Output, Fail> {
     // Tests do not depend on the machine's git settings (signature, templates…).
     #[cfg(test)]
     {
-        let empty = std::env::temp_dir().join("bref-test-gitconfig");
+        let empty = std::env::temp_dir().join("inkuno-test-gitconfig");
         let _ = std::fs::OpenOptions::new().create(true).append(true).open(&empty);
         command.env("GIT_CONFIG_GLOBAL", empty).env("GIT_CONFIG_NOSYSTEM", "1");
     }
@@ -246,7 +246,7 @@ fn usual(root: &Path) -> Result<(), Fail> {
 /// commit, merge or plain: a fallback identity signs it.
 fn signature(root: &Path) -> Vec<&'static str> {
     match run(root, &["config", "user.email"]).unwrap_or_default().is_empty() {
-        true => vec!["-c", "user.name=Bref", "-c", "user.email=bref@localhost"],
+        true => vec!["-c", "user.name=Inkuno", "-c", "user.email=inkuno@localhost"],
         false => Vec::new(),
     }
 }
@@ -261,7 +261,7 @@ fn commit(root: &Path, extra: &[&str]) -> Result<(), Fail> {
     let mut args = signature(root);
     args.extend(["commit", "-q"]);
     match extra.is_empty() {
-        true => args.extend(["--allow-empty", "-m", "Bref: sync"]),
+        true => args.extend(["--allow-empty", "-m", "Inkuno: sync"]),
         false => args.extend(extra),
     }
     run(root, &args).map(drop)
@@ -430,7 +430,7 @@ mod tests {
 
     impl Lab {
         fn new(name: &str) -> Self {
-            let base = std::env::temp_dir().join(format!("bref-git-{name}-{}", std::process::id()));
+            let base = std::env::temp_dir().join(format!("inkuno-git-{name}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&base);
             let (remote, a, b) = (base.join("remote.git"), base.join("a"), base.join("b"));
             fs::create_dir_all(&remote).unwrap();

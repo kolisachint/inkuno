@@ -33,9 +33,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let renamed = fs::read_to_string(root.join("Tests.md")).unwrap();
     assert!(renamed.starts_with("# Tests\n1. un") && !root.join("Test.md").exists());
     assert!(shell.read_with(cx, |s, _| s.recent.contains(&root.join("Tests.md"))));
-    assert_eq!(fs::read_to_string(root.join(".bref-icons")).unwrap(), "star\tTests.md\n");
+    assert_eq!(fs::read_to_string(root.join(".inkuno-icons")).unwrap(), "star\tTests.md\n");
     shell.update(cx, |s, cx| s.set_icon(root.join("Tests.md"), None, cx));
-    assert_eq!(fs::read_to_string(root.join(".bref-icons")).unwrap(), "");
+    assert_eq!(fs::read_to_string(root.join(".inkuno-icons")).unwrap(), "");
     // Links follow, in the file as in the shown note.
     assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[[Tests]]");
     assert!(fs::read_to_string(root.join("Courses.md")).unwrap().ends_with("[[Tests]]"));

@@ -8,7 +8,7 @@ use super::{Outcome, Server, draw, notes, tools, vault::Vault};
 
 fn scratch() -> PathBuf {
     static N: AtomicU64 = AtomicU64::new(0);
-    let root = std::env::temp_dir().join(format!("bref-mcp-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+    let root = std::env::temp_dir().join(format!("inkuno-mcp-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     // Reached through a link, as macOS's temp folder (`/var` → `/private/var`) and Windows'
@@ -54,7 +54,7 @@ fn a_missing_vault_is_a_sentence() {
     let mut server = Server::open(Some(scratch().join("missing")), false);
     let message = err(tools::call(&mut server, "vault_info", &json!({})));
     assert_eq!(message, "not found");
-    let mut blind = Server { vault: None, blind: "no vault: open one in Bref, or pass `--vault`".into(), read_only: false };
+    let mut blind = Server { vault: None, blind: "no vault: open one in Inkuno, or pass `--vault`".into(), read_only: false };
     assert!(err(tools::call(&mut blind, "read_note", &json!({"note": "A"}))).contains("no vault"));
     assert!(ok(tools::call(&mut blind, "check_mermaid", &json!({"source": "classDiagram\nClass A"})))["readable"].as_bool().unwrap());
 }
@@ -240,7 +240,7 @@ fn an_unreadable_folder_does_not_hide_the_rest() {
 }
 
 #[test]
-fn diagrams_are_written_by_bref_and_can_be_seen() {
+fn diagrams_are_written_by_inkuno_and_can_be_seen() {
     let root = scratch();
     let mut vault = open(&root);
     let refused = err(draw::create_diagram(&mut vault, &json!({"name": "Flow", "from": {"mermaid": "flowchart LR\n  A --> B"}})));
@@ -257,7 +257,7 @@ fn diagrams_are_written_by_bref_and_can_be_seen() {
         "from": {"mermaid": "classDiagram\nclass Duck\nclass Pond\nDuck --> Pond"}
     })));
     assert_eq!(class["embed"], "[[Types.svg]]");
-    assert!(fs::read_to_string(root.join("Types.svg")).unwrap().contains("bref-diagram"));
+    assert!(fs::read_to_string(root.join("Types.svg")).unwrap().contains("inkuno-diagram"));
     let read = ok(draw::read_diagram(&vault, &json!({"path": "Types.svg"})));
     assert_eq!(read["read_only"], false);
     assert!(read["shapes"].as_array().unwrap().len() >= 2);
@@ -408,11 +408,11 @@ fn read_only_hides_writing_and_the_guide_is_a_resource() {
     assert!(err(tools::call(&mut server, "create_note", &json!({"title": "X"}))).contains("read-only"));
     let init = server.answer(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{}}}"#).unwrap();
     assert!(init["result"]["instructions"].as_str().unwrap().contains("read-only"));
-    let page = server.answer(r#"{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"bref://guide/writing"}}"#).unwrap();
+    let page = server.answer(r#"{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"inkuno://guide/writing"}}"#).unwrap();
     assert!(page["result"]["contents"][0]["text"].as_str().unwrap().contains("Writing notes"));
-    let library = server.answer(r#"{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"bref://library"}}"#).unwrap();
+    let library = server.answer(r#"{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"inkuno://library"}}"#).unwrap();
     assert!(library["result"]["contents"][0]["text"].as_str().unwrap().contains("lifeline"));
-    let note = server.answer(r#"{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"bref://note/Note.md"}}"#).unwrap();
+    let note = server.answer(r#"{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"inkuno://note/Note.md"}}"#).unwrap();
     assert!(note["result"]["contents"][0]["text"].as_str().unwrap().contains("flowchart"));
     let prompt = server.answer(r#"{"jsonrpc":"2.0","id":5,"method":"prompts/get","params":{"name":"review_note","arguments":{"note":"Note"}}}"#).unwrap();
     assert!(prompt["result"]["messages"][0]["content"]["text"].as_str().unwrap().contains("add_comment"));
