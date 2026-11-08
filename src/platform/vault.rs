@@ -61,6 +61,16 @@ pub fn save_config(vault: &Path, recent: &[PathBuf]) {
 }
 
 pub fn load_file(name: &str) -> String {
+    // The JSON keybindings win over the legacy `keys` file when present: they are
+    // replayed as `action=chord` lines (see `ui::keys::legacy_lines`), so the reader
+    // keeps its clash, refusal and readability checks, and faulty entries are
+    // reported as usual. Nothing else goes through this detour.
+    if name == "keys" {
+        let json = load_keybindings();
+        if !json.trim().is_empty() {
+            return crate::ui::keys::legacy_lines(&json);
+        }
+    }
     // Same fallback as for the config: settings left under the old name are read again.
     fs::read_to_string(config_dir().join("bref").join(name))
         .or_else(|_| fs::read_to_string(config_dir().join("encre").join(name)))
@@ -89,6 +99,41 @@ pub fn load_settings() -> String {
 
 pub fn save_settings(text: &str) {
     save_file("settings", text)
+}
+
+/// Agent-editable JSON config: `keybindings.json` (user shortcuts) and `themes.json`
+/// (custom themes). They live next to the other config files: `~/.config/bref/` on
+/// Linux, `~/Library/Application Support/bref/` on macOS, `%APPDATA%\bref\` on
+/// Windows. A present JSON file wins over the legacy `keys` and `settings` files; a
+/// faulty JSON entry is ignored on its own (see `ui::keys::read_json` and
+/// `ui::theme::parse_themes`).
+pub fn keybindings_path() -> PathBuf {
+    config_dir().join("bref/keybindings.json")
+}
+
+pub fn themes_path() -> PathBuf {
+    config_dir().join("bref/themes.json")
+}
+
+/// Contents of `keybindings.json`, empty when the file is absent.
+pub fn load_keybindings() -> String {
+    fs::read_to_string(keybindings_path()).unwrap_or_default()
+}
+
+pub fn save_keybindings(text: &str) {
+    let path = keybindings_path();
+    // Mere convenience: if writing fails, the legacy `keys` file stays in force.
+    let _ = path.parent().map_or(Ok(()), fs::create_dir_all).and_then(|_| fs::write(path, text));
+}
+
+/// Contents of `themes.json`, empty when the file is absent.
+pub fn load_themes() -> String {
+    fs::read_to_string(themes_path()).unwrap_or_default()
+}
+
+pub fn save_themes(text: &str) {
+    let path = themes_path();
+    let _ = path.parent().map_or(Ok(()), fs::create_dir_all).and_then(|_| fs::write(path, text));
 }
 
 /// Folder offered for a first vault: `Notes` in the user's Documents, or
@@ -1387,5 +1432,12 @@ mod tests {
         fs::create_dir(&empty).unwrap();
         assert!(rescan_full(&empty, &[]).3.is_empty());
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn json_config_lives_beside_the_other_files() {
+        // Paths only: no file is written here, the real folder stays untouched.
+        assert_eq!(keybindings_path(), config_dir().join("bref/keybindings.json"));
+        assert_eq!(themes_path(), config_dir().join("bref/themes.json"));
     }
 }

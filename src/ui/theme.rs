@@ -143,13 +143,153 @@ pub const THEMES: &[(&str, [u32; 7])] = &[
     ("Sepia", [0xf4ecd8, 0x433422, 0xa89a83, 0x7c4fb0, 0xe9dcbf, 0xfffdf2, 0xd8cba6]),
 ];
 
+/// Version of the `themes.json` schema (`{"version": 1, "themes": […]}`).
+pub const THEMES_VERSION: u32 = 1;
+
+/// Seed tokens a custom theme sets, in order: `bg`, `text`, `dim`, `accent`, `code_bg`, `panel`, `border`.
+/// `of` adjusts and derives the rest.
+pub const THEME_TOKENS: [&str; 7] = ["bg", "text", "dim", "accent", "code_bg", "panel", "border"];
+
+/// One custom theme from `themes.json`: its name, the built-in it inherits missing tokens from,
+/// and its seven seed colors.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CustomTheme {
+    pub name: String,
+    pub base: String,
+    pub seeds: [u32; 7],
+}
+
+/// A `#rrggbb` color (the `#` may be omitted); `None` when it is not one.
+pub fn parse_hex(text: &str) -> Option<u32> {
+    let text = text.strip_prefix('#').unwrap_or(text);
+    (text.len() == 6 && text.chars().all(|c| c.is_ascii_hexdigit())).then(|| u32::from_str_radix(text, 16).ok()).flatten()
+}
+
+fn base_seeds(base: &str) -> ([u32; 7], bool) {
+    match THEMES.iter().find(|t| t.0 == base) {
+        Some(theme) => (theme.1, true),
+        // Unknown base: Bref Dark, and the caller warns.
+        None => (THEMES[0].1, false),
+    }
+}
+
+/// Reads `themes.json` (`{"version": 1, "themes": [{name, base, colors}, …]}`): the valid custom
+/// themes, the faulty ones (ignored one by one) and the warnings (unknown base, tokens
+/// inherited from it). A missing token inherits the base's; an unreadable color drops the whole
+/// theme. Unknown fields are ignored.
+pub fn parse_themes(text: &str) -> (Vec<CustomTheme>, Vec<String>, Vec<String>) {
+    if text.trim().is_empty() {
+        return (Vec::new(), Vec::new(), Vec::new());
+    }
+    let value: serde_json::Value = match serde_json::from_str(text) {
+        Ok(value) => value,
+        Err(fault) => return (Vec::new(), vec![format!("invalid JSON: {fault}")], Vec::new()),
+    };
+    let mut themes = Vec::new();
+    let mut errors = Vec::new();
+    let mut warns = Vec::new();
+    if value.get("version").and_then(|v| v.as_u64()) != Some(u64::from(THEMES_VERSION)) {
+        errors.push(format!("version: expected {}, got {}", THEMES_VERSION, value.get("version").unwrap_or(&serde_json::Value::Null)));
+    }
+    let Some(list) = value.get("themes").and_then(|v| v.as_array()) else {
+        errors.push("themes: expected an array of custom themes".into());
+        return (themes, errors, warns);
+    };
+    for (i, entry) in list.iter().enumerate() {
+        let at = format!("themes[{i}]");
+        let name = entry.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        if name.is_empty() {
+            errors.push(format!("{at}: missing name, the theme is ignored"));
+            continue;
+        }
+        let at = format!("{at} ({name})");
+        let base = entry.get("base").and_then(|v| v.as_str()).unwrap_or(THEMES[0].0);
+        let (fallback, known) = base_seeds(base);
+        if !known {
+            warns.push(format!("{at}: unknown base {base}, {} used instead", THEMES[0].0));
+        }
+        let Some(colors) = entry.get("colors").and_then(|v| v.as_object()) else {
+            errors.push(format!("{at}: missing colors, the theme is ignored"));
+            continue;
+        };
+        let mut seeds = fallback;
+        let mut inherited = Vec::new();
+        let mut faulty = false;
+        for (n, token) in THEME_TOKENS.into_iter().enumerate() {
+            match colors.get(token) {
+                None => inherited.push(token),
+                Some(color) => match color.as_str().and_then(parse_hex) {
+                    Some(hex) => seeds[n] = hex,
+                    None => {
+                        errors.push(format!("{at}: colors.{token} is not a #rrggbb color, the theme is ignored"));
+                        faulty = true;
+                        break;
+                    }
+                },
+            }
+        }
+        if faulty {
+            continue;
+        }
+        if !inherited.is_empty() {
+            warns.push(format!("{at}: inherits {} from {base}", inherited.join(", ")));
+        }
+        if themes.iter().any(|t: &CustomTheme| t.name == name) {
+            errors.push(format!("{at}: duplicate name, the theme is ignored"));
+            continue;
+        }
+        themes.push(CustomTheme { name: name.into(), base: base.into(), seeds });
+    }
+    (themes, errors, warns)
+}
+
+/// Pairs of a custom theme below the legibility bar, before `of` auto-fixes them: text kinds
+/// under 4.5:1 on their ground, panel kinds under 1.03:1.
+fn seed_report(seeds: [u32; 7]) -> Vec<String> {
+    let [bg, text, _, accent, code_bg, panel, _] = seeds.map(|c| Hsla::from(rgb(c)));
+    let mut short = Vec::new();
+    for (kind, pair, bar) in [("text", contrast(text, bg), 4.5), ("text on code", contrast(text, code_bg), 4.5), ("accent", contrast(accent, bg), 4.5), ("panel", contrast(bg, panel), 1.03)] {
+        if pair < bar {
+            short.push(format!("{kind} {pair:.2}:1"));
+        }
+    }
+    short
+}
+
+/// Validates `themes.json` without applying it (for `--check-config`): the custom theme names,
+/// the errors (a faulty theme is dropped) and the warnings (inherited tokens, colors `of` will
+/// auto-fix for legibility).
+pub fn check_themes(text: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let (themes, errors, warns) = parse_themes(text);
+    let mut warns = warns;
+    for theme in &themes {
+        for short in seed_report(theme.seeds) {
+            warns.push(format!("theme {}: low contrast, auto-fixed ({short})", theme.name));
+        }
+    }
+    (themes.into_iter().map(|t| t.name).collect(), errors, warns)
+}
+
+/// Seeds of the custom theme `name`, if `themes.json` holds it.
+fn custom_seeds(name: &str) -> Option<[u32; 7]> {
+    seeds_in(name, &crate::platform::vault::load_themes())
+}
+
+/// Seeds of the custom theme `name` in the `themes.json` text (pure half of [`custom_seeds`]).
+fn seeds_in(name: &str, text: &str) -> Option<[u32; 7]> {
+    let (custom, _, _) = parse_themes(text);
+    custom.into_iter().find(|theme| theme.name == name).map(|theme| theme.seeds)
+}
+
 impl Theme {
     /// The chosen theme; failing that, Bref's one matching the system appearance.
     pub fn of(prefs: &Prefs, appearance: WindowAppearance) -> Self {
         let dark = matches!(appearance, WindowAppearance::Dark | WindowAppearance::VibrantDark);
         let system = &THEMES[if dark { 0 } else { 1 }];
-        let (_, colors) = THEMES.iter().find(|t| t.0 == prefs.theme).unwrap_or(system);
-        let [bg, text, dim, accent, code_bg, panel, border] = colors.map(|c| Hsla::from(rgb(c)));
+        // Built-ins win by name (their tests stay immune to the config folder); a custom
+        // theme from `themes.json` applies otherwise, its low contrast auto-fixed below.
+        let seeds = THEMES.iter().find(|t| t.0 == prefs.theme).map(|t| t.1).or_else(|| custom_seeds(&prefs.theme)).unwrap_or(system.1);
+        let [bg, text, dim, accent, code_bg, panel, border] = seeds.map(|c| Hsla::from(rgb(c)));
         let ground = ground_of(bg);
         // The selection, as strong as the text over it allows.
         let share = (0..=15)
@@ -535,5 +675,48 @@ mod tests {
         // Keys are read back; an unknown or missing key means the default choice.
         assert!(Page::ALL.into_iter().all(|p| Page::of(p.key()) == p) && Wide::ALL.into_iter().all(|w| Wide::of(w.key()) == w));
         assert_eq!((Page::of(""), Page::of("?"), Wide::of(""), Wide::of("?")), (Page::Normal, Page::Normal, Wide::Centered, Wide::Centered));
+    }
+
+    #[test]
+    fn json_themes_parse_and_warn() {
+        assert_eq!(parse_hex("#1b1a19"), Some(0x1b1a19));
+        assert_eq!(parse_hex("e4e0da"), Some(0xe4e0da));
+        assert_eq!(parse_hex("#zzz"), None);
+        assert_eq!(parse_hex("#12345"), None);
+        let (themes, errors, warns) = parse_themes(
+            r##"{"version": 1, "themes": [
+                {"name": "My Dark", "base": "Bref Dark", "colors": {"bg": "#1b1a19", "text": "#e4e0da", "dim": "#77716a", "accent": "#e0926b", "code_bg": "#262423", "panel": "#242221", "border": "#3a3735"}},
+                {"name": "Thin", "colors": {"bg": "#ffffff"}},
+                {"name": "", "colors": {}},
+                {"name": "Bad", "base": "Bref Dark", "colors": {"bg": "red", "text": "#000000", "dim": "#000000", "accent": "#000000", "code_bg": "#000000", "panel": "#000000", "border": "#000000"}},
+                {"name": "My Dark", "colors": {"bg": "#000000"}}
+            ]}"##,
+        );
+        assert_eq!(themes.len(), 2);
+        assert_eq!(themes[0].seeds[0], 0x1b1a19);
+        // Thin inherits the six missing tokens from its base.
+        assert_eq!(themes[1].base, "Bref Dark");
+        assert_eq!(themes[1].seeds[0], 0xffffff);
+        assert_eq!(themes[1].seeds[1], THEMES[0].1[1]);
+        // Faulty themes, one by one: nameless, unreadable color, duplicate name. The dropped
+        // duplicate still reports the tokens it would inherit.
+        assert_eq!(errors.len(), 3);
+        assert_eq!(warns.len(), 2);
+        // Low contrast is reported, then auto-fixed by the `legible` in `of`.
+        let (names, errors, warns) = check_themes(
+            r##"{"version": 1, "themes": [
+                {"name": "Flat", "base": "Bref Light", "colors": {"bg": "#ffffff", "text": "#777777", "dim": "#77716a", "accent": "#e0926b", "code_bg": "#262423", "panel": "#ffffff", "border": "#3a3735"}}
+            ]}"##,
+        );
+        assert_eq!(names, vec!["Flat".to_string()]);
+        assert!(errors.is_empty());
+        assert!(warns.iter().any(|w| w.contains("auto-fixed")));
+        assert_eq!(parse_themes(""), (Vec::new(), Vec::new(), Vec::new()));
+        assert_eq!(parse_themes("nope").1.len(), 1);
+        // Lookup by name, as `of` does; the file faults never reach the theme.
+        let text = r##"{"version": 1, "themes": [{"name": "My Dark", "colors": {"bg": "#000000"}}]}"##;
+        assert_eq!(seeds_in("My Dark", text).map(|s| s[0]), Some(0x000000));
+        assert_eq!(seeds_in("Missing", text), None);
+        assert_eq!(seeds_in("My Dark", "nope"), None);
     }
 }

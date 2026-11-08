@@ -4,6 +4,7 @@
 use crate::lang::tr;
 use crate::lang::fold;
 use gpui::{Action, App, Keystroke};
+use serde_json::Value;
 use std::collections::BTreeMap;
 
 /// Shortcut key, as displayed: Cmd on macOS, Ctrl elsewhere.
@@ -254,6 +255,186 @@ pub fn read(text: &str, defaults: &[Bind], open: &dyn Fn(&str) -> bool) -> (Chan
     (changes, faults)
 }
 
+/// Version of the `keybindings.json` schema (`{"version": 1, "bindings": {action: [chord], …}, `"reset"`: [action, …]}`).
+pub const KEYBINDINGS_VERSION: u32 = 1;
+
+/// One JSON value of `bindings` as the legacy line would hold it: the canon chord, or empty
+/// for unbound (`""` or `[]`). `Err` names why the value is dropped.
+fn json_chord(value: &Value) -> Result<String, &'static str> {
+    match value {
+        Value::String(keys) if keys.is_empty() => Ok(String::new()),
+        Value::String(keys) => canon(keys).ok_or("unreadable keys"),
+        Value::Array(chords) if chords.is_empty() => Ok(String::new()),
+        Value::Array(chords) if chords.len() == 1 => json_chord(&chords[0]),
+        Value::Array(_) => Err("one chord per action"),
+        _ => Err("a chord or a list with one chord"),
+    }
+}
+
+/// The `bindings` entries of the JSON file: legacy `action=chord` lines (for [`read`], whose
+/// clash, refusal and readability checks then apply unchanged), the bound actions (a `reset`
+/// of one of them keeps the binding, with a fault), one fault per faulty entry, and the
+/// `reset` list itself. `reset` is left to the caller: telling an unknown action from a
+/// restored one needs the default table. Unknown fields are ignored, for newer files.
+fn json_entries(text: &str) -> (Vec<String>, Vec<String>, Vec<String>, Vec<Value>) {
+    let value: Value = match serde_json::from_str(text) {
+        Ok(value) => value,
+        Err(fault) => return (Vec::new(), Vec::new(), vec![format!("invalid JSON: {fault}")], Vec::new()),
+    };
+    let mut lines = Vec::new();
+    let mut bound = Vec::new();
+    let mut faults = Vec::new();
+    if value.get("version").and_then(Value::as_u64) != Some(u64::from(KEYBINDINGS_VERSION)) {
+        faults.push(format!("version: expected {}, the file is read entry by entry anyway", KEYBINDINGS_VERSION));
+    }
+    match value.get("bindings") {
+        Some(Value::Object(bindings)) => {
+            for (action, chord) in bindings {
+                match json_chord(chord) {
+                    Ok(keys) => {
+                        lines.push(format!("{action}={keys}"));
+                        bound.push(action.clone());
+                    }
+                    Err(reason) => faults.push(format!("bindings.{action}: expected {reason}, got {chord}")),
+                }
+            }
+        }
+        Some(_) => faults.push("bindings: expected an object of action to chord".into()),
+        None => {}
+    }
+    let reset = match value.get("reset") {
+        None => Vec::new(),
+        Some(Value::Array(reset)) => reset.clone(),
+        Some(reset) => {
+            faults.push(format!("reset: expected an array of action names, got {reset}"));
+            Vec::new()
+        }
+    };
+    (lines, bound, faults, reset)
+}
+
+/// Reads the JSON keybindings file (`{"version": 1, "bindings": {action: [chord], …}, `"reset"`: [action, …]}`):
+/// the user changes and the faulty entries, one by one. Clash, refusal and readability checks
+/// are exactly the legacy ones: each valid entry is replayed as an `action=keys` line through
+/// [`read`]. `"reset"` restores the default keys of its actions (an entry also bound above keeps
+/// its binding, with a fault).
+pub fn read_json(text: &str, defaults: &[Bind], open: &dyn Fn(&str) -> bool) -> (Changes, Vec<String>) {
+    let (lines, bound, mut faults, reset) = json_entries(text);
+    let (mut changes, mut read_faults) = read(&lines.join("\n"), defaults, open);
+    faults.append(&mut read_faults);
+    for action in &reset {
+        let Some(action) = action.as_str() else {
+            faults.push(format!("reset: expected action names, got {action}"));
+            continue;
+        };
+        if bound.iter().any(|b| b == action) {
+            faults.push(format!("reset: {action} is also bound above, the binding wins"));
+        } else if !open(action) || !defaults.iter().any(|b| b.action == action) {
+            faults.push(format!("reset: unknown action {action}"));
+        } else {
+            changes.remove(action);
+        }
+    }
+    (changes, faults)
+}
+
+/// `keybindings.json` replayed as legacy `action=chord` lines: what `vault::load_file("keys")`
+/// hands the unchanged reader when the JSON file is present, so it wins over the legacy file.
+/// Fault markers hold no `=`, so [`read`] sets them aside and reports them like faulty lines.
+/// A `reset` restores the default keys: no legacy line, so `read` keeps the default (an unknown
+/// reset action is silent here, without the default table: `--check-config` names it).
+pub fn legacy_lines(text: &str) -> String {
+    let (mut lines, bound, mut faults, reset) = json_entries(text);
+    for action in &reset {
+        match action.as_str() {
+            None => faults.push(format!("reset: expected action names, got {action}")),
+            Some(action) if bound.iter().any(|b| b == action) => {
+                faults.push(format!("reset: {action} is also bound above, the binding wins"))
+            }
+            Some(_) => {}
+        }
+    }
+    lines.append(&mut faults);
+    lines.join("\n") + "\n"
+}
+
+/// Writes the JSON keybindings file from the user changes (see [`write`] for the legacy
+/// form): `{"version": 1, "bindings": {action: [chord], …}}`, actions sorted.
+pub fn write_json(changes: &Changes) -> String {
+    let mut bindings = serde_json::Map::new();
+    for (action, keys) in changes {
+        bindings.insert(action.clone(), if keys.is_empty() { Value::Array(Vec::new()) } else { Value::Array(vec![Value::String(keys.clone())]) });
+    }
+    let mut root = serde_json::Map::new();
+    root.insert("version".into(), Value::from(KEYBINDINGS_VERSION));
+    root.insert("bindings".into(), Value::Object(bindings));
+    serde_json::to_string_pretty(&Value::Object(root)).unwrap_or_default() + "\n"
+}
+
+/// Validates the JSON keybindings file without the default table (for `--check-config`):
+/// the entries that would apply, the errors (a faulty entry is dropped) and the warnings
+/// (chords the system may keep for itself). Chords shared by two actions are reported as
+/// errors: without the default contexts, every action is assumed to meet every other.
+pub fn check_json(text: &str) -> (Changes, Vec<String>, Vec<String>) {
+    let mut changes = Changes::new();
+    let mut errors = Vec::new();
+    let mut warns = Vec::new();
+    let value: Value = match serde_json::from_str(text) {
+        Ok(value) => value,
+        Err(fault) => {
+            errors.push(format!("invalid JSON: {fault}"));
+            return (changes, errors, warns);
+        }
+    };
+    if value.get("version").and_then(Value::as_u64) != Some(u64::from(KEYBINDINGS_VERSION)) {
+        errors.push(format!("version: expected {}, got {}", KEYBINDINGS_VERSION, value.get("version").unwrap_or(&Value::Null)));
+    }
+    match value.get("bindings") {
+        Some(Value::Object(bindings)) => {
+            for (action, chord) in bindings {
+                match json_chord(chord) {
+                    Err(reason) => errors.push(format!("bindings.{action}: expected {reason}, got {chord}")),
+                    Ok(keys) => {
+                        if !keys.is_empty() {
+                            if let Some(issue) = refusal(&keys) {
+                                errors.push(format!("bindings.{action}: refused ({})", match issue {
+                                    Why::Types => "typing keys",
+                                    Why::Panel => "palette keys",
+                                    // Unreachable: `json_chord` already kept the readable.
+                                    Why::Unreadable => "unreadable keys",
+                                }));
+                                continue;
+                            }
+                            if system(&keys) {
+                                warns.push(format!("bindings.{action}: the system may keep {keys} for itself"));
+                            }
+                            if let Some(taken) = changes.iter().find(|(_, taken)| **taken == keys).map(|(other, _)| other.clone()) {
+                                errors.push(format!("bindings.{action}: {keys} is already taken by {taken}"));
+                                continue;
+                            }
+                        }
+                        changes.insert(action.clone(), keys);
+                    }
+                }
+            }
+        }
+        Some(_) => errors.push("bindings: expected an object of action to chord".into()),
+        None => errors.push("bindings: missing, nothing to apply".into()),
+    }
+    match value.get("reset") {
+        None => {}
+        Some(Value::Array(reset)) => {
+            for action in reset {
+                if action.as_str().is_none() {
+                    errors.push(format!("reset: expected action names, got {action}"));
+                }
+            }
+        }
+        Some(_) => errors.push("reset: expected an array of action names".into()),
+    }
+    (changes, errors, warns)
+}
+
 /// The keys in force for an action, as read: "F1 / Ctrl+/", or nothing.
 pub fn shown(bound: &[Bind], action: &str) -> String {
     let mut keys: Vec<&str> = Vec::new();
@@ -477,5 +658,107 @@ mod tests {
                 // Two default keys, once each even when bound in two contexts.
         assert_eq!(shown(&base(), "app::Help"), format!("F1 / {}+/", MOD));
         assert_eq!(shown(&base(), "editor::Find"), format!("{}+F", MOD));
+    }
+
+    #[test]
+    fn json_bindings_replay_the_legacy_checks() {
+        // One chord per action; `""` and `[]` unbind; `reset` restores defaults.
+        let (changes, faults) = read_json(
+            r#"{"version": 1, "bindings": {
+                "app::Palette": "f9",
+                "editor::Find": ["f8"],
+                "nav::Graph": [],
+                "nav::Twin": "",
+                "app::Help": ["secondary-p", "f9"],
+                "app::CopyAll": 7
+            }, "reset": ["app::Help", "nope::Nothing", 3]}"#,
+            &base(),
+            &open,
+        );
+        assert_eq!(changes.get("app::Palette").map(String::as_str), Some("f9"));
+        assert_eq!(changes.get("editor::Find").map(String::as_str), Some("f8"));
+        assert_eq!(changes.get("nav::Graph").map(String::as_str), Some(""));
+        assert_eq!(changes.get("nav::Twin").map(String::as_str), Some(""));
+        // Faulty entries, one by one: two chords, a number, both bad resets.
+        // (Reset of the unchanged `app::Help` is silent.)
+        assert_eq!(faults.len(), 4);
+        assert!(faults.iter().any(|f| f.contains("app::Help")));
+        assert!(faults.iter().any(|f| f.contains("app::CopyAll")));
+        assert!(faults.iter().any(|f| f.contains("nope::Nothing")));
+        // A clash with a binding that cannot change is a fault, like in the legacy file.
+        let (changes, faults) = read_json(r#"{"version": 1, "bindings": {"app::Help": ["enter"]}}"#, &base(), &open);
+        assert!(changes.is_empty());
+        assert_eq!(faults, vec!["app::Help=enter".to_string()]);
+        // Reset of a bound action keeps the binding, with a fault.
+        let (changes, faults) = read_json(r#"{"version": 1, "bindings": {"app::Help": ["f9"]}, "reset": ["app::Help", "app::New"]}"#, &base(), &open);
+        assert_eq!(changes.get("app::Help").map(String::as_str), Some("f9"));
+        assert_eq!(faults.len(), 2);
+        // Bad JSON and a bad version are faults, not panics.
+        assert_eq!(read_json("nope", &base(), &open).1.len(), 1);
+        assert_eq!(
+            read_json(r#"{"version": 2}"#, &base(), &open),
+            (Changes::new(), vec![format!("version: expected {}, the file is read entry by entry anyway", KEYBINDINGS_VERSION)])
+        );
+    }
+
+    #[test]
+    fn json_round_trip_keeps_the_changes() {
+        let mut changes = Changes::new();
+        changes.insert("app::Palette".into(), "secondary-p".into());
+        changes.insert("nav::Graph".into(), String::new());
+        let text = write_json(&changes);
+        let back: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(back["version"], 1);
+        assert_eq!(back["bindings"]["app::Palette"], serde_json::json!(["secondary-p"]));
+        assert_eq!(back["bindings"]["nav::Graph"], serde_json::json!([]));
+        let (read_back, faults) = read_json(&text, &base(), &open);
+        assert!(faults.is_empty() && read_back == changes);
+    }
+
+    #[test]
+    fn json_check_needs_no_default_table() {
+        let (changes, errors, warns) = check_json(
+            r#"{"version": 1, "bindings": {
+                "app::Palette": ["secondary-p"],
+                "app::Clone": ["secondary-p"],
+                "app::Help": ["f1", "f2"],
+                "nav::Graph": []
+            }, "reset": ["app::New"]}"#,
+        );
+        // The first holder of a chord wins; the rest are errors.
+        assert_eq!(changes.len(), 2);
+        assert_eq!(errors.len(), 2);
+        assert!(errors.iter().any(|e| e.contains("already taken")));
+        assert!(errors.iter().any(|e| e.contains("one chord")));
+        assert!(warns.is_empty());
+        // Refused chords are errors, system ones warnings, bad shapes errors.
+        let (_, errors, warns) = check_json(r#"{"version": 9, "bindings": {"a::B": ["a"], "a::C": ["secondary-space"]}}"#);
+        assert!(errors.iter().any(|e| e.starts_with("version:")));
+        assert!(errors.iter().any(|e| e.contains("refused")));
+        assert!(warns.iter().any(|w| w.contains("system may keep")));
+        let (_, errors, _) = check_json(r#"{"version": 1, "reset": {}}"#);
+        assert_eq!(errors.len(), 2);
+    }
+
+    #[test]
+    fn json_replayed_as_legacy_lines_reads_the_same() {
+        // What `vault::load_file("keys")` hands the reader: valid entries as lines, faulty
+        // ones as markers that `read` sets aside, `reset` restoring the defaults silently.
+        let text = r#"{"version": 1, "bindings": {
+            "app::Palette": "f9", "nav::Graph": [], "app::Help": ["secondary-p", "f9"], "app::CopyAll": 7
+        }, "reset": ["app::Palette", "app::Help"]}"#;
+        let (changes, faults) = read(&legacy_lines(text), &base(), &open);
+        assert_eq!(changes.get("app::Palette").map(String::as_str), Some("f9"));
+        assert_eq!(changes.get("nav::Graph").map(String::as_str), Some(""));
+        // Three faulty entries (two chords, a number) and the bound-but-reset clash.
+        assert_eq!(faults.len(), 3);
+        assert!(faults.iter().any(|f| f.contains("app::Help")));
+        assert!(faults.iter().any(|f| f.contains("app::CopyAll")));
+        // Invalid JSON replays as a single marker, never a panic (also when empty: the
+        // caller only replays a present file, and absence is handled before).
+        let (changes, faults) = read(&legacy_lines("nope"), &base(), &open);
+        assert!(changes.is_empty() && faults.len() == 1);
+        let (changes, faults) = read(&legacy_lines(""), &base(), &open);
+        assert!(changes.is_empty() && faults.len() == 1);
     }
 }
