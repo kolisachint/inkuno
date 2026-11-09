@@ -126,7 +126,7 @@ fn tabs_open_switch_close_and_come_back(cx: &mut TestAppContext) {
     assert_eq!(tabs(&shell, cx, 0).0.len(), 4);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.tab_labels(0, cx)[3].clone()),
-        "Nouvelle note"
+        "New note"
     );
     cx.simulate_input("# Brouillon");
     assert_eq!(
@@ -555,11 +555,7 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
     right_click(cx, beta);
     assert_eq!(
         menu(cx),
-        vec![
-            "Fermer",
-            "Fermer les autres onglets",
-            "Fermer tous les onglets de ce volet"
-        ]
+        vec!["Close", "Close other tabs", "Close all tabs in this pane"]
     );
     assert_eq!(shell.read_with(cx, |s, _| s.active), shown);
     cx.simulate_keystrokes("escape");
@@ -569,7 +565,7 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
     // "Close other tabs" keeps the clicked tab, not the shown one; it gets shown, with input.
     right_click(cx, beta);
     let at = cx
-        .debug_bounds("menu-entry-Fermer les autres onglets")
+        .debug_bounds("menu-entry-Close other tabs")
         .unwrap()
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());

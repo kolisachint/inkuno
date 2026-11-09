@@ -202,7 +202,7 @@ fn panes_split_move_resize_and_come_back(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-alt-\\");
     cx.run_until_parked();
     assert_eq!(state(&shell, cx).0, before);
-    assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "Pas de place")));
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "No room")));
     cx.simulate_keystrokes("escape");
     cx.simulate_keystrokes("secondary-\\");
     cx.run_until_parked();

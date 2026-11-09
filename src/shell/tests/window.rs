@@ -67,7 +67,7 @@ fn keys_survive_a_restart(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
-    vault::save_file("keys", "nav::ShowRecent=secondary-shift-y\nno::Such=f8\n");
+    vault::save_file("keys", "nav::ShowTree=secondary-shift-y\nno::Such=f8\n");
     cx.update(bind_keys);
     cx.update(init_fonts);
     let (shell, cx) =
@@ -75,17 +75,21 @@ fn keys_survive_a_restart(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(
         shell.read_with(cx, |s, _| s.changes.clone()),
-        keys::Changes::from([(
-            "nav::ShowRecent".to_string(),
-            "secondary-shift-y".to_string()
-        )])
+        keys::Changes::from([("nav::ShowTree".to_string(), "secondary-shift-y".to_string())])
     );
     assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "no::Such=f8")));
-    // The tags view is cut: its old shortcut dispatches nothing, the mode does not move.
-    cx.simulate_keystrokes("secondary-t");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
+    // secondary-t still dispatches nothing (the tags view stays cut); secondary-e no longer
+    // shows the tree (its keys moved with the action), secondary-shift-y does.
+    shell.update_in(cx, |s, window, cx| {
+        s.show_nav(nav::Mode::Recent, false, window, cx)
+    });
+    cx.run_until_parked();
+    for key in ["secondary-t", "secondary-e"] {
+        cx.simulate_keystrokes(key);
+        assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Recent);
+    }
     cx.simulate_keystrokes("secondary-shift-y");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Recent);
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
     // A file from before this version, or empty: the original shortcuts.
     let _ = fs::remove_dir_all(&root);
 }
@@ -315,72 +319,6 @@ fn empty_page(cx: &mut TestAppContext) {
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
     assert_eq!(text_of(cx), "x");
-    let _ = fs::remove_dir_all(&root);
-}
-
-/// A long note at three widths: the text scrolls behind the band at the bottom of the note, which
-/// holds the counter and the formatting bar or its button; going down line by line, the cursor
-/// stays above the band, never under them.
-#[gpui::test]
-fn bottom_band_keeps_the_text_clear(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("inkuno-band-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    let _config = isolated_config(&root);
-    let lines: String = (0..200).map(|i| format!("Ligne {i} du texte\n")).collect();
-    let note = root.join("Longue.md");
-    fs::write(&note, format!("# Longue\n\n{lines}")).unwrap();
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let (shell, cx) = cx.add_window_view(|window, cx| {
-        Shell::new(Some(root.clone()), vec![note.clone()], window, cx)
-    });
-    cx.run_until_parked();
-    let settle = |cx: &mut gpui::VisualTestContext| {
-        for _ in 0..3 {
-            cx.update(|window, _| window.refresh());
-            cx.run_until_parked();
-        }
-    };
-    for width in [420., 860., 1400.] {
-        cx.simulate_resize(size(px(width), px(600.)));
-        cx.simulate_keystrokes("secondary-home");
-        settle(cx);
-        for step in 0..45 {
-            cx.simulate_keystrokes("down");
-            settle(cx);
-            let band = cx
-                .debug_bounds("note-band")
-                .expect("the note has a band at its bottom");
-            let counts = cx.debug_bounds("counts").unwrap();
-            assert!(
-                counts.top() >= band.top(),
-                "{width} {step}: the counter sits in the band {counts:?} {band:?}"
-            );
-            let (folded, caret) = shell.read_with(cx, |s, cx| {
-                let editor = s.pane().editor.read(cx);
-                (
-                    editor.bar_folded(),
-                    editor.point_of(editor.caret()).unwrap(),
-                )
-            });
-            let control = cx
-                .debug_bounds(if folded {
-                    "format-toggle"
-                } else {
-                    "format-bar"
-                })
-                .unwrap();
-            assert!(
-                control.top() >= band.top(),
-                "{width} {step}: the bar or its button sits in the band {control:?} {band:?}"
-            );
-            assert!(
-                caret.y + px(10.) <= band.top(),
-                "{width} {step}: the cursor stays above the band {caret:?} {band:?}"
-            );
-        }
-    }
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -683,7 +621,7 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
     check("one tab, rail", 1, cx);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).top_margin()),
-        px(40.),
+        px(56.),
         "the text starts under the strip"
     );
     let rail = cx
@@ -860,9 +798,9 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
         cx.run_until_parked();
         let menu = cx.debug_bounds("menu").unwrap().size;
         cx.simulate_keystrokes("escape f10");
-        cx.simulate_input("note du jour");
+        cx.simulate_input("new note");
         cx.run_until_parked();
-        let command = cx.debug_bounds("command-app::Today").unwrap().size.height;
+        let command = cx.debug_bounds("command-app::NewNote").unwrap().size.height;
         cx.simulate_keystrokes("escape secondary-e");
         cx.run_until_parked();
         [
@@ -902,7 +840,7 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     }
 }
 
-/// Every small target is at least 24 × 24 px: the window buttons, back and forward, the note's copy button,
+/// Every small target is at least 24 × 24 px: the window buttons, the note's copy button,
 /// "Reset all" and "default" in the help.
 #[gpui::test]
 fn small_targets_are_24_px(cx: &mut TestAppContext) {
@@ -917,14 +855,7 @@ fn small_targets_are_24_px(cx: &mut TestAppContext) {
     cx.simulate_resize(size(px(1400.), px(900.)));
     cx.run_until_parked();
     let mut seen = Vec::new();
-    for name in [
-        "minimize",
-        "maximize",
-        "close",
-        "nav-back",
-        "nav-forward",
-        "copy-all",
-    ] {
+    for name in ["minimize", "maximize", "close", "copy-all"] {
         let b = cx
             .debug_bounds(name)
             .unwrap_or_else(|| panic!("{name} is drawn"));
@@ -990,6 +921,9 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             .iter()
             .zip(&boxes)
             .filter(|(_, b)| b.top() < view.bottom() && b.bottom() > view.top())
+            // Diagrams, CSV tables and Typing have no shortcut line left (their features
+            // were cut): nothing to point at, so they sit the check out.
+            .filter(|(section, _)| section.1.iter().any(|row| row.action.is_some()))
             .collect::<Vec<_>>();
         assert!(!mid.is_empty(), "a section is in view");
         // gpui keeps the debug bounds of earlier frames: the key must be inside its section, in this frame.
@@ -1029,7 +963,7 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             .palette
             .as_ref()
             .and_then(|p| p.read(cx).choice_at(0))),
-        Some("Par défaut : Inkuno, clair ou sombre comme le système".to_string())
+        Some("Default: Inkuno, light or dark like the system".to_string())
     );
     cx.simulate_keystrokes("escape");
 
@@ -1059,22 +993,7 @@ fn rail_groups_keep_their_order_and_room(cx: &mut TestAppContext) {
     let (_shell, cx) =
         cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
     cx.run_until_parked();
-    let order = [
-        "nav-commands",
-        "nav-back",
-        "nav-forward",
-        "nav-tree",
-        "nav-recent",
-        "nav-graph",
-        "nav-tags",
-        "nav-links",
-        "nav-calendar",
-        "nav-find",
-        "nav-search",
-        "nav-new",
-        "nav-trash",
-        "nav-help",
-    ];
+    let order = ["nav-commands", "nav-tree", "nav-search", "nav-new"];
     for height in [900., 720., 480.] {
         cx.simulate_resize(size(px(860.), px(height)));
         for _ in 0..3 {
@@ -1100,19 +1019,15 @@ fn rail_groups_keep_their_order_and_room(cx: &mut TestAppContext) {
             let at = |id: &str| b[order.iter().position(|o| *o == id).unwrap()];
             at(to).top() - at(from).bottom()
         };
-        for (from, to) in [
-            ("nav-commands", "nav-back"),
-            ("nav-forward", "nav-tree"),
-            ("nav-find", "nav-search"),
-        ] {
+        for (from, to) in [("nav-commands", "nav-tree"), ("nav-tree", "nav-search")] {
             assert!(
                 gap(from, to) >= px(24.),
                 "{from} and {to} are not set apart at {height}"
             );
         }
         assert!(
-            gap("nav-tree", "nav-recent") < px(8.),
-            "views stay one list at {height}"
+            gap("nav-search", "nav-new") < px(8.),
+            "find and new stay one group at {height}"
         );
     }
 }

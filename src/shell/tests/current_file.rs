@@ -2,14 +2,7 @@
 
 use super::*;
 
-const FILES: [&str; 6] = [
-    "Note.md",
-    "Drawing.svg",
-    "Foreign.svg",
-    "Picture.png",
-    "Data.csv",
-    "Data.tsv",
-];
+const FILES: [&str; 4] = ["Note.md", "Drawing.svg", "Foreign.svg", "Picture.png"];
 
 fn fixtures(root: &Path) {
     fs::write(root.join("Note.md"), "# Note\n\n![](Foreign.svg)\n").unwrap();
@@ -83,7 +76,7 @@ fn the_current_file_follows_mixed_views(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-tab");
     current(cx, "Note.md");
     cx.simulate_keystrokes("ctrl-shift-tab");
-    current(cx, "Data.tsv");
+    current(cx, "Picture.png");
 }
 
 /// Palette and history use the same current marker as the tree, in every supported view.
@@ -103,15 +96,6 @@ fn the_current_file_follows_the_palette_and_history(cx: &mut TestAppContext) {
         cx.simulate_keystrokes("secondary-p");
         cx.simulate_input(file.trim_end_matches(".md"));
         cx.simulate_keystrokes("enter");
-        current(cx, file);
-        let (back, forward) = if cfg!(target_os = "macos") {
-            ("cmd-[", "cmd-]")
-        } else {
-            ("alt-left", "alt-right")
-        };
-        cx.simulate_keystrokes(back);
-        current(cx, "Other.md");
-        cx.simulate_keystrokes(forward);
         current(cx, file);
     }
 }
