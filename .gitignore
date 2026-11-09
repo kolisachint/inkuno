@@ -16,3 +16,6 @@
 # Claude Code local caches
 /.claude/
 /book/book/
+
+# agent harness (local-only)
+.hoocode/
