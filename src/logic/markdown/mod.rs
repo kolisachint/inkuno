@@ -1950,10 +1950,7 @@ mod tests {
     #[test]
     fn finds_footnotes() {
         // References: range and label.
-        assert_eq!(
-            footnote_ref("see [^a] here"),
-            [(4..8, "a".to_string())]
-        );
+        assert_eq!(footnote_ref("see [^a] here"), [(4..8, "a".to_string())]);
         assert_eq!(
             footnote_ref("[^one] and [^two]"),
             [(0..6, "one".to_string()), (11..17, "two".to_string())]
@@ -1980,7 +1977,10 @@ mod tests {
         assert_eq!(footnote_ref("`code` [^a]"), [(7..11, "a".to_string())]);
         assert_eq!(footnote_ref("`open [^a]"), [(6..10, "a".to_string())]);
         // No collision with checkboxes, tasks, links or tags.
-        assert_eq!(footnote_ref("[ ] and [x] and [^a]"), [(16..20, "a".to_string())]);
+        assert_eq!(
+            footnote_ref("[ ] and [x] and [^a]"),
+            [(16..20, "a".to_string())]
+        );
         let web = links("[t](https://a.b) [^a] #tag");
         assert_eq!(web.len(), 3);
         assert!(matches!(&web[1].1, Link::Footnote(l) if l == "a"));
@@ -1993,10 +1993,7 @@ mod tests {
         assert!(f[r.start + 2] & LINK != 0 && f[r.start + 2] & DIM == 0);
         assert!(f[r.end - 1] & DIM != 0);
         // Definitions: label, marker range, text start; at most three spaces of indent.
-        assert_eq!(
-            footnote_def("[^a]: text"),
-            Some(("a".to_string(), 0..4, 6))
-        );
+        assert_eq!(footnote_def("[^a]: text"), Some(("a".to_string(), 0..4, 6)));
         assert_eq!(
             footnote_def("   [^a]:  text"),
             Some(("a".to_string(), 3..7, 10))
@@ -2010,7 +2007,9 @@ mod tests {
         let text = "See [^b] and [^a].\n\n[^a]: first\n[^b]: second\n";
         let feet = footnotes(text);
         assert_eq!(
-            feet.iter().map(|d| (d.label.as_str(), d.display)).collect::<Vec<_>>(),
+            feet.iter()
+                .map(|d| (d.label.as_str(), d.display))
+                .collect::<Vec<_>>(),
             [("a", 2), ("b", 1)]
         );
         assert!(feet[0].at < feet[1].at);

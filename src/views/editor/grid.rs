@@ -788,10 +788,20 @@ pub fn build(
         return rows;
     }
     let rows: Tables = Rc::new(
-        rows(cache, text_system, look, width, lines, cursor, marked, foot, defined)
-            .into_iter()
-            .map(|r| r.map(Rc::new))
-            .collect(),
+        rows(
+            cache,
+            text_system,
+            look,
+            width,
+            lines,
+            cursor,
+            marked,
+            foot,
+            defined,
+        )
+        .into_iter()
+        .map(|r| r.map(Rc::new))
+        .collect(),
     );
     cache.tables_new.insert(key, rows.clone());
     rows
@@ -869,10 +879,10 @@ fn rows(
         for c in 0..cols {
             let (text, bold) = (text(r, c), r == 0);
             let one = match computed(r, c) {
-                Some(shown) => cache
-                    .shape(key(&computed_key(&shown), None, bold, &None, look, foot), || {
-                        shape_computed(text_system, &shown, None, bold, look)
-                    }),
+                Some(shown) => cache.shape(
+                    key(&computed_key(&shown), None, bold, &None, look, foot),
+                    || shape_computed(text_system, &shown, None, bold, look),
+                ),
                 None => cache.shape(key(text, None, bold, &None, look, foot), || {
                     shape(text_system, text, None, bold, &None, look, defined)
                 }),
@@ -930,10 +940,10 @@ fn rows(
                     // differ by a few fractions of a pixel.
                     let wrap = (alone[r][c] > widths[c]).then_some(widths[c]);
                     if let Some(shown) = computed(r, c) {
-                        let shape = cache
-                            .shape(key(&computed_key(&shown), wrap, bold, &None, look, foot), || {
-                                shape_computed(text_system, &shown, wrap, bold, look)
-                            });
+                        let shape = cache.shape(
+                            key(&computed_key(&shown), wrap, bold, &None, look, foot),
+                            || shape_computed(text_system, &shown, wrap, bold, look),
+                        );
                         let align = if shown.right {
                             TextAlign::Right
                         } else {

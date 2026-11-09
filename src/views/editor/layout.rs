@@ -1096,25 +1096,24 @@ impl Editor {
                     theme: &t,
                     style: 0,
                 };
-                lines.iter().all(|(_, l)| md::is_table_line(l))
-                    && {
-                        let foot = self.foot_hash();
-                        let keys = self.foot_keys();
-                        let defined = |label: &str| {
-                            let key = label.to_lowercase();
-                            keys.iter().any(|k| k == &key)
-                        };
-                        grid::geometry(
-                            &mut grid::Cache::default(),
-                            &text_system,
-                            &look,
-                            room,
-                            &lines,
-                            foot,
-                            &defined,
-                        )
-                        .same(geom)
-                    }
+                lines.iter().all(|(_, l)| md::is_table_line(l)) && {
+                    let foot = self.foot_hash();
+                    let keys = self.foot_keys();
+                    let defined = |label: &str| {
+                        let key = label.to_lowercase();
+                        keys.iter().any(|k| k == &key)
+                    };
+                    grid::geometry(
+                        &mut grid::Cache::default(),
+                        &text_system,
+                        &look,
+                        room,
+                        &lines,
+                        foot,
+                        &defined,
+                    )
+                    .same(geom)
+                }
             })
         });
         // A ``` without a closing fence opens no block: otherwise each ``` typed would
@@ -2768,10 +2767,8 @@ mod tests {
         assert_eq!(hand_at(at(8) + 2), Some(CursorStyle::PointingHand));
         assert_eq!(hand_at(missing), None);
         assert_eq!(
-            editor.read_with(cx, |e, _| e.hand_at(
-                e.point_of(first + 2).unwrap(),
-                gpui::Modifiers::none()
-            )),
+            editor.read_with(cx, |e, _| e
+                .hand_at(e.point_of(first + 2).unwrap(), gpui::Modifiers::none())),
             None
         );
     }

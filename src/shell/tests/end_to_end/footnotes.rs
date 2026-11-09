@@ -15,9 +15,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position())
     };
     let click = |cx: &mut gpui::VisualTestContext, byte: usize, modifiers: gpui::Modifiers| {
-        let spot = shell.read_with(cx, |s, cx| {
-            s.pane().editor.read(cx).point_of(byte).unwrap()
-        });
+        let spot = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(byte).unwrap());
         cx.simulate_click(spot, modifiers);
     };
     // Ctrl+clicking a reference jumps to its definition.
@@ -33,9 +31,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(caret(cx), missing + 2);
     // The pointer turns into a hand over defined footnotes only, with Ctrl held.
     let hand = |cx: &mut gpui::VisualTestContext, byte: usize, held: gpui::Modifiers| {
-        let spot = shell.read_with(cx, |s, cx| {
-            s.pane().editor.read(cx).point_of(byte).unwrap()
-        });
+        let spot = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(byte).unwrap());
         cx.simulate_mouse_move(spot, None, held);
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).hand())
     };
