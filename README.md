@@ -1,16 +1,16 @@
 # Inkuno
 
-[![CI](https://github.com/alarboulletmarin/bref/actions/workflows/ci.yml/badge.svg)](https://github.com/alarboulletmarin/bref/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/alarboulletmarin/bref)](https://github.com/alarboulletmarin/bref/releases/latest)
+[![CI](https://github.com/kolisachint/inkuno/actions/workflows/ci.yml/badge.svg)](https://github.com/kolisachint/inkuno/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/kolisachint/inkuno)](https://github.com/kolisachint/inkuno/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 A fast, minimal note-taking app. Notes are plain Markdown files in a folder you choose, styled as you type. Written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework.
 
-Inkuno is [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet Marin under a new name; upstream links still point there until its future home is decided.
+Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet Marin under a new name; its home is now [github.com/kolisachint/inkuno](https://github.com/kolisachint/inkuno).
 
 ![Inkuno, light and dark](docs/screenshots/inkuno.png)
 
-**[Install](#install)** · **[User guide](book/src/introduction.md)** · [Shortcuts](book/src/shortcuts.md) · [Website](https://alarboulletmarin.github.io/bref/) · [Contributing](CONTRIBUTING.md)
+**[Install](#install)** · **[User guide](book/src/introduction.md)** · [Shortcuts](book/src/shortcuts.md) · [Website](https://kolisachint.github.io/inkuno/) · [Contributing](CONTRIBUTING.md)
 
 ## Why Inkuno
 
@@ -65,7 +65,7 @@ On macOS, read `Cmd` for `Ctrl`. More in [First steps](book/src/first-steps.md).
 
 ## Documentation
 
-The [user guide](book/src/introduction.md) covers everything. It is also published as a website: [alarboulletmarin.github.io/bref/guide](https://alarboulletmarin.github.io/bref/guide/).
+The [user guide](book/src/introduction.md) covers everything. It is also published as a website: [kolisachint.github.io/inkuno/guide](https://kolisachint.github.io/inkuno/guide/).
 
 | Page | What it covers |
 |---|---|

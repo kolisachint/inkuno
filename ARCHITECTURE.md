@@ -3,7 +3,7 @@
 Inkuno is one Rust crate built on [GPUI](https://www.gpui.rs/) (pinned at 0.2.2). This page is the
 map: where things live, which way the dependencies go, and the rules the code keeps.
 
-Inkuno is a rename of [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet Marin; upstream links stay until the new home is decided.
+Inkuno is a rename of Bref by Andrea Larboullet Marin; its home is github.com/kolisachint/inkuno.
 
 ## Layers
 

@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 description = "Fast, minimal Markdown note-taking app"
 license = "MIT"
-repository = "https://github.com/alarboulletmarin/bref"
+repository = "https://github.com/kolisachint/inkuno"
 
 [dependencies]
 # Déjà tirée par gpui, à la même version : images PNG du serveur MCP.

@@ -6,7 +6,7 @@ Only the latest release receives fixes. Inkuno can update itself (see *Updates* 
 
 ## Reporting a vulnerability
 
-Do not open a public issue. Use the [private report form](https://github.com/alarboulletmarin/bref/security/advisories/new) (*Security* tab, *Report a vulnerability*): only the maintainer sees it.
+Do not open a public issue. Use the [private report form](https://github.com/kolisachint/inkuno/security/advisories/new) (*Security* tab, *Report a vulnerability*): only the maintainer sees it.
 
 Please include the version (`inkuno --version`, or the help panel), the operating system, and the steps or the file that trigger the problem.
 

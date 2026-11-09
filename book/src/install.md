@@ -18,7 +18,7 @@ Compiling needs a recent stable Rust. If `rustc --version` shows less than 1.88,
 Every release ships a ready-to-install package. No compiler is needed, and pacman tracks it as `inkuno`.
 
 ```bash
-curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-x86_64.pkg.tar.zst
+curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-x86_64.pkg.tar.zst
 sudo pacman -U ./inkuno-x86_64.pkg.tar.zst
 ```
 
@@ -27,7 +27,7 @@ Download the file first, as above. The package is not signed: given a URL, pacma
 **To follow `main`**, build the development package from a checkout. It needs `cargo` and `git`, and conflicts with `inkuno`.
 
 ```bash
-git clone https://github.com/alarboulletmarin/bref.git
+git clone https://github.com/kolisachint/inkuno.git
 cd inkuno/aur/inkuno-git
 makepkg -si
 ```
@@ -38,7 +38,7 @@ Inkuno is not on the AUR yet.
 
 ## macOS
 
-Download [`inkuno-macos.dmg`](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-macos.dmg). It runs on Apple Silicon and Intel. Open it and drag Inkuno to Applications.
+Download [`inkuno-macos.dmg`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-macos.dmg). It runs on Apple Silicon and Intel. Open it and drag Inkuno to Applications.
 
 The app is not notarized, because that needs a paid Apple Developer account. So macOS blocks the first launch:
 
@@ -54,7 +54,7 @@ xattr -dr com.apple.quarantine /Applications/Inkuno.app
 **To compile it yourself**, you need Xcode (the full app, for the Metal shader compiler) and Rust:
 
 ```bash
-git clone https://github.com/alarboulletmarin/bref.git
+git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 cargo install --path . --locked
 ```
@@ -63,16 +63,16 @@ This installs the `inkuno` command in `~/.cargo/bin`, without the `.app` bundle.
 
 ## Windows
 
-Download [`inkuno-windows-x86_64-setup.exe`](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64-setup.exe) and run it. It installs for your user only, with no administrator rights, and adds a Start menu entry and an uninstaller.
+Download [`inkuno-windows-x86_64-setup.exe`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64-setup.exe) and run it. It installs for your user only, with no administrator rights, and adds a Start menu entry and an uninstaller.
 
-To install nothing, take [`inkuno-windows-x86_64.zip`](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64.zip) instead. Unzip it anywhere and run `inkuno.exe`.
+To install nothing, take [`inkuno-windows-x86_64.zip`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64.zip) instead. Unzip it anywhere and run `inkuno.exe`.
 
 The files are not signed, because a code-signing certificate costs a few hundred euros a year. SmartScreen may show "Windows protected your PC": click **More info**, then **Run anyway**.
 
 **To compile it yourself**, you need the Visual Studio C++ build tools with the Windows SDK, and Rust with the MSVC toolchain:
 
 ```powershell
-git clone https://github.com/alarboulletmarin/bref.git
+git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 cargo install --path . --locked
 ```
@@ -94,7 +94,7 @@ This installs `inkuno.exe` in `%USERPROFILE%\.cargo\bin`.
 3. Build and install:
 
    ```bash
-   git clone https://github.com/alarboulletmarin/bref.git
+   git clone https://github.com/kolisachint/inkuno.git
    cd inkuno
    make
    sudo make install

@@ -15,6 +15,6 @@
   <provides>
     <binary>inkuno</binary>
   </provides>
-  <url type="homepage">https://github.com/alarboulletmarin/bref</url>
-  <url type="bugtracker">https://github.com/alarboulletmarin/bref/issues</url>
+  <url type="homepage">https://github.com/kolisachint/inkuno</url>
+  <url type="bugtracker">https://github.com/kolisachint/inkuno/issues</url>
 </component>

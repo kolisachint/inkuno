@@ -506,7 +506,7 @@ mod tests {
             "{repo}/releases/download/v0.2.2/inkuno-macos.dmg"
         )));
         assert!(!trusted(
-            "http://github.com/alarboulletmarin/bref/releases/download/v1/a"
+            "http://github.com/kolisachint/inkuno/releases/download/v1/a"
         ));
         assert!(!trusted(&format!("{repo}-evil/releases/download/v1/a")));
         assert!(!trusted(
