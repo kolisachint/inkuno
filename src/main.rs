@@ -23,7 +23,6 @@ fn help_text() -> String {
          \n\
          usage:\n\
          \u{20} inkuno                  open the app\n\
-         \u{20} inkuno --capture         open the quick-capture line\n\
          \u{20} inkuno mcp               run the Model Context Protocol server on stdio\n\
          \u{20} inkuno --check-config    validate the JSON config below, exit 0/1\n\
          \u{20} inkuno --help            show this text\n\
