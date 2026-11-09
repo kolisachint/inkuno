@@ -19,7 +19,7 @@ Principles: variable fonts, **bundled locally** with OFL licence notices
 existing `font` / `mono` prefs overrides (`src/ui/assets.rs:70`,
 `src/logic/prefs.rs:7-8`).
 
-## 2. Where Bref is today (verified)
+## 2. Where Inkuno is today (verified)
 
 - Bundled + default faces are **IBM Plex Sans + IBM Plex Mono**
   (`src/ui/assets.rs:16,22`), exposed as `sans()` / `mono()`

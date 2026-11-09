@@ -5,9 +5,11 @@ Releases ship macOS + Linux downloads. There are two paths: the **label gate**
 required for the first release, `0.0.1`. Both end in `release-native.yml`,
 which builds the artifacts and publishes only after every download verifies.
 
-> **Naming seam.** New pipeline files use `inkuno` names. Remaining `bref`
-> asset strings (bundle names, artifact files, packaging directories) are the
-> rename crew's lane and are intentionally untouched here.
+> **Naming seam.** New pipeline files use `inkuno` names. Any remaining
+> old-name asset strings (bundle names, artifact files, packaging
+> directories) are the rename crew's lane and are intentionally untouched
+> here. Docs carry the new name except one upstream-origin credit line per
+> file (README, ARCHITECTURE, user-guide introduction).
 
 ## Label-gated releases
 
