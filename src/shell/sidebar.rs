@@ -52,6 +52,159 @@ impl Shell {
         self.settle_nav(window, cx);
     }
 
+    /// The tab that shows the tool, if it is open as one.
+    pub(super) fn tool_tab(&self, mode: Mode) -> Option<usize> {
+        self.panes.iter().position(|pane| pane.tool == Some(mode))
+    }
+
+    /// The tools drawn in the left dock (or the right one), top to bottom: those shown there that
+    /// live there and are not open as a tab.
+    pub(super) fn dock_tools(&self, right: bool) -> Vec<Mode> {
+        let shown = if right {
+            &self.nav.right_shown
+        } else {
+            &self.nav.left_shown
+        };
+        shown
+            .iter()
+            .copied()
+            .filter(|m| self.nav.right.contains(m) == right && self.tool_tab(*m).is_none())
+            .collect()
+    }
+
+    pub(super) fn left_open(&self) -> bool {
+        self.nav.panel != Panel::Rail && !self.dock_tools(false).is_empty()
+    }
+
+    pub(super) fn right_open(&self) -> bool {
+        self.nav.panel != Panel::Full && !self.dock_tools(true).is_empty()
+    }
+
+    /// The tool is drawn in a dock that is open.
+    fn docked(&self, mode: Mode) -> bool {
+        self.left_open() && self.dock_tools(false).contains(&mode)
+            || self.right_open() && self.dock_tools(true).contains(&mode)
+    }
+
+    /// The tool is in sight: in its dock, or as a tab.
+    pub(super) fn tool_shown(&self, mode: Mode) -> bool {
+        self.tool_tab(mode).is_some() || self.docked(mode)
+    }
+
+    /// The tool's view comes into `Nav` and its dock opens on it: alone, as the panel always did,
+    /// unless it is already shown there with others.
+    pub(super) fn put_tool(&mut self, mode: Mode) {
+        let right = self.nav.right.contains(&mode);
+        if !self.docked(mode) {
+            match right {
+                true => self.nav.right_shown = vec![mode],
+                false => self.nav.left_shown = vec![mode],
+            }
+        }
+        if !right && self.nav.panel == Panel::Rail {
+            self.nav.panel = Panel::Split;
+        }
+        self.nav.folded.remove(&mode);
+        self.nav.activate(mode);
+    }
+
+    /// Shift+click on the rail: the tool joins the others of its dock, at the bottom, or leaves
+    /// them if it is shown. (The graph refresh went with the graph.)
+    pub(super) fn stack_tool(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        if self.tool_tab(mode).is_some() {
+            return self.show_nav(mode, false, window, cx);
+        }
+        let right = self.nav.right.contains(&mode);
+        match self.docked(mode) {
+            true => self.hide_tool(mode, window, cx),
+            false => {
+                // A folded left dock opens on this tool alone.
+                let fresh = !right && !self.left_open();
+                let stack = if right {
+                    &mut self.nav.right_shown
+                } else {
+                    &mut self.nav.left_shown
+                };
+                if fresh {
+                    stack.clear();
+                }
+                stack.retain(|m| *m != mode);
+                stack.push(mode);
+                if !right && self.nav.panel == Panel::Rail {
+                    self.nav.panel = Panel::Split;
+                }
+                self.nav.folded.remove(&mode);
+                self.nav.activate(mode);
+                self.nav.reveal = true;
+                window.focus(&self.nav.focus);
+                self.settle_nav(window, cx);
+            }
+        }
+    }
+
+    /// The tool leaves its dock's stack; the last one of the left dock folds the panel onto its
+    /// rail instead, so that it comes back the same.
+    pub(super) fn hide_tool(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        let right = self.nav.right.contains(&mode);
+        let had_focus = self.nav.focus.contains_focused(window, cx);
+        match right {
+            true => self.nav.right_shown.retain(|m| *m != mode),
+            false if self.dock_tools(false) == [mode] => self.nav.panel = Panel::Rail,
+            false => self.nav.left_shown.retain(|m| *m != mode),
+        }
+        // The keys go to another tool in sight, or back to the note.
+        match self
+            .dock_tools(right)
+            .first()
+            .or(self.dock_tools(!right).first())
+            .copied()
+            .filter(|m| self.docked(*m))
+        {
+            Some(next) if had_focus => self.nav.activate(next),
+            _ if had_focus => window.focus(&self.pane().editor.focus_handle(cx)),
+            _ => {}
+        }
+        self.settle_nav(window, cx);
+    }
+
+    /// A tool stacked in a dock folds down to its header, or unfolds.
+    pub(super) fn fold_tool(&mut self, mode: Mode, cx: &mut Context<Self>) {
+        if !self.nav.folded.remove(&mode) {
+            self.nav.folded.insert(mode);
+        }
+        self.nav.save();
+        cx.notify();
+    }
+
+    /// Width of the right dock: the one it was given, as long as the panes keep `MIN_PANE`; none
+    /// (the dock hides) when even 160 px would take it from them.
+    pub(super) fn right_width(&self) -> Pixels {
+        let left = if self.left_open() && self.nav.panel == Panel::Split {
+            self.split_width() + DIVIDER
+        } else {
+            px(0.)
+        };
+        let room =
+            self.nav.total - self.theme.px(RAIL) - left - self.nav.aside - DIVIDER - pane::MIN_PANE;
+        match room < px(160.) {
+            true => px(0.),
+            false => self.nav.right_w.clamp(px(160.), room),
+        }
+    }
+
+    /// The right dock's border follows the pointer.
+    pub(super) fn drag_right(&mut self, x: Pixels, cx: &mut Context<Self>) {
+        self.nav.right_w = (self.nav.left + self.nav.total - x).max(px(160.));
+        cx.notify();
+    }
+
+    /// The outline row at `at`: the cursor jumps there and the note takes the keys back.
+    pub(super) fn outline_go(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.pane().editor.update(cx, |e, cx| e.jump(at, true, cx));
+        window.focus(&self.pane().editor.focus_handle(cx));
+        cx.notify();
+    }
+
     pub(super) fn toggle_full(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.nav.panel = match self.nav.panel {
             Panel::Full => Panel::Split,
@@ -271,14 +424,9 @@ impl Shell {
         if self.nav.panel == Panel::Full {
             self.nav.panel = Panel::Split;
         }
-        // A table takes focus so one can write in it; an image shows in place
-        // of the note, and the panel keeps control.
-        match self.shown_sheet() {
-            Some(sheet) => window.focus(&sheet.focus_handle(cx)),
-            None if self.pane().file.is_none() => {
-                window.focus(&self.pane().editor.focus_handle(cx))
-            }
-            None => {}
+        // An image shows in place of the note, and the panel keeps control.
+        if self.pane().file.is_none() {
+            window.focus(&self.pane().editor.focus_handle(cx))
         }
         self.settle_nav(window, cx);
     }
@@ -783,7 +931,7 @@ impl Shell {
                     Some(_) => Some(path.clone()),
                     None => path.parent().map(Path::to_path_buf),
                 };
-                let (target, drop_into) = (path.clone(), into.clone());
+                let target = path.clone();
                 let (paths, name) = match marked.contains(&path) {
                     true => (lot.clone(), format!("{} {}", lot.len(), tr("items", "éléments"))),
                     false => (vec![path], name),
@@ -826,27 +974,6 @@ impl Shell {
                                 cx.notify();
                             }),
                         )
-                        // Files coming from the system: they go into the row's folder, or into the
-                        // note's, and the row tints to say so.
-                        .when(tree, |d| {
-                            let aim_into = drop_into.clone();
-                            d.drag_over::<gpui::ExternalPaths>(move |style, _, _, _| style.bg(t.selection))
-                                .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<gpui::ExternalPaths>, _, cx| {
-                                    let Some(dir) = &aim_into else { return };
-                                    let mine = matches!(&this.drop_aim, Some(super::DropAim { aim: super::Aim::Folder(d), .. }) if d == dir);
-                                    if e.bounds.contains(&e.event.position) {
-                                        let aim = super::DropAim { aim: super::Aim::Folder(dir.clone()), items: e.drag(cx).paths().len(), pointer: e.event.position };
-                                        this.aim_drop(Some(aim), cx);
-                                    } else if mine {
-                                        this.aim_drop(None, cx);
-                                    }
-                                }))
-                                .on_drop(cx.listener(move |this, paths: &gpui::ExternalPaths, _, cx| {
-                                    if let Some(dir) = &drop_into {
-                                        this.drop_paths(paths.paths().to_vec(), super::Aim::Folder(dir.clone()), cx);
-                                    }
-                                }))
-                        })
                         .when(tree, |d| {
                             d.on_drag(Dragged { paths, name, theme: t }, |dragged, _, _, cx| {
                                 cx.new(|_| dragged.clone())
@@ -1027,33 +1154,6 @@ impl Shell {
             );
 
         let wrapper = div().h_full().flex().min_w_0();
-        // A header dragged from the right dock: the rail of a folded panel takes it.
-        let rail = rail
-            .on_drag_move(cx.listener(
-                |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                    this.tool_drag = true;
-                    if !this.left_open() {
-                        let inside = e.bounds.contains(&e.event.position);
-                        match inside {
-                            true => this.aim_tool(Some((false, 0)), cx),
-                            false if this.tool_aim == Some((false, 0)) => this.aim_tool(None, cx),
-                            false => {}
-                        }
-                    }
-                },
-            ))
-            .when(!unfolded, |d| {
-                d.on_drop(
-                    cx.listener(|this, dragged: &docks::ToolDragged, window, cx| {
-                        if this.tool_aim.take() == Some((false, 0)) {
-                            this.place_tool(dragged.mode, false, 0, window, cx);
-                        }
-                    }),
-                )
-                .when(self.tool_aim == Some((false, 0)), |d| {
-                    d.bg(t.accent.opacity(0.12))
-                })
-            });
         if !unfolded {
             return wrapper.flex_none().child(rail);
         }
@@ -1097,8 +1197,7 @@ impl Shell {
             .child(divider)
     }
 
-    /// The right dock, if it is open and the window leaves the note its room; while a tool's
-    /// header is dragged and it is closed, a strip on the right edge to drop it there.
+    /// The right dock, if it is open and the window leaves the note its room.
     pub(super) fn render_right_dock(
         &mut self,
         window: &mut Window,
@@ -1106,45 +1205,7 @@ impl Shell {
     ) -> Option<gpui::AnyElement> {
         let t = self.theme;
         if !self.right_open() || self.right_width() <= px(0.) {
-            if !self.tool_drag || self.nav.panel == Panel::Full {
-                return None;
-            }
-            let aimed = self.tool_aim == Some((true, 0));
-            return Some(
-                div()
-                    .id("dock-right-drop")
-                    .debug_selector(|| "dock-right-drop".into())
-                    .flex_none()
-                    .w(t.px(48.))
-                    .h_full()
-                    .border_l_1()
-                    .border_color(if aimed { t.accent } else { t.border })
-                    .rounded(t.sheet())
-                    .bg(if aimed {
-                        t.accent.opacity(0.12)
-                    } else {
-                        t.panel
-                    })
-                    .on_drag_move(cx.listener(
-                        |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                            match e.bounds.contains(&e.event.position) {
-                                true => this.aim_tool(Some((true, 0)), cx),
-                                false if this.tool_aim == Some((true, 0)) => {
-                                    this.aim_tool(None, cx)
-                                }
-                                false => {}
-                            }
-                        },
-                    ))
-                    .on_drop(
-                        cx.listener(|this, dragged: &docks::ToolDragged, window, cx| {
-                            if this.tool_aim.take() == Some((true, 0)) {
-                                this.place_tool(dragged.mode, true, 0, window, cx);
-                            }
-                        }),
-                    )
-                    .into_any_element(),
-            );
+            return None;
         }
         let content = self.render_stack(true, window, cx);
         let divider = div()
@@ -1195,8 +1256,7 @@ impl Shell {
                 && self.dock_tools(true).contains(&mode)
     }
 
-    /// A dock: its tools one above the other, each under its header, the folded ones reduced to it;
-    /// a header dragged over it shows by a line where it would land.
+    /// A dock: its tools one above the other, each under its header, the folded ones reduced to it.
     fn render_stack(
         &mut self,
         right: bool,
@@ -1205,44 +1265,18 @@ impl Shell {
     ) -> Stateful<Div> {
         let t = self.theme;
         let tools = self.dock_tools(right);
-        let (count, stacked) = (tools.len(), tools.len() > 1);
+        let stacked = tools.len() > 1;
         let active = self.nav.mode;
-        let aim = self.tool_aim.filter(|(r, _)| *r == right).map(|(_, at)| at);
         let full = !right && self.nav.panel == Panel::Full;
         let width = if right {
             self.right_width()
         } else {
             self.split_width()
         };
-        let line = move || {
-            div()
-                .debug_selector(|| "tool-aim".into())
-                .absolute()
-                .left_0()
-                .right_0()
-                .h(t.px(2.))
-                .bg(t.accent)
-        };
         let mut sections = Vec::new();
-        for (at, mode) in tools.into_iter().enumerate() {
+        for mode in tools.into_iter() {
             self.nav.activate(mode);
-            let section = self
-                .render_dock(right, stacked, mode == active, window, cx)
-                .when(aim == Some(at), |d| d.child(line().top_0()))
-                .when(aim == Some(count) && at + 1 == count, |d| {
-                    d.child(line().bottom_0())
-                })
-                .on_drag_move(cx.listener(
-                    move |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                        let p = e.event.position;
-                        if e.bounds.contains(&p) {
-                            this.aim_tool(
-                                Some((right, at + usize::from(p.y > e.bounds.center().y))),
-                                cx,
-                            );
-                        }
-                    },
-                ));
+            let section = self.render_dock(right, stacked, mode == active, window, cx);
             sections.push(section);
         }
         self.nav.activate(active);
@@ -1272,24 +1306,6 @@ impl Shell {
                 }
             })
             .children(sections)
-            .on_drag_move(cx.listener(
-                move |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                    this.tool_drag = true;
-                    let mine = this.tool_aim.is_some_and(|(r, _)| r == right);
-                    match e.bounds.contains(&e.event.position) {
-                        true if !mine => this.aim_tool(Some((right, count)), cx),
-                        false if mine => this.aim_tool(None, cx),
-                        _ => {}
-                    }
-                },
-            ))
-            .on_drop(
-                cx.listener(move |this, dragged: &docks::ToolDragged, window, cx| {
-                    if let Some((_, at)) = this.tool_aim.take().filter(|(r, _)| *r == right) {
-                        this.place_tool(dragged.mode, right, at, window, cx);
-                    }
-                }),
-            )
     }
 
     /// Header and content of the tool whose view is in `Nav`, in the right dock or the left one;
@@ -1509,16 +1525,6 @@ impl Shell {
                             // space: it stays a dock-drag source (and a window handle through its
                             // parent) even with nothing written in it.
                             .when(mode == Mode::Tree, |d| d.flex_1())
-                            .when(!full, |d| {
-                                d.cursor_grab().on_drag(
-                                    docks::ToolDragged {
-                                        mode,
-                                        name: title.clone(),
-                                        theme: t,
-                                    },
-                                    |dragged, _, _, cx| cx.new(|_| dragged.clone()),
-                                )
-                            })
                             // Quiet sans-semibold title (13 px) for a 32 px header: no serif at this size.
                             // The tree shows none: its vault name moved to the window's title bar.
                             .when(mode != Mode::Tree, |d| {
@@ -1529,42 +1535,6 @@ impl Shell {
                             }),
                     ),
             )
-            // The tool elsewhere: in the other dock. Not from the
-            // panel on the whole window, where it is not in sight.
-            .when(!full, |d| {
-                d.child(
-                    button(
-                        if right {
-                            "dock-move-right"
-                        } else {
-                            "dock-move"
-                        },
-                        if right { "c-left.svg" } else { "c-right.svg" },
-                        false,
-                        t,
-                    )
-                    .debug_selector(move || {
-                        if right {
-                            "dock-move-right".into()
-                        } else {
-                            "dock-move".into()
-                        }
-                    })
-                    .tooltip(tip(
-                        if right {
-                            tr("Move to the left dock", "Déplacer dans le dock de gauche")
-                        } else {
-                            tr("Move to the right dock", "Déplacer dans le dock de droite")
-                        },
-                        keys(&crate::actions::MoveTool),
-                        t,
-                    ))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.nav.activate(mode);
-                        this.move_tool(window, cx)
-                    })),
-                )
-            })
             // No hide button in the header: the sidebar stays shown; hiding is on the keys
             // and the palette (`hide_tool` unchanged, bring the button back below to restore it).
             .when(!right && first, |d| {
@@ -1688,34 +1658,7 @@ impl Shell {
             .min_h_0()
             // Outside any row: a drop goes to the root, right-click targets the vault.
             .when(mode == Mode::Tree, |d| {
-                // System files dropped outside any row: at the vault root.
-                d.on_drag_move(cx.listener(
-                    |this, e: &gpui::DragMoveEvent<gpui::ExternalPaths>, _, cx| {
-                        let root = matches!(
-                            &this.drop_aim,
-                            Some(super::DropAim {
-                                aim: super::Aim::Root,
-                                ..
-                            })
-                        );
-                        if !e.bounds.contains(&e.event.position) {
-                            if root {
-                                this.aim_drop(None, cx);
-                            }
-                        } else if this.drop_aim.is_none() || root {
-                            let aim = super::DropAim {
-                                aim: super::Aim::Root,
-                                items: e.drag(cx).paths().len(),
-                                pointer: e.event.position,
-                            };
-                            this.aim_drop(Some(aim), cx);
-                        }
-                    },
-                ))
-                .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
-                    this.drop_paths(paths.paths().to_vec(), super::Aim::Root, cx);
-                }))
-                .on_drop(cx.listener(|this, dragged: &Dragged, _, cx| {
+                d.on_drop(cx.listener(|this, dragged: &Dragged, _, cx| {
                     if let Some(root) = this.vault.clone() {
                         this.move_all(&dragged.paths, &root, cx)
                     }
@@ -1771,13 +1714,13 @@ impl Shell {
             }))
             .on_action(cx.listener(|this, _: &Rename, window, cx| {
                 this.menu_do(Do::Rename, this.nav.sel.clone(), window, cx)
-            })
+            }))
             .on_action(cx.listener(|this, _: &Duplicate, window, cx| {
                 this.menu_do(Do::Duplicate, this.nav.sel.clone(), window, cx)
-            })
+            }))
             .on_action(cx.listener(|this, _: &Trash, window, cx| {
                 this.menu_do(Do::Trash, this.nav.sel.clone(), window, cx)
-            })
+            }))
             .on_action(cx.listener(|this, _: &Close, window, cx| {
                 if this.menu.is_some() {
                     return this.close_menu(window, cx);
@@ -1794,7 +1737,6 @@ impl Shell {
             .child(header)
             .map(|d| match mode {
                 _ if shut => d,
-                Mode::Search => d.child(self.render_vault_find(window, cx)),
                 Mode::Outline => d.child(self.render_outline(cx)),
                 _ => d.child(
                     div()
