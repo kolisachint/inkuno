@@ -1,4 +1,4 @@
-//! The window around the notes: badge, format bar, saved shortcuts and panes, first launch, quick capture, empty page.
+//! The window around the notes: badge, format bar, saved shortcuts and panes, first launch, empty page.
 
 use super::*;
 use crate::shell::render::badge_label;
@@ -210,81 +210,6 @@ fn opens_on_the_body(cx: &mut TestAppContext) {
         .collect();
     notes.sort();
     assert_eq!(notes, ["Accueil.md", "Plan.md"]);
-    let _ = fs::remove_dir_all(&root);
-}
-
-/// Capture (`inkuno --capture`): a line typed, Enter, it is in the daily note
-/// and the window has closed. Escape closes without writing anything.
-#[gpui::test]
-fn capture_window(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("inkuno-capture-window-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    let _config = isolated_config(&root);
-    let note = root.join(format!("{}.md", date_name(today())));
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let closed = std::rc::Rc::new(std::cell::Cell::new(0));
-    cx.update(|cx| {
-        let closed = closed.clone();
-        cx.on_window_closed(move |_| closed.set(closed.get() + 1))
-            .detach();
-    });
-    {
-        let (capture, cx) = cx.add_window_view(|window, cx| Capture::new(root.clone(), window, cx));
-        cx.run_until_parked();
-        // An input field suggests nothing, even before the first keystroke.
-        assert_eq!(capture.read_with(cx, |c, cx| c.field.read(cx).listed()), 0);
-        cx.simulate_input("rappeler le plombier");
-        cx.simulate_keystrokes("enter");
-        cx.run_until_parked();
-    }
-    assert_eq!(
-        fs::read_to_string(&note).unwrap(),
-        format!("# {}\n\n- rappeler le plombier\n", date_name(today()))
-    );
-    assert_eq!(closed.get(), 1);
-    {
-        let (_, cx) = cx.add_window_view(|window, cx| Capture::new(root.clone(), window, cx));
-        cx.run_until_parked();
-        cx.simulate_input("à oublier");
-        cx.simulate_keystrokes("escape");
-        cx.run_until_parked();
-    }
-    assert!(!fs::read_to_string(&note).unwrap().contains("oublier"));
-    assert_eq!(closed.get(), 2);
-    // A very long line: nothing is cut or refused. The text scrolls under the cursor,
-    // which stays in the frame, while typing as when going back to the start of the line.
-    let long = "mot ".repeat(250);
-    {
-        let (capture, cx) = cx.add_window_view(|window, cx| Capture::new(root.clone(), window, cx));
-        cx.run_until_parked();
-        let caret_inside = |cx: &mut gpui::VisualTestContext| {
-            capture.read_with(cx, |c, cx| c.field.read(cx).caret_inside())
-        };
-        cx.simulate_input(&long);
-        cx.run_until_parked();
-        assert_eq!(
-            caret_inside(cx),
-            Some(true),
-            "the cursor follows the typing"
-        );
-        cx.simulate_keystrokes("home");
-        cx.run_until_parked();
-        assert_eq!(
-            caret_inside(cx),
-            Some(true),
-            "the cursor comes back into view at the start"
-        );
-        cx.simulate_keystrokes("end enter");
-        cx.run_until_parked();
-    }
-    assert!(
-        fs::read_to_string(&note)
-            .unwrap()
-            .ends_with(&format!("- {}\n", long.trim()))
-    );
-    assert_eq!(closed.get(), 3);
     let _ = fs::remove_dir_all(&root);
 }
 

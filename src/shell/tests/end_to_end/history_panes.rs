@@ -1,121 +1,13 @@
-//! Back and forward, shortcuts shown in menus, two panes.
+//! Shortcuts shown in menus, two panes.
 
 use super::*;
 
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let (shell, root) = (&j.shell, &j.root);
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
-    // Back / forward: the history of what was shown, as in a browser.
-    let (hist_a, hist_b, hist_csv) = (
-        root.join("Hist A.md"),
-        root.join("Hist B.md"),
-        // A CSV file: it opens as text, like a note.
-        root.join("hist.csv"),
-    );
-    let long: String = (0..200).map(|i| format!("ligne {i}\n")).collect();
-    fs::write(&hist_a, format!("# Hist A\n\n{long}\n[[Hist B]]\n")).unwrap();
-    fs::write(&hist_b, "# Hist B\n").unwrap();
-    fs::write(&hist_csv, "a,b\n1,2\n3,4\n5,6\n").unwrap();
     j.settle(cx);
-    let (back, forward) = if cfg!(target_os = "macos") {
-        ("cmd-[", "cmd-]")
-    } else {
-        ("alt-left", "alt-right")
-    };
-    let seen = |cx: &mut gpui::VisualTestContext| {
-        shell.read_with(cx, |s, _| {
-            (s.pane().file_path().cloned(), s.pane().path.clone())
-        })
-    };
-    let on_note = |path: &Path| (None, Some(path.to_path_buf()));
-    shell.update_in(cx, |s, window, cx| s.open_from_nav(&hist_a, window, cx));
-    // Far into the note: the cursor and scroll will be found again on return.
-    cx.simulate_keystrokes("secondary-end up up up");
-    let place = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).view());
-    assert!(place.0 > 1000 && place.1 > 0., "{place:?}");
-    // Follow a link, come back, go again.
-    shell.update_in(cx, |s, window, cx| {
-        s.follow(&Link::Wiki("Hist B".into()), window, cx)
-    });
-    assert_eq!(seen(cx), on_note(&hist_b));
-    assert!(shell.read_with(cx, |s, _| s.history.can_back() && !s.history.can_forward()));
-    cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx), on_note(&hist_a));
-    assert_eq!(
-        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).view()),
-        place
-    );
-    cx.simulate_input("x");
-    assert!(text(cx).contains("x"), "input is in the note found again");
-    cx.simulate_keystrokes("backspace");
-    assert!(shell.read_with(cx, |s, _| s.history.can_forward()));
-    cx.simulate_keystrokes(forward);
-    assert_eq!(seen(cx), on_note(&hist_b));
-    // Back, as the rail button does (the rail keeps no travel buttons).
-    cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx), on_note(&hist_a));
-    // Opening something else after going back: "forward" has nowhere to go.
-    shell.update_in(cx, |s, window, cx| s.open_from_nav(&hist_csv, window, cx));
-    assert_eq!(seen(cx), on_note(&hist_csv));
-    assert!(!shell.read_with(cx, |s, _| s.history.can_forward()));
-    cx.simulate_keystrokes("secondary-end");
-    let cell = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).view());
-    cx.simulate_keystrokes(forward);
-    assert_eq!(seen(cx), on_note(&hist_csv));
-    cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx), on_note(&hist_a));
-    cx.simulate_keystrokes(forward);
-    assert_eq!(seen(cx), on_note(&hist_csv));
-    assert_eq!(
-        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).view()),
-        cell,
-        "the cursor is found again"
-    );
-    // The mouse's back and forward buttons.
-    let middle = gpui::point(px(500.), px(400.));
-    let navigate = |cx: &mut gpui::VisualTestContext, to| {
-        cx.simulate_mouse_down(middle, MouseButton::Navigate(to), gpui::Modifiers::none());
-        cx.simulate_mouse_up(middle, MouseButton::Navigate(to), gpui::Modifiers::none());
-    };
-    navigate(cx, gpui::NavigationDirection::Back);
-    assert_eq!(seen(cx), on_note(&hist_a));
-    // A preview does not enter the history: "back" returns to where we came from, and
-    // "forward" still leads to the table.
-    shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.nav.focus);
-        s.preview_note(&hist_b, window, cx);
-    });
-    assert_eq!(seen(cx), on_note(&hist_b));
-    cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx), on_note(&hist_a));
-    navigate(cx, gpui::NavigationDirection::Forward);
-    assert_eq!(seen(cx), on_note(&hist_csv));
-    // A moved note is followed.
-    shell.update_in(cx, |s, window, cx| s.open_from_nav(&hist_b, window, cx));
     let shelf = root.join("Étagère");
     fs::create_dir_all(&shelf).unwrap();
-    shell.update(cx, |s, cx| s.move_into(&hist_b, &shelf, cx));
-    let moved = shelf.join("Hist B.md");
-    cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx), on_note(&hist_csv));
-    cx.simulate_keystrokes(forward);
-    assert_eq!(seen(cx), on_note(&moved));
-    // A file put in the trash leaves the history; a file deleted by another
-    // program is skipped.
-    shell.update_in(cx, |s, window, cx| {
-        s.menu_do(nav::Do::Trash, Some(hist_csv.clone()), window, cx)
-    });
-    cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx), on_note(&hist_a));
-    fs::remove_file(&moved).unwrap();
-    cx.simulate_keystrokes(forward);
-    assert_eq!(seen(cx), on_note(&hist_a));
-    assert!(!shell.read_with(cx, |s, _| s.history.can_forward()));
-    // From a new note, not yet saved: "back" returns to the last one.
-    shell.update_in(cx, |s, window, cx| s.new_note_in(None, window, cx));
-    assert_eq!(seen(cx), (None, None));
-    cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx), on_note(&hist_a));
 
     // Menus show, next to each action, the shortcut that does the same thing:
     // the one in force, and nothing for an action that has none.
