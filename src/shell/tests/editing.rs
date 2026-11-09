@@ -610,7 +610,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
     };
     grid(cx, "row below");
     assert_eq!((rows(cx), columns(cx)), (r + 1, c), "{:?}", text(cx));
-    grid(cx, "column to the right");
+    grid(cx, "column on the right");
     assert_eq!((rows(cx), columns(cx)), (r + 1, c + 1));
     grid(cx, "delete the row");
     grid(cx, "delete the column");

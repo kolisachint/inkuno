@@ -90,6 +90,14 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Delete` | Panel: move to the trash |
 | `Ctrl+click` / `Shift+click` | Select several rows: move, duplicate, trash them together |
 | Right click | Copy the link or the path, set an icon, show a folder or a tag as a list… |
+|  | Open the note in the other pane |
+|  | Copy the [[link]] of the note |
+|  | Copy the path of the note |
+|  | Copy the relative path of the note |
+|  | Show in the file manager |
+|  | Move the note to a folder… |
+|  | Icon of the note… |
+|  | Show the note's folder as a list |
 | `Tab` | From the panel: go from button to button (Shift+Tab: back); Enter or Space presses it |
 | `Shift+Tab` | Back to the previous button |
 | `Shift+F10` / `Menu` | The same menu from the keys, for the selected row or the cursor: arrows, Enter, Esc |
@@ -141,6 +149,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Keys | Action |
 |---|---|
 | `Ctrl+P › theme` | Theme, previewed as you browse |
+|  | Theme… |
 | `Ctrl+P › font` | Font of the app / of the code |
 | `Ctrl+P › page width` | Width of the text column: narrow, normal, wide, full |
 | `Ctrl+P › wide tables` | A table wider than the text: in the column, or centered and wider |

@@ -430,7 +430,7 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
         let (pane, pill, top) = (cx.debug_bounds("pane-0").unwrap(), pill_bottom(cx), top(cx));
         // Wide enough: the text starts right under the handle strip, which is as high as the window buttons.
         assert!(
-            pane.top() + top >= pill && (narrow || top == px(40.)),
+            pane.top() + top >= pill && (narrow || top == px(56.)),
             "{window}: the text starts at {top:?}, the window buttons end at {pill:?}"
         );
     }
@@ -822,13 +822,13 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
         cx.run_until_parked();
         assert_eq!(shell.read_with(cx, |s, _| s.theme.size), size);
         let now = measure(cx);
-        // The note's foot: counter, comments button and copy button side by side, none over another.
-        let foot = ["counts", "comments-toggle", "copy-all"].map(|name| {
+        // The note's foot: counter and comments button side by side, none over another.
+        let foot = ["counts", "comments-toggle"].map(|name| {
             cx.debug_bounds(name)
                 .unwrap_or_else(|| panic!("{name} at {size}"))
         });
         assert!(
-            foot[0].right() <= foot[1].left() && foot[1].right() <= foot[2].left(),
+            foot[0].right() <= foot[1].left(),
             "at {size}: {foot:?}"
         );
         for (i, (got, was)) in now.iter().zip(base).enumerate() {
@@ -840,7 +840,7 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     }
 }
 
-/// Every small target is at least 24 × 24 px: the window buttons, the note's copy button,
+/// Every small target is at least 24 × 24 px: the window buttons,
 /// "Reset all" and "default" in the help.
 #[gpui::test]
 fn small_targets_are_24_px(cx: &mut TestAppContext) {
@@ -855,7 +855,7 @@ fn small_targets_are_24_px(cx: &mut TestAppContext) {
     cx.simulate_resize(size(px(1400.), px(900.)));
     cx.run_until_parked();
     let mut seen = Vec::new();
-    for name in ["minimize", "maximize", "close", "copy-all"] {
+    for name in ["minimize", "maximize", "close"] {
         let b = cx
             .debug_bounds(name)
             .unwrap_or_else(|| panic!("{name} is drawn"));

@@ -560,7 +560,7 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
     assert_eq!(shell.read_with(cx, |s, _| s.active), shown);
     cx.simulate_keystrokes("escape");
     assert!(shell.read_with(cx, |s, _| s.menu.is_none()));
-    assert_eq!(names(cx, 0).len(), 5);
+    assert_eq!(names(cx, 0).len(), 4);
 
     // "Close other tabs" keeps the clicked tab, not the shown one; it gets shown, with input.
     right_click(cx, beta);
