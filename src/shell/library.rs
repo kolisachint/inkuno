@@ -1,6 +1,7 @@
 //! The vault: choosing it, scanning and watching it, icons, backup, trash, terminal.
 
 use super::*;
+use std::sync::Arc;
 
 impl Shell {
     /// Rereads the vault right away, without waiting for the watcher: what the merge wrote

@@ -71,7 +71,6 @@ impl Shell {
         reload: bool,
         cx: &mut Context<Self>,
     ) {
-        self.history.rename(from, to);
         let shift = |p: &PathBuf| match p.strip_prefix(from) {
             Ok(rest) if rest.as_os_str().is_empty() => to.to_path_buf(),
             Ok(rest) => to.join(rest),
@@ -136,7 +135,6 @@ impl Shell {
             Some((trashed, path.to_path_buf())),
             cx,
         );
-        self.history.remove(path);
         let gone = |p: &PathBuf| p.starts_with(path);
         self.notes.retain(|n| !gone(&n.path));
         self.dirs.retain(|d| !gone(d));

@@ -1,11 +1,10 @@
 //! Notes: opening, previewing, creating, saving, renaming with their title, links and wikilinks.
 
 use super::*;
+use std::sync::Arc;
 
 impl Shell {
     /// Shows a Mermaid figure or a picture of the note large, in its place.
-    /// The canvas is gone: `ViewerEvent::ToCanvas` ("edit on the canvas")
-    /// closes the figure again instead of making a canvas diagram.
     pub(super) fn show_figure(
         &mut self,
         source: viewer::Source,
@@ -14,13 +13,6 @@ impl Shell {
     ) {
         let theme = self.theme;
         let figure = cx.new(|cx| viewer::Viewer::new(source, theme, cx));
-        cx.subscribe_in(&figure, window, |this, _, event, window, cx| match event {
-            viewer::ViewerEvent::ToCanvas(_) => {
-                this.pane_mut().figure = None;
-                this.focus_pane(this.active, window, cx);
-            }
-        })
-        .detach();
         window.focus(&figure.focus_handle(cx));
         self.pane_mut().figure = Some(figure);
         cx.notify();

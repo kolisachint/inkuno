@@ -1624,10 +1624,7 @@ impl Editor {
                     let mut at = px(0.);
                     for r in rows.iter_mut() {
                         r.y = at;
-                        at += r.height
-                            + r.image_height()
-                            + r.embed.as_ref().map_or(px(0.), |e| e.height())
-                            + r.gap;
+                        at += r.height + r.image_height() + r.gap;
                     }
                     y = at;
                 }

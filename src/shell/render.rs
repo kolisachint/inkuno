@@ -59,7 +59,6 @@ impl Render for Shell {
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             self.keep_preview();
         }
-        self.track(cx);
         // Zed-style window title: the folder first, then the app — the tree header no longer
         // shows the vault name, so the title bar carries it on every system (drawn below on
         // Linux, native elsewhere through `set_window_title`).

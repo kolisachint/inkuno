@@ -1547,6 +1547,7 @@ impl Shell {
                             tr("Fold every folder", "Replier tous les dossiers")
                         },
                         String::new(),
+                        t,
                     ))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.fold_all();

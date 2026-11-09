@@ -527,7 +527,7 @@ impl Palette {
             }
         }
         if (self.cells || self.table) && !q.is_empty() {
-            let shown = |op: &TableOp| (self.cells || op.in_sheet()) && command(&q, op.label());
+            let shown = |op: &TableOp| self.cells && command(&q, op.label());
             items.extend(TableOp::ALL.into_iter().filter(shown).map(Item::Grid));
         }
         if self.lists && !q.is_empty() {

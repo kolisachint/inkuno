@@ -127,9 +127,9 @@ impl Shell {
             .collect();
         let root = self.vault.clone().unwrap_or_default();
         let theme = self.theme;
-        let table = self.shown_sheet().is_some();
-        let lists =
-            self.pane().file.is_none() && self.pane().listing.is_none() && !self.board_shown(cx);
+        // No sheets: the palette never offers sheet gestures from a shown sheet.
+        let table = false;
+        let lists = self.pane().file.is_none() && self.pane().listing.is_none();
         let cells = lists && self.pane().editor.read(cx).in_table();
         let (commands, here) = self.palette_commands(window, cx);
         let context = self.here_group(cx).1;
@@ -157,11 +157,7 @@ impl Shell {
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
                 PaletteEvent::Comments => this.open_comments(window, cx),
                 PaletteEvent::Grid(op) => {
-                    // The gesture goes to what is shown: a CSV's sheet, or the note.
-                    match this.shown_sheet() {
-                        Some(sheet) => window.focus(&sheet.focus_handle(cx)),
-                        None => window.focus(&this.pane().editor.focus_handle(cx)),
-                    }
+                    window.focus(&this.pane().editor.focus_handle(cx));
                     window.dispatch_action(op.action(), cx);
                 }
                 PaletteEvent::Run(name) => {

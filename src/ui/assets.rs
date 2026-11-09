@@ -6,7 +6,7 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
-use gpui::{App, AssetSource, Hsla, SharedString, prelude::*, rgb, svg};
+use gpui::{App, AssetSource, Hsla, SharedString, div, prelude::*, rgb, svg};
 
 use crate::{logic::prefs::Prefs, ui::theme::Theme};
 
