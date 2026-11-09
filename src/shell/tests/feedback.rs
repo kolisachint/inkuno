@@ -366,12 +366,8 @@ fn an_empty_panel_says_so(cx: &mut TestAppContext) {
     });
     for width in [420., 860., 1600.] {
         cx.simulate_resize(size(px(width), px(640.)));
-        for mode in [
-            nav::Mode::Tree,
-            nav::Mode::Recent,
-            nav::Mode::Tags,
-            nav::Mode::Links,
-        ] {
+        // The cut views (tags, backlinks) are gone: only the tree and the recent notes say so.
+        for mode in [nav::Mode::Tree, nav::Mode::Recent] {
             shell.update(cx, |s, cx| {
                 s.nav.show_alone(mode);
                 cx.notify();

@@ -184,28 +184,19 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     });
     assert_eq!(figures, [true, true, true]);
 
-    // The vault's images are tracked like notes. Those a note displays
-    // have their node in the graph; choosing one shows it in place of the note.
+    // The vault's images are tracked like notes: those a note displays first, then every image.
     for _ in 0..2 {
         cx.executor().advance_clock(Duration::from_secs(3));
         cx.run_until_parked();
     }
-    cx.simulate_keystrokes("secondary-g");
-    cx.run_until_parked();
-    let (images, notes, nodes) = shell.read_with(cx, |s, cx| {
-        (s.images.len(), s.notes.len(), s.graph.read(cx).size().0)
-    });
-    assert_eq!((images, nodes), (2, notes + 2));
-    // An image no note displays also has its node, without a link.
+    assert_eq!(shell.read_with(cx, |s, _| s.images.len()), 2);
+    // An image no note displays is tracked too.
     fs::write(root.join("seule.svg"), svg).unwrap();
     for _ in 0..2 {
         cx.executor().advance_clock(Duration::from_secs(3));
         cx.run_until_parked();
     }
-    assert_eq!(
-        shell.read_with(cx, |s, cx| s.graph.read(cx).size().0),
-        notes + 3
-    );
+    assert_eq!(shell.read_with(cx, |s, _| s.images.len()), 3);
     // Browsed, an image shows in the preview tab; the note keeps its own tab.
     let note = shell.read_with(cx, |s, _| s.pane().path.clone().unwrap());
     shell.update_in(cx, |s, window, cx| {

@@ -198,8 +198,6 @@ impl Shell {
             note.aliases = markdown::aliases(&new).into();
             note.set_body(new.as_str().into());
         }
-        self.graph_stale = true;
-        self.refresh_graph(cx);
         // The note shown under the list is reloaded: it just changed on disk.
         self.each_pane(|this| {
             if this.pane().path.as_ref() == Some(&path) {

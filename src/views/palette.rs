@@ -179,30 +179,6 @@ impl Setting {
 
 actions!(palette, [Prev, Next, Confirm, ConfirmAside, Dismiss]);
 
-/// What templates allow: a note born from one, a template inserted, the open note saved as a template.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum TemplateAct {
-    New,
-    Insert,
-    Save,
-}
-
-impl TemplateAct {
-    fn label(self) -> &'static str {
-        match self {
-            TemplateAct::New => tr(
-                "New note from a template…",
-                "Nouvelle note depuis un modèle…",
-            ),
-            TemplateAct::Insert => tr("Insert a template…", "Insérer un modèle…"),
-            TemplateAct::Save => tr(
-                "Make a template of this note…",
-                "Faire un modèle de cette note…",
-            ),
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct Entry {
     pub name: String,
@@ -230,8 +206,6 @@ pub enum PaletteEvent {
     Restyle(ListStyle),
     /// A gesture on the table under the cursor.
     Grid(TableOp),
-    /// A note born from a template, a template inserted, or the note saved as a template.
-    Template(TemplateAct),
     /// Turns the new-version check on or off.
     ToggleUpdates,
     /// Checks for a new version right now.
@@ -296,7 +270,6 @@ enum Item {
     Table(Pick),
     Restyle(ListStyle),
     Grid(TableOp),
-    Template(TemplateAct),
     /// An app command (`commands`), by its index.
     Command(usize),
 }
@@ -730,14 +703,6 @@ impl Palette {
             let shown = |op: &TableOp| (self.cells || op.in_sheet()) && command(&q, op.label());
             items.extend(TableOp::ALL.into_iter().filter(shown).map(Item::Grid));
         }
-        if !q.is_empty() {
-            let acts = [TemplateAct::New, TemplateAct::Insert, TemplateAct::Save];
-            items.extend(
-                acts.into_iter()
-                    .filter(|a| (*a == TemplateAct::New || self.lists) && command(&q, a.label()))
-                    .map(Item::Template),
-            );
-        }
         if self.lists && !q.is_empty() {
             items.extend(
                 [
@@ -767,7 +732,6 @@ impl Palette {
                             | "app::SyncVault"
                             | "app::ToggleHelp"
                             | "nav::NewFolder"
-                            | "app::NewFromTemplate"
                             | "app::ChooseTheme"
                             | "editor::ListBullet"
                             | "editor::ListOrdered"
@@ -827,7 +791,6 @@ impl Palette {
             Some(&Item::Restyle(style)) => PaletteEvent::Restyle(style),
             Some(&Item::Grid(op)) => PaletteEvent::Grid(op),
             Some(&Item::Command(n)) => PaletteEvent::Run(self.commands[n].action),
-            Some(&Item::Template(act)) => PaletteEvent::Template(act),
             Some(Item::Updates) => PaletteEvent::ToggleUpdates,
             Some(Item::Check) => PaletteEvent::CheckUpdate,
             Some(Item::Outline) => PaletteEvent::Outline,
@@ -1073,7 +1036,6 @@ impl Render for Palette {
                 &Item::Restyle(style) => (list_label(style).to_string(), String::new()),
                 &Item::Grid(op) => (op.label().to_string(), crate::ui::keys::of(cx, op.action().as_ref())),
                 &Item::Command(n) => (self.commands[n].label.to_string(), self.commands[n].keys.clone()),
-                &Item::Template(act) => (act.label().to_string(), if act == TemplateAct::New { crate::ui::keys::of(cx, &crate::actions::NewFromTemplate) } else { String::new() }),
                 Item::UndoSwap => (undo_swap_label().to_string(), String::new()),
                 Item::Board => (board_label().to_string(), String::new()),
                 Item::Today => (today_label().to_string(), crate::ui::keys::of(cx, &crate::actions::Today)),
@@ -1092,7 +1054,7 @@ impl Render for Palette {
             // Where the detail is a shortcut, not a description.
             let shortcut = matches!(
                 item,
-                Item::Vault | Item::Help | Item::Folder | Item::Outline | Item::Grid(_) | Item::Template(_) | Item::Today | Item::Back | Item::Forward | Item::Sync
+                Item::Vault | Item::Help | Item::Folder | Item::Outline | Item::Grid(_) | Item::Today | Item::Back | Item::Forward | Item::Sync
             );
             let note = matches!(item, Item::Note(_));
             let age = match item {

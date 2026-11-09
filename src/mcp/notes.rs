@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 
 use crate::{
     lang::{date_name, time_name},
-    logic::{daily, embed, embed::Anchor, markdown, markdown::Link, rank},
+    logic::{daily, markdown, markdown::Link, rank},
+    logic::wiki::Anchor,
     platform::{clock, link, vault as files},
 };
 
@@ -266,7 +267,7 @@ fn section_text(text: &str, section: &str) -> Result<String, String> {
     } else {
         Anchor::Heading(section.to_string())
     };
-    embed::section(text, &anchor).ok_or_else(|| match &anchor {
+    crate::logic::wiki::section(text, &anchor).ok_or_else(|| match &anchor {
         Anchor::Block(id) => format!("no block `^{id}`"),
         _ => format!("no heading `{section}`"),
     })
@@ -312,7 +313,7 @@ fn wiki_path(vault: &Vault, name: &str) -> Option<String> {
 
 fn embeds(vault: &Vault, text: &str) -> Vec<Value> {
     text.lines()
-        .filter_map(embed::parse)
+        .filter_map(crate::logic::wiki::parse)
         .map(|target| {
             let resolved = wiki_path(vault, &target.note);
             json!({

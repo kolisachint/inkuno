@@ -274,10 +274,6 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     within(cx, "find-bar", "pane-0");
     within(cx, "counts", "pane-0");
     cx.simulate_keystrokes("escape");
-    // The calendar does not go below 170 px, and its month fits in the panel.
-    lay(cx, 420., Mode::Calendar, Panel::Split, 120.);
-    assert_eq!(cx.debug_bounds("nav-panel").unwrap().size.width, px(170.));
-    within(cx, "calendar", "nav-panel");
     cx.simulate_resize(whole);
     shell.update(cx, |s, cx| {
         s.nav.show_alone(before.0);

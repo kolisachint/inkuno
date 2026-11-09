@@ -6,7 +6,6 @@ mod clipboard;
 mod completion;
 mod cursor;
 mod edit;
-mod embed;
 mod find;
 mod format_bar;
 mod formulas;
@@ -27,7 +26,6 @@ pub use blocks::*;
 use completion::*;
 use cursor::*;
 use edit::*;
-use embed::*;
 use find::*;
 pub use format_bar::*;
 use formulas::*;
@@ -72,7 +70,6 @@ use crate::{
     ui::svg,
     ui::theme::Theme,
     ui::theme::Wide,
-    views::graph,
     views::viewer::Source,
 };
 
@@ -245,8 +242,8 @@ pub enum EditorEvent {
     BlockMenu(Point<Pixels>),
     /// A diagram, formula or picture to view large.
     View(Source),
-    /// An embedded section, or a link to a heading, to open: the note and where in it; with Shift, aside.
-    OpenAt(crate::logic::embed::Target, bool),
+    /// A link to a heading or a block of a note, to open: the note and where in it; with Shift, aside.
+    OpenAt(crate::logic::wiki::Target, bool),
 }
 
 /// What the footer counter depends on: the text version and the selection.
@@ -326,10 +323,12 @@ pub struct Editor {
     marks: Option<Marks>,
     /// Why the formula under the pointer has no result.
     reason: Option<Rc<str>>,
-    /// This editor shows an embedded section: nothing in it can be edited, clicked or focused.
+    /// No editor is read-only anymore (embeds are cut, every editor edits); kept false so the
+    /// layout paths stay as they were.
     readonly: bool,
-    /// The notes embedded in this one, and what is kept of them.
-    embeds: Embeds,
+    /// Names of the vault's notes (lowercase, aliases too), to their files: what `#` and `^`
+    /// completion looks up, and what PDF export resolves notes by.
+    sources: Rc<HashMap<String, PathBuf>>,
     /// The handle under the pointer: (table start, handle).
     part_hover: Option<(usize, Part)>,
     /// Where the pointer was at its last move.
@@ -471,7 +470,7 @@ impl Editor {
             marks: None,
             reason: None,
             readonly: false,
-            embeds: Embeds::default(),
+            sources: Rc::new(HashMap::new()),
             part_hover: None,
             pointer: Point::default(),
             hand: None,
@@ -579,13 +578,21 @@ impl Editor {
     pub fn set_images(&mut self, images: &[PathBuf]) {
         let named = images
             .iter()
-            .map(|p| (graph::image_name(p).to_lowercase(), p.clone()));
+            .map(|p| (vault::image_name(p).to_lowercase(), p.clone()));
         self.images = named.collect();
         self.version += 1;
         self.epoch += 1;
     }
 
-    /// What the note's pictures and embeds are looked up in: its folders, the vault's pictures by
+    /// Names of the vault's notes (lowercase, aliases too) → their files, for `#` and `^`
+    /// completion of links to a heading or a block.
+    pub fn set_sources(&mut self, sources: Rc<HashMap<String, PathBuf>>) {
+        self.sources = sources;
+        self.epoch += 1;
+        self.laid_out = None;
+    }
+
+    /// What the note's pictures are looked up in: its folders, the vault's pictures by
     /// name, its notes by name (see `find_picture`).
     pub fn lookups(
         &self,
@@ -597,7 +604,7 @@ impl Editor {
         (
             self.dirs.clone(),
             self.images.clone(),
-            (*self.embeds.sources).clone(),
+            (*self.sources).clone(),
         )
     }
 

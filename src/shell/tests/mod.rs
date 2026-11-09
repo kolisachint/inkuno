@@ -4,7 +4,6 @@
 
 mod benches;
 mod board_header;
-mod calendar_head;
 mod current_file;
 mod docks;
 mod drops;

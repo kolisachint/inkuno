@@ -5,7 +5,6 @@ pub mod block;
 pub mod commands;
 pub mod daily;
 pub mod diagram;
-pub mod embed;
 pub mod formula;
 pub mod history;
 pub mod layout;

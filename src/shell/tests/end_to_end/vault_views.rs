@@ -1,4 +1,4 @@
-//! Tags, backlinks, front matter, trash, replace in vault, list pages, calendar, backup, search, daily note.
+//! Front matter, trash, replace in vault, list pages, backup, search, daily note.
 
 use super::*;
 
@@ -6,92 +6,9 @@ use super::*;
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     let (shell, root) = (&j.shell, &j.root);
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
-    // Tags: Ctrl+T lists the vault's tags; Right expands the first, Down
-    // previews a note that carries it.
-    fs::write(root.join("Tagué.md"), "# Tagué\n\n#alpha\n").unwrap();
-    for _ in 0..2 {
-        cx.executor().advance_clock(Duration::from_secs(3));
-        cx.run_until_parked();
-    }
-    cx.simulate_keystrokes("secondary-t down right down");
-    cx.run_until_parked();
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), Mode::Tags);
-    assert!(vault::load_layout().starts_with("tags split"));
-    let (tagged, previewed) = shell.read_with(cx, |s, _| {
-        let tag = s
-            .notes
-            .iter()
-            .flat_map(|n| n.tags.iter())
-            .min()
-            .unwrap()
-            .clone();
-        let has = |n: &&Note| n.tags.contains(&tag);
-        (
-            s.notes.iter().filter(has).count(),
-            s.notes
-                .iter()
-                .filter(has)
-                .any(|n| Some(&n.path) == s.pane().path.as_ref()),
-        )
-    });
-    assert!(tagged > 0 && previewed);
-    // A tag is not a file: Delete does nothing on it.
-    cx.simulate_keystrokes("up delete");
-    assert!(shell.read_with(cx, |s, _| s.palette.is_none() && !s.told(Tone::Failed, "")));
-
-    // Backlinks: Ctrl+L lists the notes that lead to the open note (link with alias, link
-    // in a table). Down previews one without the list changing; it follows a
-    // removed link; Enter opens the note, and the list becomes its own.
+    // The tags and backlinks views are cut: only the tree, the recent notes, the
+    // search, the outline and the lists stay in the panel.
     let was = shell.read_with(cx, |s, _| s.pane().path.clone()).unwrap();
-    fs::write(root.join("Cible.md"), "# Cible\n").unwrap();
-    fs::write(
-        root.join("Source A.md"),
-        "# Source A\n\nvoir [[Cible|la cible]] ici\n",
-    )
-    .unwrap();
-    fs::write(
-        root.join("Source B.md"),
-        "# Source B\n\n| a | [[cible]] |\n",
-    )
-    .unwrap();
-    j.settle(cx);
-    shell.update(cx, |s, cx| s.open_note(&root.join("Cible.md"), cx));
-    cx.simulate_keystrokes("secondary-l");
-    cx.run_until_parked();
-    let rows = |cx: &mut gpui::VisualTestContext| {
-        shell.read_with(cx, |s, _| {
-            s.nav
-                .rows
-                .iter()
-                .map(|r| r.name.clone())
-                .collect::<Vec<_>>()
-        })
-    };
-    assert_eq!(rows(cx), ["Source A", "Source B"]);
-    assert!(vault::load_layout().starts_with("links split"));
-    cx.simulate_keystrokes("down");
-    cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| {
-        s.pane()
-            .path
-            .as_ref()
-            .is_some_and(|p| p.to_string_lossy().contains("Source"))
-    }));
-    assert_eq!(rows(cx), ["Source A", "Source B"]);
-    fs::write(root.join("Source B.md"), "# Source B\n").unwrap();
-    j.settle(cx);
-    assert_eq!(rows(cx), ["Source A"]);
-    cx.simulate_keystrokes("enter");
-    cx.run_until_parked();
-    assert!(
-        shell.read_with(cx, |s, _| s.pane().path.as_deref()
-            == Some(&*root.join("Source A.md")))
-            && rows(cx).is_empty()
-    );
-    for name in ["Cible.md", "Source A.md", "Source B.md"] {
-        fs::remove_file(root.join(name)).unwrap();
-    }
-
     // Front matter: its lines are neither a heading nor a rule, the file
     // name follows the title placed after it, and neither typing, saving,
     // renaming nor link rewriting changes a byte of it.
@@ -318,40 +235,6 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     fs::remove_dir_all(root.join("Livres")).unwrap();
     j.settle(cx);
 
-    // Calendar: Ctrl+Shift+J shows the month; arrows change the day, Page Down the
-    // month, Enter opens that day's note, or creates it.
-    let before = shell.read_with(cx, |s, _| (s.pane().path.clone(), s.nav.mode, s.nav.panel));
-    cx.simulate_keystrokes("secondary-shift-j");
-    assert!(shell.read_with(cx, |s, _| s.nav.mode == Mode::Calendar
-        && s.nav.panel != Panel::Rail));
-    shell.update(cx, |s, _| s.nav.day = (2026, 10, 30));
-    cx.simulate_keystrokes("right down pagedown");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.day), (2026, 12, 7));
-    cx.simulate_keystrokes("pageup pageup up enter");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.day), (2026, 9, 30));
-    assert_eq!(text(cx), "# 2026-09-30\n\n");
-    // A day of the next month, dimmed in the grid, is a cell like another: a click opens its note and
-    // the grid moves to that month. Today is the one round pill; a day with a note has a dot.
-    let next = cx.debug_bounds("day-2026-10-1").unwrap();
-    let inside = cx.debug_bounds("day-2026-9-30").unwrap();
-    assert!(next.origin.y == inside.origin.y && next.origin.x > inside.origin.x);
-    cx.simulate_click(next.center(), gpui::Modifiers::none());
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.day), (2026, 10, 1));
-    assert_eq!(text(cx), "# 2026-10-01\n\n");
-    assert!(
-        cx.debug_bounds("day-2026-9-30").is_some() && cx.debug_bounds("day-2026-11-1").is_some()
-    );
-    shell.update(cx, |s, cx| {
-        s.nav.show_alone(before.1);
-        s.nav.panel = before.2;
-        s.open_note(before.0.as_ref().unwrap(), cx);
-    });
-    // Once left, the daily note is saved like any note that has a title.
-    j.settle(cx);
-    fs::remove_file(root.join("2026-09-30.md")).unwrap();
-    let _ = fs::remove_file(root.join("2026-10-01.md"));
-    j.settle(cx);
-
     // Terminal: the palette offers it; tests open no window, hence the refusal.
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("terminal");
@@ -471,7 +354,5 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     j.settle(cx);
     shell.update(cx, |s, cx| s.open_note(&was, cx));
     j.settle(cx);
-    cx.simulate_keystrokes("secondary-t");
-    cx.run_until_parked();
     here
 }

@@ -67,7 +67,7 @@ fn keys_survive_a_restart(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
-    vault::save_file("keys", "nav::ShowTags=secondary-shift-y\nno::Such=f8\n");
+    vault::save_file("keys", "nav::ShowRecent=secondary-shift-y\nno::Such=f8\n");
     cx.update(bind_keys);
     cx.update(init_fonts);
     let (shell, cx) =
@@ -75,13 +75,14 @@ fn keys_survive_a_restart(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(
         shell.read_with(cx, |s, _| s.changes.clone()),
-        keys::Changes::from([("nav::ShowTags".to_string(), "secondary-shift-y".to_string())])
+        keys::Changes::from([("nav::ShowRecent".to_string(), "secondary-shift-y".to_string())])
     );
     assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "no::Such=f8")));
+    // The tags view is cut: its old shortcut dispatches nothing, the mode does not move.
     cx.simulate_keystrokes("secondary-t");
-    assert_ne!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tags);
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
     cx.simulate_keystrokes("secondary-shift-y");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tags);
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Recent);
     // A file from before this version, or empty: the original shortcuts.
     let _ = fs::remove_dir_all(&root);
 }

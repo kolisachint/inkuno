@@ -452,25 +452,10 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Create,
         ),
         (
-            "app::NewFromTemplate",
-            tr("New note from a template", "Nouvelle note depuis un modèle"),
-            "file-plus.svg",
-            Create,
-        ),
-        (
             "nav::NewFolder",
             tr("New folder", "Nouveau dossier"),
             "folder-plus.svg",
             Create,
-        ),
-        (
-            "editor::OpenEmbed",
-            tr(
-                "Open the embedded note (on its line)",
-                "Ouvrir la note incorporée (sur sa ligne)",
-            ),
-            "link.svg",
-            Go,
         ),
         (
             "app::Today",
@@ -494,25 +479,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             "nav::ShowRecent",
             tr("Recent notes", "Notes récentes"),
             "clock.svg",
-            Go,
-        ),
-        (
-            "nav::ShowGraph",
-            tr("Graph of the notes", "Graphe des notes"),
-            "graph.svg",
-            Go,
-        ),
-        ("nav::ShowTags", "Tags", "tag.svg", Go),
-        (
-            "nav::ShowLinks",
-            tr("Backlinks", "Rétroliens"),
-            "backlink.svg",
-            Go,
-        ),
-        (
-            "nav::ShowCalendar",
-            tr("Calendar", "Calendrier"),
-            "c-calendar.svg",
             Go,
         ),
         (
@@ -615,15 +581,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
                 "Déplacer la vue du panneau dans l'autre dock",
             ),
             "c-right.svg",
-            Go,
-        ),
-        (
-            "app::ToolAsTab",
-            tr(
-                "Open the graph or the calendar as a tab",
-                "Ouvrir le graphe ou le calendrier dans un onglet",
-            ),
-            "c-split.svg",
             Go,
         ),
         (

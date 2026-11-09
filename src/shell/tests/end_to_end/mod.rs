@@ -6,7 +6,6 @@ mod boards;
 mod csv;
 mod cursors_comments;
 mod dates_lists;
-mod embeds;
 mod files;
 mod find_mouse;
 mod history_panes;
@@ -106,7 +105,6 @@ fn end_to_end(cx: &mut TestAppContext) {
     table_handles::run(&j, cx);
     table_styles::run(&j, cx);
     table_formulas::run(&j, cx);
-    embeds::run(&j, cx);
     find_mouse::run(&j, cx);
     csv::run(&j, cx);
     history_panes::run(&j, cx);

@@ -309,9 +309,7 @@ impl Shell {
             }
             self.history.remove(&path);
             self.pane_mut().path = None;
-            self.graph_stale = true;
             self.push_names(cx);
-            self.refresh_graph(cx);
         }
     }
 
@@ -336,10 +334,8 @@ impl Shell {
             if let Some(text) = rewritten {
                 (note.tags, note.links) = Note::index(&text);
                 changed.push(note.path.clone());
-                self.graph_stale = true;
             }
         }
-        self.refresh_graph(cx);
         // The other pane's note is reloaded here; the active pane's is up to the caller
         // (it may be leaving it).
         let showing = |pane: &Pane| {
@@ -356,7 +352,7 @@ impl Shell {
     }
 
     /// A heading of the note was renamed (the same headings but one, which reads differently): the links
-    /// and embeds of the other notes that point at it, `[[Note#old]]` and `![[Note#old]]`, now point at the new one.
+    /// of the other notes that point at it, `[[Note#old]]` and `![[Note#old]]`, now point at the new one.
     // ponytail: synchronous rewrite, limited to the notes the index says link to this one, like `relink`;
     // typing a heading rewrites them at each save, which is as often as the note is written.
     fn follow_heading(&mut self, path: &Path, before: &str, after: &str, cx: &mut Context<Self>) {
@@ -385,7 +381,7 @@ impl Shell {
         {
             let fresh = fs::read_to_string(&note.path)
                 .ok()
-                .map(|text| embed::rename_heading(&text, &name, was.1.trim(), now.1.trim()))
+                .map(|text| wiki::rename_heading(&text, &name, was.1.trim(), now.1.trim()))
                 .filter(|(_, count)| *count > 0)
                 .filter(|(text, _)| vault::write(&note.path, text).is_ok());
             if let Some((text, _)) = fresh {
@@ -402,10 +398,6 @@ impl Shell {
             {
                 self.in_pane(pane, |this| this.reload(cx));
             }
-        }
-        // A note shown here that embeds the renamed section follows too.
-        for pane in &self.panes {
-            pane.editor.update(cx, |e, cx| e.refresh_embeds(cx));
         }
     }
 
@@ -431,10 +423,6 @@ impl Shell {
         self.each_pane(|this| {
             this.flush_one(cx);
         });
-        // What was just written may be shown in an embed, in this window.
-        for pane in &self.panes {
-            pane.editor.update(cx, |e, cx| e.refresh_embeds(cx));
-        }
     }
 
     /// Another program (an agent, a sync tool) wrote the note while it was typed in: its changes
@@ -522,18 +510,7 @@ impl Shell {
                 self.pane_mut().base = content.clone();
                 self.calm();
                 let (tags, links) = markdown::index(&content);
-                // A template has neither tags nor links.
-                let (tags, links) = if vault::in_templates(&root, &path) {
-                    (Vec::new(), Vec::new())
-                } else {
-                    (tags, links)
-                };
                 let old = self.pane().path.clone();
-                // The graph only changes if the note is new, renamed or linked differently.
-                let known = self.notes.iter().find(|n| Some(&n.path) == old.as_ref());
-                if known.is_none_or(|n| n.path != path || n.links[..] != links[..]) {
-                    self.graph_stale = true;
-                }
                 // The text as it was last saved, to see which heading was renamed.
                 let before = self
                     .notes
@@ -575,7 +552,6 @@ impl Shell {
                 if let Some(before) = before {
                     self.follow_heading(&path, &before, &self.notes[0].body.clone(), cx);
                 }
-                self.refresh_graph(cx);
             }
             Err(e) => {
                 let name = self
@@ -698,11 +674,11 @@ impl Shell {
         }
     }
 
-    /// Opens the note of an embed or of a link to a heading, scrolled to what it points at: the heading,
+    /// Opens the note of a link to a heading, scrolled to what it points at: the heading,
     /// the block (a note comes back from there with Alt+Left, like after any link).
     pub(super) fn open_at(
         &mut self,
-        target: &embed::Target,
+        target: &wiki::Target,
         aside: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -713,7 +689,7 @@ impl Shell {
         }
         let anchor = target.anchor.clone();
         let at = self.pane().editor.read(cx).text();
-        let at = embed::position(at, &anchor).filter(|_| anchor != embed::Anchor::Whole);
+        let at = wiki::position(at, &anchor).filter(|_| anchor != wiki::Anchor::Whole);
         if let Some(at) = at {
             self.pane().editor.update(cx, |e, cx| e.jump(at, true, cx));
         }
@@ -747,29 +723,18 @@ impl Shell {
 
     /// Daily note: the note named after the local date, wherever it is in the
     /// vault; created with that date as title if it does not exist yet.
+    /// (No template anymore: the cut keeps plain Markdown editing only.)
     pub(super) fn open_today(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(root) = self.vault.clone() else {
-            return;
-        };
-        let name = date_name(today());
-        // No daily note yet, and a `Daily` or `Journal` template: it is born from it.
-        if self.wiki_path(&name).is_none()
-            && let Some(template) = self.daily_template()
-            && self
-                .create_from(&template, &name, &root, window, cx)
-                .is_some()
-        {
+        if self.vault.is_none() {
             return;
         }
-        self.open_wiki(&name, window, cx);
+        self.open_wiki(&date_name(today()), window, cx);
     }
 
     /// The note a `[[link]]` points to: by its name first, otherwise by an alias in its
     /// front matter.
     pub(super) fn wiki_path(&self, name: &str) -> Option<PathBuf> {
-        // A template answers no link: `[[Réunion]]` points to the note, not its template.
-        logic::wiki::resolve(&self.notes, name, |n| self.is_template(n))
-            .map(|note| note.path.clone())
+        logic::wiki::resolve(&self.notes, name, |_| false).map(|note| note.path.clone())
     }
 
     pub(super) fn open_wiki(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {

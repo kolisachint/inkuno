@@ -168,8 +168,6 @@ impl Shell {
                 | PaletteEvent::InstallUpdate => {}
                 PaletteEvent::Outline => this.toggle_outline(window, cx),
                 PaletteEvent::Comments => this.open_comments(window, cx),
-                PaletteEvent::Template(TemplateAct::Save) => this.save_as_template(window, cx),
-                PaletteEvent::Template(act) => this.open_templates(*act, window, cx),
                 PaletteEvent::Grid(op) => {
                     // The gesture goes to what is shown: a CSV's sheet, or the note.
                     match this.shown_sheet() {

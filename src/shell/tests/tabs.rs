@@ -512,15 +512,11 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
         open(cx, &note(name));
     }
     open(cx, &csv);
-    shell.update_in(cx, |s, window, cx| s.tool_as_tab(window, cx));
     cx.run_until_parked();
     let names = |cx: &mut gpui::VisualTestContext, group: usize| {
         shell.read_with(cx, |s, cx| s.tab_labels(group, cx))
     };
-    assert_eq!(
-        names(cx, 0),
-        vec!["Alpha", "Beta", "Gamma", "Données", "Graphe"]
-    );
+    assert_eq!(names(cx, 0), vec!["Alpha", "Beta", "Gamma", "Données"]);
     let right_click = |cx: &mut gpui::VisualTestContext, tab: usize| {
         cx.update(|window, _| window.refresh());
         cx.run_until_parked();

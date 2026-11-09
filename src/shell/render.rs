@@ -232,11 +232,6 @@ impl Render for Shell {
                 }
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| this.new_note_here(window, cx)))
-            .on_action(cx.listener(|this, _: &NewFromTemplate, window, cx| {
-                this.open_templates(TemplateAct::New, window, cx)
-            }))
-            // Escape in the viewer: back to the note, if its tab has one under it.
-            // (`canvas::Cancel` is the action the viewer propagates; the canvas editor is gone.)
             .on_action(cx.listener(|this, _: &canvas::Cancel, window, cx| {
                 if this.has_note(cx) {
                     window.focus(&this.pane().editor.focus_handle(cx));
@@ -252,18 +247,6 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &nav::NewFolder, window, cx| this.new_folder(window, cx)),
             )
-            .on_action(cx.listener(|this, _: &nav::ShowGraph, window, cx| {
-                this.show_nav(Mode::Graph, false, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &nav::ShowTags, window, cx| {
-                this.show_nav(Mode::Tags, false, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &nav::ShowCalendar, window, cx| {
-                this.show_nav(Mode::Calendar, false, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &nav::ShowLinks, window, cx| {
-                this.show_nav(Mode::Links, false, window, cx)
-            }))
             .on_action(
                 cx.listener(|this, _: &nav::ToggleFull, window, cx| this.toggle_full(window, cx)),
             )
@@ -375,7 +358,6 @@ impl Render for Shell {
                 this.tab_to_side(Side::Down, window, cx)
             }))
             .on_action(cx.listener(|this, _: &MoveTool, window, cx| this.move_tool(window, cx)))
-            .on_action(cx.listener(|this, _: &ToolAsTab, window, cx| this.tool_as_tab(window, cx)))
             .on_action(cx.listener(|this, _: &EvenPanes, _, cx| {
                 this.layout.even();
                 cx.notify();
@@ -703,13 +685,7 @@ impl Shell {
     }
 
     pub(super) fn recalled(&self) -> Vec<recall::Recalled> {
-        let notes: Vec<Note> = self
-            .notes
-            .iter()
-            .filter(|n| !self.is_template(n))
-            .cloned()
-            .collect();
-        recall::recall(&notes, today(), std::time::SystemTime::now())
+        recall::recall(&self.notes, today(), std::time::SystemTime::now())
     }
 
     /// The empty page, under the line where you write: the day (which opens its note), the useful
@@ -1192,19 +1168,8 @@ impl Shell {
             && self.pane().figure.is_none()
             && (listing.is_some() || board || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
-            _ if let Some(tool) = tool => note.flex().flex_col().child(match tool {
-                nav::Mode::Graph => div()
-                    .flex_1()
-                    .min_h_0()
-                    .child(self.graph.clone())
-                    .into_any_element(),
-                _ => div()
-                    .flex_1()
-                    .min_h_0()
-                    .pt(t.px(12.))
-                    .child(self.render_calendar(cx))
-                    .into_any_element(),
-            }),
+            // No tool opens as a tab anymore; the match stays so a restored layout still draws.
+            _ if let Some(_tool) = tool => note,
             _ if listing.is_some() => note.children(listing),
             _ if let Some(figure) = self.pane().figure.clone() => {
                 figure.update(cx, |figure, _| figure.sync(t));
