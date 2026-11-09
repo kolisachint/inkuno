@@ -15,12 +15,21 @@ fn a_note_is_saved_as_pdf(cx: &mut TestAppContext) {
     fs::write(root.join("cut.png"), &png[..40]).unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     shell.update_in(cx, |s, window, cx| s.open_from_nav(&note, window, cx));
-    shell.update_in(cx, |s, window, cx| window.focus(&s.pane().editor.focus_handle(cx)));
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
     // An edit not saved yet: the title changes in the editor only.
     cx.simulate_keystrokes("secondary-home end");
     cx.simulate_input(" final");
     assert_eq!(fs::read_to_string(&note).unwrap(), written);
-    let said = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.toasts.iter().map(|t| (t.tone, t.text.clone())).collect::<Vec<_>>());
+    let said = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, _| {
+            s.toasts
+                .iter()
+                .map(|t| (t.tone, t.text.clone()))
+                .collect::<Vec<_>>()
+        })
+    };
     let export = |cx: &mut gpui::VisualTestContext, to: Option<&str>| {
         // From the command palette, as a user finds it.
         cx.simulate_keystrokes("f10");
@@ -42,7 +51,14 @@ fn a_note_is_saved_as_pdf(cx: &mut TestAppContext) {
     // Its title is the edited one: the text in memory was printed, before the note was saved.
     assert!(String::from_utf8_lossy(&pdf).contains("/Title (Rapport final)"));
     let told = said(cx);
-    assert!(told.iter().any(|(tone, t)| *tone == Tone::Info && t.contains("Rapport.pdf") && t.contains("absent.png") && t.contains("cut.png") && !t.contains(" p.png")), "{told:?}");
+    assert!(
+        told.iter().any(|(tone, t)| *tone == Tone::Info
+            && t.contains("Rapport.pdf")
+            && t.contains("absent.png")
+            && t.contains("cut.png")
+            && !t.contains(" p.png")),
+        "{told:?}"
+    );
 
     // The name is taken: a second file, the first one left alone.
     export(cx, Some("Rapport.pdf"));
@@ -61,5 +77,11 @@ fn a_note_is_saved_as_pdf(cx: &mut TestAppContext) {
 
     // A folder that does not exist: the failure is said.
     export(cx, Some("absent/x.pdf"));
-    assert!(said(cx).iter().any(|(tone, t)| *tone == Tone::Failed && t.contains("PDF")), "{:?}", said(cx));
+    assert!(
+        said(cx)
+            .iter()
+            .any(|(tone, t)| *tone == Tone::Failed && t.contains("PDF")),
+        "{:?}",
+        said(cx)
+    );
 }

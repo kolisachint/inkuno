@@ -5,8 +5,8 @@
 use std::{cell::Cell, ops::Range, rc::Rc};
 
 use gpui::{
-    App, Bounds, Context, ElementInputHandler, EntityInputHandler, EventEmitter, FocusHandle, Focusable, Pixels, Point,
-    TextLayout, UTF16Selection, Window, canvas, div, prelude::*,
+    App, Bounds, Context, ElementInputHandler, EntityInputHandler, EventEmitter, FocusHandle,
+    Focusable, Pixels, Point, TextLayout, UTF16Selection, Window, canvas, div, prelude::*,
 };
 
 use crate::{
@@ -39,7 +39,14 @@ impl EventEmitter<FieldEvent> for Field {}
 
 impl Field {
     pub fn new(text: &str, theme: Theme, cx: &mut Context<Self>) -> Self {
-        Self { focus: cx.focus_handle(), line: Line::new(text), theme, layout: None, scrolls: false, scroll: Rc::default() }
+        Self {
+            focus: cx.focus_handle(),
+            line: Line::new(text),
+            theme,
+            layout: None,
+            scrolls: false,
+            scroll: Rc::default(),
+        }
     }
 
     /// One line that scrolls to keep the cursor in sight: a long search never makes its bar grow.
@@ -74,11 +81,22 @@ impl Focusable for Field {
 }
 
 impl EntityInputHandler for Field {
-    fn text_for_range(&mut self, range: Range<usize>, _: &mut Option<Range<usize>>, _: &mut Window, _: &mut Context<Self>) -> Option<String> {
+    fn text_for_range(
+        &mut self,
+        range: Range<usize>,
+        _: &mut Option<Range<usize>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<String> {
         Some(self.line.text_utf16(range))
     }
 
-    fn selected_text_range(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) -> Option<UTF16Selection> {
+    fn selected_text_range(
+        &mut self,
+        _: bool,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
         Some(self.line.utf16())
     }
 
@@ -90,26 +108,57 @@ impl EntityInputHandler for Field {
         self.line.unmark();
     }
 
-    fn replace_text_in_range(&mut self, range: Option<Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
+    fn replace_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.line.commit(range, text);
         self.changed(cx);
     }
 
-    fn replace_and_mark_text_in_range(&mut self, range: Option<Range<usize>>, text: &str, selected: Option<Range<usize>>, _: &mut Window, cx: &mut Context<Self>) {
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        selected: Option<Range<usize>>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.line.compose(range, text, selected);
         self.changed(cx);
     }
 
-    fn bounds_for_range(&mut self, range: Range<usize>, _: Bounds<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<Bounds<Pixels>> {
+    fn bounds_for_range(
+        &mut self,
+        range: Range<usize>,
+        _: Bounds<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
         // The input method's window opens under the composed text.
         let layout = self.layout.as_ref()?;
         let at = layout.position_for_index(self.line.text_utf16(0..range.start).len())?;
-        Some(Bounds::new(at, gpui::size(self.theme.px(2.), layout.line_height())))
+        Some(Bounds::new(
+            at,
+            gpui::size(self.theme.px(2.), layout.line_height()),
+        ))
     }
 
-    fn character_index_for_point(&mut self, point: Point<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<usize> {
+    fn character_index_for_point(
+        &mut self,
+        point: Point<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<usize> {
         let (Ok(at) | Err(at)) = self.layout.as_ref()?.index_for_position(point);
-        Some(self.line.text[..at.min(self.line.text.len())].encode_utf16().count())
+        Some(
+            self.line.text[..at.min(self.line.text.len())]
+                .encode_utf16()
+                .count(),
+        )
     }
 }
 
@@ -117,7 +166,13 @@ impl Render for Field {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
         let (focus, entity) = (self.focus.clone(), cx.entity());
-        let input = canvas(|_, _, _| (), move |bounds, _, window, cx| window.handle_input(&focus, ElementInputHandler::new(bounds, entity), cx)).size_0();
+        let input = canvas(
+            |_, _, _| (),
+            move |bounds, _, window, cx| {
+                window.handle_input(&focus, ElementInputHandler::new(bounds, entity), cx)
+            },
+        )
+        .size_0();
         let (shown, layout) = self.line.shown(t);
         self.layout = Some(layout.clone());
         let placed = layout.clone();
@@ -138,22 +193,42 @@ impl Render for Field {
                     cx.notify();
                 }),
             );
-        let field = line::keys(field, cx, |this| Some(&mut this.line), Self::changed).flex_1().min_w_0().cursor_text().child(input);
+        let field = line::keys(field, cx, |this| Some(&mut this.line), Self::changed)
+            .flex_1()
+            .min_w_0()
+            .cursor_text()
+            .child(input);
         if !self.scrolls {
             return field.child(shown);
         }
         // The cursor kept in sight: after drawing, the line moves by what it went out of the frame.
         let (scroll, at, room) = (self.scroll.clone(), self.line.cursor(), t.px(6.));
-        let follow = canvas(|_, _, _| (), move |frame, _, window, _| {
-            let Some(caret) = layout.position_for_index(at) else { return };
-            let x = caret.x - layout.bounds().left();
-            let was = scroll.get();
-            let now = if x - was > frame.size.width - room { x - frame.size.width + room } else if x < was { x } else { was };
-            if now != was {
-                scroll.set(now.max(gpui::px(0.)));
-                window.refresh();
-            }
-        });
-        field.relative().overflow_hidden().whitespace_nowrap().child(shown.flex_none().ml(-self.scroll.get())).child(follow.absolute().inset_0())
+        let follow = canvas(
+            |_, _, _| (),
+            move |frame, _, window, _| {
+                let Some(caret) = layout.position_for_index(at) else {
+                    return;
+                };
+                let x = caret.x - layout.bounds().left();
+                let was = scroll.get();
+                let now = if x - was > frame.size.width - room {
+                    x - frame.size.width + room
+                } else if x < was {
+                    x
+                } else {
+                    was
+                };
+                if now != was {
+                    scroll.set(now.max(gpui::px(0.)));
+                    window.refresh();
+                }
+            },
+        );
+        field
+            .relative()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .child(shown.flex_none().ml(-self.scroll.get()))
+            .child(follow.absolute().inset_0())
     }
 }

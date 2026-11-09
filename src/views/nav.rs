@@ -8,28 +8,65 @@ use std::{
 };
 
 use gpui::{
-    Context, FocusHandle, Entity, Pixels, Point, UniformListScrollHandle, Window,
-    actions, div, prelude::*, px,
+    Context, Entity, FocusHandle, Pixels, Point, UniformListScrollHandle, Window, actions, div,
+    prelude::*, px,
 };
 
 use crate::{
-    ui::theme::Theme, views::editor, views::graph,
-    views::field::Field,
-    logic::markdown::{Date, Link},
     lang::tr,
-    platform::vault,
+    logic::markdown::{Date, Link},
     logic::note::Note,
+    platform::vault,
+    ui::theme::Theme,
+    views::editor,
+    views::field::Field,
+    views::graph,
 };
 
-actions!(nav, [ShowCalendar, PrevMonth, NextMonth, ShowTree, ShowRecent, ShowGraph, ShowTags, ShowLinks, ToggleFull, Prev, Next, Fold, Unfold, Open, Close, NewFolder, Rename, Duplicate, Trash]);
+actions!(
+    nav,
+    [
+        ShowCalendar,
+        PrevMonth,
+        NextMonth,
+        ShowTree,
+        ShowRecent,
+        ShowGraph,
+        ShowTags,
+        ShowLinks,
+        ToggleFull,
+        Prev,
+        Next,
+        Fold,
+        Unfold,
+        Open,
+        Close,
+        NewFolder,
+        Rename,
+        Duplicate,
+        Trash
+    ]
+);
 // The entries of a row's menu that have no other way, for the open file, from the palette.
-actions!(nav, [OpenAside, SetIcon, ShowFolder, CopyLink, CopyPath, CopyRelative, Reveal, MoveTo]);
+actions!(
+    nav,
+    [
+        OpenAside,
+        SetIcon,
+        ShowFolder,
+        CopyLink,
+        CopyPath,
+        CopyRelative,
+        Reveal,
+        MoveTo
+    ]
+);
 
 /// Width of the rail and height of a row, at the interface's scale 1 (`Theme::px`).
 pub const RAIL: f32 = 40.;
 pub const ROW: f32 = 28.;
-/// Indent of a tree row per level of depth, at scale 1.
-pub const INDENT: f32 = 16.;
+/// Indent of a tree row per level of depth, at scale 1: tight, so deep vaults keep room.
+pub const INDENT: f32 = 12.;
 pub const LIST_W: Pixels = px(260.);
 /// Width the panel and the comments column always leave to the note.
 pub const NOTE_MIN: Pixels = px(200.);
@@ -51,10 +88,21 @@ pub enum Mode {
     Calendar,
     /// The vault search: the matches of a search, note by note.
     Search,
+    /// Outline: the headings of the open note, in the right dock.
+    Outline,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 7] = [Mode::Tree, Mode::Recent, Mode::Graph, Mode::Tags, Mode::Links, Mode::Calendar, Mode::Search];
+    pub const ALL: [Mode; 8] = [
+        Mode::Tree,
+        Mode::Recent,
+        Mode::Graph,
+        Mode::Tags,
+        Mode::Links,
+        Mode::Calendar,
+        Mode::Search,
+        Mode::Outline,
+    ];
 
     /// As written in the `layout` file.
     pub fn name(self) -> &'static str {
@@ -66,6 +114,7 @@ impl Mode {
             Mode::Links => "links",
             Mode::Calendar => "calendar",
             Mode::Search => "search",
+            Mode::Outline => "outline",
         }
     }
 
@@ -105,6 +154,53 @@ pub struct Row {
     pub depth: usize,
     /// Folder, expanded or not; `None` for a note.
     pub dir: Option<bool>,
+}
+
+/// A visible row of the outline dock: level (1 to 6), label, byte of its line, whether it
+/// parents deeper headings, whether it is folded.
+#[derive(Clone, Debug)]
+pub struct OutlineRow {
+    pub level: u8,
+    pub label: String,
+    pub at: usize,
+    pub kids: bool,
+    pub shut: bool,
+}
+
+/// Visible rows of the outline: `heads` (level, label, byte) with the subtrees folded in
+/// `collapsed` (bytes) left out. Second: the row of the cursor's section, the last heading at
+/// or before `pos`.
+pub fn outline_visible(
+    heads: &[(u8, &str, usize)],
+    pos: usize,
+    collapsed: &HashSet<usize>,
+) -> (Vec<OutlineRow>, Option<usize>) {
+    let kids: Vec<bool> = heads
+        .iter()
+        .enumerate()
+        .map(|(i, (level, _, _))| heads.get(i + 1).is_some_and(|(next, _, _)| *next > *level))
+        .collect();
+    let mut hidden: Vec<u8> = Vec::new();
+    let mut rows = Vec::new();
+    for (i, &(level, label, at)) in heads.iter().enumerate() {
+        hidden.retain(|&l| l < level);
+        if !hidden.is_empty() {
+            continue;
+        }
+        let shut = collapsed.contains(&at);
+        rows.push(OutlineRow {
+            level,
+            label: label.to_string(),
+            at,
+            kids: kids[i],
+            shut,
+        });
+        if shut && kids[i] {
+            hidden.push(level);
+        }
+    }
+    let active = rows.iter().rposition(|row| row.at <= pos);
+    (rows, active)
 }
 
 /// Narrowest detail (a note's folder) worth showing; under it, it is hidden.
@@ -171,7 +267,12 @@ impl Row {
     /// The icon that says what the row is: a folder (shut or open), a note, a table, a diagram, a picture,
     /// any other file.
     pub fn icon(&self) -> &'static str {
-        let ext = self.path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+        let ext = self
+            .path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
         match (self.dir, ext.as_str()) {
             (Some(true), _) => "folder-open.svg",
             (Some(false), _) => "folder.svg",
@@ -260,8 +361,17 @@ pub enum Do {
 /// Formats available from the current document's sharing menu.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Share {
-    MarkdownCopy, PlainCopy, MarkdownSave, PlainSave, SvgCopy, SvgSave, Png,
-    TableCopy, TableExport, ImageSave, Pdf,
+    MarkdownCopy,
+    PlainCopy,
+    MarkdownSave,
+    PlainSave,
+    SvgCopy,
+    SvgSave,
+    Png,
+    TableCopy,
+    TableExport,
+    ImageSave,
+    Pdf,
 }
 
 impl Share {
@@ -275,8 +385,14 @@ impl Share {
             Self::SvgCopy => tr("Copy as SVG", "Copier en SVG"),
             Self::SvgSave => tr("Save an SVG copy…", "Enregistrer une copie SVG…"),
             Self::Png => tr("Export as PNG", "Exporter en PNG"),
-            Self::TableCopy => tr("Copy as… (table/selection)", "Copier en… (tableau/sélection)"),
-            Self::TableExport => tr("Export as… (table/selection)", "Exporter en… (tableau/sélection)"),
+            Self::TableCopy => tr(
+                "Copy as… (table/selection)",
+                "Copier en… (tableau/sélection)",
+            ),
+            Self::TableExport => tr(
+                "Export as… (table/selection)",
+                "Exporter en… (tableau/sélection)",
+            ),
             Self::ImageSave => tr("Save an image copy…", "Enregistrer une copie de l’image…"),
         }
     }
@@ -286,7 +402,7 @@ impl Do {
     /// The shortcut that does the same as this menu entry, as currently in force;
     /// nothing when the action has none.
     pub fn keys(self, cx: &gpui::App) -> String {
-        use crate::{views::editor, ui::keys::of};
+        use crate::{ui::keys::of, views::editor};
         match self {
             Do::Open => of(cx, &Open),
             Do::NewNote => of(cx, &crate::actions::NewNote),
@@ -402,6 +518,9 @@ pub struct Nav {
     pub right_dragging: bool,
     /// Tools stacked in a dock and folded down to their header.
     pub folded: HashSet<Mode>,
+    /// Byte offsets of the outline headings folded in the right dock (in-memory only: the layout
+    /// file keeps no per-heading state).
+    pub outline_collapsed: HashSet<usize>,
 }
 
 impl Nav {
@@ -412,10 +531,18 @@ impl Nav {
         let mode = words.next().and_then(Mode::named).unwrap_or_default();
         // Then, in any order, what an older file does not have: the right dock.
         let (positional, keyed): (Vec<&str>, Vec<&str>) = words.partition(|w| !w.contains('='));
-        let key = |name: &str| keyed.iter().find_map(|w| w.strip_prefix(name)?.strip_prefix('='));
+        let key = |name: &str| {
+            keyed
+                .iter()
+                .find_map(|w| w.strip_prefix(name)?.strip_prefix('='))
+        };
         let list = |name: &str| {
             let mut tools: Vec<Mode> = Vec::new();
-            for tool in key(name).unwrap_or_default().split(',').filter_map(Mode::named) {
+            for tool in key(name)
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(Mode::named)
+            {
                 if !tools.contains(&tool) {
                     tools.push(tool);
                 }
@@ -427,8 +554,19 @@ impl Nav {
         if !left_shown.contains(&mode) {
             left_shown.insert(0, mode);
         }
-        let right: Vec<Mode> = list("right").into_iter().filter(|m| !left_shown.contains(m)).collect();
-        let right_shown = list("show").into_iter().filter(|m| right.contains(m)).collect();
+        // The outline lives in the right dock, available but hidden (the zen default): an older
+        // file, or none, leaves it there; an explicit `right=` (even an empty one) is respected.
+        let right: Vec<Mode> = match key("right") {
+            None => vec![Mode::Outline],
+            Some(_) => list("right")
+                .into_iter()
+                .filter(|m| !left_shown.contains(m))
+                .collect(),
+        };
+        let right_shown = list("show")
+            .into_iter()
+            .filter(|m| right.contains(m))
+            .collect();
         let folded = list("fold").into_iter().collect();
         let mut words = positional.into_iter();
         Self {
@@ -441,6 +579,7 @@ impl Nav {
             right_shown,
             right_dragging: false,
             folded,
+            outline_collapsed: HashSet::new(),
             panel: match words.next() {
                 Some("split") => Panel::Split,
                 Some("full") => Panel::Full,
@@ -475,13 +614,22 @@ impl Nav {
             Panel::Full => "full",
         };
         let (list, graph) = (f32::from(self.list_w), f32::from(self.graph_w));
-        let names = |tools: &mut dyn Iterator<Item = &Mode>| tools.map(|m| m.name()).collect::<Vec<_>>().join(",");
+        let names = |tools: &mut dyn Iterator<Item = &Mode>| {
+            tools.map(|m| m.name()).collect::<Vec<_>>().join(",")
+        };
         let mut line = format!("{} {panel} {list} {graph}", self.left_mode().name());
         if self.left_shown.len() > 1 {
             line += &format!(" left={}", names(&mut self.left_shown.iter()));
         }
-        if !self.right.is_empty() {
-            line += &format!(" right={} width={}", names(&mut self.right.iter()), f32::from(self.right_w));
+        // The stock right dock (the outline, available but hidden) is the default: older files,
+        // and fresh vaults, write no `right=` line for it.
+        let stock = self.right_shown.is_empty() && self.right == [Mode::Outline];
+        if !stock && !self.right.is_empty() {
+            line += &format!(
+                " right={} width={}",
+                names(&mut self.right.iter()),
+                f32::from(self.right_w)
+            );
             if !self.right_shown.is_empty() {
                 line += &format!(" show={}", names(&mut self.right_shown.iter()));
             }
@@ -499,7 +647,10 @@ impl Nav {
         if self.mode == mode {
             return;
         }
-        let mut view = self.parked.remove(&mode).unwrap_or_else(|| View { mode, ..View::default() });
+        let mut view = self.parked.remove(&mode).unwrap_or_else(|| View {
+            mode,
+            ..View::default()
+        });
         std::mem::swap(&mut self.mode, &mut view.mode);
         std::mem::swap(&mut self.rows, &mut view.rows);
         std::mem::swap(&mut self.rows_from, &mut view.rows_from);
@@ -531,7 +682,8 @@ impl Nav {
     /// Selects the note and expands the folders leading to it.
     pub fn reveal(&mut self, path: &Path) {
         self.sel = Some(path.to_path_buf());
-        self.open.extend(path.ancestors().skip(1).map(Path::to_path_buf));
+        self.open
+            .extend(path.ancestors().skip(1).map(Path::to_path_buf));
         self.reveal = true;
     }
 
@@ -565,12 +717,17 @@ impl Nav {
     /// Whether the row at `path` came with the last unfolding and is still fading in: the id of its fade.
     pub fn fading(&self, path: &Path) -> Option<u32> {
         let (dir, at, seq) = self.unfolded.as_ref()?;
-        (at.elapsed() < crate::ui::widgets::FADE && path.starts_with(dir) && path != dir).then_some(*seq)
+        (at.elapsed() < crate::ui::widgets::FADE && path.starts_with(dir) && path != dir)
+            .then_some(*seq)
     }
 }
 
 pub fn folder_of(sel: &Path) -> Option<PathBuf> {
-    if sel.is_dir() { Some(sel.to_path_buf()) } else { sel.parent().map(Path::to_path_buf) }
+    if sel.is_dir() {
+        Some(sel.to_path_buf())
+    } else {
+        sel.parent().map(Path::to_path_buf)
+    }
 }
 
 /// Visible rows of the tree: folders first, then notes, in alphabetical
@@ -589,19 +746,35 @@ pub fn tree_rows(
     let named = notes.iter().map(|n| (n.path.as_path(), n.name.clone()));
     let pictures = images.iter().map(|p| (p.as_path(), graph::image_name(p)));
     for (path, name) in named.chain(pictures) {
-        let parents = path.ancestors().skip(1).take_while(|a| *a != root && a.starts_with(root));
+        let parents = path
+            .ancestors()
+            .skip(1)
+            .take_while(|a| *a != root && a.starts_with(root));
         all.extend(parents);
-        files.entry(path.parent().unwrap_or(root)).or_default().push((path, name));
+        files
+            .entry(path.parent().unwrap_or(root))
+            .or_default()
+            .push((path, name));
     }
     let mut folders: HashMap<&Path, Vec<&Path>> = HashMap::new();
     for dir in all {
-        folders.entry(dir.parent().unwrap_or(root)).or_default().push(dir);
+        folders
+            .entry(dir.parent().unwrap_or(root))
+            .or_default()
+            .push(dir);
     }
-    let label = |dir: &Path| dir.file_name().unwrap_or_default().to_string_lossy().into_owned();
-    folders.values_mut().for_each(|f| f.sort_by_cached_key(|d| vault::natural(&label(d))));
-    files
+    let label = |dir: &Path| {
+        dir.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+    };
+    folders
         .values_mut()
-        .for_each(|f| f.sort_by_cached_key(|(path, name)| (vault::is_file_shown(path), vault::natural(name))));
+        .for_each(|f| f.sort_by_cached_key(|d| vault::natural(&label(d))));
+    files.values_mut().for_each(|f| {
+        f.sort_by_cached_key(|(path, name)| (vault::is_file_shown(path), vault::natural(name)))
+    });
 
     let mut rows = Vec::new();
     // Depth-first walk: (folder, depth of its content), subfolders first.
@@ -617,7 +790,11 @@ pub fn tree_rows(
             let unfolded = open.contains(*sub);
             rows.push(Row {
                 path: sub.to_path_buf(),
-                name: sub.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+                name: sub
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
                 depth,
                 dir: Some(unfolded),
             });
@@ -678,10 +855,20 @@ pub fn tag_rows(notes: &[Note], open: &HashSet<PathBuf>) -> Vec<Row> {
     for (tag, mut notes) in tagged {
         let path = tag_path(tag);
         let unfolded = open.contains(&path);
-        rows.push(Row { path, name: format!("#{tag}"), depth: 0, dir: Some(unfolded) });
+        rows.push(Row {
+            path,
+            name: format!("#{tag}"),
+            depth: 0,
+            dir: Some(unfolded),
+        });
         if unfolded {
             notes.sort_by_cached_key(|n| vault::natural(&n.name));
-            rows.extend(notes.iter().map(|n| Row { path: n.path.clone(), name: n.name.clone(), depth: 1, dir: None }));
+            rows.extend(notes.iter().map(|n| Row {
+                path: n.path.clone(),
+                name: n.name.clone(),
+                depth: 1,
+                dir: None,
+            }));
         }
     }
     rows
@@ -743,10 +930,18 @@ mod tests {
         assert_eq!(split_ext("fin."), ("fin.", ""));
         assert_eq!(split_ext(""), ("", ""));
         assert_eq!(split_ext("é 漢字 🎉.pdf"), ("é 漢字 🎉", ".pdf"));
-        let row = |file: &str, name: &str, dir| Row { path: PathBuf::from(file), name: name.into(), depth: 0, dir };
+        let row = |file: &str, name: &str, dir| Row {
+            path: PathBuf::from(file),
+            name: name.into(),
+            depth: 0,
+            dir,
+        };
         // A note's name has no `.md` (its dot is part of the name); a folder is never split.
         assert_eq!(row("n.v2.md", "n.v2", None).split(), ("n.v2", ""));
-        assert_eq!(row("Dossier.v2", "Dossier.v2", Some(false)).split(), ("Dossier.v2", ""));
+        assert_eq!(
+            row("Dossier.v2", "Dossier.v2", Some(false)).split(),
+            ("Dossier.v2", "")
+        );
         assert_eq!(row("t/a.csv", "a.csv", None).split(), ("a", ".csv"));
         // The ellipsis goes into the name, the extension stays whole.
         let width = |t: &str| t.chars().count() as f32;
@@ -757,13 +952,58 @@ mod tests {
     }
 
     #[test]
+    fn the_outline_hides_folded_sections_and_marks_the_cursor_one() {
+        let heads = vec![
+            (1u8, "Un", 0usize),
+            (2, "Deux", 10),
+            (2, "Trois", 20),
+            (1, "Quatre", 30),
+        ];
+        // No fold: every heading shows, the cursor's section is the last one at or before it.
+        let (rows, active) = outline_visible(&heads, 15, &HashSet::new());
+        assert_eq!(rows.len(), 4);
+        assert_eq!(active, Some(1));
+        assert!(rows[0].kids && !rows[1].kids && !rows[3].kids);
+        assert!(rows.iter().all(|r| !r.shut));
+        assert_eq!(rows[2].label, "Trois");
+        // Folding "Un" hides its section; a deeper section follows the cursor into "Quatre".
+        let mut shut = HashSet::new();
+        shut.insert(0);
+        let (rows, active) = outline_visible(&heads, 30, &shut);
+        assert_eq!(
+            rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(),
+            ["Un", "Quatre"]
+        );
+        assert_eq!(active, Some(1));
+        assert!(rows[0].shut && rows[0].kids);
+        // Folding a leaf changes nothing: it parents no deeper heading.
+        let mut shut = HashSet::new();
+        shut.insert(20);
+        let (rows, active) = outline_visible(&heads, 20, &shut);
+        assert_eq!(rows.len(), 4);
+        assert_eq!(active, Some(2));
+    }
+
+    #[test]
     fn every_kind_of_row_has_its_icon() {
-        let row = |file: &str, dir: Option<bool>| Row { path: PathBuf::from(file), name: String::new(), depth: 0, dir };
+        let row = |file: &str, dir: Option<bool>| Row {
+            path: PathBuf::from(file),
+            name: String::new(),
+            depth: 0,
+            dir,
+        };
         assert_eq!(row("a/Dossier.v2", Some(false)).icon(), "folder.svg");
         assert_eq!(row("a/Dossier.v2", Some(true)).icon(), "folder-open.svg");
         for (file, icon) in [
-            ("note.md", "note.svg"), ("NOTE.MD", "note.svg"), ("table.CSV", "table.svg"), ("t.tsv", "table.svg"),
-            ("schéma.svg", "diagram.svg"), ("photo.PNG", "image.svg"), ("p.jpg", "image.svg"), ("doc.pdf", "file.svg"), ("sans extension", "file.svg"),
+            ("note.md", "note.svg"),
+            ("NOTE.MD", "note.svg"),
+            ("table.CSV", "table.svg"),
+            ("t.tsv", "table.svg"),
+            ("schéma.svg", "diagram.svg"),
+            ("photo.PNG", "image.svg"),
+            ("p.jpg", "image.svg"),
+            ("doc.pdf", "file.svg"),
+            ("sans extension", "file.svg"),
         ] {
             assert_eq!(row(file, None).icon(), icon, "{file}");
         }
@@ -771,19 +1011,38 @@ mod tests {
 
     #[test]
     fn a_file_selected_in_the_tree_is_not_a_folder() {
-        let root = std::env::temp_dir().join(format!("bref-nav-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("inkuno-nav-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("Dossier.v2")).unwrap();
-        for file in ["note.md", "schéma.svg", "photo.png", "table.csv", "sans extension", "Dossier.v2/dedans.md"] {
+        for file in [
+            "note.md",
+            "schéma.svg",
+            "photo.png",
+            "table.csv",
+            "sans extension",
+            "Dossier.v2/dedans.md",
+        ] {
             fs::write(root.join(file), "").unwrap();
         }
         // A folder is its own target, even with a dot in its name; every file gives the folder it is in.
-        assert_eq!(folder_of(&root.join("Dossier.v2")), Some(root.join("Dossier.v2")));
+        assert_eq!(
+            folder_of(&root.join("Dossier.v2")),
+            Some(root.join("Dossier.v2"))
+        );
         assert_eq!(folder_of(&root), Some(root.clone()));
-        for file in ["note.md", "schéma.svg", "photo.png", "table.csv", "sans extension"] {
+        for file in [
+            "note.md",
+            "schéma.svg",
+            "photo.png",
+            "table.csv",
+            "sans extension",
+        ] {
             assert_eq!(folder_of(&root.join(file)), Some(root.clone()), "{file}");
         }
-        assert_eq!(folder_of(&root.join("Dossier.v2/dedans.md")), Some(root.join("Dossier.v2")));
+        assert_eq!(
+            folder_of(&root.join("Dossier.v2/dedans.md")),
+            Some(root.join("Dossier.v2"))
+        );
         // What is not there any more (removed outside) is looked for beside, never inside; the root of the disk is its own folder.
         assert_eq!(folder_of(&root.join("disparu.svg")), Some(root.clone()));
         assert_eq!(folder_of(Path::new("/")), Some(PathBuf::from("/")));
@@ -803,29 +1062,83 @@ mod tests {
             body: "".into(),
             lower: "".into(),
         };
-        let notes = [note("b.md"), note("Z/x.md"), note("a/c/d.md"), note("a/B.md"), note("A.md")];
+        let notes = [
+            note("b.md"),
+            note("Z/x.md"),
+            note("a/c/d.md"),
+            note("a/B.md"),
+            note("A.md"),
+        ];
         let shown = |open: &[&str]| -> Vec<String> {
             let open = open.iter().map(|d| root.join(d)).collect();
-            tree_rows(root, &notes, &[root.join("a/vide"), root.join("a")], &[root.join("a/Photo.png")], &open)
-                .iter()
-                .map(|r| format!("{}{}{}", "  ".repeat(r.depth), r.name, if r.dir.is_some() { "/" } else { "" }))
-                .collect()
+            tree_rows(
+                root,
+                &notes,
+                &[root.join("a/vide"), root.join("a")],
+                &[root.join("a/Photo.png")],
+                &open,
+            )
+            .iter()
+            .map(|r| {
+                format!(
+                    "{}{}{}",
+                    "  ".repeat(r.depth),
+                    r.name,
+                    if r.dir.is_some() { "/" } else { "" }
+                )
+            })
+            .collect()
         };
         // Folders first, case-insensitive; everything is collapsed.
         assert_eq!(shown(&[]), ["a/", "Z/", "A", "b"]);
         // A folder without notes appears too.
         // A folder's pictures follow its notes.
-        assert_eq!(shown(&["a"]), ["a/", "  c/", "  vide/", "  B", "  Photo.png", "Z/", "A", "b"]);
+        assert_eq!(
+            shown(&["a"]),
+            [
+                "a/",
+                "  c/",
+                "  vide/",
+                "  B",
+                "  Photo.png",
+                "Z/",
+                "A",
+                "b"
+            ]
+        );
         // A folder expanded inside a collapsed folder stays hidden.
         assert_eq!(shown(&["a/c", "Z"]), ["a/", "Z/", "  x", "A", "b"]);
-        assert_eq!(shown(&["a", "a/c"]), ["a/", "  c/", "    d", "  vide/", "  B", "  Photo.png", "Z/", "A", "b"]);
+        assert_eq!(
+            shown(&["a", "a/c"]),
+            [
+                "a/",
+                "  c/",
+                "    d",
+                "  vide/",
+                "  B",
+                "  Photo.png",
+                "Z/",
+                "A",
+                "b"
+            ]
+        );
 
         // Tags: in alphabetical order; an expanded tag shows its notes.
-        let tagged = |rel: &str, tags: &[&str]| Note { tags: tags.iter().map(|t| t.to_string()).collect(), ..note(rel) };
-        let notes = [tagged("b.md", &["zoo", "ami"]), tagged("A.md", &["zoo"]), note("sans.md")];
+        let tagged = |rel: &str, tags: &[&str]| Note {
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            ..note(rel)
+        };
+        let notes = [
+            tagged("b.md", &["zoo", "ami"]),
+            tagged("A.md", &["zoo"]),
+            note("sans.md"),
+        ];
         let shown = |open: &[&str]| -> Vec<String> {
             let open = open.iter().map(|t| tag_path(t)).collect();
-            tag_rows(&notes, &open).iter().map(|r| format!("{}{}", "  ".repeat(r.depth), r.name)).collect()
+            tag_rows(&notes, &open)
+                .iter()
+                .map(|r| format!("{}{}", "  ".repeat(r.depth), r.name))
+                .collect()
         };
         assert_eq!(shown(&[]), ["#ami", "#zoo"]);
         assert_eq!(shown(&["zoo"]), ["#ami", "#zoo", "  A", "  b"]);

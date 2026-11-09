@@ -14,7 +14,9 @@ impl Editor {
         if self.sel.is_empty() {
             return;
         }
-        let text = self.cells_text().unwrap_or_else(|| self.content[self.sel.clone()].to_string());
+        let text = self
+            .cells_text()
+            .unwrap_or_else(|| self.content[self.sel.clone()].to_string());
         cx.write_to_clipboard(ClipboardItem::new_string(text));
         if cut && !self.clear_cells(cx) {
             self.edit(self.sel.clone(), "", cx);
@@ -58,7 +60,10 @@ impl Editor {
         // A Markdown table, or spreadsheet or web page cells, land as a table,
         // on their own lines and reformatted.
         let line = self.line_range(self.sel.start);
-        let (sel, table) = (self.sel.clone(), md::paste_table(&text).filter(|_| !self.in_code(line.start)));
+        let (sel, table) = (
+            self.sel.clone(),
+            md::paste_table(&text).filter(|_| !self.in_code(line.start)),
+        );
         if let Some(table) = table {
             let alone = self.content[line.start..sel.start].trim().is_empty();
             let apart = line.start == 0 || self.content[..line.start].ends_with("\n\n");
@@ -68,7 +73,9 @@ impl Editor {
                 (false, _) => "\n\n",
             };
             let rest = self.line_range(sel.end);
-            let next = self.content[rest.end..].strip_prefix('\n').and_then(|n| n.lines().next());
+            let next = self.content[rest.end..]
+                .strip_prefix('\n')
+                .and_then(|n| n.lines().next());
             let tail = if !self.content[sel.end..rest.end].trim().is_empty() {
                 "\n\n"
             } else if next.is_some_and(|n| !n.trim().is_empty()) {

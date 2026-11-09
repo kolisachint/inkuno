@@ -8,6 +8,12 @@ on:
         description: Existing version tag and draft release (vX.Y.Z)
         type: string
         required: true
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing version tag and draft release (vX.Y.Z)
+        type: string
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -41,18 +47,13 @@ jobs:
           release.expected_assets(pathlib.Path.cwd(), sys.argv[1])
           release.draft(sys.argv[1])
           PYCODE
-  arch:
-    needs: validate
-    uses: ./.github/workflows/arch-package.yml
-    with:
-      tag: ${{ inputs.tag }}
   binaries:
     needs: validate
     uses: ./.github/workflows/release-binaries.yml
     with:
       tag: ${{ inputs.tag }}
   publish:
-    needs: [validate, arch, binaries]
+    needs: [validate, binaries]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

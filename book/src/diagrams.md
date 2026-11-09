@@ -115,11 +115,11 @@ It also holds **starting points**: a new diagram that already holds a few shapes
 
 ## The file
 
-A diagram is a plain SVG, saved at each change. It opens in a browser and displays on GitHub. It also carries its own source, which is what Bref reads to keep editing it.
+A diagram is a plain SVG, saved at each change. It opens in a browser and displays on GitHub. It also carries its own source, which is what Inkuno reads to keep editing it.
 
-A diagram saved by a newer Bref than yours opens in the viewer, read-only, with a notice: your version would lose what it does not know if it saved the file.
+A diagram saved by a newer Inkuno than yours opens in the viewer, read-only, with a notice: your version would lose what it does not know if it saved the file.
 
-![Opening an SVG: without Bref's source it opens in the viewer; written by a newer Bref, read-only; otherwise on the canvas, saved with the lowest version that can say what it holds](img/opening-a-diagram-file.svg)
+![Opening an SVG: without Inkuno's source it opens in the viewer; written by a newer Inkuno, read-only; otherwise on the canvas, saved with the lowest version that can say what it holds](img/opening-a-diagram-file.svg)
 
 **Share / Export**, in the existing controls at the top left, offers PNG export beside the diagram (dark on white), **Copy as SVG** and **Save an SVG copy…**. SVG copies use the current canvas, including unsaved changes, and keep the source metadata for editing. Saving a copy leaves the original path and unsaved state unchanged. An occupied destination is refused. A message reports completion or failure.
 
@@ -131,13 +131,13 @@ When a `classDiagram`, `sequenceDiagram` or `stateDiagram` is enlarged (the magn
 - **Sequence diagrams** keep their lifelines, their messages in order (`->>`, `-->>`, `-x`, `-)`), `autonumber`, and their `alt`, `opt`, `loop`, `par`, `critical` and `break` blocks with their `else` branches.
 - **State diagrams** keep their states and descriptions, `[*]`, choices, forks, joins and composite states.
 
-The shapes are placed by layers, parents above their children. What Bref cannot draw (notes, styles, `rect` colours, regions) is left out, and a message says how many lines.
+The shapes are placed by layers, parents above their children. What Inkuno cannot draw (notes, styles, `rect` colours, regions) is left out, and a message says how many lines.
 
 ## Import
 
 `import` in the palette takes an Excalidraw file (`.excalidraw`) or a draw.io file (`.drawio`, saved without compression: untick *File › Properties › Compressed*).
 
-Shapes, texts, arrows and what they hold on to are kept. Freehand strokes and pictures are not, and arrows are routed again by Bref. The message counts what could not be drawn (« 3 items not imported »).
+Shapes, texts, arrows and what they hold on to are kept. Freehand strokes and pictures are not, and arrows are routed again by Inkuno. The message counts what could not be drawn (« 3 items not imported »).
 
 ## SVG files from elsewhere
 

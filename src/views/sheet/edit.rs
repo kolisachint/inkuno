@@ -81,7 +81,10 @@ impl Sheet {
     pub(super) fn apply(&mut self, change: Change) -> Change {
         match change {
             Change::Set(cells) => {
-                let before = cells.iter().map(|&(r, c, _)| (r, c, self.table.cell(r, c).into_owned())).collect();
+                let before = cells
+                    .iter()
+                    .map(|&(r, c, _)| (r, c, self.table.cell(r, c).into_owned()))
+                    .collect();
                 for (r, c, value) in cells {
                     self.widen(c, value.chars().count());
                     self.table.set_cell(r, c, value);
@@ -99,7 +102,16 @@ impl Sheet {
                 Change::Remove(at..at + n)
             }
             Change::Remove(range) => {
-                let rows = range.clone().map(|r| self.table.row(r).into_iter().map(|c| c.into_owned()).collect()).collect();
+                let rows = range
+                    .clone()
+                    .map(|r| {
+                        self.table
+                            .row(r)
+                            .into_iter()
+                            .map(|c| c.into_owned())
+                            .collect()
+                    })
+                    .collect();
                 let at = range.start;
                 self.table.remove_rows(range);
                 Change::Insert(at, rows)
@@ -147,7 +159,11 @@ impl Sheet {
 
     pub(super) fn restore(&mut self, redo: bool, cx: &mut Context<Self>) {
         self.finish(cx);
-        let Some(batch) = (if redo { self.redo.pop() } else { self.undo.pop() }) else {
+        let Some(batch) = (if redo {
+            self.redo.pop()
+        } else {
+            self.undo.pop()
+        }) else {
             return;
         };
         let mut back: Vec<Change> = batch.into_iter().map(|c| self.apply(c)).collect();
@@ -169,8 +185,11 @@ impl Sheet {
     /// Clears the cells of the selection.
     pub(super) fn clear(&mut self, cx: &mut Context<Self>) {
         // Two selections can overlap: each cell only once.
-        let all: std::collections::BTreeSet<(usize, usize)> =
-            self.selections().into_iter().flat_map(|(rows, cols)| rows.flat_map(move |r| cols.clone().map(move |c| (r, c)))).collect();
+        let all: std::collections::BTreeSet<(usize, usize)> = self
+            .selections()
+            .into_iter()
+            .flat_map(|(rows, cols)| rows.flat_map(move |r| cols.clone().map(move |c| (r, c))))
+            .collect();
         let cells: Vec<_> = all
             .into_iter()
             .filter(|&(r, c)| !self.table.cell(r, c).is_empty())
@@ -202,7 +221,11 @@ impl Sheet {
     pub(super) fn whole_cols(&self) -> bool {
         let (tall, wide) = (self.table.rows(), self.cols());
         let all = self.selections();
-        all.iter().all(|(rows, _)| rows.start == 0 && rows.end >= tall) && !all.iter().any(|(_, cols)| cols.start == 0 && cols.end >= wide)
+        all.iter()
+            .all(|(rows, _)| rows.start == 0 && rows.end >= tall)
+            && !all
+                .iter()
+                .any(|(_, cols)| cols.start == 0 && cols.end >= wide)
     }
 
     /// The whole rows or columns of the selection: Shift+Space and Ctrl+Space, as in a spreadsheet.
@@ -223,7 +246,11 @@ impl Sheet {
             return self.delete_rows(cx);
         }
         self.finish(cx);
-        let cols: std::collections::BTreeSet<usize> = self.selections().into_iter().flat_map(|(_, cols)| cols).collect();
+        let cols: std::collections::BTreeSet<usize> = self
+            .selections()
+            .into_iter()
+            .flat_map(|(_, cols)| cols)
+            .collect();
         let mut ranges: Vec<Range<usize>> = Vec::new();
         for c in cols {
             match ranges.last_mut() {
@@ -234,7 +261,10 @@ impl Sheet {
         let first = ranges[0].start;
         self.more.clear();
         // Right to left: each removal leaves in place the columns still to remove.
-        self.commit(ranges.into_iter().rev().map(Change::RemoveCols).collect(), cx);
+        self.commit(
+            ranges.into_iter().rev().map(Change::RemoveCols).collect(),
+            cx,
+        );
         let c = first.min(self.cols() - 1);
         (self.anchor, self.cursor) = ((self.last_row(), c), (0, c));
         cx.notify();
@@ -253,17 +283,38 @@ impl Sheet {
             TableOp::RowBelow => self.insert_rows(true, cx),
             TableOp::DeleteRow => self.delete_rows(cx),
             TableOp::ColLeft | TableOp::ColRight => {
-                let at = if op == TableOp::ColLeft { cols.start } else { cols.end };
+                let at = if op == TableOp::ColLeft {
+                    cols.start
+                } else {
+                    cols.end
+                };
                 self.commit(vec![Change::InsertCols(at, 1, Vec::new())], cx);
                 (self.anchor, self.cursor) = ((r, at), (r, at));
             }
             TableOp::DuplicateRow => {
-                let copies = rows.clone().map(|r| self.table.row(r).into_iter().map(|c| c.into_owned()).collect()).collect();
+                let copies = rows
+                    .clone()
+                    .map(|r| {
+                        self.table
+                            .row(r)
+                            .into_iter()
+                            .map(|c| c.into_owned())
+                            .collect()
+                    })
+                    .collect();
                 self.commit(vec![Change::Insert(rows.end, copies)], cx);
                 self.select_to((rows.end, c), false, cx);
             }
             TableOp::DuplicateCol => {
-                let saved = (0..tall).map(|r| self.table.cells(r, cols.clone()).into_iter().map(|c| c.into_owned()).collect()).collect();
+                let saved = (0..tall)
+                    .map(|r| {
+                        self.table
+                            .cells(r, cols.clone())
+                            .into_iter()
+                            .map(|c| c.into_owned())
+                            .collect()
+                    })
+                    .collect();
                 self.commit(vec![Change::InsertCols(cols.end, cols.len(), saved)], cx);
                 (self.anchor, self.cursor) = ((r, cols.end), (r, cols.end));
             }
@@ -291,7 +342,9 @@ impl Sheet {
                 self.settle(cx);
             }
             // Removing all columns would leave no table.
-            TableOp::DeleteCol if cols.len() < wide => self.commit(vec![Change::RemoveCols(cols)], cx),
+            TableOp::DeleteCol if cols.len() < wide => {
+                self.commit(vec![Change::RemoveCols(cols)], cx)
+            }
             TableOp::SortAsc | TableOp::SortDesc => self.sort(c, op == TableOp::SortAsc, cx),
             _ => {}
         }
@@ -301,10 +354,12 @@ impl Sheet {
     /// both directions, equal rows in their previous order. Rows are not copied.
     pub(super) fn sort(&mut self, col: usize, ascending: bool, cx: &mut Context<Self>) {
         let (first, tall) = (self.first(), self.table.rows());
-        let keys: Vec<String> = (first..tall).map(|r| self.table.cell(r, col).into_owned()).collect();
+        let keys: Vec<String> = (first..tall)
+            .map(|r| self.table.cell(r, col).into_owned())
+            .collect();
         let mut perm: Vec<usize> = (0..keys.len()).collect();
-        perm.sort_by(|&a, &b| {
-            match (keys[a].trim().is_empty(), keys[b].trim().is_empty()) {
+        perm.sort_by(
+            |&a, &b| match (keys[a].trim().is_empty(), keys[b].trim().is_empty()) {
                 (true, true) => std::cmp::Ordering::Equal,
                 (true, false) => std::cmp::Ordering::Greater,
                 (false, true) => std::cmp::Ordering::Less,
@@ -312,8 +367,8 @@ impl Sheet {
                     let order = crate::logic::markdown::cell_order(&keys[a], &keys[b]);
                     if ascending { order } else { order.reverse() }
                 }
-            }
-        });
+            },
+        );
         if perm.iter().enumerate().any(|(i, &p)| i != p) {
             self.commit(vec![Change::Reorder(first, perm)], cx);
         }
@@ -323,7 +378,11 @@ impl Sheet {
         self.finish(cx);
         // The rows of all selections, grouped into ranges and removed from bottom to
         // top: each removal leaves in place the rows still to remove.
-        let rows: std::collections::BTreeSet<usize> = self.selections().into_iter().flat_map(|(rows, _)| rows).collect();
+        let rows: std::collections::BTreeSet<usize> = self
+            .selections()
+            .into_iter()
+            .flat_map(|(rows, _)| rows)
+            .collect();
         let mut ranges: Vec<Range<usize>> = Vec::new();
         for r in rows.iter().copied() {
             match ranges.last_mut() {

@@ -28,22 +28,46 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Right click in the note: its menu; Escape closes it. Its entries do what the
     // keyboard does, and those of a link act on the targeted link.
     let view = cx.update(|window, _| window.viewport_size());
-    cx.simulate_mouse_down(point(view.width / 2., view.height / 2.), MouseButton::Right, gpui::Modifiers::none());
-    assert!(shell.read_with(cx, |s, _| s.menu.as_ref().is_some_and(|m| m.text == Some(None))));
+    cx.simulate_mouse_down(
+        point(view.width / 2., view.height / 2.),
+        MouseButton::Right,
+        gpui::Modifiers::none(),
+    );
+    assert!(shell.read_with(cx, |s, _| {
+        s.menu.as_ref().is_some_and(|m| m.text == Some(None))
+    }));
     cx.simulate_keystrokes("escape");
     assert!(shell.read_with(cx, |s, _| s.menu.is_none()));
-    cx.simulate_mouse_down(point(view.width / 2., view.height / 2.), MouseButton::Right, gpui::Modifiers::none());
+    cx.simulate_mouse_down(
+        point(view.width / 2., view.height / 2.),
+        MouseButton::Right,
+        gpui::Modifiers::none(),
+    );
     cx.write_to_clipboard(ClipboardItem::new_string(" !".into()));
-    shell.update_in(cx, |s, window, cx| s.menu_do(nav::Do::Paste, None, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::Paste, None, window, cx)
+    });
     cx.run_until_parked();
     // Pasted where the click put the cursor.
-    assert!(text(cx).contains(" !") && text(cx).replace(" !", "") == "voir [la doc](https://a.b/c) ici");
+    assert!(
+        text(cx).contains(" !") && text(cx).replace(" !", "") == "voir [la doc](https://a.b/c) ici"
+    );
     let link = Link::Url("https://a.b/c".into());
     shell.update_in(cx, |s, window, cx| {
-        s.menu = Some(nav::Menu { at: point(px(0.), px(0.)), target: None, text: Some(Some(link)), commented: false, block: false, ..Default::default() });
+        s.menu = Some(nav::Menu {
+            at: point(px(0.), px(0.)),
+            target: None,
+            text: Some(Some(link)),
+            commented: false,
+            block: false,
+            ..Default::default()
+        });
         s.menu_do(nav::Do::CopyAddress, None, window, cx)
     });
-    assert_eq!(cx.read_from_clipboard().and_then(|c| c.text()).as_deref(), Some("https://a.b/c"));
+    assert_eq!(
+        cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
+        Some("https://a.b/c")
+    );
     // Without a selection, and an address in the clipboard: only the text is missing.
     j.load(cx, "", 0);
     cx.write_to_clipboard(ClipboardItem::new_string("https://a.b".into()));
@@ -54,19 +78,31 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // menu and the palette, to the wanted kind; the selection stays on its text, a gesture undoes in one go.
     j.load(cx, "un\ndeux\ntrois\n\nfin", 0);
     cx.simulate_keystrokes("shift-down shift-down shift-end");
-    for want in ["- un\n- deux\n- trois\n\nfin", "1. un\n2. deux\n3. trois\n\nfin", "- [ ] un\n- [ ] deux\n- [ ] trois\n\nfin", "un\ndeux\ntrois\n\nfin"] {
+    for want in [
+        "- un\n- deux\n- trois\n\nfin",
+        "1. un\n2. deux\n3. trois\n\nfin",
+        "- [ ] un\n- [ ] deux\n- [ ] trois\n\nfin",
+        "un\ndeux\ntrois\n\nfin",
+    ] {
         cx.simulate_keystrokes("secondary-shift-b");
         assert_eq!(text(cx), want);
     }
-    assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).selected() == "un\ndeux\ntrois"));
-    shell.update_in(cx, |s, window, cx| s.menu_do(nav::Do::Numbered, None, window, cx));
+    assert!(
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).selected()
+            == "un\ndeux\ntrois")
+    );
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::Numbered, None, window, cx)
+    });
     assert_eq!(text(cx), "1. un\n2. deux\n3. trois\n\nfin");
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("tâches");
     cx.simulate_keystrokes("down enter");
     assert_eq!(text(cx), "- [ ] un\n- [ ] deux\n- [ ] trois\n\nfin");
     // The same kind again: back to text. Undo brings back the previous list.
-    shell.update_in(cx, |s, window, cx| s.menu_do(nav::Do::Tasks, None, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::Tasks, None, window, cx)
+    });
     assert_eq!(text(cx), "un\ndeux\ntrois\n\nfin");
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(text(cx), "- [ ] un\n- [ ] deux\n- [ ] trois\n\nfin");

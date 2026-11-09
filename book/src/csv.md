@@ -4,8 +4,8 @@ A `.csv` or `.tsv` file of the vault shows in the tree and opens in a grid, in p
 
 ## Detection
 
-- **Encoding**: from the byte order mark; else UTF-8 if the file is valid UTF-8; else Windows-1252. Bref reads and writes UTF-8, UTF-16, ISO-8859-1 and Windows-1252.
-- **Delimiter**: `,` `;` tab `|` `:` or space. Bref picks the one that splits most lines into the same number of fields, quotes respected.
+- **Encoding**: from the byte order mark; else UTF-8 if the file is valid UTF-8; else Windows-1252. Inkuno reads and writes UTF-8, UTF-16, ISO-8859-1 and Windows-1252.
+- **Delimiter**: `,` `;` tab `|` `:` or space. Inkuno picks the one that splits most lines into the same number of fields, quotes respected.
 - **Header row**: the first row is a header unless it holds numbers.
 
 **To change them**, click one in the bar above the grid, or search `table` in the palette. The file is read again that way, and the choice is kept for that file. **Detect automatically** forgets it.

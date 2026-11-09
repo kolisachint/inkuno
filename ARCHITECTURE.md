@@ -1,13 +1,15 @@
 # Architecture
 
-Bref is one Rust crate built on [GPUI](https://www.gpui.rs/) (pinned at 0.2.2). This page is the
+Inkuno is one Rust crate built on [GPUI](https://www.gpui.rs/) (pinned at 0.2.2). This page is the
 map: where things live, which way the dependencies go, and the rules the code keeps.
+
+Inkuno is a rename of Bref by Andrea Larboullet Marin; its home is github.com/kolisachint/inkuno.
 
 ## Layers
 
 ```
 src/
-  main.rs      entry point: declares the layers, sends `bref mcp` to mcp::run(), then shell::run()
+  main.rs      entry point: declares the layers, sends `inkuno mcp` to mcp::run(), then shell::run()
   lang.rs      tr("English", "Français"), language detection, date and search-key names
   actions.rs   the app's actions, dispatched by shortcuts, menus and the palette
   logic/       pure functions: no gpui, no disk, no window
@@ -16,7 +18,7 @@ src/
   views/       gpui entities: editor, side panel, palette, grid, canvas, graph, viewer, board
   shell/       the window: owns the panes and the views, routes events, runs the commands
     tests/     the whole app driven by simulated keystrokes
-  mcp/         `bref mcp`: JSON-RPC over stdio for an agent. Uses logic, platform and the pure
+  mcp/         `inkuno mcp`: JSON-RPC over stdio for an agent. Uses logic, platform and the pure
                parts of ui. Nothing uses it. Its texts stay in English and do not go through tr
 ```
 
@@ -29,9 +31,9 @@ shell ──► views ──► ui ──► logic
 mcp ────────────► ui, logic, platform
 ```
 
-![The layers of Bref and which ones each uses](book/src/img/architecture-layers.svg)
+![The layers of Inkuno and which ones each uses](book/src/img/architecture-layers.svg)
 
-*Drawn with `bref mcp`; the source is in the SVG, so Bref opens it on the canvas.*
+*Drawn with `inkuno mcp`; the source is in the SVG, so Inkuno opens it on the canvas.*
 
 The test `layers_only_depend_downwards` fails when a file breaks this rule, and when a view
 reaches into the shell.
@@ -83,7 +85,7 @@ A view talks to the shell only through its events (`EditorEvent`, `SheetEvent`, 
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
 | git commands, update check | `platform/git.rs`, `platform/update.rs` |
 | a note saved as PDF | `ui/print.rs` (A4 pages as SVG, text kept as `<text>`, pure), `platform/pdf.rs` (svg2pdf, links), `Shell::export_pdf` in `shell/print.rs` (dialog, pictures and embeds read, free name) |
-| the window's door for `bref mcp` (`show`) | `platform/link.rs` (127.0.0.1 and a secret in `<config>/bref/agent`), `Shell::listen` in `shell/library.rs` |
+| the window's door for `inkuno mcp` (`show`) | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `logic/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `ui/theme.rs` |
 | icons and fonts | `ui/assets.rs` |
@@ -95,7 +97,7 @@ A view talks to the shell only through its events (`EditorEvent`, `SheetEvent`, 
 | a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `ui/keys.rs` (how keys are read and shown) |
 | the test of a feature | `shell/tests/` (`end_to_end/` is one session, one file per chapter) |
 | the user guide | `book/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
-| the MCP server (`bref mcp`) | `src/mcp/` (`mod.rs` the protocol, `notes.rs`, `draw.rs`, `guide.rs`); `main` routes `mcp` before the window. A session over pipes is `tests/mcp.rs` |
+| the MCP server (`inkuno mcp`) | `src/mcp/` (`mod.rs` the protocol, `notes.rs`, `draw.rs`, `guide.rs`); `main` routes `mcp` before the window. A session over pipes is `tests/mcp.rs` |
 
 ## How the main parts work
 
@@ -134,16 +136,16 @@ A view talks to the shell only through its events (`EditorEvent`, `SheetEvent`, 
   is not tiled, the graphics card draws it whole.
 - **Updates** (`platform/update.rs`): the latest release comes from the GitHub API through `curl`,
   at most once a day, off the UI thread, and so does the download. Reading the answer and comparing
-  versions are pure functions with unit tests; swapping `Bref.app` from a disk image is tested on a
-  real macOS by CI. `BREF_RELEASES_API` points the check at a local `file://` release description,
+  versions are pure functions with unit tests; swapping `Inkuno.app` from a disk image is tested on a
+  real macOS by CI. `INKUNO_RELEASES_API` points the check at a local `file://` release description,
   to try an update without publishing one.
 - **Startup**: the last note is read before the first frame, so the window appears with its content.
-  Icons are embedded in the binary. `bref mcp` never reaches that: `main` runs `mcp::run()` and
+  Icons are embedded in the binary. `inkuno mcp` never reaches that: `main` runs `mcp::run()` and
   leaves before the window, one JSON-RPC message at a time, stdout reserved for the protocol.
 - **Agents**: the server keeps the vault's index and rereads it when the watcher signals a change.
   It writes with the same rules as the app (atomic save, trash, a taken name refused, links
   rewritten on rename). A diagram file is produced by `Diagram::to_svg` only.
-- **Window**: on Linux Bref draws its own title bar, shadow and resize edges (client-side
+- **Window**: on Linux Inkuno draws its own title bar, shadow and resize edges (client-side
   decorations); on macOS and Windows the system does.
 
 ## Rules

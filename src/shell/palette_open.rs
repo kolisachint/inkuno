@@ -4,7 +4,13 @@ use super::*;
 
 impl Shell {
     /// Asks for a line of free text (a URL) in the palette, then passes it to `then`.
-    pub(super) fn ask_text(&mut self, label: &'static str, window: &mut Window, cx: &mut Context<Self>, then: fn(&mut Self, String, &mut Window, &mut Context<Self>)) {
+    pub(super) fn ask_text(
+        &mut self,
+        label: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        then: fn(&mut Self, String, &mut Window, &mut Context<Self>),
+    ) {
         let theme = self.theme;
         let palette = cx.new(|cx| Palette::prompt(label, "", theme, cx));
         cx.subscribe_in(&palette, window, move |this, _, event, window, cx| {
@@ -26,18 +32,6 @@ impl Shell {
         cx.notify();
     }
 
-    /// Outline of the note: the list of its headings, the one of the current
-    /// section preselected. The heading browsed shows as a preview, Enter leaves the cursor there,
-    /// Escape puts it back where it was.
-    pub(super) fn open_outline(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let heads = markdown::headings(self.pane().editor.read(cx).text())
-            .into_iter()
-            .map(|(level, title, at)| (format!("{}{title}", "  ".repeat(level as usize - 1)), at))
-            .collect();
-        let none = tr("This note has no headings", "Cette note n'a pas de titres");
-        self.open_places(tr("Outline", "Plan"), none, heads, window, cx)
-    }
-
     /// The note's comments, in the same list as its outline: the commented text, then
     /// what is said about it.
     pub(super) fn open_comments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -45,17 +39,38 @@ impl Shell {
         let said = markdown::all_comments(self.pane().editor.read(cx).text())
             .into_iter()
             .map(|n| {
-                let who = if n.noted.is_empty() { n.scope.clone() } else { n.noted.to_string() };
-                (if who.is_empty() { n.said.to_string() } else { format!("{who} — {}", n.said) }, n.at)
+                let who = if n.noted.is_empty() {
+                    n.scope.clone()
+                } else {
+                    n.noted.to_string()
+                };
+                (
+                    if who.is_empty() {
+                        n.said.to_string()
+                    } else {
+                        format!("{who} — {}", n.said)
+                    },
+                    n.at,
+                )
             })
             .collect();
-        let none = tr("This note has no comments", "Cette note n'a pas de commentaires");
+        let none = tr(
+            "This note has no comments",
+            "Cette note n'a pas de commentaires",
+        );
         self.open_places(tr("Comments", "Commentaires"), none, said, window, cx)
     }
 
     /// List of places in the note (label, byte), the one we are at preselected; with
     /// none, `none` says so.
-    pub(super) fn open_places(&mut self, title: &str, none: &str, heads: Vec<(String, usize)>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_places(
+        &mut self,
+        title: &str,
+        none: &str,
+        heads: Vec<(String, usize)>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.vault.is_none() || self.pane().file.is_some() {
             return;
         }
@@ -67,11 +82,16 @@ impl Shell {
             return cx.notify();
         }
         let current = heads.iter().rposition(|(_, at)| *at <= before).unwrap_or(0);
-        let (theme, options) = (self.theme, heads.iter().map(|(label, _)| label.clone()).collect());
+        let (theme, options) = (
+            self.theme,
+            heads.iter().map(|(label, _)| label.clone()).collect(),
+        );
         let palette = cx.new(|cx| Palette::choose(title, options, "", theme, cx).select(current));
         cx.subscribe_in(&palette, window, move |this, palette, event, window, cx| {
             let to = match event {
-                PaletteEvent::Preview(_) | PaletteEvent::Submit(_) => palette.read(cx).chosen().and_then(|i| heads.get(i)),
+                PaletteEvent::Preview(_) | PaletteEvent::Submit(_) => {
+                    palette.read(cx).chosen().and_then(|i| heads.get(i))
+                }
                 _ => None,
             };
             let (at, top) = to.map_or((before, false), |(_, at)| (*at, true));
@@ -88,11 +108,21 @@ impl Shell {
         cx.notify();
     }
 
-    pub(super) fn open_palette(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_palette(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.show_palette(query, window, cx)
     }
 
-    pub(super) fn show_palette(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_palette(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.vault.is_none() {
             return;
         }
@@ -105,23 +135,36 @@ impl Shell {
                 name: n.name.clone(),
                 path: n.path.clone(),
                 tags: n.tags.clone(),
-                days: now.duration_since(n.mtime).ok().map(|age| age.as_secs() / 86_400),
+                days: now
+                    .duration_since(n.mtime)
+                    .ok()
+                    .map(|age| age.as_secs() / 86_400),
                 body: n.body.clone(),
                 lower: n.lower.clone(),
             })
             // The vault's other files (tables, images, diagrams) are also found by their name.
-            .chain(self.images.iter().map(|path| Entry {
-                name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-                path: path.clone(),
-                ..Entry::default()
+            .chain(self.images.iter().map(|path| {
+                Entry {
+                    name: path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                    path: path.clone(),
+                    ..Entry::default()
+                }
             }))
             .collect();
         let root = self.vault.clone().unwrap_or_default();
         let theme = self.theme;
         let updates = self.prefs.updates;
-        let installable = self.update.as_ref().filter(|r| r.asset.is_some()).map(|r| r.version.clone());
+        let installable = self
+            .update
+            .as_ref()
+            .filter(|r| r.asset.is_some())
+            .map(|r| r.version.clone());
         let table = self.shown_sheet().is_some();
-        let lists = self.pane().file.is_none() && self.pane().listing.is_none() && !self.board_shown(cx);
+        let lists =
+            self.pane().file.is_none() && self.pane().listing.is_none() && !self.board_shown(cx);
         let cells = lists && self.pane().editor.read(cx).in_table();
         let swap = !self.swapped.is_empty();
         let (commands, here) = self.palette_commands(window, cx);
@@ -155,7 +198,7 @@ impl Shell {
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
                 PaletteEvent::ToggleUpdates => this.toggle_updates(cx),
                 PaletteEvent::CheckUpdate => this.check_now(cx),
-                PaletteEvent::Outline => this.open_outline(window, cx),
+                PaletteEvent::Outline => this.toggle_outline(window, cx),
                 PaletteEvent::Comments => this.open_comments(window, cx),
                 PaletteEvent::Template(TemplateAct::Save) => this.save_as_template(window, cx),
                 PaletteEvent::Template(act) => this.open_templates(*act, window, cx),
@@ -208,20 +251,168 @@ impl Shell {
 
     /// The catalogue commands the view can do, with their keys, the view's own first
     /// (how many: the second number). Those it cannot do are not offered.
-    pub(super) fn palette_commands(&self, window: &mut Window, cx: &mut Context<Self>) -> (Vec<commands::Command>, usize) {
+    pub(super) fn palette_commands(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Vec<commands::Command>, usize) {
         use commands::Group;
-        let available: std::collections::HashSet<&str> = window.available_actions(cx).iter().map(|action| action.name()).collect();
+        let available: std::collections::HashSet<&str> = window
+            .available_actions(cx)
+            .iter()
+            .map(|action| action.name())
+            .collect();
         let here = self.here_group(cx).0;
-        let list = commands::catalog()
+        let mut list: Vec<commands::Command> = commands::catalog()
             .into_iter()
             .filter(|(action, ..)| available.contains(action))
             // Gestures of a block, a table or a diagram only count there: elsewhere, they would do nothing.
-            .filter(|&(_, _, _, group)| !matches!(group, Group::Block | Group::Table | Group::Diagram) || Some(group) == here)
+            .filter(|&(_, _, _, group)| {
+                !matches!(group, Group::Block | Group::Table | Group::Diagram)
+                    || Some(group) == here
+            })
             .filter_map(|(action, label, icon, group)| {
                 let keys = keys::of(cx, cx.build_action(action, None).ok()?.as_ref());
-                Some(commands::Command { action, label, icon, group, keys })
+                Some(commands::Command {
+                    action,
+                    label,
+                    icon,
+                    group,
+                    keys,
+                })
             })
             .collect();
+        // Aliases: actions found by typing what they do. Most name chorded actions the
+        // catalogue does not (multicursor, column alignment); the block transforms below
+        // repeat catalogue lines on purpose (overrule 2026-11-08: `›` stays a blessed path
+        // next to `/` and the grip). Same availability and Group rules as the catalogue
+        // lines above; the keys shown come from the bindings in effect. An alias the
+        // catalogue already names is set aside, so no action lists twice.
+        let aliases: Vec<(&str, &'static str, &'static str, Group)> = vec![
+            (
+                "editor::SelectNext",
+                tr(
+                    "Multicursor: select the next occurrence",
+                    "Multicurseur : prendre l'occurrence suivante",
+                ),
+                "in-selection.svg",
+                Group::Note,
+            ),
+            (
+                "editor::AlignLeft",
+                tr(
+                    "Align the column of the cursor to the left",
+                    "Aligner la colonne du curseur à gauche",
+                ),
+                "table.svg",
+                Group::Table,
+            ),
+            (
+                "editor::AlignCenter",
+                tr(
+                    "Center the column of the cursor",
+                    "Centrer la colonne du curseur",
+                ),
+                "table.svg",
+                Group::Table,
+            ),
+            (
+                "editor::AlignRight",
+                tr(
+                    "Align the column of the cursor to the right",
+                    "Aligner la colonne du curseur à droite",
+                ),
+                "table.svg",
+                Group::Table,
+            ),
+            (
+                "editor::BlockHeading1",
+                tr("Turn into heading 1", "Transformer en titre 1"),
+                "c-heading.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockHeading2",
+                tr("Turn into heading 2", "Transformer en titre 2"),
+                "c-heading.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockHeading3",
+                tr("Turn into heading 3", "Transformer en titre 3"),
+                "c-heading.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockBullet",
+                tr("Turn into a bulleted list", "Transformer en liste à puces"),
+                "list-bullet.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockOrdered",
+                tr(
+                    "Turn into a numbered list",
+                    "Transformer en liste numérotée",
+                ),
+                "list-number.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockTask",
+                tr("Turn into a task list", "Transformer en liste de tâches"),
+                "list-task.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockQuote",
+                tr("Turn into a quote", "Transformer en citation"),
+                "c-quote.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockCode",
+                tr("Turn into a code block", "Transformer en bloc de code"),
+                "code.svg",
+                Group::Block,
+            ),
+            (
+                "editor::BlockDuplicate",
+                tr("Duplicate the block", "Dupliquer le bloc"),
+                "copy.svg",
+                Group::Block,
+            ),
+            (
+                "app::ToggleFocus",
+                tr(
+                    "Focus mode: hide the sidebars, the note alone",
+                    "Mode focus : masquer les panneaux, la note seule",
+                ),
+                "expand.svg",
+                Group::Look,
+            ),
+        ];
+        let seen: std::collections::HashSet<&str> = list.iter().map(|c| c.action).collect();
+        list.extend(
+            aliases
+                .into_iter()
+                .filter(|(action, ..)| !seen.contains(action))
+                .filter(|(action, ..)| available.contains(action))
+                .filter(|&(_, _, _, group)| {
+                    !matches!(group, Group::Block | Group::Table | Group::Diagram)
+                        || Some(group) == here
+                })
+                .filter_map(|(action, label, icon, group)| {
+                    let keys = keys::of(cx, cx.build_action(action, None).ok()?.as_ref());
+                    Some(commands::Command {
+                        action,
+                        label,
+                        icon,
+                        group,
+                        keys,
+                    })
+                }),
+        );
         commands::arrange(list, here)
     }
 

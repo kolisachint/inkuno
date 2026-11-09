@@ -1,8 +1,17 @@
 use super::*;
 use crate::views::sheet::summary;
 
-fn window<'a>(cx: &'a mut TestAppContext, tag: &str, files: &[(&str, &[u8])]) -> (PathBuf, Entity<Shell>, &'a mut gpui::VisualTestContext, std::sync::MutexGuard<'static, ()>) {
-    let root = std::env::temp_dir().join(format!("bref-table-open-{tag}-{}", std::process::id()));
+fn window<'a>(
+    cx: &'a mut TestAppContext,
+    tag: &str,
+    files: &[(&str, &[u8])],
+) -> (
+    PathBuf,
+    Entity<Shell>,
+    &'a mut gpui::VisualTestContext,
+    std::sync::MutexGuard<'static, ()>,
+) {
+    let root = std::env::temp_dir().join(format!("inkuno-table-open-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let config = isolated_config(&root);
@@ -71,13 +80,20 @@ fn an_empty_csv_opens_as_a_table(cx: &mut TestAppContext) {
             _ => summary(0, 0),
         };
         assert_eq!(got, want, "{name}");
-        assert!(shell.read_with(cx, |s, _| s.toasts.is_empty()), "{name}: a message is left");
+        assert!(
+            shell.read_with(cx, |s, _| s.toasts.is_empty()),
+            "{name}: a message is left"
+        );
     }
     // Emptied from outside while open: the table stays, empty.
     fs::write(root.join("header.csv"), b"x,y\n1,2\n").unwrap();
     open(&shell, cx, &root, "header.csv");
     fs::write(root.join("header.csv"), b"").unwrap();
-    shell.update(cx, |s, cx| s.shown_sheet().unwrap().update(cx, |sheet, cx| sheet.reload_if_changed(cx)));
+    shell.update(cx, |s, cx| {
+        s.shown_sheet()
+            .unwrap()
+            .update(cx, |sheet, cx| sheet.reload_if_changed(cx))
+    });
     frames(cx);
     assert!(shown(&shell, cx), "emptied from outside: the table is gone");
 }
@@ -87,7 +103,9 @@ fn an_empty_csv_opens_as_a_table(cx: &mut TestAppContext) {
 fn a_table_opened_from_the_editor_stays(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = window(cx, "focus", &[("data.csv", b"a,b\n1,2\n")]);
     let focus_editor = |cx: &mut gpui::VisualTestContext| {
-        shell.update_in(cx, |s, window, cx| window.focus(&s.pane().editor.focus_handle(cx)));
+        shell.update_in(cx, |s, window, cx| {
+            window.focus(&s.pane().editor.focus_handle(cx))
+        });
         frames(cx);
     };
     for how in ["open_note", "palette", "link"] {
@@ -103,17 +121,32 @@ fn a_table_opened_from_the_editor_stays(cx: &mut TestAppContext) {
                 frames(cx);
             }
             _ => {
-                shell.update_in(cx, |s, window, cx| s.follow(&markdown::Link::Wiki("data.csv".into()), window, cx));
+                shell.update_in(cx, |s, window, cx| {
+                    s.follow(&markdown::Link::Wiki("data.csv".into()), window, cx)
+                });
                 frames(cx);
             }
         }
-        assert!(shown(&shell, cx), "{how}: the note replaced the table at the next frame");
+        assert!(
+            shown(&shell, cx),
+            "{how}: the note replaced the table at the next frame"
+        );
         // Typing goes to the table.
         cx.simulate_keystrokes("x enter");
         frames(cx);
-        let text = shell.read_with(cx, |s, cx| s.shown_sheet().unwrap().read(cx).table().row(0).join("|"));
-        assert!(text.contains('x'), "{how}: typing did not reach the table: {text}");
-        assert!(!fs::read_to_string(root.join("Note.md")).unwrap().contains('x'), "{how}: typing went to the note");
+        let text = shell.read_with(cx, |s, cx| {
+            s.shown_sheet().unwrap().read(cx).table().row(0).join("|")
+        });
+        assert!(
+            text.contains('x'),
+            "{how}: typing did not reach the table: {text}"
+        );
+        assert!(
+            !fs::read_to_string(root.join("Note.md"))
+                .unwrap()
+                .contains('x'),
+            "{how}: typing went to the note"
+        );
     }
 }
 
@@ -121,21 +154,39 @@ fn a_table_opened_from_the_editor_stays(cx: &mut TestAppContext) {
 /// first pane keeps its note.
 #[gpui::test]
 fn a_table_opened_in_the_second_pane_stays(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = window(cx, "two", &[("data.csv", b"a,b\n1,2\n"), ("Other.md", b"# Other\n")]);
+    let (root, shell, cx, _config) = window(
+        cx,
+        "two",
+        &[("data.csv", b"a,b\n1,2\n"), ("Other.md", b"# Other\n")],
+    );
     cx.simulate_keystrokes("secondary-\\");
     cx.simulate_input("Other");
     cx.simulate_keystrokes("enter");
     frames(cx);
     assert_eq!(shell.read_with(cx, |s, _| s.active), 1);
-    shell.update_in(cx, |s, window, cx| window.focus(&s.pane().editor.focus_handle(cx)));
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
     frames(cx);
     open(&shell, cx, &root, "data.csv");
     shell.update(cx, |s, cx| s.open_note(&root.join("data.csv"), cx));
     frames(cx);
-    assert!(shown(&shell, cx), "the note replaced the table in the second pane");
+    assert!(
+        shown(&shell, cx),
+        "the note replaced the table in the second pane"
+    );
     assert_eq!(shell.read_with(cx, |s, _| s.active), 1);
-    assert!(shell.read_with(cx, |s, _| s.panes[0].sheet().is_none() && s.panes[0].path.as_deref() == Some(root.join("Note.md").as_path())));
+    assert!(shell.read_with(cx, |s, _| s.panes[0].sheet().is_none()
+        && s.panes[0].path.as_deref() == Some(root.join("Note.md").as_path())));
     cx.simulate_keystrokes("x enter");
     frames(cx);
-    assert!(shell.read_with(cx, |s, cx| s.shown_sheet().unwrap().read(cx).table().row(0).join("|").contains('x')));
+    assert!(shell.read_with(cx, |s, cx| {
+        s.shown_sheet()
+            .unwrap()
+            .read(cx)
+            .table()
+            .row(0)
+            .join("|")
+            .contains('x')
+    }));
 }

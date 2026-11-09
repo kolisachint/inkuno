@@ -10,6 +10,7 @@ pub(super) struct LayoutKey {
     pub(super) width: u32,
     pub(super) size: u32,
     pub(super) cursor: usize,
+    pub(super) revealed: Option<usize>,
     pub(super) marked: Option<Range<usize>>,
 }
 
@@ -30,6 +31,7 @@ pub(super) struct Laid {
     pub(super) size: u32,
     pub(super) len: usize,
     pub(super) cursor: usize,
+    pub(super) revealed: Option<usize>,
     pub(super) fences: usize,
     pub(super) dollars: usize,
     /// Length of the front matter.
@@ -61,7 +63,13 @@ pub(super) struct Plan {
 }
 
 /// Reuses `count` lines of the old layout, placed from `y`, their text shifted by `delta`.
-pub(super) fn reuse(old: &mut std::vec::IntoIter<Row>, count: usize, delta: isize, y: &mut Pixels, rows: &mut Vec<Row>) {
+pub(super) fn reuse(
+    old: &mut std::vec::IntoIter<Row>,
+    count: usize,
+    delta: isize,
+    y: &mut Pixels,
+    rows: &mut Vec<Row>,
+) {
     let mut by = None;
     for mut row in old.by_ref().take(count) {
         let by = *by.get_or_insert(*y - row.y);
@@ -122,13 +130,21 @@ impl Geo {
         let f = self.frame;
         // The last line counts for the last column (or row): its "+" shows there.
         let along = |lines: &[Pixels], v: Pixels| {
-            (0..lines.len() - 1).find(|&i| v >= lines[i] && (v < lines[i + 1] || (i + 2 == lines.len() && v <= lines[i + 1])))
+            (0..lines.len() - 1).find(|&i| {
+                v >= lines[i] && (v < lines[i + 1] || (i + 2 == lines.len() && v <= lines[i + 1]))
+            })
         };
-        let (above, aside) = (at.y >= f.top() - GRIP_REACH && at.y <= f.bottom(), at.x >= f.left() - GRIP_REACH && at.x <= f.right());
+        let (above, aside) = (
+            at.y >= f.top() - GRIP_REACH && at.y <= f.bottom(),
+            at.x >= f.left() - GRIP_REACH && at.x <= f.right(),
+        );
         Near {
             col: along(&self.xs, at.x).filter(|_| above && at.x >= f.left() && at.x <= f.right()),
             row: along(&self.ys, at.y).filter(|_| aside && at.y >= f.top() && at.y <= f.bottom()),
-            corner: at.x >= f.left() - GRIP_REACH && at.x <= f.left() + px(16.) && at.y >= f.top() - GRIP_REACH && at.y <= f.top() + px(16.),
+            corner: at.x >= f.left() - GRIP_REACH
+                && at.x <= f.left() + px(16.)
+                && at.y >= f.top() - GRIP_REACH
+                && at.y <= f.top() + px(16.),
         }
     }
 
@@ -137,12 +153,27 @@ impl Geo {
         let f = self.frame;
         let shown = |x: Pixels| x >= f.left() - px(1.) && x <= f.right() + px(1.);
         // The corner first: it wins over the "+" of the first line, which brushes it.
-        let mut parts = vec![(Part::Corner, Bounds::new(f.origin - point(GRIP + GRIP_GAP, GRIP + GRIP_GAP), size(GRIP, GRIP)))];
+        let mut parts = vec![(
+            Part::Corner,
+            Bounds::new(
+                f.origin - point(GRIP + GRIP_GAP, GRIP + GRIP_GAP),
+                size(GRIP, GRIP),
+            ),
+        )];
         for (b, &x) in self.xs.iter().enumerate().filter(|(_, x)| shown(**x)) {
-            parts.push((Part::JoinCol(b), Bounds::new(point(x - px(6.), f.top() - px(18.)), size(px(12.), px(16.)))));
+            parts.push((
+                Part::JoinCol(b),
+                Bounds::new(point(x - px(6.), f.top() - px(18.)), size(px(12.), px(16.))),
+            ));
         }
         for (b, &y) in self.ys.iter().enumerate().skip(1) {
-            parts.push((Part::JoinRow(b), Bounds::new(point(f.left() - px(18.), y - px(6.)), size(px(16.), px(12.)))));
+            parts.push((
+                Part::JoinRow(b),
+                Bounds::new(
+                    point(f.left() - px(18.), y - px(6.)),
+                    size(px(16.), px(12.)),
+                ),
+            ));
         }
         // A badge in the middle of its column (or row), smaller if room is short.
         for c in 0..self.cols() {
@@ -150,7 +181,13 @@ impl Geo {
             let long = GRIP_LONG.min(to - from - px(12.));
             if long >= px(10.) {
                 let mid = (from + to) / 2.;
-                parts.push((Part::Col(c), Bounds::new(point(mid - long / 2., f.top() - GRIP - GRIP_GAP), size(long, GRIP))));
+                parts.push((
+                    Part::Col(c),
+                    Bounds::new(
+                        point(mid - long / 2., f.top() - GRIP - GRIP_GAP),
+                        size(long, GRIP),
+                    ),
+                ));
             }
         }
         for r in 0..self.tall() {
@@ -158,7 +195,13 @@ impl Geo {
             let long = GRIP_LONG.min(to - from - px(8.));
             if long >= px(10.) {
                 let mid = (from + to) / 2.;
-                parts.push((Part::Row(r), Bounds::new(point(f.left() - GRIP - GRIP_GAP, mid - long / 2.), size(GRIP, long))));
+                parts.push((
+                    Part::Row(r),
+                    Bounds::new(
+                        point(f.left() - GRIP - GRIP_GAP, mid - long / 2.),
+                        size(GRIP, long),
+                    ),
+                ));
             }
         }
         parts
@@ -166,14 +209,20 @@ impl Geo {
 
     /// Handle `part` shows: the pointer is on its column or row, or it holds what was grabbed.
     pub(super) fn visible(&self, part: Part, near: Near, pick: Option<&Pick>) -> bool {
-        let (all_rows, all_cols) = pick.map_or((false, false), |p| (p.rows.len() == self.tall(), p.cols.len() == self.cols()));
-        let held = |hold: bool, n: usize, range: Option<&Range<usize>>| hold && range.is_some_and(|r| r.contains(&n));
+        let (all_rows, all_cols) = pick.map_or((false, false), |p| {
+            (p.rows.len() == self.tall(), p.cols.len() == self.cols())
+        });
+        let held = |hold: bool, n: usize, range: Option<&Range<usize>>| {
+            hold && range.is_some_and(|r| r.contains(&n))
+        };
         match part {
             Part::Col(c) => near.col == Some(c) || held(all_rows, c, pick.map(|p| &p.cols)),
             Part::Row(r) => near.row == Some(r) || held(all_cols, r, pick.map(|p| &p.rows)),
             Part::Corner => near.corner || (all_rows && all_cols),
             // A "+" only shows under the pointer: its zone, near the handles, is enough.
-            Part::JoinCol(_) | Part::JoinRow(_) => near.col.is_some() || near.row.is_some() || near.corner,
+            Part::JoinCol(_) | Part::JoinRow(_) => {
+                near.col.is_some() || near.row.is_some() || near.corner
+            }
         }
     }
 
@@ -183,19 +232,29 @@ impl Geo {
             Part::Col(_) => (&self.xs, at.x, 0),
             _ => (&self.ys, at.y, 1),
         };
-        (first..lines.len()).min_by_key(|&b| (f32::from((lines[b] - at).abs()) * 100.) as i64).unwrap_or(first)
+        (first..lines.len())
+            .min_by_key(|&b| (f32::from((lines[b] - at).abs()) * 100.) as i64)
+            .unwrap_or(first)
     }
 
     /// The `rows` × `cols` cells, in pixels.
     pub(super) fn cells(&self, rows: &Range<usize>, cols: &Range<usize>) -> Bounds<Pixels> {
-        let (x0, x1) = (self.xs[cols.start.min(self.cols())], self.xs[cols.end.min(self.cols())]);
-        let (y0, y1) = (self.ys[rows.start.min(self.tall())], self.ys[rows.end.min(self.tall())]);
+        let (x0, x1) = (
+            self.xs[cols.start.min(self.cols())],
+            self.xs[cols.end.min(self.cols())],
+        );
+        let (y0, y1) = (
+            self.ys[rows.start.min(self.tall())],
+            self.ys[rows.end.min(self.tall())],
+        );
         Bounds::new(point(x0, y0), size(x1 - x0, y1 - y0))
     }
 }
 
 /// A laid out logical line (it may take several visual lines).
 pub(super) struct Row {
+    /// The line shows its source (its markers): the clicked or edited one.
+    pub(super) live: bool,
     pub(super) start: usize,
     pub(super) len: usize,
     pub(super) y: Pixels,
@@ -235,10 +294,19 @@ impl Row {
         let p = match &self.grid {
             Some(grid) => grid.pos(i.min(self.len), self.lh),
             None => match &self.shaped.lead {
-                Some(lead) if i < lead.len => lead.line.position_for_index(i, self.lh).unwrap_or_default(),
+                Some(lead) if i < lead.len => {
+                    lead.line.position_for_index(i, self.lh).unwrap_or_default()
+                }
                 lead => {
-                    let (skip, at) = lead.as_ref().map_or((0, px(0.)), |l| (l.len, l.width));
-                    let p = self.shaped.line.as_ref().and_then(|l| l.position_for_index(self.shown(i.min(self.len)) - skip, self.lh));
+                    let skip = self.shaped.skip;
+                    let at = lead.as_ref().map_or(px(0.), |l| l.width);
+                    let p = self.shaped.line.as_ref().and_then(|l| {
+                        // Bytes of a hidden heading marker sit at the line start.
+                        l.position_for_index(
+                            self.shown(i.min(self.len)).saturating_sub(skip),
+                            self.lh,
+                        )
+                    });
                     p.map_or_else(Default::default, |p| point(p.x + at, p.y))
                 }
             },
@@ -283,32 +351,45 @@ impl Row {
         if let Some(lead) = &self.shaped.lead {
             // On the marker (first visual line, left of the title), or in the title shifted by it.
             if p.y < self.lh && p.x < lead.width {
-                return lead.line.closest_index_for_position(p, self.lh).unwrap_or_else(|i| i).min(lead.len);
+                return lead
+                    .line
+                    .closest_index_for_position(p, self.lh)
+                    .unwrap_or_else(|i| i)
+                    .min(lead.len);
             }
             let p = point(p.x - lead.width, p.y);
-            return match self.shaped.line.as_ref().map(|l| l.closest_index_for_position(p, self.lh)) {
-                Some(Ok(i) | Err(i)) => self.source(i + lead.len),
-                None => lead.len,
+            return match self
+                .shaped
+                .line
+                .as_ref()
+                .map(|l| l.closest_index_for_position(p, self.lh))
+            {
+                Some(Ok(i) | Err(i)) => self.source(i + self.shaped.skip),
+                None => self.shaped.skip,
             };
         }
         match &self.shaped.line {
             Some(l) => match l.closest_index_for_position(p, self.lh) {
-                Ok(i) | Err(i) => self.source(i),
+                Ok(i) | Err(i) => self.source(i + self.shaped.skip),
             },
-            None => 0,
+            None => self.shaped.skip,
         }
     }
 
     pub(super) fn visual_rows(&self) -> i32 {
         match &self.grid {
             Some(grid) => grid.lines,
-            None => (f32::from(self.height - self.pad - self.below() - self.gap) / f32::from(self.lh)).round() as i32,
+            None => (f32::from(self.height - self.pad - self.below() - self.gap)
+                / f32::from(self.lh))
+            .round() as i32,
         }
     }
 
     /// Visual lines of what contains byte `i`: the line, or a table cell.
     pub(super) fn lines_at(&self, i: usize) -> i32 {
-        self.grid.as_ref().map_or_else(|| self.visual_rows(), |grid| grid.lines_at(i))
+        self.grid
+            .as_ref()
+            .map_or_else(|| self.visual_rows(), |grid| grid.lines_at(i))
     }
 
     /// A table's dash line, which is not seen.
@@ -320,7 +401,10 @@ impl Row {
     pub(super) fn content_width(&self) -> Pixels {
         match &self.grid {
             Some(grid) => grid.total(),
-            None => self.shaped.line.as_ref().map_or(px(0.), |l| l.width()) + self.shaped.lead.as_ref().map_or(px(0.), |l| l.width),
+            None => {
+                self.shaped.line.as_ref().map_or(px(0.), |l| l.width())
+                    + self.shaped.lead.as_ref().map_or(px(0.), |l| l.width)
+            }
         }
     }
 }
@@ -395,6 +479,8 @@ pub(super) struct Lead {
 /// What a line displays, as long as neither it nor its context change.
 pub(super) struct Shaped {
     pub(super) line: Option<WrappedLine>,
+    /// Source bytes hidden before the shaped text (a heading's `# `, shown by `lead` or hidden with it).
+    pub(super) skip: usize,
     /// A heading's `#` marker: shaped on its own at the body size, since a line has a single font size.
     pub(super) lead: Option<Lead>,
     /// Signs displayed in place of their ASCII spelling: (start byte,
@@ -416,7 +502,13 @@ pub(super) type Figures = FastMap<u64, (u64, Drawing)>;
 /// The figure with key `key`, reused from the previous frame or drawn by `make`; if `lazy`,
 /// only reused. As long as `make` has nothing (drawing in a background task), the previous version
 /// of the same source (`family`), if there is one.
-pub(super) fn cached(old: &mut Figures, kept: &mut Figures, (key, family): (u64, u64), lazy: bool, make: impl FnOnce() -> Option<Drawing>) -> Drawing {
+pub(super) fn cached(
+    old: &mut Figures,
+    kept: &mut Figures,
+    (key, family): (u64, u64),
+    lazy: bool,
+    make: impl FnOnce() -> Option<Drawing>,
+) -> Drawing {
     if let Some(entry) = old.remove(&key).or_else(|| kept.get(&key).cloned()) {
         kept.insert(key, entry.clone());
         return entry.1;
@@ -428,7 +520,10 @@ pub(super) fn cached(old: &mut Figures, kept: &mut Figures, (key, family): (u64,
         kept.insert(key, (family, drawing.clone()));
         return drawing;
     }
-    let stale = *old.iter().find(|(_, (f, d))| *f == family && d.is_some())?.0;
+    let stale = *old
+        .iter()
+        .find(|(_, (f, d))| *f == family && d.is_some())?
+        .0;
     let entry = old.remove(&stale)?;
     kept.insert(stale, entry.clone());
     entry.1
@@ -452,7 +547,13 @@ pub struct RunStyle {
 
 /// The styles of the line `text`, `flags` (one flag word per byte), in one piece
 /// as long as nothing changes; `marked`: the byte is in the text being composed.
-pub fn text_runs(t: &Theme, text: &str, flags: &[u16], marked: impl Fn(usize) -> bool, style: &RunStyle) -> Vec<TextRun> {
+pub fn text_runs(
+    t: &Theme,
+    text: &str,
+    flags: &[u16],
+    marked: impl Fn(usize) -> bool,
+    style: &RunStyle,
+) -> Vec<TextRun> {
     let mut runs: Vec<TextRun> = Vec::new();
     let mut i = 0;
     while i < flags.len() {
@@ -469,7 +570,9 @@ pub fn text_runs(t: &Theme, text: &str, flags: &[u16], marked: impl Fn(usize) ->
             t.string
         } else if f & md::NUMBER != 0 {
             t.number
-        } else if f & md::MARK != 0 && let Some(tint) = style.tint {
+        } else if f & md::MARK != 0
+            && let Some(tint) = style.tint
+        {
             t.callout_label(tint)
         } else if f & (md::LINK | md::TAG | md::MARK | md::KEYWORD) != 0 {
             t.accent
@@ -478,20 +581,37 @@ pub fn text_runs(t: &Theme, text: &str, flags: &[u16], marked: impl Fn(usize) ->
         } else {
             t.text
         };
-        let (code, slanted) = (style.mono || f & md::CODE != 0, f & md::ITALIC != 0 || style.italic);
-        let underline = (m || f & (md::LINK | md::UNDER) != 0).then_some(UnderlineStyle {
-            thickness: px(1.),
-            color: Some(if f & md::LINK != 0 { t.accent } else { color }.opacity(if f & md::UNDER != 0 { 1. } else { 0.5 })),
-            wavy: false,
-        });
+        let (code, slanted) = (
+            style.mono || f & md::CODE != 0,
+            f & md::ITALIC != 0 || style.italic,
+        );
+        let underline =
+            (m || f & (md::LINK | md::UNDER) != 0).then_some(UnderlineStyle {
+                thickness: px(1.),
+                color: Some(
+                    if f & md::LINK != 0 { t.accent } else { color }
+                        .opacity(if f & md::UNDER != 0 { 1. } else { 0.5 }),
+                ),
+                wavy: false,
+            });
         // `upright`: the characters the app's fonts lack, in the sans, not italic.
         let run = |len: usize, upright: bool| {
             let (code, slanted) = (code && !upright, slanted && !upright);
             TextRun {
                 len,
                 font: Font {
-                    weight: if style.heading { FontWeight::SEMIBOLD } else if f & md::BOLD != 0 { FontWeight::BOLD } else { FontWeight::NORMAL },
-                    style: if slanted { FontStyle::Italic } else { FontStyle::Normal },
+                    weight: if style.heading {
+                        FontWeight::SEMIBOLD
+                    } else if f & md::BOLD != 0 {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::NORMAL
+                    },
+                    style: if slanted {
+                        FontStyle::Italic
+                    } else {
+                        FontStyle::Normal
+                    },
                     // Titles follow the chosen font, in semibold (code spans stay mono).
                     ..font(if code { mono() } else { sans() })
                 },
@@ -501,12 +621,22 @@ pub fn text_runs(t: &Theme, text: &str, flags: &[u16], marked: impl Fn(usize) ->
                 // a bit of underline in the margin if the underline changes style
                 // right at a wrap.
                 underline,
-                strikethrough: (f & md::STRIKE != 0).then_some(StrikethroughStyle { thickness: px(1.), color: Some(color) }),
+                strikethrough: (f & md::STRIKE != 0).then_some(StrikethroughStyle {
+                    thickness: px(1.),
+                    color: Some(color),
+                }),
             }
         };
-        if (code || slanted) && text.get(i..j).is_some_and(|s| s.chars().any(needs_system_font)) {
+        if (code || slanted)
+            && text
+                .get(i..j)
+                .is_some_and(|s| s.chars().any(needs_system_font))
+        {
             // Cut into pieces of the same kind: with or without such characters.
-            let mut piece = (i, needs_system_font(text[i..].chars().next().unwrap_or(' ')));
+            let mut piece = (
+                i,
+                needs_system_font(text[i..].chars().next().unwrap_or(' ')),
+            );
             for (k, c) in text[i..j].char_indices() {
                 let (k, upright) = (i + k, needs_system_font(c));
                 if upright != piece.1 {
@@ -521,6 +651,56 @@ pub fn text_runs(t: &Theme, text: &str, flags: &[u16], marked: impl Fn(usize) ->
         i = j;
     }
     runs
+}
+
+/// Byte ranges of `line` hidden when it is not the live one: its block prefix (`- `, `1. `,
+/// `> `, `- [ ] `, the indent kept so that nested items keep their level) and its inline style
+/// markers (`**`, backticks…). Links, tags, images, comments and callouts stay readable; a checked
+/// task keeps its (struck) text; code stays as is. The caller only asks for the kinds it hides.
+fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    if matches!(
+        kind,
+        Kind::Quote | Kind::Bullet | Kind::Ordered | Kind::Task(_)
+    ) {
+        let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+        if marker > indent {
+            out.push((indent, marker));
+        }
+    }
+    // A checked task dims its text: it stays.
+    if matches!(kind, Kind::Task(true)) {
+        return out;
+    }
+    // What stays readable: links, images, comments, callouts.
+    let links: Vec<Range<usize>> = md::links(line).into_iter().map(|(r, _)| r).collect();
+    let image = md::image(line).map(|(r, _)| r);
+    let comments: Vec<Range<usize>> = md::comments(line).into_iter().map(|(w, ..)| w).collect();
+    let callout = md::callout(line);
+    let kept = |i: usize| {
+        links.iter().any(|r| r.contains(&i))
+            || image.as_ref().is_some_and(|r| r.contains(&i))
+            || comments.iter().any(|r| r.contains(&i))
+            || callout.as_ref().is_some_and(|r| r.contains(&i))
+    };
+    let mut i = marker;
+    while i < line.len() {
+        if flags[i] & md::DIM != 0 && flags[i] & (md::CODE | md::QUIET) == 0 && !kept(i) {
+            let mut j = i + 1;
+            while j < line.len()
+                && flags[j] & md::DIM != 0
+                && flags[j] & (md::CODE | md::QUIET) == 0
+                && !kept(j)
+            {
+                j += 1;
+            }
+            out.push((i, j));
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    out
 }
 
 impl Editor {
@@ -586,6 +766,11 @@ impl Editor {
         for c in [laid.cursor.min(laid.len), now.min(laid.len)] {
             dirty.push(at(c)..at(c) + 1);
         }
+        // The line showing its source changed: the old one renders again, the new one shows its markers.
+        for r in [laid.revealed, self.revealed].into_iter().flatten() {
+            let r = r.min(laid.len);
+            dirty.push(at(r)..at(r) + 1);
+        }
         // Blocks not to cut: a table holds in one piece (except the inside of a very big one),
         // a quote does not lose its callout's tint.
         let block_of = |i: usize| -> Range<usize> {
@@ -607,9 +792,17 @@ impl Editor {
         let touched = self.dmg.is_some();
         let bounds = |r: &Range<usize>| {
             let (first, last) = (&rows[r.start], &rows[r.end - 1]);
-            let start = if first.start <= p { first.start } else { (first.start as isize + delta) as usize };
+            let start = if first.start <= p {
+                first.start
+            } else {
+                (first.start as isize + delta) as usize
+            };
             let end = last.start + last.len;
-            let stop = if touched && end >= q { (end as isize + delta) as usize } else { end };
+            let stop = if touched && end >= q {
+                (end as isize + delta) as usize
+            } else {
+                end
+            };
             (start, stop)
         };
         loop {
@@ -640,8 +833,13 @@ impl Editor {
                     }
                 }
                 // A very big table is cut into independent lines, except its first ones.
-                let inside = |i: usize, j: usize| big_of(i).is_some_and(|b| b.rows.contains(&j) && i + 1 < b.rows.end);
-                if r.start > 0 && rows[r.start - 1].kind == Kind::Table && !inside(r.start, r.start - 1) {
+                let inside = |i: usize, j: usize| {
+                    big_of(i).is_some_and(|b| b.rows.contains(&j) && i + 1 < b.rows.end)
+                };
+                if r.start > 0
+                    && rows[r.start - 1].kind == Kind::Table
+                    && !inside(r.start, r.start - 1)
+                {
                     whole(r, block_of(r.start - 1));
                 }
                 // The new text, too, can stick to a neighboring table or quote.
@@ -651,7 +849,11 @@ impl Editor {
                 }
                 let text = &self.content[start..stop];
                 let last = text.rsplit('\n').next().unwrap_or("");
-                if r.end < n && rows[r.end].kind == Kind::Table && md::is_table_line(last) && !inside(r.end - 1, r.end) {
+                if r.end < n
+                    && rows[r.end].kind == Kind::Table
+                    && md::is_table_line(last)
+                    && !inside(r.end - 1, r.end)
+                {
                     whole(r, block_of(r.end));
                 }
                 if r.start > 0 && rows[r.start - 1].kind == Kind::Quote {
@@ -660,15 +862,24 @@ impl Editor {
                 if r.end < n && rows[r.end].kind == Kind::Quote {
                     r.end += 1;
                 }
-                while r.start > 0 && rows[r.start].kind == Kind::Quote && rows[r.start - 1].kind == Kind::Quote {
+                while r.start > 0
+                    && rows[r.start].kind == Kind::Quote
+                    && rows[r.start - 1].kind == Kind::Quote
+                {
                     r.start -= 1;
                 }
-                while r.end < n && rows[r.end - 1].kind == Kind::Quote && rows[r.end].kind == Kind::Quote {
+                while r.end < n
+                    && rows[r.end - 1].kind == Kind::Quote
+                    && rows[r.end].kind == Kind::Quote
+                {
                     r.end += 1;
                 }
                 // The line after a table gives it its margin: it is redone with it, whether it always was
                 // one or becomes one.
-                if r.end < n && (rows[r.end - 1].kind == Kind::Table || md::is_table_line(last)) && rows[r.end].kind != Kind::Table {
+                if r.end < n
+                    && (rows[r.end - 1].kind == Kind::Table || md::is_table_line(last))
+                    && rows[r.end].kind != Kind::Table
+                {
                     r.end += 1;
                 }
                 grown |= *r != before;
@@ -683,11 +894,18 @@ impl Editor {
             let (start, stop) = bounds(&r);
             // Inside a very big table.
             let block = big_of(r.start).filter(|b| r.end < b.rows.end);
-            let big = block.map(|b| (b.geom.clone(), r.start - b.rows.start, rows[b.rows.start].start));
+            let big = block.map(|b| {
+                (
+                    b.geom.clone(),
+                    r.start - b.rows.start,
+                    rows[b.rows.start].start,
+                )
+            });
             let check = block.is_some_and(|b| r.start < b.rows.start + grid::SAMPLE);
             // The new text must change nothing in the context of the reused lines: no fence, no `$$`,
             // and, in a very big table, only table lines.
-            if start > stop || stop > len || (stop < len && self.content.as_bytes()[stop] != b'\n') {
+            if start > stop || stop > len || (stop < len && self.content.as_bytes()[stop] != b'\n')
+            {
                 return None;
             }
             let mut lines = 0;
@@ -698,20 +916,63 @@ impl Editor {
                 }
             }
             // A table going back under the threshold is laid out like a small one: redo everything.
-            if let Some(b) = block.filter(|_| big.is_some()) && b.rows.len() + lines <= r.len() + grid::BIG {
+            if let Some(b) = block.filter(|_| big.is_some())
+                && b.rows.len() + lines <= r.len() + grid::BIG
+            {
                 return None;
             }
-            regions.push(Region { old: r, start, stop, big, check });
+            regions.push(Region {
+                old: r,
+                start,
+                stop,
+                big,
+                check,
+            });
         }
-        Some(Plan { regions, fences: laid.fences, dollars: laid.dollars, after: if touched { q } else { usize::MAX }, delta })
+        Some(Plan {
+            regions,
+            fences: laid.fences,
+            dollars: laid.dollars,
+            after: if touched { q } else { usize::MAX },
+            delta,
+        })
     }
 
     /// What describes each laid out line, to compare two layouts.
     #[cfg(test)]
     #[allow(clippy::type_complexity)]
-    pub(super) fn signature(&self) -> Vec<(usize, usize, i64, i64, i64, bool, Kind, i64, (bool, bool))> {
+    pub(super) fn signature(
+        &self,
+    ) -> Vec<(
+        usize,
+        usize,
+        i64,
+        i64,
+        i64,
+        bool,
+        Kind,
+        i64,
+        (bool, bool),
+        bool,
+    )> {
         let px = |v: Pixels| (f32::from(v) * 100.).round() as i64;
-        self.rows.iter().map(|r| (r.start, r.len, px(r.y), px(r.height), px(r.pad), r.opens, r.kind, px(r.gap), (r.head, r.foot))).collect()
+        self.rows
+            .iter()
+            .map(|r| {
+                (
+                    r.start,
+                    r.len,
+                    px(r.y),
+                    px(r.height),
+                    px(r.pad),
+                    r.opens,
+                    r.kind,
+                    px(r.gap),
+                    (r.head, r.foot),
+                    r.live,
+                )
+            })
+            .collect()
     }
 
     /// Each frame: the heavy layout is only redone if the text, the width, the theme
@@ -727,6 +988,7 @@ impl Editor {
             width: f32::from(bounds.size.width).to_bits(),
             size: self.theme.size.to_bits(),
             cursor: self.cursor(),
+            revealed: self.revealed,
             marked: self.marked.clone(),
         };
         if self.laid_out.as_ref() != Some(&key) {
@@ -739,14 +1001,23 @@ impl Editor {
                 // Every table of more than `grid::BIG` lines is recorded as very big, and only those.
                 let mut i = 0;
                 while i < self.rows.len() {
-                    let n = self.rows[i..].iter().take_while(|r| r.kind == Kind::Table).count();
+                    let n = self.rows[i..]
+                        .iter()
+                        .take_while(|r| r.kind == Kind::Table)
+                        .count();
                     if n > 0 {
                         let registered = self.big.iter().any(|b| b.rows == (i..i + n));
-                        assert_eq!(registered, n > grid::BIG, "table of {n} lines at line {i}, register {:?}", self.big.iter().map(|b| b.rows.clone()).collect::<Vec<_>>());
+                        assert_eq!(
+                            registered,
+                            n > grid::BIG,
+                            "table of {n} lines at line {i}, register {:?}",
+                            self.big.iter().map(|b| b.rows.clone()).collect::<Vec<_>>()
+                        );
                     }
                     i += n.max(1);
                 }
-                let (laid, big, counts) = (self.laid.take(), std::mem::take(&mut self.big), self.counts);
+                let (laid, big, counts) =
+                    (self.laid.take(), std::mem::take(&mut self.big), self.counts);
                 self.force_full = true;
                 self.relayout(bounds, window, cx);
                 self.force_full = false;
@@ -756,7 +1027,16 @@ impl Editor {
                 let near = |a: i64, b: i64| (a - b).abs() <= 20;
                 for (i, (a, b)) in reused.iter().zip(self.signature()).enumerate() {
                     assert!(
-                        a.0 == b.0 && a.1 == b.1 && near(a.2, b.2) && near(a.3, b.3) && near(a.4, b.4) && a.5 == b.5 && a.6 == b.6 && near(a.7, b.7) && a.8 == b.8,
+                        a.0 == b.0
+                            && a.1 == b.1
+                            && near(a.2, b.2)
+                            && near(a.3, b.3)
+                            && near(a.4, b.4)
+                            && a.5 == b.5
+                            && a.6 == b.6
+                            && near(a.7, b.7)
+                            && a.8 == b.8
+                            && a.9 == b.9,
                         "line {i}: {a:?} against {b:?}"
                     );
                 }
@@ -775,14 +1055,18 @@ impl Editor {
     pub(super) fn relayout(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
         let t = self.theme;
         let cursor = self.cursor();
-        let width = (bounds.size.width - SIDE * 2.).min(t.page.measure(t.size)).max(px(40.));
+        let width = (bounds.size.width - SIDE * 2.)
+            .min(t.page.measure(t.size))
+            .max(px(40.));
         let room = table_room(t.wide, bounds.size.width, width);
         let text_system = window.text_system().clone();
         // What can be reused from the previous layout, when only a few lines changed.
         // The first lines of a very big table set its columns: if they move, redo everything.
         let plan = self.plan(width, room, cursor).filter(|plan| {
             plan.regions.iter().filter(|r| r.check).all(|r| {
-                let Some((geom, _, start)) = &r.big else { return true };
+                let Some((geom, _, start)) = &r.big else {
+                    return true;
+                };
                 let lines: Vec<(usize, &str)> = self.content[*start..]
                     .split('\n')
                     .scan(*start, |at, l| {
@@ -792,9 +1076,19 @@ impl Editor {
                     })
                     .take(grid::SAMPLE)
                     .collect();
-                let look = grid::Look { theme: &t, style: 0 };
+                let look = grid::Look {
+                    theme: &t,
+                    style: 0,
+                };
                 lines.iter().all(|(_, l)| md::is_table_line(l))
-                    && grid::geometry(&mut grid::Cache::default(), &text_system, &look, room, &lines).same(geom)
+                    && grid::geometry(
+                        &mut grid::Cache::default(),
+                        &text_system,
+                        &look,
+                        room,
+                        &lines,
+                    )
+                    .same(geom)
             })
         });
         // A ``` without a closing fence opens no block: otherwise each ``` typed would
@@ -834,7 +1128,16 @@ impl Editor {
         // A figure's key, and the key of its source alone.
         let key = |kind: u8, source: &str| {
             let (mut hasher, mut family) = (Fast::default(), Fast::default());
-            (kind, source, &look.bg, &look.fill, &look.text, &look.line, &look.font, t.size.to_bits())
+            (
+                kind,
+                source,
+                &look.bg,
+                &look.fill,
+                &look.text,
+                &look.line,
+                &look.font,
+                t.size.to_bits(),
+            )
                 .hash(&mut hasher);
             (kind, source).hash(&mut family);
             (hasher.finish(), family.finish())
@@ -846,18 +1149,43 @@ impl Editor {
         };
         // Figures are drawn at the page's largest width, for this screen.
         let job = {
-            let (room, density, bg) = (f32::from(t.page.measure(t.size)), window.scale_factor(), rgb(t.bg));
-            move |(key, family): (u64, u64), make: Arc<dyn Fn() -> Option<String> + Send + Sync>| Job { key, family, make, room, density, bg }
+            let (room, density, bg) = (
+                f32::from(t.page.measure(t.size)),
+                window.scale_factor(),
+                rgb(t.bg),
+            );
+            move |(key, family): (u64, u64), make: Arc<dyn Fn() -> Option<String> + Send + Sync>| {
+                Job {
+                    key,
+                    family,
+                    make,
+                    room,
+                    density,
+                    bg,
+                }
+            }
         };
         let vector = |figure: Option<figure::Figure>| {
-            Some(figure.map(|(svg, w, h)| (Arc::new(Image::from_bytes(ImageFormat::Svg, svg.into_bytes())), size(px(w), px(h)))))
+            Some(figure.map(|(svg, w, h)| {
+                (
+                    Arc::new(Image::from_bytes(ImageFormat::Svg, svg.into_bytes())),
+                    size(px(w), px(h)),
+                )
+            }))
         };
         let mut cells = std::mem::take(&mut self.cells);
         cells.next_frame();
         let mut embeds = std::mem::take(&mut self.embeds);
         // Lines of a table already laid out, waiting for their turn in the loop.
         let mut pending: VecDeque<Option<Rc<TableRow>>> = VecDeque::new();
-        let empty = Rc::new(Shaped { line: None, lead: None, subs: Vec::new(), formula: None, picture: None });
+        let empty = Rc::new(Shaped {
+            line: None,
+            skip: 0,
+            lead: None,
+            subs: Vec::new(),
+            formula: None,
+            picture: None,
+        });
         let mut shaped = std::mem::take(&mut self.shaped);
         self.frame = self.frame.wrapping_add(1);
         let frame = self.frame;
@@ -882,7 +1210,12 @@ impl Editor {
                 "[!caution]" | "[!danger]" | "[!error]" => 0.,
                 _ => 0.58,
             };
-            Hsla { h, s: 0.7, l: 0.5, a: 1. }
+            Hsla {
+                h,
+                s: 0.7,
+                l: 0.5,
+                a: 1.,
+            }
         };
         let mut tint;
         let mut loading = false;
@@ -900,18 +1233,43 @@ impl Editor {
         }
         let (old_total, old_big) = (self.rows.len(), std::mem::take(&mut self.big));
         let mut old_rows = std::mem::take(&mut self.rows).into_iter();
-        let (after, delta) = plan.as_ref().map_or((usize::MAX, 0), |p| (p.after, p.delta));
-        let regions = plan.map_or_else(|| vec![Region { old: 0..0, start: 0, stop: text_len, big: None, check: false }], |p| p.regions);
+        let (after, delta) = plan
+            .as_ref()
+            .map_or((usize::MAX, 0), |p| (p.after, p.delta));
+        let regions = plan.map_or_else(
+            || {
+                vec![Region {
+                    old: 0..0,
+                    start: 0,
+                    stop: text_len,
+                    big: None,
+                    check: false,
+                }]
+            },
+            |p| p.regions,
+        );
         // Very big tables reused as they are: their columns, and the place of their first line.
         let mut carried: Vec<(Rc<grid::Geometry>, usize)> = Vec::new();
         let mut next_old = 0;
         let mut regions = regions.into_iter();
         // Reused lines: first those before the zone, then, at the end, those after it.
-        let keep = |upto: usize, next_old: &mut usize, old_rows: &mut std::vec::IntoIter<Row>, y: &mut Pixels, rows: &mut Vec<Row>, carried: &mut Vec<(Rc<grid::Geometry>, usize)>| {
+        let keep = |upto: usize,
+                    next_old: &mut usize,
+                    old_rows: &mut std::vec::IntoIter<Row>,
+                    y: &mut Pixels,
+                    rows: &mut Vec<Row>,
+                    carried: &mut Vec<(Rc<grid::Geometry>, usize)>| {
             let count = upto - *next_old;
-            let shift = if old_rows.as_slice().first().is_some_and(|r| r.start > after) { delta } else { 0 };
+            let shift = if old_rows.as_slice().first().is_some_and(|r| r.start > after) {
+                delta
+            } else {
+                0
+            };
             carried.extend(
-                old_big.iter().filter(|b| (*next_old..upto).contains(&b.rows.start)).map(|b| (b.geom.clone(), rows.len() + b.rows.start - *next_old)),
+                old_big
+                    .iter()
+                    .filter(|b| (*next_old..upto).contains(&b.rows.start))
+                    .map(|b| (b.geom.clone(), rows.len() + b.rows.start - *next_old)),
             );
             reuse(old_rows, count, shift, y, rows);
             *next_old = upto;
@@ -919,7 +1277,14 @@ impl Editor {
         while let Some(region) = {
             let next = regions.next();
             if incremental {
-                keep(next.as_ref().map_or(old_total, |r| r.old.start), &mut next_old, &mut old_rows, &mut y, &mut rows, &mut carried);
+                keep(
+                    next.as_ref().map_or(old_total, |r| r.old.start),
+                    &mut next_old,
+                    &mut old_rows,
+                    &mut y,
+                    &mut rows,
+                    &mut carried,
+                );
             }
             next
         } {
@@ -934,407 +1299,688 @@ impl Editor {
                 carried.push((geom.clone(), first_new));
             }
             while offset <= region.stop {
-            let line = &self.content[offset..self.content[offset..].find('\n').map_or(text_len, |i| offset + i)];
-            // Inside a very big table, each line stands alone: same height, no cells.
-            if let Some((geom, rank, _)) = &region.big {
-                let (pad, height) = geom.metrics(rank + rows.len() - first_new, false, grid::line_height(&t));
-                rows.push(Row {
+                let line = &self.content[offset
+                    ..self.content[offset..]
+                        .find('\n')
+                        .map_or(text_len, |i| offset + i)];
+                // Inside a very big table, each line stands alone: same height, no cells.
+                if let Some((geom, rank, _)) = &region.big {
+                    let (pad, height) =
+                        geom.metrics(rank + rows.len() - first_new, false, grid::line_height(&t));
+                    rows.push(Row {
+                        live: false,
+                        start: offset,
+                        len: line.len(),
+                        y,
+                        pad,
+                        lh: grid::line_height(&t),
+                        height,
+                        kind: Kind::Table,
+                        shaped: empty.clone(),
+                        image: None,
+                        enlarge: None,
+                        opens: false,
+                        gap: px(0.),
+                        head: false,
+                        foot: false,
+                        tint: None,
+                        dx: px(0.),
+                        grid: None,
+                        embed: None,
+                        broken: None,
+                    });
+                    y += height;
+                    offset += line.len() + 1;
+                    continue;
+                }
+                let (mut kind, mut marker) = if offset < meta {
+                    (Kind::Meta, 0)
+                } else {
+                    md::classify(line, in_code)
+                };
+                let mut opens = false;
+                let mut drawing = None;
+                let mut broken = None;
+                let mut enlarge = None;
+                let was_in_code = in_code;
+                if kind == Kind::Fence && orphan != Some(offset) {
+                    opens = !in_code && fences > 1;
+                    in_code = opens;
+                    fences -= 1;
+                    if opens {
+                        lang = line.trim_start()[3..].trim().to_lowercase();
+                        block = (lang == "mermaid").then(|| (offset, String::new()));
+                    } else if let Some((start, source)) = block.take() {
+                        // A diagram is drawn once the cursor has left the block, in a background task.
+                        let editing = (start..=offset + line.len()).contains(&cursor);
+                        let (k, look) = (key(0, &source), look.clone());
+                        drawing = cached(&mut old, &mut kept, k, editing, || {
+                            drawn(
+                                job(k, Arc::new(move || figure::mermaid(&source, &look).ok())),
+                                &before,
+                                &mut waiting,
+                                window,
+                                cx,
+                            )
+                        });
+                        broken =
+                            failed(&kept, k.0).then(|| tr("Unreadable figure", "Figure illisible"));
+                    }
+                }
+                let code = matches!(kind, Kind::Code | Kind::Fence | Kind::Meta);
+                // Formula over several lines, between two `$$` lines.
+                let mut math = false;
+                if kind == Kind::Code {
+                    if let Some((_, source)) = &mut block {
+                        source.push_str(line);
+                        source.push('\n');
+                    }
+                } else if !code && line.trim() == "$$" {
+                    math = true;
+                    dollars -= 1;
+                    match block.take() {
+                        Some((_, source)) => {
+                            let k = key(1, &source);
+                            drawing = cached(&mut old, &mut kept, k, false, || {
+                                vector(figure::latex(
+                                    &source,
+                                    true,
+                                    rgb(t.text),
+                                    t.size * MATH_SCALE,
+                                ))
+                            });
+                            broken = failed(&kept, k.0)
+                                .then(|| tr("Unreadable formula", "Formule illisible"));
+                            enlarge = drawing.is_some().then_some(Source::Formula(source, true));
+                        }
+                        // As for ```: a `$$` without a closing one opens nothing.
+                        None if dollars > 0 => block = Some((offset, String::new())),
+                        None => {}
+                    }
+                } else if !code && let Some((_, source)) = &mut block {
+                    math = true;
+                    source.push_str(line);
+                    source.push('\n');
+                }
+                if math {
+                    (kind, marker) = (Kind::Para, 0);
+                }
+                // Callout: the `> [!TYPE]` quote and the ones that follow it.
+                let own_tint = (kind == Kind::Quote)
+                    .then(|| md::callout(line))
+                    .flatten()
+                    .map(|r| tint_of(&line[r]));
+                tint = own_tint.or(tint).filter(|_| kind == Kind::Quote);
+                let tinted = tint.is_some();
+                let last: Option<&mut Row> = rows.last_mut();
+                let after_table = last.as_ref().is_some_and(|r| r.kind == Kind::Table);
+                let header = kind == Kind::Table && !after_table;
+                // A table is laid out in one block, at its first line: its columns
+                // depend on all its cells.
+                if header {
+                    let mut at = offset;
+                    let block: Vec<(usize, &str)> = self.content[offset..]
+                        .split('\n')
+                        .take_while(|l| md::is_table_line(l))
+                        .map(|l| {
+                            at += l.len() + 1;
+                            (at - l.len() - 1, l)
+                        })
+                        .collect();
+                    // A very big table: lines all of the same height, no styling yet.
+                    if block.len() > grid::BIG {
+                        let look = grid::Look { theme: &t, style };
+                        let geom = Rc::new(grid::geometry(
+                            &mut cells,
+                            &text_system,
+                            &look,
+                            room,
+                            &block[..grid::SAMPLE],
+                        ));
+                        let (first, n, lh) = (rows.len(), block.len(), grid::line_height(&t));
+                        for (k, &(at, text)) in block.iter().enumerate() {
+                            let (pad, height) = geom.metrics(k, k + 1 == n, lh);
+                            rows.push(Row {
+                                live: false,
+                                start: at,
+                                len: text.len(),
+                                y,
+                                pad,
+                                lh,
+                                height,
+                                kind: Kind::Table,
+                                shaped: empty.clone(),
+                                image: None,
+                                enlarge: None,
+                                opens: false,
+                                gap: px(0.),
+                                head: false,
+                                foot: false,
+                                tint: None,
+                                dx: px(0.),
+                                grid: None,
+                                embed: None,
+                                broken: None,
+                            });
+                            y += height;
+                        }
+                        big.push(BigBlock {
+                            rows: first..first + n,
+                            geom,
+                            mat: Vec::new(),
+                            rescan: false,
+                        });
+                        offset = block[n - 1].0 + block[n - 1].1.len() + 1;
+                        continue;
+                    }
+                    let look = grid::Look { theme: &t, style };
+                    pending = grid::build(
+                        &mut cells,
+                        &text_system,
+                        &look,
+                        room,
+                        &block,
+                        cursor,
+                        marked.as_ref(),
+                    )
+                    .iter()
+                    .cloned()
+                    .collect();
+                }
+                let grid_row = if kind == Kind::Table {
+                    pending.pop_front().flatten()
+                } else {
+                    None
+                };
+                if kind != Kind::Table
+                    && after_table
+                    && let Some(last) = last
+                {
+                    last.gap = TABLE_GAP;
+                    last.height += TABLE_GAP;
+                    y += TABLE_GAP;
+                }
+                // Titles: a scale of about 1.2, about one body line of room above the first two levels
+                // and two thirds of it above the others.
+                let (font_size, pad) = match kind {
+                    Kind::Heading(1) => (px(30.), px(24.)),
+                    Kind::Heading(2) => (px(23.), px(24.)),
+                    Kind::Heading(3) => (px(19.), px(16.)),
+                    Kind::Heading(4) => (px(17.), px(16.)),
+                    Kind::Heading(_) => (px(16.), px(16.)),
+                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => (px(14.), px(0.)),
+                    _ => (px(16.), px(0.)),
+                };
+                // The sizes above hold for a 16 px body text.
+                let font_size = font_size * (t.size / 16.);
+                let pad = if offset == 0 {
+                    px(0.)
+                } else {
+                    pad * (t.size / 16.)
+                };
+
+                // An unchanged line, in the same context, reuses its styling from
+                // the previous frame: typing only reprocesses the touched line.
+                // Typora-style: only the clicked or edited line shows its source (its markers).
+                // A plain cursor move (keyboard, search) does not reveal: it leaves `revealed` alone.
+                let live = self.revealed == Some(offset);
+                let composed = marked
+                    .clone()
+                    .filter(|m| m.start <= offset + line.len() && m.end >= offset);
+                let id = {
+                    let near = composed
+                        .as_ref()
+                        .map(|m| (m.start.wrapping_sub(offset), m.end.wrapping_sub(offset)));
+                    let lang = (kind == Kind::Code).then_some(&lang);
+                    let mut hasher = Fast::default();
+                    (
+                        style,
+                        line,
+                        kind,
+                        marker,
+                        math,
+                        lang,
+                        live,
+                        near,
+                        f32::from(width).to_bits(),
+                        f32::from(room).to_bits(),
+                        header,
+                        tinted,
+                    )
+                        .hash(&mut hasher);
+                    hasher.finish()
+                };
+                // A title's lines are closer than the body's, so that it belongs to what follows.
+                let lh = (font_size
+                    * if matches!(kind, Kind::Heading(_)) {
+                        1.35
+                    } else {
+                        1.7
+                    })
+                .round();
+                let made = if grid_row.is_some() {
+                    empty.clone()
+                } else {
+                    cached_shape(&mut shaped, id, frame, || {
+                        let mut formula = None;
+                        let mut flags = vec![0u16; line.len()];
+                        let list = matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
+                        flags[..marker].fill(if list { md::MARK } else { md::DIM });
+                        if kind == Kind::Meta {
+                            flags.fill(md::DIM | md::QUIET);
+                        } else if math {
+                            flags.fill(if line.trim() == "$$" {
+                                md::DIM
+                            } else {
+                                md::CODE
+                            });
+                        } else if kind == Kind::Code {
+                            // With no language given, in plain text or in Mermaid, the block stays as it is.
+                            if !matches!(lang.as_str(), "" | "text" | "txt" | "plain" | "mermaid") {
+                                md::code(line, &lang, &mut flags);
+                            }
+                        } else if !code && kind != Kind::Rule {
+                            md::inline(line, marker, &mut flags);
+                            // Formula on the line: its source stays readable, like code.
+                            if let Some((range, source, display)) = md::math(line)
+                                && range.start >= marker
+                                && flags[range.start] & md::CODE == 0
+                            {
+                                flags[range].fill(md::CODE);
+                                formula = Some((source.to_string(), display));
+                            }
+                        }
+                        if kind == Kind::Task(true) {
+                            flags[marker..]
+                                .iter_mut()
+                                .for_each(|f| *f |= md::STRIKE | md::DIM);
+                            // Checked, its checkbox is bold, like a checkbox in the text or a table.
+                            if let Some(at) = line[..marker].find('[') {
+                                flags[at..(at + 3).min(marker)]
+                                    .iter_mut()
+                                    .for_each(|f| *f |= md::BOLD);
+                            }
+                        }
+                        if let Some(label) = md::callout(line).filter(|_| own_tint.is_some()) {
+                            // The type is tinted, its `[!` and `]` are markers like any other.
+                            let (open, close) = (label.start + 2, label.end - 1);
+                            flags[label.clone()].fill(md::DIM);
+                            flags[open..close].fill(md::MARK);
+                        }
+                        // Table: header in bold, `|` and dashes dimmed.
+                        // A line never wraps, which would break the grid: a
+                        // table wider than the page scrolls horizontally.
+                        if kind == Kind::Table {
+                            if header {
+                                flags.iter_mut().for_each(|f| *f |= md::BOLD);
+                            }
+                            md::bars(line)
+                                .into_iter()
+                                .for_each(|bar| flags[bar] = md::DIM);
+                            if line.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ')) {
+                                flags.fill(md::DIM);
+                            }
+                        }
+                        let picture =
+                            (!code)
+                                .then(|| md::image(line))
+                                .flatten()
+                                .map(|(range, path)| {
+                                    flags[range].iter_mut().for_each(|f| *f |= md::DIM);
+                                    path
+                                });
+                        // Outside the live line, `->`, `!=`… display as signs;
+                        // the text itself does not change.
+                        let mut signs = if code || live || matches!(kind, Kind::Rule | Kind::Table)
+                        {
+                            Vec::new()
+                        } else {
+                            md::symbols(line, marker, &flags)
+                        };
+                        signs.retain(|(_, _, sign)| has_unequal || *sign != "≠");
+                        // Hidden markers, Typora-style: the block prefix and the inline style
+                        // signs, unless the line is live, in code or math, or of a kind that
+                        // keeps its source (fences, links, tables, front matter).
+                        let hide = !live
+                            && !code
+                            && !math
+                            && matches!(
+                                kind,
+                                Kind::Para
+                                    | Kind::Heading(_)
+                                    | Kind::Quote
+                                    | Kind::Bullet
+                                    | Kind::Ordered
+                                    | Kind::Task(_)
+                            );
+                        let elide = hide
+                            .then(|| elided(line, marker, kind, &flags))
+                            .unwrap_or_default();
+                        let mut shown = Cow::Borrowed(line);
+                        let mut subs = Vec::new();
+                        if !signs.is_empty() || !elide.is_empty() {
+                            // Substitutions and hidden markers, in text order: both map through
+                            // `subs`, so hit-testing, the selection and finding keep working on
+                            // text bytes (see `source`).
+                            let (mut text, mut styles, mut done) = (String::new(), Vec::new(), 0);
+                            let (mut si, mut ei) = (0, 0);
+                            while si < signs.len() || ei < elide.len() {
+                                let cut = elide
+                                    .get(ei)
+                                    .map(|e| e.0)
+                                    .is_some_and(|c| signs.get(si).is_none_or(|s| c < s.0));
+                                if cut {
+                                    let (a, b) = elide[ei];
+                                    ei += 1;
+                                    if a < done {
+                                        continue;
+                                    }
+                                    text.push_str(&line[done..a]);
+                                    styles.extend_from_slice(&flags[done..a]);
+                                    subs.push((a, b - a, 0));
+                                    done = b;
+                                } else if si < signs.len() {
+                                    let (at, len, sign) = signs[si];
+                                    si += 1;
+                                    if at < done {
+                                        continue;
+                                    }
+                                    text.push_str(&line[done..at]);
+                                    styles.extend_from_slice(&flags[done..at]);
+                                    text.push_str(sign);
+                                    styles.resize(text.len(), flags[at]);
+                                    subs.push((at, len, sign.len()));
+                                    done = at + len;
+                                }
+                            }
+                            text.push_str(&line[done..]);
+                            styles.extend_from_slice(&flags[done..]);
+                            shown = Cow::Owned(text);
+                            flags = styles;
+                        }
+                        let is_marked =
+                            |i: usize| composed.as_ref().is_some_and(|m| m.contains(&(offset + i)));
+
+                        let style = RunStyle {
+                            heading: matches!(kind, Kind::Heading(_)),
+                            soft: kind == Kind::Heading(6),
+                            italic: kind == Kind::Quote && !tinted,
+                            mono: code || kind == Kind::Table,
+                            tint: own_tint,
+                        };
+                        // A title's `#` marker is at the body size, `dim`, on the title's baseline.
+                        let cut = if matches!(kind, Kind::Heading(_)) {
+                            marker
+                        } else {
+                            0
+                        };
+                        let runs = text_runs(
+                            &t,
+                            &shown[cut..],
+                            &flags[cut..],
+                            |i| is_marked(i + cut),
+                            &style,
+                        );
+                        let shape =
+                            |text: &str, size: Pixels, runs: &[TextRun], wrap: Option<Pixels>| {
+                                window
+                                    .text_system()
+                                    .shape_text(text.to_string().into(), size, runs, wrap, None)
+                                    .ok()
+                                    .and_then(|lines| lines.into_iter().next())
+                            };
+                        let marker_style = RunStyle {
+                            heading: false,
+                            soft: false,
+                            italic: false,
+                            mono: false,
+                            tint: None,
+                        };
+                        // The live line shows its `# ` marker; the others hide it (see `elided`).
+                        let mut lead = (cut > 0 && live)
+                            .then(|| {
+                                shape(
+                                    &shown[..cut],
+                                    px(t.size),
+                                    &text_runs(
+                                        &t,
+                                        &shown[..cut],
+                                        &flags[..cut],
+                                        is_marked,
+                                        &marker_style,
+                                    ),
+                                    None,
+                                )
+                            })
+                            .flatten()
+                            .map(|line| Lead {
+                                width: line.position_for_index(cut, lh).map_or(px(0.), |p| p.x),
+                                line,
+                                len: cut,
+                                dy: px(0.),
+                            });
+                        let wrap = (kind != Kind::Table)
+                            .then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
+                        let line = shape(&shown[cut..], font_size, &runs, wrap);
+                        if let Some(lead) = &mut lead {
+                            // An empty title has no metrics of its own: those of a letter will do.
+                            let probe = if shown[cut..].is_empty() {
+                                shape(
+                                    "x",
+                                    font_size,
+                                    &text_runs(&t, "x", &[0], |_| false, &style),
+                                    None,
+                                )
+                            } else {
+                                None
+                            };
+                            if let Some(title) = probe.as_ref().or(line.as_ref()) {
+                                let baseline = |l: &WrappedLine| {
+                                    (lh - (l.ascent() + l.descent())) / 2. + l.ascent()
+                                };
+                                lead.dy = baseline(title) - baseline(&lead.line);
+                            }
+                        }
+                        Rc::new(Shaped {
+                            line,
+                            // Offsets before a hidden heading marker still address the text.
+                            skip: if matches!(kind, Kind::Heading(_)) {
+                                cut
+                            } else {
+                                0
+                            },
+                            lead,
+                            subs,
+                            formula,
+                            picture,
+                        })
+                    })
+                };
+                if let Some((source, display)) = &made.formula {
+                    drawing = cached(
+                        &mut old,
+                        &mut kept,
+                        key(1 + *display as u8, source),
+                        false,
+                        || {
+                            vector(figure::latex(
+                                source,
+                                *display,
+                                rgb(t.text),
+                                t.size * MATH_SCALE,
+                            ))
+                        },
+                    );
+                }
+                // ponytail: one picture per line, looked up in the note's folder, at the
+                // vault root, then by its name in the whole vault; inline
+                // pictures (http) are not loaded.
+                let file = made
+                    .picture
+                    .as_ref()
+                    .and_then(|path| find_picture(&self.dirs, &self.images, path));
+                let has_file = file.is_some();
+                let svg = file
+                    .as_ref()
+                    .is_some_and(|f| f.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg")));
+                // The picture wins over a formula on the same line: it is what is drawn.
+                enlarge = file
+                    .as_ref()
+                    .map(|f| {
+                        if svg {
+                            Source::File(f.clone(), None)
+                        } else {
+                            Source::Raster(f.clone())
+                        }
+                    })
+                    .or(enlarge)
+                    .or_else(|| {
+                        made.formula
+                            .clone()
+                            .map(|(source, display)| Source::Formula(source, display))
+                    });
+                // An SVG is redrawn in the theme's colors, and every time its file
+                // changes: its date is part of its key. A Inkuno diagram takes the ink of the
+                // text; an SVG from elsewhere is made readable (HTML text, `light-dark()`).
+                if svg
+                    && let Some(file) = &file
+                    && let Ok(stamp) = fs::metadata(file).and_then(|m| m.modified())
+                {
+                    let (k, family) = (
+                        key(3, &format!("{}{stamp:?}", file.display())).0,
+                        key(3, &file.display().to_string()).1,
+                    );
+                    let (path, ink, dark) =
+                        (file.clone(), crate::views::canvas::neutral(t), look.dark);
+                    let own = cached(&mut old, &mut kept, (k, family), false, || {
+                        let make = move || {
+                            let text = fs::read_to_string(&path).ok()?;
+                            Some(
+                                Diagram::from_svg(&text)
+                                    .map_or_else(|| svg::readable(&text, dark), |d| d.to_svg(ink)),
+                            )
+                        };
+                        drawn(
+                            job((k, family), Arc::new(make)),
+                            &before,
+                            &mut waiting,
+                            window,
+                            cx,
+                        )
+                    });
+                    broken = broken
+                        .or(failed(&kept, k).then(|| tr("Unreadable figure", "Figure illisible")));
+                    drawing = own.or(drawing);
+                }
+                let image = file.filter(|_| drawing.is_none() && !svg).and_then(|file| {
+                    let loaded =
+                        window.use_asset::<ImgResourceLoader>(&Resource::Path(file.into()), cx);
+                    loading |= loaded.is_none();
+                    let image = match loaded? {
+                        Ok(image) => image,
+                        Err(_) => {
+                            broken = Some(tr("Unreadable image", "Image illisible"));
+                            return None;
+                        }
+                    };
+                    let natural = |d: gpui::DevicePixels| d.0 as f32;
+                    let (w, h) = (natural(image.size(0).width), natural(image.size(0).height));
+                    let scale = (f32::from(width) / w.max(1.)).min(1.);
+                    Some((image, size(px(w * scale), px(h * scale))))
+                });
+                let image = image.or_else(|| {
+                    let (image, s) = drawing?;
+                    let rendered = image.use_render_image(window, cx);
+                    loading |= rendered.is_none();
+                    let image = rendered?;
+                    let scale = (width / s.width).min(1.);
+                    Some((image, size(s.width * scale, s.height * scale)))
+                });
+                let enlarge = enlarge.filter(|_| image.is_some());
+                // `![[Note#Heading]]` alone on a line, that is no picture and no other file: the section it points at,
+                // framed under it.
+                let embed = (!code && !has_file && made.picture.is_some())
+                    .then(|| crate::logic::embed::parse(line))
+                    .flatten()
+                    .filter(|target| !vault::is_file_shown(Path::new(&target.note)))
+                    .map(|target| {
+                        Rc::new(embeds.row(&target, width, self, frame as u64, window, cx))
+                    });
+
+                let text_height = made.line.as_ref().map_or(lh, |l| l.size(lh).height);
+                // A code block and a callout have room inside their fill, above the first line and under the last.
+                let (head, foot) = match kind {
+                    Kind::Fence => (!was_in_code, was_in_code || !opens),
+                    Kind::Quote => {
+                        let next = self
+                            .content
+                            .get(offset + line.len() + 1..)
+                            .and_then(|rest| rest.split('\n').next())
+                            .unwrap_or("");
+                        (
+                            own_tint.is_some()
+                                || !rows.last().is_some_and(|r| r.kind == Kind::Quote),
+                            md::classify(next, false).0 != Kind::Quote
+                                || md::callout(next).is_some(),
+                        )
+                    }
+                    _ => (false, false),
+                };
+                let room = if matches!(kind, Kind::Code | Kind::Fence) || tinted {
+                    BLOCK_ROOM * (t.size / 16.)
+                } else {
+                    px(0.)
+                };
+                let (above, below) = (
+                    if head { room } else { px(0.) },
+                    if foot { room } else { px(0.) },
+                );
+                let (pad, lh, height) = match &grid_row {
+                    Some(grid) => {
+                        let lh = grid::line_height(&t);
+                        (grid.pad(), lh, grid.height(lh))
+                    }
+                    None => (pad + above, lh, pad + above + text_height),
+                };
+                let row = Row {
+                    live,
                     start: offset,
                     len: line.len(),
                     y,
                     pad,
-                    lh: grid::line_height(&t),
+                    lh,
                     height,
-                    kind: Kind::Table,
-                    shaped: empty.clone(),
-                    image: None,
-                    enlarge: None,
-                    opens: false,
-                    gap: px(0.),
-                    head: false,
-                    foot: false,
-                    tint: None,
+                    kind,
+                    shaped: made,
+                    image,
+                    enlarge,
+                    opens,
+                    gap: below,
+                    head,
+                    foot,
+                    tint,
                     dx: px(0.),
-                    grid: None,
+                    grid: grid_row,
                     embed: None,
-                    broken: None,
+                    broken,
+                };
+                let height = row.height
+                    + row.image_height()
+                    + embed.as_ref().map_or(px(0.), |e| e.height())
+                    + row.gap;
+                rows.push(Row {
+                    height,
+                    embed,
+                    ..row
                 });
                 y += height;
                 offset += line.len() + 1;
-                continue;
-            }
-            let (mut kind, mut marker) = if offset < meta { (Kind::Meta, 0) } else { md::classify(line, in_code) };
-            let mut opens = false;
-            let mut drawing = None;
-            let mut broken = None;
-            let mut enlarge = None;
-            let was_in_code = in_code;
-            if kind == Kind::Fence && orphan != Some(offset) {
-                opens = !in_code && fences > 1;
-                in_code = opens;
-                fences -= 1;
-                if opens {
-                    lang = line.trim_start()[3..].trim().to_lowercase();
-                    block = (lang == "mermaid").then(|| (offset, String::new()));
-                } else if let Some((start, source)) = block.take() {
-                    // A diagram is drawn once the cursor has left the block, in a background task.
-                    let editing = (start..=offset + line.len()).contains(&cursor);
-                    let (k, look) = (key(0, &source), look.clone());
-                    drawing = cached(&mut old, &mut kept, k, editing, || {
-                        drawn(job(k, Arc::new(move || figure::mermaid(&source, &look).ok())), &before, &mut waiting, window, cx)
-                    });
-                    broken = failed(&kept, k.0).then(|| tr("Unreadable figure", "Figure illisible"));
-                }
-            }
-            let code = matches!(kind, Kind::Code | Kind::Fence | Kind::Meta);
-            // Formula over several lines, between two `$$` lines.
-            let mut math = false;
-            if kind == Kind::Code {
-                if let Some((_, source)) = &mut block {
-                    source.push_str(line);
-                    source.push('\n');
-                }
-            } else if !code && line.trim() == "$$" {
-                math = true;
-                dollars -= 1;
-                match block.take() {
-                    Some((_, source)) => {
-                        let k = key(1, &source);
-                        drawing = cached(&mut old, &mut kept, k, false, || {
-                            vector(figure::latex(&source, true, rgb(t.text), t.size * MATH_SCALE))
-                        });
-                        broken = failed(&kept, k.0).then(|| tr("Unreadable formula", "Formule illisible"));
-                        enlarge = drawing.is_some().then_some(Source::Formula(source, true));
-                    }
-                    // As for ```: a `$$` without a closing one opens nothing.
-                    None if dollars > 0 => block = Some((offset, String::new())),
-                    None => {}
-                }
-            } else if !code && let Some((_, source)) = &mut block {
-                math = true;
-                source.push_str(line);
-                source.push('\n');
-            }
-            if math {
-                (kind, marker) = (Kind::Para, 0);
-            }
-            // Callout: the `> [!TYPE]` quote and the ones that follow it.
-            let own_tint = (kind == Kind::Quote).then(|| md::callout(line)).flatten().map(|r| tint_of(&line[r]));
-            tint = own_tint.or(tint).filter(|_| kind == Kind::Quote);
-            let tinted = tint.is_some();
-            let last: Option<&mut Row> = rows.last_mut();
-            let after_table = last.as_ref().is_some_and(|r| r.kind == Kind::Table);
-            let header = kind == Kind::Table && !after_table;
-            // A table is laid out in one block, at its first line: its columns
-            // depend on all its cells.
-            if header {
-                let mut at = offset;
-                let block: Vec<(usize, &str)> = self.content[offset..]
-                    .split('\n')
-                    .take_while(|l| md::is_table_line(l))
-                    .map(|l| {
-                        at += l.len() + 1;
-                        (at - l.len() - 1, l)
-                    })
-                    .collect();
-                // A very big table: lines all of the same height, no styling yet.
-                if block.len() > grid::BIG {
-                    let look = grid::Look { theme: &t, style };
-                    let geom = Rc::new(grid::geometry(&mut cells, &text_system, &look, room, &block[..grid::SAMPLE]));
-                    let (first, n, lh) = (rows.len(), block.len(), grid::line_height(&t));
-                    for (k, &(at, text)) in block.iter().enumerate() {
-                        let (pad, height) = geom.metrics(k, k + 1 == n, lh);
-                        rows.push(Row {
-                            start: at,
-                            len: text.len(),
-                            y,
-                            pad,
-                            lh,
-                            height,
-                            kind: Kind::Table,
-                            shaped: empty.clone(),
-                            image: None,
-                            enlarge: None,
-                            opens: false,
-                            gap: px(0.),
-                            head: false,
-                            foot: false,
-                            tint: None,
-                            dx: px(0.),
-                            grid: None,
-                            embed: None,
-                            broken: None,
-                        });
-                        y += height;
-                    }
-                    big.push(BigBlock { rows: first..first + n, geom, mat: Vec::new(), rescan: false });
-                    offset = block[n - 1].0 + block[n - 1].1.len() + 1;
-                    continue;
-                }
-                let look = grid::Look { theme: &t, style };
-                pending = grid::build(&mut cells, &text_system, &look, room, &block, cursor, marked.as_ref()).iter().cloned().collect();
-            }
-            let grid_row = if kind == Kind::Table { pending.pop_front().flatten() } else { None };
-            if kind != Kind::Table && after_table && let Some(last) = last {
-                last.gap = TABLE_GAP;
-                last.height += TABLE_GAP;
-                y += TABLE_GAP;
-            }
-            // Titles: a scale of about 1.2, about one body line of room above the first two levels
-            // and two thirds of it above the others.
-            let (font_size, pad) = match kind {
-                Kind::Heading(1) => (px(30.), px(24.)),
-                Kind::Heading(2) => (px(23.), px(24.)),
-                Kind::Heading(3) => (px(19.), px(16.)),
-                Kind::Heading(4) => (px(17.), px(16.)),
-                Kind::Heading(_) => (px(16.), px(16.)),
-                Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => (px(14.), px(0.)),
-                _ => (px(16.), px(0.)),
-            };
-            // The sizes above hold for a 16 px body text.
-            let font_size = font_size * (t.size / 16.);
-            let pad = if offset == 0 { px(0.) } else { pad * (t.size / 16.) };
-
-            // An unchanged line, in the same context, reuses its styling from
-            // the previous frame: typing only reprocesses the touched line.
-            let has_cursor = (offset..=offset + line.len()).contains(&cursor);
-            let composed = marked.clone().filter(|m| m.start <= offset + line.len() && m.end >= offset);
-            let id = {
-                let near = composed.as_ref().map(|m| (m.start.wrapping_sub(offset), m.end.wrapping_sub(offset)));
-                let lang = (kind == Kind::Code).then_some(&lang);
-                let mut hasher = Fast::default();
-                (style, line, kind, marker, math, lang, has_cursor, near, f32::from(width).to_bits(), f32::from(room).to_bits(), header, tinted)
-                    .hash(&mut hasher);
-                hasher.finish()
-            };
-            // A title's lines are closer than the body's, so that it belongs to what follows.
-            let lh = (font_size * if matches!(kind, Kind::Heading(_)) { 1.35 } else { 1.7 }).round();
-            let made = if grid_row.is_some() { empty.clone() } else { cached_shape(&mut shaped, id, frame, || {
-                let mut formula = None;
-                let mut flags = vec![0u16; line.len()];
-                let list = matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
-                flags[..marker].fill(if list { md::MARK } else { md::DIM });
-                if kind == Kind::Meta {
-                    flags.fill(md::DIM | md::QUIET);
-                } else if math {
-                    flags.fill(if line.trim() == "$$" { md::DIM } else { md::CODE });
-                } else if kind == Kind::Code {
-                    // With no language given, in plain text or in Mermaid, the block stays as it is.
-                    if !matches!(lang.as_str(), "" | "text" | "txt" | "plain" | "mermaid") {
-                        md::code(line, &lang, &mut flags);
-                    }
-                } else if !code && kind != Kind::Rule {
-                    md::inline(line, marker, &mut flags);
-                    // Formula on the line: its source stays readable, like code.
-                    if let Some((range, source, display)) = md::math(line)
-                        && range.start >= marker
-                        && flags[range.start] & md::CODE == 0
-                    {
-                        flags[range].fill(md::CODE);
-                        formula = Some((source.to_string(), display));
-                    }
-                }
-                if kind == Kind::Task(true) {
-                    flags[marker..].iter_mut().for_each(|f| *f |= md::STRIKE | md::DIM);
-                    // Checked, its checkbox is bold, like a checkbox in the text or a table.
-                    if let Some(at) = line[..marker].find('[') {
-                        flags[at..(at + 3).min(marker)].iter_mut().for_each(|f| *f |= md::BOLD);
-                    }
-                }
-                if let Some(label) = md::callout(line).filter(|_| own_tint.is_some()) {
-                    // The type is tinted, its `[!` and `]` are markers like any other.
-                    let (open, close) = (label.start + 2, label.end - 1);
-                    flags[label.clone()].fill(md::DIM);
-                    flags[open..close].fill(md::MARK);
-                }
-                // Table: header in bold, `|` and dashes dimmed.
-                // A line never wraps, which would break the grid: a
-                // table wider than the page scrolls horizontally.
-                if kind == Kind::Table {
-                    if header {
-                        flags.iter_mut().for_each(|f| *f |= md::BOLD);
-                    }
-                    md::bars(line).into_iter().for_each(|bar| flags[bar] = md::DIM);
-                    if line.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ')) {
-                        flags.fill(md::DIM);
-                    }
-                }
-                let picture = (!code).then(|| md::image(line)).flatten().map(|(range, path)| {
-                    flags[range].iter_mut().for_each(|f| *f |= md::DIM);
-                    path
-                });
-                // Outside the cursor's line, `->`, `!=`… display as signs;
-                // the text itself does not change.
-                let mut signs = if code || has_cursor || matches!(kind, Kind::Rule | Kind::Table) {
-                    Vec::new()
-                } else {
-                    md::symbols(line, marker, &flags)
-                };
-                signs.retain(|(_, _, sign)| has_unequal || *sign != "≠");
-                let mut shown = Cow::Borrowed(line);
-                let mut subs = Vec::new();
-                if !signs.is_empty() {
-                    let (mut text, mut styles, mut done) = (String::new(), Vec::new(), 0);
-                    for (at, len, sign) in signs {
-                        text.push_str(&line[done..at]);
-                        styles.extend_from_slice(&flags[done..at]);
-                        text.push_str(sign);
-                        styles.resize(text.len(), flags[at]);
-                        subs.push((at, len, sign.len()));
-                        done = at + len;
-                    }
-                    text.push_str(&line[done..]);
-                    styles.extend_from_slice(&flags[done..]);
-                    shown = Cow::Owned(text);
-                    flags = styles;
-                }
-                let is_marked = |i: usize| composed.as_ref().is_some_and(|m| m.contains(&(offset + i)));
-
-                let style = RunStyle {
-                    heading: matches!(kind, Kind::Heading(_)),
-                    soft: kind == Kind::Heading(6),
-                    italic: kind == Kind::Quote && !tinted,
-                    mono: code || kind == Kind::Table,
-                    tint: own_tint,
-                };
-                // A title's `#` marker is at the body size, `dim`, on the title's baseline.
-                let cut = if matches!(kind, Kind::Heading(_)) { marker } else { 0 };
-                let runs = text_runs(&t, &shown[cut..], &flags[cut..], |i| is_marked(i + cut), &style);
-                let shape = |text: &str, size: Pixels, runs: &[TextRun], wrap: Option<Pixels>| {
-                    window.text_system().shape_text(text.to_string().into(), size, runs, wrap, None).ok().and_then(|lines| lines.into_iter().next())
-                };
-                let marker_style = RunStyle { heading: false, soft: false, italic: false, mono: false, tint: None };
-                let mut lead = (cut > 0)
-                    .then(|| shape(&shown[..cut], px(t.size), &text_runs(&t, &shown[..cut], &flags[..cut], is_marked, &marker_style), None))
-                    .flatten()
-                    .map(|line| Lead { width: line.position_for_index(cut, lh).map_or(px(0.), |p| p.x), line, len: cut, dy: px(0.) });
-                let wrap = (kind != Kind::Table).then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
-                let line = shape(&shown[cut..], font_size, &runs, wrap);
-                if let Some(lead) = &mut lead {
-                    // An empty title has no metrics of its own: those of a letter will do.
-                    let probe = if shown[cut..].is_empty() { shape("x", font_size, &text_runs(&t, "x", &[0], |_| false, &style), None) } else { None };
-                    if let Some(title) = probe.as_ref().or(line.as_ref()) {
-                        let baseline = |l: &WrappedLine| (lh - (l.ascent() + l.descent())) / 2. + l.ascent();
-                        lead.dy = baseline(title) - baseline(&lead.line);
-                    }
-                }
-                Rc::new(Shaped { line, lead, subs, formula, picture })
-            }) };
-            if let Some((source, display)) = &made.formula {
-                drawing = cached(&mut old, &mut kept, key(1 + *display as u8, source), false, || {
-                    vector(figure::latex(source, *display, rgb(t.text), t.size * MATH_SCALE))
-                });
-            }
-            // ponytail: one picture per line, looked up in the note's folder, at the
-            // vault root, then by its name in the whole vault; inline
-            // pictures (http) are not loaded.
-            let file = made.picture.as_ref().and_then(|path| find_picture(&self.dirs, &self.images, path));
-            let has_file = file.is_some();
-            let svg = file.as_ref().is_some_and(|f| f.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg")));
-            // The picture wins over a formula on the same line: it is what is drawn.
-            enlarge = file
-                .as_ref()
-                .map(|f| if svg { Source::File(f.clone(), None) } else { Source::Raster(f.clone()) })
-                .or(enlarge)
-                .or_else(|| made.formula.clone().map(|(source, display)| Source::Formula(source, display)));
-            // An SVG is redrawn in the theme's colors, and every time its file
-            // changes: its date is part of its key. A Bref diagram takes the ink of the
-            // text; an SVG from elsewhere is made readable (HTML text, `light-dark()`).
-            if svg
-                && let Some(file) = &file
-                && let Ok(stamp) = fs::metadata(file).and_then(|m| m.modified())
-            {
-                let (k, family) = (key(3, &format!("{}{stamp:?}", file.display())).0, key(3, &file.display().to_string()).1);
-                let (path, ink, dark) = (file.clone(), crate::views::canvas::neutral(t), look.dark);
-                let own = cached(&mut old, &mut kept, (k, family), false, || {
-                    let make = move || {
-                        let text = fs::read_to_string(&path).ok()?;
-                        Some(Diagram::from_svg(&text).map_or_else(|| svg::readable(&text, dark), |d| d.to_svg(ink)))
-                    };
-                    drawn(job((k, family), Arc::new(make)), &before, &mut waiting, window, cx)
-                });
-                broken = broken.or(failed(&kept, k).then(|| tr("Unreadable figure", "Figure illisible")));
-                drawing = own.or(drawing);
-            }
-            let image = file.filter(|_| drawing.is_none() && !svg).and_then(|file| {
-                let loaded = window.use_asset::<ImgResourceLoader>(&Resource::Path(file.into()), cx);
-                loading |= loaded.is_none();
-                let image = match loaded? {
-                    Ok(image) => image,
-                    Err(_) => {
-                        broken = Some(tr("Unreadable image", "Image illisible"));
-                        return None;
-                    }
-                };
-                let natural = |d: gpui::DevicePixels| d.0 as f32;
-                let (w, h) = (natural(image.size(0).width), natural(image.size(0).height));
-                let scale = (f32::from(width) / w.max(1.)).min(1.);
-                Some((image, size(px(w * scale), px(h * scale))))
-            });
-            let image = image.or_else(|| {
-                let (image, s) = drawing?;
-                let rendered = image.use_render_image(window, cx);
-                loading |= rendered.is_none();
-                let image = rendered?;
-                let scale = (width / s.width).min(1.);
-                Some((image, size(s.width * scale, s.height * scale)))
-            });
-            let enlarge = enlarge.filter(|_| image.is_some());
-            // `![[Note#Heading]]` alone on a line, that is no picture and no other file: the section it points at,
-            // framed under it.
-            let embed = (!code && !has_file && made.picture.is_some())
-                .then(|| crate::logic::embed::parse(line))
-                .flatten()
-                .filter(|target| !vault::is_file_shown(Path::new(&target.note)))
-                .map(|target| Rc::new(embeds.row(&target, width, self, frame as u64, window, cx)));
-
-            let text_height = made.line.as_ref().map_or(lh, |l| l.size(lh).height);
-            // A code block and a callout have room inside their fill, above the first line and under the last.
-            let (head, foot) = match kind {
-                Kind::Fence => (!was_in_code, was_in_code || !opens),
-                Kind::Quote => {
-                    let next = self.content.get(offset + line.len() + 1..).and_then(|rest| rest.split('\n').next()).unwrap_or("");
-                    (own_tint.is_some() || !rows.last().is_some_and(|r| r.kind == Kind::Quote), md::classify(next, false).0 != Kind::Quote || md::callout(next).is_some())
-                }
-                _ => (false, false),
-            };
-            let room = if matches!(kind, Kind::Code | Kind::Fence) || tinted { BLOCK_ROOM * (t.size / 16.) } else { px(0.) };
-            let (above, below) = (if head { room } else { px(0.) }, if foot { room } else { px(0.) });
-            let (pad, lh, height) = match &grid_row {
-                Some(grid) => {
-                    let lh = grid::line_height(&t);
-                    (grid.pad(), lh, grid.height(lh))
-                }
-                None => (pad + above, lh, pad + above + text_height),
-            };
-            let row = Row {
-                start: offset,
-                len: line.len(),
-                y,
-                pad,
-                lh,
-                height,
-                kind,
-                shaped: made,
-                image,
-                enlarge,
-                opens,
-                gap: below,
-                head,
-                foot,
-                tint,
-                dx: px(0.),
-                grid: grid_row,
-                embed: None,
-                broken,
-            };
-            let height = row.height + row.image_height() + embed.as_ref().map_or(px(0.), |e| e.height()) + row.gap;
-            rows.push(Row { height, embed, ..row });
-            y += height;
-            offset += line.len() + 1;
             }
         }
-        if let Some(last) = rows.last_mut().filter(|r| r.kind == Kind::Table && r.gap == px(0.)) {
+        if let Some(last) = rows
+            .last_mut()
+            .filter(|r| r.kind == Kind::Table && r.gap == px(0.))
+        {
             last.gap = TABLE_GAP;
             last.height += TABLE_GAP;
             y += TABLE_GAP;
@@ -1346,8 +1992,17 @@ impl Editor {
         self.embeds = embeds;
         // Reused very big tables: their lines are no longer the ones that were styled.
         for (geom, first) in carried {
-            let end = first + self.rows[first..].iter().take_while(|r| r.kind == Kind::Table).count();
-            big.push(BigBlock { rows: first..end, geom, mat: Vec::new(), rescan: true });
+            let end = first
+                + self.rows[first..]
+                    .iter()
+                    .take_while(|r| r.kind == Kind::Table)
+                    .count();
+            big.push(BigBlock {
+                rows: first..end,
+                geom,
+                mat: Vec::new(),
+                rescan: true,
+            });
         }
         big.sort_by_key(|b| b.rows.start);
         self.big = big;
@@ -1366,7 +2021,10 @@ impl Editor {
         self.waiting = waiting;
         // Figures no longer in use free their image and its room on the graphics card,
         // unless a kept figure has the same one (same source, back to the same theme).
-        let used: Vec<u64> = kept.values().filter_map(|(_, d)| Some(d.as_ref()?.0.id())).collect();
+        let used: Vec<u64> = kept
+            .values()
+            .filter_map(|(_, d)| Some(d.as_ref()?.0.id()))
+            .collect();
         for (_, (_, drawing)) in old {
             if let Some((image, _)) = drawing.filter(|(image, _)| !used.contains(&image.id())) {
                 if let Some(render) = image.clone().get_render_image(window, cx) {
@@ -1384,6 +2042,7 @@ impl Editor {
             size: t.size.to_bits(),
             len: text_len,
             cursor,
+            revealed: self.revealed,
             fences: fences0,
             dollars: dollars0,
             meta,
@@ -1396,18 +2055,30 @@ impl Editor {
         self.cells = cells;
         self.width = width;
         self.room = room;
-        self.opening = (0..self.rows.len()).filter(|&i| self.rows[i].opens).collect();
+        self.opening = (0..self.rows.len())
+            .filter(|&i| self.rows[i].opens)
+            .collect();
         self.table_meta.clear();
         let mut i = 0;
         while i < self.rows.len() {
-            let n = self.rows[i..].iter().take_while(|r| r.kind == Kind::Table).count();
+            let n = self.rows[i..]
+                .iter()
+                .take_while(|r| r.kind == Kind::Table)
+                .count();
             if n > 0 {
                 let wide = match self.big.iter().find(|b| b.rows.start == i) {
                     Some(block) => block.geom.total(),
-                    None => self.rows[i..i + n].iter().map(Row::content_width).fold(px(0.), |a, b| a.max(b)),
+                    None => self.rows[i..i + n]
+                        .iter()
+                        .map(Row::content_width)
+                        .fold(px(0.), |a, b| a.max(b)),
                 };
                 let (first, last) = (&self.rows[i], &self.rows[i + n - 1]);
-                self.table_meta.push(TableMeta { range: first.start..last.start + last.len, rows: i..i + n, wide });
+                self.table_meta.push(TableMeta {
+                    range: first.start..last.start + last.len,
+                    rows: i..i + n,
+                    wide,
+                });
             }
             i += n.max(1);
         }
@@ -1421,7 +2092,10 @@ impl Editor {
         }
         let (cursor, t) = (self.cursor(), self.theme);
         let at = self.row_at(cursor);
-        let look = grid::Look { theme: &t, style: self.big_style };
+        let look = grid::Look {
+            theme: &t,
+            style: self.big_style,
+        };
         let (page, top) = (bounds.size.height, self.scroll_y - self.top);
         let (lo, hi) = (top - page * 2., top + page * 3.);
         let text_system = window.text_system().clone();
@@ -1430,7 +2104,10 @@ impl Editor {
             let range = self.big[b].rows.clone();
             let n = range.len();
             let rows = &self.rows[range.clone()];
-            let (from, to) = (rows.partition_point(|r| r.y + r.height < lo), rows.partition_point(|r| r.y <= hi));
+            let (from, to) = (
+                rows.partition_point(|r| r.y + r.height < lo),
+                rows.partition_point(|r| r.y <= hi),
+            );
             let mut want = vec![0..3.min(n), from..to.max(from)];
             if let Some(k) = at.filter(|c| range.contains(c)).map(|c| c - range.start) {
                 want.push(k.saturating_sub(40)..(k + 41).min(n));
@@ -1455,7 +2132,16 @@ impl Editor {
                 let row = &mut self.rows[range.start + k];
                 if row.grid.is_none() {
                     let text = &self.content[row.start..row.start + row.len];
-                    let built = grid::big_row(&mut cells, &text_system, &look, &geom, k, k + 1 == n, (row.start, text), self.marked.as_ref());
+                    let built = grid::big_row(
+                        &mut cells,
+                        &text_system,
+                        &look,
+                        &geom,
+                        k,
+                        k + 1 == n,
+                        (row.start, text),
+                        self.marked.as_ref(),
+                    );
                     row.grid = Some(Rc::new(built));
                 }
             }
@@ -1475,7 +2161,11 @@ impl Editor {
         // can still pass under them; that is worth no gap at the top of every note.
         let narrow = self.width + SIDE * 2. >= bounds.size.width;
         let text_right = bounds.left() + (bounds.size.width + self.width) / 2.;
-        self.top = if narrow && self.pill.is_some_and(|left| text_right > left) { PILL_CLEAR } else { TOP.max(self.strip) };
+        self.top = if narrow && self.pill.is_some_and(|left| text_right > left) {
+            PILL_CLEAR
+        } else {
+            TOP.max(self.strip)
+        };
         if reveal {
             let c = self.cursor();
             if let Some(r) = self.row_at(c) {
@@ -1498,33 +2188,55 @@ impl Editor {
         self.viewport = bounds;
         self.materialize(bounds, window);
         if !self.readonly {
-        self.view_hitbox = Some(window.insert_hitbox(bounds, HitboxBehavior::Normal));
-        self.copy_hitboxes = self
-            .opening
-            .iter()
-            .map(|&i| &self.rows[i])
-            .map(|r| (r.start, window.insert_hitbox(self.copy_bounds(r), HitboxBehavior::Normal)))
-            .collect();
-        self.view_hitboxes = self
-            .opening
-            .iter()
-            .map(|&i| &self.rows[i])
-            .filter(|r| self.views(r))
-            .map(|r| (r.start, window.insert_hitbox(self.view_bounds(r), HitboxBehavior::Normal)))
-            .collect();
-        self.big_hitboxes = self
-            .rows
-            .iter()
-            .filter_map(|r| Some((r.start, window.insert_hitbox(self.big_bounds(r)?, HitboxBehavior::Normal))))
-            .collect();
-        let grid = self.grid.and_then(|_| self.popup_at(Self::grid_size()));
-        self.grid_hitbox = grid.map(|at| window.insert_hitbox(Bounds::new(at, Self::grid_size()), HitboxBehavior::Normal));
+            self.view_hitbox = Some(window.insert_hitbox(bounds, HitboxBehavior::Normal));
+            self.copy_hitboxes = self
+                .opening
+                .iter()
+                .map(|&i| &self.rows[i])
+                .map(|r| {
+                    (
+                        r.start,
+                        window.insert_hitbox(self.copy_bounds(r), HitboxBehavior::Normal),
+                    )
+                })
+                .collect();
+            self.view_hitboxes = self
+                .opening
+                .iter()
+                .map(|&i| &self.rows[i])
+                .filter(|r| self.views(r))
+                .map(|r| {
+                    (
+                        r.start,
+                        window.insert_hitbox(self.view_bounds(r), HitboxBehavior::Normal),
+                    )
+                })
+                .collect();
+            self.big_hitboxes = self
+                .rows
+                .iter()
+                .filter_map(|r| {
+                    Some((
+                        r.start,
+                        window.insert_hitbox(self.big_bounds(r)?, HitboxBehavior::Normal),
+                    ))
+                })
+                .collect();
+            let grid = self.grid.and_then(|_| self.popup_at(Self::grid_size()));
+            self.grid_hitbox = grid.map(|at| {
+                window.insert_hitbox(Bounds::new(at, Self::grid_size()), HitboxBehavior::Normal)
+            });
         }
         self.frames(reveal, window);
     }
 
     /// What an embedded section shows: where it is on screen, and what is visible of it.
-    pub(super) fn place_embedded(&mut self, origin: Point<Pixels>, clip: Bounds<Pixels>, window: &mut Window) {
+    pub(super) fn place_embedded(
+        &mut self,
+        origin: Point<Pixels>,
+        clip: Bounds<Pixels>,
+        window: &mut Window,
+    ) {
         self.origin = origin;
         self.viewport = clip;
         self.scroll_y = px(0.);
@@ -1551,9 +2263,17 @@ impl Editor {
             let frame_w = wide.min(room);
             let overflow = (wide - room).max(px(0.));
             let lead = table_lead(self.theme.wide, frame_w, width);
-            let mut dx = scrolled.get(&start).copied().unwrap_or_default().max(px(0.)).min(overflow);
+            let mut dx = scrolled
+                .get(&start)
+                .copied()
+                .unwrap_or_default()
+                .max(px(0.))
+                .min(overflow);
             if reveal && (start..=end).contains(&cursor) {
-                let at = self.row_at(cursor).unwrap_or(meta.rows.start).clamp(meta.rows.start, meta.rows.end - 1);
+                let at = self
+                    .row_at(cursor)
+                    .unwrap_or(meta.rows.start)
+                    .clamp(meta.rows.start, meta.rows.end - 1);
                 let row = &self.rows[at];
                 // Where the cursor would be without scrolling.
                 let x = row.pos(cursor - row.start).x + row.dx;
@@ -1569,7 +2289,9 @@ impl Editor {
                 self.table_x.insert(start, dx);
             }
             if self.rows[meta.rows.start].dx != dx + lead {
-                self.rows[meta.rows.clone()].iter_mut().for_each(|r| r.dx = dx + lead);
+                self.rows[meta.rows.clone()]
+                    .iter_mut()
+                    .for_each(|r| r.dx = dx + lead);
             }
             let (first, last) = (&self.rows[meta.rows.start], &self.rows[meta.rows.end - 1]);
             let top = first.y + first.pad;
@@ -1580,7 +2302,10 @@ impl Editor {
             if overflow > px(0.) {
                 let thumb = (frame_w * (frame_w / wide)).max(px(24.));
                 let at = (frame_w - thumb) * (dx / overflow);
-                let bar = Bounds::new(point(frame.left() + at, frame.bottom() - px(5.)), size(thumb, px(3.)));
+                let bar = Bounds::new(
+                    point(frame.left() + at, frame.bottom() - px(5.)),
+                    size(thumb, px(3.)),
+                );
                 self.thumbs.push(bar);
             }
             self.tables.push((start..end, frame));
@@ -1588,20 +2313,35 @@ impl Editor {
             let big = self.big.iter().any(|b| b.rows.start == meta.rows.start);
             if let Some(grid) = first.grid.as_ref().filter(|_| !big) {
                 let xs = grid.xs().iter().map(|x| frame.left() - dx + *x).collect();
-                let lines = self.rows[meta.rows.clone()].iter().filter(|r| !r.hidden()).map(|r| self.origin.y + r.y);
-                let mut ys: Vec<Pixels> = std::iter::once(frame.top()).chain(lines.skip(1)).collect();
+                let lines = self.rows[meta.rows.clone()]
+                    .iter()
+                    .filter(|r| !r.hidden())
+                    .map(|r| self.origin.y + r.y);
+                let mut ys: Vec<Pixels> =
+                    std::iter::once(frame.top()).chain(lines.skip(1)).collect();
                 ys.push(frame.bottom());
-                self.geos.push(Geo { start, frame, xs, ys, notes: marks.get(&start).cloned().unwrap_or_default() });
+                self.geos.push(Geo {
+                    start,
+                    frame,
+                    xs,
+                    ys,
+                    notes: marks.get(&start).cloned().unwrap_or_default(),
+                });
             }
         }
         if self.readonly {
             return;
         }
         let bars = self.tables.iter().flat_map(|(_, frame)| plus_bars(*frame));
-        self.table_hitboxes = bars.map(|bar| window.insert_hitbox(bar, HitboxBehavior::Normal)).collect();
-        self.handles.hitboxes = self
-            .handle_bounds()
-            .map(|(grip, plus)| (window.insert_hitbox(grip, HitboxBehavior::Normal), plus.map(|plus| window.insert_hitbox(plus, HitboxBehavior::Normal))));
+        self.table_hitboxes = bars
+            .map(|bar| window.insert_hitbox(bar, HitboxBehavior::Normal))
+            .collect();
+        self.handles.hitboxes = self.handle_bounds().map(|(grip, plus)| {
+            (
+                window.insert_hitbox(grip, HitboxBehavior::Normal),
+                plus.map(|plus| window.insert_hitbox(plus, HitboxBehavior::Normal)),
+            )
+        });
     }
 }
 
@@ -1620,33 +2360,315 @@ mod tests {
             .map(|r| {
                 let piece = text[at..at + r.len].to_string();
                 at += r.len;
-                (piece, r.font.style == FontStyle::Italic, r.font.family == mono())
+                (
+                    piece,
+                    r.font.style == FontStyle::Italic,
+                    r.font.family == mono(),
+                )
             })
             .collect()
     }
 
     fn plain() -> RunStyle {
-        RunStyle { heading: false, soft: false, italic: false, mono: false, tint: None }
+        RunStyle {
+            heading: false,
+            soft: false,
+            italic: false,
+            mono: false,
+            tint: None,
+        }
     }
 
     #[test]
     fn characters_missing_from_the_app_fonts_leave_the_italic_and_the_monospace() {
         // Italic: the CJK pieces are upright, the Latin ones keep their slant; every byte is in one run.
         let got = pieces("abc 中文 def", md::ITALIC, plain());
-        assert_eq!(got, [("abc ".into(), true, false), ("中文".into(), false, false), (" def".into(), true, false)]);
+        assert_eq!(
+            got,
+            [
+                ("abc ".into(), true, false),
+                ("中文".into(), false, false),
+                (" def".into(), true, false)
+            ]
+        );
         // Monospace (inline code, then a code block): the same, the piece in the sans.
-        for (flag, style) in [(md::CODE, plain()), (0, RunStyle { mono: true, ..plain() })] {
+        for (flag, style) in [
+            (md::CODE, plain()),
+            (
+                0,
+                RunStyle {
+                    mono: true,
+                    ..plain()
+                },
+            ),
+        ] {
             let got = pieces("a漢b", flag, style);
-            assert_eq!(got, [("a".into(), false, true), ("漢".into(), false, false), ("b".into(), false, true)]);
+            assert_eq!(
+                got,
+                [
+                    ("a".into(), false, true),
+                    ("漢".into(), false, false),
+                    ("b".into(), false, true)
+                ]
+            );
         }
         // Edges: one character, only CJK, CJK at both ends, a quote (italic by its kind), Japanese, Korean, a second plane.
-        assert_eq!(pieces("中", md::ITALIC, plain()), [("中".into(), false, false)]);
+        assert_eq!(
+            pieces("中", md::ITALIC, plain()),
+            [("中".into(), false, false)]
+        );
         assert_eq!(pieces("中a日", md::ITALIC, plain()).len(), 3);
-        assert_eq!(pieces("かな한글𠀀", md::ITALIC, plain()), [("かな한글𠀀".into(), false, false)]);
-        assert_eq!(pieces("引用 中", 0, RunStyle { italic: true, ..plain() }), [("引用".into(), false, false), (" ".into(), true, false), ("中".into(), false, false)]);
+        assert_eq!(
+            pieces("かな한글𠀀", md::ITALIC, plain()),
+            [("かな한글𠀀".into(), false, false)]
+        );
+        assert_eq!(
+            pieces(
+                "引用 中",
+                0,
+                RunStyle {
+                    italic: true,
+                    ..plain()
+                }
+            ),
+            [
+                ("引用".into(), false, false),
+                (" ".into(), true, false),
+                ("中".into(), false, false)
+            ]
+        );
         // Nothing to cut: one run, unchanged; a plain run with CJK stays as it was.
-        assert_eq!(pieces("abc", md::ITALIC, plain()), [("abc".into(), true, false)]);
-        assert_eq!(pieces("中文 abc", 0, plain()), [("中文 abc".into(), false, false)]);
+        assert_eq!(
+            pieces("abc", md::ITALIC, plain()),
+            [("abc".into(), true, false)]
+        );
+        assert_eq!(
+            pieces("中文 abc", 0, plain()),
+            [("中文 abc".into(), false, false)]
+        );
         assert_eq!(pieces("", md::ITALIC, plain()), []);
+    }
+
+    /// The source ranges `elided` hides on a non-live line, as text.
+    fn hidden(line: &str) -> Vec<&str> {
+        let (kind, marker) = md::classify(line, false);
+        let flags = md::flags(line, marker);
+        elided(line, marker, kind, &flags)
+            .into_iter()
+            .map(|r| &line[r.0..r.1])
+            .collect()
+    }
+
+    #[test]
+    fn non_live_lines_hide_their_markers() {
+        // Inline style signs go; their text stays.
+        assert_eq!(hidden("Hello **bold**!"), ["**", "**"]);
+        assert_eq!(hidden("a *it* and _it_"), ["*", "*", "_", "_"]);
+        assert_eq!(hidden("a ~~gone~~ b"), ["~~", "~~"]);
+        assert_eq!(hidden("a ==hl== b"), ["==", "=="]);
+        assert_eq!(hidden("a <u>u</u> b"), ["<u>", "</u>"]);
+        assert_eq!(hidden("a `code` b"), ["`", "`"]);
+        // Unmatched signs are text: they stay.
+        assert_eq!(hidden("a * b"), Vec::<&str>::new());
+        assert_eq!(hidden("a -> b"), Vec::<&str>::new());
+        // Block prefixes go, the indent kept.
+        assert_eq!(hidden("- item **b**"), ["- ", "**", "**"]);
+        assert_eq!(hidden("  - nested"), ["- "]);
+        assert_eq!(hidden("1. first"), ["1. "]);
+        assert_eq!(hidden("> quote"), ["> "]);
+        assert_eq!(hidden("- [ ] open"), ["- [ ] "]);
+        // A checked task keeps its struck text; only the marker goes.
+        assert_eq!(hidden("- [x] done"), ["- [x] "]);
+        // A heading keeps its title (its `# ` goes with the lead, not here).
+        assert_eq!(hidden("# Title **b**"), ["**", "**"]);
+        // Phase 3 stays readable: links, images, comments, callouts, tables.
+        assert_eq!(hidden("[t](https://example.com)"), Vec::<&str>::new());
+        assert_eq!(hidden("see [[note]] here"), Vec::<&str>::new());
+        assert_eq!(hidden("a #tag b"), Vec::<&str>::new());
+        assert_eq!(hidden("![a](p.png)"), Vec::<&str>::new());
+        assert_eq!(hidden("a {==t==}{>>c<<} b"), Vec::<&str>::new());
+        assert_eq!(hidden("> [!NOTE] hi"), ["> "]);
+        // An inline checkbox is not a block marker: it stays.
+        assert_eq!(hidden("do [ ] it"), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn hidden_markers_still_map_both_ways() {
+        // `- [ ] done` hides its six marker bytes: display 0 is the line start, the rest shifts.
+        let subs = [(0, 6, 0)];
+        assert_eq!(
+            (0..=8).map(|i| grid::shown(&subs, i)).collect::<Vec<_>>(),
+            [0, 0, 0, 0, 0, 0, 0, 1, 2]
+        );
+        assert_eq!(
+            (0..=2).map(|i| grid::source(&subs, i)).collect::<Vec<_>>(),
+            [0, 7, 8]
+        );
+    }
+
+    /// A note exercising every hidden kind, and the kinds that keep their source.
+    fn note() -> &'static str {
+        "# Title\n\
+         \n\
+         Hello **bold** and *italic*.\n\
+         \n\
+         - item one\n\
+         - [ ] task open\n\
+         - [x] task done\n\
+         \n\
+         1. first\n\
+         \n\
+         > quote here\n\
+         \n\
+         [our](https://example.com) link\n\
+         \n\
+         `code` bit\n\
+         \n\
+         | a | b |\n\
+         |---|---|\n\
+         | c | d |\n\
+         \n\
+         ```\n\
+         fenced\n\
+         ```\n\
+         \n\
+         ---"
+    }
+
+    /// The displayed text of the row starting at `start` (lead included), and whether it shows its source.
+    fn displayed(editor: &Editor, start: usize) -> (String, bool) {
+        let row = editor.rows.iter().find(|r| r.start == start).unwrap();
+        let mut text = String::new();
+        if let Some(l) = row.shaped.lead.as_ref() {
+            text.push_str(&l.line.text);
+        }
+        if let Some(l) = row.shaped.line.as_ref() {
+            text.push_str(&l.text);
+        }
+        (text, row.live)
+    }
+
+    /// Start of each line of `text`, in order.
+    fn starts(text: &str) -> Vec<usize> {
+        let mut out = vec![0];
+        for (i, b) in text.bytes().enumerate() {
+            if b == b'\n' {
+                out.push(i + 1);
+            }
+        }
+        out
+    }
+
+    #[gpui::test]
+    fn markers_hide_until_the_line_is_clicked_or_edited(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        let text = note().to_string();
+        let at = |line: usize| starts(&text)[line];
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        // A real frame: the editor lays itself out while painting.
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        draw(cx);
+        // Nothing is live after a load: markers hide, fences/links/tables keep their source.
+        let shown = |cx: &mut gpui::VisualTestContext, lines: &[usize]| {
+            editor.read_with(cx, |e, _| {
+                (0..lines.len())
+                    .map(|l| displayed(e, lines[l]))
+                    .collect::<Vec<_>>()
+            })
+        };
+        let lines = starts(&text);
+        let at = |line: usize| lines[line];
+        let rows = shown(cx, &lines);
+        // The cursor's line starts out live; every other line hides its markers.
+        assert_eq!(rows[0], ("# Title".to_string(), true));
+        assert_eq!(rows[2], ("Hello bold and italic.".to_string(), false));
+        assert_eq!(rows[4], ("item one".to_string(), false));
+        assert_eq!(rows[5], ("task open".to_string(), false));
+        assert_eq!(rows[6], ("task done".to_string(), false));
+        assert_eq!(rows[8], ("first".to_string(), false));
+        assert_eq!(rows[10], ("quote here".to_string(), false));
+        assert_eq!(
+            rows[12],
+            ("[our](https://example.com) link".to_string(), false)
+        );
+        assert_eq!(rows[14], ("code bit".to_string(), false));
+        // Tables keep their source in their cells (phase 3): no hidden bytes, drawn as a grid.
+        for l in [16, 17, 18] {
+            let (grid, subs) = editor.read_with(cx, |e, _| {
+                let r = e.rows.iter().find(|r| r.start == at(l)).unwrap();
+                (r.grid.is_some(), r.shaped.subs.len())
+            });
+            assert!(grid && subs == 0, "table line {l}");
+        }
+        assert_eq!(rows[20], ("```".to_string(), false));
+        assert_eq!(rows[23], (String::new(), false));
+        assert_eq!(rows[24], ("---".to_string(), false));
+        // Clicking the bold line reveals it; the others keep hiding.
+        let middle = editor.read_with(cx, |e, _| e.point_of(at(2) + 8).unwrap());
+        cx.simulate_click(middle, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
+        assert_eq!(rows[0], ("Title".to_string(), false));
+        assert_eq!(rows[4], ("item one".to_string(), false));
+        // A plain keyboard move does not reveal: the cursor is on the title, still rendered.
+        editor.update(cx, |e, cx| e.place_cursor(at(0) + 2, cx));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(rows[0], ("Title".to_string(), false));
+        assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
+        // Typing reveals the edited line.
+        editor.update(cx, |e, cx| e.edit(at(0) + 7..at(0) + 7, "!", cx));
+        draw(cx);
+        let edited = editor.read_with(cx, |e, _| e.text().to_string());
+        let lines = starts(&edited);
+        let at = |line: usize| lines[line];
+        let rows = shown(cx, &lines);
+        assert_eq!(rows[0], ("# Title!".to_string(), true));
+        assert_eq!(rows[2], ("Hello bold and italic.".to_string(), false));
+        // Hit-testing works on text bytes: display and source round-trip on a hidden line.
+        // (Bytes sharing the display position of an elision edge map to its start, as with `\|`.)
+        let roundtrip = editor.read_with(cx, |e, _| {
+            let row = e.rows.iter().find(|r| r.start == at(4)).unwrap();
+            (3..row.len - 1)
+                .map(|i| {
+                    let p = e.point_of(at(4) + i).unwrap();
+                    e.index_at(p)
+                })
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(
+            roundtrip,
+            (3..editor.read_with(cx, |e, _| e
+                .rows
+                .iter()
+                .find(|r| r.start == at(4))
+                .unwrap()
+                .len
+                - 1))
+                .map(|i| at(4) + i)
+                .collect::<Vec<_>>()
+        );
+        // The text itself never changes: clipboard and find read the source.
+        editor.update(cx, |e, cx| {
+            e.move_to(at(4), cx);
+            e.select_to(
+                at(4) + e.rows.iter().find(|r| r.start == at(4)).unwrap().len,
+                cx,
+            );
+        });
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.selected_text().to_string()),
+            "- item one"
+        );
+        assert_eq!(editor.read_with(cx, |e, _| e.text().to_string()), edited);
     }
 }

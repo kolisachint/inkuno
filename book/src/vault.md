@@ -1,6 +1,6 @@
 # Files on disk
 
-A vault is an ordinary folder of plain files. Bref adds nothing to your notes that another Markdown app could not read.
+A vault is an ordinary folder of plain files. Inkuno adds nothing to your notes that another Markdown app could not read.
 
 ## Notes
 
@@ -38,19 +38,19 @@ A YAML front matter is a block that starts on the first line with `---` and ends
 - **CSV and TSV** files are listed with the notes of their folder and open in a [grid](csv.md).
 - **Pictures** shown and listed: `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`, `tif`, `tiff`, `avif`.
 - **Attachments** are listed, found in the palette, linked with `[[name.pdf]]`, and open in the application of your system: `pdf`; video and audio (`mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mp3`, `m4a`, `wav`, `ogg`, `opus`, `flac`); archives (`zip`, `7z`, `tar`, `gz`, `rar`); documents (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `odt`, `ods`, `odp`, `epub`, `rtf`); text (`txt`, `json`, `xml`, `html`, `log`). See [Dropping files](links.md#dropping-files).
-- **Other files** stay in the folder, but Bref does not list them.
+- **Other files** stay in the folder, but Inkuno does not list them.
 
 ## Changes from other programs
 
-What other programs change in the vault (a sync tool, a script, another editor) is picked up in about half a second, without restarting. Bref asks the system to report changes (inotify, FSEvents, ReadDirectoryChangesW).
+What other programs change in the vault (a sync tool, a script, another editor) is picked up in about half a second, without restarting. Inkuno asks the system to report changes (inotify, FSEvents, ReadDirectoryChangesW).
 
 - Notes and folders added, renamed or removed elsewhere show up in the tree, the palette and the graph.
 - The note on display is read again when its file changes. If you were typing in that note at that moment, your version is kept and written back.
-- Bref also looks at the vault every 30 seconds, in case an event got lost. When the system cannot watch the folder, it looks every two seconds. See [Troubleshooting](troubleshooting.md#changes-made-elsewhere-show-up-late).
+- Inkuno also looks at the vault every 30 seconds, in case an event got lost. When the system cannot watch the folder, it looks every two seconds. See [Troubleshooting](troubleshooting.md#changes-made-elsewhere-show-up-late).
 
 ## Backup
 
-Click the arrow into a tray at the bottom of the rail, or type `back up` in the palette, and choose a folder. Bref writes there one archive of the whole vault, trash included, named after the vault and the date: `Notes 2026-10-09.tar.gz`. It is numbered if that name is taken.
+Click the arrow into a tray at the bottom of the rail, or type `back up` in the palette, and choose a folder. Inkuno writes there one archive of the whole vault, trash included, named after the vault and the date: `Notes 2026-10-09.tar.gz`. It is numbered if that name is taken.
 
 A folder inside the vault is refused.
 
@@ -62,7 +62,7 @@ Type `terminal` in the palette to open the terminal of your system in the folder
 - macOS: Terminal;
 - Linux: the one named in `$TERMINAL`, else the one of the desktop.
 
-Bref has no terminal of its own.
+Inkuno has no terminal of its own.
 
 ## Messages
 
@@ -74,13 +74,13 @@ Bref has no terminal of its own.
 
 ## Configuration files
 
-Bref keeps its own state in a configuration folder, outside the vault:
+Inkuno keeps its own state in a configuration folder, outside the vault:
 
 | System | Folder |
 |---|---|
-| Linux | `~/.config/bref/` |
-| macOS | `~/Library/Application Support/bref/` |
-| Windows | `%APPDATA%\bref\` |
+| Linux | `~/.config/inkuno/` |
+| macOS | `~/Library/Application Support/inkuno/` |
+| Windows | `%APPDATA%\inkuno\` |
 
 | File | Holds |
 |---|---|
@@ -91,6 +91,6 @@ Bref keeps its own state in a configuration folder, outside the vault:
 | `tables` | the delimiter, encoding and header row you chose for a [CSV file](csv.md#detection) |
 | `keys` | the [shortcuts you changed](settings.md#changing-a-shortcut) |
 | `update` | the time of the last [update check](updates.md) |
-| `crash` | the last crash, with the version of Bref, to attach to a bug report |
+| `crash` | the last crash, with the version of Inkuno, to attach to a bug report |
 
-In the vault itself, Bref only writes `.bref-icons` (the [icons](navigation.md#icons) you gave), the `.trash` folder, and, for a vault it [connects to git](sync.md#a-vault-not-in-git-yet), a `.gitignore` that leaves the trash out.
+In the vault itself, Inkuno only writes `.inkuno-icons` (the [icons](navigation.md#icons) you gave), the `.trash` folder, and, for a vault it [connects to git](sync.md#a-vault-not-in-git-yet), a `.gitignore` that leaves the trash out.

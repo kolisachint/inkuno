@@ -4,7 +4,7 @@
 <text x="95" y="63" text-anchor="middle" fill="#7d8590" stroke="none">You</text>
 <path d="M222 40L328 40C329.1 40 330 40.9 330 42L330 74C330 75.1 329.1 76 328 76L222 76C220.9 76 220 75.1 220 74L220 42C220 40.9 220.9 40 222 40Z" stroke="#7d8590"/>
 <path d="M275 76L275 612" stroke="#7d8590" stroke-dasharray="6 4"/>
-<text x="275" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Bref</text>
+<text x="275" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Inkuno</text>
 <path d="M402 40L508 40C509.1 40 510 40.9 510 42L510 74C510 75.1 509.1 76 508 76L402 76C400.9 76 400 75.1 400 74L400 42C400 40.9 400.9 40 402 40Z" stroke="#7d8590"/>
 <path d="M455 76L455 612" stroke="#7d8590" stroke-dasharray="6 4"/>
 <text x="455" y="63" text-anchor="middle" fill="#7d8590" stroke="none">git</text>
@@ -27,7 +27,7 @@
 <text x="362.5" y="150" text-anchor="middle" fill="#7d8590" stroke="none">save, commit</text>
 <path d="M450 200L275 200" stroke="#7d8590" stroke-dasharray="6 4"/>
 <path d="M285 195L275 200L285 205" stroke="#7d8590"/>
-<text x="362.5" y="194" text-anchor="middle" fill="#7d8590" stroke="none">Bref: sync</text>
+<text x="362.5" y="194" text-anchor="middle" fill="#7d8590" stroke="none">Inkuno: sync</text>
 <path d="M275 290L618 290" stroke="#7d8590"/>
 <path d="M630 290L618 296L618 284Z" stroke="#7d8590" fill="#7d8590"/>
 <text x="452.5" y="284" text-anchor="middle" fill="#7d8590" stroke="none">fetch</text>
@@ -49,17 +49,17 @@
 <path d="M275 568L95 568" stroke="#7d8590"/>
 <path d="M105 563L95 568L105 573" stroke="#7d8590"/>
 <text x="185" y="562" text-anchor="middle" fill="#7d8590" stroke="none">what was sent, or why not</text>
-<metadata id="bref-diagram">
+<metadata id="inkuno-diagram">
 version 8
 rich 1
 shape 1 lifeline 40 40 110 572 0 0 0 You
-shape 2 lifeline 220 40 110 572 0 0 0 Bref
+shape 2 lifeline 220 40 110 572 0 0 0 Inkuno
 shape 3 lifeline 400 40 110 572 0 0 0 git
 shape 4 lifeline 580 40 110 572 0 0 0 Server
 shape 15 fragment 196 250 552 286 0 0 0 loop\n[at most 3 times, while rejected]
 link 5 l1 l2 none arrow straight 0 0 Ctrl+Shift+S
 link 6 l2 l3 none solidtriangle straight 0 0 save, commit
-link 7 l3 l2 none arrow straight 0 1 Bref: sync
+link 7 l3 l2 none arrow straight 0 1 Inkuno: sync
 link 8 l2 l4 none solidtriangle straight 0 0 fetch
 link 9 l4 l2 none arrow straight 0 1 their commits
 link 10 l2 l3 none solidtriangle straight 0 0 merge

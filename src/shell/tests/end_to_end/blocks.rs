@@ -5,8 +5,12 @@ use super::*;
 
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let shell = &j.shell;
-    let lines = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, cx| s.pane().editor.read(cx).block_lines());
-    let of = |lines: &[(usize, bool, bool, f32, f32)], at: usize| *lines.iter().find(|l| l.0 == at).unwrap();
+    let lines = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).block_lines())
+    };
+    let of = |lines: &[(usize, bool, bool, f32, f32)], at: usize| {
+        *lines.iter().find(|l| l.0 == at).unwrap()
+    };
     // Block alone, one line, two, a callout followed straight by a code block, two callouts in a row, a plain quote
     // (a bar, no room), a ``` with no closing one (a block of one line).
     let note = "```rust\nlet a = 1;\n```\n\n> [!NOTE]\n> une\n> deux\n```\nx\n```\n> [!TIP]\n> seule\n> [!WARNING]\n> autre\n\n> simple\n\n```\ndeux\n```\n\n```\n";
@@ -18,40 +22,80 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Code: the room above the opening line and under the closing one only.
     assert_eq!(of(&l, 0), (0, true, false, room, 0.));
     assert_eq!(of(&l, at("let")), (at("let"), false, false, 0., 0.));
-    assert_eq!(of(&l, at("```\n\n> [!NOTE]")), (at("```\n\n> [!NOTE]"), false, true, 0., room));
+    assert_eq!(
+        of(&l, at("```\n\n> [!NOTE]")),
+        (at("```\n\n> [!NOTE]"), false, true, 0., room)
+    );
     // Callout: from its `[!TYPE]` line to the line before the next block, a gap between it and the code block.
-    assert_eq!(of(&l, at("> [!NOTE]")), (at("> [!NOTE]"), true, false, room, 0.));
+    assert_eq!(
+        of(&l, at("> [!NOTE]")),
+        (at("> [!NOTE]"), true, false, room, 0.)
+    );
     assert_eq!(of(&l, at("> une")), (at("> une"), false, false, 0., 0.));
     assert_eq!(of(&l, at("> deux")), (at("> deux"), false, true, 0., room));
     assert_eq!(of(&l, at("```\nx")).1, true);
     // Two callouts in a row are two shapes; a callout of a single line has both ends.
-    assert_eq!(of(&l, at("> seule")), (at("> seule"), false, true, 0., room));
-    assert_eq!(of(&l, at("> [!WARNING]")), (at("> [!WARNING]"), true, false, room, 0.));
+    assert_eq!(
+        of(&l, at("> seule")),
+        (at("> seule"), false, true, 0., room)
+    );
+    assert_eq!(
+        of(&l, at("> [!WARNING]")),
+        (at("> [!WARNING]"), true, false, room, 0.)
+    );
     // A plain quote has the ends of its bar but no room.
     assert_eq!(of(&l, at("> simple")), (at("> simple"), true, true, 0., 0.));
     // A ``` that closes nothing: one line.
     let orphan = note.rfind("```").unwrap();
     assert_eq!(of(&l, orphan), (orphan, true, true, room, room));
     // A block at the very top and a block at the very bottom of the note, and a single line block.
-    for note in ["```\nx\n```", "```\n```\n", "> [!NOTE]", "> [!NOTE]\n> a", "> a\n> b\n> c"] {
+    for note in [
+        "```\nx\n```",
+        "```\n```\n",
+        "> [!NOTE]",
+        "> [!NOTE]\n> a",
+        "> a\n> b\n> c",
+    ] {
         j.load(cx, note, 0);
         let l = lines(cx);
-        assert!(l.first().unwrap().1 && l.last().unwrap().2, "{note:?}: {l:?}");
+        assert!(
+            l.first().unwrap().1 && l.last().unwrap().2,
+            "{note:?}: {l:?}"
+        );
         assert_eq!(l.iter().filter(|l| l.1).count(), 1, "{note:?}: {l:?}");
         assert_eq!(l.iter().filter(|l| l.2).count(), 1, "{note:?}: {l:?}");
     }
     // The room moves the text down, not the clicks: the caret and a click land on the same byte on the first and last
     // lines of a fence and of a callout, whether the cursor is inside the block or not.
+    // Only the cursor's line shows its markers (Typora-style): anywhere else the markers take no
+    // room, so a click on one lands on the title's first letter instead of the marker byte.
+    // The cursor is at 0, on `# un`: that line alone shows its markers from the start.
     let note = "avant\n\n```rust\nfin\n```\n\n> [!NOTE]\n> fin\n\napres\n";
     for inside in [false, true] {
         j.load(cx, note, if inside { note.find("fin").unwrap() } else { 0 });
-        shell.update_in(cx, |s, window, cx| window.focus(&s.pane().editor.focus_handle(cx)));
+        shell.update_in(cx, |s, window, cx| {
+            window.focus(&s.pane().editor.focus_handle(cx))
+        });
         cx.run_until_parked();
-        for target in [note.find("rust").unwrap(), note.find("```\n\n> ").unwrap(), note.find("NOTE").unwrap(), note.rfind("fin").unwrap()] {
-            let p = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(target).unwrap());
+        for target in [
+            note.find("rust").unwrap(),
+            note.find("```\n\n> ").unwrap(),
+            note.find("NOTE").unwrap(),
+            note.rfind("fin").unwrap(),
+        ] {
+            let p = shell.read_with(cx, |s, cx| {
+                s.pane().editor.read(cx).point_of(target).unwrap()
+            });
             cx.simulate_click(p + point(px(1.), px(0.)), gpui::Modifiers::none());
             let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
-            assert_eq!(caret, target, "inside {inside}, click on byte {target}");
+            // A hidden block prefix takes no room: a click on the line's first visible byte
+            // lands on the line start (the keys can still put the caret under the prefix).
+            // Here the `> ` of `> fin` is hidden in both passes: neither cursor is on its line.
+            let expected = match target == note.rfind("fin").unwrap() {
+                true => target - "> ".len(),
+                false => target,
+            };
+            assert_eq!(caret, expected, "inside {inside}, click on byte {target}");
         }
     }
 }
@@ -66,23 +110,69 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = |s: &str| note.find(s).unwrap();
     // `#######` and `#tag` are no title; an empty `## ` and a one letter title are.
     let found: Vec<(usize, u8)> = rows.iter().map(|r| (r.0, r.1)).collect();
-    assert_eq!(found, [(0, 1), (at("## deux"), 2), (at("### trois"), 3), (at("#### quatre"), 4), (at("##### cinq"), 5), (at("###### six"), 6), (at("## \n"), 2), (at("# Éa"), 1)]);
+    assert_eq!(
+        found,
+        [
+            (0, 1),
+            (at("## deux"), 2),
+            (at("### trois"), 3),
+            (at("#### quatre"), 4),
+            (at("##### cinq"), 5),
+            (at("###### six"), 6),
+            (at("## \n"), 2),
+            (at("# Éa"), 1)
+        ]
+    );
     let lh = |n: u8| rows.iter().find(|r| r.1 == n).unwrap().3;
     // Line heights fall with the level (H5 and H6 share the body size), room above: none on the first line, then a
     // body line for H1 and H2, two thirds of it for the rest.
-    assert!(lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) > lh(5) && lh(5) == lh(6), "{rows:?}");
+    assert!(
+        lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) > lh(5) && lh(5) == lh(6),
+        "{rows:?}"
+    );
     let pad = |n: u8| rows.iter().filter(|r| r.1 == n).last().unwrap().2;
     assert_eq!(rows[0].2, 0.);
-    assert!(pad(1) == pad(2) && pad(2) > pad(3) && pad(3) == pad(6) && pad(6) > 0., "{rows:?}");
+    assert!(
+        pad(1) == pad(2) && pad(2) > pad(3) && pad(3) == pad(6) && pad(6) > 0.,
+        "{rows:?}"
+    );
     // Caret and click land on the same byte: on the marker and on the first letter of each title.
-    shell.update_in(cx, |s, window, cx| window.focus(&s.pane().editor.focus_handle(cx)));
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
     cx.run_until_parked();
-    for target in ["# un", "un", "## deux", "deux", "### trois", "trois", "#### quatre", "quatre", "##### cinq", "cinq", "###### six", "six", "Éa"] {
-        let start = if target.starts_with('#') { at(target) } else { note[..].rfind(target).unwrap() };
-        let p = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(start).unwrap());
+    for target in [
+        "# un",
+        "un",
+        "## deux",
+        "deux",
+        "### trois",
+        "trois",
+        "#### quatre",
+        "quatre",
+        "##### cinq",
+        "cinq",
+        "###### six",
+        "six",
+        "Éa",
+    ] {
+        let start = if target.starts_with('#') {
+            at(target)
+        } else {
+            note[..].rfind(target).unwrap()
+        };
+        let p = shell.read_with(cx, |s, cx| {
+            s.pane().editor.read(cx).point_of(start).unwrap()
+        });
         cx.simulate_click(p + point(px(1.), px(1.)), gpui::Modifiers::none());
         let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
-        assert_eq!(caret, start, "click on {target:?}");
+        let hashes = target.bytes().take_while(|&b| b == b'#').count();
+        // Markers shown (the cursor's line): the marker byte. Hidden: the title's first letter.
+        let expected = match hashes == 0 || start == 0 {
+            true => start,
+            false => start + hashes + 1,
+        };
+        assert_eq!(caret, expected, "click on {target:?}");
     }
 }
 
@@ -97,15 +187,23 @@ pub(super) fn tags(j: &Journey, cx: &mut gpui::VisualTestContext) {
         "assez longue pour passer à la ligne ".repeat(4)
     );
     // The same text, every tag's `#` replaced by a letter of the same width: no tag, so no pill.
-    let plain = note.replace(" #", " x").replace("| #", "| x").replace("\n\n#", "\n\nx");
+    let plain = note
+        .replace(" #", " x")
+        .replace("| #", "| x")
+        .replace("\n\n#", "\n\nx");
     assert_eq!(plain.len(), note.len());
     let geometry = |cx: &mut gpui::VisualTestContext, text: &str| {
         j.load(cx, text, 0);
-        shell.update_in(cx, |s, window, cx| window.focus(&s.pane().editor.focus_handle(cx)));
+        shell.update_in(cx, |s, window, cx| {
+            window.focus(&s.pane().editor.focus_handle(cx))
+        });
         cx.run_until_parked();
         shell.read_with(cx, |s, cx| {
             let editor = s.pane().editor.read(cx);
-            (0..=text.len()).filter(|i| text.is_char_boundary(*i)).map(|i| editor.point_of(i)).collect::<Vec<_>>()
+            (0..=text.len())
+                .filter(|i| text.is_char_boundary(*i))
+                .map(|i| editor.point_of(i))
+                .collect::<Vec<_>>()
         })
     };
     let (with, without) = (geometry(cx, &note), geometry(cx, &plain));
@@ -115,12 +213,25 @@ pub(super) fn tags(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // The long tag wraps (its two halves are on two lines), and a click on it still lands on the byte.
     let at = note.find(&long).unwrap();
     let (first, last) = (with[at].unwrap(), with[at + long.len() - 1].unwrap());
-    assert!(last.y > first.y, "the long tag is not wrapped: {first:?} {last:?}");
+    assert!(
+        last.y > first.y,
+        "the long tag is not wrapped: {first:?} {last:?}"
+    );
     j.load(cx, &note, 0);
-    shell.update_in(cx, |s, window, cx| window.focus(&s.pane().editor.focus_handle(cx)));
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
     cx.run_until_parked();
-    for target in [note.find("#tag").unwrap(), note.find("#fin").unwrap() + 2, at + 90, note.find("#item").unwrap() + 1, note.find("#astuce").unwrap()] {
-        let p = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(target).unwrap());
+    for target in [
+        note.find("#tag").unwrap(),
+        note.find("#fin").unwrap() + 2,
+        at + 90,
+        note.find("#item").unwrap() + 1,
+        note.find("#astuce").unwrap(),
+    ] {
+        let p = shell.read_with(cx, |s, cx| {
+            s.pane().editor.read(cx).point_of(target).unwrap()
+        });
         cx.simulate_click(p + point(px(1.), px(0.)), gpui::Modifiers::none());
         let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
         assert_eq!(caret, target, "click on byte {target}");

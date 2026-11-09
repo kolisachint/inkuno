@@ -37,10 +37,16 @@ pub fn onto(base: &str, ours: &str, theirs: &str) -> Option<Vec<(Range<usize>, S
         let shift = |at: usize, start: bool| {
             mine.iter()
                 .filter(|h| h.base.end < at || h.base.end == at && (start || !empty(&h.base)))
-                .fold(at as isize, |n, h| n + h.side.len() as isize - h.base.len() as isize) as usize
+                .fold(at as isize, |n, h| {
+                    n + h.side.len() as isize - h.base.len() as isize
+                }) as usize
         };
         let start = shift(hunk.base.start, true);
-        let end = if empty(&hunk.base) { start } else { shift(hunk.base.end, false) };
+        let end = if empty(&hunk.base) {
+            start
+        } else {
+            shift(hunk.base.end, false)
+        };
         let byte = |line: usize| o[..line].iter().map(|l| l.len()).sum::<usize>();
         edits.push((byte(start)..byte(end), t[hunk.side.clone()].concat()));
     }
@@ -58,20 +64,35 @@ const CELLS: usize = 1_000_000;
 
 fn hunks(base: &[&str], side: &[&str]) -> Vec<Hunk> {
     let head = base.iter().zip(side).take_while(|(a, b)| a == b).count();
-    let tail = base[head..].iter().rev().zip(side[head..].iter().rev()).take_while(|(a, b)| a == b).count();
-    let (b, s) = (&base[head..base.len() - tail], &side[head..side.len() - tail]);
+    let tail = base[head..]
+        .iter()
+        .rev()
+        .zip(side[head..].iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let (b, s) = (
+        &base[head..base.len() - tail],
+        &side[head..side.len() - tail],
+    );
     if b.is_empty() && s.is_empty() {
         return Vec::new();
     }
     if b.len() * s.len() > CELLS || b.is_empty() || s.is_empty() {
-        return vec![Hunk { base: head..head + b.len(), side: head..head + s.len() }];
+        return vec![Hunk {
+            base: head..head + b.len(),
+            side: head..head + s.len(),
+        }];
     }
     // Length of the longest common subsequence of b[i..] and s[j..].
     let w = s.len() + 1;
     let mut lcs = vec![0u32; (b.len() + 1) * w];
     for i in (0..b.len()).rev() {
         for j in (0..s.len()).rev() {
-            lcs[i * w + j] = if b[i] == s[j] { lcs[(i + 1) * w + j + 1] + 1 } else { lcs[(i + 1) * w + j].max(lcs[i * w + j + 1]) };
+            lcs[i * w + j] = if b[i] == s[j] {
+                lcs[(i + 1) * w + j + 1] + 1
+            } else {
+                lcs[(i + 1) * w + j].max(lcs[i * w + j + 1])
+            };
         }
     }
     let (mut i, mut j, mut out) = (0, 0, Vec::new());
@@ -79,7 +100,10 @@ fn hunks(base: &[&str], side: &[&str]) -> Vec<Hunk> {
     while i < b.len() || j < s.len() {
         if i < b.len() && j < s.len() && b[i] == s[j] {
             if let Some((bi, sj)) = open.take() {
-                out.push(Hunk { base: head + bi..head + i, side: head + sj..head + j });
+                out.push(Hunk {
+                    base: head + bi..head + i,
+                    side: head + sj..head + j,
+                });
             }
             (i, j) = (i + 1, j + 1);
             continue;
@@ -92,7 +116,10 @@ fn hunks(base: &[&str], side: &[&str]) -> Vec<Hunk> {
         }
     }
     if let Some((bi, sj)) = open {
-        out.push(Hunk { base: head + bi..head + i, side: head + sj..head + j });
+        out.push(Hunk {
+            base: head + bi..head + i,
+            side: head + sj..head + j,
+        });
     }
     out
 }
@@ -114,13 +141,45 @@ mod tests {
     fn changes_on_different_lines_are_both_kept() {
         let base = "# Note\n\nfirst\nsecond\nthird\n";
         // An agent appends while the user types on the first lines.
-        assert_eq!(merged(base, "# Note\n\nfirst typed\nsecond\nthird\n", "# Note\n\nfirst\nsecond\nthird\n\n## Added\nby the agent\n").unwrap(), "# Note\n\nfirst typed\nsecond\nthird\n\n## Added\nby the agent\n");
+        assert_eq!(
+            merged(
+                base,
+                "# Note\n\nfirst typed\nsecond\nthird\n",
+                "# Note\n\nfirst\nsecond\nthird\n\n## Added\nby the agent\n"
+            )
+            .unwrap(),
+            "# Note\n\nfirst typed\nsecond\nthird\n\n## Added\nby the agent\n"
+        );
         // The agent edits above where the user types.
-        assert_eq!(merged(base, "# Note\n\nfirst\nsecond\nthird!\n", "# Note\n\nFIRST\nsecond\nthird\n").unwrap(), "# Note\n\nFIRST\nsecond\nthird!\n");
+        assert_eq!(
+            merged(
+                base,
+                "# Note\n\nfirst\nsecond\nthird!\n",
+                "# Note\n\nFIRST\nsecond\nthird\n"
+            )
+            .unwrap(),
+            "# Note\n\nFIRST\nsecond\nthird!\n"
+        );
         // Neighbouring lines, one each: lines are independent.
-        assert_eq!(merged(base, "# Note\n\nfirst\nsecond 2\nthird\n", "# Note\n\nfirst\nsecond\nthird 3\n").unwrap(), "# Note\n\nfirst\nsecond 2\nthird 3\n");
+        assert_eq!(
+            merged(
+                base,
+                "# Note\n\nfirst\nsecond 2\nthird\n",
+                "# Note\n\nfirst\nsecond\nthird 3\n"
+            )
+            .unwrap(),
+            "# Note\n\nfirst\nsecond 2\nthird 3\n"
+        );
         // Lines removed by the agent, lines added by the user elsewhere.
-        assert_eq!(merged(base, "# Note\nnew\n\nfirst\nsecond\nthird\n", "# Note\n\nthird\n").unwrap(), "# Note\nnew\n\nthird\n");
+        assert_eq!(
+            merged(
+                base,
+                "# Note\nnew\n\nfirst\nsecond\nthird\n",
+                "# Note\n\nthird\n"
+            )
+            .unwrap(),
+            "# Note\nnew\n\nthird\n"
+        );
     }
 
     #[test]
@@ -147,10 +206,19 @@ mod tests {
         assert_eq!(merged("", "mine\n", "theirs\n"), None);
         assert_eq!(merged("a\n", "a\n", "").unwrap(), "");
         // An insertion of ours right before their changed block, one of theirs right after ours.
-        assert_eq!(merged("a\nb\nc\n", "a\nmine\nb\nc\n", "a\nB\nc\n").unwrap(), "a\nmine\nB\nc\n");
-        assert_eq!(merged("a\nb\nc\n", "a\nB\nc\n", "a\nb\ntheirs\nc\n").unwrap(), "a\nB\ntheirs\nc\n");
+        assert_eq!(
+            merged("a\nb\nc\n", "a\nmine\nb\nc\n", "a\nB\nc\n").unwrap(),
+            "a\nmine\nB\nc\n"
+        );
+        assert_eq!(
+            merged("a\nb\nc\n", "a\nB\nc\n", "a\nb\ntheirs\nc\n").unwrap(),
+            "a\nB\ntheirs\nc\n"
+        );
         // CRLF, accents, CJK, emoji: lines are compared byte for byte.
-        assert_eq!(merged("é\r\n日本\r\n", "é typed\r\n日本\r\n", "é\r\n日本 🙂\r\n").unwrap(), "é typed\r\n日本 🙂\r\n");
+        assert_eq!(
+            merged("é\r\n日本\r\n", "é typed\r\n日本\r\n", "é\r\n日本 🙂\r\n").unwrap(),
+            "é typed\r\n日本 🙂\r\n"
+        );
     }
 
     #[test]
@@ -158,7 +226,11 @@ mod tests {
         let base: String = (0..5_000).map(|n| format!("line {n}\n")).collect();
         let ours = base.replace("line 10\n", "line 10 typed\n");
         let theirs = base.replace("line 4000\n", "line 4000 agent\n");
-        assert_eq!(merged(&base, &ours, &theirs).unwrap(), base.replace("line 10\n", "line 10 typed\n").replace("line 4000\n", "line 4000 agent\n"));
+        assert_eq!(
+            merged(&base, &ours, &theirs).unwrap(),
+            base.replace("line 10\n", "line 10 typed\n")
+                .replace("line 4000\n", "line 4000 agent\n")
+        );
         // Every line rewritten on one side, one on the other: too big to align finely, so one clash.
         let all: String = (0..2_000).map(|n| format!("other {n}\n")).collect();
         let start = std::time::Instant::now();
@@ -193,7 +265,10 @@ mod tests {
             let mut both = base.clone();
             edit(&mut both, 1, a);
             edit(&mut both, 11, b);
-            assert_eq!(merged(&base.concat(), &ours.concat(), &theirs.concat()).unwrap(), both.concat());
+            assert_eq!(
+                merged(&base.concat(), &ours.concat(), &theirs.concat()).unwrap(),
+                both.concat()
+            );
         }
     }
 }

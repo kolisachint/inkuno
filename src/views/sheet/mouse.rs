@@ -22,8 +22,14 @@ pub(super) enum Hit {
 
 impl Sheet {
     pub(super) fn hit(&self, p: Point<Pixels>) -> Hit {
-        let (x, y) = (f32::from(p.x - self.body.origin.x), f32::from(p.y - self.body.origin.y));
-        let (w, h) = (f32::from(self.body.size.width), f32::from(self.body.size.height));
+        let (x, y) = (
+            f32::from(p.x - self.body.origin.x),
+            f32::from(p.y - self.body.origin.y),
+        );
+        let (w, h) = (
+            f32::from(self.body.size.width),
+            f32::from(self.body.size.height),
+        );
         let (mx, my) = self.max_scroll();
         if my > 0. && x > w - EDGE && y > ROW {
             return Hit::Bar(true);
@@ -33,7 +39,8 @@ impl Sheet {
         }
         let col = (x >= GUTTER).then(|| self.col_at(x - GUTTER + self.scroll.0));
         let last = self.table.rows().max(1) - 1;
-        let row = (y >= ROW).then(|| (self.first() + ((y - ROW + self.scroll.1) / ROW) as usize).min(last));
+        let row = (y >= ROW)
+            .then(|| (self.first() + ((y - ROW + self.scroll.1) / ROW) as usize).min(last));
         match (row, col) {
             (None, None) => Hit::Corner,
             (None, Some(c)) => Hit::Col(c),
@@ -42,7 +49,12 @@ impl Sheet {
         }
     }
 
-    pub(super) fn press(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn press(
+        &mut self,
+        e: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         window.focus(&self.focus);
         self.finish(cx);
         let extend = e.modifiers.shift;
@@ -52,7 +64,9 @@ impl Sheet {
         let adding = e.modifiers.secondary();
         let mut kept = std::mem::take(&mut self.more);
         match hit {
-            Hit::Cell(..) | Hit::Row(_) | Hit::Col(_) if adding && !extend => kept.push((self.anchor, self.cursor)),
+            Hit::Cell(..) | Hit::Row(_) | Hit::Col(_) if adding && !extend => {
+                kept.push((self.anchor, self.cursor))
+            }
             Hit::Bar(_) => {}
             _ if adding || extend => {}
             _ => kept.clear(),
@@ -108,7 +122,10 @@ impl Sheet {
     /// The scrollbar follows the pointer.
     pub(super) fn drag_bar(&mut self, p: Point<Pixels>, vertical: bool, cx: &mut Context<Self>) {
         let (mx, my) = self.max_scroll();
-        let (w, h) = (f32::from(self.body.size.width), f32::from(self.body.size.height));
+        let (w, h) = (
+            f32::from(self.body.size.width),
+            f32::from(self.body.size.height),
+        );
         if vertical {
             let y = f32::from(p.y - self.body.origin.y) - ROW;
             self.scroll.1 = (y / (h - ROW).max(1.)).clamp(0., 1.) * my;
@@ -123,9 +140,15 @@ impl Sheet {
     pub(super) fn wheel(&mut self, e: &ScrollWheelEvent, cx: &mut Context<Self>) {
         let mut delta = e.delta.pixel_delta(px(ROW));
         if e.modifiers.shift && delta.x == px(0.) {
-            delta = Point { x: delta.y, y: px(0.) };
+            delta = Point {
+                x: delta.y,
+                y: px(0.),
+            };
         }
-        self.scroll = (self.scroll.0 - f32::from(delta.x), self.scroll.1 - f32::from(delta.y));
+        self.scroll = (
+            self.scroll.0 - f32::from(delta.x),
+            self.scroll.1 - f32::from(delta.y),
+        );
         self.clamp();
         cx.notify();
     }

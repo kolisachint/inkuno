@@ -4,9 +4,9 @@ use super::*;
 
 #[derive(PartialEq, Debug)]
 pub enum Enter {
-        /// Text to insert at the cursor.
+    /// Text to insert at the cursor.
     Insert(String),
-        /// Empty item: the line is emptied to leave the list.
+    /// Empty item: the line is emptied to leave the list.
     Clear,
 }
 
@@ -14,7 +14,10 @@ pub enum Enter {
 pub fn on_enter(line: &str, col: usize, in_code: bool) -> Enter {
     let (kind, marker) = classify(line, in_code);
     let indent = &line[..indent_len(line)];
-    let list = matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_) | Kind::Quote);
+    let list = matches!(
+        kind,
+        Kind::Bullet | Kind::Ordered | Kind::Task(_) | Kind::Quote
+    );
     if !list || col < marker {
         let keep = if col >= indent.len() { indent } else { "" };
         return Enter::Insert(format!("\n{keep}"));
@@ -74,7 +77,10 @@ pub fn templatize(text: &str) -> String {
         if is_fence(bare) {
             fenced = !fenced;
         }
-        if !fenced && classify(bare, false).0 == Kind::Heading(1) && line.trim_start().starts_with("# ") {
+        if !fenced
+            && classify(bare, false).0 == Kind::Heading(1)
+            && line.trim_start().starts_with("# ")
+        {
             let end = at + line.trim_end_matches('\n').len();
             return format!("{}# {{{{title}}}}{}", &text[..at], &text[end..]);
         }
@@ -111,7 +117,14 @@ pub fn restyle(block: &str, to: ListStyle) -> (String, Vec<(usize, usize)>) {
                 return (line, None);
             }
             let kind = classify(line, false).0;
-            (line, matches!(kind, Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_)).then_some(kind))
+            (
+                line,
+                matches!(
+                    kind,
+                    Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_)
+                )
+                .then_some(kind),
+            )
         })
         .collect();
     let same = |kind: Kind| match to {
@@ -121,13 +134,20 @@ pub fn restyle(block: &str, to: ListStyle) -> (String, Vec<(usize, usize)>) {
         ListStyle::Task => matches!(kind, Kind::Task(_)),
     };
     let touched = lines.iter().filter_map(|(_, kind)| *kind);
-    let target = if touched.clone().next().is_some() && touched.clone().all(same) { ListStyle::Text } else { to };
-    let (mut out, mut spans) = (Vec::with_capacity(lines.len()), Vec::with_capacity(lines.len()));
-        // Rank of the last item at each indent, for numbering.
+    let target = if touched.clone().next().is_some() && touched.clone().all(same) {
+        ListStyle::Text
+    } else {
+        to
+    };
+    let (mut out, mut spans) = (
+        Vec::with_capacity(lines.len()),
+        Vec::with_capacity(lines.len()),
+    );
+    // Rank of the last item at each indent, for numbering.
     let mut counts: Vec<(usize, usize)> = Vec::new();
     for (line, kind) in lines {
         let Some(kind) = kind else {
-                        // An empty line lets numbering run on; any other block interrupts it.
+            // An empty line lets numbering run on; any other block interrupts it.
             if !line.trim().is_empty() {
                 counts.clear();
             }
@@ -136,8 +156,16 @@ pub fn restyle(block: &str, to: ListStyle) -> (String, Vec<(usize, usize)>) {
             continue;
         };
         let indent = indent_len(line);
-        let start = if kind == Kind::Para { indent } else { classify(line, false).1 };
-        let pad = if target == ListStyle::Text { "" } else { &line[..indent] };
+        let start = if kind == Kind::Para {
+            indent
+        } else {
+            classify(line, false).1
+        };
+        let pad = if target == ListStyle::Text {
+            ""
+        } else {
+            &line[..indent]
+        };
         let marker = match target {
             ListStyle::Text => String::new(),
             ListStyle::Bullet => "- ".to_string(),
@@ -171,7 +199,7 @@ pub fn renumber(text: &str, cursor: usize) -> Option<(String, usize)> {
     }
     let cur = starts.partition_point(|&s| s <= cursor).saturating_sub(1);
     let ordered = |i: usize| classify(lines[i], false).0 == Kind::Ordered;
-        // After an item is deleted, the list to fix starts below the cursor.
+    // After an item is deleted, the list to fix starts below the cursor.
     let anchor = [cur, cur + 1]
         .into_iter()
         .find(|&i| i < lines.len() && ordered(i))?;

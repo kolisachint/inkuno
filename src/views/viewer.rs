@@ -9,17 +9,20 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use gpui::{
-    App, Asset, Bounds, ContentMask, Context, Corners, CursorStyle, FocusHandle, Focusable, Image, ImageFormat,
-    ImgResourceLoader, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, RenderImage, Resource, Rgba,
-    ScrollWheelEvent, Window, canvas, div, fill, point, prelude::*, px,
+    App, Asset, Bounds, ContentMask, Context, Corners, CursorStyle, FocusHandle, Focusable, Image,
+    ImageFormat, ImgResourceLoader, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point,
+    RenderImage, Resource, Rgba, ScrollWheelEvent, Window, canvas, div, fill, point, prelude::*,
+    px,
 };
 use resvg::usvg;
 
 use crate::{
+    lang::tr,
+    ui::figure,
+    ui::svg,
     ui::theme::Theme,
-    views::canvas::{Cancel, Down, Left, Right, Up, ZoomFit, ZoomIn, ZoomOut},
     ui::widgets::{button, tip},
-    ui::figure, ui::svg, lang::tr,
+    views::canvas::{Cancel, Down, Left, Right, Up, ZoomFit, ZoomIn, ZoomOut},
 };
 
 /// What the viewer asks of the window.
@@ -83,7 +86,9 @@ impl Asset for Load {
     fn load(load: Self, _: &mut App) -> impl Future<Output = Self::Output> + Send + 'static {
         async move {
             let svg = match &load.source {
-                Source::File(path, _) => svg::readable(&std::fs::read_to_string(path).ok()?, load.look.dark),
+                Source::File(path, _) => {
+                    svg::readable(&std::fs::read_to_string(path).ok()?, load.look.dark)
+                }
                 Source::Mermaid(text) => figure::mermaid(text, &load.look).ok()?,
                 Source::Formula(text, display) => {
                     let ink = |i: usize| u8::from_str_radix(load.look.text.get(i..i + 2)?, 16).ok();
@@ -94,7 +99,10 @@ impl Asset for Load {
             let tree = svg::parse(&svg)?;
             let mut hasher = DefaultHasher::new();
             load.hash(&mut hasher);
-            Some(Arc::new(Doc { tree, id: hasher.finish() }))
+            Some(Arc::new(Doc {
+                tree,
+                id: hasher.finish(),
+            }))
         }
     }
 }
@@ -118,7 +126,8 @@ impl Hash for Tile {
 
 impl PartialEq for Tile {
     fn eq(&self, other: &Self) -> bool {
-        (self.doc.id, self.level, self.x, self.y, self.bg) == (other.doc.id, other.level, other.x, other.y, other.bg)
+        (self.doc.id, self.level, self.x, self.y, self.bg)
+            == (other.doc.id, other.level, other.x, other.y, other.bg)
     }
 }
 
@@ -148,11 +157,22 @@ impl Asset for Tile {
                     let (x, y) = (tile.x * TILE, tile.y * TILE);
                     let right = (w * scale).ceil() as u32;
                     let bottom = (h * scale).ceil() as u32;
-                    (scale, (x, y, TILE.min(right.saturating_sub(x)), TILE.min(bottom.saturating_sub(y))))
+                    (
+                        scale,
+                        (
+                            x,
+                            y,
+                            TILE.min(right.saturating_sub(x)),
+                            TILE.min(bottom.saturating_sub(y)),
+                        ),
+                    )
                 }
                 None => {
                     let scale = overview(&tile.doc);
-                    (scale, (0, 0, (w * scale).ceil() as u32, (h * scale).ceil() as u32))
+                    (
+                        scale,
+                        (0, 0, (w * scale).ceil() as u32, (h * scale).ceil() as u32),
+                    )
                 }
             };
             let bytes = svg::bmp(&tile.doc.tree, scale, region, tile.bg)?;
@@ -227,7 +247,12 @@ impl Viewer {
 
     #[cfg(test)]
     pub fn state(&self) -> (bool, bool, f32, (f32, f32)) {
-        (self.doc.is_some() || self.picture.is_some(), self.failed, self.zoom, self.pan)
+        (
+            self.doc.is_some() || self.picture.is_some(),
+            self.failed,
+            self.zoom,
+            self.pan,
+        )
     }
 
     /// Corner of the viewer in the window.
@@ -251,7 +276,10 @@ impl Viewer {
     }
 
     fn zoom_by(&mut self, by: f32, cx: &mut Context<Self>) {
-        let middle = (f32::from(self.bounds.size.width) / 2., f32::from(self.bounds.size.height) / 2.);
+        let middle = (
+            f32::from(self.bounds.size.width) / 2.,
+            f32::from(self.bounds.size.height) / 2.,
+        );
         self.zoom_at(self.zoom * by, middle, cx);
     }
 
@@ -275,10 +303,17 @@ impl Viewer {
     /// Fits the document: to its width (a long diagram is read going down), at 100% at most,
     /// centered if it fits entirely.
     fn frame(&mut self, (w, h): (f32, f32)) {
-        let (bw, bh) = (f32::from(self.bounds.size.width), f32::from(self.bounds.size.height));
+        let (bw, bh) = (
+            f32::from(self.bounds.size.width),
+            f32::from(self.bounds.size.height),
+        );
         let margin = 24.;
         self.zoom = ((bw - 2. * margin) / w.max(1.)).clamp(ZOOM.0, 1.);
-        let top = if h * self.zoom + 2. * margin <= bh { (bh - h * self.zoom) / 2. } else { margin };
+        let top = if h * self.zoom + 2. * margin <= bh {
+            (bh - h * self.zoom) / 2.
+        } else {
+            margin
+        };
         self.pan = ((bw - w * self.zoom) / 2., top);
     }
 
@@ -288,7 +323,10 @@ impl Viewer {
         if let Source::File(path, stamp) = &mut self.source {
             *stamp = std::fs::metadata(path).and_then(|m| m.modified()).ok();
         }
-        let load = Load { source: self.source.clone(), look: figure::Look::of(&self.theme) };
+        let load = Load {
+            source: self.source.clone(),
+            look: figure::Look::of(&self.theme),
+        };
         // One read at a time: the one for a theme already left finishes before the next starts.
         if let Some(running) = self.waiting.clone().filter(|running| *running != load) {
             if window.use_asset::<Load>(&running, cx).is_none() {
@@ -318,7 +356,9 @@ impl Viewer {
 
     /// The picture on screen, read by gpui in the background (animated GIF: its first frame).
     fn picture(&mut self, window: &mut Window, cx: &mut App) -> Option<Arc<RenderImage>> {
-        let Source::Raster(path) = &self.source else { return None };
+        let Source::Raster(path) = &self.source else {
+            return None;
+        };
         match window.use_asset::<ImgResourceLoader>(&Resource::Path(path.clone().into()), cx) {
             Some(Ok(image)) => self.picture = Some(image),
             Some(Err(_)) => self.failed = self.picture.is_none(),
@@ -329,7 +369,12 @@ impl Viewer {
 
     /// A tile's image, if it is ready; keeps it among the last requested. A tile
     /// never requested waits its turn if `FLYING` are already in progress.
-    fn tile(&mut self, tile: Tile, window: &mut Window, cx: &mut App) -> Option<Arc<gpui::RenderImage>> {
+    fn tile(
+        &mut self,
+        tile: Tile,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Arc<gpui::RenderImage>> {
         match self.tiles.iter().position(|t| *t == tile) {
             Some(i) => {
                 let t = self.tiles.remove(i).unwrap();
@@ -348,7 +393,10 @@ impl Viewer {
     /// Tiles in progress that have finished make room for the next ones.
     fn landed(&mut self, window: &mut Window, cx: &mut App) {
         let flying = std::mem::take(&mut self.flying);
-        self.flying = flying.into_iter().filter(|t| window.use_asset::<Tile>(t, cx).is_none()).collect();
+        self.flying = flying
+            .into_iter()
+            .filter(|t| window.use_asset::<Tile>(t, cx).is_none())
+            .collect();
     }
 
     /// Frees the tiles beyond the last `KEPT`: their image and their room on the graphics card.
@@ -391,19 +439,34 @@ impl Viewer {
         }
         let o = bounds.origin;
         let (pan, zoom) = (self.pan, self.zoom);
-        let at = move |x: f32, y: f32| point(o.x + px(pan.0 + x * zoom), o.y + px(pan.1 + y * zoom));
+        let at =
+            move |x: f32, y: f32| point(o.x + px(pan.0 + x * zoom), o.y + px(pan.1 + y * zoom));
         let whole = Bounds::from_corners(at(0., 0.), at(w, h));
-        window.paint_quad(fill(whole, t.bg).border_widths(px(1.)).border_color(t.border));
+        window.paint_quad(
+            fill(whole, t.bg)
+                .border_widths(px(1.))
+                .border_color(t.border),
+        );
         let Some(doc) = doc else {
             if let Some(Some(image)) = picture {
-                window.paint_image(whole, Corners::default(), image, 0, false).ok();
+                window
+                    .paint_image(whole, Corners::default(), image, 0, false)
+                    .ok();
             }
             return;
         };
         let bg = self.bg();
-        let base = Tile { doc: doc.clone(), level: None, x: 0, y: 0, bg };
+        let base = Tile {
+            doc: doc.clone(),
+            level: None,
+            x: 0,
+            y: 0,
+            bg,
+        };
         if let Some(image) = self.tile(base, window, cx) {
-            window.paint_image(whole, Corners::default(), image, 0, false).ok();
+            window
+                .paint_image(whole, Corners::default(), image, 0, false)
+                .ok();
         }
         // The tile level just fine enough for the screen: a tile weighs only its size, the
         // whole document is never rasterized at that level.
@@ -413,20 +476,40 @@ impl Viewer {
         let (bw, bh) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
         let unit = |v: f32, pan: f32| (v - pan) / zoom;
         let cell = |u: f32| (u * scale / TILE as f32).floor().max(0.) as u32;
-        let (cols, rows) = ((w * scale / TILE as f32).ceil() as u32, (h * scale / TILE as f32).ceil() as u32);
-        let (x0, x1) = (cell(unit(0., pan.0)), cell(unit(bw, pan.0)).min(cols.saturating_sub(1)));
-        let (y0, y1) = (cell(unit(0., pan.1)), cell(unit(bh, pan.1)).min(rows.saturating_sub(1)));
+        let (cols, rows) = (
+            (w * scale / TILE as f32).ceil() as u32,
+            (h * scale / TILE as f32).ceil() as u32,
+        );
+        let (x0, x1) = (
+            cell(unit(0., pan.0)),
+            cell(unit(bw, pan.0)).min(cols.saturating_sub(1)),
+        );
+        let (y0, y1) = (
+            cell(unit(0., pan.1)),
+            cell(unit(bh, pan.1)).min(rows.saturating_sub(1)),
+        );
         let side = TILE as f32 / scale;
         for y in y0..=y1.max(y0) {
             for x in x0..=x1.max(x0) {
                 if x >= cols || y >= rows {
                     continue;
                 }
-                let tile = Tile { doc: doc.clone(), level: Some(level), x, y, bg };
+                let tile = Tile {
+                    doc: doc.clone(),
+                    level: Some(level),
+                    x,
+                    y,
+                    bg,
+                };
                 if let Some(image) = self.tile(tile, window, cx) {
                     let (ux, uy) = (x as f32 * side, y as f32 * side);
-                    let cell = Bounds::from_corners(at(ux, uy), at((ux + side).min(w), (uy + side).min(h)));
-                    window.paint_image(cell, Corners::default(), image, 0, false).ok();
+                    let cell = Bounds::from_corners(
+                        at(ux, uy),
+                        at((ux + side).min(w), (uy + side).min(h)),
+                    );
+                    window
+                        .paint_image(cell, Corners::default(), image, 0, false)
+                        .ok();
                 }
             }
         }
@@ -462,7 +545,11 @@ impl Render for Viewer {
             .border_1()
             .border_color(t.border)
             .occlude()
-            .child(button("v-zoom-out", "minimize.svg", false, t).tooltip(tip(tr("Zoom out", "Dézoomer"), "-".into(), t)).on_click(cx.listener(|this, _, _, cx| this.zoom_by(0.8, cx))))
+            .child(
+                button("v-zoom-out", "minimize.svg", false, t)
+                    .tooltip(tip(tr("Zoom out", "Dézoomer"), "-".into(), t))
+                    .on_click(cx.listener(|this, _, _, cx| this.zoom_by(0.8, cx))),
+            )
             .child(
                 div()
                     .id("v-zoom-fit")
@@ -477,12 +564,24 @@ impl Render for Viewer {
                         cx.notify();
                     })),
             )
-            .child(button("v-zoom-in", "plus.svg", false, t).tooltip(tip(tr("Zoom in", "Zoomer"), "+".into(), t)).on_click(cx.listener(|this, _, _, cx| this.zoom_by(1.25, cx))))
-            .when(matches!(self.source, Source::File(..)), |d| d.child(
-                button("v-share", "export.svg", false, t)
-                    .tooltip(tip(tr("Share / Export", "Partager / Exporter"), crate::ui::keys::of(cx, &crate::actions::ShareDocument), t))
-                    .on_click(|_, window, cx| window.dispatch_action(Box::new(crate::actions::ShareDocument), cx))
-            ));
+            .child(
+                button("v-zoom-in", "plus.svg", false, t)
+                    .tooltip(tip(tr("Zoom in", "Zoomer"), "+".into(), t))
+                    .on_click(cx.listener(|this, _, _, cx| this.zoom_by(1.25, cx))),
+            )
+            .when(matches!(self.source, Source::File(..)), |d| {
+                d.child(
+                    button("v-share", "export.svg", false, t)
+                        .tooltip(tip(
+                            tr("Share / Export", "Partager / Exporter"),
+                            crate::ui::keys::of(cx, &crate::actions::ShareDocument),
+                            t,
+                        ))
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(crate::actions::ShareDocument), cx)
+                        }),
+                )
+            });
         // A Mermaid class, sequence or state diagram can be carried on by hand, on the canvas.
         let edit = matches!(&self.source, Source::Mermaid(text) if crate::logic::mermaid::kind(text).is_some()).then(|| {
             div()
@@ -497,10 +596,22 @@ impl Render for Viewer {
                 .occlude()
                 .child(button("v-to-canvas", "pencil.svg", false, t).tooltip(tip(tr("Edit on the canvas", "Modifier sur le canevas"), String::new(), t)).on_click(cx.listener(|this, _, _, cx| this.edit_on_canvas(cx))))
         });
-        let note = |text: &'static str| div().absolute().inset_0().flex().items_center().justify_center().text_color(t.soft).child(text);
+        let note = |text: &'static str| {
+            div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_color(t.soft)
+                .child(text)
+        };
         let shown = self.doc.is_some() || self.picture.is_some();
         let status = match (shown, self.failed) {
-            (false, true) => Some(note(tr("This drawing cannot be read", "Ce dessin ne peut pas être lu"))),
+            (false, true) => Some(note(tr(
+                "This drawing cannot be read",
+                "Ce dessin ne peut pas être lu",
+            ))),
             (false, false) => Some(note(tr("Drawing…", "Dessin en cours…"))),
             _ => None,
         };
@@ -513,7 +624,11 @@ impl Render for Viewer {
             // The sheet's corners: the sheet under it clips to a rectangle, not to its corners.
             .bg(t.bg)
             .rounded(t.sheet())
-            .cursor(if self.drag.is_some() { CursorStyle::ClosedHand } else { CursorStyle::OpenHand })
+            .cursor(if self.drag.is_some() {
+                CursorStyle::ClosedHand
+            } else {
+                CursorStyle::OpenHand
+            })
             .on_action(cx.listener(|this, _: &ZoomIn, _, cx| this.zoom_by(1.25, cx)))
             .on_action(cx.listener(|this, _: &ZoomOut, _, cx| this.zoom_by(0.8, cx)))
             .on_action(cx.listener(|this, _: &ZoomFit, _, cx| {

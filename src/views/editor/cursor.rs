@@ -40,7 +40,11 @@ impl Editor {
     }
 
     pub(super) fn cursor(&self) -> usize {
-        if self.reversed { self.sel.start } else { self.sel.end }
+        if self.reversed {
+            self.sel.start
+        } else {
+            self.sel.end
+        }
     }
 
     pub(super) fn clamp(&self, mut i: usize) -> usize {
@@ -53,7 +57,9 @@ impl Editor {
 
     pub(super) fn line_range(&self, at: usize) -> Range<usize> {
         let start = self.content[..at].rfind('\n').map_or(0, |i| i + 1);
-        let end = self.content[at..].find('\n').map_or(self.content.len(), |i| at + i);
+        let end = self.content[at..]
+            .find('\n')
+            .map_or(self.content.len(), |i| at + i);
         start..end
     }
 
@@ -95,7 +101,8 @@ impl Editor {
         let (mut kept, main): (Vec<(Range<usize>, bool)>, _) = (Vec::new(), self.sel.clone());
         let touch = |a: &Range<usize>, b: &Range<usize>| a.start <= b.end && b.start <= a.end;
         for cursor in std::mem::take(&mut self.more) {
-            if !touch(&cursor.0, &main) && kept.last().is_none_or(|last| !touch(&last.0, &cursor.0)) {
+            if !touch(&cursor.0, &main) && kept.last().is_none_or(|last| !touch(&last.0, &cursor.0))
+            {
                 kept.push(cursor);
             }
         }
@@ -122,9 +129,14 @@ impl Editor {
             return self.select_to(word.end, cx);
         }
         let text = self.content[self.sel.clone()].to_string();
-        let taken = |at: usize| self.sel.start == at || self.more.iter().any(|(sel, _)| sel.start == at);
-        let after = self.content[self.sel.end..].match_indices(&text).map(|(i, _)| i + self.sel.end);
-        let before = self.content[..self.sel.start].match_indices(&text).map(|(i, _)| i);
+        let taken =
+            |at: usize| self.sel.start == at || self.more.iter().any(|(sel, _)| sel.start == at);
+        let after = self.content[self.sel.end..]
+            .match_indices(&text)
+            .map(|(i, _)| i + self.sel.end);
+        let before = self.content[..self.sel.start]
+            .match_indices(&text)
+            .map(|(i, _)| i);
         let Some(at) = after.chain(before).find(|at| !taken(*at)) else {
             return;
         };
@@ -135,9 +147,7 @@ impl Editor {
     }
 
     pub(super) fn row_at(&self, i: usize) -> Option<usize> {
-        self.rows
-            .partition_point(|r| r.start <= i)
-            .checked_sub(1)
+        self.rows.partition_point(|r| r.start <= i).checked_sub(1)
     }
 
     /// Neighbouring visible line: a table's dash line is skipped.
@@ -195,17 +205,21 @@ impl Editor {
         {
             let n = items.len();
             let i = self.ac_index.min(n - 1);
-            self.ac_index = if m == Motion::Down { (i + 1) % n } else { (i + n - 1) % n };
+            self.ac_index = if m == Motion::Down {
+                (i + 1) % n
+            } else {
+                (i + n - 1) % n
+            };
             cx.notify();
             return;
         }
         let c = self.cursor();
-        let gx = self
-            .goal_x
-            .unwrap_or_else(|| self.row_at(c).map_or(px(0.), |r| {
+        let gx = self.goal_x.unwrap_or_else(|| {
+            self.row_at(c).map_or(px(0.), |r| {
                 let row = &self.rows[r];
                 row.pos(c.saturating_sub(row.start)).x
-            }));
+            })
+        });
         let to = match m {
             Motion::Left if !select && !self.sel.is_empty() => self.sel.start,
             Motion::Right if !select && !self.sel.is_empty() => self.sel.end,
@@ -216,7 +230,10 @@ impl Editor {
         } else {
             self.move_to(to, cx)
         }
-        if matches!(m, Motion::Up | Motion::Down | Motion::PageUp | Motion::PageDown) {
+        if matches!(
+            m,
+            Motion::Up | Motion::Down | Motion::PageUp | Motion::PageDown
+        ) {
             self.goal_x = Some(gx);
         }
     }

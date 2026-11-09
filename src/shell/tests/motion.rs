@@ -36,9 +36,14 @@ fn fades_never_move_or_delay_anything(cx: &mut TestAppContext) {
         cx.debug_bounds("nav-panel").expect("panel")
     };
     let on = panel(cx);
-    assert!(shell.read_with(cx, |s, _| s.theme.motion), "fades are on by default");
+    assert!(
+        shell.read_with(cx, |s, _| s.theme.motion),
+        "fades are on by default"
+    );
     let choose = |cx: &mut gpui::VisualTestContext, keys: &str| {
-        shell.update_in(cx, |s, window, cx| s.choose_setting(Setting::Motion, window, cx));
+        shell.update_in(cx, |s, window, cx| {
+            s.choose_setting(Setting::Motion, window, cx)
+        });
         cx.run_until_parked();
         cx.simulate_keystrokes(keys);
         cx.run_until_parked();
@@ -56,7 +61,9 @@ fn fades_never_move_or_delay_anything(cx: &mut TestAppContext) {
     // A folder unfolded: its rows (not itself, not the others) fade for `FADE`; a second unfolding
     // before the end takes over, and nothing is left fading afterwards.
     let (dir, other) = (root.join("Dossier"), root.join("Alpha.md"));
-    let fading = |cx: &mut gpui::VisualTestContext, path: &Path| shell.read_with(cx, |s, _| s.nav.fading(path));
+    let fading = |cx: &mut gpui::VisualTestContext, path: &Path| {
+        shell.read_with(cx, |s, _| s.nav.fading(path))
+    };
     shell.update(cx, |s, _| s.nav.unfold(dir.clone()));
     assert_eq!(fading(cx, &dir.join("Dedans.md")), Some(0));
     assert_eq!((fading(cx, &dir), fading(cx, &other)), (None, None));
@@ -70,8 +77,18 @@ fn fades_never_move_or_delay_anything(cx: &mut TestAppContext) {
 
 #[test]
 fn the_setting_reads_absent_empty_and_unknown() {
-    for (text, motion) in [("", true), ("motion=\n", true), ("motion=banana\n", true), ("motion=on\n", true), ("motion=off\n", false)] {
+    for (text, motion) in [
+        ("", true),
+        ("motion=\n", true),
+        ("motion=banana\n", true),
+        ("motion=on\n", true),
+        ("motion=off\n", false),
+    ] {
         let prefs = crate::logic::prefs::Prefs::parse(text);
-        assert_eq!(crate::ui::theme::Theme::of(&prefs, gpui::WindowAppearance::Light).motion, motion, "{text:?}");
+        assert_eq!(
+            crate::ui::theme::Theme::of(&prefs, gpui::WindowAppearance::Light).motion,
+            motion,
+            "{text:?}"
+        );
     }
 }

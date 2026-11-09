@@ -9,7 +9,13 @@ pub(super) struct Line {
 }
 
 impl Line {
-    pub fn paint(&self, origin: Point<Pixels>, line_height: Pixels, window: &mut Window, cx: &mut App) -> gpui::Result<()> {
+    pub fn paint(
+        &self,
+        origin: Point<Pixels>,
+        line_height: Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> gpui::Result<()> {
         let mut x = origin.x;
         for part in &self.parts {
             part.paint(point(x, origin.y), line_height, window, cx)?;
@@ -22,18 +28,33 @@ impl Line {
 impl Canvas {
     /// The shape being written in grows to hold its text.
     pub(super) fn fit_text(&mut self, window: &mut Window) {
-        let Some(shape) = self.writing_id().and_then(|id| self.diagram.shape(id)) else { return };
+        let Some(shape) = self.writing_id().and_then(|id| self.diagram.shape(id)) else {
+            return;
+        };
         let (lines, _) = self.diagram.lines(shape);
         // What is written is shown as typed: its marks are not applied.
-        let widest = self.diagram.runs(shape, true).iter().map(|spans| self.measure(spans, 1., window)).fold(0f32, f32::max);
+        let widest = self
+            .diagram
+            .runs(shape, true)
+            .iter()
+            .map(|spans| self.measure(spans, 1., window))
+            .fold(0f32, f32::max);
         let tall = lines.last().map_or(0., |l| l.y + diagram::LINE - shape.y);
         let (form, id) = (shape.form, shape.id);
-        let Some(shape) = self.diagram.shape_mut(id) else { return };
+        let Some(shape) = self.diagram.shape_mut(id) else {
+            return;
+        };
         match form {
             Form::Text => (shape.w, shape.h) = (widest.max(20.), tall.max(diagram::LINE)),
             Form::Actor => {}
             _ => {
-                let grow = |have: f32, need: f32| if need > have { (need / diagram::GRID).ceil() * diagram::GRID } else { have };
+                let grow = |have: f32, need: f32| {
+                    if need > have {
+                        (need / diagram::GRID).ceil() * diagram::GRID
+                    } else {
+                        have
+                    }
+                };
                 (shape.w, shape.h) = (grow(shape.w, widest + 20.), grow(shape.h, tall + 6.));
             }
         }
@@ -43,48 +64,104 @@ impl Canvas {
     pub(super) fn spans_of(&self, id: u32, slot: Slot, text: &str, bold: bool) -> Vec<Span> {
         match self.writing_id() {
             Some(editing) if editing == id && slot == self.slot => richtext::plain(text, bold),
-            _ if slot == Slot::Middle && self.diagram.link(id).is_some() => self.diagram.label_runs(text),
+            _ if slot == Slot::Middle && self.diagram.link(id).is_some() => {
+                self.diagram.label_runs(text)
+            }
             _ => self.diagram.styled(text, bold),
         }
     }
 
     /// A line of the text being written, shaped as it is drawn (as typed, at the zoom), from byte `start`
     /// of its text, written at `(x, y)` of the diagram from its `anchor`.
-    fn row(&self, start: usize, text: &str, bold: bool, (x, y): (f32, f32), anchor: Anchor, window: &mut Window) -> Row {
-        let mut line = self.shaped(&richtext::plain(text, bold), self.theme.text, self.zoom, window);
+    fn row(
+        &self,
+        start: usize,
+        text: &str,
+        bold: bool,
+        (x, y): (f32, f32),
+        anchor: Anchor,
+        window: &mut Window,
+    ) -> Row {
+        let mut line = self.shaped(
+            &richtext::plain(text, bold),
+            self.theme.text,
+            self.zoom,
+            window,
+        );
         let shaped = line.parts.remove(0);
         let back = match anchor {
             Anchor::Start => px(0.),
             Anchor::Middle => shaped.width / 2.,
             Anchor::End => shaped.width,
         };
-        Row { start, origin: self.spot(x, y) - point(back, px(0.)), shaped }
+        Row {
+            start,
+            origin: self.spot(x, y) - point(back, px(0.)),
+            shaped,
+        }
     }
 
-    pub(super) fn line(&self, text: &str, bold: bool, color: Hsla, scale: f32, window: &mut Window) -> Line {
+    pub(super) fn line(
+        &self,
+        text: &str,
+        bold: bool,
+        color: Hsla,
+        scale: f32,
+        window: &mut Window,
+    ) -> Line {
         self.shaped(&richtext::plain(text, bold), color, scale, window)
     }
 
     /// A line of text in runs: bold, italic, underlined, struck, in code. One shaped piece for
     /// each run: gpui 0.2 gives a whole line the font of its first run when the runs share a color.
-    pub(super) fn shaped(&self, spans: &[Span], color: Hsla, scale: f32, window: &mut Window) -> Line {
+    pub(super) fn shaped(
+        &self,
+        spans: &[Span],
+        color: Hsla,
+        scale: f32,
+        window: &mut Window,
+    ) -> Line {
         let parts: Vec<gpui::ShapedLine> = spans
             .iter()
             .map(|span| {
                 let style = span.style;
-                let weight = if style.bold { FontWeight::BOLD } else { FontWeight::NORMAL };
+                let weight = if style.bold {
+                    FontWeight::BOLD
+                } else {
+                    FontWeight::NORMAL
+                };
                 // The italic fonts have no CJK glyphs, and gpui draws a box instead of falling back.
                 let cjk = span.text.chars().any(crate::ui::assets::needs_system_font);
-                let slant = if style.italic && !cjk { FontStyle::Italic } else { FontStyle::Normal };
+                let slant = if style.italic && !cjk {
+                    FontStyle::Italic
+                } else {
+                    FontStyle::Normal
+                };
                 let run = TextRun {
                     len: span.text.len(),
-                    font: gpui::Font { weight, style: slant, ..font(if style.code { mono() } else { sans() }) },
+                    font: gpui::Font {
+                        weight,
+                        style: slant,
+                        ..font(if style.code { mono() } else { sans() })
+                    },
                     color,
                     background_color: None,
-                    underline: style.under.then_some(UnderlineStyle { thickness: px(1.), color: Some(color), wavy: false }),
-                    strikethrough: style.strike.then_some(StrikethroughStyle { thickness: px(1.), color: Some(color) }),
+                    underline: style.under.then_some(UnderlineStyle {
+                        thickness: px(1.),
+                        color: Some(color),
+                        wavy: false,
+                    }),
+                    strikethrough: style.strike.then_some(StrikethroughStyle {
+                        thickness: px(1.),
+                        color: Some(color),
+                    }),
                 };
-                window.text_system().shape_line(SharedString::from(span.text.clone()), px(diagram::FONT * scale), &[run], None)
+                window.text_system().shape_line(
+                    SharedString::from(span.text.clone()),
+                    px(diagram::FONT * scale),
+                    &[run],
+                    None,
+                )
             })
             .collect();
         let width = parts.iter().map(|p| p.width).fold(px(0.), |a, b| a + b);
@@ -99,11 +176,19 @@ impl Canvas {
         self.bounds = bounds;
         if std::mem::take(&mut self.fit) {
             // The dock floats over the bottom of the canvas: the diagram is fitted above it.
-            let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height) - DOCK - TOP);
+            let (w, h) = (
+                f32::from(bounds.size.width),
+                f32::from(bounds.size.height) - DOCK - TOP,
+            );
             match self.diagram.bounds() {
                 Some((x0, y0, x1, y1)) => {
-                    self.zoom = (w / (x1 - x0 + 80.)).min(h / (y1 - y0 + 80.)).clamp(0.2, 1.);
-                    self.pan = (w / 2. - (x0 + x1) / 2. * self.zoom, TOP + h / 2. - (y0 + y1) / 2. * self.zoom);
+                    self.zoom = (w / (x1 - x0 + 80.))
+                        .min(h / (y1 - y0 + 80.))
+                        .clamp(0.2, 1.);
+                    self.pan = (
+                        w / 2. - (x0 + x1) / 2. * self.zoom,
+                        TOP + h / 2. - (y0 + y1) / 2. * self.zoom,
+                    );
                 }
                 None => (self.pan, self.zoom) = ((w / 2., TOP + h / 2.), 1.),
             }
@@ -116,14 +201,20 @@ impl Canvas {
                 match *cmd {
                     Cmd::Move(x, y) => builder.move_to(at((x, y))),
                     Cmd::Line(x, y) => builder.line_to(at((x, y))),
-                    Cmd::Curve(a, b, c, d, x, y) => builder.cubic_bezier_to(at((x, y)), at((a, b)), at((c, d))),
+                    Cmd::Curve(a, b, c, d, x, y) => {
+                        builder.cubic_bezier_to(at((x, y)), at((a, b)), at((c, d)))
+                    }
                     Cmd::Close => builder.close(),
                 }
             }
         };
         let pen = |dashed: bool| {
             let pen = PathBuilder::stroke(px(1.5 * zoom.max(0.6)));
-            if dashed { pen.dash_array(&[px(6. * zoom), px(4. * zoom)]) } else { pen }
+            if dashed {
+                pen.dash_array(&[px(6. * zoom), px(4. * zoom)])
+            } else {
+                pen
+            }
         };
         let stroke = |window: &mut Window, path: &[Cmd], dashed: bool, color: Hsla| {
             let mut builder = pen(dashed);
@@ -139,7 +230,14 @@ impl Canvas {
                 window.paint_path(path, color);
             }
         };
-        let write = |this: &Self, window: &mut Window, cx: &mut App, x: f32, y: f32, spans: &[Span], anchor: Anchor, color: Hsla| {
+        let write = |this: &Self,
+                     window: &mut Window,
+                     cx: &mut App,
+                     x: f32,
+                     y: f32,
+                     spans: &[Span],
+                     anchor: Anchor,
+                     color: Hsla| {
             if spans.is_empty() {
                 return;
             }
@@ -150,7 +248,8 @@ impl Canvas {
                 Anchor::End => line.width,
             };
             let origin = at((x, y)) - point(back, px(0.));
-            line.paint(origin, px(diagram::LINE * zoom), window, cx).ok();
+            line.paint(origin, px(diagram::LINE * zoom), window, cx)
+                .ok();
         };
 
         // The lines of the text being written, where they are drawn: its selection and its cursor are put on them.
@@ -163,40 +262,82 @@ impl Canvas {
             step *= 2.;
         }
         let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
-        let (first, last) = (((-self.pan.0 / zoom) / step).floor() as i32, (((w - self.pan.0) / zoom) / step).ceil() as i32);
-        let (top, bottom) = (((-self.pan.1 / zoom) / step).floor() as i32, (((h - self.pan.1) / zoom) / step).ceil() as i32);
+        let (first, last) = (
+            ((-self.pan.0 / zoom) / step).floor() as i32,
+            (((w - self.pan.0) / zoom) / step).ceil() as i32,
+        );
+        let (top, bottom) = (
+            ((-self.pan.1 / zoom) / step).floor() as i32,
+            (((h - self.pan.1) / zoom) / step).ceil() as i32,
+        );
         for i in first..=last {
             for j in top..=bottom {
                 let c = at((i as f32 * step, j as f32 * step));
-                window.paint_quad(fill(Bounds::new(point(c.x - px(0.75), c.y - px(0.75)), size(px(1.5), px(1.5))), t.border));
+                window.paint_quad(fill(
+                    Bounds::new(
+                        point(c.x - px(0.75), c.y - px(0.75)),
+                        size(px(1.5), px(1.5)),
+                    ),
+                    t.border,
+                ));
             }
         }
         for shape in &self.diagram.shapes {
             let ink = self.ink(shape.color);
             let outline = shape.outline();
-            if shape.fill && let Some(body) = outline.first() {
+            if shape.fill
+                && let Some(body) = outline.first()
+            {
                 flood(window, body, ink.opacity(0.15));
             }
             for (i, path) in outline.iter().enumerate() {
                 if shape.solid().contains(&i) {
                     flood(window, path, ink);
                 }
-                stroke(window, path, shape.dashed || shape.dashed_paths().contains(&i), ink);
+                stroke(
+                    window,
+                    path,
+                    shape.dashed || shape.dashed_paths().contains(&i),
+                    ink,
+                );
             }
             let (lines, rules) = self.diagram.lines(shape);
             for y in rules {
                 let (x0, x1) = shape.rule_span(y);
-                stroke(window, &[Cmd::Move(x0, y), Cmd::Line(x1, y)], shape.form == Form::Fragment, ink);
+                stroke(
+                    window,
+                    &[Cmd::Move(x0, y), Cmd::Line(x1, y)],
+                    shape.form == Form::Fragment,
+                    ink,
+                );
             }
             let runs = self.diagram.runs(shape, writing == Some(shape.id));
             for (line, spans) in lines.iter().zip(&runs) {
-                write(self, window, cx, line.x, line.y, spans, line.centered.into(), ink);
+                write(
+                    self,
+                    window,
+                    cx,
+                    line.x,
+                    line.y,
+                    spans,
+                    line.centered.into(),
+                    ink,
+                );
                 // A line is found in the text by its place in it (separator strokes are not text lines).
-                let start = (line.text.as_ptr() as usize).checked_sub(shape.text.as_ptr() as usize).filter(|at| at + line.text.len() <= shape.text.len());
+                let start = (line.text.as_ptr() as usize)
+                    .checked_sub(shape.text.as_ptr() as usize)
+                    .filter(|at| at + line.text.len() <= shape.text.len());
                 if writing == Some(shape.id)
                     && let Some(start) = start
                 {
-                    rows.push(self.row(start, line.text, line.bold, (line.x, line.y), line.centered.into(), window));
+                    rows.push(self.row(
+                        start,
+                        line.text,
+                        line.bold,
+                        (line.x, line.y),
+                        line.centered.into(),
+                        window,
+                    ));
                 }
             }
         }
@@ -206,14 +347,30 @@ impl Canvas {
         for bar in &marks.bars {
             let (x, y, w, h) = bar.rect();
             let ink = self.ink(self.diagram.shape(bar.life).map_or(0, |s| s.color));
-            let path = [Cmd::Move(x, y), Cmd::Line(x + w, y), Cmd::Line(x + w, y + h), Cmd::Line(x, y + h), Cmd::Close];
+            let path = [
+                Cmd::Move(x, y),
+                Cmd::Line(x + w, y),
+                Cmd::Line(x + w, y + h),
+                Cmd::Line(x, y + h),
+                Cmd::Close,
+            ];
             flood(window, &path, ink.opacity(0.15));
             stroke(window, &path, false, ink);
         }
         for &(x, y) in &marks.crosses {
             let ink = self.ink(0);
-            stroke(window, &[Cmd::Move(x - 10., y - 10.), Cmd::Line(x + 10., y + 10.)], false, ink);
-            stroke(window, &[Cmd::Move(x + 10., y - 10.), Cmd::Line(x - 10., y + 10.)], false, ink);
+            stroke(
+                window,
+                &[Cmd::Move(x - 10., y - 10.), Cmd::Line(x + 10., y + 10.)],
+                false,
+                ink,
+            );
+            stroke(
+                window,
+                &[Cmd::Move(x + 10., y - 10.), Cmd::Line(x - 10., y + 10.)],
+                false,
+                ink,
+            );
         }
         for (link, drawn) in self.diagram.links.iter().zip(traces) {
             let Some(drawn) = drawn else { continue };
@@ -227,24 +384,49 @@ impl Canvas {
             }
             // Written, the text is as typed; otherwise a message of a numbered diagram has its number.
             let written = |slot: Slot| writing == Some(link.id) && self.slot == slot;
-            let shown = if written(Slot::Middle) { link.text.clone() } else { self.diagram.shown_text(link) };
+            let shown = if written(Slot::Middle) {
+                link.text.clone()
+            } else {
+                self.diagram.shown_text(link)
+            };
             let lines: Vec<&str> = shown.split('\n').collect();
             let mut start = 0;
             for (i, text) in lines.iter().enumerate() {
                 let (x, y, centered) = Diagram::label_at(&drawn, i, lines.len());
-                write(self, window, cx, x, y, &self.spans_of(link.id, Slot::Middle, text, false), centered.into(), ink);
+                write(
+                    self,
+                    window,
+                    cx,
+                    x,
+                    y,
+                    &self.spans_of(link.id, Slot::Middle, text, false),
+                    centered.into(),
+                    ink,
+                );
                 if written(Slot::Middle) {
                     rows.push(self.row(start, text, false, (x, y), centered.into(), window));
                 }
                 start += text.len() + 1;
             }
             // The texts at the ends: a role, a multiplicity.
-            for (tip, slot, along) in [(drawn.tips[0], Slot::Start, link.start_along), (drawn.tips[1], Slot::End, link.end_along)] {
+            for (tip, slot, along) in [
+                (drawn.tips[0], Slot::Start, link.start_along),
+                (drawn.tips[1], Slot::End, link.end_along),
+            ] {
                 let lines: Vec<&str> = link.text_of(slot).split('\n').collect();
                 let mut start = 0;
                 for (i, text) in lines.iter().enumerate() {
                     let (x, y, anchor) = Diagram::tip_label_at(&tip, along, i, lines.len());
-                    write(self, window, cx, x, y, &self.spans_of(link.id, slot, text, false), anchor, ink);
+                    write(
+                        self,
+                        window,
+                        cx,
+                        x,
+                        y,
+                        &self.spans_of(link.id, slot, text, false),
+                        anchor,
+                        ink,
+                    );
                     if written(slot) {
                         rows.push(self.row(start, text, false, (x, y), anchor, window));
                     }
@@ -255,7 +437,13 @@ impl Canvas {
 
         // Selection: a frame, and handles at the corners of a single shape.
         let frame = |window: &mut Window, x0: f32, y0: f32, x1: f32, y1: f32, color: Hsla| {
-            let path = [Cmd::Move(x0, y0), Cmd::Line(x1, y0), Cmd::Line(x1, y1), Cmd::Line(x0, y1), Cmd::Close];
+            let path = [
+                Cmd::Move(x0, y0),
+                Cmd::Line(x1, y0),
+                Cmd::Line(x1, y1),
+                Cmd::Line(x0, y1),
+                Cmd::Close,
+            ];
             let mut builder = PathBuilder::stroke(px(1.5));
             trace(&mut builder, &path);
             if let Ok(path) = builder.build() {
@@ -265,14 +453,30 @@ impl Canvas {
         let knob = |window: &mut Window, p: (f32, f32)| {
             let c = at(p);
             let bounds = Bounds::new(point(c.x - px(4.), c.y - px(4.)), size(px(8.), px(8.)));
-            window.paint_quad(quad(bounds, px(2.), t.bg, px(1.5), t.accent, gpui::BorderStyle::default()));
+            window.paint_quad(quad(
+                bounds,
+                px(2.),
+                t.bg,
+                px(1.5),
+                t.accent,
+                gpui::BorderStyle::default(),
+            ));
         };
         let pad = 4. / zoom;
         for &id in &self.selected {
             if let Some(shape) = self.diagram.shape(id) {
-                frame(window, shape.x - pad, shape.y - pad, shape.x + shape.w + pad, shape.y + shape.h + pad, t.accent);
+                frame(
+                    window,
+                    shape.x - pad,
+                    shape.y - pad,
+                    shape.x + shape.w + pad,
+                    shape.y + shape.h + pad,
+                    t.accent,
+                );
                 if self.selected.len() == 1 && self.editing.is_none() {
-                    Self::corners(shape).into_iter().for_each(|c| knob(window, c));
+                    Self::corners(shape)
+                        .into_iter()
+                        .for_each(|c| knob(window, c));
                 }
             } else if let Some((a, b)) = self.diagram.link(id).and_then(|l| self.diagram.ends(l)) {
                 knob(window, a);
@@ -281,20 +485,53 @@ impl Canvas {
         }
         // Moving: a line where the shapes moved line up, by side or by middle, with another.
         if let Drag::Move { begun: true, .. } = self.drag {
-            let moving: Vec<&diagram::Shape> = self.selected.iter().filter_map(|id| self.diagram.shape(*id)).collect();
-            let edges = |s: &diagram::Shape| ([s.x, s.x + s.w / 2., s.x + s.w], [s.y, s.y + s.h / 2., s.y + s.h]);
-            if let Some(((mx0, my0), (mx1, my1))) = moving.iter().map(|s| ((s.x, s.y), (s.x + s.w, s.y + s.h))).reduce(|a, b| ((a.0.0.min(b.0.0), a.0.1.min(b.0.1)), (a.1.0.max(b.1.0), a.1.1.max(b.1.1)))) {
+            let moving: Vec<&diagram::Shape> = self
+                .selected
+                .iter()
+                .filter_map(|id| self.diagram.shape(*id))
+                .collect();
+            let edges = |s: &diagram::Shape| {
+                (
+                    [s.x, s.x + s.w / 2., s.x + s.w],
+                    [s.y, s.y + s.h / 2., s.y + s.h],
+                )
+            };
+            if let Some(((mx0, my0), (mx1, my1))) = moving
+                .iter()
+                .map(|s| ((s.x, s.y), (s.x + s.w, s.y + s.h)))
+                .reduce(|a, b| {
+                    (
+                        (a.0.0.min(b.0.0), a.0.1.min(b.0.1)),
+                        (a.1.0.max(b.1.0), a.1.1.max(b.1.1)),
+                    )
+                })
+            {
                 let mine = ([mx0, (mx0 + mx1) / 2., mx1], [my0, (my0 + my1) / 2., my1]);
                 let mut guides: Vec<[Cmd; 2]> = Vec::new();
-                for other in self.diagram.shapes.iter().filter(|s| !self.selected.contains(&s.id) && !s.form.holds() && s.form != Form::Lifeline) {
+                for other in self.diagram.shapes.iter().filter(|s| {
+                    !self.selected.contains(&s.id) && !s.form.holds() && s.form != Form::Lifeline
+                }) {
                     let theirs = edges(other);
-                    let (lo_x, hi_x, lo_y, hi_y) = (mx0.min(other.x), mx1.max(other.x + other.w), my0.min(other.y), my1.max(other.y + other.h));
-                    for (a, b) in mine.0.iter().flat_map(|a| theirs.0.iter().map(move |b| (a, b))) {
+                    let (lo_x, hi_x, lo_y, hi_y) = (
+                        mx0.min(other.x),
+                        mx1.max(other.x + other.w),
+                        my0.min(other.y),
+                        my1.max(other.y + other.h),
+                    );
+                    for (a, b) in mine
+                        .0
+                        .iter()
+                        .flat_map(|a| theirs.0.iter().map(move |b| (a, b)))
+                    {
                         if (a - b).abs() < 0.5 {
                             guides.push([Cmd::Move(*b, lo_y), Cmd::Line(*b, hi_y)]);
                         }
                     }
-                    for (a, b) in mine.1.iter().flat_map(|a| theirs.1.iter().map(move |b| (a, b))) {
+                    for (a, b) in mine
+                        .1
+                        .iter()
+                        .flat_map(|a| theirs.1.iter().map(move |b| (a, b)))
+                    {
                         if (a - b).abs() < 0.5 {
                             guides.push([Cmd::Move(lo_x, *b), Cmd::Line(hi_x, *b)]);
                         }
@@ -310,7 +547,8 @@ impl Canvas {
             }
         }
         // A shape tool: the shape it would drop, where the pointer is.
-        if let (Some((form, _)), Some(pointer), Drag::None) = (made_by(self.tool), self.pointer, self.drag)
+        if let (Some((form, _)), Some(pointer), Drag::None) =
+            (made_by(self.tool), self.pointer, self.drag)
             && bounds.contains(&pointer)
         {
             let (w, h) = usual(self.tool);
@@ -318,7 +556,13 @@ impl Canvas {
             let (x, y) = (diagram::snap(p.0 - w / 2.), diagram::snap(p.1 - h / 2.));
             let mut scratch = Diagram::blank();
             let ghost = scratch.add_shape(form, x, y, w, h);
-            for (i, path) in scratch.shape(ghost).map(|s| s.outline()).unwrap_or_default().iter().enumerate() {
+            for (i, path) in scratch
+                .shape(ghost)
+                .map(|s| s.outline())
+                .unwrap_or_default()
+                .iter()
+                .enumerate()
+            {
                 let mut builder = PathBuilder::stroke(px(1.5)).dash_array(&[px(5.), px(4.)]);
                 trace(&mut builder, path);
                 if let Ok(path) = builder.build() {
@@ -330,7 +574,13 @@ impl Canvas {
         if let Some(id) = self.hover {
             if let Some(shape) = self.diagram.shape(id) {
                 if !self.selected.contains(&id) {
-                    let path = [Cmd::Move(shape.x - pad, shape.y - pad), Cmd::Line(shape.x + shape.w + pad, shape.y - pad), Cmd::Line(shape.x + shape.w + pad, shape.y + shape.h + pad), Cmd::Line(shape.x - pad, shape.y + shape.h + pad), Cmd::Close];
+                    let path = [
+                        Cmd::Move(shape.x - pad, shape.y - pad),
+                        Cmd::Line(shape.x + shape.w + pad, shape.y - pad),
+                        Cmd::Line(shape.x + shape.w + pad, shape.y + shape.h + pad),
+                        Cmd::Line(shape.x - pad, shape.y + shape.h + pad),
+                        Cmd::Close,
+                    ];
                     let mut builder = PathBuilder::stroke(px(1.5));
                     trace(&mut builder, &path);
                     if let Ok(path) = builder.build() {
@@ -340,14 +590,34 @@ impl Canvas {
                 if Self::drawable_from(shape) {
                     for (h, _) in Self::handles(shape, zoom) {
                         let c = at(h);
-                        let bounds = Bounds::new(point(c.x - px(6.), c.y - px(6.)), size(px(12.), px(12.)));
-                        window.paint_quad(quad(bounds, px(6.), t.panel, px(1.5), t.accent, gpui::BorderStyle::default()));
+                        let bounds =
+                            Bounds::new(point(c.x - px(6.), c.y - px(6.)), size(px(12.), px(12.)));
+                        window.paint_quad(quad(
+                            bounds,
+                            px(6.),
+                            t.panel,
+                            px(1.5),
+                            t.accent,
+                            gpui::BorderStyle::default(),
+                        ));
                     }
                     // Where an arrow would leave from, if the pointer pressed here.
-                    if let Some((_, (fx, fy))) = self.pointer.map(|p| self.world(p)).and_then(|p| self.handle_at(p)) {
+                    if let Some((_, (fx, fy))) = self
+                        .pointer
+                        .map(|p| self.world(p))
+                        .and_then(|p| self.handle_at(p))
+                    {
                         let c = at(shape.border((shape.x + fx * shape.w, shape.y + fy * shape.h)));
-                        let bounds = Bounds::new(point(c.x - px(4.), c.y - px(4.)), size(px(8.), px(8.)));
-                        window.paint_quad(quad(bounds, px(4.), t.accent, px(0.), t.accent, gpui::BorderStyle::default()));
+                        let bounds =
+                            Bounds::new(point(c.x - px(4.), c.y - px(4.)), size(px(8.), px(8.)));
+                        window.paint_quad(quad(
+                            bounds,
+                            px(4.),
+                            t.accent,
+                            px(0.),
+                            t.accent,
+                            gpui::BorderStyle::default(),
+                        ));
                     }
                 }
             } else if !self.selected.contains(&id)
@@ -363,13 +633,29 @@ impl Canvas {
         // While dragging an end over a shape: its attachment points.
         if let Drag::Tip { id, to } = self.drag
             && let Some(link) = self.diagram.link(id)
-            && let Some(shape) = (if to { link.to } else { link.from }).shape().and_then(|id| self.diagram.shape(id))
+            && let Some(shape) = (if to { link.to } else { link.from })
+                .shape()
+                .and_then(|id| self.diagram.shape(id))
         {
-            frame(window, shape.x - pad, shape.y - pad, shape.x + shape.w + pad, shape.y + shape.h + pad, t.accent);
+            frame(
+                window,
+                shape.x - pad,
+                shape.y - pad,
+                shape.x + shape.w + pad,
+                shape.y + shape.h + pad,
+                t.accent,
+            );
             for hook in shape.hooks() {
                 let c = at(hook);
                 let dot = Bounds::new(point(c.x - px(2.5), c.y - px(2.5)), size(px(5.), px(5.)));
-                window.paint_quad(quad(dot, px(2.5), t.accent, px(0.), t.accent, gpui::BorderStyle::default()));
+                window.paint_quad(quad(
+                    dot,
+                    px(2.5),
+                    t.accent,
+                    px(0.),
+                    t.accent,
+                    gpui::BorderStyle::default(),
+                ));
             }
         }
         // An association class held by the middle of an arrow: a dot there.
@@ -381,12 +667,22 @@ impl Canvas {
                 {
                     let c = at(m);
                     let dot = Bounds::new(point(c.x - px(3.), c.y - px(3.)), size(px(6.), px(6.)));
-                    window.paint_quad(quad(dot, px(3.), t.accent, px(0.), t.accent, gpui::BorderStyle::default()));
+                    window.paint_quad(quad(
+                        dot,
+                        px(3.),
+                        t.accent,
+                        px(0.),
+                        t.accent,
+                        gpui::BorderStyle::default(),
+                    ));
                 }
             }
         }
         if let Drag::Marquee { from, to } = self.drag {
-            let (a, b) = (at((from.0.min(to.0), from.1.min(to.1))), at((from.0.max(to.0), from.1.max(to.1))));
+            let (a, b) = (
+                at((from.0.min(to.0), from.1.min(to.1))),
+                at((from.0.max(to.0), from.1.max(to.1))),
+            );
             window.paint_quad(fill(Bounds::from_corners(a, b), t.selection));
         }
         // The selection in the text being written, line by line, and its cursor.
@@ -395,7 +691,13 @@ impl Canvas {
             for row in &rows {
                 let (a, b) = (chosen.start.max(row.start), chosen.end.min(row.end()));
                 if a < b {
-                    window.paint_quad(fill(Bounds::from_corners(point(row.x(a), row.origin.y), point(row.x(b), row.origin.y + tall)), t.selection));
+                    window.paint_quad(fill(
+                        Bounds::from_corners(
+                            point(row.x(a), row.origin.y),
+                            point(row.x(b), row.origin.y + tall),
+                        ),
+                        t.selection,
+                    ));
                 }
             }
             // What an input method is composing: underlined, as in every other field.
@@ -403,14 +705,23 @@ impl Canvas {
                 for row in &rows {
                     let (a, b) = (marked.start.max(row.start), marked.end.min(row.end()));
                     if a < b {
-                        window.paint_quad(fill(Bounds::new(point(row.x(a), row.origin.y + tall * 0.9), size(row.x(b) - row.x(a), px(zoom.max(1.)))), t.text));
+                        window.paint_quad(fill(
+                            Bounds::new(
+                                point(row.x(a), row.origin.y + tall * 0.9),
+                                size(row.x(b) - row.x(a), px(zoom.max(1.))),
+                            ),
+                            t.text,
+                        ));
                     }
                 }
             }
             if let Some(row) = rows.iter().rev().find(|r| r.start <= field.cursor())
                 && self.focus.is_focused(window)
             {
-                let top = point(row.x(field.cursor().min(row.end())), row.origin.y + tall * 0.1);
+                let top = point(
+                    row.x(field.cursor().min(row.end())),
+                    row.origin.y + tall * 0.1,
+                );
                 window.paint_quad(fill(Bounds::new(top, size(px(1.5), tall * 0.8)), t.accent));
             }
         }
@@ -424,7 +735,9 @@ impl Canvas {
             let mut lines: Vec<String> = Vec::new();
             for word in hint.split(' ') {
                 let longer = lines.last().map(|last| format!("{last} {word}"));
-                match longer.filter(|longer| self.line(longer, false, t.soft, 0.93, window).width <= room) {
+                match longer
+                    .filter(|longer| self.line(longer, false, t.soft, 0.93, window).width <= room)
+                {
                     Some(longer) => *lines.last_mut().unwrap() = longer,
                     None => lines.push(word.to_string()),
                 }
@@ -432,7 +745,10 @@ impl Canvas {
             let top = bounds.center().y - px(10.) * lines.len() as f32;
             for (i, text) in lines.iter().enumerate() {
                 let line = self.line(text, false, t.soft, 0.93, window);
-                let origin = point(bounds.center().x - line.width / 2., top + px(20.) * i as f32);
+                let origin = point(
+                    bounds.center().x - line.width / 2.,
+                    top + px(20.) * i as f32,
+                );
                 line.paint(origin, px(20.), window, cx).ok();
             }
         }

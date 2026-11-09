@@ -5,37 +5,88 @@ use super::*;
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let shell = &j.shell;
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
-    // Note outline: Ctrl+Shift+O lists the headings, the current section's one
-    // preselected. The browsed heading gets the cursor as a preview (two headings with the same name
-    // stay distinct, the one in the code block is not one), Escape gives it back, Enter leaves it there.
+    // Note outline: Ctrl+Shift+O opens the right dock on the headings (the cursor's section
+    // first), the fenced heading excluded; a click jumps the cursor there and focuses the note,
+    // Escape in the list focuses it back; folding hides a section; an empty note has an empty state.
     let plan = "# Un\n\ntexte\n\n## Deux\n\n```\n# code\n```\n\n## Deux\n\nfin\n";
     j.load(cx, plan, plan.find("texte").unwrap());
-    let caret = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
-    cx.simulate_keystrokes("secondary-shift-o down");
+    let bounds = |cx: &mut gpui::VisualTestContext, name: &str| {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+        cx.debug_bounds(leak(name.to_string()))
+    };
+    let outline = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| {
+            let editor = s.pane().editor.read(cx);
+            let text = editor.text().to_string();
+            let (rows, active) = nav::outline_visible(
+                &markdown::headings(&text),
+                editor.position(),
+                &s.nav.outline_collapsed,
+            );
+            (rows.len(), active)
+        })
+    };
+    let caret = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position())
+    };
+    let editing = |cx: &mut gpui::VisualTestContext| {
+        cx.update(|window, cx| {
+            shell
+                .read(cx)
+                .pane()
+                .editor
+                .focus_handle(cx)
+                .is_focused(window)
+        })
+    };
+    cx.simulate_keystrokes("secondary-shift-o");
+    assert!(bounds(cx, "dock-right").is_some());
+    assert_eq!(outline(cx), (3, Some(0)));
+    assert!(bounds(cx, "outline-empty").is_none());
+    let row = bounds(cx, "outline-row-1").unwrap().center();
+    cx.simulate_click(row, gpui::Modifiers::none());
     assert_eq!(caret(cx), plan.find("## Deux").unwrap());
-    cx.simulate_keystrokes("down");
-    assert_eq!(caret(cx), plan.rfind("## Deux").unwrap());
-    cx.simulate_keystrokes("down");
-    assert_eq!(caret(cx), 0);
+    assert!(editing(cx));
+    cx.simulate_keystrokes("secondary-shift-o");
     cx.simulate_keystrokes("escape");
-    assert_eq!(caret(cx), plan.find("texte").unwrap());
-    cx.simulate_keystrokes("secondary-shift-o");
-    cx.simulate_input("deux");
-    cx.simulate_keystrokes("enter");
-    assert!(caret(cx) == plan.find("## Deux").unwrap() && shell.read_with(cx, |s, _| s.palette.is_none()));
+    assert!(editing(cx));
+    // Folding the first heading hides its section; unfolding brings it back.
+    let fold = bounds(cx, "outline-fold-0").unwrap().center();
+    cx.simulate_click(fold, gpui::Modifiers::none());
+    assert_eq!(outline(cx).0, 1);
+    let fold = bounds(cx, "outline-fold-0").unwrap().center();
+    cx.simulate_click(fold, gpui::Modifiers::none());
+    assert_eq!(outline(cx).0, 3);
     j.load(cx, "sans titre", 0);
-    cx.simulate_keystrokes("secondary-shift-o");
-    assert!(shell.read_with(cx, |s, _| s.palette.is_none() && s.told(Tone::Info, "titres")));
+    assert!(bounds(cx, "outline-empty").is_some());
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
+    assert_eq!(caret(cx), 0);
+    // No headings and no comments: the comments palette says so instead of opening, which
+    // leaves the status message the clicks below dismiss (the outline keeps its empty state
+    // to itself now that it lives in the dock, not in the palette).
+    cx.simulate_keystrokes("secondary-p");
+    cx.simulate_input("commentaires");
+    cx.simulate_keystrokes("down enter");
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none()
+        && s.told(Tone::Info, "commentaires")));
     // Status messages: a click removes the one it targets, the others go by themselves after four
     // seconds; the one of an operation in progress stays, until the message that gives its outcome.
     shell.update(cx, |s, cx| s.say(Tone::Busy, "En cours", cx));
     let view = cx.update(|window, _| window.viewport_size());
-    cx.simulate_click(point(view.width - px(60.), view.height - px(70.)), gpui::Modifiers::none());
-    assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "titres") && !s.told(Tone::Busy, "")));
+    cx.simulate_click(
+        point(view.width - px(60.), view.height - px(70.)),
+        gpui::Modifiers::none(),
+    );
+    assert!(
+        shell.read_with(cx, |s, _| s.told(Tone::Info, "commentaires")
+            && !s.told(Tone::Busy, ""))
+    );
     shell.update(cx, |s, cx| s.say(Tone::Busy, "En cours", cx));
     cx.executor().advance_clock(TOAST);
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| s.toasts.len() == 1 && s.told(Tone::Busy, "En cours")));
+    assert!(shell.read_with(cx, |s, _| s.toasts.len() == 1
+        && s.told(Tone::Busy, "En cours")));
     shell.update(cx, |s, cx| s.say(Tone::Done, "Fini", cx));
     assert!(shell.read_with(cx, |s, _| s.toasts.len() == 1 && s.told(Tone::Done, "Fini")));
     cx.executor().advance_clock(TOAST);
@@ -44,8 +95,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
 
     // Links: an address pasted on a selection makes it a link; Ctrl+K on a link
     // selects its address, to retype; Ctrl+K on a selection waits for the address.
+    // (The clicks above went through to the outline dock, so the note needs its focus back.)
     j.load(cx, "voir la doc ici", 5);
-    cx.simulate_keystrokes("shift-right shift-right shift-right shift-right shift-right shift-right");
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
+    cx.simulate_keystrokes(
+        "shift-right shift-right shift-right shift-right shift-right shift-right",
+    );
     cx.write_to_clipboard(ClipboardItem::new_string("https://a.b/c\n".into()));
     cx.simulate_keystrokes("secondary-v");
     assert_eq!(text(cx), "voir [la doc](https://a.b/c) ici");

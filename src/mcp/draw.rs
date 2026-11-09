@@ -1,7 +1,10 @@
 //! Diagrams and figures. A diagram file is written only by `Diagram::to_svg`: its version
 //! stays, and a line this version cannot read is kept.
 
-use std::{collections::{HashMap, HashSet}, fs};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+};
 
 use serde_json::{Value, json};
 
@@ -15,20 +18,42 @@ use crate::{
     ui::{figure, svg},
 };
 
-use super::{Outcome, Server, arg_opt, arg_str, disk, vault::{self, Vault}};
+use super::{
+    Outcome, Server, arg_opt, arg_str, disk,
+    vault::{self, Vault},
+};
 
 const FLOW: &str = "this Mermaid diagram cannot become a canvas (only classDiagram, sequenceDiagram and stateDiagram can). Put it in a note as a ```mermaid block, then render that block.";
-const NEWER: &str = "this diagram was written by a newer version of Bref and is read-only";
+const NEWER: &str = "this diagram was written by a newer version of Inkuno and is read-only";
 
 /// Stable names of the library's starting points, in the order `library::templates` returns them.
-const TEMPLATES: [&str; 8] = ["class", "use-case", "package", "state", "sequence", "activity", "component", "deployment"];
+const TEMPLATES: [&str; 8] = [
+    "class",
+    "use-case",
+    "package",
+    "state",
+    "sequence",
+    "activity",
+    "component",
+    "deployment",
+];
 
-/// The key an agent passes for each family of the library, by its English name (`bref mcp`
+/// The key an agent passes for each family of the library, by its English name (`inkuno mcp`
 /// speaks English: `lang::speak_english`).
-const FAMILIES: [(&str, &str); 6] = [("Class", "class"), ("Use case", "use-case"), ("State machine", "state"), ("Activity", "activity"), ("Component", "component"), ("Sequence", "sequence")];
+const FAMILIES: [(&str, &str); 6] = [
+    ("Class", "class"),
+    ("Use case", "use-case"),
+    ("State machine", "state"),
+    ("Activity", "activity"),
+    ("Component", "component"),
+    ("Sequence", "sequence"),
+];
 
 fn family_key(family: &str) -> &'static str {
-    FAMILIES.iter().find(|(name, _)| *name == family).map_or("other", |(_, key)| key)
+    FAMILIES
+        .iter()
+        .find(|(name, _)| *name == family)
+        .map_or("other", |(_, key)| key)
 }
 
 pub fn check_mermaid(args: &Value) -> Outcome {
@@ -39,8 +64,12 @@ pub fn check_mermaid(args: &Value) -> Outcome {
     let kind = mermaid_kind(source);
     let canvas = matches!(kind, "class" | "sequence" | "state");
     match figure::mermaid(source, &look(false)) {
-        Ok(_) => Outcome::ok(json!({"readable": true, "error": null, "kind": kind, "canvas": canvas})),
-        Err(error) => Outcome::ok(json!({"readable": false, "error": error, "kind": kind, "canvas": false})),
+        Ok(_) => {
+            Outcome::ok(json!({"readable": true, "error": null, "kind": kind, "canvas": canvas}))
+        }
+        Err(error) => {
+            Outcome::ok(json!({"readable": false, "error": error, "kind": kind, "canvas": false}))
+        }
     }
 }
 
@@ -54,8 +83,14 @@ pub fn render(server: &mut Server, args: &Value) -> Outcome {
     if width.is_some_and(|n| n <= 0.) {
         return Outcome::err("`width` must be greater than zero");
     }
-    let (mermaid_src, path, note) = (arg_opt(args, "mermaid"), arg_opt(args, "path"), arg_opt(args, "note"));
-    let given = usize::from(mermaid_src.is_some()) + usize::from(path.is_some()) + usize::from(note.is_some());
+    let (mermaid_src, path, note) = (
+        arg_opt(args, "mermaid"),
+        arg_opt(args, "path"),
+        arg_opt(args, "note"),
+    );
+    let given = usize::from(mermaid_src.is_some())
+        + usize::from(path.is_some())
+        + usize::from(note.is_some());
     if given != 1 {
         return Outcome::err("give one of `path`, `mermaid` or `note`");
     }
@@ -75,7 +110,10 @@ pub fn render(server: &mut Server, args: &Value) -> Outcome {
         }
     };
     match raster(&svg, width, theme) {
-        Ok((png, w, h)) => Outcome::image(json!({"width": w, "height": h, "kind": kind, "path": shown}), &png),
+        Ok((png, w, h)) => Outcome::image(
+            json!({"width": w, "height": h, "kind": kind, "path": shown}),
+            &png,
+        ),
         Err(message) => Outcome::err(message),
     }
 }
@@ -118,7 +156,7 @@ pub fn read_diagram(vault: &Vault, args: &Value) -> Outcome {
         }));
     }
     let Some(diagram) = Diagram::from_svg(&text) else {
-        return Outcome::err("this SVG is not a Bref diagram");
+        return Outcome::err("this SVG is not a Inkuno diagram");
     };
     Outcome::ok(described(&diagram, &vault::rel(&vault.root, &path), false))
 }
@@ -136,7 +174,7 @@ pub fn edit_diagram(vault: &mut Vault, args: &Value) -> Outcome {
         return Outcome::err(NEWER);
     }
     let Some(diagram) = Diagram::from_svg(&text) else {
-        return Outcome::err("this SVG is not a Bref diagram");
+        return Outcome::err("this SVG is not a Inkuno diagram");
     };
     let Some(ops) = args.get("ops").and_then(|v| v.as_array()) else {
         return Outcome::err("`ops` must be a list");
@@ -184,7 +222,9 @@ pub fn import_diagram(vault: &mut Vault, args: &Value) -> Outcome {
         Err(message) => return Outcome::err(message),
     };
     let imported = match format {
-        "excalidraw" => import::excalidraw(content).map_err(|_| "not an Excalidraw file".to_string()),
+        "excalidraw" => {
+            import::excalidraw(content).map_err(|_| "not an Excalidraw file".to_string())
+        }
         "drawio" => import::drawio(content).map_err(|_| drawio_error(content)),
         other => Err(format!("unknown format `{other}`")),
     };
@@ -192,10 +232,17 @@ pub fn import_diagram(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(imported) => imported,
         Err(message) => return Outcome::err(message),
     };
-    write_diagram(vault, name, arg_opt(args, "folder"), &imported.diagram, imported.skipped).unwrap_or_else(|e| e)
+    write_diagram(
+        vault,
+        name,
+        arg_opt(args, "folder"),
+        &imported.diagram,
+        imported.skipped,
+    )
+    .unwrap_or_else(|e| e)
 }
 
-/// What `diagram_library` returns, also served at `bref://library`.
+/// What `diagram_library` returns, also served at `inkuno://library`.
 pub fn library_value(family: Option<&str>) -> Result<Value, String> {
     if let Some(family) = family
         && !FAMILIES.iter().any(|(_, key)| *key == family)
@@ -281,18 +328,43 @@ fn mermaid_kind(source: &str) -> &'static str {
         Some(mermaid::Kind::Sequence) => "sequence",
         Some(mermaid::Kind::State) => "state",
         None => {
-            let word = source.lines().map(str::trim).find(|line| !line.is_empty() && !line.starts_with("%%")).unwrap_or("");
-            let word = word.split(|c: char| c.is_whitespace() || c == ';').next().unwrap_or("");
-            if word.eq_ignore_ascii_case("flowchart") || word.eq_ignore_ascii_case("graph") { "flowchart" } else { "other" }
+            let word = source
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty() && !line.starts_with("%%"))
+                .unwrap_or("");
+            let word = word
+                .split(|c: char| c.is_whitespace() || c == ';')
+                .next()
+                .unwrap_or("");
+            if word.eq_ignore_ascii_case("flowchart") || word.eq_ignore_ascii_case("graph") {
+                "flowchart"
+            } else {
+                "other"
+            }
         }
     }
 }
 
 fn look(dark: bool) -> figure::Look {
     if dark {
-        figure::Look { dark: true, bg: "#1e1e1e".into(), fill: "#2a2a2a".into(), text: "#e6e6e6".into(), line: "#9a9a9a".into(), font: "sans-serif".into() }
+        figure::Look {
+            dark: true,
+            bg: "#1e1e1e".into(),
+            fill: "#2a2a2a".into(),
+            text: "#e6e6e6".into(),
+            line: "#9a9a9a".into(),
+            font: "sans-serif".into(),
+        }
     } else {
-        figure::Look { dark: false, bg: "#ffffff".into(), fill: "#f3f3f3".into(), text: "#1c1c1c".into(), line: "#5c5c5c".into(), font: "sans-serif".into() }
+        figure::Look {
+            dark: false,
+            bg: "#ffffff".into(),
+            fill: "#f3f3f3".into(),
+            text: "#1c1c1c".into(),
+            line: "#5c5c5c".into(),
+            font: "sans-serif".into(),
+        }
     }
 }
 
@@ -301,14 +373,23 @@ fn ink(dark: bool) -> u32 {
 }
 
 /// The SVG to draw, what kind it is, and the vault path when it came from a file.
-fn picture(vault: &Vault, path: Option<&str>, note: Option<&str>, args: &Value, dark: bool) -> Result<(String, &'static str, Option<String>), Outcome> {
+fn picture(
+    vault: &Vault,
+    path: Option<&str>,
+    note: Option<&str>,
+    args: &Value,
+    dark: bool,
+) -> Result<(String, &'static str, Option<String>), Outcome> {
     if let Some(note) = note {
-        let block = super::arg_usize(args, "block").ok_or_else(|| Outcome::err("`block` is missing"))?;
+        let block =
+            super::arg_usize(args, "block").ok_or_else(|| Outcome::err("`block` is missing"))?;
         if block == 0 {
             return Err(Outcome::err("`block` starts at 1"));
         }
         let found = vault.find_note(note).map_err(Outcome::err)?;
-        let text = fs::read_to_string(&found.path).map_err(disk).map_err(Outcome::err)?;
+        let text = fs::read_to_string(&found.path)
+            .map_err(disk)
+            .map_err(Outcome::err)?;
         let blocks = mermaid_blocks(&text);
         let Some(source) = blocks.get(block - 1) else {
             return Err(Outcome::err(format!("no Mermaid block {block}")));
@@ -318,7 +399,9 @@ fn picture(vault: &Vault, path: Option<&str>, note: Option<&str>, args: &Value, 
     }
     let path = path.unwrap_or("");
     let file = vault.find_file(path).map_err(Outcome::err)?;
-    let text = fs::read_to_string(&file).map_err(disk).map_err(Outcome::err)?;
+    let text = fs::read_to_string(&file)
+        .map_err(disk)
+        .map_err(Outcome::err)?;
     let shown = Some(vault::rel(&vault.root, &file));
     if Diagram::newer(&text) {
         return Err(Outcome::err(NEWER));
@@ -362,7 +445,8 @@ fn raster(svg: &str, width: Option<f32>, dark: bool) -> Result<(Vec<u8>, u32, u3
     let (w, h) = (tree.size().width().max(1.), tree.size().height().max(1.));
     let want = width.map(|px| px / w).unwrap_or(2.).max(0.05);
     let scale = svg::scale_for(w, h, want);
-    let png = figure::png(svg, scale, if dark { 0x1e1e1e } else { 0xffffff }).ok_or("the picture could not be drawn")?;
+    let png = figure::png(svg, scale, if dark { 0x1e1e1e } else { 0xffffff })
+        .ok_or("the picture could not be drawn")?;
     let (pw, ph) = png_size(&png);
     Ok((png, pw, ph))
 }
@@ -379,7 +463,9 @@ fn build(from: &Value) -> Result<(Diagram, usize), String> {
     let mermaid_src = from.get("mermaid").and_then(|v| v.as_str());
     let template = from.get("template").and_then(|v| v.as_str());
     let shapes = from.get("shapes");
-    let chosen = usize::from(mermaid_src.is_some()) + usize::from(template.is_some()) + usize::from(shapes.is_some());
+    let chosen = usize::from(mermaid_src.is_some())
+        + usize::from(template.is_some())
+        + usize::from(shapes.is_some());
     if chosen != 1 {
         return Err("`from` needs one of `mermaid`, `template` or `shapes`".into());
     }
@@ -391,14 +477,23 @@ fn build(from: &Value) -> Result<(Diagram, usize), String> {
     }
     if let Some(name) = template {
         let made = library::templates();
-        let at = TEMPLATES.iter().position(|key| *key == name).or_else(|| made.iter().position(|template| template.name == name));
+        let at = TEMPLATES
+            .iter()
+            .position(|key| *key == name)
+            .or_else(|| made.iter().position(|template| template.name == name));
         let Some(at) = at else {
             return Err(format!("no template named `{name}`"));
         };
         return Ok(((made[at].make)(), 0));
     }
-    let shapes = shapes.and_then(|v| v.as_array()).ok_or("`shapes` must be a list")?;
-    let links = from.get("links").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let shapes = shapes
+        .and_then(|v| v.as_array())
+        .ok_or("`shapes` must be a list")?;
+    let links = from
+        .get("links")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     let mut diagram = Diagram::blank();
     let mut keys = HashMap::new();
     let mut made_shapes = Vec::new();
@@ -429,7 +524,12 @@ fn build(from: &Value) -> Result<(Diagram, usize), String> {
     }
     lay_out(&mut diagram, &unplaced);
     // Outer fragments first: an inner one then goes inside the operand its messages are in.
-    for fragment in from.get("fragments").and_then(|v| v.as_array()).into_iter().flatten() {
+    for fragment in from
+        .get("fragments")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+    {
         let id = wrap(&mut diagram, fragment, &keys)?;
         if let Some(key) = fragment.get("key").and_then(|v| v.as_str()) {
             keys.insert(key.to_string(), id);
@@ -444,14 +544,25 @@ fn lay_out(diagram: &mut Diagram, unplaced: &[u32]) {
     if unplaced.is_empty() {
         return;
     }
-    let lives: Vec<u32> = unplaced.iter().copied().filter(|id| diagram.shape(*id).is_some_and(|s| s.form == Form::Lifeline)).collect();
+    let lives: Vec<u32> = unplaced
+        .iter()
+        .copied()
+        .filter(|id| diagram.shape(*id).is_some_and(|s| s.form == Form::Lifeline))
+        .collect();
     let roots: Vec<u32> = unplaced
         .iter()
         .copied()
-        .filter(|id| diagram.shape(*id).is_some_and(|s| s.parent.is_none() && s.form != Form::Lifeline))
+        .filter(|id| {
+            diagram
+                .shape(*id)
+                .is_some_and(|s| s.parent.is_none() && s.form != Form::Lifeline)
+        })
         .collect();
     if !roots.is_empty() {
-        let sizes: Vec<(f32, f32)> = roots.iter().map(|id| diagram.shape(*id).map(|s| (s.w, s.h)).unwrap_or((80., 40.))).collect();
+        let sizes: Vec<(f32, f32)> = roots
+            .iter()
+            .map(|id| diagram.shape(*id).map(|s| (s.w, s.h)).unwrap_or((80., 40.)))
+            .collect();
         // A link to a shape held by a package or a node places the holder: `agent → mcp`
         // with `mcp` in `Poste` puts `Poste` after `agent`.
         let top = |mut id: u32| {
@@ -465,8 +576,15 @@ fn lay_out(diagram: &mut Diagram, unplaced: &[u32]) {
         };
         let mut edges = Vec::new();
         for link in &diagram.links {
-            let (Some(a), Some(b)) = (link.from.shape().map(top), link.to.shape().map(top)) else { continue };
-            let (Some(i), Some(j)) = (roots.iter().position(|id| *id == a), roots.iter().position(|id| *id == b)) else { continue };
+            let (Some(a), Some(b)) = (link.from.shape().map(top), link.to.shape().map(top)) else {
+                continue;
+            };
+            let (Some(i), Some(j)) = (
+                roots.iter().position(|id| *id == a),
+                roots.iter().position(|id| *id == b),
+            ) else {
+                continue;
+            };
             if i != j {
                 edges.push((i, j));
             }
@@ -485,13 +603,23 @@ fn lay_out(diagram: &mut Diagram, unplaced: &[u32]) {
             if placed.contains(id) || lives.contains(id) {
                 continue;
             }
-            let Some(parent) = diagram.shape(*id).and_then(|s| s.parent) else { continue };
-            if !placed.contains(&parent) && !diagram.shape(parent).is_some_and(|s| !unplaced.contains(&s.id)) {
+            let Some(parent) = diagram.shape(*id).and_then(|s| s.parent) else {
+                continue;
+            };
+            if !placed.contains(&parent)
+                && !diagram
+                    .shape(parent)
+                    .is_some_and(|s| !unplaced.contains(&s.id))
+            {
                 continue;
             }
             let (px, py, n) = {
                 let parent = diagram.shape(parent).unwrap();
-                let n = diagram.children(parent.id).iter().filter(|child| placed.contains(child)).count();
+                let n = diagram
+                    .children(parent.id)
+                    .iter()
+                    .filter(|child| placed.contains(child))
+                    .count();
                 (parent.x, parent.y, n)
             };
             if let Some(shape) = diagram.shape_mut(*id) {
@@ -517,7 +645,11 @@ fn lay_out(diagram: &mut Diagram, unplaced: &[u32]) {
 
 fn add_shape(diagram: &mut Diagram, spec: &Value) -> Result<(u32, bool), String> {
     let form = form_of(spec.get("form").and_then(|v| v.as_str()).unwrap_or("rect"))?;
-    let text = spec.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let text = spec
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let w = spec.get("w").and_then(|v| v.as_f64()).map(|n| n as f32);
     let h = spec.get("h").and_then(|v| v.as_f64()).map(|n| n as f32);
     let (w, h) = size_of(form, &text, w, h);
@@ -543,7 +675,11 @@ fn add_shape(diagram: &mut Diagram, spec: &Value) -> Result<(u32, bool), String>
 }
 
 fn size_of(form: Form, text: &str, w: Option<f32>, h: Option<f32>) -> (f32, f32) {
-    let lines: Vec<String> = if text.is_empty() { Vec::new() } else { text.split('\n').map(str::to_string).collect() };
+    let lines: Vec<String> = if text.is_empty() {
+        Vec::new()
+    } else {
+        text.split('\n').map(str::to_string).collect()
+    };
     let min = match form {
         Form::Dot => (20., 20.),
         Form::Final => (26., 26.),
@@ -566,14 +702,23 @@ fn size_of(form: Form, text: &str, w: Option<f32>, h: Option<f32>) -> (f32, f32)
     (w.unwrap_or(fw), h.unwrap_or(fh))
 }
 
-fn add_link(diagram: &mut Diagram, spec: &Value, keys: &HashMap<String, u32>) -> Result<u32, String> {
+fn add_link(
+    diagram: &mut Diagram,
+    spec: &Value,
+    keys: &HashMap<String, u32>,
+) -> Result<u32, String> {
     let from = end_of(spec.get("from").ok_or("`from` is missing")?, keys, diagram)?;
     let to = end_of(spec.get("to").ok_or("`to` is missing")?, keys, diagram)?;
     let (mut start, mut end, mut dashed) = (Head::None, Head::Arrow, false);
     if let Some(name) = spec.get("relation").and_then(|v| v.as_str()) {
         let relation = relation_of(name)?;
         (start, end, dashed) = relation.look();
-        let id = diagram.add_link(from, to, end, route_of(spec.get("route").and_then(|v| v.as_str()))?);
+        let id = diagram.add_link(
+            from,
+            to,
+            end,
+            route_of(spec.get("route").and_then(|v| v.as_str()))?,
+        );
         let link = diagram.link_mut(id).unwrap();
         link.start = start;
         link.dashed = dashed;
@@ -582,11 +727,24 @@ fn add_link(diagram: &mut Diagram, spec: &Value, keys: &HashMap<String, u32>) ->
         return Ok(id);
     }
     if let Some(heads) = spec.get("heads") {
-        start = head_of(heads.get("start").and_then(|v| v.as_str()).unwrap_or("none"))?;
+        start = head_of(
+            heads
+                .get("start")
+                .and_then(|v| v.as_str())
+                .unwrap_or("none"),
+        )?;
         end = head_of(heads.get("end").and_then(|v| v.as_str()).unwrap_or("arrow"))?;
-        dashed = heads.get("dashed").and_then(|v| v.as_bool()).unwrap_or(false);
+        dashed = heads
+            .get("dashed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
     }
-    let id = diagram.add_link(from, to, end, route_of(spec.get("route").and_then(|v| v.as_str()))?);
+    let id = diagram.add_link(
+        from,
+        to,
+        end,
+        route_of(spec.get("route").and_then(|v| v.as_str()))?,
+    );
     let link = diagram.link_mut(id).unwrap();
     link.start = start;
     link.dashed = dashed;
@@ -631,7 +789,10 @@ fn end_of(value: &Value, keys: &HashMap<String, u32>, diagram: &Diagram) -> Resu
     if let Some(life) = obj.get("life") {
         return Ok(End::Life(resolve_id(life, keys, diagram)?));
     }
-    if let (Some(x), Some(y)) = (obj.get("x").and_then(|v| v.as_f64()), obj.get("y").and_then(|v| v.as_f64())) {
+    if let (Some(x), Some(y)) = (
+        obj.get("x").and_then(|v| v.as_f64()),
+        obj.get("y").and_then(|v| v.as_f64()),
+    ) {
         return Ok(End::Point(x as f32, y as f32));
     }
     if let Some(shape) = obj.get("shape") {
@@ -641,11 +802,21 @@ fn end_of(value: &Value, keys: &HashMap<String, u32>, diagram: &Diagram) -> Resu
 }
 
 fn shape_end(id: u32, diagram: &Diagram) -> Result<End, String> {
-    let shape = diagram.shape(id).ok_or_else(|| format!("no shape `{id}`"))?;
-    Ok(if shape.form == Form::Lifeline { End::Life(id) } else { End::Shape(id) })
+    let shape = diagram
+        .shape(id)
+        .ok_or_else(|| format!("no shape `{id}`"))?;
+    Ok(if shape.form == Form::Lifeline {
+        End::Life(id)
+    } else {
+        End::Shape(id)
+    })
 }
 
-fn resolve_id(value: &Value, keys: &HashMap<String, u32>, diagram: &Diagram) -> Result<u32, String> {
+fn resolve_id(
+    value: &Value,
+    keys: &HashMap<String, u32>,
+    diagram: &Diagram,
+) -> Result<u32, String> {
     if let Some(text) = value.as_str() {
         return resolve_key(text, keys);
     }
@@ -660,32 +831,58 @@ fn resolve_id(value: &Value, keys: &HashMap<String, u32>, diagram: &Diagram) -> 
 }
 
 fn resolve_key(key: &str, keys: &HashMap<String, u32>) -> Result<u32, String> {
-    keys.get(key).copied().ok_or_else(|| format!("no shape `{key}`"))
+    keys.get(key)
+        .copied()
+        .ok_or_else(|| format!("no shape `{key}`"))
 }
 
 fn form_of(name: &str) -> Result<Form, String> {
-    Form::ALL.iter().find(|(_, known)| *known == name).map(|(form, _)| *form).ok_or_else(|| format!("unknown form `{name}`"))
+    Form::ALL
+        .iter()
+        .find(|(_, known)| *known == name)
+        .map(|(form, _)| *form)
+        .ok_or_else(|| format!("unknown form `{name}`"))
 }
 
 fn form_name(form: Form) -> &'static str {
-    Form::ALL.iter().find(|(known, _)| *known == form).map(|(_, name)| *name).unwrap_or("rect")
+    Form::ALL
+        .iter()
+        .find(|(known, _)| *known == form)
+        .map(|(_, name)| *name)
+        .unwrap_or("rect")
 }
 
 fn head_of(name: &str) -> Result<Head, String> {
-    Head::ALL.iter().find(|(_, known)| *known == name).map(|(head, _)| *head).ok_or_else(|| format!("unknown head `{name}`"))
+    Head::ALL
+        .iter()
+        .find(|(_, known)| *known == name)
+        .map(|(head, _)| *head)
+        .ok_or_else(|| format!("unknown head `{name}`"))
 }
 
 fn head_name(head: Head) -> &'static str {
-    Head::ALL.iter().find(|(known, _)| *known == head).map(|(_, name)| *name).unwrap_or("none")
+    Head::ALL
+        .iter()
+        .find(|(known, _)| *known == head)
+        .map(|(_, name)| *name)
+        .unwrap_or("none")
 }
 
 fn route_of(name: Option<&str>) -> Result<Route, String> {
     let name = name.unwrap_or("straight");
-    Route::ALL.iter().find(|(_, known)| *known == name).map(|(route, _)| *route).ok_or_else(|| format!("unknown route `{name}`"))
+    Route::ALL
+        .iter()
+        .find(|(_, known)| *known == name)
+        .map(|(route, _)| *route)
+        .ok_or_else(|| format!("unknown route `{name}`"))
 }
 
 fn route_name(route: Route) -> &'static str {
-    Route::ALL.iter().find(|(known, _)| *known == route).map(|(_, name)| *name).unwrap_or("straight")
+    Route::ALL
+        .iter()
+        .find(|(known, _)| *known == route)
+        .map(|(_, name)| *name)
+        .unwrap_or("straight")
 }
 
 fn relation_of(name: &str) -> Result<Relation, String> {
@@ -696,11 +893,23 @@ fn relation_of(name: &str) -> Result<Relation, String> {
         "async" => return Ok(Relation::Navigable),
         _ => {}
     }
-    Relation::ALL.into_iter().find(|relation| relation_key(*relation) == name).ok_or_else(|| format!("unknown relation `{name}`"))
+    Relation::ALL
+        .into_iter()
+        .find(|relation| relation_key(*relation) == name)
+        .ok_or_else(|| format!("unknown relation `{name}`"))
 }
 
-fn apply(diagram: &mut Diagram, op: &Value, keys: &mut HashMap<String, u32>, shapes: &mut Vec<u32>, links: &mut Vec<u32>) -> Result<(), String> {
-    let name = op.get("op").and_then(|v| v.as_str()).ok_or("`op` is missing")?;
+fn apply(
+    diagram: &mut Diagram,
+    op: &Value,
+    keys: &mut HashMap<String, u32>,
+    shapes: &mut Vec<u32>,
+    links: &mut Vec<u32>,
+) -> Result<(), String> {
+    let name = op
+        .get("op")
+        .and_then(|v| v.as_str())
+        .ok_or("`op` is missing")?;
     match name {
         "add_shape" => {
             let (id, _) = add_shape(diagram, op)?;
@@ -741,8 +950,14 @@ fn apply(diagram: &mut Diagram, op: &Value, keys: &mut HashMap<String, u32>, sha
         "move" => {
             let id = resolve_id(op.get("id").ok_or("`id` is missing")?, keys, diagram)?;
             let shape = diagram.shape_mut(id).ok_or("move a shape, not a link")?;
-            shape.x = op.get("x").and_then(|v| v.as_f64()).ok_or("`x` is missing")? as f32;
-            shape.y = op.get("y").and_then(|v| v.as_f64()).ok_or("`y` is missing")? as f32;
+            shape.x = op
+                .get("x")
+                .and_then(|v| v.as_f64())
+                .ok_or("`x` is missing")? as f32;
+            shape.y = op
+                .get("y")
+                .and_then(|v| v.as_f64())
+                .ok_or("`y` is missing")? as f32;
         }
         "wrap" => {
             let id = wrap(diagram, op, keys)?;
@@ -753,9 +968,14 @@ fn apply(diagram: &mut Diagram, op: &Value, keys: &mut HashMap<String, u32>, sha
         }
         "reorder" => {
             let id = resolve_id(op.get("id").ok_or("`id` is missing")?, keys, diagram)?;
-            let to = op.get("to").and_then(|v| v.as_u64()).ok_or("`to` is the new place of the message, from 0")?;
+            let to = op
+                .get("to")
+                .and_then(|v| v.as_u64())
+                .ok_or("`to` is the new place of the message, from 0")?;
             if !diagram.messages().contains(&id) {
-                return Err("only a message (an arrow with a lifeline at an end) has a place".into());
+                return Err(
+                    "only a message (an arrow with a lifeline at an end) has a place".into(),
+                );
             }
             diagram.reorder(id, to as usize);
         }
@@ -773,19 +993,33 @@ fn apply(diagram: &mut Diagram, op: &Value, keys: &mut HashMap<String, u32>, sha
 /// branch, the messages of each (`messages` when there is one branch); together they are every message
 /// from the first to the last, in order.
 fn wrap(diagram: &mut Diagram, spec: &Value, keys: &HashMap<String, u32>) -> Result<u32, String> {
-    let text = spec.get("text").and_then(|v| v.as_str()).filter(|t| !t.trim().is_empty()).ok_or("`text` is the operator, then one [guard] line per branch: alt\n[ok]\n[else]")?;
-    let groups: Vec<&Value> = match (spec.get("operands").and_then(|v| v.as_array()), spec.get("messages")) {
+    let text = spec
+        .get("text")
+        .and_then(|v| v.as_str())
+        .filter(|t| !t.trim().is_empty())
+        .ok_or("`text` is the operator, then one [guard] line per branch: alt\n[ok]\n[else]")?;
+    let groups: Vec<&Value> = match (
+        spec.get("operands").and_then(|v| v.as_array()),
+        spec.get("messages"),
+    ) {
         (Some(groups), _) => groups.iter().collect(),
         (None, Some(messages)) => vec![messages],
-        (None, None) => return Err("`operands` (a list of lists of messages) or `messages` is missing".into()),
+        (None, None) => {
+            return Err("`operands` (a list of lists of messages) or `messages` is missing".into());
+        }
     };
     let order = diagram.messages();
     let mut ranked: Vec<Vec<(usize, u32)>> = Vec::new();
     for group in &groups {
         let mut ids = Vec::new();
-        for value in group.as_array().ok_or("each operand is a list of messages")? {
+        for value in group
+            .as_array()
+            .ok_or("each operand is a list of messages")?
+        {
             let id = resolve_id(value, keys, diagram)?;
-            let rank = order.iter().position(|m| *m == id).ok_or_else(|| format!("`{value}` is not a message (an arrow with a lifeline at an end)"))?;
+            let rank = order.iter().position(|m| *m == id).ok_or_else(|| {
+                format!("`{value}` is not a message (an arrow with a lifeline at an end)")
+            })?;
             ids.push((rank, id));
         }
         if ids.is_empty() {
@@ -794,18 +1028,29 @@ fn wrap(diagram: &mut Diagram, spec: &Value, keys: &HashMap<String, u32>) -> Res
         ids.sort();
         ranked.push(ids);
     }
-    if ranked.windows(2).any(|w| w[0].last().map(|m| m.0) >= w[1].first().map(|m| m.0)) {
+    if ranked
+        .windows(2)
+        .any(|w| w[0].last().map(|m| m.0) >= w[1].first().map(|m| m.0))
+    {
         return Err("the operands follow one another: every message of a branch comes after those of the branch before".into());
     }
     let all: Vec<u32> = ranked.iter().flatten().map(|(_, id)| *id).collect();
-    let (first, last) = (ranked[0][0].0, ranked.last().and_then(|g| g.last()).map_or(0, |m| m.0));
+    let (first, last) = (
+        ranked[0][0].0,
+        ranked.last().and_then(|g| g.last()).map_or(0, |m| m.0),
+    );
     if last - first + 1 != all.len() {
-        return Err("list every message from the first to the last: a fragment cannot skip one".into());
+        return Err(
+            "list every message from the first to the last: a fragment cannot skip one".into(),
+        );
     }
     let id = diagram.wrap(&all, text).ok_or("these messages cannot be wrapped: they must be in the same fragment and branch, and a ref holds no message")?;
     let branches = diagram.shape(id).map_or(1, Diagram::operands) as usize;
     if ranked.len() > branches {
-        return Err(format!("{} operands but {branches} guard line(s) in `text`: write one [guard] line per branch", ranked.len()));
+        return Err(format!(
+            "{} operands but {branches} guard line(s) in `text`: write one [guard] line per branch",
+            ranked.len()
+        ));
     }
     for (k, group) in ranked.iter().enumerate() {
         for (_, m) in group {
@@ -872,7 +1117,12 @@ fn update(diagram: &mut Diagram, op: &Value, keys: &HashMap<String, u32>) -> Res
             relation.apply(diagram.link_mut(id).unwrap());
         }
         if let Some(heads) = op.get("heads") {
-            let start = head_of(heads.get("start").and_then(|v| v.as_str()).unwrap_or("none"))?;
+            let start = head_of(
+                heads
+                    .get("start")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("none"),
+            )?;
             let end = head_of(heads.get("end").and_then(|v| v.as_str()).unwrap_or("arrow"))?;
             let link = diagram.link_mut(id).unwrap();
             (link.start, link.end) = (start, end);
@@ -939,7 +1189,9 @@ fn described(diagram: &Diagram, path: &str, read_only: bool) -> Value {
             })
         })
         .collect();
-    let bounds = diagram.bounds().map(|(x, y, x1, y1)| json!({"x": x, "y": y, "w": x1 - x, "h": y1 - y}));
+    let bounds = diagram
+        .bounds()
+        .map(|(x, y, x1, y1)| json!({"x": x, "y": y, "w": x1 - x, "h": y1 - y}));
     json!({
         "path": path,
         "read_only": read_only,
@@ -960,15 +1212,25 @@ fn end_json(end: End) -> Value {
 }
 
 fn ids_of(keys: &HashMap<String, u32>) -> Value {
-    keys.iter().map(|(key, id)| (key.clone(), json!(id))).collect()
+    keys.iter()
+        .map(|(key, id)| (key.clone(), json!(id)))
+        .collect()
 }
 
 fn open_file(vault: &Vault, args: &Value) -> Result<std::path::PathBuf, Outcome> {
-    let name = arg_str(args, "path").or_else(|_| arg_str(args, "note")).map_err(Outcome::err)?;
+    let name = arg_str(args, "path")
+        .or_else(|_| arg_str(args, "note"))
+        .map_err(Outcome::err)?;
     vault.find_file(name).map_err(Outcome::err)
 }
 
-fn write_diagram(vault: &mut Vault, name: &str, folder: Option<&str>, diagram: &Diagram, skipped: usize) -> Result<Outcome, Outcome> {
+fn write_diagram(
+    vault: &mut Vault,
+    name: &str,
+    folder: Option<&str>,
+    diagram: &Diagram,
+    skipped: usize,
+) -> Result<Outcome, Outcome> {
     let Some(clean) = files::clean_name(name) else {
         return Err(Outcome::err("invalid name"));
     };
@@ -976,14 +1238,24 @@ fn write_diagram(vault: &mut Vault, name: &str, folder: Option<&str>, diagram: &
         None => vault.root.clone(),
         Some(folder) => vault.inside(folder, false).map_err(Outcome::err)?,
     };
-    fs::create_dir_all(&dir).map_err(disk).map_err(Outcome::err)?;
+    fs::create_dir_all(&dir)
+        .map_err(disk)
+        .map_err(Outcome::err)?;
     if let Some(taken) = vault::name_taken(&dir, &clean, "svg") {
-        return Err(Outcome::err(format!("a file already has the name `{clean}` ({})", vault::rel(&vault.root, &taken))));
+        return Err(Outcome::err(format!(
+            "a file already has the name `{clean}` ({})",
+            vault::rel(&vault.root, &taken)
+        )));
     }
     let path = dir.join(format!("{clean}.svg"));
-    files::write(&path, &diagram.to_svg(diagram::COLORS[0])).map_err(disk).map_err(Outcome::err)?;
+    files::write(&path, &diagram.to_svg(diagram::COLORS[0]))
+        .map_err(disk)
+        .map_err(Outcome::err)?;
     vault.rescan();
-    let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let file = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     Ok(Outcome::ok(json!({
         "path": vault::rel(&vault.root, &path),
         "embed": format!("[[{file}]]"),
@@ -993,7 +1265,8 @@ fn write_diagram(vault: &mut Vault, name: &str, folder: Option<&str>, diagram: &
 
 fn drawio_error(content: &str) -> String {
     if roxmltree::Document::parse(content).is_ok() && !content.contains("mxCell") {
-        "this draw.io file is compressed: untick File > Properties > Compressed, then save it again".into()
+        "this draw.io file is compressed: untick File > Properties > Compressed, then save it again"
+            .into()
     } else {
         "not a draw.io file".into()
     }

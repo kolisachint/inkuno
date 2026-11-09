@@ -1,0 +1,229 @@
+# Label-gated releases for Inkuno. New files use `inkuno` names; remaining
+# `bref` asset strings elsewhere are the rename crew's lane (see RELEASING.md).
+#
+# Merging a PR into main with exactly one rust:patch, rust:minor or rust:major
+# label bumps the Cargo.toml version, commits the bump, tags main (vX.Y.Z),
+# creates a draft release and builds it through release-native.yml. Any other
+# merge is a no-op with a summary line. The FIRST release (0.0.1) is always
+# manual via scripts/release.sh: with no previous tag this gate stops before
+# mutating anything.
+name: Release gate
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: release-gate
+  cancel-in-progress: false
+jobs:
+  gate:
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.ready.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Install the pinned toolchain
+        run: rustup show active-toolchain
+      - name: Decide the bump from PR labels
+        id: decide
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin --tags
+          count=0
+          bump=""
+          for label in $LABELS; do
+            case "$label" in
+              rust:patch) count=$((count + 1)); bump=patch ;;
+              rust:minor) count=$((count + 1)); bump=minor ;;
+              rust:major) count=$((count + 1)); bump=major ;;
+            esac
+          done
+          if [ "$count" != 1 ]; then
+            {
+              echo "## Release gate: no-op"
+              echo
+              echo "PR #$PR_NUMBER merged with $count release labels;"
+              echo "expected exactly one of \`rust:patch\`, \`rust:minor\`, \`rust:major\`."
+              echo "No version bump, tag or release."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! prev=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null); then
+            {
+              echo "## Release gate: no-op"
+              echo
+              echo "No previous version tag: the first release is manual."
+              echo "Run \`DRY_RUN=1 scripts/release.sh 0.0.1\`, then"
+              echo "\`scripts/release.sh 0.0.1\` from synchronized main."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          current=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          head_msg=$(git log -1 --pretty=%s)
+          # A merged `chore: release` fallback PR already carries the bump:
+          # tag it instead of bumping twice.
+          if [ "$head_msg" = "chore: release $current" ]; then
+            tag="v$current"
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "tag $tag already exists; refusing to release twice" >&2
+              exit 1
+            fi
+            echo "bumped=false" >>"$GITHUB_OUTPUT"
+            echo "next=$current" >>"$GITHUB_OUTPUT"
+            echo "tag=$tag" >>"$GITHUB_OUTPUT"
+            echo "prev=$prev" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          next=$(python3 - "$current" "$bump" <<'PY'
+          import re, sys
+          current, bump = sys.argv[1], sys.argv[2]
+          m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", current)
+          if not m:
+              sys.exit(f"Cargo.toml version is not semver: {current!r}")
+          major, minor, patch = map(int, m.groups())
+          if bump == "major":
+              major, minor, patch = major + 1, 0, 0
+          elif bump == "minor":
+              minor, patch = minor + 1, 0
+          else:
+              patch += 1
+          print(f"{major}.{minor}.{patch}")
+          PY
+          )
+          tag="v$next"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "tag $tag already exists; refusing to bump" >&2
+            exit 1
+          fi
+          echo "bumped=true" >>"$GITHUB_OUTPUT"
+          echo "next=$next" >>"$GITHUB_OUTPUT"
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "prev=$prev" >>"$GITHUB_OUTPUT"
+      - name: Commit the bump and tag main
+        id: tag
+        if: steps.decide.outputs.tag != ''
+        env:
+          TAG: ${{ steps.decide.outputs.tag }}
+          NEXT: ${{ steps.decide.outputs.next }}
+          BUMPED: ${{ steps.decide.outputs.bumped }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ "$BUMPED" = true ]; then
+            app=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
+            # First `version` line only (ubuntu runner: GNU sed).
+            sed -i "0,/^version = .*/s//version = \"$NEXT\"/" Cargo.toml
+            cargo update -p "$app" -q
+            git add Cargo.toml Cargo.lock
+            git commit -q -m "chore: release $NEXT"
+            git tag -a "$TAG" -m "Inkuno $NEXT"
+            # A protected main rejects the push: fall back to a release PR.
+            if git push --atomic origin main "$TAG"; then
+              echo "pushed=true" >>"$GITHUB_OUTPUT"
+            else
+              branch="chore/release-$NEXT"
+              git checkout -qb "$branch"
+              git push -u origin "$branch"
+              echo "pushed=false" >>"$GITHUB_OUTPUT"
+              echo "branch=$branch" >>"$GITHUB_OUTPUT"
+            fi
+          else
+            git tag -a "$TAG" -m "Inkuno $NEXT"
+            git push origin "$TAG"
+            echo "pushed=true" >>"$GITHUB_OUTPUT"
+          fi
+      - name: Open a release PR when main is protected
+        if: steps.decide.outputs.tag != '' && steps.tag.outputs.pushed == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT: ${{ steps.decide.outputs.next }}
+          BRANCH: ${{ steps.tag.outputs.branch }}
+        run: |
+          set -euo pipefail
+          url=$(gh pr create --base main --head "$BRANCH" \
+            --title "chore: release $NEXT" \
+            --body "Label-gated release: main is protected, so this PR carries the version bump. Label it with the same \`rust:*\` label and merge to tag and ship; the gate tags the existing bump instead of bumping twice. Do not push tags by hand.")
+          {
+            echo "## Release gate: release PR"
+            echo
+            echo "Main is protected; pushed \`$BRANCH\` instead of tagging."
+            echo "Merge <$url> to ship the release."
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Draft the release with author notes
+        if: steps.decide.outputs.tag != '' && steps.tag.outputs.pushed != 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.decide.outputs.tag }}
+          NEXT: ${{ steps.decide.outputs.next }}
+          PREV: ${{ steps.decide.outputs.prev }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          take=$(python3 - <<'PY'
+          import os, re
+          body = os.environ.get("PR_BODY", "")
+          m = re.search(r"^###\s+My take\s*$\n?(.*?)(?=^#{1,3}\s|\Z)", body, re.M | re.S)
+          print(m.group(1).strip() if m else "")
+          PY
+          )
+          authors=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --paginate \
+            --jq '[.[].commit.author.name] | unique | join(", ")')
+          {
+            echo "## Highlights"
+            echo
+            if [ -n "$take" ]; then
+              echo "$take"
+            else
+              echo "_The author did not include a \`### My take\` section._"
+            fi
+            echo
+            echo "## Credits"
+            echo
+            echo "Author: @$PR_AUTHOR"
+            echo "Commits: $authors"
+            echo
+            echo "## Changes"
+            echo
+            # shellcheck disable=SC2016
+            git log "$PREV..$TAG" --no-merges --pretty='- %s (%h)' \
+              | grep -vE '^- (chore|build|refactor)(\(.*\))?: ' || true
+          } >notes.md
+          gh release create "$TAG" --draft --verify-tag \
+            --title "Inkuno $NEXT" --notes-file notes.md
+          {
+            echo "## Release gate: drafted $TAG"
+            echo
+            echo "Draft: <https://github.com/$REPO/releases/tag/$TAG>"
+            echo "The Native release workflow builds macOS + Linux and publishes"
+            echo "only after every download verifies."
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Mark the tag ready for the Native release
+        id: ready
+        if: steps.decide.outputs.tag != '' && steps.tag.outputs.pushed != 'false'
+        env:
+          TAG: ${{ steps.decide.outputs.tag }}
+        run: echo "tag=$TAG" >>"$GITHUB_OUTPUT"
+  release:
+    needs: gate
+    if: needs.gate.outputs.tag != ''
+    uses: ./.github/workflows/release-native.yml
+    with:
+      tag: ${{ needs.gate.outputs.tag }}

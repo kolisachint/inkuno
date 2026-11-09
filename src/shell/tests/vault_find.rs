@@ -22,7 +22,10 @@ fn keys_in(shell: &Entity<Shell>, cx: &mut Cx) -> &'static str {
 }
 
 fn inside(a: Bounds<Pixels>, b: Bounds<Pixels>) -> bool {
-    a.left() >= b.left() - px(0.5) && a.right() <= b.right() + px(0.5) && a.top() >= b.top() && a.bottom() <= b.bottom()
+    a.left() >= b.left() - px(0.5)
+        && a.right() <= b.right() + px(0.5)
+        && a.top() >= b.top()
+        && a.bottom() <= b.bottom()
 }
 
 fn apart(a: Bounds<Pixels>, b: Bounds<Pixels>) -> bool {
@@ -32,7 +35,10 @@ fn apart(a: Bounds<Pixels>, b: Bounds<Pixels>) -> bool {
 fn click(cx: &mut Cx, name: &str) {
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
-    let at = cx.debug_bounds(leak(name.to_string())).unwrap_or_else(|| panic!("{name}")).center();
+    let at = cx
+        .debug_bounds(leak(name.to_string()))
+        .unwrap_or_else(|| panic!("{name}"))
+        .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
 }
@@ -55,14 +61,22 @@ fn the_vault_search(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-f");
     cx.simulate_input("zèbre");
     cx.simulate_keystrokes("secondary-shift-f");
-    assert_eq!(shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)), (nav::Mode::Search, nav::Panel::Split));
+    assert_eq!(
+        shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)),
+        (nav::Mode::Search, nav::Panel::Split)
+    );
     assert_eq!(keys_in(&shell, cx), "query");
     // Three matches in two notes: Alpha (its two lines) then Beta; Gamma is not listed.
     assert_eq!(state(&shell, cx), Some(("zèbre".into(), 3, 2, 5, 0)));
     // Down to the second match of Alpha, Enter: the note opens on it, its bar on the same search.
     cx.simulate_keystrokes("down down enter");
-    let open = shell.read_with(cx, |s, cx| (s.pane().path.clone(), s.pane().editor.read(cx).finding(cx)));
-    assert_eq!(open, (Some(root.join("Alpha.md")), Some(("zèbre".into(), 2, 2))));
+    let open = shell.read_with(cx, |s, cx| {
+        (s.pane().path.clone(), s.pane().editor.read(cx).finding(cx))
+    });
+    assert_eq!(
+        open,
+        (Some(root.join("Alpha.md")), Some(("zèbre".into(), 2, 2)))
+    );
     assert_eq!(keys_in(&shell, cx), "note");
     // Again: the search all selected, replaced by the first keys; case matters with Alt+C.
     cx.simulate_keystrokes("secondary-shift-f");
@@ -78,22 +92,50 @@ fn the_vault_search(cx: &mut TestAppContext) {
     click(cx, "vault-dismiss-1");
     assert_eq!(state(&shell, cx).map(|s| (s.1, s.2, s.3)), Some((2, 2, 4)));
     cx.simulate_keystrokes("secondary-enter");
-    assert!(shell.read_with(cx, |s, _| s.palette.is_some()), "the count is shown first");
-    assert_eq!(fs::read_to_string(root.join("Beta.md")).unwrap(), "# Beta\n\nle Zèbre\n");
+    assert!(
+        shell.read_with(cx, |s, _| s.palette.is_some()),
+        "the count is shown first"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Beta.md")).unwrap(),
+        "# Beta\n\nle Zèbre\n"
+    );
     cx.simulate_keystrokes("enter");
-    assert_eq!(fs::read_to_string(root.join("Alpha.md")).unwrap(), "# Alpha\n\nun zèbre\ndeux okapis\n");
-    assert_eq!(fs::read_to_string(root.join("Beta.md")).unwrap(), "# Beta\n\nle okapi\n");
+    assert_eq!(
+        fs::read_to_string(root.join("Alpha.md")).unwrap(),
+        "# Alpha\n\nun zèbre\ndeux okapis\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Beta.md")).unwrap(),
+        "# Beta\n\nle okapi\n"
+    );
     // The results follow: only the dismissed match is left, and it stays aside.
     assert_eq!(state(&shell, cx).map(|s| (s.1, s.2)), Some((0, 0)));
     // Undone: every note as it was.
     shell.update(cx, |s, cx| s.undo_swap(cx));
-    assert_eq!(fs::read_to_string(root.join("Alpha.md")).unwrap(), "# Alpha\n\nun zèbre\ndeux zèbres\n");
-    assert_eq!(fs::read_to_string(root.join("Beta.md")).unwrap(), "# Beta\n\nle Zèbre\n");
+    assert_eq!(
+        fs::read_to_string(root.join("Alpha.md")).unwrap(),
+        "# Alpha\n\nun zèbre\ndeux zèbres\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Beta.md")).unwrap(),
+        "# Beta\n\nle Zèbre\n"
+    );
     // Replace in one note only, from its header: Beta is the second note.
-    assert_eq!(state(&shell, cx).map(|s| (s.1, s.2, s.3)), Some((2, 2, 4)), "the dismissed match stays aside after the undo");
+    assert_eq!(
+        state(&shell, cx).map(|s| (s.1, s.2, s.3)),
+        Some((2, 2, 4)),
+        "the dismissed match stays aside after the undo"
+    );
     click(cx, "vault-note-replace-2");
-    assert_eq!(fs::read_to_string(root.join("Beta.md")).unwrap(), "# Beta\n\nle okapi\n");
-    assert_eq!(fs::read_to_string(root.join("Alpha.md")).unwrap(), "# Alpha\n\nun zèbre\ndeux zèbres\n");
+    assert_eq!(
+        fs::read_to_string(root.join("Beta.md")).unwrap(),
+        "# Beta\n\nle okapi\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Alpha.md")).unwrap(),
+        "# Alpha\n\nun zèbre\ndeux zèbres\n"
+    );
     shell.update(cx, |s, cx| s.undo_swap(cx));
     // A note's header folds its matches, and unfolds them.
     let rows = |cx: &mut Cx| state(&shell, cx).unwrap().3;
@@ -104,7 +146,10 @@ fn the_vault_search(cx: &mut TestAppContext) {
     assert_eq!(rows(cx), before);
     // Escape: the keys go back to the note, the panel stays on its results.
     cx.simulate_keystrokes("secondary-shift-f escape");
-    assert_eq!((keys_in(&shell, cx), shell.read_with(cx, |s, _| s.nav.mode)), ("note", nav::Mode::Search));
+    assert_eq!(
+        (keys_in(&shell, cx), shell.read_with(cx, |s, _| s.nav.mode)),
+        ("note", nav::Mode::Search)
+    );
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -163,9 +208,15 @@ fn the_vault_search_follows_the_notes(cx: &mut TestAppContext) {
         cx.simulate_keystrokes("secondary-r");
         cx.simulate_input("nom");
         cx.simulate_keystrokes("secondary-enter enter");
-        assert_eq!(fs::read_to_string(root.join("Quatre.md")).unwrap(), "# Quatre\n\nnom\n");
+        assert_eq!(
+            fs::read_to_string(root.join("Quatre.md")).unwrap(),
+            "# Quatre\n\nnom\n"
+        );
         if readonly {
-            assert_eq!(fs::read_to_string(folder.join("Cinq.md")).unwrap(), "# Cinq\n\nmot\n");
+            assert_eq!(
+                fs::read_to_string(folder.join("Cinq.md")).unwrap(),
+                "# Cinq\n\nmot\n"
+            );
             assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "Cinq.md")));
         }
         fs::set_permissions(&folder, fs::Permissions::from_mode(0o755)).unwrap();
@@ -180,13 +231,20 @@ fn the_vault_search_holds_its_place(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "vault-find-measures");
     let long = format!("{} mot {}", "début ".repeat(30), "x".repeat(200));
     for i in 0..12 {
-        fs::write(root.join(format!("Note {i} avec un nom assez long pour déborder.md")), format!("# N\n\n{long}\nmot\n")).unwrap();
+        fs::write(
+            root.join(format!("Note {i} avec un nom assez long pour déborder.md")),
+            format!("# N\n\n{long}\nmot\n"),
+        )
+        .unwrap();
     }
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     cx.simulate_keystrokes("secondary-shift-f");
     cx.simulate_input("mot");
     cx.simulate_keystrokes("secondary-r");
-    let zooms = ["secondary-0", "secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-="];
+    let zooms = [
+        "secondary-0",
+        "secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-= secondary-=",
+    ];
     for zoom in zooms {
         cx.simulate_keystrokes(zoom);
         for list_w in [260., 600.] {
@@ -200,16 +258,32 @@ fn the_vault_search_holds_its_place(cx: &mut TestAppContext) {
                 cx.run_until_parked();
                 let what = format!("zoom {zoom:.12}, panel {list_w}, {width} px");
                 let panel = cx.debug_bounds("nav-panel").unwrap();
-                let parts = ["vault-chevron", "vault-query", "vault-case", "vault-word", "vault-regex", "vault-with", "vault-replace-all", "vault-count"].map(|id| (id, cx.debug_bounds(id).unwrap()));
+                let parts = [
+                    "vault-chevron",
+                    "vault-query",
+                    "vault-case",
+                    "vault-word",
+                    "vault-regex",
+                    "vault-with",
+                    "vault-replace-all",
+                    "vault-count",
+                ]
+                .map(|id| (id, cx.debug_bounds(id).unwrap()));
                 for (i, (id, part)) in parts.iter().enumerate() {
                     assert!(inside(*part, panel), "{what}: {id} {part:?} in {panel:?}");
                     for (other, them) in &parts[i + 1..] {
-                        assert!(apart(*part, *them), "{what}: {id} {part:?} over {other} {them:?}");
+                        assert!(
+                            apart(*part, *them),
+                            "{what}: {id} {part:?} over {other} {them:?}"
+                        );
                     }
                 }
                 for row in 0..4 {
                     let row = cx.debug_bounds(leak(format!("vault-row-{row}"))).unwrap();
-                    assert!(inside(row, panel) && row.top() >= parts[7].1.bottom(), "{what}: row {row:?} in {panel:?}");
+                    assert!(
+                        inside(row, panel) && row.top() >= parts[7].1.bottom(),
+                        "{what}: row {row:?} in {panel:?}"
+                    );
                 }
             }
         }
@@ -222,7 +296,13 @@ fn the_vault_search_holds_its_place(cx: &mut TestAppContext) {
 fn the_vault_search_of_5000_notes(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "vault-find-5000");
     for i in 0..5_000 {
-        fs::write(root.join(format!("Note {i}.md")), format!("# Note {i}\n\nUn texte de quelques mots, le numéro {i}.\nEt une autre ligne.\n")).unwrap();
+        fs::write(
+            root.join(format!("Note {i}.md")),
+            format!(
+                "# Note {i}\n\nUn texte de quelques mots, le numéro {i}.\nEt une autre ligne.\n"
+            ),
+        )
+        .unwrap();
     }
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     cx.run_until_parked();
@@ -236,7 +316,13 @@ fn the_vault_search_of_5000_notes(cx: &mut TestAppContext) {
     let typed = begun.elapsed();
     let found = Instant::now();
     assert_eq!(state(&shell, cx).map(|s| (s.1, s.2)), Some((111, 111)));
-    eprintln!("5 000 notes: keystroke {typed:?}, results {:?}", found.elapsed());
-    assert!(typed < Duration::from_millis(50), "a keystroke took {typed:?}");
+    eprintln!(
+        "5 000 notes: keystroke {typed:?}, results {:?}",
+        found.elapsed()
+    );
+    assert!(
+        typed < Duration::from_millis(50),
+        "a keystroke took {typed:?}"
+    );
     let _ = fs::remove_dir_all(&root);
 }

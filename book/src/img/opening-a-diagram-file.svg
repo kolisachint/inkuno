@@ -9,7 +9,7 @@
 <path d="M240 300L255 315L240 330L225 315Z" stroke="#7d8590"/>
 <path d="M434 285L626 285C633.7 285 640 291.3 640 299L640 331C640 338.7 633.7 345 626 345L434 345C426.3 345 420 338.7 420 331L420 299C420 291.3 426.3 285 434 285Z" stroke="#7d8590"/>
 <text x="530" y="311" text-anchor="middle" fill="#7d8590" stroke="none">Viewer, read-only</text>
-<text x="530" y="329" text-anchor="middle" fill="#7d8590" stroke="none">(made by a newer Bref)</text>
+<text x="530" y="329" text-anchor="middle" fill="#7d8590" stroke="none">(made by a newer Inkuno)</text>
 <path d="M174 410L306 410C313.7 410 320 416.3 320 424L320 446C320 453.7 313.7 460 306 460L174 460C166.3 460 160 453.7 160 446L160 424C160 416.3 166.3 410 174 410Z" stroke="#7d8590"/>
 <text x="240" y="440" text-anchor="middle" fill="#7d8590" stroke="none">Canvas, editable</text>
 <path d="M420 405L628 405L640 417L640 465L420 465Z" stroke="#7d8590"/>
@@ -27,7 +27,7 @@
 <path d="M235 180L240 190L245 180" stroke="#7d8590"/>
 <path d="M255 205L420 205" stroke="#7d8590"/>
 <path d="M410 210L420 205L410 200" stroke="#7d8590"/>
-<text x="337.5" y="199" text-anchor="middle" font-style="italic" fill="#7d8590" stroke="none">[no Bref source]</text>
+<text x="337.5" y="199" text-anchor="middle" font-style="italic" fill="#7d8590" stroke="none">[no Inkuno source]</text>
 <path d="M240 220L240 300" stroke="#7d8590"/>
 <path d="M235 290L240 300L245 290" stroke="#7d8590"/>
 <text x="246" y="265" font-style="italic" fill="#7d8590" stroke="none">[source in metadata]</text>
@@ -42,7 +42,7 @@
 <path d="M235 510L240 520L245 510" stroke="#7d8590"/>
 <path d="M240 580L240 640" stroke="#7d8590"/>
 <path d="M235 630L240 640L245 630" stroke="#7d8590"/>
-<metadata id="bref-diagram">
+<metadata id="inkuno-diagram">
 version 6
 rich 1
 shape 1 dot 230 30 20 20 0 0 0 
@@ -50,14 +50,14 @@ shape 2 round 160 90 160 50 0 0 0 Read the SVG
 shape 3 branch 225 190 30 30 0 0 0 
 shape 4 round 420 175 220 60 0 0 0 Viewer\n(an SVG from elsewhere)
 shape 5 branch 225 300 30 30 0 0 0 
-shape 6 round 420 285 220 60 0 0 0 Viewer, read-only\n(made by a newer Bref)
+shape 6 round 420 285 220 60 0 0 0 Viewer, read-only\n(made by a newer Inkuno)
 shape 7 round 160 410 160 50 0 0 0 Canvas, editable
 shape 8 note 420 405 220 60 0 0 0 Lines it cannot read\nare kept, written back
 shape 9 round 120 520 240 60 0 0 0 Save with the lowest version\nthat says what it holds
 shape 10 final 227 640 26 26 0 0 0 
 link 11 s1 s2 none arrow straight 0 0 
 link 12 s2 s3 none arrow straight 0 0 
-link 13 s3 s4 none arrow straight 0 0 [no Bref source]
+link 13 s3 s4 none arrow straight 0 0 [no Inkuno source]
 link 14 s3 s5 none arrow straight 0 0 [source in metadata]
 link 15 s5 s6 none arrow straight 0 0 [newer version]
 link 16 s5 s7 none arrow straight 0 0 [this version or older]

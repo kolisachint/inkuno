@@ -1,5 +1,5 @@
-//! The running app's door, for `bref mcp`: a TCP port on 127.0.0.1 and a secret, both written in
-//! `<config>/bref/agent` when the window opens. One request a connection, one JSON line each way:
+//! The running app's door, for `inkuno mcp`: a TCP port on 127.0.0.1 and a secret, both written in
+//! `<config>/inkuno/agent` when the window opens. One request a connection, one JSON line each way:
 //! `{"secret", "show": path}` asks the window to show a file of its vault; the answer is
 //! `{"ok": true}` or `{"error": sentence}`. The secret keeps out the other programs of the machine,
 //! which can all reach 127.0.0.1. Only the standard library: TCP is the one local channel it has
@@ -30,11 +30,11 @@ pub struct Asked {
     pub answer: mpsc::Sender<Answer>,
 }
 
-/// What `bref mcp` says when no window answers: the file is written all the same.
-pub const NOT_OPEN: &str = "Bref is not open: start it to see the file";
+/// What `inkuno mcp` says when no window answers: the file is written all the same.
+pub const NOT_OPEN: &str = "Inkuno is not open: start it to see the file";
 
 fn door() -> PathBuf {
-    config_dir().join("bref/agent")
+    config_dir().join("inkuno/agent")
 }
 
 /// Opens the door: each request lands in `asked`, and `signal` is raised for it.
@@ -52,21 +52,34 @@ fn open_at(file: &Path, asked: Arc<Mutex<Vec<Asked>>>, signal: Arc<Signal>) -> i
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    writeln!(options.open(file)?, "{} {secret}", listener.local_addr()?.port())?;
-    thread::Builder::new().name("agent door".into()).spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let _ = serve(stream, &secret, &asked, &signal);
-        }
-    })?;
+    writeln!(
+        options.open(file)?,
+        "{} {secret}",
+        listener.local_addr()?.port()
+    )?;
+    thread::Builder::new()
+        .name("agent door".into())
+        .spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let _ = serve(stream, &secret, &asked, &signal);
+            }
+        })?;
     Ok(())
 }
 
 /// 128 bits from the hasher keys the standard library draws from the system.
 fn secret() -> String {
-    (0..2).map(|_| format!("{:016x}", RandomState::new().build_hasher().finish())).collect()
+    (0..2)
+        .map(|_| format!("{:016x}", RandomState::new().build_hasher().finish()))
+        .collect()
 }
 
-fn serve(mut stream: TcpStream, secret: &str, asked: &Mutex<Vec<Asked>>, signal: &Signal) -> io::Result<()> {
+fn serve(
+    mut stream: TcpStream,
+    secret: &str,
+    asked: &Mutex<Vec<Asked>>,
+    signal: &Signal,
+) -> io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
     let mut line = String::new();
     BufReader::new((&stream).take(64 * 1024)).read_line(&mut line)?;
@@ -76,7 +89,8 @@ fn serve(mut stream: TcpStream, secret: &str, asked: &Mutex<Vec<Asked>>, signal:
             let (answer, wait) = mpsc::channel();
             asked.lock().unwrap().push(Asked { path, answer });
             signal.raise();
-            wait.recv_timeout(Duration::from_secs(5)).unwrap_or_else(|_| Err("Bref did not answer".into()))
+            wait.recv_timeout(Duration::from_secs(5))
+                .unwrap_or_else(|_| Err("Inkuno did not answer".into()))
         }
     };
     let reply = match answer {
@@ -92,7 +106,10 @@ fn request(line: &str, secret: &str) -> Result<PathBuf, String> {
     if value["secret"].as_str() != Some(secret) {
         return Err("wrong secret".into());
     }
-    value["show"].as_str().map(PathBuf::from).ok_or_else(|| "nothing to show".into())
+    value["show"]
+        .as_str()
+        .map(PathBuf::from)
+        .ok_or_else(|| "nothing to show".into())
 }
 
 /// Asks the running window to show `path` (absolute).
@@ -106,11 +123,17 @@ fn show_at(file: &Path, path: &Path) -> Answer {
     let port: u16 = port.parse().map_err(|_| NOT_OPEN.to_string())?;
     // Left by a window since closed: nobody listens there any more.
     let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(1)).map_err(|_| NOT_OPEN.to_string())?;
-    stream.set_read_timeout(Some(Duration::from_secs(6))).map_err(|e| e.to_string())?;
-    writeln!(stream, "{}", json!({"secret": secret, "show": path})).map_err(|_| NOT_OPEN.to_string())?;
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(1))
+        .map_err(|_| NOT_OPEN.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(6)))
+        .map_err(|e| e.to_string())?;
+    writeln!(stream, "{}", json!({"secret": secret, "show": path}))
+        .map_err(|_| NOT_OPEN.to_string())?;
     let mut line = String::new();
-    BufReader::new(&stream).read_line(&mut line).map_err(|_| "Bref did not answer".to_string())?;
+    BufReader::new(&stream)
+        .read_line(&mut line)
+        .map_err(|_| "Inkuno did not answer".to_string())?;
     let reply: Value = serde_json::from_str(&line).map_err(|_| NOT_OPEN.to_string())?;
     match reply["error"].as_str() {
         Some(error) => Err(error.to_string()),
@@ -125,8 +148,11 @@ mod tests {
 
     /// A window that answers each request with `answer`, through a door in `dir`.
     fn window(dir: &Path, answer: fn(&Path) -> Answer) -> PathBuf {
-        let file = dir.join("bref/agent");
-        let (asked, signal) = (Arc::new(Mutex::new(Vec::<Asked>::new())), Arc::new(Signal::default()));
+        let file = dir.join("inkuno/agent");
+        let (asked, signal) = (
+            Arc::new(Mutex::new(Vec::<Asked>::new())),
+            Arc::new(Signal::default()),
+        );
         open_at(&file, asked.clone(), signal.clone()).unwrap();
         thread::spawn(move || {
             loop {
@@ -143,18 +169,37 @@ mod tests {
 
     #[test]
     fn the_window_answers_through_the_door() {
-        let dir = std::env::temp_dir().join(format!("bref-link-{}", std::process::id()));
-        let file = window(&dir.join("a"), |path| if path.ends_with("Note é.md") { Ok(()) } else { Err(format!("no file {}", path.display())) });
+        let dir = std::env::temp_dir().join(format!("inkuno-link-{}", std::process::id()));
+        let file = window(&dir.join("a"), |path| {
+            if path.ends_with("Note é.md") {
+                Ok(())
+            } else {
+                Err(format!("no file {}", path.display()))
+            }
+        });
         assert_eq!(show_at(&file, Path::new("/vault/Note é.md")), Ok(()));
-        assert_eq!(show_at(&file, Path::new("/vault/Other.md")), Err("no file /vault/Other.md".into()));
+        assert_eq!(
+            show_at(&file, Path::new("/vault/Other.md")),
+            Err("no file /vault/Other.md".into())
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600, "the secret is the user's alone");
+            assert_eq!(
+                fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+                0o600,
+                "the secret is the user's alone"
+            );
         }
 
         // A wrong secret, a broken line, a line without end: refused, and the door still answers.
-        let port = fs::read_to_string(&file).unwrap().split(' ').next().unwrap().parse::<u16>().unwrap();
+        let port = fs::read_to_string(&file)
+            .unwrap()
+            .split(' ')
+            .next()
+            .unwrap()
+            .parse::<u16>()
+            .unwrap();
         let ask = |line: &[u8]| {
             let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
             stream.write_all(line).unwrap();
@@ -169,14 +214,25 @@ mod tests {
         assert_eq!(show_at(&file, Path::new("/vault/Note é.md")), Ok(()));
 
         // No door, a stale door (its window closed), a door file in a bad state.
-        assert_eq!(show_at(&dir.join("none"), Path::new("/x.md")), Err(NOT_OPEN.into()));
+        assert_eq!(
+            show_at(&dir.join("none"), Path::new("/x.md")),
+            Err(NOT_OPEN.into())
+        );
         let stale = dir.join("stale");
-        let port = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap().local_addr().unwrap().port();
+        let port = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
         fs::write(&stale, format!("{port} secret")).unwrap();
         assert_eq!(show_at(&stale, Path::new("/x.md")), Err(NOT_OPEN.into()));
         for bad in ["", "garbage", "99999999 s"] {
             fs::write(&stale, bad).unwrap();
-            assert_eq!(show_at(&stale, Path::new("/x.md")), Err(NOT_OPEN.into()), "{bad:?}");
+            assert_eq!(
+                show_at(&stale, Path::new("/x.md")),
+                Err(NOT_OPEN.into()),
+                "{bad:?}"
+            );
         }
         assert_ne!(secret(), secret());
         fs::remove_dir_all(&dir).ok();

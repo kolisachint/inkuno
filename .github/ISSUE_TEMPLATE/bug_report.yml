@@ -18,7 +18,7 @@ body:
       required: true
   - type: input
     attributes:
-      label: Bref version
+      label: Inkuno version
       description: Shown at the bottom of the help panel.
     validations:
       required: true
@@ -34,7 +34,7 @@ body:
       required: true
   - type: input
     attributes:
-      label: How Bref was installed
+      label: How Inkuno was installed
       placeholder: Arch package, installer, zip, dmg, built from source…
   - type: textarea
     attributes:

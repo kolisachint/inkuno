@@ -51,23 +51,31 @@ impl Shell {
             let find = cx.new(|cx| field::Field::new("", theme, cx));
             cx.observe(&find, |_, _, cx| cx.notify()).detach();
             // Escape clears the field, then closes the panel.
-            cx.subscribe_in(&find, window, |this, find, event: &field::FieldEvent, window, cx| {
-                if let field::FieldEvent::Done = event {
-                    // Enter on the picked row: its keys are awaited.
-                    if let Some(action) = this.help.sel.filter(|sel| this.help_actions(cx).contains(sel)) {
-                        this.key_edit(action, cx);
+            cx.subscribe_in(
+                &find,
+                window,
+                |this, find, event: &field::FieldEvent, window, cx| {
+                    if let field::FieldEvent::Done = event {
+                        // Enter on the picked row: its keys are awaited.
+                        if let Some(action) = this
+                            .help
+                            .sel
+                            .filter(|sel| this.help_actions(cx).contains(sel))
+                        {
+                            this.key_edit(action, cx);
+                        }
+                    } else if let field::FieldEvent::Cancel = event {
+                        if find.read(cx).line.text.is_empty() {
+                            this.set_help(false, window, cx);
+                        } else {
+                            find.update(cx, |find, cx| {
+                                find.line = line::Line::default();
+                                cx.notify();
+                            });
+                        }
                     }
-                } else if let field::FieldEvent::Cancel = event {
-                    if find.read(cx).line.text.is_empty() {
-                        this.set_help(false, window, cx);
-                    } else {
-                        find.update(cx, |find, cx| {
-                            find.line = line::Line::default();
-                            cx.notify();
-                        });
-                    }
-                }
-            })
+                },
+            )
             .detach();
             window.focus(&find.focus_handle(cx));
             self.help.find = Some(find);
@@ -82,7 +90,11 @@ impl Shell {
 
     /// The actions of the rows the help shows, in order.
     pub(super) fn help_actions(&self, cx: &App) -> Vec<&'static str> {
-        self.help_rows(cx).into_iter().flat_map(|(_, rows)| rows).filter_map(|row| row.action).collect()
+        self.help_rows(cx)
+            .into_iter()
+            .flat_map(|(_, rows)| rows)
+            .filter_map(|row| row.action)
+            .collect()
     }
 
     /// Up and down in the help: the picked row, among those whose keys can be changed.
@@ -90,7 +102,10 @@ impl Shell {
     // on screen. One `ScrollHandle` per section if the need is confirmed.
     pub(super) fn help_step(&mut self, down: bool, cx: &mut Context<Self>) {
         let actions = self.help_actions(cx);
-        let at = self.help.sel.and_then(|sel| actions.iter().position(|action| *action == sel));
+        let at = self
+            .help
+            .sel
+            .and_then(|sel| actions.iter().position(|action| *action == sel));
         let next = match (at, down) {
             (None, true) => 0,
             (None, false) => actions.len().saturating_sub(1),
@@ -104,7 +119,11 @@ impl Shell {
     /// Awaits the keys of the shortcut for `action`.
     pub(super) fn key_edit(&mut self, action: &'static str, cx: &mut Context<Self>) {
         self.help.sel = Some(action);
-        self.help.edit = Some(KeyEdit { action, keys: String::new(), issue: None });
+        self.help.edit = Some(KeyEdit {
+            action,
+            keys: String::new(),
+            issue: None,
+        });
         cx.notify();
     }
 
@@ -112,7 +131,9 @@ impl Shell {
     /// Backspace (no shortcut) and Enter on keys already taken (replace).
     /// `false` when nothing is awaited: the keystroke goes on its way.
     pub(super) fn key_pressed(&mut self, stroke: &gpui::Keystroke, cx: &mut Context<Self>) -> bool {
-        let Some(edit) = &self.help.edit else { return false };
+        let Some(edit) = &self.help.edit else {
+            return false;
+        };
         let (action, taken) = (edit.action, matches!(edit.issue, Some(KeyIssue::Taken(_))));
         let keys = keys::spell(stroke);
         match keys.as_str() {
@@ -127,17 +148,28 @@ impl Shell {
                         "A key alone types text: add Ctrl, Alt or Cmd.",
                         "Une touche seule écrit du texte : ajouter Ctrl, Alt ou Cmd.",
                     ))),
-                    Some(_) => Some(KeyIssue::Refused(tr("These keys cannot be a shortcut.", "Ces touches ne peuvent pas servir de raccourci."))),
-                    None if others.iter().any(|other| !open.contains(other)) => Some(KeyIssue::Refused(tr(
-                        "Kept for typing and moving in the text and the views.",
-                        "Réservées à la saisie et au déplacement dans le texte et les vues.",
+                    Some(_) => Some(KeyIssue::Refused(tr(
+                        "These keys cannot be a shortcut.",
+                        "Ces touches ne peuvent pas servir de raccourci.",
                     ))),
+                    None if others.iter().any(|other| !open.contains(other)) => {
+                        Some(KeyIssue::Refused(tr(
+                            "Kept for typing and moving in the text and the views.",
+                            "Réservées à la saisie et au déplacement dans le texte et les vues.",
+                        )))
+                    }
                     None if !others.is_empty() => Some(KeyIssue::Taken(others)),
                     None => None,
                 };
                 match issue {
                     None => self.key_set(action, keys, &[], cx),
-                    issue => self.help.edit = Some(KeyEdit { action, keys, issue }),
+                    issue => {
+                        self.help.edit = Some(KeyEdit {
+                            action,
+                            keys,
+                            issue,
+                        })
+                    }
                 }
             }
         }
@@ -147,14 +179,29 @@ impl Shell {
 
     /// "Replace": the proposed keys go to the action, those that had them lose them.
     pub(super) fn key_replace(&mut self, cx: &mut Context<Self>) {
-        if let Some(KeyEdit { action, keys, issue: Some(KeyIssue::Taken(others)) }) = self.help.edit.take() {
+        if let Some(KeyEdit {
+            action,
+            keys,
+            issue: Some(KeyIssue::Taken(others)),
+        }) = self.help.edit.take()
+        {
             self.key_set(action, keys, &others, cx);
         }
     }
 
     /// Gives `keys` to `action` (empty: no shortcut) and takes them from `losers`.
-    pub(super) fn key_set(&mut self, action: &'static str, keys: String, losers: &[&'static str], cx: &mut Context<Self>) {
-        let mut usual: Vec<String> = defaults().into_iter().filter(|bind| bind.action == action).map(|bind| bind.keys).collect();
+    pub(super) fn key_set(
+        &mut self,
+        action: &'static str,
+        keys: String,
+        losers: &[&'static str],
+        cx: &mut Context<Self>,
+    ) {
+        let mut usual: Vec<String> = defaults()
+            .into_iter()
+            .filter(|bind| bind.action == action)
+            .map(|bind| bind.keys)
+            .collect();
         usual.dedup();
         // Back to its original keys: nothing left to remember for this action.
         if usual == [keys.clone()] {
@@ -167,7 +214,14 @@ impl Shell {
         }
         self.help.edit = None;
         if keys::system(&keys) {
-            self.say(Tone::Info, tr("The system may keep these keys for itself.", "Le système garde peut-être ces touches pour lui."), cx);
+            self.say(
+                Tone::Info,
+                tr(
+                    "The system may keep these keys for itself.",
+                    "Le système garde peut-être ces touches pour lui.",
+                ),
+                cx,
+            );
         }
         self.rebind(cx);
         vault::save_file("keys", &keys::write(&self.changes));
@@ -194,10 +248,18 @@ impl Shell {
 
     /// The help rows the search keeps.
     pub(super) fn help_rows(&self, cx: &App) -> keys::Sections {
-        let query = self.help.find.as_ref().map(|find| find.read(cx).line.text.clone()).unwrap_or_default();
+        let query = self
+            .help
+            .find
+            .as_ref()
+            .map(|find| find.read(cx).line.text.clone())
+            .unwrap_or_default();
         let mut sections = keys::filter(help_sections(&self.bound, &self.changes), &query);
         // Opened on a table or a diagram, the panel starts with its keys.
-        if let Some(at) = self.here(cx).and_then(|here| sections.iter().position(|(title, _)| *title == here)) {
+        if let Some(at) = self
+            .here(cx)
+            .and_then(|here| sections.iter().position(|(title, _)| *title == here))
+        {
             let first = sections.remove(at);
             sections.insert(0, first);
         }
@@ -211,7 +273,10 @@ impl Shell {
             Some(tr("CSV tables", "Tableaux CSV"))
         } else if self.pane().drawing().is_some() {
             Some(tr("Diagrams", "Schémas"))
-        } else if self.pane().file.is_none() && self.pane().listing.is_none() && self.pane().editor.read(cx).in_table() {
+        } else if self.pane().file.is_none()
+            && self.pane().listing.is_none()
+            && self.pane().editor.read(cx).in_table()
+        {
             Some(tr("Tables in a note", "Tableaux d'une note"))
         } else {
             None
@@ -226,7 +291,10 @@ impl Shell {
             (Some(Group::Table), tr("CSV table", "Tableau CSV"))
         } else if self.pane().drawing().is_some() {
             (Some(Group::Diagram), tr("Diagram", "Schéma"))
-        } else if self.pane().file.is_some() || self.pane().listing.is_some() || self.board_shown(cx) {
+        } else if self.pane().file.is_some()
+            || self.pane().listing.is_some()
+            || self.board_shown(cx)
+        {
             (None, "")
         } else if self.pane().editor.read(cx).in_table() {
             (Some(Group::Table), tr("Table", "Tableau"))
@@ -240,7 +308,11 @@ impl Shell {
         let t = self.theme;
         let rows = self.help_rows(cx);
         let none = rows.is_empty();
-        let asked = self.help.find.as_ref().is_some_and(|find| !find.read(cx).line.text.is_empty());
+        let asked = self
+            .help
+            .find
+            .as_ref()
+            .is_some_and(|find| !find.read(cx).line.text.is_empty());
         let small = |id: String, text: &'static str| {
             div()
                 .id(gpui::SharedString::from(id.clone()))
@@ -256,7 +328,12 @@ impl Shell {
                 .hover(|s| s.bg(t.hover).text_color(t.text))
                 .child(text)
         };
-        let hint = div().absolute().left_0().top_0().text_color(t.soft).child(tr("Search the shortcuts…", "Chercher un raccourci…"));
+        let hint = div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .text_color(t.soft)
+            .child(tr("Search the shortcuts…", "Chercher un raccourci…"));
         let find = div()
             .flex_none()
             .px_5()
@@ -266,7 +343,13 @@ impl Shell {
             .flex()
             .items_center()
             .gap_2()
-            .child(svg().path("search.svg").size(t.px(14.)).flex_none().text_color(t.soft))
+            .child(
+                svg()
+                    .path("search.svg")
+                    .size(t.px(14.))
+                    .flex_none()
+                    .text_color(t.soft),
+            )
             .child(
                 div()
                     .flex_1()
@@ -279,11 +362,16 @@ impl Shell {
             )
             .when(!self.changes.is_empty(), |d| {
                 d.child(
-                    small("keys-reset".into(), tr("Reset all", "Tout rétablir")).on_click(cx.listener(|this, _, _, cx| this.key_reset(None, cx))),
+                    small("keys-reset".into(), tr("Reset all", "Tout rétablir"))
+                        .on_click(cx.listener(|this, _, _, cx| this.key_reset(None, cx))),
                 )
             });
         let label = |action: &str| {
-            help_sections(&[], &keys::Changes::new()).into_iter().flat_map(|(_, rows)| rows).find(|row| row.action == Some(action)).map_or("", |row| row.effect)
+            help_sections(&[], &keys::Changes::new())
+                .into_iter()
+                .flat_map(|(_, rows)| rows)
+                .find(|row| row.action == Some(action))
+                .map_or("", |row| row.effect)
         };
         // Table of contents: one link per section, which scrolls the list to it; and how a shortcut is changed.
         let titles: Vec<&'static str> = rows.iter().map(|(title, _)| *title).collect();
@@ -291,7 +379,13 @@ impl Shell {
         // others are boxes of the height they had. Their heights are those of the frame before, so
         // everything is built again when the sections, the search or the width changed.
         let view = self.help.scroll.bounds();
-        let lazy = !asked && self.help.laid.borrow().as_ref().is_some_and(|(seen, width)| *seen == titles && *width == view.size.width);
+        let lazy = !asked
+            && self
+                .help
+                .laid
+                .borrow()
+                .as_ref()
+                .is_some_and(|(seen, width)| *seen == titles && *width == view.size.width);
         *self.help.laid.borrow_mut() = (!asked).then(|| (titles.clone(), view.size.width));
         let margin = view.size.height / 2.;
         let contents = (!asked && !none).then(|| {
@@ -308,22 +402,43 @@ impl Shell {
                 .gap_x_1()
                 .text_size(t.px(12.))
                 .children(titles.into_iter().enumerate().map(|(i, title)| {
-                    small(format!("help-to-{i}"), title).text_color(t.accent).on_click(cx.listener(move |this, _, _, cx| {
-                        this.help.scroll.scroll_to_item(i);
-                        *this.help.laid.borrow_mut() = None;
-                        cx.notify();
-                    }))
+                    small(format!("help-to-{i}"), title)
+                        .text_color(t.accent)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.help.scroll.scroll_to_item(i);
+                            *this.help.laid.borrow_mut() = None;
+                            cx.notify();
+                        }))
                 }))
-                .child(div().flex_1().min_w(t.px(200.)).text_right().text_color(t.soft).child(tr(
-                    "Click the keys of a line to change them",
-                    "Cliquez les touches d'une ligne pour les changer",
-                )))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(t.px(200.))
+                        .text_right()
+                        .text_color(t.soft)
+                        .child(tr(
+                            "Click the keys of a line to change them",
+                            "Cliquez les touches d'une ligne pour les changer",
+                        )),
+                )
         });
         let sections = rows.into_iter().enumerate().map(|(i, (title, rows))| {
-            let busy = rows.iter().any(|row| row.action.is_some() && (row.action == self.help.sel || self.help.edit.as_ref().is_some_and(|edit| Some(edit.action) == row.action)));
+            let busy = rows.iter().any(|row| {
+                row.action.is_some()
+                    && (row.action == self.help.sel
+                        || self
+                            .help
+                            .edit
+                            .as_ref()
+                            .is_some_and(|edit| Some(edit.action) == row.action))
+            });
             // An item's bounds are where it lies unscrolled: the offset brings them to the window.
             let shift = self.help.scroll.offset().y;
-            if let Some(far) = self.help.scroll.bounds_for_item(i).filter(|at| lazy && !busy && (at.bottom() + shift < view.top() - margin || at.top() + shift > view.bottom() + margin)) {
+            if let Some(far) = self.help.scroll.bounds_for_item(i).filter(|at| {
+                lazy && !busy
+                    && (at.bottom() + shift < view.top() - margin
+                        || at.top() + shift > view.bottom() + margin)
+            }) {
                 return div().w(t.px(370.)).max_w_full().h(far.size.height);
             }
             div()
@@ -332,20 +447,45 @@ impl Shell {
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(div().mb_1().text_color(t.accent).text_size(t.px(12.)).child(title))
+                .child(
+                    div()
+                        .mb_1()
+                        .text_color(t.accent)
+                        .text_size(t.px(12.))
+                        .child(title),
+                )
                 .children(rows.into_iter().map(|row| {
-                    let edit = self.help.edit.as_ref().filter(|edit| Some(edit.action) == row.action);
+                    let edit = self
+                        .help
+                        .edit
+                        .as_ref()
+                        .filter(|edit| Some(edit.action) == row.action);
                     let chosen = row.action.is_some() && row.action == self.help.sel;
                     // The keys: a button when they can be changed, text otherwise.
                     let keys = match row.action {
                         // Badges for real keys; a line of words ("Drag from the tree") or of
                         // alternatives ("F3 / Enter") stays text.
-                        None if row.keys.contains(' ') => div().w(t.px(156.)).flex_none().font_family(mono()).text_size(t.px(12.)).child(row.keys.clone()),
-                        None => div().w(t.px(156.)).flex_none().child(keycaps(&row.keys, t, false).flex_wrap()),
+                        None if row.keys.contains(' ') => div()
+                            .w(t.px(156.))
+                            .flex_none()
+                            .font_family(mono())
+                            .text_size(t.px(12.))
+                            .child(row.keys.clone()),
+                        None => div()
+                            .w(t.px(156.))
+                            .flex_none()
+                            .child(keycaps(&row.keys, t, false).flex_wrap()),
                         Some(action) => {
-                            let color = if edit.is_some() || row.changed { t.accent } else { t.text };
+                            let color = if edit.is_some() || row.changed {
+                                t.accent
+                            } else {
+                                t.text
+                            };
                             let shown = if edit.is_some() {
-                                div().font_family(mono()).text_size(t.px(12.)).child(tr("Press the keys…", "Tapez les touches…"))
+                                div()
+                                    .font_family(mono())
+                                    .text_size(t.px(12.))
+                                    .child(tr("Press the keys…", "Tapez les touches…"))
                             } else if row.keys.is_empty() {
                                 div().font_family(mono()).text_size(t.px(12.)).child("—")
                             } else {
@@ -361,9 +501,14 @@ impl Shell {
                                 .text_color(color)
                                 .hover(|s| s.bg(t.hover))
                                 .child(shown)
-                                .on_click(cx.listener(move |this, _, _, cx| this.key_edit(action, cx)));
-                            let reset = small(format!("key-reset-{action}"), tr("default", "défaut"))
-                                .on_click(cx.listener(move |this, _, _, cx| this.key_reset(Some(action), cx)));
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.key_edit(action, cx)),
+                                );
+                            let reset =
+                                small(format!("key-reset-{action}"), tr("default", "défaut"))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.key_reset(Some(action), cx)
+                                    }));
                             div()
                                 .debug_selector(move || format!("key-column-{action}"))
                                 .w(t.px(156.))
@@ -382,7 +527,9 @@ impl Shell {
                             "Backspace: no shortcut · Esc: cancel",
                             "Retour arrière : aucun raccourci · Échap : annuler",
                         )),
-                        Some(KeyIssue::Refused(why)) => div().text_size(t.px(12.)).child(format!("{} : {why}", keys::show(&edit.keys))),
+                        Some(KeyIssue::Refused(why)) => div()
+                            .text_size(t.px(12.))
+                            .child(format!("{} : {why}", keys::show(&edit.keys))),
                         Some(KeyIssue::Taken(others)) => div()
                             .text_size(t.px(12.))
                             .flex()
@@ -390,20 +537,30 @@ impl Shell {
                             .items_center()
                             .gap_1()
                             .child(div().w_full().child(format!(
-                                "{} : {} {}",
-                                keys::show(&edit.keys),
-                                tr("already used by:", "déjà utilisé par :"),
-                                others.iter().map(|other| label(other)).collect::<Vec<_>>().join(", "),
-                            )))
+                                    "{} : {} {}",
+                                    keys::show(&edit.keys),
+                                    tr("already used by:", "déjà utilisé par :"),
+                                    others
+                                        .iter()
+                                        .map(|other| label(other))
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                )))
                             .child(
-                                small("key-replace".into(), tr("Replace (Enter)", "Remplacer (Entrée)"))
-                                    .text_color(t.text)
-                                    .on_click(cx.listener(|this, _, _, cx| this.key_replace(cx))),
+                                small(
+                                    "key-replace".into(),
+                                    tr("Replace (Enter)", "Remplacer (Entrée)"),
+                                )
+                                .text_color(t.text)
+                                .on_click(cx.listener(|this, _, _, cx| this.key_replace(cx))),
                             )
-                            .child(small("key-keep".into(), tr("Cancel (Esc)", "Annuler (Échap)")).on_click(cx.listener(|this, _, _, cx| {
-                                this.help.edit = None;
-                                cx.notify();
-                            }))),
+                            .child(
+                                small("key-keep".into(), tr("Cancel (Esc)", "Annuler (Échap)"))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.help.edit = None;
+                                        cx.notify();
+                                    })),
+                            ),
                     });
                     div()
                         .flex()
@@ -411,27 +568,42 @@ impl Shell {
                         .gap_1()
                         .rounded(t.small())
                         .when(chosen, |d| d.bg(t.selection.opacity(0.5)))
-                        .child(div().flex().gap_3().child(keys).child(div().flex_1().min_w_0().text_color(if chosen { t.text } else { t.soft }).child(row.effect)))
+                        .child(
+                            div().flex().gap_3().child(keys).child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_color(if chosen { t.text } else { t.soft })
+                                    .child(row.effect),
+                            ),
+                        )
                         .children(note)
                 }))
         });
         // About, at the foot of the panel: what the app is, and where to find it.
-        let link = |id: &'static str, icon: &'static str, label: &'static str, url: &'static str| {
-            div()
-                .id(id)
-                .px_2()
-                .py_1()
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .rounded(t.small())
-                .cursor_pointer()
-                .text_color(t.accent)
-                .hover(|s| s.bg(t.hover))
-                .child(svg().path(icon).size(t.px(14.)).flex_none().text_color(t.accent))
-                .child(label)
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| cx.open_url(url))
-        };
+        let link =
+            |id: &'static str, icon: &'static str, label: &'static str, url: &'static str| {
+                div()
+                    .id(id)
+                    .px_2()
+                    .py_1()
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .rounded(t.small())
+                    .cursor_pointer()
+                    .text_color(t.accent)
+                    .hover(|s| s.bg(t.hover))
+                    .child(
+                        svg()
+                            .path(icon)
+                            .size(t.px(14.))
+                            .flex_none()
+                            .text_color(t.accent),
+                    )
+                    .child(label)
+                    .on_mouse_down(MouseButton::Left, move |_, _, cx| cx.open_url(url))
+            };
         let about = div()
             .flex_none()
             .map(|d| if short { d.w_full().pt_3() } else { d.px_5().py_3() })
@@ -442,14 +614,18 @@ impl Shell {
             .items_center()
             .gap_2()
             .child(logo(t))
-            .child(format!("Bref {}", env!("CARGO_PKG_VERSION")))
+            .child(format!("Inkuno {}", env!("CARGO_PKG_VERSION")))
             .child(div().flex_1().min_w(t.px(200.)).text_color(t.soft).child(tr(
                 "Fast, minimal Markdown notes, in plain files you own.",
                 "Des notes Markdown rapides et minimales, dans de simples fichiers qui vous appartiennent.",
             )))
             .child(link("about-github", "code.svg", "GitHub", env!("CARGO_PKG_REPOSITORY")))
             .child(link("about-kofi", "heart.svg", tr("Support on Ko-fi", "Soutenir sur Ko-fi"), KOFI));
-        let (inside, below) = if short { (Some(about), None) } else { (None, Some(about)) };
+        let (inside, below) = if short {
+            (Some(about), None)
+        } else {
+            (None, Some(about))
+        };
         div()
             .absolute()
             .inset_0()
@@ -476,8 +652,12 @@ impl Shell {
                     .text_size(t.px(13.))
                     // A click in the panel does not close it.
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_action(cx.listener(|this, _: &palette::Prev, _, cx| this.help_step(false, cx)))
-                    .on_action(cx.listener(|this, _: &palette::Next, _, cx| this.help_step(true, cx)))
+                    .on_action(
+                        cx.listener(|this, _: &palette::Prev, _, cx| this.help_step(false, cx)),
+                    )
+                    .on_action(
+                        cx.listener(|this, _: &palette::Next, _, cx| this.help_step(true, cx)),
+                    )
                     .child(find)
                     .children(contents)
                     .child(
@@ -494,7 +674,10 @@ impl Shell {
                             .gap_y_4()
                             .children(sections)
                             .when(none, |d| {
-                                d.child(div().text_color(t.soft).child(tr("No shortcut matches.", "Aucun raccourci ne correspond.")))
+                                d.child(div().text_color(t.soft).child(tr(
+                                    "No shortcut matches.",
+                                    "Aucun raccourci ne correspond.",
+                                )))
                             })
                             .children(inside),
                     )

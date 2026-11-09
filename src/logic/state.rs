@@ -23,7 +23,8 @@ pub fn guard(line: &str) -> Option<Range<usize>> {
                         if depth == 0 {
                             let end = at + i + 1;
                             // Not empty, and closed before the effect begins.
-                            return (!line[at + 1..end - 1].trim().is_empty() && end <= limit).then_some(at..end);
+                            return (!line[at + 1..end - 1].trim().is_empty() && end <= limit)
+                                .then_some(at..end);
                         }
                     }
                     _ => {}
@@ -38,7 +39,9 @@ pub fn guard(line: &str) -> Option<Range<usize>> {
 
 /// The runs of one line of a transition's label.
 pub fn runs(line: &str) -> Vec<Span> {
-    let Some(g) = guard(line) else { return richtext::spans(line, false) };
+    let Some(g) = guard(line) else {
+        return richtext::spans(line, false);
+    };
     let mut guarded = richtext::spans(&line[g.clone()], false);
     for span in &mut guarded {
         span.style.italic = true;
@@ -65,7 +68,18 @@ mod tests {
         assert_eq!(guarded("e [list[0] > 1] / f"), Some("[list[0] > 1]"));
         assert_eq!(guarded("日本 [条件] / 動作 😀"), Some("[条件]"));
         // Not a guard: an index, an effect's brackets, nothing closed, nothing in it, no brackets, nothing at all.
-        for no in ["a[0]", "a / b [c]", "[unclosed", "[]", "[  ]", "timer", "", "/", "] [", "a/[b]"] {
+        for no in [
+            "a[0]",
+            "a / b [c]",
+            "[unclosed",
+            "[]",
+            "[  ]",
+            "timer",
+            "",
+            "/",
+            "] [",
+            "a/[b]",
+        ] {
             assert_eq!(guarded(no), None, "{no:?}");
         }
     }
@@ -73,12 +87,25 @@ mod tests {
     #[test]
     fn draws_only_the_guard_in_italics() {
         let spans = runs("timer [ok] / go()");
-        let drawn: Vec<(String, bool)> = spans.iter().map(|s| (s.text.clone(), s.style.italic)).collect();
-        assert_eq!(drawn, [("timer ".to_string(), false), ("[ok]".to_string(), true), (" / go()".to_string(), false)]);
+        let drawn: Vec<(String, bool)> = spans
+            .iter()
+            .map(|s| (s.text.clone(), s.style.italic))
+            .collect();
+        assert_eq!(
+            drawn,
+            [
+                ("timer ".to_string(), false),
+                ("[ok]".to_string(), true),
+                (" / go()".to_string(), false)
+            ]
+        );
         // With no guard, the line as the marks of notes read it; the text is never lost.
         for line in ["", "x", "*a* [g] **b**", "[a] [b]", "日本語 [😀] é | \\"] {
             let text: String = runs(line).iter().map(|s| s.text.as_str()).collect();
-            let plain: String = richtext::spans(line, false).iter().map(|s| s.text.as_str()).collect();
+            let plain: String = richtext::spans(line, false)
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect();
             assert_eq!(text, plain, "{line:?}");
         }
     }

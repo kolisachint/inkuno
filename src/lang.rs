@@ -12,10 +12,14 @@ pub fn tr(en: &'static str, fr: &'static str) -> &'static str {
         return en;
     }
     // Tests run in French to stay deterministic.
-    if *FRENCH.get_or_init(|| cfg!(test) || system_is_french()) { fr } else { en }
+    if *FRENCH.get_or_init(|| cfg!(test) || system_is_french()) {
+        fr
+    } else {
+        en
+    }
 }
 
-/// English from now on, whatever the system's language: `bref mcp` talks to a model, and
+/// English from now on, whatever the system's language: `inkuno mcp` talks to a model, and
 /// the library's names and templates it returns are part of what the model reads.
 pub fn speak_english() {
     let _ = FRENCH.set(false);
@@ -91,7 +95,9 @@ fn os_language_is_french() -> bool {
         .args(["read", "-g", "AppleLanguages"])
         .output()
         .ok()
-        .and_then(|out| first_language(&String::from_utf8_lossy(&out.stdout)).map(|l| l.starts_with("fr")))
+        .and_then(|out| {
+            first_language(&String::from_utf8_lossy(&out.stdout)).map(|l| l.starts_with("fr"))
+        })
         .unwrap_or(false)
 }
 
@@ -176,14 +182,34 @@ mod tests {
     #[test]
     fn tells_how_long_ago() {
         // Tests run in French.
-        let said: Vec<String> = [0, 1, 6, 7, 29, 30, 364, 365, 729, 730, 100_000].map(age).into();
-        assert_eq!(said, ["aujourd'hui", "1 j", "6 j", "1 sem.", "4 sem.", "1 mois", "12 mois", "1 an", "1 an", "2 ans", "273 ans"]);
+        let said: Vec<String> = [0, 1, 6, 7, 29, 30, 364, 365, 729, 730, 100_000]
+            .map(age)
+            .into();
+        assert_eq!(
+            said,
+            [
+                "aujourd'hui",
+                "1 j",
+                "6 j",
+                "1 sem.",
+                "4 sem.",
+                "1 mois",
+                "12 mois",
+                "1 an",
+                "1 an",
+                "2 ans",
+                "273 ans"
+            ]
+        );
     }
 
     #[test]
     fn reads_the_first_system_language() {
         // What `defaults read -g AppleLanguages` prints, with and without quotes.
-        assert_eq!(first_language("(\n    \"fr-FR\",\n    \"en-US\"\n)\n"), Some("fr-FR"));
+        assert_eq!(
+            first_language("(\n    \"fr-FR\",\n    \"en-US\"\n)\n"),
+            Some("fr-FR")
+        );
         assert_eq!(first_language("(\n    en,\n    fr\n)"), Some("en"));
         assert_eq!(first_language("(\n)"), None);
         assert_eq!(first_language(""), None);
@@ -193,14 +219,25 @@ mod tests {
     fn tells_why_a_disk_operation_failed() {
         use std::io::{Error, ErrorKind};
         // A real system error, whatever the system: a file that is not there.
-        let os = std::fs::read(std::env::temp_dir().join("bref-absent-ici/rien")).unwrap_err();
+        let os = std::fs::read(std::env::temp_dir().join("inkuno-absent-ici/rien")).unwrap_err();
         assert_eq!(io_reason(&os), "introuvable");
         assert!(!io_reason(&os).contains("os error"));
-        for (kind, said) in [(ErrorKind::PermissionDenied, "permission refusée"), (ErrorKind::NotFound, "introuvable"), (ErrorKind::StorageFull, "le disque est plein"), (ErrorKind::ReadOnlyFilesystem, "le disque est en lecture seule")] {
+        for (kind, said) in [
+            (ErrorKind::PermissionDenied, "permission refusée"),
+            (ErrorKind::NotFound, "introuvable"),
+            (ErrorKind::StorageFull, "le disque est plein"),
+            (
+                ErrorKind::ReadOnlyFilesystem,
+                "le disque est en lecture seule",
+            ),
+        ] {
             assert_eq!(io_reason(&Error::from(kind)), said);
         }
         // Our own wording is kept; a kind we do not know falls back to the system's words.
-        assert_eq!(io_reason(&Error::new(ErrorKind::AlreadyExists, "déjà pris")), "déjà pris");
+        assert_eq!(
+            io_reason(&Error::new(ErrorKind::AlreadyExists, "déjà pris")),
+            "déjà pris"
+        );
         assert_eq!(io_reason(&Error::other("")), "");
         assert!(!io_reason(&Error::from(ErrorKind::TimedOut)).is_empty());
     }

@@ -10,7 +10,7 @@ The comment is kept in the note itself, as [CriticMarkup](https://criticmarkup.c
 {==the text==}{>>the comment<<}
 ```
 
-The file stays plain Markdown. In Bref, the text is highlighted and the comment follows it, faded.
+The file stays plain Markdown. In Inkuno, the text is highlighted and the comment follows it, faded.
 
 ## The comments panel
 

@@ -37,7 +37,10 @@ fn indent(line: &str) -> usize {
 }
 
 fn is_item(line: &str) -> bool {
-    matches!(md::classify(line, false).0, Kind::Bullet | Kind::Ordered | Kind::Task(_))
+    matches!(
+        md::classify(line, false).0,
+        Kind::Bullet | Kind::Ordered | Kind::Task(_)
+    )
 }
 
 /// The index of the last line of the block starting at line `i`.
@@ -47,12 +50,21 @@ fn extent(text: &str, lines: &[(usize, usize)], i: usize) -> usize {
     let line = at(i);
     // A block opened and never closed runs to the end of the note.
     if md::is_fence(line) {
-        return (i + 1..=last).find(|&k| md::is_fence(at(k))).unwrap_or(last);
+        return (i + 1..=last)
+            .find(|&k| md::is_fence(at(k)))
+            .unwrap_or(last);
     }
     if line.trim() == "$$" {
-        return (i + 1..=last).find(|&k| at(k).trim() == "$$").unwrap_or(last);
+        return (i + 1..=last)
+            .find(|&k| at(k).trim() == "$$")
+            .unwrap_or(last);
     }
-    let run = |keep: &dyn Fn(&str) -> bool| (i + 1..=last).take_while(|&k| keep(at(k))).last().unwrap_or(i);
+    let run = |keep: &dyn Fn(&str) -> bool| {
+        (i + 1..=last)
+            .take_while(|&k| keep(at(k)))
+            .last()
+            .unwrap_or(i)
+    };
     match md::classify(line, false).0 {
         Kind::Table => run(&md::is_table_line),
         Kind::Quote => run(&|l: &str| md::classify(l, false).0 == Kind::Quote),
@@ -93,7 +105,10 @@ pub fn at(text: &str, top: &[Range<usize>], line: usize) -> Option<Range<usize>>
     if line > block.end {
         return None;
     }
-    let first = &text[block.start..text[block.start..].find('\n').map_or(text.len(), |n| block.start + n)];
+    let first = &text[block.start
+        ..text[block.start..]
+            .find('\n')
+            .map_or(text.len(), |n| block.start + n)];
     let end = text[line..].find('\n').map_or(text.len(), |n| line + n);
     if line == block.start || !is_item(first) || !is_item(&text[line..end]) {
         return Some(block);
@@ -101,7 +116,10 @@ pub fn at(text: &str, top: &[Range<usize>], line: usize) -> Option<Range<usize>>
     // A sub-item: it and what is indented further under it, without leaving the block.
     let own = indent(&text[line..end]);
     let mut stop = end;
-    for (start, end) in lines(&text[..block.end]).into_iter().filter(|(s, _)| *s > line) {
+    for (start, end) in lines(&text[..block.end])
+        .into_iter()
+        .filter(|(s, _)| *s > line)
+    {
         let l = &text[start..end];
         if l.trim().is_empty() || indent(l) <= own {
             break;
@@ -117,7 +135,10 @@ pub fn targets(text: &str, top: &[Range<usize>]) -> Vec<usize> {
     let mut out = Vec::new();
     for block in top {
         out.push(block.start);
-        let first = text[block.start..block.end].split('\n').next().unwrap_or_default();
+        let first = text[block.start..block.end]
+            .split('\n')
+            .next()
+            .unwrap_or_default();
         if is_item(first) {
             let mut at = block.start;
             for line in text[block.start..block.end].split('\n') {
@@ -149,7 +170,8 @@ fn before(text: &str, block: &Range<usize>) -> Range<usize> {
     let kept = head.trim_end_matches(['\n', ' ', '\t']).len();
     // It starts at the newline that ends the last written line.
     let from = head[kept..].find('\n').map_or(block.start, |n| kept + n);
-    from.max(md::front_matter(text).saturating_sub(1)).min(block.start)..block.start
+    from.max(md::front_matter(text).saturating_sub(1))
+        .min(block.start)..block.start
 }
 
 /// The first line of a block.
@@ -186,7 +208,11 @@ fn spacing(a: &str, b: &str, there: &str, kept: &str) -> String {
         (false, false) => kept,
         _ => there,
     };
-    if gap.contains('\n') { gap.to_string() } else { "\n\n".to_string() }
+    if gap.contains('\n') {
+        gap.to_string()
+    } else {
+        "\n\n".to_string()
+    }
 }
 
 /// The block placed before the block starting at `to` (in the original text), or at the end
@@ -224,7 +250,11 @@ pub fn moved(text: &str, block: Range<usize>, to: usize) -> Option<(String, Rang
 pub fn duplicated(text: &str, block: Range<usize>) -> (String, Range<usize>) {
     let piece = &text[block.clone()];
     let (gap, more) = after(text, &block);
-    let kept = if more { &text[gap] } else { &text[before(text, &block)] };
+    let kept = if more {
+        &text[gap]
+    } else {
+        &text[before(text, &block)]
+    };
     let sep = spacing(piece, piece, kept, kept);
     let mut out = text.to_string();
     out.insert_str(block.end, &format!("{sep}{piece}"));
@@ -252,7 +282,9 @@ pub fn removed(text: &str, block: Range<usize>) -> (String, usize) {
 fn bare(line: &str) -> &str {
     let (kind, marker) = md::classify(line, false);
     match kind {
-        Kind::Heading(_) | Kind::Quote | Kind::Bullet | Kind::Ordered | Kind::Task(_) => &line[marker.min(line.len())..],
+        Kind::Heading(_) | Kind::Quote | Kind::Bullet | Kind::Ordered | Kind::Task(_) => {
+            &line[marker.min(line.len())..]
+        }
         _ => line.trim_start(),
     }
 }
@@ -262,16 +294,37 @@ fn bare(line: &str) -> &str {
 pub fn turned(piece: &str, turn: Turn) -> String {
     let lines: Vec<&str> = piece.split('\n').collect();
     let fenced = lines.len() >= 2 && md::is_fence(lines[0]) && md::is_fence(lines[lines.len() - 1]);
-    let inner: Vec<&str> = if fenced { lines[1..lines.len() - 1].to_vec() } else { lines.iter().map(|l| bare(l)).collect() };
+    let inner: Vec<&str> = if fenced {
+        lines[1..lines.len() - 1].to_vec()
+    } else {
+        lines.iter().map(|l| bare(l)).collect()
+    };
     match turn {
         Turn::Code if fenced => piece.to_string(),
-        Turn::Code => format!("```\n{}\n```", lines.iter().map(|l| bare(l)).collect::<Vec<_>>().join("\n")),
+        Turn::Code => format!(
+            "```\n{}\n```",
+            lines.iter().map(|l| bare(l)).collect::<Vec<_>>().join("\n")
+        ),
         Turn::Text => inner.join("\n"),
         Turn::Heading(n) => {
             let hashes = "#".repeat(n as usize);
-            inner.iter().map(|l| if l.trim().is_empty() { l.to_string() } else { format!("{hashes} {l}") }).collect::<Vec<_>>().join("\n")
+            inner
+                .iter()
+                .map(|l| {
+                    if l.trim().is_empty() {
+                        l.to_string()
+                    } else {
+                        format!("{hashes} {l}")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
         }
-        Turn::Quote => inner.iter().map(|l| format!("> {l}")).collect::<Vec<_>>().join("\n"),
+        Turn::Quote => inner
+            .iter()
+            .map(|l| format!("> {l}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
         Turn::Bullet | Turn::Ordered | Turn::Task => {
             let style = match turn {
                 Turn::Bullet => md::ListStyle::Bullet,
@@ -279,14 +332,25 @@ pub fn turned(piece: &str, turn: Turn) -> String {
                 _ => md::ListStyle::Task,
             };
             // A list already of this kind stays so: `restyle` would turn it back into text.
-            let source = if fenced { inner.join("\n") } else { piece.to_string() };
+            let source = if fenced {
+                inner.join("\n")
+            } else {
+                piece.to_string()
+            };
             let lines: Vec<&str> = source.split('\n').collect();
-            let plain: String = match lines.iter().any(|l| matches!(md::classify(l, false).0, Kind::Heading(_) | Kind::Quote)) {
+            let plain: String = match lines
+                .iter()
+                .any(|l| matches!(md::classify(l, false).0, Kind::Heading(_) | Kind::Quote))
+            {
                 true => lines.iter().map(|l| bare(l)).collect::<Vec<_>>().join("\n"),
                 false => source.clone(),
             };
             let (out, _) = md::restyle(&plain, style);
-            if out.split('\n').all(|l| l.trim().is_empty() || md::classify(l, false).0 == Kind::Para) && plain != out {
+            if out
+                .split('\n')
+                .all(|l| l.trim().is_empty() || md::classify(l, false).0 == Kind::Para)
+                && plain != out
+            {
                 plain
             } else {
                 out
@@ -297,16 +361,29 @@ pub fn turned(piece: &str, turn: Turn) -> String {
 
 /// The smallest replacement that turns `old` into `new`: the range in `old` and its text.
 pub fn diff(old: &str, new: &str) -> (Range<usize>, String) {
-    let mut start = old.bytes().zip(new.bytes()).take_while(|(a, b)| a == b).count();
+    let mut start = old
+        .bytes()
+        .zip(new.bytes())
+        .take_while(|(a, b)| a == b)
+        .count();
     while !old.is_char_boundary(start) || !new.is_char_boundary(start) {
         start -= 1;
     }
     let room = old.len().min(new.len()) - start;
-    let mut tail = old.bytes().rev().zip(new.bytes().rev()).take(room).take_while(|(a, b)| a == b).count();
+    let mut tail = old
+        .bytes()
+        .rev()
+        .zip(new.bytes().rev())
+        .take(room)
+        .take_while(|(a, b)| a == b)
+        .count();
     while !old.is_char_boundary(old.len() - tail) || !new.is_char_boundary(new.len() - tail) {
         tail -= 1;
     }
-    (start..old.len() - tail, new[start..new.len() - tail].to_string())
+    (
+        start..old.len() - tail,
+        new[start..new.len() - tail].to_string(),
+    )
 }
 
 #[cfg(test)]
@@ -324,11 +401,23 @@ mod tests {
         let top = blocks(NOTE);
         assert_eq!(
             named(NOTE, &top),
-            ["# Titre", "Un paragraphe.", "- un\n    - sous", "- deux", "```\ncode\n\nencore\n```", "| a | b |\n| - | - |", "> cité\n> encore", "---"]
+            [
+                "# Titre",
+                "Un paragraphe.",
+                "- un\n    - sous",
+                "- deux",
+                "```\ncode\n\nencore\n```",
+                "| a | b |\n| - | - |",
+                "> cité\n> encore",
+                "---"
+            ]
         );
         // The front matter is not a block; a code block never closed runs to the end.
         let front = "---\ntags: a\n---\ntexte\n```\nouvert\n\nfin";
-        assert_eq!(named(front, &blocks(front)), ["texte", "```\nouvert\n\nfin"]);
+        assert_eq!(
+            named(front, &blocks(front)),
+            ["texte", "```\nouvert\n\nfin"]
+        );
     }
 
     #[test]
@@ -341,19 +430,33 @@ mod tests {
         assert_eq!(of("- deux"), Some("- deux"));
         assert_eq!(of("encore\n```"), Some("```\ncode\n\nencore\n```"));
         assert_eq!(of("| - |"), Some("| a | b |\n| - | - |"));
-        assert_eq!(at(NOTE, &top, line("\n\nUn") + 1), None, "a blank line is outside the blocks");
+        assert_eq!(
+            at(NOTE, &top, line("\n\nUn") + 1),
+            None,
+            "a blank line is outside the blocks"
+        );
         // A list's items are as many places to drop a block, besides the blocks and the end.
         let targets = targets(NOTE, &top);
-        assert!(targets.contains(&line("- deux")) && targets.contains(&line("    - sous")) && targets.contains(&NOTE.len()));
+        assert!(
+            targets.contains(&line("- deux"))
+                && targets.contains(&line("    - sous"))
+                && targets.contains(&NOTE.len())
+        );
     }
 
     #[test]
     fn moves_blocks_with_their_spacing() {
         let text = "A\n\nB\n\nC\n";
         let (a, c) = (0..1, 6..7);
-        assert_eq!(moved(text, a.clone(), 6).unwrap(), ("B\n\nA\n\nC\n".to_string(), 3..4));
+        assert_eq!(
+            moved(text, a.clone(), 6).unwrap(),
+            ("B\n\nA\n\nC\n".to_string(), 3..4)
+        );
         assert_eq!(moved(text, a, text.len()).unwrap().0, "B\n\nC\n\nA\n");
-        assert_eq!(moved(text, c.clone(), 0).unwrap(), ("C\n\nA\n\nB\n".to_string(), 0..1));
+        assert_eq!(
+            moved(text, c.clone(), 0).unwrap(),
+            ("C\n\nA\n\nB\n".to_string(), 0..1)
+        );
         // Right before itself, or right after: nothing moves.
         assert_eq!(moved(text, 3..4, 3), None);
         assert_eq!(moved(text, 3..4, 6), None);
@@ -368,11 +471,22 @@ mod tests {
         // separates it from the callout stays in place.
         let list = "Titre\n\n- a\n- b\n- c\n\n> note\n";
         let c = list.find("- c").unwrap();
-        assert_eq!(moved(list, c..c + 3, list.find("- a").unwrap()).unwrap().0, "Titre\n\n- c\n- a\n- b\n\n> note\n");
+        assert_eq!(
+            moved(list, c..c + 3, list.find("- a").unwrap()).unwrap().0,
+            "Titre\n\n- c\n- a\n- b\n\n> note\n"
+        );
         // An item taken out of its list takes the space of the place it lands.
         let a = list.find("- a").unwrap();
-        assert_eq!(moved(list, a..a + 3, list.find("> note").unwrap()).unwrap().0, "Titre\n\n- b\n- c\n\n- a\n\n> note\n");
-        assert_eq!(moved(list, a..a + 3, list.len()).unwrap().0, "Titre\n\n- b\n- c\n\n> note\n\n- a\n");
+        assert_eq!(
+            moved(list, a..a + 3, list.find("> note").unwrap())
+                .unwrap()
+                .0,
+            "Titre\n\n- b\n- c\n\n- a\n\n> note\n"
+        );
+        assert_eq!(
+            moved(list, a..a + 3, list.len()).unwrap().0,
+            "Titre\n\n- b\n- c\n\n> note\n\n- a\n"
+        );
     }
 
     #[test]
@@ -393,7 +507,11 @@ mod tests {
         assert_eq!(turned("# Titre", Turn::Text), "Titre");
         assert_eq!(turned("# Titre", Turn::Bullet), "- Titre");
         assert_eq!(turned("un\ndeux", Turn::Ordered), "1. un\n2. deux");
-        assert_eq!(turned("- un", Turn::Bullet), "- un", "a bullet list stays one");
+        assert_eq!(
+            turned("- un", Turn::Bullet),
+            "- un",
+            "a bullet list stays one"
+        );
         assert_eq!(turned("- un", Turn::Task), "- [ ] un");
         assert_eq!(turned("- [x] fait", Turn::Text), "fait");
         assert_eq!(turned("> cité", Turn::Text), "cité");

@@ -82,7 +82,9 @@ impl Embeds {
 
     /// Looks at the file's date, and reads it if it is not the one that was known.
     fn look(&mut self, path: &Path, now: Instant) -> Option<Rc<str>> {
-        let stamp = fs::metadata(path).and_then(|m| Ok((m.modified()?, m.len()))).ok();
+        let stamp = fs::metadata(path)
+            .and_then(|m| Ok((m.modified()?, m.len())))
+            .ok();
         if let Some((looked, known, text)) = self.texts.get_mut(path)
             && *known == stamp
         {
@@ -94,7 +96,10 @@ impl Embeds {
         if self.texts.len() > 64 {
             self.texts.clear();
         }
-        self.stale |= self.texts.insert(path.to_path_buf(), (now, stamp, text.clone())).is_some();
+        self.stale |= self
+            .texts
+            .insert(path.to_path_buf(), (now, stamp, text.clone()))
+            .is_some();
         Some(text)
     }
 
@@ -102,7 +107,12 @@ impl Embeds {
     /// one changed, and the layout must be redone.
     pub(super) fn poll(&mut self) -> bool {
         let (now, force) = (Instant::now(), std::mem::take(&mut self.recheck));
-        let due: Vec<PathBuf> = self.texts.iter().filter(|(_, (looked, ..))| force || now.duration_since(*looked) >= LOOK).map(|(p, _)| p.clone()).collect();
+        let due: Vec<PathBuf> = self
+            .texts
+            .iter()
+            .filter(|(_, (looked, ..))| force || now.duration_since(*looked) >= LOOK)
+            .map(|(p, _)| p.clone())
+            .collect();
         for path in due {
             self.look(&path, now);
         }
@@ -116,8 +126,12 @@ impl Embeds {
 
     /// The text of what the embed points at, or why there is none.
     fn section(&mut self, target: &Target) -> Result<(PathBuf, Rc<str>), String> {
-        let path = self.path_of(&target.note).ok_or_else(|| tr("note not found", "note introuvable").to_string())?;
-        let text = self.text(&path).ok_or_else(|| tr("note not found", "note introuvable").to_string())?;
+        let path = self
+            .path_of(&target.note)
+            .ok_or_else(|| tr("note not found", "note introuvable").to_string())?;
+        let text = self
+            .text(&path)
+            .ok_or_else(|| tr("note not found", "note introuvable").to_string())?;
         let shown = embed::section(&text, &target.anchor).ok_or_else(|| match &target.anchor {
             Anchor::Block(_) => tr("block not found", "bloc introuvable").to_string(),
             _ => tr("heading not found", "titre introuvable").to_string(),
@@ -126,8 +140,22 @@ impl Embeds {
     }
 
     /// Lays out the embed of `target` at `width`: its editor is made, or given its text again, and measured.
-    pub(super) fn row(&mut self, target: &Target, width: Pixels, host: &Editor, frame: u64, window: &mut Window, cx: &mut App) -> EmbedRow {
-        let message = |why: String| EmbedRow { target: target.clone(), child: None, message: Some(why), inner: px(0.), key: None };
+    pub(super) fn row(
+        &mut self,
+        target: &Target,
+        width: Pixels,
+        host: &Editor,
+        frame: u64,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> EmbedRow {
+        let message = |why: String| EmbedRow {
+            target: target.clone(),
+            child: None,
+            message: Some(why),
+            inner: px(0.),
+            key: None,
+        };
         let name = target.note.to_lowercase();
         if self.trail.contains(&name) {
             return message(tr("circular embed", "incorporation circulaire").to_string());
@@ -143,7 +171,11 @@ impl Embeds {
         let slot = match self.slots.remove(&key) {
             Some(slot) => slot,
             None => {
-                let (theme, trail, sources) = (host.theme, self.trail.iter().cloned().chain([name]).collect::<Vec<_>>(), self.sources.clone());
+                let (theme, trail, sources) = (
+                    host.theme,
+                    self.trail.iter().cloned().chain([name]).collect::<Vec<_>>(),
+                    self.sources.clone(),
+                );
                 let child = cx.new(|cx| {
                     let mut child = Editor::new(theme, cx);
                     child.readonly = true;
@@ -151,13 +183,31 @@ impl Embeds {
                     child.embeds.sources = sources;
                     child
                 });
-                Slot { child, text: "".into(), seen: 0 }
+                Slot {
+                    child,
+                    text: "".into(),
+                    seen: 0,
+                }
             }
         };
-        let (dirs, images, theme) = (vec![path.parent().map(Path::to_path_buf), host.dirs.last().cloned()].into_iter().flatten().collect::<Vec<_>>(), host.images.clone(), host.theme);
+        let (dirs, images, theme) = (
+            vec![
+                path.parent().map(Path::to_path_buf),
+                host.dirs.last().cloned(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>(),
+            host.images.clone(),
+            host.theme,
+        );
         let mut slot = slot;
         let inner = slot.child.update(cx, |child, cx| {
-            if slot.text != text || child.dirs != dirs || child.images != images || child.theme != theme {
+            if slot.text != text
+                || child.dirs != dirs
+                || child.images != images
+                || child.theme != theme
+            {
                 child.theme = theme;
                 child.images = images;
                 child.dirs = dirs;
@@ -169,14 +219,24 @@ impl Embeds {
         slot.seen = frame;
         let child = slot.child.clone();
         self.slots.insert(key.clone(), slot);
-        EmbedRow { target: target.clone(), child: Some(child), message: None, inner, key: Some(key) }
+        EmbedRow {
+            target: target.clone(),
+            child: Some(child),
+            message: None,
+            inner,
+            key: Some(key),
+        }
     }
 
     /// The editors of embeds that are no longer on a line go: the lines laid out again this time, and the ones
     /// that were kept as they were, `rows`, hold theirs.
     pub(super) fn sweep(&mut self, rows: &[Row], frame: u64) {
-        let kept: Vec<&(PathBuf, Anchor)> = rows.iter().filter_map(|r| r.embed.as_ref()?.key.as_ref()).collect();
-        self.slots.retain(|key, slot| slot.seen == frame || kept.contains(&key));
+        let kept: Vec<&(PathBuf, Anchor)> = rows
+            .iter()
+            .filter_map(|r| r.embed.as_ref()?.key.as_ref())
+            .collect();
+        self.slots
+            .retain(|key, slot| slot.seen == frame || kept.contains(&key));
     }
 
     fn has_slots(&self) -> bool {
@@ -218,7 +278,14 @@ impl Editor {
     /// Lays out this embedded section at `width` and says how tall it is.
     pub(super) fn fit(&mut self, width: Pixels, window: &mut Window, cx: &mut App) -> Pixels {
         let bounds = Bounds::new(point(px(0.), px(0.)), size(width + SIDE * 2., px(10_000.)));
-        let key = LayoutKey { version: self.version, width: f32::from(bounds.size.width).to_bits(), size: self.theme.size.to_bits(), cursor: 0, marked: None };
+        let key = LayoutKey {
+            version: self.version,
+            width: f32::from(bounds.size.width).to_bits(),
+            size: self.theme.size.to_bits(),
+            cursor: 0,
+            revealed: None,
+            marked: None,
+        };
         if self.laid_out.as_ref() != Some(&key) {
             self.laid_out = None;
             self.relayout(bounds, window, cx);
@@ -228,30 +295,81 @@ impl Editor {
     }
 
     /// Draws the frame of an embed and its section, under its line: `top` is where the frame starts.
-    pub(super) fn paint_embed(&self, row: &Row, embed: &EmbedRow, window: &mut Window, cx: &mut App) {
+    pub(super) fn paint_embed(
+        &self,
+        row: &Row,
+        embed: &EmbedRow,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         let t = self.theme;
         let top = self.origin.y + row.y + row.height - embed.height() + GAP;
-        let area = Bounds::new(point(self.origin.x, top), size(self.width, embed.height() - GAP));
+        let area = Bounds::new(
+            point(self.origin.x, top),
+            size(self.width, embed.height() - GAP),
+        );
         if area.bottom() < self.viewport.top() || area.top() > self.viewport.bottom() {
             return;
         }
         window.paint_quad(fill(area, t.code_bg.opacity(0.5)).corner_radii(px(4.)));
-        window.paint_quad(fill(Bounds::new(area.origin, size(BAR, area.size.height)), t.accent));
+        window.paint_quad(fill(
+            Bounds::new(area.origin, size(BAR, area.size.height)),
+            t.accent,
+        ));
         // The source's name, on the right of the strip; a click on it opens the note there.
         let label = embed.target.label();
-        let run = |color| TextRun { len: label.len(), font: font(sans()), color, background_color: None, underline: None, strikethrough: None };
-        let hot = self.embed_label(row, embed).is_some_and(|b| b.contains(&self.pointer));
-        let text = window.text_system().shape_line(SharedString::from(label.clone()), px(12.), &[run(if hot { t.accent } else { t.soft })], None);
-        text.paint(point(area.right() - PAD - text.width, area.top() + px(4.)), px(16.), window, cx).ok();
+        let run = |color| TextRun {
+            len: label.len(),
+            font: font(sans()),
+            color,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let hot = self
+            .embed_label(row, embed)
+            .is_some_and(|b| b.contains(&self.pointer));
+        let text = window.text_system().shape_line(
+            SharedString::from(label.clone()),
+            px(12.),
+            &[run(if hot { t.accent } else { t.soft })],
+            None,
+        );
+        text.paint(
+            point(area.right() - PAD - text.width, area.top() + px(4.)),
+            px(16.),
+            window,
+            cx,
+        )
+        .ok();
         if let Some(why) = &embed.message {
-            let run = TextRun { len: why.len(), font: font(sans()), color: t.soft, background_color: None, underline: None, strikethrough: None };
-            let line = window.text_system().shape_line(SharedString::from(why.clone()), px(13.), &[run], None);
-            line.paint(point(area.left() + BAR + PAD, area.top() + px(3.)), px(18.), window, cx).ok();
+            let run = TextRun {
+                len: why.len(),
+                font: font(sans()),
+                color: t.soft,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let line = window.text_system().shape_line(
+                SharedString::from(why.clone()),
+                px(13.),
+                &[run],
+                None,
+            );
+            line.paint(
+                point(area.left() + BAR + PAD, area.top() + px(3.)),
+                px(18.),
+                window,
+                cx,
+            )
+            .ok();
             return;
         }
         let Some(child) = &embed.child else { return };
         let inner = point(area.left() + BAR + PAD, area.top() + HEAD);
-        let clip = Bounds::new(inner, size(self.width - BAR - PAD * 2., embed.inner)).intersect(&self.viewport);
+        let clip = Bounds::new(inner, size(self.width - BAR - PAD * 2., embed.inner))
+            .intersect(&self.viewport);
         window.with_content_mask(Some(ContentMask { bounds: clip }), |window| {
             child.update(cx, |child, cx| {
                 child.place_embedded(inner, clip, window);
@@ -264,7 +382,10 @@ impl Editor {
     pub(super) fn embed_label(&self, row: &Row, embed: &EmbedRow) -> Option<Bounds<Pixels>> {
         let top = self.origin.y + row.y + row.height - embed.height() + GAP;
         let width = px(7.) * embed.target.label().chars().count() as f32 + PAD;
-        Some(Bounds::new(point(self.origin.x + self.width - width - PAD, top), size(width + PAD, HEAD)))
+        Some(Bounds::new(
+            point(self.origin.x + self.width - width - PAD, top),
+            size(width + PAD, HEAD),
+        ))
     }
 
     /// The embed whose frame holds `at`, and whether `at` is on its label.
@@ -272,15 +393,27 @@ impl Editor {
         self.rows.iter().find_map(|row| {
             let embed = row.embed.as_ref()?;
             let top = self.origin.y + row.y + row.height - embed.height() + GAP;
-            let area = Bounds::new(point(self.origin.x, top), size(self.width, embed.height() - GAP));
-            area.contains(&at).then(|| (row, &**embed, self.embed_label(row, embed).is_some_and(|b| b.contains(&at))))
+            let area = Bounds::new(
+                point(self.origin.x, top),
+                size(self.width, embed.height() - GAP),
+            );
+            area.contains(&at).then(|| {
+                (
+                    row,
+                    &**embed,
+                    self.embed_label(row, embed)
+                        .is_some_and(|b| b.contains(&at)),
+                )
+            })
         })
     }
 
     /// The embed on the line holding byte `at`.
     pub(super) fn embed_target_at(&self, at: usize) -> Option<Target> {
         let line = self.line_range(self.clamp(at));
-        (!self.in_code(line.start)).then(|| embed::parse(&self.content[line])).flatten()
+        (!self.in_code(line.start))
+            .then(|| embed::parse(&self.content[line]))
+            .flatten()
     }
 
     /// The note to open for an embed line, the pointer's or the cursor's.
@@ -298,7 +431,11 @@ impl Editor {
     /// The embeds of the note, for the tests: what each is written as, and what its frame says if it has no section.
     #[cfg(test)]
     pub fn embeds_shown(&self) -> Vec<(String, Option<String>, f32)> {
-        self.rows.iter().filter_map(|r| r.embed.as_ref()).map(|e| (e.target.written(), e.message.clone(), f32::from(e.inner))).collect()
+        self.rows
+            .iter()
+            .filter_map(|r| r.embed.as_ref())
+            .map(|e| (e.target.written(), e.message.clone(), f32::from(e.inner)))
+            .collect()
     }
 
     /// For each embed, a point in its frame and a point on its source's name, for the tests.
@@ -309,7 +446,11 @@ impl Editor {
             .filter_map(|row| {
                 let embed = row.embed.as_ref()?;
                 let top = self.origin.y + row.y + row.height - embed.height() + GAP;
-                let body = Bounds::new(point(self.origin.x, top), size(self.width, embed.height() - GAP)).center();
+                let body = Bounds::new(
+                    point(self.origin.x, top),
+                    size(self.width, embed.height() - GAP),
+                )
+                .center();
                 Some((body, self.embed_label(row, embed)?.center()))
             })
             .collect()
@@ -318,13 +459,22 @@ impl Editor {
     /// The editor of the first embedded section, for the tests.
     #[cfg(test)]
     pub fn first_child(&self, _: &App) -> Option<Entity<Editor>> {
-        self.rows.iter().find_map(|r| r.embed.as_ref())?.child.clone()
+        self.rows
+            .iter()
+            .find_map(|r| r.embed.as_ref())?
+            .child
+            .clone()
     }
 
     /// What the first embedded section shows, line by line, for the tests.
     #[cfg(test)]
     pub fn first_section(&self, cx: &App) -> Option<String> {
-        let child = self.rows.iter().find_map(|r| r.embed.as_ref())?.child.as_ref()?;
+        let child = self
+            .rows
+            .iter()
+            .find_map(|r| r.embed.as_ref())?
+            .child
+            .as_ref()?;
         Some(child.read(cx).text().to_string())
     }
 }

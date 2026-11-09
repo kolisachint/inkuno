@@ -8,12 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{
     lang::{date_name, time_name},
-    logic::{
-        daily, embed, markdown,
-        embed::Anchor,
-        markdown::Link,
-        rank,
-    },
+    logic::{daily, embed, embed::Anchor, markdown, markdown::Link, rank},
     platform::{clock, link, vault as files},
 };
 
@@ -36,7 +31,12 @@ pub fn vault_info(vault: &Vault) -> Outcome {
     tags.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     tags.truncate(12);
     let folders: Vec<String> = {
-        let mut dirs: Vec<String> = vault.dirs.iter().map(|dir| vault::rel(&vault.root, dir)).filter(|dir| !dir.is_empty()).collect();
+        let mut dirs: Vec<String> = vault
+            .dirs
+            .iter()
+            .map(|dir| vault::rel(&vault.root, dir))
+            .filter(|dir| !dir.is_empty())
+            .collect();
         dirs.sort();
         dirs
     };
@@ -63,28 +63,37 @@ pub fn vault_info(vault: &Vault) -> Outcome {
 pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
     let kind = arg_opt(args, "kind").unwrap_or("all");
     let sort = arg_opt(args, "sort").unwrap_or("name");
-    if !matches!(kind, "note" | "diagram" | "table" | "picture" | "attachment" | "all") {
+    if !matches!(
+        kind,
+        "note" | "diagram" | "table" | "picture" | "attachment" | "all"
+    ) {
         return Outcome::err(format!("unknown kind `{kind}`"));
     }
     if !matches!(sort, "name" | "recent") {
         return Outcome::err(format!("unknown sort `{sort}`"));
     }
     let limit = arg_usize(args, "limit").unwrap_or(100).clamp(1, 200);
-    let cursor: usize = arg_opt(args, "cursor").and_then(|c| c.parse().ok()).unwrap_or(0);
+    let cursor: usize = arg_opt(args, "cursor")
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
     let mut rows = Vec::new();
     if matches!(kind, "note" | "all") {
         for note in &vault.notes {
             if !kept(vault, &note.path, &note.tags, args) {
                 continue;
             }
-            rows.push((note.name.clone(), vault::unix(note.mtime), json!({
-                "path": vault::rel(&vault.root, &note.path),
-                "title": note.name,
-                "folder": vault::folder(&vault.root, &note.path),
-                "tags": note.tags,
-                "modified": vault::unix(note.mtime),
-                "kind": "note",
-            })));
+            rows.push((
+                note.name.clone(),
+                vault::unix(note.mtime),
+                json!({
+                    "path": vault::rel(&vault.root, &note.path),
+                    "title": note.name,
+                    "folder": vault::folder(&vault.root, &note.path),
+                    "tags": note.tags,
+                    "modified": vault::unix(note.mtime),
+                    "kind": "note",
+                }),
+            ));
         }
     }
     let files: [(&str, &[std::path::PathBuf]); 4] = [
@@ -101,25 +110,44 @@ pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
             if !kept(vault, path, &[], args) {
                 continue;
             }
-            let modified = path.metadata().and_then(|m| m.modified()).map(vault::unix).unwrap_or(0);
-            let title = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            rows.push((title.clone(), modified, json!({
-                "path": vault::rel(&vault.root, path),
-                "title": title,
-                "folder": vault::folder(&vault.root, path),
-                "tags": [],
-                "modified": modified,
-                "kind": file_kind,
-            })));
+            let modified = path
+                .metadata()
+                .and_then(|m| m.modified())
+                .map(vault::unix)
+                .unwrap_or(0);
+            let title = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            rows.push((
+                title.clone(),
+                modified,
+                json!({
+                    "path": vault::rel(&vault.root, path),
+                    "title": title,
+                    "folder": vault::folder(&vault.root, path),
+                    "tags": [],
+                    "modified": modified,
+                    "kind": file_kind,
+                }),
+            ));
         }
     }
     if sort == "recent" {
-        rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| files::natural(&a.0).cmp(&files::natural(&b.0))));
+        rows.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| files::natural(&a.0).cmp(&files::natural(&b.0)))
+        });
     } else {
         rows.sort_by(|a, b| files::natural(&a.0).cmp(&files::natural(&b.0)));
     }
     let next = (cursor + limit < rows.len()).then(|| (cursor + limit).to_string());
-    let notes: Vec<Value> = rows.into_iter().skip(cursor).take(limit).map(|(_, _, row)| row).collect();
+    let notes: Vec<Value> = rows
+        .into_iter()
+        .skip(cursor)
+        .take(limit)
+        .map(|(_, _, row)| row)
+        .collect();
     Outcome::ok(json!({"notes": notes, "next": next}))
 }
 
@@ -173,7 +201,12 @@ pub fn search_notes(vault: &Vault, args: &Value) -> Outcome {
                 continue;
             }
             if rank::contains_all(&note.lower, &words) {
-                hits.push(hit(vault, note, "text", &rank::snippet(&note.body, &note.lower, word)));
+                hits.push(hit(
+                    vault,
+                    note,
+                    "text",
+                    &rank::snippet(&note.body, &note.lower, word),
+                ));
                 if hits.len() == limit {
                     break;
                 }
@@ -253,7 +286,12 @@ fn outgoing(vault: &Vault, text: &str) -> Vec<Value> {
         }
         for (_, link) in markdown::links(line) {
             let Link::Wiki(name) = link else { continue };
-            let target = name.split(['#', '|']).next().unwrap_or(&name).trim().to_string();
+            let target = name
+                .split(['#', '|'])
+                .next()
+                .unwrap_or(&name)
+                .trim()
+                .to_string();
             if target.is_empty() || seen.contains(&target.to_lowercase()) {
                 continue;
             }
@@ -266,7 +304,10 @@ fn outgoing(vault: &Vault, text: &str) -> Vec<Value> {
 }
 
 fn wiki_path(vault: &Vault, name: &str) -> Option<String> {
-    vault.find_note(name).ok().map(|note| vault::rel(&vault.root, &note.path))
+    vault
+        .find_note(name)
+        .ok()
+        .map(|note| vault::rel(&vault.root, &note.path))
 }
 
 fn embeds(vault: &Vault, text: &str) -> Vec<Value> {
@@ -328,7 +369,9 @@ pub fn list_tags(vault: &Vault) -> Outcome {
         }
     }
     tags.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    Outcome::ok(json!({"tags": tags.into_iter().map(|(tag, count)| json!({"tag": tag, "count": count})).collect::<Vec<_>>()}))
+    Outcome::ok(
+        json!({"tags": tags.into_iter().map(|(tag, count)| json!({"tag": tag, "count": count})).collect::<Vec<_>>()}),
+    )
 }
 
 fn open<'a>(vault: &'a Vault, args: &Value) -> Result<&'a crate::logic::note::Note, Outcome> {
@@ -352,7 +395,10 @@ pub fn create_note(vault: &mut Vault, args: &Value) -> Outcome {
         return Outcome::err(message);
     }
     if let Some(taken) = vault::name_taken(&dir, &name, "md") {
-        return Outcome::err(format!("a note already has the name `{name}` ({})", vault::rel(&vault.root, &taken)));
+        return Outcome::err(format!(
+            "a note already has the name `{name}` ({})",
+            vault::rel(&vault.root, &taken)
+        ));
     }
     let body = if let Some(template) = arg_opt(args, "template") {
         let Some(path) = template_path(vault, template) else {
@@ -362,7 +408,13 @@ pub fn create_note(vault: &mut Vault, args: &Value) -> Outcome {
             Ok(text) => text,
             Err(message) => return Outcome::err(message),
         };
-        markdown::fill(&text, &name, &date_name(clock::today()), &time_name(clock::clock())).0
+        markdown::fill(
+            &text,
+            &name,
+            &date_name(clock::today()),
+            &time_name(clock::clock()),
+        )
+        .0
     } else {
         let mut body = format!("# {name}\n\n");
         if let Some(text) = arg_opt(args, "text") {
@@ -390,7 +442,11 @@ fn place(vault: &Vault, folder: Option<&str>) -> Result<std::path::PathBuf, Outc
 
 fn template_path(vault: &Vault, name: &str) -> Option<std::path::PathBuf> {
     let want = name.to_lowercase();
-    vault.notes.iter().find(|n| vault.is_template(n) && n.name.to_lowercase() == want).map(|n| n.path.clone())
+    vault
+        .notes
+        .iter()
+        .find(|n| vault.is_template(n) && n.name.to_lowercase() == want)
+        .map(|n| n.path.clone())
 }
 
 pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
@@ -439,7 +495,12 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
 
 /// A changed `# title` renames the file and the links, unless the new name is taken:
 /// the text is kept and the file keeps its name, as the app does.
-fn follow_title(vault: &mut Vault, path: &Path, before: &str, after: &str) -> (std::path::PathBuf, bool, Option<String>, usize) {
+fn follow_title(
+    vault: &mut Vault,
+    path: &Path,
+    before: &str,
+    after: &str,
+) -> (std::path::PathBuf, bool, Option<String>, usize) {
     let was = files::h1_of(before);
     let now = files::h1_of(after);
     let Some(title) = now.filter(|title| was.as_ref() != Some(title)) else {
@@ -454,7 +515,12 @@ fn follow_title(vault: &mut Vault, path: &Path, before: &str, after: &str) -> (s
     let dest = path.with_file_name(format!("{title}.md"));
     if dest.exists() {
         vault.rescan();
-        return (path.to_path_buf(), false, Some("this name is already taken".into()), 0);
+        return (
+            path.to_path_buf(),
+            false,
+            Some("this name is already taken".into()),
+            0,
+        );
     }
     if let Err(error) = files::rename(path, &dest) {
         vault.rescan();
@@ -499,21 +565,35 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
         return Outcome::err(message);
     }
     vault.rescan();
-    Outcome::ok(json!({"path": vault::rel(&vault.root, &path), "revision": vault::revision(next.as_bytes())}))
+    Outcome::ok(
+        json!({"path": vault::rel(&vault.root, &path), "revision": vault::revision(next.as_bytes())}),
+    )
 }
 
 fn append_under(text: &str, heading: &str, extra: &str) -> Result<String, String> {
     let heads = markdown::headings(text);
-    let at = heads.iter().position(|(_, label, _)| *label == heading).or_else(|| {
-        let want = heading.to_lowercase();
-        let found: Vec<usize> = heads.iter().enumerate().filter(|(_, (_, label, _))| label.to_lowercase() == want).map(|(i, _)| i).collect();
-        (found.len() == 1).then(|| found[0])
-    });
+    let at = heads
+        .iter()
+        .position(|(_, label, _)| *label == heading)
+        .or_else(|| {
+            let want = heading.to_lowercase();
+            let found: Vec<usize> = heads
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, label, _))| label.to_lowercase() == want)
+                .map(|(i, _)| i)
+                .collect();
+            (found.len() == 1).then(|| found[0])
+        });
     let Some(at) = at else {
         return Err(format!("no heading `{heading}`"));
     };
     let level = heads[at].0;
-    let end = heads[at + 1..].iter().find(|(next, _, _)| *next <= level).map(|(_, _, start)| *start).unwrap_or(text.len());
+    let end = heads[at + 1..]
+        .iter()
+        .find(|(next, _, _)| *next <= level)
+        .map(|(_, _, start)| *start)
+        .unwrap_or(text.len());
     let mut out = text[..end].trim_end().to_string();
     out.push_str("\n\n");
     out.push_str(extra.trim());
@@ -537,9 +617,14 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
     };
     // find_file borrows vault. Clone before mut.
     let path = path;
-    let old_file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let old_file = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let old_stem = files::stem(&path);
-    let image = files::is_image(&path) || files::is_attachment(&path) || vault.diagrams.iter().any(|p| p == &path);
+    let image = files::is_image(&path)
+        || files::is_attachment(&path)
+        || vault.diagrams.iter().any(|p| p == &path);
     let name = arg_opt(args, "name").map(|n| n.to_string());
     let folder = arg_opt(args, "folder").map(|n| n.to_string());
     if name.is_none() && folder.is_none() {
@@ -572,7 +657,11 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
     };
     let dest = dir.join(&file_name);
     if dest != path && dest.exists() {
-        return Outcome::err(format!("a file already has the name `{}` ({})", files::stem(&dest), vault::rel(&vault.root, &dest)));
+        return Outcome::err(format!(
+            "a file already has the name `{}` ({})",
+            files::stem(&dest),
+            vault::rel(&vault.root, &dest)
+        ));
     }
     if dest != path
         && let Err(message) = files::rename(&path, &dest).map_err(disk)
@@ -581,7 +670,12 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
     }
     let new_stem = files::stem(&dest);
     let (old_link, new_link) = if image || !dest.extension().is_some_and(|e| e == "md") {
-        (old_file, dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(new_stem.clone()))
+        (
+            old_file,
+            dest.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or(new_stem.clone()),
+        )
     } else {
         (old_stem.clone(), new_stem.clone())
     };
@@ -599,8 +693,18 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
             }
         }
     }
-    let rewritten = if old_link != new_link { vault::relink(vault, &old_link, &new_link) } else { vault.rescan(); 0 };
-    let left = old_link != new_link && rewritten == 0 && vault.notes.iter().any(|n| n.name.eq_ignore_ascii_case(&old_link));
+    let rewritten = if old_link != new_link {
+        vault::relink(vault, &old_link, &new_link)
+    } else {
+        vault.rescan();
+        0
+    };
+    let left = old_link != new_link
+        && rewritten == 0
+        && vault
+            .notes
+            .iter()
+            .any(|n| n.name.eq_ignore_ascii_case(&old_link));
     Outcome::ok(json!({
         "path": vault::rel(&vault.root, &dest),
         "rewritten": rewritten,
@@ -608,9 +712,12 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
     }))
 }
 
-/// Asks the open Bref window to show a note or file: the user sees at once what the agent did.
+/// Asks the open Inkuno window to show a note or file: the user sees at once what the agent did.
 pub fn show(vault: &mut Vault, args: &Value) -> Outcome {
-    let path = match arg_str(args, "note").map(str::to_string).and_then(|note| vault.find_file(&note)) {
+    let path = match arg_str(args, "note")
+        .map(str::to_string)
+        .and_then(|note| vault.find_file(&note))
+    {
         Ok(path) => path,
         Err(message) => return Outcome::err(message),
     };
@@ -686,7 +793,10 @@ pub fn daily_note(vault: &mut Vault, args: &Value) -> Outcome {
         };
         let path = vault.root.join(format!("{name}.md"));
         if path.exists() {
-            return Outcome::err(format!("a note already has the name `{name}` ({})", vault::rel(&vault.root, &path)));
+            return Outcome::err(format!(
+                "a note already has the name `{name}` ({})",
+                vault::rel(&vault.root, &path)
+            ));
         }
         if let Err(message) = files::write(&path, &body).map_err(disk) {
             return Outcome::err(message);
@@ -707,7 +817,9 @@ fn parse_date(text: &str) -> Result<(i32, u32, u32), String> {
     match (year, month, day, parts.next()) {
         // A day the calendar has comes back unchanged from a day number: 2026-02-30 does not.
         (Some(year), Some(month), Some(day), None)
-            if (1..=12).contains(&month) && markdown::day_of(markdown::day_number((year, month, day))) == (year, month, day) =>
+            if (1..=12).contains(&month)
+                && markdown::day_of(markdown::day_number((year, month, day)))
+                    == (year, month, day) =>
         {
             Ok((year, month, day))
         }
@@ -722,7 +834,11 @@ fn daily_template(vault: &Vault) -> Option<std::path::PathBuf> {
         .filter(|n| vault.is_template(n))
         .map(|n| (n.path.clone(), n.name.clone()))
         .collect();
-    daily::pick(named.iter().map(|(path, stem)| (path.clone(), stem.as_str())))
+    daily::pick(
+        named
+            .iter()
+            .map(|(path, stem)| (path.clone(), stem.as_str())),
+    )
 }
 
 pub fn add_comment(vault: &mut Vault, args: &Value) -> Outcome {
@@ -750,7 +866,9 @@ pub fn add_comment(vault: &mut Vault, args: &Value) -> Outcome {
         return Outcome::err(message);
     }
     vault.rescan();
-    Outcome::ok(json!({"path": vault::rel(&vault.root, &path), "revision": vault::revision(next.as_bytes())}))
+    Outcome::ok(
+        json!({"path": vault::rel(&vault.root, &path), "revision": vault::revision(next.as_bytes())}),
+    )
 }
 
 /// `{==passage==}{>>comment<<}`. In a table cell a `|` of the comment is written `\|`.
@@ -775,9 +893,17 @@ fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String
         });
     };
     let line_start = text[..*start].rfind('\n').map(|i| i + 1).unwrap_or(0);
-    let line_end = text[*start..].find('\n').map(|i| *start + i).unwrap_or(text.len());
-    let in_cell = *start + passage.len() <= line_end && markdown::is_table_line(&text[line_start..line_end]);
-    let said = if in_cell { comment.replace('|', "\\|") } else { comment.to_string() };
+    let line_end = text[*start..]
+        .find('\n')
+        .map(|i| *start + i)
+        .unwrap_or(text.len());
+    let in_cell =
+        *start + passage.len() <= line_end && markdown::is_table_line(&text[line_start..line_end]);
+    let said = if in_cell {
+        comment.replace('|', "\\|")
+    } else {
+        comment.to_string()
+    };
     let mut out = String::with_capacity(text.len() + said.len() + 12);
     out.push_str(&text[..*start]);
     out.push_str("{==");
@@ -791,7 +917,10 @@ fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String
 
 fn vault_note(vault: &Vault, args: &Value) -> Result<std::path::PathBuf, Outcome> {
     let name = arg_str(args, "note").map_err(Outcome::err)?;
-    vault.find_note(name).map(|n| n.path.clone()).map_err(Outcome::err)
+    vault
+        .find_note(name)
+        .map(|n| n.path.clone())
+        .map_err(Outcome::err)
 }
 
 /// Backlinks with the line each one is written on. Lives next to the tool that shows them.

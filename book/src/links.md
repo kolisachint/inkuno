@@ -49,7 +49,7 @@ The file stays plain Markdown: other apps show the line as a link.
 
 ## Pictures
 
-`![](picture.png)` or `![[picture.png]]` shows the picture under its line: PNG, JPEG, GIF, WebP, SVG, BMP, TIFF or AVIF. Bref looks for it next to the note, then at the top of the vault, then by its file name anywhere in the vault.
+`![](picture.png)` or `![[picture.png]]` shows the picture under its line: PNG, JPEG, GIF, WebP, SVG, BMP, TIFF or AVIF. Inkuno looks for it next to the note, then at the top of the vault, then by its file name anywhere in the vault.
 
 - `Ctrl + V` with a picture in the clipboard saves it next to the note and inserts its `![](…)` line.
 - Typing `![[` suggests the diagrams and pictures of the vault.

@@ -12,14 +12,14 @@ use gpui::{
 };
 
 use crate::{
-    ui::theme::Theme,
-    ui::line::{self, Line},
-    ui::widgets::keycaps,
-    views::editor::TableOp,
+    lang::tr,
     logic::markdown::ListStyle,
     logic::rank::{self, contains_all, fuzzy, snippet},
+    ui::line::{self, Line},
+    ui::theme::Theme,
+    ui::widgets::keycaps,
+    views::editor::TableOp,
     views::sheet::Pick,
-    lang::tr,
 };
 
 /// Height of a row of the list.
@@ -38,23 +38,38 @@ fn folder_label() -> &'static str {
 }
 
 fn import_label() -> &'static str {
-    tr("Import a diagram (Excalidraw, draw.io)…", "Importer un schéma (Excalidraw, draw.io)…")
+    tr(
+        "Import a diagram (Excalidraw, draw.io)…",
+        "Importer un schéma (Excalidraw, draw.io)…",
+    )
 }
 
 fn updates_label(on: bool) -> &'static str {
     if on {
-        tr("Stop checking for updates", "Ne plus chercher les mises à jour")
+        tr(
+            "Stop checking for updates",
+            "Ne plus chercher les mises à jour",
+        )
     } else {
-        tr("Check for updates every day", "Chercher les mises à jour chaque jour")
+        tr(
+            "Check for updates every day",
+            "Chercher les mises à jour chaque jour",
+        )
     }
 }
 
 fn check_label() -> &'static str {
-    tr("Check for updates now", "Chercher une mise à jour maintenant")
+    tr(
+        "Check for updates now",
+        "Chercher une mise à jour maintenant",
+    )
 }
 
 fn install_label(version: &str) -> String {
-    format!("{} {version}", tr("Update Bref to", "Mettre à jour Bref vers"))
+    format!(
+        "{} {version}",
+        tr("Update Inkuno to", "Mettre à jour Inkuno vers")
+    )
 }
 
 pub fn sync_label() -> &'static str {
@@ -62,7 +77,10 @@ pub fn sync_label() -> &'static str {
 }
 
 pub fn clone_label() -> &'static str {
-    tr("Clone a vault from a git address…", "Cloner un coffre depuis une adresse git…")
+    tr(
+        "Clone a vault from a git address…",
+        "Cloner un coffre depuis une adresse git…",
+    )
 }
 
 fn backup_label() -> &'static str {
@@ -70,11 +88,17 @@ fn backup_label() -> &'static str {
 }
 
 fn capture_label() -> &'static str {
-    tr("Set up the quick capture shortcut", "Créer le raccourci de capture rapide")
+    tr(
+        "Set up the quick capture shortcut",
+        "Créer le raccourci de capture rapide",
+    )
 }
 
 fn terminal_label() -> &'static str {
-    tr("Open a terminal in the vault", "Ouvrir un terminal dans le coffre")
+    tr(
+        "Open a terminal in the vault",
+        "Ouvrir un terminal dans le coffre",
+    )
 }
 
 fn trash_label() -> &'static str {
@@ -82,11 +106,17 @@ fn trash_label() -> &'static str {
 }
 
 pub fn back_label() -> &'static str {
-    tr("Back: what was shown before", "Précédent : ce qui était affiché avant")
+    tr(
+        "Back: what was shown before",
+        "Précédent : ce qui était affiché avant",
+    )
 }
 
 pub fn forward_label() -> &'static str {
-    tr("Forward: what was shown after", "Suivant : ce qui était affiché après")
+    tr(
+        "Forward: what was shown after",
+        "Suivant : ce qui était affiché après",
+    )
 }
 
 fn today_label() -> &'static str {
@@ -98,13 +128,19 @@ fn board_label() -> &'static str {
 }
 
 fn undo_swap_label() -> &'static str {
-    tr("Undo the replacement in the vault", "Annuler le remplacement dans le coffre")
+    tr(
+        "Undo the replacement in the vault",
+        "Annuler le remplacement dans le coffre",
+    )
 }
 
 fn list_label(style: ListStyle) -> &'static str {
     match style {
         ListStyle::Bullet => tr("Turn into a bulleted list", "Transformer en liste à puces"),
-        ListStyle::Ordered => tr("Turn into a numbered list", "Transformer en liste numérotée"),
+        ListStyle::Ordered => tr(
+            "Turn into a numbered list",
+            "Transformer en liste numérotée",
+        ),
         ListStyle::Task => tr("Turn into a task list", "Transformer en liste de tâches"),
         ListStyle::Text => tr("Turn into plain text", "Transformer en texte simple"),
     }
@@ -165,9 +201,15 @@ pub enum TemplateAct {
 impl TemplateAct {
     fn label(self) -> &'static str {
         match self {
-            TemplateAct::New => tr("New note from a template…", "Nouvelle note depuis un modèle…"),
+            TemplateAct::New => tr(
+                "New note from a template…",
+                "Nouvelle note depuis un modèle…",
+            ),
             TemplateAct::Insert => tr("Insert a template…", "Insérer un modèle…"),
-            TemplateAct::Save => tr("Make a template of this note…", "Faire un modèle de cette note…"),
+            TemplateAct::Save => tr(
+                "Make a template of this note…",
+                "Faire un modèle de cette note…",
+            ),
         }
     }
 }
@@ -227,7 +269,7 @@ pub enum PaletteEvent {
     CloneVault,
     /// Opens the system terminal in the vault folder.
     Terminal,
-    /// Binds capture (`bref --capture`) to a desktop shortcut.
+    /// Binds capture (`inkuno --capture`) to a desktop shortcut.
     CaptureKey,
     /// Installs the new version.
     InstallUpdate,
@@ -335,8 +377,13 @@ pub fn command(query: &str, label: &str) -> bool {
     if label.contains(query.trim()) {
         return true;
     }
-    let words: Vec<&str> = label.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
-    query.split_whitespace().all(|typed| words.iter().any(|word| word.starts_with(typed)))
+    let words: Vec<&str> = label
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    query
+        .split_whitespace()
+        .all(|typed| words.iter().any(|word| word.starts_with(typed)))
 }
 
 impl Palette {
@@ -349,7 +396,10 @@ impl Palette {
 
     /// The folder of the file in the vault, as a path; empty at the root.
     fn folder_of(&self, path: &std::path::Path) -> String {
-        path.parent().and_then(|dir| dir.strip_prefix(&self.root).ok()).map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default()
+        path.parent()
+            .and_then(|dir| dir.strip_prefix(&self.root).ok())
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 
     pub fn new(entries: Vec<Entry>, query: &str, theme: Theme, cx: &mut Context<Self>) -> Self {
@@ -392,7 +442,12 @@ impl Palette {
     }
 
     /// Offers to undo the last vault replacement, if there is one.
-    pub fn with_commands(mut self, commands: Vec<crate::logic::commands::Command>, here: usize, context: &'static str) -> Self {
+    pub fn with_commands(
+        mut self,
+        commands: Vec<crate::logic::commands::Command>,
+        here: usize,
+        context: &'static str,
+    ) -> Self {
         (self.commands, self.here, self.context) = (commands, here, context);
         self.refresh();
         self
@@ -423,7 +478,12 @@ impl Palette {
     }
 
     /// Input field prefilled with `text`; Enter emits `Submit`.
-    pub fn prompt(label: impl Into<String>, text: &str, theme: Theme, cx: &mut Context<Self>) -> Self {
+    pub fn prompt(
+        label: impl Into<String>,
+        text: &str,
+        theme: Theme,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut this = Self {
             prompt: Some(label.into()),
             ..Self::new(Vec::new(), text, theme, cx)
@@ -448,11 +508,24 @@ impl Palette {
         theme: Theme,
         cx: &mut Context<Self>,
     ) -> Self {
-        let entries =
-            options.into_iter().map(|name| Entry { name, ..Entry::default() }).collect();
-        let mut this = Self { prompt: Some(label.into()), choices: true, ..Self::new(entries, "", theme, cx) };
+        let entries = options
+            .into_iter()
+            .map(|name| Entry {
+                name,
+                ..Entry::default()
+            })
+            .collect();
+        let mut this = Self {
+            prompt: Some(label.into()),
+            choices: true,
+            ..Self::new(entries, "", theme, cx)
+        };
         this.refresh();
-        this.selected = this.items.iter().position(|i| this.choice(i) == Some(current)).unwrap_or(0);
+        this.selected = this
+            .items
+            .iter()
+            .position(|i| this.choice(i) == Some(current))
+            .unwrap_or(0);
         this
     }
 
@@ -480,7 +553,16 @@ impl Palette {
     /// The commands offered, by the name of their action.
     #[cfg(test)]
     pub fn runs(&self) -> Vec<&'static str> {
-        self.items.iter().filter_map(|item| if let &Item::Command(n) = item { Some(self.commands[n].action) } else { None }).collect()
+        self.items
+            .iter()
+            .filter_map(|item| {
+                if let &Item::Command(n) = item {
+                    Some(self.commands[n].action)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     #[cfg(test)]
@@ -512,7 +594,10 @@ impl Palette {
     /// The label of the choice listed at `i`.
     #[cfg(test)]
     pub fn choice_at(&self, i: usize) -> Option<String> {
-        self.items.get(i).and_then(|item| self.choice(item)).map(str::to_string)
+        self.items
+            .get(i)
+            .and_then(|item| self.choice(item))
+            .map(str::to_string)
     }
 
     fn choice(&self, item: &Item) -> Option<&str> {
@@ -536,13 +621,21 @@ impl Palette {
         let q = self.query.text.trim().to_lowercase();
         // ">" first: the palette shows only the commands, and the ">"
         // is cleared from the field.
-        if !self.commands_only && !self.choices && self.prompt.is_none() && self.query.text.starts_with('>') {
+        if !self.commands_only
+            && !self.choices
+            && self.prompt.is_none()
+            && self.query.text.starts_with('>')
+        {
             self.query = Line::new(self.query.text[1..].trim_start());
             self.commands_only = true;
         }
         if self.commands_only {
             let q = self.query.text.trim().to_lowercase();
-            let found = (0..self.commands.len()).filter(|&i| q.is_empty() || command(&q, self.commands[i].label) || command(&q, &self.commands[i].keys));
+            let found = (0..self.commands.len()).filter(|&i| {
+                q.is_empty()
+                    || command(&q, self.commands[i].label)
+                    || command(&q, &self.commands[i].keys)
+            });
             self.items = found.map(Item::Command).collect();
             self.selected = 0;
             return;
@@ -599,12 +692,29 @@ impl Palette {
             }
         }
         // Like the settings: offered only when searched for.
-        for (label, item) in [(diagram_label(), Item::Diagram), (folder_label(), Item::Folder), (import_label(), Item::Import)] {
+        for (label, item) in [
+            (diagram_label(), Item::Diagram),
+            (folder_label(), Item::Folder),
+            (import_label(), Item::Import),
+        ] {
             if !q.is_empty() && command(&q, label) {
                 items.push(item);
             }
         }
-        for (label, item) in [(outline_label(), Item::Outline), (comments_label(), Item::Comments), (board_label(), Item::Board), (today_label(), Item::Today), (back_label(), Item::Back), (forward_label(), Item::Forward), (trash_label(), Item::Trash), (backup_label(), Item::Backup), (sync_label(), Item::Sync), (clone_label(), Item::CloneVault), (terminal_label(), Item::Terminal), (capture_label(), Item::CaptureKey)] {
+        for (label, item) in [
+            (outline_label(), Item::Outline),
+            (comments_label(), Item::Comments),
+            (board_label(), Item::Board),
+            (today_label(), Item::Today),
+            (back_label(), Item::Back),
+            (forward_label(), Item::Forward),
+            (trash_label(), Item::Trash),
+            (backup_label(), Item::Backup),
+            (sync_label(), Item::Sync),
+            (clone_label(), Item::CloneVault),
+            (terminal_label(), Item::Terminal),
+            (capture_label(), Item::CaptureKey),
+        ] {
             if !q.is_empty() && command(&q, label) {
                 items.push(item);
             }
@@ -629,7 +739,10 @@ impl Palette {
         }
         if self.table && !q.is_empty() {
             items.extend(
-                Pick::ALL.into_iter().filter(|p| command(&q, p.label())).map(Item::Table),
+                Pick::ALL
+                    .into_iter()
+                    .filter(|p| command(&q, p.label()))
+                    .map(Item::Table),
             );
         }
         if (self.cells || self.table) && !q.is_empty() {
@@ -638,14 +751,23 @@ impl Palette {
         }
         if !q.is_empty() {
             let acts = [TemplateAct::New, TemplateAct::Insert, TemplateAct::Save];
-            items.extend(acts.into_iter().filter(|a| (*a == TemplateAct::New || self.lists) && command(&q, a.label())).map(Item::Template));
+            items.extend(
+                acts.into_iter()
+                    .filter(|a| (*a == TemplateAct::New || self.lists) && command(&q, a.label()))
+                    .map(Item::Template),
+            );
         }
         if self.lists && !q.is_empty() {
             items.extend(
-                [ListStyle::Bullet, ListStyle::Ordered, ListStyle::Task, ListStyle::Text]
-                    .into_iter()
-                    .filter(|&s| command(&q, list_label(s)))
-                    .map(Item::Restyle),
+                [
+                    ListStyle::Bullet,
+                    ListStyle::Ordered,
+                    ListStyle::Task,
+                    ListStyle::Text,
+                ]
+                .into_iter()
+                .filter(|&s| command(&q, list_label(s)))
+                .map(Item::Restyle),
             );
         }
         // The app's commands, by what they do; those the palette already offers under another
@@ -656,16 +778,37 @@ impl Palette {
                     || name.starts_with("sheet::Pick")
                     || matches!(
                         name,
-                        "app::Outline" | "app::Today" | "app::OpenVault" | "app::GoBack" | "app::GoForward" | "app::SyncVault" | "app::ToggleHelp"
-                            | "app::NewDiagram" | "nav::NewFolder" | "app::NewFromTemplate" | "app::ChooseTheme" | "editor::ListBullet"
-                            | "editor::ListOrdered" | "editor::ListTask"
+                        "app::Outline"
+                            | "app::Today"
+                            | "app::OpenVault"
+                            | "app::GoBack"
+                            | "app::GoForward"
+                            | "app::SyncVault"
+                            | "app::ToggleHelp"
+                            | "app::NewDiagram"
+                            | "nav::NewFolder"
+                            | "app::NewFromTemplate"
+                            | "app::ChooseTheme"
+                            | "editor::ListBullet"
+                            | "editor::ListOrdered"
+                            | "editor::ListTask"
                     )
             };
-            let found = (0..self.commands.len()).filter(|&i| !doubled(self.commands[i].action) && command(&q, self.commands[i].label));
+            let found = (0..self.commands.len()).filter(|&i| {
+                !doubled(self.commands[i].action) && command(&q, self.commands[i].label)
+            });
             items.extend(found.take(8).map(Item::Command));
         }
         // The settings do not clutter the list until searched for.
-        for setting in [Setting::Theme, Setting::Font, Setting::Mono, Setting::Page, Setting::Wide, Setting::Bar, Setting::Motion] {
+        for setting in [
+            Setting::Theme,
+            Setting::Font,
+            Setting::Mono,
+            Setting::Page,
+            Setting::Wide,
+            Setting::Bar,
+            Setting::Motion,
+        ] {
             if !q.is_empty() && command(&q, setting.label()) {
                 items.push(Item::Setting(setting));
             }
@@ -693,7 +836,9 @@ impl Palette {
             return cx.emit(PaletteEvent::Submit(self.query.text.trim().to_string()));
         }
         cx.emit(match self.items.get(index) {
-            Some(Item::Note(i) | Item::Text(i)) => PaletteEvent::Open(self.entries[*i].path.clone()),
+            Some(Item::Note(i) | Item::Text(i)) => {
+                PaletteEvent::Open(self.entries[*i].path.clone())
+            }
             Some(Item::Create) => PaletteEvent::Create(self.query.text.trim().to_string()),
             Some(Item::Vault) => PaletteEvent::ChangeVault,
             Some(Item::Help) => PaletteEvent::Help,
@@ -811,7 +956,13 @@ impl Palette {
         let c = &self.commands[n];
         let on = i == self.selected;
         let title = header.then(|| {
-            div().px_4().pt(t.px(10.)).pb(t.px(4.)).text_size(t.px(11.5)).text_color(t.soft).child(c.group.title(n < self.here))
+            div()
+                .px_4()
+                .pt(t.px(10.))
+                .pb(t.px(4.))
+                .text_size(t.px(11.5))
+                .text_color(t.soft)
+                .child(c.group.title(n < self.here))
         });
         let row = div()
             .id(("command", i))
@@ -829,10 +980,19 @@ impl Palette {
             .cursor_pointer()
             .when(on, |d| d.bg(t.selection))
             .when(!on, |d| d.hover(|s| s.bg(t.hover)))
-            .child(svg().path(c.icon).size(t.px(16.)).flex_none().text_color(if on { t.accent } else { t.soft }))
+            .child(
+                svg()
+                    .path(c.icon)
+                    .size(t.px(16.))
+                    .flex_none()
+                    .text_color(if on { t.accent } else { t.soft }),
+            )
             .child(div().flex_1().min_w_0().truncate().child(c.label))
             .child(keycaps(&c.keys, t, on).flex_none())
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.confirm(i, cx)));
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _, _, cx| this.confirm(i, cx)),
+            );
         div().flex().flex_col().children(title).child(row)
     }
 }
@@ -852,11 +1012,18 @@ impl Render for Palette {
 
         // The input line scrolls under its cursor: it stays in view whatever is typed or pasted.
         let (line, layout) = self.query.shown(t);
-        let (scroll, seen, at, palette) = (self.scroll.clone(), self.caret.clone(), self.query.cursor(), cx.entity_id());
+        let (scroll, seen, at, palette) = (
+            self.scroll.clone(),
+            self.caret.clone(),
+            self.query.cursor(),
+            cx.entity_id(),
+        );
         let follow = canvas(
             |_, _, _| (),
             move |_, _, _, cx| {
-                let Some(caret) = layout.position_for_index(at) else { return };
+                let Some(caret) = layout.position_for_index(at) else {
+                    return;
+                };
                 let frame = scroll.bounds();
                 // Enough to bring the cursor back into the frame; the next frame shows it.
                 let slide = if caret.x > frame.right() - t.px(2.) {
@@ -869,7 +1036,9 @@ impl Render for Palette {
                 seen.set(Some(caret.x));
                 // Bounded to what can scroll: at the end, nothing more is requested.
                 let mut offset = scroll.offset();
-                let to = (offset.x + slide).max(-scroll.max_offset().width).min(t.px(0.));
+                let to = (offset.x + slide)
+                    .max(-scroll.max_offset().width)
+                    .min(t.px(0.));
                 if (to - offset.x).abs() > t.px(0.5) {
                     offset.x = to;
                     scroll.set_offset(offset);
@@ -882,7 +1051,10 @@ impl Render for Palette {
         .size_0();
 
         // A choice list shows 14 lines at a time, around the selected choice.
-        let first = self.selected.saturating_sub(6).min(self.items.len().saturating_sub(14));
+        let first = self
+            .selected
+            .saturating_sub(6)
+            .min(self.items.len().saturating_sub(14));
         let rows = self.items.iter().enumerate().skip(first).take(14).map(|(i, item)| {
             if let &Item::Command(n) = item {
                 // Without typing anything, commands go by group, each under its title.
@@ -1006,13 +1178,23 @@ impl Render for Palette {
 
         // The keys of the main palette, under the list; an input field and an empty list have none to show.
         let footer = (self.prompt.is_none() && !self.items.is_empty()).then(|| {
-            let hint = |keys: String, what: &'static str| div().flex().items_center().gap(t.px(6.)).child(keycaps(&keys, t, false)).child(what);
+            let hint = |keys: String, what: &'static str| {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(t.px(6.))
+                    .child(keycaps(&keys, t, false))
+                    .child(what)
+            };
             let hints = if self.commands_only {
                 vec![hint(crate::ui::keys::of(cx, &Confirm), tr("run", "lancer"))]
             } else {
                 vec![
                     hint(crate::ui::keys::of(cx, &Confirm), tr("open", "ouvrir")),
-                    hint(crate::ui::keys::of(cx, &ConfirmAside), tr("in the other pane", "dans l'autre volet")),
+                    hint(
+                        crate::ui::keys::of(cx, &ConfirmAside),
+                        tr("in the other pane", "dans l'autre volet"),
+                    ),
                     hint(">".into(), tr("commands", "commandes")),
                 ]
             };
@@ -1040,85 +1222,137 @@ impl Render for Palette {
             .key_context("Palette Line")
             .track_focus(&self.focus)
             .on_action(cx.listener(|this, _: &Next, _, cx| this.step(1, cx)))
-            .on_action(cx.listener(|this, _: &Prev, _, cx| this.step(this.items.len().max(1) - 1, cx)))
+            .on_action(
+                cx.listener(|this, _: &Prev, _, cx| this.step(this.items.len().max(1) - 1, cx)),
+            )
             .on_action(cx.listener(|this, _: &Confirm, _, cx| this.confirm(this.selected, cx)))
             .on_action(cx.listener(|this, _: &ConfirmAside, _, cx| {
                 this.aside = true;
                 this.confirm(this.selected, cx)
             }))
             .on_action(cx.listener(|_, _: &Dismiss, _, cx| cx.emit(PaletteEvent::Dismiss)))
-            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| cx.emit(PaletteEvent::Dismiss)));
-        line::keys(root, cx, |this| Some(&mut this.query), |this, cx| {
-            this.refresh();
-            this.preview(cx);
-        })
-            .flex()
-            .justify_center()
-            .items_start()
-            .child(
-                crate::ui::widgets::floating(t)
-                    .debug_selector(|| "palette-panel".into())
-                    .mt(self.top)
-                    .w(t.px(560.))
-                    .max_w_full()
-                    .pb(t.px(if footer.is_some() { 0. } else { 6. }))
-                    .text_size(t.px(14.))
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(
-                        div()
-                            .h(t.px(52.))
-                            .px(t.px(18.))
-                            .mb(t.px(6.))
-                            .border_b_1()
-                            .border_color(t.code_bg)
-                            .flex()
-                            .items_center()
-                            .text_size(t.px(15.))
-                            // Neither the prompt nor a long pasted address overflows the frame.
-                            .overflow_hidden()
-                            .child(input)
-                            .when(self.commands_only, |d| d.child(svg().path("search.svg").size(t.px(16.)).flex_none().mr(t.px(10.)).text_color(t.soft)))
-                            // The cursor first, the prompt after it: one writes in its place.
-                            .child(div().id("palette-line").min_w_0().overflow_x_scroll().track_scroll(&self.scroll).flex().child(line.flex_none().pr(t.px(2.)).whitespace_nowrap()).child(follow))
-                            .when(self.query.text.is_empty(), |d| {
-                                d.child(div().min_w_0().truncate().text_color(t.soft).child(self.prompt.clone().unwrap_or_else(|| match self.commands_only {
-                                    true => tr("Search a command…", "Rechercher une commande…").into(),
-                                    false => tr("Search or create a note, #tag…", "Chercher ou créer une note, #tag…").into(),
-                                })))
-                            })
-                            .when(!self.query.text.is_empty(), |d| {
-                                d.children(self.prompt.clone().map(|label| {
-                                    div().ml_auto().pl_3().flex_none().max_w(gpui::relative(0.45)).truncate().text_size(t.px(12.)).text_color(t.soft).child(label)
-                                }))
-                            })
-                            // What the commands target first: the note, a table, a diagram.
-                            .when(self.commands_only && !self.context.is_empty(), |d| {
-                                d.child(div().flex_1()).child(
-                                    div()
-                                        .debug_selector(|| "palette-context".into())
-                                        .flex_none()
-                                        .px(t.px(7.))
-                                        .py(t.px(1.))
-                                        .rounded(t.small())
-                                        .bg(t.code_bg)
-                                        .text_size(t.px(11.5))
-                                        .text_color(t.soft)
-                                        .child(self.context),
-                                )
-                            }),
-                    )
-                    .children(rows)
-                    .children(footer)
-                    .children(self.nothing_to_show().map(|said| {
-                        div().debug_selector(|| "palette-empty".into()).px_4().py_3().text_center().text_size(t.px(13.)).text_color(t.soft).child(said)
-                    }))
-                    // The panel slides into place when opening.
-                    .with_animation(
-                        "palette-in",
-                        Animation::new(Duration::from_millis(140)).with_easing(ease_out_quint()),
-                        move |panel, delta| panel.opacity(delta).mt(top - t.px(8.) * (1. - delta)),
-                    ),
-            )
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|_, _, _, cx| cx.emit(PaletteEvent::Dismiss)),
+            );
+        line::keys(
+            root,
+            cx,
+            |this| Some(&mut this.query),
+            |this, cx| {
+                this.refresh();
+                this.preview(cx);
+            },
+        )
+        .flex()
+        .justify_center()
+        .items_start()
+        .child(
+            crate::ui::widgets::floating(t)
+                .debug_selector(|| "palette-panel".into())
+                .mt(self.top)
+                .w(t.px(560.))
+                .max_w_full()
+                .pb(t.px(if footer.is_some() { 0. } else { 6. }))
+                .text_size(t.px(14.))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(
+                    div()
+                        .h(t.px(52.))
+                        .px(t.px(18.))
+                        .mb(t.px(6.))
+                        .border_b_1()
+                        .border_color(t.code_bg)
+                        .flex()
+                        .items_center()
+                        .text_size(t.px(15.))
+                        // Neither the prompt nor a long pasted address overflows the frame.
+                        .overflow_hidden()
+                        .child(input)
+                        .when(self.commands_only, |d| {
+                            d.child(
+                                svg()
+                                    .path("search.svg")
+                                    .size(t.px(16.))
+                                    .flex_none()
+                                    .mr(t.px(10.))
+                                    .text_color(t.soft),
+                            )
+                        })
+                        // The cursor first, the prompt after it: one writes in its place.
+                        .child(
+                            div()
+                                .id("palette-line")
+                                .min_w_0()
+                                .overflow_x_scroll()
+                                .track_scroll(&self.scroll)
+                                .flex()
+                                .child(line.flex_none().pr(t.px(2.)).whitespace_nowrap())
+                                .child(follow),
+                        )
+                        .when(self.query.text.is_empty(), |d| {
+                            d.child(div().min_w_0().truncate().text_color(t.soft).child(
+                                self.prompt.clone().unwrap_or_else(|| {
+                                    match self.commands_only {
+                                        true => tr("Search a command…", "Rechercher une commande…")
+                                            .into(),
+                                        false => tr(
+                                            "Search or create a note, #tag…",
+                                            "Chercher ou créer une note, #tag…",
+                                        )
+                                        .into(),
+                                    }
+                                }),
+                            ))
+                        })
+                        .when(!self.query.text.is_empty(), |d| {
+                            d.children(self.prompt.clone().map(|label| {
+                                div()
+                                    .ml_auto()
+                                    .pl_3()
+                                    .flex_none()
+                                    .max_w(gpui::relative(0.45))
+                                    .truncate()
+                                    .text_size(t.px(12.))
+                                    .text_color(t.soft)
+                                    .child(label)
+                            }))
+                        })
+                        // What the commands target first: the note, a table, a diagram.
+                        .when(self.commands_only && !self.context.is_empty(), |d| {
+                            d.child(div().flex_1()).child(
+                                div()
+                                    .debug_selector(|| "palette-context".into())
+                                    .flex_none()
+                                    .px(t.px(7.))
+                                    .py(t.px(1.))
+                                    .rounded(t.small())
+                                    .bg(t.code_bg)
+                                    .text_size(t.px(11.5))
+                                    .text_color(t.soft)
+                                    .child(self.context),
+                            )
+                        }),
+                )
+                .children(rows)
+                .children(footer)
+                .children(self.nothing_to_show().map(|said| {
+                    div()
+                        .debug_selector(|| "palette-empty".into())
+                        .px_4()
+                        .py_3()
+                        .text_center()
+                        .text_size(t.px(13.))
+                        .text_color(t.soft)
+                        .child(said)
+                }))
+                // The panel slides into place when opening.
+                .with_animation(
+                    "palette-in",
+                    Animation::new(Duration::from_millis(140)).with_easing(ease_out_quint()),
+                    move |panel, delta| panel.opacity(delta).mt(top - t.px(8.) * (1. - delta)),
+                ),
+        )
     }
 }
 

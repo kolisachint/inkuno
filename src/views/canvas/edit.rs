@@ -28,7 +28,10 @@ impl Canvas {
 
     /// The text of `id` (at `self.slot`) is now the one being written, cursor at its end.
     pub(super) fn begin(&mut self, id: u32) -> bool {
-        self.editing = self.text_of(id).map(|text| Writing { id, field: Input::multiline(text.clone()) });
+        self.editing = self.text_of(id).map(|text| Writing {
+            id,
+            field: Input::multiline(text.clone()),
+        });
         self.editing.is_some()
     }
 
@@ -39,7 +42,9 @@ impl Canvas {
 
     /// The field being written changed: its text goes into the diagram.
     pub(super) fn wrote(&mut self, cx: &mut Context<Self>) {
-        let Some(Writing { id, field }) = &self.editing else { return };
+        let Some(Writing { id, field }) = &self.editing else {
+            return;
+        };
         let (id, text) = (*id, field.text.clone());
         if let Some(target) = self.text_of(id) {
             *target = text;
@@ -55,7 +60,9 @@ impl Canvas {
                 self.begin(id);
                 cx.notify();
             }
-            (None, &[id]) if self.diagram.link(id).is_some() => self.start_editing_slot(id, Slot::Start, cx),
+            (None, &[id]) if self.diagram.link(id).is_some() => {
+                self.start_editing_slot(id, Slot::Start, cx)
+            }
             (None, _) if self.tool == Tool::Select => cx.propagate(),
             _ => {}
         }
@@ -65,7 +72,10 @@ impl Canvas {
         self.slot = Slot::Middle;
         if let Some(Writing { id, .. }) = self.editing.take() {
             // A text left empty leaves nothing behind.
-            let empty = self.diagram.shape(id).is_some_and(|s| s.form == Form::Text && s.text.trim().is_empty());
+            let empty = self
+                .diagram
+                .shape(id)
+                .is_some_and(|s| s.form == Form::Text && s.text.trim().is_empty());
             if empty {
                 self.diagram.remove(&[id]);
                 self.selected.clear();
@@ -90,16 +100,27 @@ impl Canvas {
                 "0" => self.zoom_fit(cx),
                 // The menu of relationships: `k` opens it, then a letter picks one.
                 // The menu is open: `k` closes it, a letter picks a relationship.
-                _ if self.relations && text.eq_ignore_ascii_case(Self::RELATIONS) => self.toggle_relations(cx),
+                _ if self.relations && text.eq_ignore_ascii_case(Self::RELATIONS) => {
+                    self.toggle_relations(cx)
+                }
                 _ if self.relations => {
-                    let relation = Relation::ALL.iter().find(|r| text.chars().next().is_some_and(|c| c.eq_ignore_ascii_case(&r.key())));
+                    let relation = Relation::ALL.iter().find(|r| {
+                        text.chars()
+                            .next()
+                            .is_some_and(|c| c.eq_ignore_ascii_case(&r.key()))
+                    });
                     match relation {
                         Some(relation) => self.choose_relation(*relation, cx),
-                        None if text.eq_ignore_ascii_case(Self::NARY) => self.set_tool(Tool::Shape(Form::Branch), cx),
+                        None if text.eq_ignore_ascii_case(Self::NARY) => {
+                            self.set_tool(Tool::Shape(Form::Branch), cx)
+                        }
                         // Not in the menu: it closes, and the letter acts as it would have.
                         None => {
                             self.relations = false;
-                            if let Some((tool, ..)) = TOOLS.iter().find(|(_, _, key)| key.eq_ignore_ascii_case(text)) {
+                            if let Some((tool, ..)) = TOOLS
+                                .iter()
+                                .find(|(_, _, key)| key.eq_ignore_ascii_case(text))
+                            {
                                 self.set_tool(*tool, cx);
                             }
                         }
@@ -121,7 +142,10 @@ impl Canvas {
                     })
                 }
                 _ => {
-                    if let Some((tool, ..)) = TOOLS.iter().find(|(_, _, key)| key.eq_ignore_ascii_case(text)) {
+                    if let Some((tool, ..)) = TOOLS
+                        .iter()
+                        .find(|(_, _, key)| key.eq_ignore_ascii_case(text))
+                    {
                         self.set_tool(*tool, cx);
                     }
                 }
@@ -136,16 +160,28 @@ impl Canvas {
     /// Up or Down while writing: the line above or below, at the same distance from the left, as it is drawn;
     /// past the first line, the start of the text, past the last, its end. `select` extends the selection.
     pub(super) fn vertical(&mut self, down: bool, select: bool, cx: &mut Context<Self>) {
-        let Some(writing) = &mut self.editing else { return };
+        let Some(writing) = &mut self.editing else {
+            return;
+        };
         let at = writing.field.cursor();
-        let Some(i) = self.rows.iter().rposition(|r| r.start <= at) else { return };
+        let Some(i) = self.rows.iter().rposition(|r| r.start <= at) else {
+            return;
+        };
         let x = self.rows[i].x(at.min(self.rows[i].end()));
-        let to = match if down { self.rows.get(i + 1) } else { i.checked_sub(1).map(|i| &self.rows[i]) } {
+        let to = match if down {
+            self.rows.get(i + 1)
+        } else {
+            i.checked_sub(1).map(|i| &self.rows[i])
+        } {
             Some(row) => row.start + row.shaped.closest_index_for_x(x - row.origin.x),
             None if down => writing.field.text.len(),
             None => 0,
         };
-        if select { writing.field.extend(to) } else { writing.field.place(to) }
+        if select {
+            writing.field.extend(to)
+        } else {
+            writing.field.place(to)
+        }
         cx.notify();
     }
 
@@ -156,7 +192,9 @@ impl Canvas {
             return cx.notify();
         }
         if let Some(writing) = &mut self.editing {
-            writing.field.delete(if forward { To::Right } else { To::Left });
+            writing
+                .field
+                .delete(if forward { To::Right } else { To::Left });
             return self.wrote(cx);
         }
         if !self.selected.is_empty() {
@@ -178,7 +216,9 @@ impl Canvas {
         }
         if let Some(writing) = &mut self.editing {
             if dx != 0. {
-                writing.field.go(if dx > 0. { To::Right } else { To::Left }, false);
+                writing
+                    .field
+                    .go(if dx > 0. { To::Right } else { To::Left }, false);
                 cx.notify();
             } else if dy != 0. {
                 self.vertical(dy > 0., false, cx);
@@ -226,7 +266,12 @@ impl Canvas {
             return;
         }
         self.remember();
-        let link = self.diagram.add_link(End::Shape(id), End::Shape(id), diagram::Head::Arrow, Route::Elbow);
+        let link = self.diagram.add_link(
+            End::Shape(id),
+            End::Shape(id),
+            diagram::Head::Arrow,
+            Route::Elbow,
+        );
         self.slot = Slot::Middle;
         self.begin(link);
         self.selected = vec![link];
@@ -255,15 +300,28 @@ impl Canvas {
             writing.field.select_all();
             return cx.notify();
         }
-        self.selected = self.diagram.shapes.iter().map(|s| s.id).chain(self.diagram.links.iter().map(|l| l.id)).collect();
+        self.selected = self
+            .diagram
+            .shapes
+            .iter()
+            .map(|s| s.id)
+            .chain(self.diagram.links.iter().map(|l| l.id))
+            .collect();
         cx.notify();
     }
 
     /// Turns the selected arrows around: one step of undo.
     pub(super) fn reverse(&mut self, cx: &mut Context<Self>) {
-        let links: Vec<u32> = self.selected.iter().copied().filter(|id| self.diagram.link(*id).is_some()).collect();
+        let links: Vec<u32> = self
+            .selected
+            .iter()
+            .copied()
+            .filter(|id| self.diagram.link(*id).is_some())
+            .collect();
         self.remember();
-        let turned = links.iter().fold(false, |any, id| self.diagram.reverse(*id) | any);
+        let turned = links
+            .iter()
+            .fold(false, |any, id| self.diagram.reverse(*id) | any);
         if turned {
             self.changed(cx);
         } else {
@@ -285,14 +343,24 @@ impl Canvas {
     pub(super) fn text_at(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
         self.remember();
         let p = self.world(at);
-        let id = self.diagram.add_shape(Form::Text, diagram::snap(p.0), diagram::snap(p.1), 80., diagram::LINE);
+        let id = self.diagram.add_shape(
+            Form::Text,
+            diagram::snap(p.0),
+            diagram::snap(p.1),
+            80.,
+            diagram::LINE,
+        );
         self.begin(id);
         self.selected = vec![id];
         self.changed(cx);
     }
 
     /// Applies a setting to the selected elements.
-    pub(super) fn style(&mut self, cx: &mut Context<Self>, set: impl Fn(Option<&mut diagram::Shape>, Option<&mut diagram::Link>)) {
+    pub(super) fn style(
+        &mut self,
+        cx: &mut Context<Self>,
+        set: impl Fn(Option<&mut diagram::Shape>, Option<&mut diagram::Link>),
+    ) {
         self.remember();
         for id in self.selected.clone() {
             if self.diagram.shape(id).is_some() {

@@ -5,13 +5,13 @@
 <text x="110.5" y="72" text-anchor="middle" fill="#7d8590" stroke="none">(Claude, Codex…)</text>
 <path d="M253 40L359 40C360.1 40 361 40.9 361 42L361 74C361 75.1 360.1 76 359 76L253 76C251.9 76 251 75.1 251 74L251 42C251 40.9 251.9 40 253 40Z" stroke="#7d8590"/>
 <path d="M306 76L306 784" stroke="#7d8590" stroke-dasharray="6 4"/>
-<text x="306" y="63" text-anchor="middle" fill="#7d8590" stroke="none">bref mcp</text>
+<text x="306" y="63" text-anchor="middle" fill="#7d8590" stroke="none">inkuno mcp</text>
 <path d="M433 40L539 40C540.1 40 541 40.9 541 42L541 74C541 75.1 540.1 76 539 76L433 76C431.9 76 431 75.1 431 74L431 42C431 40.9 431.9 40 433 40Z" stroke="#7d8590"/>
 <path d="M486 76L486 784" stroke="#7d8590" stroke-dasharray="6 4"/>
 <text x="486" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Vault (disk)</text>
 <path d="M613 40L719 40C720.1 40 721 40.9 721 42L721 74C721 75.1 720.1 76 719 76L613 76C611.9 76 611 75.1 611 74L611 42C611 40.9 611.9 40 613 40Z" stroke="#7d8590"/>
 <path d="M666 76L666 784" stroke="#7d8590" stroke-dasharray="6 4"/>
-<text x="666" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Bref window</text>
+<text x="666" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Inkuno window</text>
 <path d="M18 294L417 294C418.1 294 419 294.9 419 296L419 402C419 403.1 418.1 404 417 404L18 404C16.9 404 16 403.1 16 402L16 296C16 294.9 16.9 294 18 294Z" stroke="#7d8590"/>
 <path d="M16 294L64 294L64 305L55 314L16 314Z" stroke="#7d8590"/>
 <text x="22" y="309" font-weight="bold" fill="#7d8590" stroke="none">loop</text>
@@ -60,13 +60,13 @@
 <path d="M301 714L110.5 714" stroke="#7d8590" stroke-dasharray="6 4"/>
 <path d="M120.5 709L110.5 714L120.5 719" stroke="#7d8590"/>
 <text x="205.8" y="708" text-anchor="middle" fill="#7d8590" stroke="none">not open: file written</text>
-<metadata id="bref-diagram">
+<metadata id="inkuno-diagram">
 version 8
 rich 1
 shape 1 lifeline 40 40 141 744 0 0 0 Agent\n(Claude, Codex…)
-shape 2 lifeline 251 40 110 744 0 0 0 bref mcp
+shape 2 lifeline 251 40 110 744 0 0 0 inkuno mcp
 shape 3 lifeline 431 40 110 744 0 0 0 Vault (disk)
-shape 4 lifeline 611 40 110 744 0 0 0 Bref window
+shape 4 lifeline 611 40 110 744 0 0 0 Inkuno window
 shape 16 fragment 16 294 403 110 0 0 0 loop\n[until the drawing is clean]
 shape 17 fragment 16 486 763 254 0 0 0 alt\n[window open on this vault]\n[no window]
 link 5 l1 l2 none solidtriangle straight 0 0 create_diagram

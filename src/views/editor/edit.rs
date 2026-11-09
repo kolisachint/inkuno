@@ -17,16 +17,31 @@ impl History {
         if let Some((old, old_sel)) = self.last.replace((text, sel)) {
             let new = self.last.as_ref().unwrap().0.as_bytes();
             let old_bytes = old.as_bytes();
-            let mut start = old_bytes.iter().zip(new).take_while(|(a, b)| a == b).count();
+            let mut start = old_bytes
+                .iter()
+                .zip(new)
+                .take_while(|(a, b)| a == b)
+                .count();
             while !old.is_char_boundary(start) {
                 start -= 1;
             }
             let room = old.len().min(new.len()) - start;
-            let mut tail = old_bytes.iter().rev().zip(new.iter().rev()).take(room).take_while(|(a, b)| a == b).count();
+            let mut tail = old_bytes
+                .iter()
+                .rev()
+                .zip(new.iter().rev())
+                .take(room)
+                .take_while(|(a, b)| a == b)
+                .count();
             while !old.is_char_boundary(old.len() - tail) {
                 tail -= 1;
             }
-            self.earlier.push((start, new.len() - tail - start, old[start..old.len() - tail].to_string(), old_sel));
+            self.earlier.push((
+                start,
+                new.len() - tail - start,
+                old[start..old.len() - tail].to_string(),
+                old_sel,
+            ));
             if self.earlier.len() >= 200 {
                 self.earlier.remove(0);
             }
@@ -65,13 +80,28 @@ impl Editor {
         let (prefix, suffix) = (range.start, len - range.end);
         self.edited_at = range.start;
         self.dmg = Some(match self.dmg {
-            None => Damage { old_len: len, prefix, suffix },
-            Some(d) => Damage { prefix: d.prefix.min(prefix), suffix: d.suffix.min(suffix), ..d },
+            None => Damage {
+                old_len: len,
+                prefix,
+                suffix,
+            },
+            Some(d) => Damage {
+                prefix: d.prefix.min(prefix),
+                suffix: d.suffix.min(suffix),
+                ..d
+            },
         });
     }
 
     pub(super) fn changed(&mut self, cx: &mut Context<Self>) {
         self.bar.swatches = false;
+        // Typora-style: the edited line shows its source. A plain cursor move never calls
+        // this, so keyboard navigation keeps the rendered markers hidden.
+        let at = self
+            .dmg
+            .map(|d| d.prefix.min(self.content.len()))
+            .unwrap_or_else(|| self.cursor());
+        self.revealed = Some(self.line_range(at).start);
         self.version += 1;
         self.revision += 1;
         self.marked = None;
@@ -111,7 +141,9 @@ impl Editor {
     /// lands. Every change calls it (`splice`, or the rewrites of a whole block: a realigned
     /// table, emptied cells, reindented lines), or the other cursors point into the wrong text.
     pub(super) fn follow(&mut self, map: impl Fn(usize) -> usize) {
-        self.more.iter_mut().for_each(|(sel, _)| *sel = map(sel.start)..map(sel.end));
+        self.more
+            .iter_mut()
+            .for_each(|(sel, _)| *sel = map(sel.start)..map(sel.end));
     }
 
     /// Makes each cursor do `act`: each in turn becomes the main cursor,
@@ -120,7 +152,11 @@ impl Editor {
     // ponytail: the column aimed at by Up and Down (`goal_x`) is not kept per cursor: it
     // is recomputed at each step. Keep it per cursor if the drift bothers on lines
     // of uneven lengths.
-    pub(super) fn each(&mut self, cx: &mut Context<Self>, act: impl Fn(&mut Self, &mut Context<Self>)) {
+    pub(super) fn each(
+        &mut self,
+        cx: &mut Context<Self>,
+        act: impl Fn(&mut Self, &mut Context<Self>),
+    ) {
         if self.more.is_empty() {
             return act(self, cx);
         }
@@ -191,6 +227,7 @@ impl Editor {
         self.more.clear();
         self.last_edit = None;
         self.edited_at = usize::MAX;
+        self.dmg = None;
         self.changed(cx);
     }
 
@@ -214,7 +251,10 @@ impl Editor {
             if let Some((_, k)) = self.table_cells(c) {
                 let line = self.line_range(c);
                 let bars = md::bars(&self.content[line.clone()]);
-                let (from, to) = (line.start + bars[k] + 1, bars.get(k + 1).map_or(line.end, |b| line.start + b));
+                let (from, to) = (
+                    line.start + bars[k] + 1,
+                    bars.get(k + 1).map_or(line.end, |b| line.start + b),
+                );
                 range = range.start.max(from)..range.end.min(to);
                 if range.is_empty() {
                     return;
@@ -244,7 +284,12 @@ impl Editor {
         if self.sel.is_empty() && self.in_big(self.cursor()) {
             let line = self.line_range(self.cursor());
             let cells = md::cells(&self.content[line.clone()]).len().max(1);
-            let after = match self.row_at(self.cursor()).and_then(|r| self.big.iter().find(|b| b.rows.contains(&r)).map(|b| r - b.rows.start)) {
+            let after = match self.row_at(self.cursor()).and_then(|r| {
+                self.big
+                    .iter()
+                    .find(|b| b.rows.contains(&r))
+                    .map(|b| r - b.rows.start)
+            }) {
                 Some(0) if line.end < self.content.len() => self.line_range(line.end + 1).end,
                 _ => line.end,
             };
@@ -312,7 +357,11 @@ impl Editor {
                 } else if let Some(rest) = l.strip_prefix('\t') {
                     rest.to_string()
                 } else {
-                    let n = l.bytes().take(md::INDENT.len()).take_while(|&b| b == b' ').count();
+                    let n = l
+                        .bytes()
+                        .take(md::INDENT.len())
+                        .take_while(|&b| b == b' ')
+                        .count();
                     l[n..].to_string()
                 };
                 deltas.push(new.len() as isize - l.len() as isize);
@@ -336,7 +385,8 @@ impl Editor {
             ((start as isize + shift) + ((p - start) as isize + deltas[l]).max(0)) as usize
         });
         self.damaged(&block);
-        self.content.replace_range(block.clone(), &shifted.join("\n"));
+        self.content
+            .replace_range(block.clone(), &shifted.join("\n"));
         let start = (sel.start as isize + deltas[0]).max(block.start as isize) as usize;
         let end = (sel.end as isize + total).max(start as isize) as usize;
         self.sel = start..end;
@@ -375,7 +425,11 @@ impl Editor {
     /// a single undo step, the cursor at their end.
     pub fn insert_lines(&mut self, at: usize, lines: &[String], cx: &mut Context<Self>) {
         let at = self.clamp(at);
-        let before = if at > 0 && !self.content[..at].ends_with('\n') { "\n" } else { "" };
+        let before = if at > 0 && !self.content[..at].ends_with('\n') {
+            "\n"
+        } else {
+            ""
+        };
         let after = if at < self.content.len() { "\n" } else { "" };
         let text = format!("{before}{}{after}", lines.join("\n"));
         self.push_undo(true);

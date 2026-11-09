@@ -24,8 +24,15 @@ impl Render for Sheet {
         let head = if self.format.header {
             self.render_row(0, c0..c1, &selected, true)
         } else {
-            div().absolute().top(px(0.)).left(px(0.)).h(px(ROW)).flex().text_size(px(self.text_px())).child(div().flex_none().w(px(self.xs[c0]))).children(
-                (c0..c1).map(|c| {
+            div()
+                .absolute()
+                .top(px(0.))
+                .left(px(0.))
+                .h(px(ROW))
+                .flex()
+                .text_size(px(self.text_px()))
+                .child(div().flex_none().w(px(self.xs[c0])))
+                .children((c0..c1).map(|c| {
                     let inside = selected.iter().any(|(_, cols)| cols.contains(&c));
                     div()
                         .flex_none()
@@ -42,8 +49,7 @@ impl Render for Sheet {
                         .when(c + 1 == self.cols(), |d| d.rounded_tr(t.band()))
                         .when(inside, |d| d.bg(t.selection))
                         .child(letters(c))
-                }),
-            )
+                }))
         };
         let rows = (r0..r1).map(|r| self.render_row(r, c0..c1, &selected, false));
         let grid = div()
@@ -53,8 +59,24 @@ impl Render for Sheet {
             .right(px(0.))
             .bottom(px(0.))
             .overflow_hidden()
-            .child(div().absolute().top(px(0.)).left(px(-self.scroll.0)).size_full().children(rows))
-            .child(div().absolute().top(px(0.)).left(px(-self.scroll.0)).w_full().h(px(ROW)).cursor_pointer().child(head))
+            .child(
+                div()
+                    .absolute()
+                    .top(px(0.))
+                    .left(px(-self.scroll.0))
+                    .size_full()
+                    .children(rows),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top(px(0.))
+                    .left(px(-self.scroll.0))
+                    .w_full()
+                    .h(px(ROW))
+                    .cursor_pointer()
+                    .child(head),
+            )
             .children(self.edit.as_ref().map(|edit| self.render_edit(edit)));
 
         let number = |r: usize, y: f32| {
@@ -90,7 +112,19 @@ impl Render for Sheet {
             .font_family(mono())
             .text_size(px(self.text_px()))
             .children((r0..r1).map(|r| number(r, self.y_of(r))))
-            .child(div().absolute().top(px(0.)).left(px(0.)).w(px(GUTTER)).h(px(ROW)).border_r_1().border_b_1().border_color(t.code_bg).bg(t.code_bg).rounded_tl(t.band()))
+            .child(
+                div()
+                    .absolute()
+                    .top(px(0.))
+                    .left(px(0.))
+                    .w(px(GUTTER))
+                    .h(px(ROW))
+                    .border_r_1()
+                    .border_b_1()
+                    .border_color(t.code_bg)
+                    .bg(t.code_bg)
+                    .rounded_tl(t.band()),
+            )
             .children(self.format.header.then(|| number(0, 0.)));
 
         let body = div()
@@ -107,10 +141,19 @@ impl Render for Sheet {
             .child(grid)
             .child(gutter)
             .child(self.render_bars())
-            .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, window, cx| this.press(e, window, cx)))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, e: &MouseDownEvent, window, cx| this.press(e, window, cx)),
+            )
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| this.drag_to(e, cx)))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, _| this.drag = Drag::None))
-            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, _| this.drag = Drag::None))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseUpEvent, _, _| this.drag = Drag::None),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseUpEvent, _, _| this.drag = Drag::None),
+            )
             .on_scroll_wheel(cx.listener(|this, e: &ScrollWheelEvent, _, cx| this.wheel(e, cx)));
 
         line::keys(div(), cx, |this| this.edit.as_mut(), |_, _| ())
@@ -123,7 +166,11 @@ impl Render for Sheet {
             .text_color(t.text)
             // A cell being typed in: the keys of an input line come before
             // those of the grid (arrows, deletion, clipboard).
-            .key_context(if self.edit.is_some() { "Sheet Line" } else { "Sheet" })
+            .key_context(if self.edit.is_some() {
+                "Sheet Line"
+            } else {
+                "Sheet"
+            })
             .track_focus(&self.focus)
             .on_action(cx.listener(|this, _: &Left, _, cx| this.go(0, -1, false, cx)))
             .on_action(cx.listener(|this, _: &Right, _, cx| this.go(0, 1, false, cx)))
@@ -135,8 +182,12 @@ impl Render for Sheet {
             .on_action(cx.listener(|this, _: &ExtendDown, _, cx| this.go(1, 0, true, cx)))
             .on_action(cx.listener(|this, _: &PageUp, _, cx| this.go(-this.page(), 0, false, cx)))
             .on_action(cx.listener(|this, _: &PageDown, _, cx| this.go(this.page(), 0, false, cx)))
-            .on_action(cx.listener(|this, _: &RowStart, _, cx| this.select_to((this.cursor.0, 0), false, cx)))
-            .on_action(cx.listener(|this, _: &RowEnd, _, cx| this.select_to((this.cursor.0, this.cols() - 1), false, cx)))
+            .on_action(cx.listener(|this, _: &RowStart, _, cx| {
+                this.select_to((this.cursor.0, 0), false, cx)
+            }))
+            .on_action(cx.listener(|this, _: &RowEnd, _, cx| {
+                this.select_to((this.cursor.0, this.cols() - 1), false, cx)
+            }))
             .on_action(cx.listener(|this, _: &Origin, _, cx| {
                 this.finish(cx);
                 this.select_to((0, 0), false, cx)
@@ -202,20 +253,48 @@ impl Render for Sheet {
             .on_action(cx.listener(|this, _: &editor::TableDeleteSpan, _, cx| this.delete_span(cx)))
             .on_action(cx.listener(|this, _: &SelectRow, _, cx| this.select_whole(true, cx)))
             .on_action(cx.listener(|this, _: &SelectCol, _, cx| this.select_whole(false, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableRowAbove, _, cx| this.table_op(TableOp::RowAbove, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableRowBelow, _, cx| this.table_op(TableOp::RowBelow, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableColLeft, _, cx| this.table_op(TableOp::ColLeft, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableColRight, _, cx| this.table_op(TableOp::ColRight, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableDuplicateRow, _, cx| this.table_op(TableOp::DuplicateRow, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableDuplicateCol, _, cx| this.table_op(TableOp::DuplicateCol, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableMoveRowUp, _, cx| this.table_op(TableOp::MoveRowUp, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableMoveRowDown, _, cx| this.table_op(TableOp::MoveRowDown, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableMoveColLeft, _, cx| this.table_op(TableOp::MoveColLeft, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableMoveColRight, _, cx| this.table_op(TableOp::MoveColRight, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableDeleteRow, _, cx| this.table_op(TableOp::DeleteRow, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableDeleteCol, _, cx| this.table_op(TableOp::DeleteCol, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableSortAsc, _, cx| this.table_op(TableOp::SortAsc, cx)))
-            .on_action(cx.listener(|this, _: &editor::TableSortDesc, _, cx| this.table_op(TableOp::SortDesc, cx)))
+            .on_action(cx.listener(|this, _: &editor::TableRowAbove, _, cx| {
+                this.table_op(TableOp::RowAbove, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableRowBelow, _, cx| {
+                this.table_op(TableOp::RowBelow, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableColLeft, _, cx| {
+                this.table_op(TableOp::ColLeft, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableColRight, _, cx| {
+                this.table_op(TableOp::ColRight, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableDuplicateRow, _, cx| {
+                this.table_op(TableOp::DuplicateRow, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableDuplicateCol, _, cx| {
+                this.table_op(TableOp::DuplicateCol, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableMoveRowUp, _, cx| {
+                this.table_op(TableOp::MoveRowUp, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableMoveRowDown, _, cx| {
+                this.table_op(TableOp::MoveRowDown, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableMoveColLeft, _, cx| {
+                this.table_op(TableOp::MoveColLeft, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableMoveColRight, _, cx| {
+                this.table_op(TableOp::MoveColRight, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableDeleteRow, _, cx| {
+                this.table_op(TableOp::DeleteRow, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableDeleteCol, _, cx| {
+                this.table_op(TableOp::DeleteCol, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableSortAsc, _, cx| {
+                this.table_op(TableOp::SortAsc, cx)
+            }))
+            .on_action(cx.listener(|this, _: &editor::TableSortDesc, _, cx| {
+                this.table_op(TableOp::SortDesc, cx)
+            }))
             .child(self.render_bar(window, cx))
             .child(body)
     }
@@ -223,7 +302,13 @@ impl Render for Sheet {
 
 impl Sheet {
     /// A setting of the table as a pill; the one in force (`on`) is tinted with the accent.
-    pub(super) fn chip(&self, id: &'static str, text: String, on: bool, pick: Pick) -> Stateful<gpui::Div> {
+    pub(super) fn chip(
+        &self,
+        id: &'static str,
+        text: String,
+        on: bool,
+        pick: Pick,
+    ) -> Stateful<gpui::Div> {
         let t = self.theme;
         pill(t, on)
             .id(id)
@@ -242,8 +327,12 @@ impl Sheet {
     pub(super) fn span_tools(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
         let t = self.theme;
         let (rows, cols) = self.selection();
-        let whole_cols = rows.start == 0 && rows.end >= self.table.rows() && cols.len() < self.cols();
-        let whole_rows = cols.start == 0 && cols.end >= self.cols() && !whole_cols && rows.len() < self.table.rows();
+        let whole_cols =
+            rows.start == 0 && rows.end >= self.table.rows() && cols.len() < self.cols();
+        let whole_rows = cols.start == 0
+            && cols.end >= self.cols()
+            && !whole_cols
+            && rows.len() < self.table.rows();
         type Tool = (&'static str, &'static str, Box<dyn Action>);
         let (title, groups): (String, Vec<Vec<Tool>>) = if whole_cols {
             let named = self.table.cell(0, cols.start).trim().to_string();
@@ -252,55 +341,143 @@ impl Sheet {
                 (1, false) => format!("{} {}", tr("Column", "Colonne"), letters(cols.start)),
                 (n, _) => format!("{n} {}", tr("columns", "colonnes")),
             };
-            (title, vec![
+            (
+                title,
                 vec![
-                    ("c-ins-left.svg", TableOp::ColLeft.label(), Box::new(editor::TableColLeft)),
-                    ("c-ins-right.svg", TableOp::ColRight.label(), Box::new(editor::TableColRight)),
+                    vec![
+                        (
+                            "c-ins-left.svg",
+                            TableOp::ColLeft.label(),
+                            Box::new(editor::TableColLeft),
+                        ),
+                        (
+                            "c-ins-right.svg",
+                            TableOp::ColRight.label(),
+                            Box::new(editor::TableColRight),
+                        ),
+                    ],
+                    vec![
+                        (
+                            "c-left.svg",
+                            TableOp::MoveColLeft.label(),
+                            Box::new(editor::TableMoveColLeft),
+                        ),
+                        (
+                            "c-right.svg",
+                            TableOp::MoveColRight.label(),
+                            Box::new(editor::TableMoveColRight),
+                        ),
+                    ],
+                    vec![
+                        (
+                            "c-sort-az.svg",
+                            TableOp::SortAsc.label(),
+                            Box::new(editor::TableSortAsc),
+                        ),
+                        (
+                            "c-sort-za.svg",
+                            TableOp::SortDesc.label(),
+                            Box::new(editor::TableSortDesc),
+                        ),
+                    ],
+                    vec![(
+                        "trash.svg",
+                        TableOp::DeleteCol.label(),
+                        Box::new(editor::TableDeleteCol),
+                    )],
                 ],
-                vec![
-                    ("c-left.svg", TableOp::MoveColLeft.label(), Box::new(editor::TableMoveColLeft)),
-                    ("c-right.svg", TableOp::MoveColRight.label(), Box::new(editor::TableMoveColRight)),
-                ],
-                vec![
-                    ("c-sort-az.svg", TableOp::SortAsc.label(), Box::new(editor::TableSortAsc)),
-                    ("c-sort-za.svg", TableOp::SortDesc.label(), Box::new(editor::TableSortDesc)),
-                ],
-                vec![("trash.svg", TableOp::DeleteCol.label(), Box::new(editor::TableDeleteCol))],
-            ])
+            )
         } else if whole_rows {
             let title = match rows.len() {
                 1 => format!("{} {}", tr("Row", "Ligne"), rows.start + 1),
                 n => format!("{n} {}", tr("rows", "lignes")),
             };
-            (title, vec![
+            (
+                title,
                 vec![
-                    ("c-ins-above.svg", tr("Insert a row above", "Insérer une ligne au-dessus"), Box::new(InsertAbove)),
-                    ("c-ins-below.svg", tr("Insert a row below", "Insérer une ligne en dessous"), Box::new(InsertBelow)),
+                    vec![
+                        (
+                            "c-ins-above.svg",
+                            tr("Insert a row above", "Insérer une ligne au-dessus"),
+                            Box::new(InsertAbove),
+                        ),
+                        (
+                            "c-ins-below.svg",
+                            tr("Insert a row below", "Insérer une ligne en dessous"),
+                            Box::new(InsertBelow),
+                        ),
+                    ],
+                    vec![
+                        (
+                            "c-up.svg",
+                            TableOp::MoveRowUp.label(),
+                            Box::new(editor::TableMoveRowUp),
+                        ),
+                        (
+                            "c-down.svg",
+                            TableOp::MoveRowDown.label(),
+                            Box::new(editor::TableMoveRowDown),
+                        ),
+                    ],
+                    vec![(
+                        "copy.svg",
+                        TableOp::DuplicateRow.label(),
+                        Box::new(editor::TableDuplicateRow),
+                    )],
+                    vec![(
+                        "trash.svg",
+                        tr("Delete the rows", "Supprimer les lignes"),
+                        Box::new(DeleteRows),
+                    )],
                 ],
-                vec![
-                    ("c-up.svg", TableOp::MoveRowUp.label(), Box::new(editor::TableMoveRowUp)),
-                    ("c-down.svg", TableOp::MoveRowDown.label(), Box::new(editor::TableMoveRowDown)),
-                ],
-                vec![("copy.svg", TableOp::DuplicateRow.label(), Box::new(editor::TableDuplicateRow))],
-                vec![("trash.svg", tr("Delete the rows", "Supprimer les lignes"), Box::new(DeleteRows))],
-            ])
+            )
         } else {
             return Vec::new();
         };
-        let separator = || div().flex_none().w(px(1.)).h(px(16.)).mx(px(6.)).bg(t.border).into_any_element();
-        let mut out = vec![separator(), div().flex_none().mr_1().font_weight(FontWeight::BOLD).text_color(t.text).child(title).into_any_element()];
+        let separator = || {
+            div()
+                .flex_none()
+                .w(px(1.))
+                .h(px(16.))
+                .mx(px(6.))
+                .bg(t.border)
+                .into_any_element()
+        };
+        let mut out = vec![
+            separator(),
+            div()
+                .flex_none()
+                .mr_1()
+                .font_weight(FontWeight::BOLD)
+                .text_color(t.text)
+                .child(title)
+                .into_any_element(),
+        ];
         for (g, group) in groups.into_iter().enumerate() {
             if g > 0 {
-                out.push(div().flex_none().w(px(1.)).h(px(14.)).mx(px(3.)).bg(t.border).into_any_element());
+                out.push(
+                    div()
+                        .flex_none()
+                        .w(px(1.))
+                        .h(px(14.))
+                        .mx(px(3.))
+                        .bg(t.border)
+                        .into_any_element(),
+                );
             }
             for (icon, label, action) in group {
                 let name = action.name();
                 out.push(
-                    button(gpui::SharedString::from(format!("sheet-span-{name}")), icon, false, t)
-                        .debug_selector(move || format!("sheet-span-{name}"))
-                        .tooltip(tip(label, crate::ui::keys::of(cx, action.as_ref()), t))
-                        .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
-                        .into_any_element(),
+                    button(
+                        gpui::SharedString::from(format!("sheet-span-{name}")),
+                        icon,
+                        false,
+                        t,
+                    )
+                    .debug_selector(move || format!("sheet-span-{name}"))
+                    .tooltip(tip(label, crate::ui::keys::of(cx, action.as_ref()), t))
+                    .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
+                    .into_any_element(),
                 );
             }
         }
@@ -309,8 +486,27 @@ impl Sheet {
 
     /// Width of `text` shaped in `font` at `size` (scale 1).
     fn text_width(&self, window: &Window, text: &str, size: f32, font: gpui::Font) -> f32 {
-        let run = gpui::TextRun { len: text.len(), font, color: self.theme.text, background_color: None, underline: None, strikethrough: None };
-        f32::from(window.text_system().shape_line(gpui::SharedString::from(text.to_string()), self.theme.px(size), &[run], None).width).ceil() + 1.
+        let run = gpui::TextRun {
+            len: text.len(),
+            font,
+            color: self.theme.text,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        f32::from(
+            window
+                .text_system()
+                .shape_line(
+                    gpui::SharedString::from(text.to_string()),
+                    self.theme.px(size),
+                    &[run],
+                    None,
+                )
+                .width,
+        )
+        .ceil()
+            + 1.
     }
 
     /// "6 rows · 5 columns". The lone row of an empty table is only there to write in: it is not counted.
@@ -327,14 +523,32 @@ impl Sheet {
         let t = self.theme;
         let title = crate::platform::vault::stem(&self.path);
         let summary = self.summary_text();
-        let (delimiter, encoding, header) = (delimiter_option(self.format.delimiter), self.format.encoding.label().to_string(), tr("Header", "En-tête").to_string());
+        let (delimiter, encoding, header) = (
+            delimiter_option(self.format.delimiter),
+            self.format.encoding.label().to_string(),
+            tr("Header", "En-tête").to_string(),
+        );
         // The width of everything but the name: summary, pills (10 px each side), two icons, gaps, and the margins.
         let sans = || gpui::font(crate::ui::assets::sans());
-        let pills: f32 = [&delimiter, &encoding, &header].iter().map(|text| self.text_width(window, text, 12., sans()) + 20.).sum();
-        let fixed = self.text_width(window, &summary, 13., sans()) + pills + 2. * 28. + 8. * 4. + 16. * 4. + 24. + if self.client { 128. } else { 24. };
-        let serif = gpui::Font { weight: FontWeight::SEMIBOLD, ..gpui::font(crate::ui::assets::SERIF) };
+        let pills: f32 = [&delimiter, &encoding, &header]
+            .iter()
+            .map(|text| self.text_width(window, text, 12., sans()) + 20.)
+            .sum();
+        let fixed = self.text_width(window, &summary, 13., sans())
+            + pills
+            + 2. * 28.
+            + 8. * 4.
+            + 16. * 4.
+            + 24.
+            + if self.client { 128. } else { 24. };
+        let serif = gpui::Font {
+            weight: FontWeight::SEMIBOLD,
+            ..gpui::font(crate::ui::assets::SERIF)
+        };
         let room = (f32::from(self.body.size.width) + 48. - f32::from(t.px(fixed))).max(80.);
-        let title = crate::views::nav::ellipsize(&title, room, |s| self.text_width(window, s, 22., serif.clone()));
+        let title = crate::views::nav::ellipsize(&title, room, |s| {
+            self.text_width(window, s, 22., serif.clone())
+        });
         div()
             .flex_none()
             .pl(px(24.))
@@ -349,32 +563,70 @@ impl Sheet {
             .gap_x(px(16.))
             .gap_y(px(8.))
             .text_size(px(12.))
-            .child(widgets::page_head(t, "sheet-table", 22., title, summary).flex_none().when(self.client, |d| d.map(widgets::drag_window)))
+            .child(
+                widgets::page_head(t, "sheet-table", 22., title, summary)
+                    .flex_none()
+                    .when(self.client, |d| d.map(widgets::drag_window)),
+            )
             // Next to the table name: what is selected, and what can be done with it.
             .children(self.span_tools(cx))
-            .child(div().flex_1().min_w(px(8.)).h(px(26.)).when(self.client, |d| d.map(widgets::drag_window)))
-            .child(div().flex().gap_1().child(self.chip("sheet-delimiter", delimiter, false, Pick::Delimiter)).child(self.chip("sheet-encoding", encoding, false, Pick::Encoding)).child(self.chip("sheet-header", header, self.format.header, Pick::Header)))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(8.))
+                    .h(px(26.))
+                    .when(self.client, |d| d.map(widgets::drag_window)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap_1()
+                    .child(self.chip("sheet-delimiter", delimiter, false, Pick::Delimiter))
+                    .child(self.chip("sheet-encoding", encoding, false, Pick::Encoding))
+                    .child(self.chip("sheet-header", header, self.format.header, Pick::Header)),
+            )
             .child(
                 div()
                     .flex()
                     .gap_1()
                     .child(
-                        button("sheet-copy", if self.copied { "check.svg" } else { "copy.svg" }, false, t)
-                            .debug_selector(|| "sheet-copy".into())
-                            .tooltip(tip(tr("Copy the selection", "Copier la sélection"), crate::ui::keys::of(cx, &Copy), t))
-                            .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
+                        button(
+                            "sheet-copy",
+                            if self.copied { "check.svg" } else { "copy.svg" },
+                            false,
+                            t,
+                        )
+                        .debug_selector(|| "sheet-copy".into())
+                        .tooltip(tip(
+                            tr("Copy the selection", "Copier la sélection"),
+                            crate::ui::keys::of(cx, &Copy),
+                            t,
+                        ))
+                        .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
                     )
                     .child(
                         button("sheet-export", "export.svg", false, t)
                             .debug_selector(|| "sheet-export".into())
-                            .tooltip(tip(tr("Share / Export", "Partager / Exporter"), crate::ui::keys::of(cx, &crate::actions::ShareDocument), t))
-                            .on_click(|_, window, cx| window.dispatch_action(Box::new(crate::actions::ShareDocument), cx)),
+                            .tooltip(tip(
+                                tr("Share / Export", "Partager / Exporter"),
+                                crate::ui::keys::of(cx, &crate::actions::ShareDocument),
+                                t,
+                            ))
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(crate::actions::ShareDocument), cx)
+                            }),
                     ),
             )
     }
 
     /// A row of cells, from column `cols.start` to `cols.end` excluded.
-    pub(super) fn render_row(&self, row: usize, cols: Range<usize>, selected: &[(Range<usize>, Range<usize>)], head: bool) -> gpui::Div {
+    pub(super) fn render_row(
+        &self,
+        row: usize,
+        cols: Range<usize>,
+        selected: &[(Range<usize>, Range<usize>)],
+        head: bool,
+    ) -> gpui::Div {
         let t = self.theme;
         let editing = self.edit.is_some();
         let size = px(self.text_px());
@@ -385,32 +637,52 @@ impl Sheet {
             .h(px(ROW))
             .flex()
             .child(div().flex_none().w(px(self.xs[cols.start])))
-            .children(cols.clone().zip(self.table.cells(row, cols)).map(|(c, field)| {
-                let mut text = field.into_owned();
-                if text.len() > 400 {
-                    text.truncate(text.char_indices().nth(200).map_or(text.len(), |(i, _)| i));
-                }
-                let text = if text.contains(['\n', '\r']) { text.replace(['\r', '\n'], "↵") } else { text };
-                let inside = selected.iter().any(|(rows, cols)| rows.contains(&row) && cols.contains(&c));
-                div()
-                    .relative()
-                    .flex_none()
-                    .w(px(self.widths[c]))
-                    .h(px(ROW))
-                    .px(px(PAD))
-                    .flex()
-                    .items_center()
-                    .when(c + 1 != self.cols(), |d| d.border_r_1())
-                    .border_b_1()
-                    .border_color(t.code_bg)
-                    .when(self.mono.get(c) == Some(&true) && !head, |d| d.font_family(mono()))
-                    .when(head, |d| d.bg(t.code_bg).font_weight(FontWeight::SEMIBOLD).when(c + 1 == self.cols(), |d| d.rounded_tr(t.band())))
-                    .when(inside, |d| d.bg(t.selection))
-                    .child(div().min_w_0().truncate().child(text))
-                    .when(self.cursor == (row, c) && !editing, |d| {
-                        d.child(div().absolute().inset_0().border_2().border_color(t.accent))
-                    })
-            }))
+            .children(
+                cols.clone()
+                    .zip(self.table.cells(row, cols))
+                    .map(|(c, field)| {
+                        let mut text = field.into_owned();
+                        if text.len() > 400 {
+                            text.truncate(
+                                text.char_indices().nth(200).map_or(text.len(), |(i, _)| i),
+                            );
+                        }
+                        let text = if text.contains(['\n', '\r']) {
+                            text.replace(['\r', '\n'], "↵")
+                        } else {
+                            text
+                        };
+                        let inside = selected
+                            .iter()
+                            .any(|(rows, cols)| rows.contains(&row) && cols.contains(&c));
+                        div()
+                            .relative()
+                            .flex_none()
+                            .w(px(self.widths[c]))
+                            .h(px(ROW))
+                            .px(px(PAD))
+                            .flex()
+                            .items_center()
+                            .when(c + 1 != self.cols(), |d| d.border_r_1())
+                            .border_b_1()
+                            .border_color(t.code_bg)
+                            .when(self.mono.get(c) == Some(&true) && !head, |d| {
+                                d.font_family(mono())
+                            })
+                            .when(head, |d| {
+                                d.bg(t.code_bg)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .when(c + 1 == self.cols(), |d| d.rounded_tr(t.band()))
+                            })
+                            .when(inside, |d| d.bg(t.selection))
+                            .child(div().min_w_0().truncate().child(text))
+                            .when(self.cursor == (row, c) && !editing, |d| {
+                                d.child(
+                                    div().absolute().inset_0().border_2().border_color(t.accent),
+                                )
+                            })
+                    }),
+            )
             .text_size(size)
     }
 
@@ -439,7 +711,10 @@ impl Sheet {
     pub(super) fn render_bars(&self) -> impl IntoElement {
         let t = self.theme;
         let (mx, my) = self.max_scroll();
-        let (w, h) = (f32::from(self.body.size.width), f32::from(self.body.size.height));
+        let (w, h) = (
+            f32::from(self.body.size.width),
+            f32::from(self.body.size.height),
+        );
         let thumb = |track: f32, scroll: f32, max: f32, shown: f32| {
             let len = (track * shown / (shown + max)).max(24.);
             (scroll / max * (track - len), len)
@@ -447,11 +722,31 @@ impl Sheet {
         div()
             .when(my > 0., |d| {
                 let (at, len) = thumb(h - ROW, self.scroll.1, my, self.view().1);
-                d.child(div().absolute().right(px(2.)).top(px(ROW + at)).w(px(6.)).h(px(len)).rounded_full().cursor_pointer().bg(t.dim.opacity(0.45)))
+                d.child(
+                    div()
+                        .absolute()
+                        .right(px(2.))
+                        .top(px(ROW + at))
+                        .w(px(6.))
+                        .h(px(len))
+                        .rounded_full()
+                        .cursor_pointer()
+                        .bg(t.dim.opacity(0.45)),
+                )
             })
             .when(mx > 0., |d| {
                 let (at, len) = thumb(w - GUTTER, self.scroll.0, mx, self.view().0);
-                d.child(div().absolute().bottom(px(2.)).left(px(GUTTER + at)).h(px(6.)).w(px(len)).rounded_full().cursor_pointer().bg(t.dim.opacity(0.45)))
+                d.child(
+                    div()
+                        .absolute()
+                        .bottom(px(2.))
+                        .left(px(GUTTER + at))
+                        .h(px(6.))
+                        .w(px(len))
+                        .rounded_full()
+                        .cursor_pointer()
+                        .bg(t.dim.opacity(0.45)),
+                )
             })
     }
 }

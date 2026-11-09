@@ -1,12 +1,12 @@
 //! A Mermaid `classDiagram`, `sequenceDiagram` or `stateDiagram` turned into a canvas diagram, to be
-//! carried on by hand. A bridge, not a renderer: what Bref can draw is kept (classes with their members
+//! carried on by hand. A bridge, not a renderer: what Inkuno can draw is kept (classes with their members
 //! and relations, lifelines with their messages and combined fragments, states with their transitions),
 //! the lines it does not understand are left out and counted. Pure functions.
 
 use std::collections::HashMap;
 
 use super::{
-    diagram::{fit, layered, Diagram, End, Form, Head, LANE, RULE, Route, snap},
+    diagram::{Diagram, End, Form, Head, LANE, RULE, Route, fit, layered, snap},
     relation::Relation,
 };
 
@@ -39,10 +39,12 @@ fn body(source: &str) -> Vec<&str> {
     out
 }
 
-/// What kind of diagram this source is, if Bref can take it.
+/// What kind of diagram this source is, if Inkuno can take it.
 pub fn kind(source: &str) -> Option<Kind> {
     let first = body(source).into_iter().next()?;
-    let word = first.split(|c: char| c.is_whitespace() || c == ';').next()?;
+    let word = first
+        .split(|c: char| c.is_whitespace() || c == ';')
+        .next()?;
     match word {
         "classDiagram" | "classDiagram-v2" => Some(Kind::Class),
         "sequenceDiagram" => Some(Kind::Sequence),
@@ -64,7 +66,11 @@ pub fn to_diagram(source: &str) -> Option<Converted> {
 
 /// The text as one line: Mermaid breaks lines with `<br>`.
 fn flat(text: &str) -> String {
-    text.replace("<br/>", " ").replace("<br />", " ").replace("<br>", " ").trim().to_string()
+    text.replace("<br/>", " ")
+        .replace("<br />", " ")
+        .replace("<br>", " ")
+        .trim()
+        .to_string()
 }
 
 /// A name without its quotes.
@@ -83,7 +89,12 @@ struct Class {
 
 impl Class {
     fn new(name: &str) -> Class {
-        Class { name: name.to_string(), note: None, attributes: Vec::new(), operations: Vec::new() }
+        Class {
+            name: name.to_string(),
+            note: None,
+            attributes: Vec::new(),
+            operations: Vec::new(),
+        }
     }
 
     /// `+String name` is `+ name: String`, `+getName() String` is `+ getName(): String`.
@@ -99,7 +110,11 @@ impl Class {
         if let Some(close) = rest.find(')').filter(|_| rest.contains('(')) {
             let (head, tail) = rest.split_at(close + 1);
             let tail = tail.trim().trim_start_matches(':').trim();
-            let text = if tail.is_empty() { format!("{visibility}{head}") } else { format!("{visibility}{head}: {tail}") };
+            let text = if tail.is_empty() {
+                format!("{visibility}{head}")
+            } else {
+                format!("{visibility}{head}: {tail}")
+            };
             self.operations.push(text);
             return;
         }
@@ -169,8 +184,21 @@ fn arrow_in(line: &str) -> Option<(usize, &'static (&'static str, Relation, bool
         }
         // Longest first: `<|--` before `--`.
         // An arrow stands between spaces (or quotes): `Foo--Bar` is not one.
-        let before = line[..at].chars().next_back().is_none_or(|c| c.is_whitespace() || c == '"');
-        let best = ARROWS.iter().filter(|(a, ..)| before && line[at..].starts_with(a) && line[at + a.len()..].chars().next().is_none_or(|c| c.is_whitespace() || c == '"')).max_by_key(|(a, ..)| a.len());
+        let before = line[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|c| c.is_whitespace() || c == '"');
+        let best = ARROWS
+            .iter()
+            .filter(|(a, ..)| {
+                before
+                    && line[at..].starts_with(a)
+                    && line[at + a.len()..]
+                        .chars()
+                        .next()
+                        .is_none_or(|c| c.is_whitespace() || c == '"')
+            })
+            .max_by_key(|(a, ..)| a.len());
         if let Some(found) = best {
             return Some((at, found));
         }
@@ -185,10 +213,13 @@ fn class(lines: &[&str]) -> Converted {
     let mut links: Vec<Rel> = Vec::new();
     let index = |classes: &mut Vec<Class>, name: &str| -> usize {
         let name = flat(unquoted(name));
-        classes.iter().position(|c| c.name == name).unwrap_or_else(|| {
-            classes.push(Class::new(&name));
-            classes.len() - 1
-        })
+        classes
+            .iter()
+            .position(|c| c.name == name)
+            .unwrap_or_else(|| {
+                classes.push(Class::new(&name));
+                classes.len() - 1
+            })
     };
     for line in lines {
         let line = line.trim_end_matches(';').trim();
@@ -223,11 +254,25 @@ fn class(lines: &[&str]) -> Converted {
             }
             let (a, b) = (index(&mut classes, &a), index(&mut classes, &b));
             // The diamond of a whole is at the start of the link; a parent is the end of its link.
-            let (from, to, m_from, m_to) = if *back { (b, a, mb, ma) } else { (a, b, ma, mb) };
+            let (from, to, m_from, m_to) = if *back {
+                (b, a, mb, ma)
+            } else {
+                (a, b, ma, mb)
+            };
             let upper = matches!(relation, Relation::Generalization | Relation::Realization);
             // A dotted association is a dashed line.
-            links.push(Rel { from, to, relation: *relation, dashed: arrow == &".." || arrow.contains("()") && arrow.contains(".."), upper, start: m_from, end: m_to, text: label });
-        } else if let Some((name, member)) = line.split_once(" : ").or_else(|| line.split_once(':')) {
+            links.push(Rel {
+                from,
+                to,
+                relation: *relation,
+                dashed: arrow == &".." || arrow.contains("()") && arrow.contains(".."),
+                upper,
+                start: m_from,
+                end: m_to,
+                text: label,
+            });
+        } else if let Some((name, member)) = line.split_once(" : ").or_else(|| line.split_once(':'))
+        {
             let i = index(&mut classes, name);
             classes[i].member(member);
         } else {
@@ -237,7 +282,17 @@ fn class(lines: &[&str]) -> Converted {
     let mut d = Diagram::blank();
     let lines: Vec<Vec<String>> = classes.iter().map(Class::lines).collect();
     let sizes: Vec<(f32, f32)> = lines.iter().map(|l| fit(l, (140., 50.))).collect();
-    let edges: Vec<(usize, usize)> = links.iter().filter(|l| l.from != l.to).map(|l| if l.upper { (l.to, l.from) } else { (l.from, l.to) }).collect();
+    let edges: Vec<(usize, usize)> = links
+        .iter()
+        .filter(|l| l.from != l.to)
+        .map(|l| {
+            if l.upper {
+                (l.to, l.from)
+            } else {
+                (l.from, l.to)
+            }
+        })
+        .collect();
     let (at, _) = layered(&sizes, &edges);
     let ids: Vec<u32> = (0..classes.len())
         .map(|i| {
@@ -249,21 +304,32 @@ fn class(lines: &[&str]) -> Converted {
         })
         .collect();
     for rel in links {
-        let id = d.add_link(End::Shape(ids[rel.from]), End::Shape(ids[rel.to]), Head::None, Route::Elbow);
+        let id = d.add_link(
+            End::Shape(ids[rel.from]),
+            End::Shape(ids[rel.to]),
+            Head::None,
+            Route::Elbow,
+        );
         if let Some(link) = d.link_mut(id) {
             rel.relation.apply(link);
             link.dashed |= rel.dashed;
             (link.start_text, link.end_text, link.text) = (rel.start, rel.end, rel.text);
         }
     }
-    Converted { diagram: d, skipped }
+    Converted {
+        diagram: d,
+        skipped,
+    }
 }
 
 /// The class and its multiplicity at the left of an arrow: `A "1"`.
 fn end_of_left(side: &str) -> (String, String) {
     let side = side.trim();
     match side.find('"') {
-        Some(q) => (side[..q].trim().to_string(), unquoted(&side[q..]).to_string()),
+        Some(q) => (
+            side[..q].trim().to_string(),
+            unquoted(&side[q..]).to_string(),
+        ),
         None => (side.to_string(), String::new()),
     }
 }
@@ -317,15 +383,24 @@ fn sequence(lines: &[&str]) -> Converted {
         let after = line[word.len()..].trim();
         match word {
             "participant" | "actor" => {
-                let (id, label) = after.split_once(" as ").map_or((after, after), |(i, l)| (i, l));
+                let (id, label) = after
+                    .split_once(" as ")
+                    .map_or((after, after), |(i, l)| (i, l));
                 let i = lifeline(&mut names, id);
                 names[i].1 = flat(label);
             }
             "autonumber" => numbered = true,
             "activate" | "deactivate" | "title" | "box" | "link" | "links" => {}
             "loop" | "alt" | "opt" | "par" | "critical" | "break" | "rect" => {
-                let operator = ["loop", "alt", "opt", "par", "critical", "break"].into_iter().find(|o| *o == word);
-                stack.push(Block { operator, guards: vec![flat(after)], start: messages.len(), splits: vec![messages.len()] });
+                let operator = ["loop", "alt", "opt", "par", "critical", "break"]
+                    .into_iter()
+                    .find(|o| *o == word);
+                stack.push(Block {
+                    operator,
+                    guards: vec![flat(after)],
+                    start: messages.len(),
+                    splits: vec![messages.len()],
+                });
             }
             "else" | "and" | "option" => match stack.last_mut() {
                 Some(block) => {
@@ -341,10 +416,19 @@ fn sequence(lines: &[&str]) -> Converted {
             _ => {
                 // `Alice->>+Bob: text`: the arrow is the first of the table found outside the text.
                 let (head, text) = line.split_once(':').map_or((line, ""), |(h, t)| (h, t));
-                let found = MESSAGES.iter().filter_map(|(a, r)| head.find(a).map(|at| (at, a, r))).min_by_key(|(at, a, _)| (*at, usize::MAX - a.len()));
+                let found = MESSAGES
+                    .iter()
+                    .filter_map(|(a, r)| head.find(a).map(|at| (at, a, r)))
+                    .min_by_key(|(at, a, _)| (*at, usize::MAX - a.len()));
                 match found {
                     Some((at, arrow, relation)) => {
-                        let (from, to) = (head[..at].trim(), head[at + arrow.len()..].trim().trim_start_matches(['+', '-']).trim());
+                        let (from, to) = (
+                            head[..at].trim(),
+                            head[at + arrow.len()..]
+                                .trim()
+                                .trim_start_matches(['+', '-'])
+                                .trim(),
+                        );
                         if from.is_empty() || to.is_empty() {
                             skipped += 1;
                             continue;
@@ -379,7 +463,12 @@ fn sequence(lines: &[&str]) -> Converted {
     let ids: Vec<u32> = messages
         .iter()
         .map(|(a, b, relation, text)| {
-            let id = d.add_link(End::Life(lives[*a]), End::Life(lives[*b]), Head::None, Route::Straight);
+            let id = d.add_link(
+                End::Life(lives[*a]),
+                End::Life(lives[*b]),
+                Head::None,
+                Route::Straight,
+            );
             if let Some(link) = d.link_mut(id) {
                 relation.apply(link);
                 link.text = text.clone();
@@ -400,7 +489,10 @@ fn sequence(lines: &[&str]) -> Converted {
             _ if operator == "alt" => "[else]".to_string(),
             _ => String::new(),
         };
-        let text = std::iter::once(operator.to_string()).chain(block.guards.iter().enumerate().map(|(i, g)| guard(i, g))).collect::<Vec<_>>().join("\n");
+        let text = std::iter::once(operator.to_string())
+            .chain(block.guards.iter().enumerate().map(|(i, g)| guard(i, g)))
+            .collect::<Vec<_>>()
+            .join("\n");
         let Some(fragment) = d.wrap(&ids[block.start..end], &text) else {
             skipped += 1;
             continue;
@@ -415,7 +507,10 @@ fn sequence(lines: &[&str]) -> Converted {
         }
     }
     d.fit_sequence();
-    Converted { diagram: d, skipped }
+    Converted {
+        diagram: d,
+        skipped,
+    }
 }
 
 // ------------------------------------------------------------------- states
@@ -450,20 +545,35 @@ struct States {
 impl States {
     fn find(&mut self, id: &str, scope: Option<usize>) -> usize {
         let id = unquoted(id);
-        if let Some(i) = self.nodes.iter().position(|n| n.id == id && !matches!(n.kind, Node::Start | Node::End)) {
+        if let Some(i) = self
+            .nodes
+            .iter()
+            .position(|n| n.id == id && !matches!(n.kind, Node::Start | Node::End))
+        {
             return i;
         }
         self.add(id, id, Node::State, scope)
     }
 
     fn add(&mut self, id: &str, label: &str, kind: Node, scope: Option<usize>) -> usize {
-        self.nodes.push(StateNode { id: id.to_string(), label: flat(label), notes: Vec::new(), kind, scope, holds: false });
+        self.nodes.push(StateNode {
+            id: id.to_string(),
+            label: flat(label),
+            notes: Vec::new(),
+            kind,
+            scope,
+            holds: false,
+        });
         self.nodes.len() - 1
     }
 
     /// The `[*]` of a scope: its start, or its end.
     fn pseudo(&mut self, kind: Node, scope: Option<usize>) -> usize {
-        match self.nodes.iter().position(|n| n.kind == kind && n.scope == scope) {
+        match self
+            .nodes
+            .iter()
+            .position(|n| n.kind == kind && n.scope == scope)
+        {
             Some(i) => i,
             None => self.add("[*]", "", kind, scope),
         }
@@ -498,11 +608,18 @@ impl States {
 
     /// The nodes of a scope, placed by layers, and the size of what they take.
     fn arrange(&self, scope: Option<usize>) -> Placed {
-        let members: Vec<usize> = (0..self.nodes.len()).filter(|i| self.nodes[*i].scope == scope).collect();
+        let members: Vec<usize> = (0..self.nodes.len())
+            .filter(|i| self.nodes[*i].scope == scope)
+            .collect();
         let sizes: Vec<(f32, f32)> = members.iter().map(|i| self.size(*i)).collect();
         // A transition between nodes of other scopes counts for the scope that holds them both.
         let place = |n: usize| members.iter().position(|m| self.within(n, *m));
-        let edges: Vec<(usize, usize)> = self.edges.iter().filter_map(|(a, b, _)| Some((place(*a)?, place(*b)?))).filter(|(a, b)| a != b).collect();
+        let edges: Vec<(usize, usize)> = self
+            .edges
+            .iter()
+            .filter_map(|(a, b, _)| Some((place(*a)?, place(*b)?)))
+            .filter(|(a, b)| a != b)
+            .collect();
         let (at, total) = layered(&sizes, &edges);
         (members.into_iter().zip(at).collect(), total)
     }
@@ -521,7 +638,13 @@ impl States {
     }
 
     /// Draws the nodes of a scope with their corner at `(x, y)`; `ids[i]` is the shape of node `i`.
-    fn draw(&self, d: &mut Diagram, scope: Option<usize>, (x, y): (f32, f32), ids: &mut HashMap<usize, u32>) {
+    fn draw(
+        &self,
+        d: &mut Diagram,
+        scope: Option<usize>,
+        (x, y): (f32, f32),
+        ids: &mut HashMap<usize, u32>,
+    ) {
         let (placed, _) = self.arrange(scope);
         for (i, (dx, dy)) in placed {
             let (w, h) = self.size(i);
@@ -552,7 +675,10 @@ impl States {
 }
 
 fn state(lines: &[&str]) -> Converted {
-    let mut s = States { nodes: Vec::new(), edges: Vec::new() };
+    let mut s = States {
+        nodes: Vec::new(),
+        edges: Vec::new(),
+    };
     let mut scopes: Vec<usize> = Vec::new();
     let mut skipped = 0;
     for line in lines {
@@ -589,8 +715,16 @@ fn state(lines: &[&str]) -> Converted {
         } else if let Some((from, rest)) = line.split_once("-->") {
             let (to, text) = rest.split_once(':').map_or((rest, ""), |(t, x)| (t, x));
             let (from, to) = (from.trim(), to.trim());
-            let a = if from == "[*]" { s.pseudo(Node::Start, scope) } else { s.find(from, scope) };
-            let b = if to == "[*]" { s.pseudo(Node::End, scope) } else { s.find(to, scope) };
+            let a = if from == "[*]" {
+                s.pseudo(Node::Start, scope)
+            } else {
+                s.find(from, scope)
+            };
+            let b = if to == "[*]" {
+                s.pseudo(Node::End, scope)
+            } else {
+                s.find(to, scope)
+            };
             s.edges.push((a, b, flat(text)));
         } else if let Some((id, text)) = line.split_once(':') {
             let i = s.find(id.trim(), scope);
@@ -603,13 +737,23 @@ fn state(lines: &[&str]) -> Converted {
     let mut ids = HashMap::new();
     s.draw(&mut d, None, (0., 0.), &mut ids);
     for (a, b, text) in &s.edges {
-        let (Some(from), Some(to)) = (ids.get(a), ids.get(b)) else { continue };
-        let id = d.add_link(End::Shape(*from), End::Shape(*to), Head::Arrow, Route::Elbow);
+        let (Some(from), Some(to)) = (ids.get(a), ids.get(b)) else {
+            continue;
+        };
+        let id = d.add_link(
+            End::Shape(*from),
+            End::Shape(*to),
+            Head::Arrow,
+            Route::Elbow,
+        );
         if let Some(link) = d.link_mut(id) {
             link.text = text.clone();
         }
     }
-    Converted { diagram: d, skipped }
+    Converted {
+        diagram: d,
+        skipped,
+    }
 }
 
 #[cfg(test)]
@@ -627,10 +771,12 @@ mod tests {
     }
 
     fn boxes_apart(d: &Diagram) {
-        let top: Vec<&crate::logic::diagram::Shape> = d.shapes.iter().filter(|s| s.parent.is_none()).collect();
+        let top: Vec<&crate::logic::diagram::Shape> =
+            d.shapes.iter().filter(|s| s.parent.is_none()).collect();
         for (i, a) in top.iter().enumerate() {
             for b in &top[i + 1..] {
-                let apart = a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+                let apart =
+                    a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
                 assert!(apart, "{a:?} {b:?}");
             }
         }
@@ -639,12 +785,29 @@ mod tests {
     #[test]
     fn the_kind_is_the_first_line_that_counts() {
         assert_eq!(kind("classDiagram\n A <|-- B"), Some(Kind::Class));
-        assert_eq!(kind("%% a comment\n\n  sequenceDiagram"), Some(Kind::Sequence));
-        assert_eq!(kind("---\ntitle: x\n---\nstateDiagram-v2\n[*] --> A"), Some(Kind::State));
+        assert_eq!(
+            kind("%% a comment\n\n  sequenceDiagram"),
+            Some(Kind::Sequence)
+        );
+        assert_eq!(
+            kind("---\ntitle: x\n---\nstateDiagram-v2\n[*] --> A"),
+            Some(Kind::State)
+        );
         assert_eq!(kind("stateDiagram"), Some(Kind::State));
         // Not one of the three: a flowchart, a word, nothing.
-        for source in ["graph TD\n A --> B", "flowchart LR", "pie title x", "", "   \n\n", "classDiagrams", "sequence"] {
-            assert!(kind(source).is_none() && to_diagram(source).is_none(), "{source:?}");
+        for source in [
+            "graph TD\n A --> B",
+            "flowchart LR",
+            "pie title x",
+            "",
+            "   \n\n",
+            "classDiagrams",
+            "sequence",
+        ] {
+            assert!(
+                kind(source).is_none() && to_diagram(source).is_none(),
+                "{source:?}"
+            );
         }
     }
 
@@ -674,21 +837,54 @@ mod tests {
         );
         let d = &c.diagram;
         assert_eq!(c.skipped, 1, "only the note is not understood");
-        let text = |name: &str| d.shapes.iter().find(|s| s.text.lines().any(|l| l == name)).unwrap();
+        let text = |name: &str| {
+            d.shapes
+                .iter()
+                .find(|s| s.text.lines().any(|l| l == name))
+                .unwrap()
+        };
         // Members are in compartments, the type after the name, the stereotype first.
-        assert_eq!(text("Animal").text, "«abstract»\nAnimal\n---\n+ name: String\n+ age: int\n---\n+ eat(food): bool\n- sleep()");
+        assert_eq!(
+            text("Animal").text,
+            "«abstract»\nAnimal\n---\n+ name: String\n+ age: int\n---\n+ eat(food): bool\n- sleep()"
+        );
         assert_eq!(text("Duck").text, "Duck\n---\n+ swim()");
-        let rel = |from: &str, to: &str| d.links.iter().find(|l| matches!((l.from, l.to), (End::Shape(a), End::Shape(b)) if a == text(from).id && b == text(to).id)).unwrap();
+        let rel = |from: &str, to: &str| {
+            d.links.iter().find(|l| matches!((l.from, l.to), (End::Shape(a), End::Shape(b)) if a == text(from).id && b == text(to).id)).unwrap()
+        };
         // A parent is the end of its arrow; a whole is its start; the multiplicities and the label come along.
-        assert_eq!(Relation::of(rel("Duck", "Animal")), Some(Relation::Generalization));
+        assert_eq!(
+            Relation::of(rel("Duck", "Animal")),
+            Some(Relation::Generalization)
+        );
         assert_eq!(rel("Fish", "Animal").text, "is a");
         let lays = rel("Duck", "Egg");
-        assert_eq!((Relation::of(lays), lays.start_text.as_str(), lays.end_text.as_str(), lays.text.as_str()), (Some(Relation::Navigable), "1", "*", "lays"));
-        assert_eq!(Relation::of(rel("Pond", "Duck")), Some(Relation::Aggregation));
+        assert_eq!(
+            (
+                Relation::of(lays),
+                lays.start_text.as_str(),
+                lays.end_text.as_str(),
+                lays.text.as_str()
+            ),
+            (Some(Relation::Navigable), "1", "*", "lays")
+        );
+        assert_eq!(
+            Relation::of(rel("Pond", "Duck")),
+            Some(Relation::Aggregation)
+        );
         let farm = rel("Farm", "Pond");
-        assert_eq!((Relation::of(farm), farm.end_text.as_str()), (Some(Relation::Composition), "2..*"));
-        assert_eq!(Relation::of(rel("Duck", "Water")), Some(Relation::Dependency));
-        assert_eq!(Relation::of(rel("Duck", "Fish")), Some(Relation::Association));
+        assert_eq!(
+            (Relation::of(farm), farm.end_text.as_str()),
+            (Some(Relation::Composition), "2..*")
+        );
+        assert_eq!(
+            Relation::of(rel("Duck", "Water")),
+            Some(Relation::Dependency)
+        );
+        assert_eq!(
+            Relation::of(rel("Duck", "Fish")),
+            Some(Relation::Association)
+        );
         // The parent is above its children, and nothing overlaps.
         assert!(text("Animal").y < text("Duck").y && text("Animal").y < text("Fish").y);
         boxes_apart(d);
@@ -723,22 +919,75 @@ mod tests {
         let d = &c.diagram;
         assert!(d.numbered);
         assert_eq!(c.skipped, 2, "the note and the end with no beginning");
-        let lives: Vec<&str> = d.shapes.iter().filter(|s| s.form == Form::Lifeline).map(|s| s.text.as_str()).collect();
+        let lives: Vec<&str> = d
+            .shapes
+            .iter()
+            .filter(|s| s.form == Form::Lifeline)
+            .map(|s| s.text.as_str())
+            .collect();
         assert_eq!(lives, ["Client", "Server", "DB"]);
-        let texts: Vec<&str> = d.messages().iter().map(|id| d.link(*id).unwrap().text.as_str()).collect();
-        assert_eq!(texts, ["login()", "token", "refuse", "retry", "log", "save"]);
-        let relations: Vec<Option<Relation>> = d.messages().iter().map(|id| Relation::of(d.link(*id).unwrap())).collect();
-        assert_eq!(relations[..4], [Some(Relation::Sync), Some(Relation::Dependency), Some(Relation::NonNavigable), Some(Relation::Navigable)]);
+        let texts: Vec<&str> = d
+            .messages()
+            .iter()
+            .map(|id| d.link(*id).unwrap().text.as_str())
+            .collect();
+        assert_eq!(
+            texts,
+            ["login()", "token", "refuse", "retry", "log", "save"]
+        );
+        let relations: Vec<Option<Relation>> = d
+            .messages()
+            .iter()
+            .map(|id| Relation::of(d.link(*id).unwrap()))
+            .collect();
+        assert_eq!(
+            relations[..4],
+            [
+                Some(Relation::Sync),
+                Some(Relation::Dependency),
+                Some(Relation::NonNavigable),
+                Some(Relation::Navigable)
+            ]
+        );
         // alt with its two operands, a loop inside the second, an opt of one message; the rect is only a colour.
-        let fragments: Vec<&str> = d.shapes.iter().filter(|s| s.form == Form::Fragment).map(|s| s.text.as_str()).collect();
-        assert_eq!(fragments, ["alt\n[known]\n[unknown]", "loop\n[3 times]", "opt\n"]);
-        let held = |text: &str| d.link(d.messages()[texts.iter().position(|t| *t == text).unwrap()]).map(|l| (l.holder.is_some(), l.operand)).unwrap();
-        assert_eq!((held("login()"), held("token"), held("refuse"), held("retry"), held("save")), ((false, 0), (true, 0), (true, 1), (true, 0), (false, 0)));
+        let fragments: Vec<&str> = d
+            .shapes
+            .iter()
+            .filter(|s| s.form == Form::Fragment)
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(
+            fragments,
+            ["alt\n[known]\n[unknown]", "loop\n[3 times]", "opt\n"]
+        );
+        let held = |text: &str| {
+            d.link(d.messages()[texts.iter().position(|t| *t == text).unwrap()])
+                .map(|l| (l.holder.is_some(), l.operand))
+                .unwrap()
+        };
+        assert_eq!(
+            (
+                held("login()"),
+                held("token"),
+                held("refuse"),
+                held("retry"),
+                held("save")
+            ),
+            ((false, 0), (true, 0), (true, 1), (true, 0), (false, 0))
+        );
         let alt = d.shapes.iter().find(|s| s.text.starts_with("alt")).unwrap();
-        let lp = d.shapes.iter().find(|s| s.text.starts_with("loop")).unwrap();
+        let lp = d
+            .shapes
+            .iter()
+            .find(|s| s.text.starts_with("loop"))
+            .unwrap();
         assert_eq!((lp.parent, lp.operand), (Some(alt.id), 1));
         // Messages are in order, apart, each lower than the one before.
-        let ys: Vec<f32> = d.messages().iter().map(|id| d.message_y(*id).unwrap()).collect();
+        let ys: Vec<f32> = d
+            .messages()
+            .iter()
+            .map(|id| d.message_y(*id).unwrap())
+            .collect();
         assert!(ys.windows(2).all(|w| w[1] > w[0] + 20.), "{ys:?}");
     }
 
@@ -770,30 +1019,78 @@ mod tests {
         );
         let d = &c.diagram;
         assert_eq!(c.skipped, 1, "the line of regions only");
-        let by = |text: &str| d.shapes.iter().find(|s| s.text.lines().next() == Some(text)).unwrap();
+        let by = |text: &str| {
+            d.shapes
+                .iter()
+                .find(|s| s.text.lines().next() == Some(text))
+                .unwrap()
+        };
         assert_eq!(by("Still").text, "Still\n---\nis at rest");
         assert_eq!(by("Long name").form, Form::Round);
-        assert_eq!((by("Active").form, by("Run").parent), (Form::Composite, Some(by("Active").id)));
+        assert_eq!(
+            (by("Active").form, by("Run").parent),
+            (Form::Composite, Some(by("Active").id))
+        );
         // One start and one end for the scope, one for the composite; they are held by it.
         let count = |form| d.shapes.iter().filter(|s| s.form == form).count();
-        assert_eq!((count(Form::Dot), count(Form::Final), count(Form::Bar), count(Form::Branch)), (2, 2, 1, 1));
-        assert_eq!(d.shapes.iter().filter(|s| s.parent == Some(by("Active").id)).count(), 3);
+        assert_eq!(
+            (
+                count(Form::Dot),
+                count(Form::Final),
+                count(Form::Bar),
+                count(Form::Branch)
+            ),
+            (2, 2, 1, 1)
+        );
+        assert_eq!(
+            d.shapes
+                .iter()
+                .filter(|s| s.parent == Some(by("Active").id))
+                .count(),
+            3
+        );
         let push = d.links.iter().find(|l| l.text == "push").unwrap();
         assert_eq!(push.end, Head::Arrow);
         // The states of the scope do not overlap each other, and the composite holds what it holds.
         boxes_apart(d);
         let active = by("Active");
-        assert!(d.shapes.iter().filter(|s| s.parent == Some(active.id)).all(|s| s.x >= active.x && s.y >= active.y + LANE && s.x + s.w <= active.x + active.w && s.y + s.h <= active.y + active.h));
+        assert!(
+            d.shapes
+                .iter()
+                .filter(|s| s.parent == Some(active.id))
+                .all(|s| s.x >= active.x
+                    && s.y >= active.y + LANE
+                    && s.x + s.w <= active.x + active.w
+                    && s.y + s.h <= active.y + active.h)
+        );
     }
 
     #[test]
     fn what_cannot_be_read_is_skipped_and_never_breaks_the_rest() {
         // Only the header; the header and garbage; an unclosed block and an unclosed class; a loop of fragments left open.
-        for source in ["classDiagram", "sequenceDiagram", "stateDiagram", "classDiagram\n???\n{{{\n}}}", "sequenceDiagram\nloop forever\nA->>B: x\nalt\nB->>A: y", "classDiagram\nclass A {\n+x", "stateDiagram\nstate A {\nstate B {\nA --> B", "stateDiagram\n} \n}", "sequenceDiagram\nelse\nend\nend"] {
+        for source in [
+            "classDiagram",
+            "sequenceDiagram",
+            "stateDiagram",
+            "classDiagram\n???\n{{{\n}}}",
+            "sequenceDiagram\nloop forever\nA->>B: x\nalt\nB->>A: y",
+            "classDiagram\nclass A {\n+x",
+            "stateDiagram\nstate A {\nstate B {\nA --> B",
+            "stateDiagram\n} \n}",
+            "sequenceDiagram\nelse\nend\nend",
+        ] {
             let c = made(source);
             let _ = c.skipped;
         }
-        assert!(made("sequenceDiagram\nloop forever\nA->>B: x\nalt\nB->>A: y").diagram.shapes.iter().filter(|s| s.form == Form::Fragment).count() == 2);
+        assert!(
+            made("sequenceDiagram\nloop forever\nA->>B: x\nalt\nB->>A: y")
+                .diagram
+                .shapes
+                .iter()
+                .filter(|s| s.form == Form::Fragment)
+                .count()
+                == 2
+        );
         // A block with no message is not drawn, and says so.
         assert_eq!(made("sequenceDiagram\nloop x\nend\nA->>B: m").skipped, 1);
         // Names with accents, CJK, emoji, `|`, `\`; a name that is only an arrow; a message with a colon in its text.
@@ -814,7 +1111,11 @@ mod tests {
     fn a_big_diagram_is_made_in_no_time() {
         let mut classes = String::from("classDiagram\n");
         for i in 0..500 {
-            classes += &format!("class C{i} {{\n+int a{i}\n+run()\n}}\nC{} <|-- C{i}\nC{i} --> C{}\n", i / 2, (i * 7) % 500);
+            classes += &format!(
+                "class C{i} {{\n+int a{i}\n+run()\n}}\nC{} <|-- C{i}\nC{i} --> C{}\n",
+                i / 2,
+                (i * 7) % 500
+            );
         }
         let mut sequence = String::from("sequenceDiagram\n");
         for i in 0..800 {
@@ -827,12 +1128,23 @@ mod tests {
         for i in 0..500 {
             states += &format!("S{i} --> S{} : e{i}\nS{i} --> S{}\n", i + 1, (i * 3) % 500);
         }
-        for (name, source) in [("class", classes), ("sequence", sequence), ("state", states)] {
+        for (name, source) in [
+            ("class", classes),
+            ("sequence", sequence),
+            ("state", states),
+        ] {
             let started = std::time::Instant::now();
             let c = to_diagram(&source).unwrap();
             let took = started.elapsed();
-            assert!(!c.diagram.shapes.is_empty() && took.as_secs_f32() < 5., "{name}: {took:?}");
-            eprintln!("{name}: {} shapes, {} arrows in {took:?}", c.diagram.shapes.len(), c.diagram.links.len());
+            assert!(
+                !c.diagram.shapes.is_empty() && took.as_secs_f32() < 5.,
+                "{name}: {took:?}"
+            );
+            eprintln!(
+                "{name}: {} shapes, {} arrows in {took:?}",
+                c.diagram.shapes.len(),
+                c.diagram.links.len()
+            );
         }
     }
 }

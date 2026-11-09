@@ -29,10 +29,18 @@ impl Canvas {
         for id in &self.selected {
             if let Some(s) = self.diagram.shape(*id) {
                 boxes.push((s.x, s.y, s.x + s.w, s.y + s.h));
-            } else if let Some((link, trace)) = self.diagram.link(*id).and_then(|l| Some((l, self.diagram.trace(l)?))) {
+            } else if let Some((link, trace)) = self
+                .diagram
+                .link(*id)
+                .and_then(|l| Some((l, self.diagram.trace(l)?)))
+            {
                 boxes.extend(trace.points.iter().map(|p| (p.0, p.1, p.0, p.1)));
                 // What is written along it is part of it: the bar must not cover the texts it can change.
-                boxes.extend([Slot::Start, Slot::End].into_iter().filter_map(|slot| self.diagram.tip_label_box(link, slot, &trace)));
+                boxes.extend(
+                    [Slot::Start, Slot::End]
+                        .into_iter()
+                        .filter_map(|slot| self.diagram.tip_label_box(link, slot, &trace)),
+                );
                 let shown = self.diagram.shown_text(link);
                 let lines: Vec<&str> = shown.split('\n').filter(|l| !l.is_empty()).collect();
                 for (i, text) in lines.iter().enumerate() {
@@ -43,7 +51,9 @@ impl Canvas {
                 }
             }
         }
-        boxes.into_iter().reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)))
+        boxes
+            .into_iter()
+            .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)))
     }
 
     /// Duplicates the selection, a little lower and to the right.
@@ -57,39 +67,74 @@ impl Canvas {
 
     /// The six colours of the palette, side by side; the one the whole selection has is ringed.
     fn swatches(&self, cx: &mut Context<Self>) -> Item {
-        let names = [tr("Neutral", "Neutre"), tr("Red", "Rouge"), tr("Orange", "Orange"), tr("Green", "Vert"), tr("Blue", "Bleu"), tr("Purple", "Violet")];
-        let colors: Vec<u8> = self.selected.iter().filter_map(|id| self.diagram.shape(*id).map(|s| s.color).or_else(|| self.diagram.link(*id).map(|l| l.color))).collect();
-        let shared = colors.first().copied().filter(|c| colors.iter().all(|o| o == c));
-        let row = div().flex().items_center().gap(px(GAP)).children((0..diagram::COLORS.len() as u8).map(|i| {
-            div()
-                .id(("d-color", i as usize))
-                .size(px(SWATCH))
-                .flex_none()
-                .rounded_full()
-                .cursor_pointer()
-                .bg(self.ink(i))
-                .border_2()
-                .border_color(if shared == Some(i) { self.theme.accent } else { self.theme.panel })
-                .hover(|s| s.opacity(0.75))
-                .tooltip(tip(names[i as usize % names.len()], String::new(), self.theme))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.style(cx, |shape, link| {
-                        if let Some(shape) = shape {
-                            shape.color = i;
-                        }
-                        if let Some(link) = link {
-                            link.color = i;
-                        }
+        let names = [
+            tr("Neutral", "Neutre"),
+            tr("Red", "Rouge"),
+            tr("Orange", "Orange"),
+            tr("Green", "Vert"),
+            tr("Blue", "Bleu"),
+            tr("Purple", "Violet"),
+        ];
+        let colors: Vec<u8> = self
+            .selected
+            .iter()
+            .filter_map(|id| {
+                self.diagram
+                    .shape(*id)
+                    .map(|s| s.color)
+                    .or_else(|| self.diagram.link(*id).map(|l| l.color))
+            })
+            .collect();
+        let shared = colors
+            .first()
+            .copied()
+            .filter(|c| colors.iter().all(|o| o == c));
+        let row = div().flex().items_center().gap(px(GAP)).children(
+            (0..diagram::COLORS.len() as u8).map(|i| {
+                div()
+                    .id(("d-color", i as usize))
+                    .size(px(SWATCH))
+                    .flex_none()
+                    .rounded_full()
+                    .cursor_pointer()
+                    .bg(self.ink(i))
+                    .border_2()
+                    .border_color(if shared == Some(i) {
+                        self.theme.accent
+                    } else {
+                        self.theme.panel
                     })
-                }))
-        }));
+                    .hover(|s| s.opacity(0.75))
+                    .tooltip(tip(
+                        names[i as usize % names.len()],
+                        String::new(),
+                        self.theme,
+                    ))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.style(cx, |shape, link| {
+                            if let Some(shape) = shape {
+                                shape.color = i;
+                            }
+                            if let Some(link) = link {
+                                link.color = i;
+                            }
+                        })
+                    }))
+            }),
+        );
         let n = diagram::COLORS.len() as f32;
         (row.into_any_element(), n * SWATCH + (n - 1.) * GAP)
     }
 
     /// Whether the bar is over the selection: there is one, nothing is being written, dragged or drawn.
     pub(super) fn bar_wanted(&self) -> bool {
-        let busy = !matches!(self.drag, Drag::None | Drag::Move { begun: false, .. } | Drag::Reorder { begun: false, .. } | Drag::Along { begun: false, .. });
+        let busy = !matches!(
+            self.drag,
+            Drag::None
+                | Drag::Move { begun: false, .. }
+                | Drag::Reorder { begun: false, .. }
+                | Drag::Along { begun: false, .. }
+        );
         !self.selected.is_empty() && self.editing.is_none() && !busy && self.tool == Tool::Select
     }
 
@@ -100,24 +145,54 @@ impl Canvas {
         }
         let (x0, y0, x1, y1) = self.selection_box()?;
         let t = self.theme;
-        let links = self.selected.iter().any(|id| self.diagram.link(*id).is_some());
-        let shapes = self.selected.iter().any(|id| self.diagram.shape(*id).is_some());
+        let links = self
+            .selected
+            .iter()
+            .any(|id| self.diagram.link(*id).is_some());
+        let shapes = self
+            .selected
+            .iter()
+            .any(|id| self.diagram.shape(*id).is_some());
         let alone = matches!(self.selected[..], [id] if self.diagram.shape(id).is_some_and(|s| matches!(s.form, diagram::Form::Round | diagram::Form::Composite)));
         let holder = matches!(self.selected[..], [id] if self.diagram.shape(id).is_some_and(|s| s.form.holds()) && !self.diagram.children(id).is_empty());
         // On a mixed selection a switch sets all to the same state: on unless all are on already.
-        let filled = self.selected.iter().filter_map(|id| self.diagram.shape(*id)).all(|s| s.fill);
-        let dashed = self.selected.iter().all(|id| self.diagram.shape(*id).map(|s| s.dashed).or_else(|| self.diagram.link(*id).map(|l| l.dashed)) == Some(true));
+        let filled = self
+            .selected
+            .iter()
+            .filter_map(|id| self.diagram.shape(*id))
+            .all(|s| s.fill);
+        let dashed = self.selected.iter().all(|id| {
+            self.diagram
+                .shape(*id)
+                .map(|s| s.dashed)
+                .or_else(|| self.diagram.link(*id).map(|l| l.dashed))
+                == Some(true)
+        });
         let mut items: Vec<Item> = Vec::new();
         let divider = |items: &mut Vec<Item>| {
             if !items.is_empty() {
-                items.push((div().w(px(1.)).h(px(16.)).mx_1().bg(t.border).into_any_element(), DIVIDER));
+                items.push((
+                    div()
+                        .w(px(1.))
+                        .h(px(16.))
+                        .mx_1()
+                        .bg(t.border)
+                        .into_any_element(),
+                    DIVIDER,
+                ));
             }
         };
         // What an arrow is, named, and the menu to change it.
         if links {
-            let current = self.selected.iter().find_map(|id| self.diagram.link(*id)).and_then(Relation::of);
+            let current = self
+                .selected
+                .iter()
+                .find_map(|id| self.diagram.link(*id))
+                .and_then(Relation::of);
             let name = current.map_or(tr("Arrow", "Flèche"), Relation::label);
-            let icon = current.and_then(Relation::icon).unwrap_or("d-rel-dependency.svg");
+            let icon = current
+                .and_then(Relation::icon)
+                .unwrap_or("d-rel-dependency.svg");
             let chip = div()
                 .id("d-relation-chip")
                 .debug_selector(|| "d-relation-chip".into())
@@ -135,49 +210,140 @@ impl Canvas {
                 .border_1()
                 .border_color(t.border)
                 .hover(|s| s.bg(t.hover))
-                .tooltip(tip(tr("Relationship of this arrow", "Relation de cette flèche"), Self::RELATIONS.to_uppercase(), t))
-                .child(svg().path(icon).size(px(16.)).flex_none().text_color(t.soft))
+                .tooltip(tip(
+                    tr("Relationship of this arrow", "Relation de cette flèche"),
+                    Self::RELATIONS.to_uppercase(),
+                    t,
+                ))
+                .child(
+                    svg()
+                        .path(icon)
+                        .size(px(16.))
+                        .flex_none()
+                        .text_color(t.soft),
+                )
                 .child(div().flex_1().truncate().child(name))
-                .child(svg().path("chevron-down.svg").size(px(12.)).flex_none().text_color(t.soft))
+                .child(
+                    svg()
+                        .path("chevron-down.svg")
+                        .size(px(12.))
+                        .flex_none()
+                        .text_color(t.soft),
+                )
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_relations(cx)));
             items.push((chip.into_any_element(), CHIP));
             divider(&mut items);
             // The heads and the route show their state in their icon: a click goes to the next.
             let first = self.selected.iter().find_map(|id| self.diagram.link(*id));
-            let (start, end, route) = first.map_or((diagram::Head::None, diagram::Head::None, self.route), |l| (l.start, l.end, l.route));
-            let head = |id: &'static str, tooltip: &'static str, head: diagram::Head, at_end: bool, cx: &mut Context<Self>| -> Item {
+            let (start, end, route) = first.map_or(
+                (diagram::Head::None, diagram::Head::None, self.route),
+                |l| (l.start, l.end, l.route),
+            );
+            let head = |id: &'static str,
+                        tooltip: &'static str,
+                        head: diagram::Head,
+                        at_end: bool,
+                        cx: &mut Context<Self>|
+             -> Item {
                 let (icon, native_end) = head_icon(head);
-                let button = button_turned(id, icon, false, native_end != at_end, t).tooltip(tip(tooltip, String::new(), t)).on_click(cx.listener(move |this, _, _, cx| {
-                    this.style(cx, move |_, link| {
-                        if let Some(link) = link {
-                            *(if at_end { &mut link.end } else { &mut link.start }) = head.next();
-                        }
-                    })
-                }));
+                let button = button_turned(id, icon, false, native_end != at_end, t)
+                    .tooltip(tip(tooltip, String::new(), t))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.style(cx, move |_, link| {
+                            if let Some(link) = link {
+                                *(if at_end {
+                                    &mut link.end
+                                } else {
+                                    &mut link.start
+                                }) = head.next();
+                            }
+                        })
+                    }));
                 (button.into_any_element(), BUTTON)
             };
-            items.push(head("d-head-start", tr("Head at the start: click for the next", "Extrémité du début : un clic passe à la suivante"), start, false, cx));
-            items.push(head("d-head-end", tr("Head at the end: click for the next", "Extrémité de la fin : un clic passe à la suivante"), end, true, cx));
-            let route_button = button("d-route", route_icon(route), false, t).tooltip(tip(tr("Route: elbowed, straight or curved; click for the next", "Tracé : coudé, droit ou courbe ; un clic passe au suivant"), String::new(), t)).on_click(cx.listener(|this, _, _, cx| {
-                // The chosen path also applies to arrows to come.
-                let first = this.selected.iter().find_map(|id| this.diagram.link(*id)).map(|l| l.route.next());
-                if let Some(route) = first {
-                    this.set_route(route, cx);
-                }
-            }));
-            items.push((route_button.into_any_element(), BUTTON));
-            divider(&mut items);
-            let text = |id: &'static str, icon: &'static str, slot: Slot, tooltip: &'static str, cx: &mut Context<Self>| -> Item {
-                let button = button(id, icon, false, t).tooltip(tip(tooltip, String::new(), t)).on_click(cx.listener(move |this, _, _, cx| {
-                    if let Some(link) = this.selected.iter().copied().find(|id| this.diagram.link(*id).is_some()) {
-                        this.stop_editing(cx);
-                        this.start_editing_slot(link, slot, cx);
+            items.push(head(
+                "d-head-start",
+                tr(
+                    "Head at the start: click for the next",
+                    "Extrémité du début : un clic passe à la suivante",
+                ),
+                start,
+                false,
+                cx,
+            ));
+            items.push(head(
+                "d-head-end",
+                tr(
+                    "Head at the end: click for the next",
+                    "Extrémité de la fin : un clic passe à la suivante",
+                ),
+                end,
+                true,
+                cx,
+            ));
+            let route_button = button("d-route", route_icon(route), false, t)
+                .tooltip(tip(
+                    tr(
+                        "Route: elbowed, straight or curved; click for the next",
+                        "Tracé : coudé, droit ou courbe ; un clic passe au suivant",
+                    ),
+                    String::new(),
+                    t,
+                ))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    // The chosen path also applies to arrows to come.
+                    let first = this
+                        .selected
+                        .iter()
+                        .find_map(|id| this.diagram.link(*id))
+                        .map(|l| l.route.next());
+                    if let Some(route) = first {
+                        this.set_route(route, cx);
                     }
                 }));
+            items.push((route_button.into_any_element(), BUTTON));
+            divider(&mut items);
+            let text = |id: &'static str,
+                        icon: &'static str,
+                        slot: Slot,
+                        tooltip: &'static str,
+                        cx: &mut Context<Self>|
+             -> Item {
+                let button = button(id, icon, false, t)
+                    .tooltip(tip(tooltip, String::new(), t))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(link) = this
+                            .selected
+                            .iter()
+                            .copied()
+                            .find(|id| this.diagram.link(*id).is_some())
+                        {
+                            this.stop_editing(cx);
+                            this.start_editing_slot(link, slot, cx);
+                        }
+                    }));
                 (button.into_any_element(), BUTTON)
             };
-            items.push(text("d-text-start", "d-label-start.svg", Slot::Start, tr("Text at the start: a role, a multiplicity", "Texte au début : un rôle, une multiplicité"), cx));
-            items.push(text("d-text-end", "d-label-end.svg", Slot::End, tr("Text at the end: a role, a multiplicity", "Texte à la fin : un rôle, une multiplicité"), cx));
+            items.push(text(
+                "d-text-start",
+                "d-label-start.svg",
+                Slot::Start,
+                tr(
+                    "Text at the start: a role, a multiplicity",
+                    "Texte au début : un rôle, une multiplicité",
+                ),
+                cx,
+            ));
+            items.push(text(
+                "d-text-end",
+                "d-label-end.svg",
+                Slot::End,
+                tr(
+                    "Text at the end: a role, a multiplicity",
+                    "Texte à la fin : un rôle, une multiplicité",
+                ),
+                cx,
+            ));
             divider(&mut items);
         }
         items.push(self.swatches(cx));
@@ -199,7 +365,11 @@ impl Canvas {
         }
         items.push((
             button("d-dash", "d-dash.svg", dashed, t)
-                .tooltip(tip(tr("Dashed stroke", "Trait en pointillés"), String::new(), t))
+                .tooltip(tip(
+                    tr("Dashed stroke", "Trait en pointillés"),
+                    String::new(),
+                    t,
+                ))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.style(cx, move |shape, link| {
                         if let Some(shape) = shape {
@@ -217,21 +387,70 @@ impl Canvas {
             divider(&mut items);
         }
         if alone {
-            items.push((button("d-self", "d-st-loop.svg", false, t).tooltip(tip(tr("Transition to itself: a loop", "Transition vers elle-même : une boucle"), String::new(), t)).on_click(cx.listener(|this, _, _, cx| this.self_link(cx))).into_any_element(), BUTTON));
+            items.push((
+                button("d-self", "d-st-loop.svg", false, t)
+                    .tooltip(tip(
+                        tr(
+                            "Transition to itself: a loop",
+                            "Transition vers elle-même : une boucle",
+                        ),
+                        String::new(),
+                        t,
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| this.self_link(cx)))
+                    .into_any_element(),
+                BUTTON,
+            ));
         }
         if holder {
-            items.push((button("d-fit", "d-fit.svg", false, t).tooltip(tip(tr("Fit to what it holds", "Ajuster à son contenu"), String::new(), t)).on_click(cx.listener(|this, _, _, cx| this.fit_container(cx))).into_any_element(), BUTTON));
+            items.push((
+                button("d-fit", "d-fit.svg", false, t)
+                    .tooltip(tip(
+                        tr("Fit to what it holds", "Ajuster à son contenu"),
+                        String::new(),
+                        t,
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| this.fit_container(cx)))
+                    .into_any_element(),
+                BUTTON,
+            ));
         }
         divider(&mut items);
-        let (copy, erase) = (crate::ui::keys::of(cx, &Duplicate), crate::ui::keys::of(cx, &Erase));
-        items.push((button("d-duplicate", "copy.svg", false, t).tooltip(tip(tr("Duplicate", "Dupliquer"), copy, t)).on_click(cx.listener(|this, _, _, cx| this.duplicate(cx))).into_any_element(), BUTTON));
-        items.push((button("d-delete", "trash.svg", false, t).debug_selector(|| "d-delete".into()).tooltip(tip(tr("Delete", "Supprimer"), erase, t)).on_click(cx.listener(|this, _, _, cx| this.erase(false, cx))).into_any_element(), BUTTON));
+        let (copy, erase) = (
+            crate::ui::keys::of(cx, &Duplicate),
+            crate::ui::keys::of(cx, &Erase),
+        );
+        items.push((
+            button("d-duplicate", "copy.svg", false, t)
+                .tooltip(tip(tr("Duplicate", "Dupliquer"), copy, t))
+                .on_click(cx.listener(|this, _, _, cx| this.duplicate(cx)))
+                .into_any_element(),
+            BUTTON,
+        ));
+        items.push((
+            button("d-delete", "trash.svg", false, t)
+                .debug_selector(|| "d-delete".into())
+                .tooltip(tip(tr("Delete", "Supprimer"), erase, t))
+                .on_click(cx.listener(|this, _, _, cx| this.erase(false, cx)))
+                .into_any_element(),
+            BUTTON,
+        ));
 
         // Where it goes: centred over the selection, above it (below if there is no room), inside the canvas.
         // Before the first frame the canvas has no size yet.
-        let known = |side: Pixels, otherwise: f32| if f32::from(side) < 1. { otherwise } else { f32::from(side) };
-        let (canvas_w, canvas_h) = (known(self.bounds.size.width, 800.), known(self.bounds.size.height, 600.));
-        let natural = items.iter().map(|(_, w)| *w).sum::<f32>() + GAP * (items.len() as f32 - 1.) + 12.;
+        let known = |side: Pixels, otherwise: f32| {
+            if f32::from(side) < 1. {
+                otherwise
+            } else {
+                f32::from(side)
+            }
+        };
+        let (canvas_w, canvas_h) = (
+            known(self.bounds.size.width, 800.),
+            known(self.bounds.size.height, 600.),
+        );
+        let natural =
+            items.iter().map(|(_, w)| *w).sum::<f32>() + GAP * (items.len() as f32 - 1.) + 12.;
         let width = natural.min(canvas_w - 16.);
         let rows = (natural / width).ceil().max(1.);
         // Padding and border, then a row of buttons and the gap to the next.
@@ -239,11 +458,24 @@ impl Canvas {
         let middle = self.pan.0 + (x0 + x1) / 2. * self.zoom;
         let left = (middle - width / 2.).clamp(8., (canvas_w - width - 8.).max(8.));
         // Above the selection or below it, whichever covers fewer shapes; at the top if neither fits.
-        let (above, below) = (self.pan.1 + y0 * self.zoom - height - AWAY, self.pan.1 + y1 * self.zoom + AWAY);
+        let (above, below) = (
+            self.pan.1 + y0 * self.zoom - height - AWAY,
+            self.pan.1 + y1 * self.zoom + AWAY,
+        );
         let room = canvas_h - DOCK - 8.;
         let covered = |top: f32| {
-            let (l, t, r, b) = ((left - self.pan.0) / self.zoom, (top - self.pan.1) / self.zoom, (left + width - self.pan.0) / self.zoom, (top + height - self.pan.1) / self.zoom);
-            self.diagram.shapes.iter().filter(|s| !self.selected.contains(&s.id) && !s.form.holds()).filter(|s| s.x < r && s.x + s.w > l && s.y < b && s.y + s.h > t).count()
+            let (l, t, r, b) = (
+                (left - self.pan.0) / self.zoom,
+                (top - self.pan.1) / self.zoom,
+                (left + width - self.pan.0) / self.zoom,
+                (top + height - self.pan.1) / self.zoom,
+            );
+            self.diagram
+                .shapes
+                .iter()
+                .filter(|s| !self.selected.contains(&s.id) && !s.form.holds())
+                .filter(|s| s.x < r && s.x + s.w > l && s.y < b && s.y + s.h > t)
+                .count()
         };
         // The cluster of buttons at the top left is not covered.
         let least = if left < CLUSTER { 56. } else { 8. };

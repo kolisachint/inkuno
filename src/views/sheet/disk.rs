@@ -20,17 +20,33 @@ pub(super) fn stamp_of(path: &Path) -> Option<(SystemTime, u64)> {
 /// Reads the file. Without `forced`, encoding, delimiter and header are guessed, except
 /// those the user has already chosen for this file.
 pub fn load(path: &Path, forced: Option<Format>) -> Result<Loaded, String> {
-    let fail = |e: std::io::Error| format!("{} {} : {e}", tr("Cannot open", "Impossible d'ouvrir"), path.display());
+    let fail = |e: std::io::Error| {
+        format!(
+            "{} {} : {e}",
+            tr("Cannot open", "Impossible d'ouvrir"),
+            path.display()
+        )
+    };
     let size = fs::metadata(path).map_err(fail)?.len();
     if size > table::MAX_BYTES as u64 {
-        return Err(format!("{} : {}", path.display(), tr("file too large", "fichier trop gros")));
+        return Err(format!(
+            "{} : {}",
+            path.display(),
+            tr("file too large", "fichier trop gros")
+        ));
     }
     // ponytail: synchronous read and parse (100 MB: about 0.3 s); move to a background
     // task with a "loading" state if files of several hundred MB get opened.
     let bytes = fs::read(path).map_err(fail)?;
-    let format = forced.or_else(|| saved_format(path)).unwrap_or_else(|| table::detect(&bytes));
+    let format = forced
+        .or_else(|| saved_format(path))
+        .unwrap_or_else(|| table::detect(&bytes));
     let table = Table::parse(table::decode(bytes, format.encoding), format.delimiter);
-    Ok(Loaded { table, format, stamp: stamp_of(path) })
+    Ok(Loaded {
+        table,
+        format,
+        stamp: stamp_of(path),
+    })
 }
 
 /// Settings the user chose for this file: `path ⇥ delimiter ⇥ encoding ⇥ header`.
@@ -51,10 +67,18 @@ pub(super) fn remember_format(path: &Path, format: Option<Format>) {
     let Some(key) = path.to_str().filter(|k| !k.contains(['\t', '\n'])) else {
         return;
     };
-    let mut lines: Vec<String> =
-        vault::load_file("tables").lines().filter(|l| l.split('\t').next() != Some(key)).map(String::from).collect();
+    let mut lines: Vec<String> = vault::load_file("tables")
+        .lines()
+        .filter(|l| l.split('\t').next() != Some(key))
+        .map(String::from)
+        .collect();
     if let Some(f) = format {
-        lines.push(format!("{key}\t{}\t{}\t{}", f.delimiter, f.encoding.label(), f.header as u8));
+        lines.push(format!(
+            "{key}\t{}\t{}\t{}",
+            f.delimiter,
+            f.encoding.label(),
+            f.header as u8
+        ));
     }
     vault::save_file("tables", &lines.join("\n"));
 }
@@ -64,13 +88,22 @@ pub(super) fn remember_format(path: &Path, format: Option<Format>) {
 pub(super) struct Disk(Mutex<usize>);
 
 impl Disk {
-    pub(super) fn write(&self, generation: usize, path: &Path, table: &Table, encoding: Encoding) -> Result<(), WriteError> {
+    pub(super) fn write(
+        &self,
+        generation: usize,
+        path: &Path,
+        table: &Table,
+        encoding: Encoding,
+    ) -> Result<(), WriteError> {
         let mut last = self.0.lock().unwrap();
         if *last >= generation {
             return Ok(());
         }
         // Atomic write: a crash never leaves a truncated table.
-        let tmp = path.with_file_name(format!(".{}.tmp", path.file_name().unwrap_or_default().to_string_lossy()));
+        let tmp = path.with_file_name(format!(
+            ".{}.tmp",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ));
         let result = (|| {
             let file = fs::File::create(&tmp)?;
             if let Ok(meta) = fs::metadata(path) {
@@ -155,12 +188,20 @@ impl Sheet {
         if !self.dirty {
             return;
         }
-        let (generation, snapshot, path, encoding, disk) =
-            (self.generation, self.table.snapshot(), self.path.clone(), self.format.encoding, self.disk.clone());
+        let (generation, snapshot, path, encoding, disk) = (
+            self.generation,
+            self.table.snapshot(),
+            self.path.clone(),
+            self.format.encoding,
+            self.disk.clone(),
+        );
         cx.spawn(async move |this, cx| {
             let written = cx
                 .background_executor()
-                .spawn(async move { disk.write(generation, &path, &snapshot, encoding).map(|()| stamp_of(&path)) })
+                .spawn(async move {
+                    disk.write(generation, &path, &snapshot, encoding)
+                        .map(|()| stamp_of(&path))
+                })
                 .await;
             this.update(cx, |this, cx| match written {
                 Ok(stamp) => {
@@ -175,7 +216,11 @@ impl Sheet {
     }
 
     pub(super) fn not_saved(&self, e: WriteError) -> String {
-        format!("{} « {} » : {e}", tr("Table not saved", "Tableau non enregistré"), self.path.display())
+        format!(
+            "{} « {} » : {e}",
+            tr("Table not saved", "Tableau non enregistré"),
+            self.path.display()
+        )
     }
 
     /// Whether a write or a cell edit still needs saving.
@@ -190,7 +235,12 @@ impl Sheet {
         if !self.dirty {
             return true;
         }
-        match self.disk.write(self.generation, &self.path, &self.table, self.format.encoding) {
+        match self.disk.write(
+            self.generation,
+            &self.path,
+            &self.table,
+            self.format.encoding,
+        ) {
             Ok(()) => {
                 self.dirty = false;
                 self.stamp = stamp_of(&self.path).or(self.stamp);

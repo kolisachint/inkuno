@@ -12,8 +12,8 @@ use notify::RecommendedWatcher;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    logic::{rank, wiki},
     logic::note::Note,
+    logic::{rank, wiki},
     platform::vault::{self, Signal},
 };
 
@@ -106,13 +106,20 @@ impl Vault {
     pub fn find_note(&self, note: &str) -> Result<&Note, String> {
         if looks_like_path(note) {
             let path = self.inside(note, false)?;
-            return self.notes.iter().find(|n| n.path == path).ok_or_else(|| format!("no note at `{note}`"));
+            return self
+                .notes
+                .iter()
+                .find(|n| n.path == path)
+                .ok_or_else(|| format!("no note at `{note}`"));
         }
         let name = note.split(['#', '|']).next().unwrap_or(note).trim();
         if name.is_empty() {
             return Err("the note's name is empty".into());
         }
-        wiki::resolve(&self.notes, name, |n| vault::in_templates(&self.root, &n.path)).ok_or_else(|| self.missing(name))
+        wiki::resolve(&self.notes, name, |n| {
+            vault::in_templates(&self.root, &n.path)
+        })
+        .ok_or_else(|| self.missing(name))
     }
 
     fn missing(&self, name: &str) -> String {
@@ -133,9 +140,16 @@ impl Vault {
         if given.is_absolute() && !given.starts_with(&self.root) {
             return Err("a path cannot leave the vault".into());
         }
-        let joined = if given.is_absolute() { given.to_path_buf() } else { self.root.join(given) };
+        let joined = if given.is_absolute() {
+            given.to_path_buf()
+        } else {
+            self.root.join(given)
+        };
         let root = self.root.canonicalize().map_err(disk)?;
-        let rel = joined.strip_prefix(&self.root).or_else(|_| joined.strip_prefix(&root)).map_err(|_| "a path cannot leave the vault".to_string())?;
+        let rel = joined
+            .strip_prefix(&self.root)
+            .or_else(|_| joined.strip_prefix(&root))
+            .map_err(|_| "a path cannot leave the vault".to_string())?;
         let mut cur = root.clone();
         let mut depth = 0;
         for component in rel.components() {
@@ -148,7 +162,10 @@ impl Vault {
             }
             cur.push(name.as_ref());
             depth += 1;
-            if cur.symlink_metadata().is_ok_and(|meta| meta.file_type().is_symlink()) {
+            if cur
+                .symlink_metadata()
+                .is_ok_and(|meta| meta.file_type().is_symlink())
+            {
                 let target = cur.canonicalize().map_err(disk)?;
                 if !target.starts_with(&root) {
                     return Err("a path cannot leave the vault".into());
@@ -163,17 +180,32 @@ impl Vault {
     pub fn find_file(&self, name: &str) -> Result<PathBuf, String> {
         if looks_like_path(name) {
             let path = self.inside(name, false)?;
-            return path.is_file().then_some(path).ok_or_else(|| format!("no file at `{name}`"));
+            return path
+                .is_file()
+                .then_some(path)
+                .ok_or_else(|| format!("no file at `{name}`"));
         }
         if let Ok(note) = self.find_note(name) {
             return Ok(note.path.clone());
         }
         let want = name.to_lowercase();
-        self.files().into_iter().find(|path| path.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase() == want)).ok_or_else(|| format!("no file named `{name}`"))
+        self.files()
+            .into_iter()
+            .find(|path| {
+                path.file_name()
+                    .is_some_and(|n| n.to_string_lossy().to_lowercase() == want)
+            })
+            .ok_or_else(|| format!("no file named `{name}`"))
     }
 
     pub fn files(&self) -> Vec<PathBuf> {
-        self.diagrams.iter().chain(&self.pictures).chain(&self.tables).chain(&self.attachments).cloned().collect()
+        self.diagrams
+            .iter()
+            .chain(&self.pictures)
+            .chain(&self.tables)
+            .chain(&self.attachments)
+            .cloned()
+            .collect()
     }
 
     pub fn is_template(&self, note: &Note) -> bool {
@@ -182,18 +214,25 @@ impl Vault {
 }
 
 fn looks_like_path(note: &str) -> bool {
-    note.contains('/') || note.contains('\\') || note.to_lowercase().ends_with(".md") || note.to_lowercase().ends_with(".svg")
+    note.contains('/')
+        || note.contains('\\')
+        || note.to_lowercase().ends_with(".md")
+        || note.to_lowercase().ends_with(".svg")
 }
 
-/// A Bref diagram, including one this build can only open read-only.
+/// A Inkuno diagram, including one this build can only open read-only.
 fn is_diagram(path: &Path) -> bool {
-    if path.extension().is_none_or(|e| !e.eq_ignore_ascii_case("svg")) {
+    if path
+        .extension()
+        .is_none_or(|e| !e.eq_ignore_ascii_case("svg"))
+    {
         return false;
     }
     let Ok(text) = fs::read_to_string(path) else {
         return false;
     };
-    crate::logic::diagram::Diagram::from_svg(&text).is_some() || crate::logic::diagram::Diagram::newer(&text)
+    crate::logic::diagram::Diagram::from_svg(&text).is_some()
+        || crate::logic::diagram::Diagram::newer(&text)
 }
 
 /// The note whose name is closest to `query`, when one clearly contains the other.
@@ -205,10 +244,14 @@ pub fn suggest(notes: &[Note], query: &str) -> Option<String> {
         if name == q {
             continue;
         }
-        let score = if name.contains(&q) || (!q.is_empty() && q.contains(&name) && name.chars().count() >= 3) {
+        let score = if name.contains(&q)
+            || (!q.is_empty() && q.contains(&name) && name.chars().count() >= 3)
+        {
             2000 - (name.len() as i32 - q.len() as i32).abs()
         } else {
-            rank::fuzzy(&q, &name).filter(|score| *score > 0).unwrap_or(i32::MIN)
+            rank::fuzzy(&q, &name)
+                .filter(|score| *score > 0)
+                .unwrap_or(i32::MIN)
         };
         if score == i32::MIN {
             continue;
@@ -217,25 +260,37 @@ pub fn suggest(notes: &[Note], query: &str) -> Option<String> {
             best = Some((score, note.name.as_str()));
         }
     }
-    best.filter(|(score, _)| *score > 0).map(|(_, name)| name.to_string())
+    best.filter(|(score, _)| *score > 0)
+        .map(|(_, name)| name.to_string())
 }
 
 /// Path of `path` relative to the vault, with `/` even on Windows.
 pub fn rel(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/")
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 pub fn folder(root: &Path, path: &Path) -> String {
-    path.parent().and_then(|dir| dir.strip_prefix(root).ok()).map(|dir| dir.to_string_lossy().replace('\\', "/")).unwrap_or_default()
+    path.parent()
+        .and_then(|dir| dir.strip_prefix(root).ok())
+        .map(|dir| dir.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default()
 }
 
 pub fn unix(time: SystemTime) -> u64 {
-    time.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    time.duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// Hash of the file as it is on disk. `edit_note` refuses a revision that is no longer this.
 pub fn revision(bytes: &[u8]) -> String {
-    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 pub fn read_text(path: &Path) -> Result<(String, String), String> {
@@ -247,9 +302,16 @@ pub fn read_text(path: &Path) -> Result<(String, String), String> {
 /// A file of this name, ignoring case, already in `dir`.
 pub fn name_taken(dir: &Path, name: &str, extension: &str) -> Option<PathBuf> {
     let want = name.to_lowercase();
-    fs::read_dir(dir).ok()?.flatten().map(|entry| entry.path()).find(|path| {
-        path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(extension)) && vault::stem(path).to_lowercase() == want
-    })
+    fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case(extension))
+                && vault::stem(path).to_lowercase() == want
+        })
 }
 
 fn disk_kind(kind: io::ErrorKind) -> String {
@@ -266,8 +328,12 @@ pub fn relink(vault: &mut Vault, old: &str, new: &str) -> usize {
     let paths: Vec<PathBuf> = targets.iter().map(|n| n.path.clone()).collect();
     let mut changed = 0;
     for path in paths {
-        let Ok(text) = fs::read_to_string(&path) else { continue };
-        let Some(fresh) = crate::logic::markdown::relink(&text, old, new) else { continue };
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Some(fresh) = crate::logic::markdown::relink(&text, old, new) else {
+            continue;
+        };
         if vault::write(&path, &fresh).is_ok() {
             changed += 1;
         }

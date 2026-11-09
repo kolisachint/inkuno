@@ -1,13 +1,18 @@
 //! Shortcuts: the binding table, what the user changed in it, conflicts, the
 //! `keys` file, and what the help panel shows and searches (pure functions).
 
-use crate::lang::tr;
 use crate::lang::fold;
+use crate::lang::tr;
 use gpui::{Action, App, Keystroke};
+use serde_json::Value;
 use std::collections::BTreeMap;
 
 /// Shortcut key, as displayed: Cmd on macOS, Ctrl elsewhere.
-pub const MOD: &str = if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" };
+pub const MOD: &str = if cfg!(target_os = "macos") {
+    "Cmd"
+} else {
+    "Ctrl"
+};
 
 /// A binding: keys (written by `canon`), an action name, the context where it applies.
 #[derive(Clone, Debug, PartialEq)]
@@ -22,7 +27,11 @@ pub type Changes = BTreeMap<String, String>;
 
 /// A binding from the default table; unreadable keys there are a bug in the code.
 pub fn bind(keys: &str, action: &dyn Action, context: Option<&'static str>) -> Bind {
-    Bind { keys: canon(keys).expect("default keys unreadable"), action: action.name(), context }
+    Bind {
+        keys: canon(keys).expect("default keys unreadable"),
+        action: action.name(),
+        context,
+    }
 }
 
 /// The keys in force for an action, read from the app's bindings: for the hints
@@ -30,7 +39,12 @@ pub fn bind(keys: &str, action: &dyn Action, context: Option<&'static str>) -> B
 pub fn of(cx: &App, action: &dyn Action) -> String {
     let keymap = cx.key_bindings();
     let keymap = keymap.borrow();
-    let first = keymap.bindings_for_action(action).find_map(|binding| binding.keystrokes().first().map(|stroke| spell(stroke.inner())));
+    let first = keymap.bindings_for_action(action).find_map(|binding| {
+        binding
+            .keystrokes()
+            .first()
+            .map(|stroke| spell(stroke.inner()))
+    });
     first.map(|keys| show(&keys)).unwrap_or_default()
 }
 
@@ -38,9 +52,9 @@ pub fn of(cx: &App, action: &dyn Action) -> String {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Why {
     Unreadable,
-        /// A single key, which types text.
+    /// A single key, which types text.
     Types,
-        /// Escape: the panel itself needs it.
+    /// Escape: the panel itself needs it.
     Panel,
 }
 
@@ -55,20 +69,43 @@ pub struct Row {
 
 impl Row {
     pub fn text(keys: impl Into<String>, effect: &'static str) -> Self {
-        Self { keys: keys.into(), effect, action: None, changed: false }
+        Self {
+            keys: keys.into(),
+            effect,
+            action: None,
+            changed: false,
+        }
     }
 }
 
 /// Help panel sections: (title, lines).
 pub type Sections = Vec<(&'static str, Vec<Row>)>;
 
-const NAMED: [&str; 16] =
-    ["enter", "tab", "escape", "space", "backspace", "delete", "insert", "home", "end", "pageup", "pagedown", "left", "right", "up", "down", "menu"];
+const NAMED: [&str; 16] = [
+    "enter",
+    "tab",
+    "escape",
+    "space",
+    "backspace",
+    "delete",
+    "insert",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "left",
+    "right",
+    "up",
+    "down",
+    "menu",
+];
 
 fn parse(keys: &str) -> Option<Keystroke> {
     let stroke = Keystroke::parse(keys).ok()?;
     let key = stroke.key.as_str();
-    let function = key.strip_prefix('f').is_some_and(|n| n.parse::<u8>().is_ok_and(|n| (1..=35).contains(&n)));
+    let function = key
+        .strip_prefix('f')
+        .is_some_and(|n| n.parse::<u8>().is_ok_and(|n| (1..=35).contains(&n)));
     (key.chars().count() == 1 || NAMED.contains(&key) || function).then_some(stroke)
 }
 
@@ -77,9 +114,19 @@ fn parse(keys: &str) -> Option<Keystroke> {
 pub fn spell(stroke: &Keystroke) -> String {
     let m = stroke.modifiers;
     let mac = cfg!(target_os = "macos");
-    let (secondary, other) = if mac { (m.platform, m.control) } else { (m.control, m.platform) };
+    let (secondary, other) = if mac {
+        (m.platform, m.control)
+    } else {
+        (m.control, m.platform)
+    };
     let mut parts = Vec::new();
-    for (held, name) in [(secondary, "secondary"), (other, if mac { "ctrl" } else { "cmd" }), (m.alt, "alt"), (m.shift, "shift"), (m.function, "fn")] {
+    for (held, name) in [
+        (secondary, "secondary"),
+        (other, if mac { "ctrl" } else { "cmd" }),
+        (m.alt, "alt"),
+        (m.shift, "shift"),
+        (m.function, "fn"),
+    ] {
         if held {
             parts.push(name);
         }
@@ -95,12 +142,24 @@ pub fn canon(keys: &str) -> Option<String> {
 
 /// Keys as read on a keyboard: "Ctrl+Shift+P".
 pub fn show(keys: &str) -> String {
-    let Some(stroke) = parse(keys) else { return keys.to_string() };
+    let Some(stroke) = parse(keys) else {
+        return keys.to_string();
+    };
     let m = stroke.modifiers;
     let mac = cfg!(target_os = "macos");
-    let (secondary, other) = if mac { (m.platform, m.control) } else { (m.control, m.platform) };
+    let (secondary, other) = if mac {
+        (m.platform, m.control)
+    } else {
+        (m.control, m.platform)
+    };
     let mut parts: Vec<String> = Vec::new();
-    for (held, name) in [(secondary, MOD), (other, if mac { "Ctrl" } else { "Super" }), (m.alt, "Alt"), (m.shift, tr("Shift", "Maj")), (m.function, "Fn")] {
+    for (held, name) in [
+        (secondary, MOD),
+        (other, if mac { "Ctrl" } else { "Super" }),
+        (m.alt, "Alt"),
+        (m.shift, tr("Shift", "Maj")),
+        (m.function, "Fn"),
+    ] {
         if held {
             parts.push(name.to_string());
         }
@@ -132,7 +191,9 @@ pub fn show(keys: &str) -> String {
 /// arrows and a diagram's), except an input field with the view that carries it.
 pub fn meets(a: Option<&str>, b: Option<&str>) -> bool {
     let everywhere = |c: Option<&str>| matches!(c, None | Some("Shell"));
-    let field = |a: Option<&str>, b: Option<&str>| a == Some("Line") && matches!(b, Some("Sheet" | "Palette"));
+    let field = |a: Option<&str>, b: Option<&str>| {
+        a == Some("Line") && matches!(b, Some("Sheet" | "Palette"))
+    };
     everywhere(a) || everywhere(b) || a == b || field(a, b) || field(b, a)
 }
 
@@ -149,36 +210,66 @@ fn contexts(defaults: &[Bind], action: &str) -> Vec<Option<&'static str>> {
 /// The bindings in force: the default ones, where each changed action keeps only the
 /// chosen keys (in each of its contexts, at the place it held: for an equal
 /// context, the last binding wins). A choice wins over a changeable action (`open`)
-/// that has the same keys by default: it is left without a shortcut.
+/// that has the same keys by default: it is left without a shortcut. A choice for an
+/// action the defaults leave unbound still applies: appended last, everywhere, so the
+/// same last-wins rule gives it the keys.
 pub fn effective(defaults: &[Bind], changes: &Changes, open: &dyn Fn(&str) -> bool) -> Vec<Bind> {
     let taken: Vec<(&str, Option<&'static str>)> = changes
         .iter()
         .filter(|(_, keys)| !keys.is_empty())
-        .flat_map(|(action, keys)| contexts(defaults, action).into_iter().map(move |context| (keys.as_str(), context)))
+        .flat_map(|(action, keys)| {
+            let mut at = contexts(defaults, action);
+            if at.is_empty() {
+                at.push(None);
+            }
+            at.into_iter().map(move |context| (keys.as_str(), context))
+        })
         .collect();
     let mut out: Vec<Bind> = Vec::with_capacity(defaults.len());
     for bind in defaults {
         match changes.get(bind.action) {
             Some(keys) => {
-                let placed = out.iter().any(|b| b.action == bind.action && b.context == bind.context);
+                let placed = out
+                    .iter()
+                    .any(|b| b.action == bind.action && b.context == bind.context);
                 if !keys.is_empty() && !placed {
-                    out.push(Bind { keys: keys.clone(), ..bind.clone() });
+                    out.push(Bind {
+                        keys: keys.clone(),
+                        ..bind.clone()
+                    });
                 }
             }
             None => {
-                let lost = open(bind.action) && taken.iter().any(|(keys, context)| *keys == bind.keys && meets(*context, bind.context));
+                let lost = open(bind.action)
+                    && taken
+                        .iter()
+                        .any(|(keys, context)| *keys == bind.keys && meets(*context, bind.context));
                 if !lost {
                     out.push(bind.clone());
                 }
             }
         }
     }
+    for (action, keys) in changes {
+        if keys.is_empty() || defaults.iter().any(|bind| bind.action == action.as_str()) {
+            continue;
+        }
+        // No default slot to replace: the name is kept once, as `Bind` keeps it.
+        let action: &'static str = Box::leak(action.clone().into_boxed_str());
+        out.push(Bind {
+            keys: keys.clone(),
+            action,
+            context: None,
+        });
+    }
     out
 }
 
 /// Why these keys cannot be a shortcut, if there is a reason.
 pub fn refusal(keys: &str) -> Option<Why> {
-    let Some(stroke) = parse(keys) else { return Some(Why::Unreadable) };
+    let Some(stroke) = parse(keys) else {
+        return Some(Why::Unreadable);
+    };
     let m = stroke.modifiers;
     if stroke.key == "escape" && !(m.control || m.alt || m.platform || m.shift) {
         return Some(Why::Panel);
@@ -189,22 +280,34 @@ pub fn refusal(keys: &str) -> Option<Why> {
 
 /// Keys the system often keeps for itself: to flag, not to refuse.
 pub fn system(keys: &str) -> bool {
-    let Some(stroke) = parse(keys) else { return false };
+    let Some(stroke) = parse(keys) else {
+        return false;
+    };
     let m = stroke.modifiers;
     let key = stroke.key.as_str();
     if cfg!(target_os = "macos") {
         m.platform && matches!(key, "tab" | "space" | "h" | "m")
     } else {
-        m.platform || (m.alt && matches!(key, "tab" | "f4" | "space")) || (m.control && m.alt && key == "delete")
+        m.platform
+            || (m.alt && matches!(key, "tab" | "f4" | "space"))
+            || (m.control && m.alt && key == "delete")
     }
 }
 
-/// The actions that already have these keys where `action` applies.
+/// The actions that already have these keys where `action` applies (everywhere, when the
+/// defaults leave it unbound: that is where its choice would land).
 pub fn clashes(bound: &[Bind], defaults: &[Bind], action: &str, keys: &str) -> Vec<&'static str> {
-    let at = contexts(defaults, action);
+    let mut at = contexts(defaults, action);
+    if at.is_empty() {
+        at.push(None);
+    }
     let mut found = Vec::new();
     for bind in bound {
-        if bind.keys == keys && bind.action != action && at.iter().any(|context| meets(*context, bind.context)) && !found.contains(&bind.action) {
+        if bind.keys == keys
+            && bind.action != action
+            && at.iter().any(|context| meets(*context, bind.context))
+            && !found.contains(&bind.action)
+        {
             found.push(bind.action);
         }
     }
@@ -218,7 +321,10 @@ fn clash(bound: &[Bind], defaults: &[Bind], action: &str, keys: &str) -> Option<
 
 /// The `keys` file: one `action=keys` line per changed action.
 pub fn write(changes: &Changes) -> String {
-    changes.iter().map(|(action, keys)| format!("{action}={keys}\n")).collect()
+    changes
+        .iter()
+        .map(|(action, keys)| format!("{action}={keys}\n"))
+        .collect()
 }
 
 /// Reads the `keys` file. A faulty line (unknown or unchangeable action, keys
@@ -226,7 +332,11 @@ pub fn write(changes: &Changes) -> String {
 /// value stays.
 pub fn read(text: &str, defaults: &[Bind], open: &dyn Fn(&str) -> bool) -> (Changes, Vec<String>) {
     let (mut changes, mut faults) = (Changes::new(), Vec::new());
-    for line in text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with('#')) {
+    for line in text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+    {
         let wanted = line.split_once('=').and_then(|(action, keys)| {
             let (action, keys) = (action.trim(), keys.trim());
             let known = open(action) && defaults.iter().any(|bind| bind.action == action);
@@ -237,11 +347,19 @@ pub fn read(text: &str, defaults: &[Bind], open: &dyn Fn(&str) -> bool) -> (Chan
                 return Some((action, String::new()));
             }
             let keys = canon(keys).filter(|keys| refusal(keys).is_none())?;
-                        // Taken by another choice in the file, or by a binding that cannot change.
+            // Taken by another choice in the file, or by a binding that cannot change.
             let at = contexts(defaults, action);
-            let crosses = |other: &str| contexts(defaults, other).iter().any(|a| at.iter().any(|b| meets(*a, *b)));
-            let chosen = changes.iter().any(|(other, theirs)| other != action && *theirs == keys && crosses(other));
-            let fixed = clashes(defaults, defaults, action, &keys).into_iter().any(|other| !open(other));
+            let crosses = |other: &str| {
+                contexts(defaults, other)
+                    .iter()
+                    .any(|a| at.iter().any(|b| meets(*a, *b)))
+            };
+            let chosen = changes
+                .iter()
+                .any(|(other, theirs)| other != action && *theirs == keys && crosses(other));
+            let fixed = clashes(defaults, defaults, action, &keys)
+                .into_iter()
+                .any(|other| !open(other));
             (!chosen && !fixed).then_some((action, keys))
         });
         match wanted {
@@ -252,6 +370,241 @@ pub fn read(text: &str, defaults: &[Bind], open: &dyn Fn(&str) -> bool) -> (Chan
         }
     }
     (changes, faults)
+}
+
+/// Version of the `keybindings.json` schema (`{"version": 1, "bindings": …}`).
+pub const KEYBINDINGS_VERSION: u32 = 1;
+
+/// One JSON value of `bindings` as the legacy line would hold it: the canon chord,
+/// or empty for unbound (`""` or `[]`). `Err` names why the value is dropped.
+fn json_chord(value: &Value) -> Result<String, &'static str> {
+    match value {
+        Value::String(keys) if keys.is_empty() => Ok(String::new()),
+        Value::String(keys) => canon(keys).ok_or("unreadable keys"),
+        Value::Array(chords) if chords.is_empty() => Ok(String::new()),
+        Value::Array(chords) if chords.len() == 1 => json_chord(&chords[0]),
+        Value::Array(_) => Err("one chord per action"),
+        _ => Err("a chord or a list with one chord"),
+    }
+}
+
+/// The `bindings` entries of the JSON file: legacy `action=chord` lines (for [`read`], whose
+/// clash, refusal and readability checks then apply unchanged), the bound actions (a `reset`
+/// of one of them keeps the binding, with a fault), one fault per faulty entry, and the
+/// `reset` list itself. `reset` is left to the caller: telling an unknown action from a
+/// restored one needs the default table. Unknown fields are ignored, for newer files.
+fn json_entries(text: &str) -> (Vec<String>, Vec<String>, Vec<String>, Vec<Value>) {
+    let value: Value = match serde_json::from_str(text) {
+        Ok(value) => value,
+        Err(fault) => {
+            return (
+                Vec::new(),
+                Vec::new(),
+                vec![format!("invalid JSON: {fault}")],
+                Vec::new(),
+            );
+        }
+    };
+    let mut lines = Vec::new();
+    let mut bound = Vec::new();
+    let mut faults = Vec::new();
+    if value.get("version").and_then(Value::as_u64) != Some(u64::from(KEYBINDINGS_VERSION)) {
+        faults.push(format!(
+            "version: expected {}, the file is read entry by entry anyway",
+            KEYBINDINGS_VERSION
+        ));
+    }
+    match value.get("bindings") {
+        Some(Value::Object(bindings)) => {
+            for (action, chord) in bindings {
+                match json_chord(chord) {
+                    Ok(keys) => {
+                        lines.push(format!("{action}={keys}"));
+                        bound.push(action.clone());
+                    }
+                    Err(reason) => {
+                        faults.push(format!("bindings.{action}: expected {reason}, got {chord}"))
+                    }
+                }
+            }
+        }
+        Some(_) => faults.push("bindings: expected an object of action to chord".into()),
+        None => {}
+    }
+    let reset = match value.get("reset") {
+        None => Vec::new(),
+        Some(Value::Array(reset)) => reset.clone(),
+        Some(reset) => {
+            faults.push(format!(
+                "reset: expected an array of action names, got {reset}"
+            ));
+            Vec::new()
+        }
+    };
+    (lines, bound, faults, reset)
+}
+
+/// Reads the JSON keybindings file (`{"version": 1, "bindings": {action: [chord], …}, `"reset"`: [action, …]}`):
+/// the user changes and the faulty entries, one by one. Clash, refusal and readability checks
+/// are exactly the legacy ones: each valid entry is replayed as an `action=keys` line through
+/// [`read`]. `"reset"` restores the default keys of its actions (an entry also bound above keeps
+/// its binding, with a fault).
+pub fn read_json(
+    text: &str,
+    defaults: &[Bind],
+    open: &dyn Fn(&str) -> bool,
+) -> (Changes, Vec<String>) {
+    let (lines, bound, mut faults, reset) = json_entries(text);
+    let (mut changes, mut read_faults) = read(&lines.join("\n"), defaults, open);
+    faults.append(&mut read_faults);
+    for action in &reset {
+        let Some(action) = action.as_str() else {
+            faults.push(format!("reset: expected action names, got {action}"));
+            continue;
+        };
+        if bound.iter().any(|b| b == action) {
+            faults.push(format!(
+                "reset: {action} is also bound above, the binding wins"
+            ));
+        } else if !open(action) || !defaults.iter().any(|b| b.action == action) {
+            faults.push(format!("reset: unknown action {action}"));
+        } else {
+            changes.remove(action);
+        }
+    }
+    (changes, faults)
+}
+
+/// `keybindings.json` replayed as legacy `action=chord` lines: what [`user_lines`] hands
+/// the unchanged reader when the JSON file is present, so it wins over the legacy file.
+/// Fault markers hold no `=`, so [`read`] sets them aside and reports them like faulty lines.
+/// A `reset` restores the default keys: no legacy line, so `read` keeps the default (an unknown
+/// reset action is silent here, without the default table: `--check-config` names it).
+pub fn legacy_lines(text: &str) -> String {
+    let (mut lines, bound, mut faults, reset) = json_entries(text);
+    for action in &reset {
+        match action.as_str() {
+            None => faults.push(format!("reset: expected action names, got {action}")),
+            Some(action) if bound.iter().any(|b| b == action) => faults.push(format!(
+                "reset: {action} is also bound above, the binding wins"
+            )),
+            Some(_) => {}
+        }
+    }
+    lines.append(&mut faults);
+    lines.join("\n") + "\n"
+}
+
+/// What the shortcut reader reads: the JSON keybindings when present (replayed as legacy
+/// lines, so clash, refusal and readability checks stay the reader's own), else the legacy
+/// `keys` file. Lives here, not in the vault: the platform layer never sees the ui one.
+pub fn user_lines() -> String {
+    let json = crate::platform::vault::load_keybindings();
+    match json.trim().is_empty() {
+        true => crate::platform::vault::load_file("keys"),
+        false => legacy_lines(&json),
+    }
+}
+
+/// Writes the JSON keybindings file from the user changes (see [`write`] for the legacy
+/// form): `{"version": 1, "bindings": {action: [chord], …}}`, actions sorted.
+pub fn write_json(changes: &Changes) -> String {
+    let mut bindings = serde_json::Map::new();
+    for (action, keys) in changes {
+        bindings.insert(
+            action.clone(),
+            if keys.is_empty() {
+                Value::Array(Vec::new())
+            } else {
+                Value::Array(vec![Value::String(keys.clone())])
+            },
+        );
+    }
+    let mut root = serde_json::Map::new();
+    root.insert("version".into(), Value::from(KEYBINDINGS_VERSION));
+    root.insert("bindings".into(), Value::Object(bindings));
+    serde_json::to_string_pretty(&Value::Object(root)).unwrap_or_default() + "\n"
+}
+
+/// Validates the JSON keybindings file without the default table (for `--check-config`):
+/// the entries that would apply, the errors (a faulty entry is dropped) and the warnings
+/// (chords the system may keep for itself). Chords shared by two actions are reported as
+/// errors: without the default contexts, every action is assumed to meet every other.
+pub fn check_json(text: &str) -> (Changes, Vec<String>, Vec<String>) {
+    let mut changes = Changes::new();
+    let mut errors = Vec::new();
+    let mut warns = Vec::new();
+    let value: Value = match serde_json::from_str(text) {
+        Ok(value) => value,
+        Err(fault) => {
+            errors.push(format!("invalid JSON: {fault}"));
+            return (changes, errors, warns);
+        }
+    };
+    if value.get("version").and_then(Value::as_u64) != Some(u64::from(KEYBINDINGS_VERSION)) {
+        errors.push(format!(
+            "version: expected {}, got {}",
+            KEYBINDINGS_VERSION,
+            value.get("version").unwrap_or(&Value::Null)
+        ));
+    }
+    match value.get("bindings") {
+        Some(Value::Object(bindings)) => {
+            for (action, chord) in bindings {
+                match json_chord(chord) {
+                    Err(reason) => {
+                        errors.push(format!("bindings.{action}: expected {reason}, got {chord}"))
+                    }
+                    Ok(keys) => {
+                        if !keys.is_empty() {
+                            if let Some(issue) = refusal(&keys) {
+                                errors.push(format!(
+                                    "bindings.{action}: refused ({})",
+                                    match issue {
+                                        Why::Types => "typing keys",
+                                        Why::Panel => "palette keys",
+                                        // Unreachable: `json_chord` already kept the readable.
+                                        Why::Unreadable => "unreadable keys",
+                                    }
+                                ));
+                                continue;
+                            }
+                            if system(&keys) {
+                                warns.push(format!(
+                                    "bindings.{action}: the system may keep {keys} for itself"
+                                ));
+                            }
+                            if let Some(taken) = changes
+                                .iter()
+                                .find(|(_, taken)| **taken == keys)
+                                .map(|(other, _)| other.clone())
+                            {
+                                errors.push(format!(
+                                    "bindings.{action}: {keys} is already taken by {taken}"
+                                ));
+                                continue;
+                            }
+                        }
+                        changes.insert(action.clone(), keys);
+                    }
+                }
+            }
+        }
+        Some(_) => errors.push("bindings: expected an object of action to chord".into()),
+        None => errors.push("bindings: missing, nothing to apply".into()),
+    }
+    match value.get("reset") {
+        None => {}
+        Some(Value::Array(reset)) => {
+            for action in reset {
+                if action.as_str().is_none() {
+                    errors.push(format!("reset: expected action names, got {action}"));
+                }
+            }
+        }
+        Some(_) => errors.push("reset: expected an array of action names".into()),
+    }
+    (changes, errors, warns)
 }
 
 /// The keys in force for an action, as read: "F1 / Ctrl+/", or nothing.
@@ -288,8 +641,20 @@ mod tests {
 
     fn sample() -> Sections {
         vec![
-            ("Notes", vec![Row::text("Ctrl+P", "Chercher, créer"), Row::text("Ctrl+Shift+F", "Chercher dans le texte")]),
-            ("Navigation", vec![Row::text("Ctrl+G", "Graphe des notes"), Row::text("Ctrl+clic", "Sélection à étendre")]),
+            (
+                "Notes",
+                vec![
+                    Row::text("Ctrl+P", "Chercher, créer"),
+                    Row::text("Ctrl+Shift+F", "Chercher dans le texte"),
+                ],
+            ),
+            (
+                "Navigation",
+                vec![
+                    Row::text("Ctrl+G", "Graphe des notes"),
+                    Row::text("Ctrl+clic", "Sélection à étendre"),
+                ],
+            ),
         ]
     }
 
@@ -304,20 +669,36 @@ mod tests {
     fn filter_matches_keys_and_text() {
         let all = sample();
         assert_eq!(filter(all.clone(), "  "), all);
-                // The keys, ignoring case.
-        assert_eq!(filter(all.clone(), "ctrl+p"), vec![("Notes", vec![Row::text("Ctrl+P", "Chercher, créer")])]);
-                // The text, without accents; a section with no line disappears.
-        assert_eq!(filter(all.clone(), "selection"), vec![("Navigation", vec![Row::text("Ctrl+clic", "Sélection à étendre")])]);
-                // Each word must be there, keys and text together.
-        assert_eq!(filter(all.clone(), "ctrl graphe"), vec![("Navigation", vec![Row::text("Ctrl+G", "Graphe des notes")])]);
+        // The keys, ignoring case.
+        assert_eq!(
+            filter(all.clone(), "ctrl+p"),
+            vec![("Notes", vec![Row::text("Ctrl+P", "Chercher, créer")])]
+        );
+        // The text, without accents; a section with no line disappears.
+        assert_eq!(
+            filter(all.clone(), "selection"),
+            vec![(
+                "Navigation",
+                vec![Row::text("Ctrl+clic", "Sélection à étendre")]
+            )]
+        );
+        // Each word must be there, keys and text together.
+        assert_eq!(
+            filter(all.clone(), "ctrl graphe"),
+            vec![("Navigation", vec![Row::text("Ctrl+G", "Graphe des notes")])]
+        );
         assert!(filter(all, "zzz").is_empty());
     }
 
     fn b(keys: &str, action: &'static str, context: Option<&'static str>) -> Bind {
-        Bind { keys: canon(keys).unwrap(), action, context }
+        Bind {
+            keys: canon(keys).unwrap(),
+            action,
+            context,
+        }
     }
 
-        /// A small set of bindings: `Type` and `Close` cannot be changed.
+    /// A small set of bindings: `Type` and `Close` cannot be changed.
     fn base() -> Vec<Bind> {
         vec![
             b("secondary-p", "app::Palette", None),
@@ -339,17 +720,32 @@ mod tests {
     }
 
     fn of<'a>(binds: &'a [Bind], action: &str) -> Vec<(&'a str, Option<&'static str>)> {
-        binds.iter().filter(|b| b.action == action).map(|b| (b.keys.as_str(), b.context)).collect()
+        binds
+            .iter()
+            .filter(|b| b.action == action)
+            .map(|b| (b.keys.as_str(), b.context))
+            .collect()
     }
 
     #[test]
     fn canon_spells_one_way() {
-        assert_eq!(canon("shift-secondary-P").as_deref(), Some("secondary-shift-p"));
+        assert_eq!(
+            canon("shift-secondary-P").as_deref(),
+            Some("secondary-shift-p")
+        );
         assert_eq!(canon("secondary--").as_deref(), Some("secondary--"));
         assert_eq!(canon("alt-F3").as_deref(), Some("alt-f3"));
-        let other = if cfg!(target_os = "macos") { "ctrl-k" } else { "cmd-k" };
-        assert_eq!(canon(other).as_deref(), Some(other), "a key other than `secondary` keeps its name");
-                // Unreadable: nothing, two keys, an unknown key name.
+        let other = if cfg!(target_os = "macos") {
+            "ctrl-k"
+        } else {
+            "cmd-k"
+        };
+        assert_eq!(
+            canon(other).as_deref(),
+            Some(other),
+            "a key other than `secondary` keeps its name"
+        );
+        // Unreadable: nothing, two keys, an unknown key name.
         assert_eq!(canon(""), None);
         assert_eq!(canon("a-b"), None);
         assert_eq!(canon("ctrl-foo"), None);
@@ -368,9 +764,9 @@ mod tests {
     fn contexts_that_meet() {
         assert!(meets(None, Some("Editor")) && meets(Some("Sheet"), Some("Shell")));
         assert!(meets(Some("Nav"), Some("Nav")));
-                // A table's arrows and a diagram's never meet.
+        // A table's arrows and a diagram's never meet.
         assert!(!meets(Some("Sheet"), Some("Canvas")) && !meets(Some("Editor"), Some("Find")));
-                // A cell being edited receives the keys of a text line.
+        // A cell being edited receives the keys of a text line.
         assert!(meets(Some("Line"), Some("Sheet")) && meets(Some("Palette"), Some("Line")));
     }
 
@@ -383,30 +779,44 @@ mod tests {
         changes.insert("app::Help".into(), "f9".into());
         changes.insert("nav::Graph".into(), String::new());
         let now = effective(&base, &changes, &open);
-                // Both contexts follow, at the place the binding held (the order decides who wins).
-        assert_eq!(of(&now, "editor::Find"), [("secondary-shift-g", Some("Editor")), ("secondary-shift-g", Some("Find"))]);
-        assert_eq!(now.iter().position(|b| b.action == "editor::Find"), base.iter().position(|b| b.action == "editor::Find").map(|i| i - 2));
-                // Two default keys: only one after the choice.
+        // Both contexts follow, at the place the binding held (the order decides who wins).
+        assert_eq!(
+            of(&now, "editor::Find"),
+            [
+                ("secondary-shift-g", Some("Editor")),
+                ("secondary-shift-g", Some("Find"))
+            ]
+        );
+        assert_eq!(
+            now.iter().position(|b| b.action == "editor::Find"),
+            base.iter()
+                .position(|b| b.action == "editor::Find")
+                .map(|i| i - 2)
+        );
+        // Two default keys: only one after the choice.
         assert_eq!(of(&now, "app::Help"), [("f9", None)]);
-                // No shortcut.
+        // No shortcut.
         assert!(of(&now, "nav::Graph").is_empty());
         assert_eq!(of(&now, "app::Palette"), [("secondary-p", None)]);
     }
 
     #[test]
     fn a_choice_wins_over_a_default() {
-                // A later version gives an action keys the user has already taken:
-                // their choice stays, the action arrives without a shortcut.
+        // A later version gives an action keys the user has already taken:
+        // their choice stays, the action arrives without a shortcut.
         let mut changes = Changes::new();
         changes.insert("nav::Graph".into(), "secondary-p".into());
         let now = effective(&base(), &changes, &open);
         assert_eq!(of(&now, "nav::Graph"), [("secondary-p", Some("Shell"))]);
         assert!(of(&now, "app::Palette").is_empty());
-                // In contexts that do not meet, both stay.
+        // In contexts that do not meet, both stay.
         let mut changes = Changes::new();
         changes.insert("sheet::Undo".into(), "secondary-d".into());
         let now = effective(&base(), &changes, &open);
-        assert_eq!(of(&now, "editor::Next").len() + of(&now, "nav::Twin").len(), 2);
+        assert_eq!(
+            of(&now, "editor::Next").len() + of(&now, "nav::Twin").len(),
+            2
+        );
     }
 
     #[test]
@@ -434,17 +844,29 @@ mod tests {
     #[test]
     fn clash_names_who_has_the_keys() {
         let base = base();
-                // Free, or already one's own.
+        // Free, or already one's own.
         assert_eq!(clash(&base, &base, "app::Palette", "secondary-k"), None);
         assert_eq!(clash(&base, &base, "app::Palette", "secondary-p"), None);
-                // An everywhere action meets the editor's, and the reverse.
-        assert_eq!(clash(&base, &base, "app::Palette", "secondary-f"), Some("editor::Find"));
-        assert_eq!(clash(&base, &base, "editor::Find", "secondary-g"), Some("nav::Graph"));
-                // Two views that do not meet.
+        // An everywhere action meets the editor's, and the reverse.
+        assert_eq!(
+            clash(&base, &base, "app::Palette", "secondary-f"),
+            Some("editor::Find")
+        );
+        assert_eq!(
+            clash(&base, &base, "editor::Find", "secondary-g"),
+            Some("nav::Graph")
+        );
+        // Two views that do not meet.
         assert_eq!(clash(&base, &base, "sheet::Undo", "secondary-d"), None);
-                // In its own context.
-        assert_eq!(clash(&base, &base, "editor::Find", "secondary-d"), Some("editor::Next"));
-        assert_eq!(clash(&base, &base, "editor::Find", "enter"), Some("editor::Type"));
+        // In its own context.
+        assert_eq!(
+            clash(&base, &base, "editor::Find", "secondary-d"),
+            Some("editor::Next")
+        );
+        assert_eq!(
+            clash(&base, &base, "editor::Find", "enter"),
+            Some("editor::Type")
+        );
     }
 
     #[test]
@@ -456,14 +878,48 @@ mod tests {
         let text = write(&changes);
         assert_eq!(text, "app::Help=f9\nnav::Graph=\n");
         assert_eq!(read(&text, &base, &open), (changes.clone(), Vec::new()));
-                // A swap is allowed: each takes the other's keys.
-        let (swap, faults) = read("app::Palette=secondary-g\nnav::Graph=secondary-p\n", &base, &open);
+        // A swap is allowed: each takes the other's keys.
+        let (swap, faults) = read(
+            "app::Palette=secondary-g\nnav::Graph=secondary-p\n",
+            &base,
+            &open,
+        );
         assert_eq!((swap.len(), faults.len()), (2, 0));
-                // Each faulty line is set aside and named, the others stay.
+        // Each faulty line is set aside and named, the others stay.
         let text = "# à la main\n\napp::Help=f9\nno::Such=f8\neditor::Type=f7\napp::Palette=ctrl-foo\nnav::Graph=a\nsans égal\neditor::Find=enter\nsheet::Undo=f9\n";
         let (kept, faults) = read(text, &base, &open);
-        assert_eq!(kept, Changes::from([("app::Help".to_string(), "f9".to_string())]));
-        assert_eq!(faults, ["no::Such=f8", "editor::Type=f7", "app::Palette=ctrl-foo", "nav::Graph=a", "sans égal", "editor::Find=enter", "sheet::Undo=f9"]);
+        assert_eq!(
+            kept,
+            Changes::from([("app::Help".to_string(), "f9".to_string())])
+        );
+        assert_eq!(
+            faults,
+            [
+                "no::Such=f8",
+                "editor::Type=f7",
+                "app::Palette=ctrl-foo",
+                "nav::Graph=a",
+                "sans égal",
+                "editor::Find=enter",
+                "sheet::Undo=f9"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_choice_for_an_action_without_defaults_still_applies() {
+        // `nav::Tree` has no default binding here: its choice is appended last, everywhere.
+        let mut changes = Changes::new();
+        changes.insert("nav::Tree".into(), "secondary-d".into());
+        let now = effective(&base(), &changes, &open);
+        assert_eq!(of(&now, "nav::Tree"), [("secondary-d", None)]);
+        assert_eq!(shown(&now, "nav::Tree"), format!("{MOD}+D"));
+        // The defaults that held those keys where they meet lose them; the choice wins.
+        assert!(of(&now, "editor::Next").is_empty() && of(&now, "nav::Twin").is_empty());
+        assert_eq!(
+            clashes(&base(), &base(), "nav::Tree", "secondary-d"),
+            ["editor::Next", "nav::Twin"]
+        );
     }
 
     #[test]
@@ -474,8 +930,131 @@ mod tests {
         let now = effective(&base(), &changes, &open);
         assert_eq!(shown(&now, "app::Help"), "F9");
         assert_eq!(shown(&now, "nav::Graph"), "");
-                // Two default keys, once each even when bound in two contexts.
+        // Two default keys, once each even when bound in two contexts.
         assert_eq!(shown(&base(), "app::Help"), format!("F1 / {}+/", MOD));
         assert_eq!(shown(&base(), "editor::Find"), format!("{}+F", MOD));
+    }
+
+    #[test]
+    fn json_bindings_replay_the_legacy_checks() {
+        // One chord per action; `""` and `[]` unbind; `reset` restores defaults.
+        let (changes, faults) = read_json(
+            r#"{"version": 1, "bindings": {
+                "app::Palette": "f9",
+                "editor::Find": ["f8"],
+                "nav::Graph": [],
+                "nav::Twin": "",
+                "app::Help": ["secondary-p", "f9"],
+                "app::CopyAll": 7
+            }, "reset": ["app::Help", "nope::Nothing", 3]}"#,
+            &base(),
+            &open,
+        );
+        assert_eq!(changes.get("app::Palette").map(String::as_str), Some("f9"));
+        assert_eq!(changes.get("editor::Find").map(String::as_str), Some("f8"));
+        assert_eq!(changes.get("nav::Graph").map(String::as_str), Some(""));
+        assert_eq!(changes.get("nav::Twin").map(String::as_str), Some(""));
+        // Faulty entries, one by one: two chords, a number, both bad resets.
+        // (Reset of the unchanged `app::Help` is silent.)
+        assert_eq!(faults.len(), 4);
+        assert!(faults.iter().any(|f| f.contains("app::Help")));
+        assert!(faults.iter().any(|f| f.contains("app::CopyAll")));
+        assert!(faults.iter().any(|f| f.contains("nope::Nothing")));
+        // A clash with a binding that cannot change is a fault, like in the legacy file.
+        let (changes, faults) = read_json(
+            r#"{"version": 1, "bindings": {"app::Help": ["enter"]}}"#,
+            &base(),
+            &open,
+        );
+        assert!(changes.is_empty());
+        assert_eq!(faults, vec!["app::Help=enter".to_string()]);
+        // Reset of a bound action keeps the binding, with a fault.
+        let (changes, faults) = read_json(
+            r#"{"version": 1, "bindings": {"app::Help": ["f9"]}, "reset": ["app::Help", "app::New"]}"#,
+            &base(),
+            &open,
+        );
+        assert_eq!(changes.get("app::Help").map(String::as_str), Some("f9"));
+        assert_eq!(faults.len(), 2);
+        // Bad JSON and a bad version are faults, not panics.
+        assert_eq!(read_json("nope", &base(), &open).1.len(), 1);
+        assert_eq!(
+            read_json(r#"{"version": 2}"#, &base(), &open),
+            (
+                Changes::new(),
+                vec![format!(
+                    "version: expected {}, the file is read entry by entry anyway",
+                    KEYBINDINGS_VERSION
+                )]
+            )
+        );
+    }
+
+    #[test]
+    fn json_round_trip_keeps_the_changes() {
+        let mut changes = Changes::new();
+        changes.insert("app::Palette".into(), "secondary-p".into());
+        changes.insert("nav::Graph".into(), String::new());
+        let text = write_json(&changes);
+        let back: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(back["version"], 1);
+        assert_eq!(
+            back["bindings"]["app::Palette"],
+            serde_json::json!(["secondary-p"])
+        );
+        assert_eq!(back["bindings"]["nav::Graph"], serde_json::json!([]));
+        let (read_back, faults) = read_json(&text, &base(), &open);
+        assert!(faults.is_empty() && read_back == changes);
+    }
+
+    #[test]
+    fn json_check_needs_no_default_table() {
+        let (changes, errors, warns) = check_json(
+            r#"{"version": 1, "bindings": {
+                "app::Palette": ["secondary-p"],
+                "app::Clone": ["secondary-p"],
+                "app::Help": ["f1", "f2"],
+                "nav::Graph": []
+            }, "reset": ["app::New"]}"#,
+        );
+        // The first holder of a chord wins; the rest are errors.
+        assert_eq!(changes.len(), 2);
+        assert_eq!(errors.len(), 2);
+        assert!(errors.iter().any(|e| e.contains("already taken")));
+        assert!(errors.iter().any(|e| e.contains("one chord")));
+        assert!(warns.is_empty());
+        // Refused chords are errors, system ones warnings, bad shapes errors.
+        // (`secondary-space` only warns on macOS, where `secondary` is the platform key:
+        // on Linux it is the app's own Ctrl and stays silent. `cmd-space` warns everywhere.)
+        let (_, errors, warns) = check_json(
+            r#"{"version": 9, "bindings": {"a::B": ["a"], "a::C": ["cmd-space"], "a::D": ["ctrl-space"]}}"#,
+        );
+        assert!(errors.iter().any(|e| e.starts_with("version:")));
+        assert!(errors.iter().any(|e| e.contains("refused")));
+        assert!(warns.iter().any(|w| w.contains("system may keep")));
+        let (_, errors, _) = check_json(r#"{"version": 1, "reset": {}}"#);
+        assert_eq!(errors.len(), 2);
+    }
+
+    #[test]
+    fn json_replayed_as_legacy_lines_reads_the_same() {
+        // What `user_lines` hands the reader: valid entries as lines, faulty
+        // ones as markers that `read` sets aside, `reset` restoring the defaults silently.
+        let text = r#"{"version": 1, "bindings": {
+            "app::Palette": "f9", "nav::Graph": [], "app::Help": ["secondary-p", "f9"], "app::CopyAll": 7
+        }, "reset": ["app::Palette", "app::Help"]}"#;
+        let (changes, faults) = read(&legacy_lines(text), &base(), &open);
+        assert_eq!(changes.get("app::Palette").map(String::as_str), Some("f9"));
+        assert_eq!(changes.get("nav::Graph").map(String::as_str), Some(""));
+        // Three faulty entries (two chords, a number) and the bound-but-reset clash.
+        assert_eq!(faults.len(), 3);
+        assert!(faults.iter().any(|f| f.contains("app::Help")));
+        assert!(faults.iter().any(|f| f.contains("app::CopyAll")));
+        // Invalid JSON replays as a single marker, never a panic (also when empty: the
+        // caller only replays a present file, and absence is handled before).
+        let (changes, faults) = read(&legacy_lines("nope"), &base(), &open);
+        assert!(changes.is_empty() && faults.len() == 1);
+        let (changes, faults) = read(&legacy_lines(""), &base(), &open);
+        assert!(changes.is_empty() && faults.len() == 1);
     }
 }

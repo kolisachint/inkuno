@@ -20,7 +20,10 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 fn cell(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
-        if matches!(c, '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '|' | '#') {
+        if matches!(
+            c,
+            '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '|' | '#'
+        ) {
             out.push('\\');
         }
         out.push(c);
@@ -40,7 +43,11 @@ fn keys(keys: &str) -> String {
                 return cell(k);
             }
             let k = k.replace('|', "\\|");
-            if k.contains('`') { format!("`` {k} ``") } else { format!("`{k}`") }
+            if k.contains('`') {
+                format!("`` {k} ``")
+            } else {
+                format!("`{k}`")
+            }
         })
         .collect::<Vec<_>>()
         .join(" / ")
@@ -59,25 +66,39 @@ fn page() -> String {
     })
 }
 
-/// `make docs` (`BREF_WRITE_DOCS=1`) writes the page; otherwise a page that no longer matches
+/// `make docs` (`INKUNO_WRITE_DOCS=1`) writes the page; otherwise a page that no longer matches
 /// the help panel fails, with the command that brings it up to date.
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn shortcuts_page_is_current() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(PAGE);
     let page = page();
-    if std::env::var_os("BREF_WRITE_DOCS").is_some() {
+    if std::env::var_os("INKUNO_WRITE_DOCS").is_some() {
         std::fs::write(&path, &page).unwrap();
         return;
     }
-    let written = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
-    assert!(written == page, "{PAGE} no longer matches the help panel: run `make docs`");
+    let written = std::fs::read_to_string(&path)
+        .unwrap_or_default()
+        .replace("\r\n", "\n");
+    assert!(
+        written == page,
+        "{PAGE} no longer matches the help panel: run `make docs`"
+    );
 }
 
 #[test]
 fn shortcuts_page_is_in_english_with_every_section() {
     let page = page();
-    for title in ["## Notes", "## Navigation", "## Diagrams", "## CSV tables", "## Appearance", "## Typing", "## Editing", "## Blocks"] {
+    for title in [
+        "## Notes",
+        "## Navigation",
+        "## Diagrams",
+        "## CSV tables",
+        "## Appearance",
+        "## Typing",
+        "## Editing",
+        "## Blocks",
+    ] {
         assert!(page.contains(&format!("\n{title}\n")), "{title} missing");
     }
     assert!(page.contains("| Find by name or text, create, filter by \\#tag |"));

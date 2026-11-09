@@ -1,8 +1,8 @@
-# Bref
+# Inkuno
 
-Bref is a fast, minimal note-taking app. Your notes are plain Markdown files in a folder you choose, styled as you type. It is written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework.
+Inkuno is a fast, minimal note-taking app. Your notes are plain Markdown files in a folder you choose, styled as you type. It is written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework. It continues Bref by Andrea Larboullet Marin under a new name.
 
-New here? [Install Bref](install.md), then read [First steps](first-steps.md).
+New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 
 ## What it does
 
@@ -23,7 +23,7 @@ New here? [Install Bref](install.md), then read [First steps](first-steps.md).
 | **Keyboard first** | One palette for notes and commands. Every shortcut is listed in the app and can be changed. See [Keyboard shortcuts](shortcuts.md). |
 | **Yours to dress** | A dozen themes, IBM Plex built in, any installed font, light and dark. See [Settings and appearance](settings.md). |
 
-Bref speaks English and French, following the language of your system.
+Inkuno speaks English and French, following the language of your system.
 
 ## Conventions in this guide
 

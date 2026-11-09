@@ -9,13 +9,14 @@ use std::{
 };
 
 use gpui::{
-    App, Bounds, ContentMask, Pixels, Point, TextAlign, Window, WindowTextSystem, WrappedLine, fill, point, px, size,
+    App, Bounds, ContentMask, Pixels, Point, TextAlign, Window, WindowTextSystem, WrappedLine,
+    fill, point, px, size,
 };
 
 use crate::{
+    logic::{formula, markdown as md},
     ui::theme::Theme,
     views::editor::{Fast, FastMap, RunStyle, text_runs},
-    logic::{formula, markdown as md},
 };
 
 /// Inner padding of a cell, and stroke thickness.
@@ -67,7 +68,11 @@ impl Cache {
     }
 
     fn shape(&mut self, key: u64, make: impl FnOnce() -> Shape) -> Rc<Shape> {
-        let shape = self.old.remove(&key).or_else(|| self.new.get(&key).cloned()).unwrap_or_else(|| Rc::new(make()));
+        let shape = self
+            .old
+            .remove(&key)
+            .or_else(|| self.new.get(&key).cloned())
+            .unwrap_or_else(|| Rc::new(make()));
         self.new.insert(key, shape.clone());
         shape
     }
@@ -125,7 +130,10 @@ pub fn source(subs: &[(usize, usize, usize)], i: usize) -> usize {
 fn is_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric()
         || matches!(c, '\u{00C0}'..='\u{024F}' | '\u{0400}'..='\u{04FF}')
-        || matches!(c, '-' | '_' | '.' | '\'' | '$' | '%' | '@' | '#' | '^' | '~' | ',' | '=' | ':' | '⋯')
+        || matches!(
+            c,
+            '-' | '_' | '.' | '\'' | '$' | '%' | '@' | '#' | '^' | '~' | ',' | '=' | ':' | '⋯'
+        )
 }
 
 /// The pieces wrapping does not cut, as it sees them: a word with
@@ -151,7 +159,10 @@ fn x_at(line: &WrappedLine, i: usize) -> Pixels {
 /// Width of the longest unbreakable piece.
 fn longest(line: &WrappedLine) -> Pixels {
     let trimmed = |r: Range<usize>| r.start..line.text[r.clone()].trim_end().len() + r.start;
-    let widths = units(&line.text).into_iter().map(trimmed).map(|r| x_at(line, r.end) - x_at(line, r.start));
+    let widths = units(&line.text)
+        .into_iter()
+        .map(trimmed)
+        .map(|r| x_at(line, r.end) - x_at(line, r.start));
     widths.fold(px(0.), |a, b| a.max(b))
 }
 
@@ -168,13 +179,27 @@ pub fn column_widths(narrow: &[f32], wide: &[f32], avail: f32) -> Vec<f32> {
     if total(&narrow) <= avail {
         // One shared level for the columns that need it: short ones keep their width,
         // long ones share the rest, without going below their longest word.
-        let take = |level: f32| narrow.iter().zip(wide).map(|(n, w)| level.clamp(*n, *w)).sum::<f32>();
+        let take = |level: f32| {
+            narrow
+                .iter()
+                .zip(wide)
+                .map(|(n, w)| level.clamp(*n, *w))
+                .sum::<f32>()
+        };
         let (mut low, mut high) = (0., wide.iter().copied().fold(0., f32::max));
         for _ in 0..40 {
             let mid = (low + high) / 2.;
-            if take(mid) > avail { high = mid } else { low = mid }
+            if take(mid) > avail {
+                high = mid
+            } else {
+                low = mid
+            }
         }
-        return narrow.iter().zip(wide).map(|(n, w)| low.clamp(*n, *w)).collect();
+        return narrow
+            .iter()
+            .zip(wide)
+            .map(|(n, w)| low.clamp(*n, *w))
+            .collect();
     }
     // Lower the widest columns to one shared level, like water in vessels.
     let mut sorted = narrow.clone();
@@ -210,7 +235,10 @@ pub struct Cell {
 
 impl Cell {
     fn lines(&self) -> i32 {
-        self.shape.line.as_ref().map_or(1, |l| l.wrap_boundaries.len() as i32 + 1)
+        self.shape
+            .line
+            .as_ref()
+            .map_or(1, |l| l.wrap_boundaries.len() as i32 + 1)
     }
 
     /// Width of visual line `k`.
@@ -219,8 +247,13 @@ impl Cell {
             return px(0.);
         };
         let edge = |b: &gpui::WrapBoundary| line.runs()[b.run_ix].glyphs[b.glyph_ix].position.x;
-        let start = k.checked_sub(1).map_or(px(0.), |k| edge(&line.wrap_boundaries[k]));
-        line.wrap_boundaries.get(k).map_or(line.unwrapped_layout.width, edge) - start
+        let start = k
+            .checked_sub(1)
+            .map_or(px(0.), |k| edge(&line.wrap_boundaries[k]));
+        line.wrap_boundaries
+            .get(k)
+            .map_or(line.unwrapped_layout.width, edge)
+            - start
     }
 
     /// Offset of visual line `k` due to the column's alignment.
@@ -245,7 +278,10 @@ impl Cell {
             return point(self.shift(k + 1), lh * (k + 1) as f32);
         }
         let p = line.position_for_index(i, lh).unwrap_or_default();
-        point(p.x + self.shift((f32::from(p.y) / f32::from(lh)).round() as usize), p.y)
+        point(
+            p.x + self.shift((f32::from(p.y) / f32::from(lh)).round() as usize),
+            p.y,
+        )
     }
 
     /// Content byte closest to point `p`, from the cell's corner.
@@ -253,7 +289,8 @@ impl Cell {
         let Some(line) = &self.shape.line else {
             return 0;
         };
-        let k = ((f32::from(p.y) / f32::from(lh)).floor().max(0.) as usize).min(line.wrap_boundaries.len());
+        let k = ((f32::from(p.y) / f32::from(lh)).floor().max(0.) as usize)
+            .min(line.wrap_boundaries.len());
         let at = point(p.x - self.shift(k), lh * (k as f32 + 0.5));
         match line.closest_index_for_position(at, lh) {
             Ok(i) | Err(i) => source(&self.shape.subs, i),
@@ -267,7 +304,11 @@ impl Cell {
         (row(a)..=row(b))
             .map(|k| {
                 let start = if k == row(a) { a.x } else { self.shift(k) };
-                let end = if k == row(b) { b.x } else { self.shift(k) + self.line_width(k) };
+                let end = if k == row(b) {
+                    b.x
+                } else {
+                    self.shift(k) + self.line_width(k)
+                };
                 (start, lh * k as f32, end - start)
             })
             .collect()
@@ -318,7 +359,11 @@ impl TableRow {
 
     /// Line height, for visual lines of `lh`.
     pub fn height(&self, lh: Pixels) -> Pixels {
-        if self.hidden() { px(0.) } else { self.pad() + lh * self.lines as f32 + PAD_Y + self.bottom }
+        if self.hidden() {
+            px(0.)
+        } else {
+            self.pad() + lh * self.lines as f32 + PAD_Y + self.bottom
+        }
     }
 
     /// Column where byte `i` is: that of the `|` before it.
@@ -335,7 +380,15 @@ impl TableRow {
     /// What each cell shows, for the tests.
     #[cfg(test)]
     pub fn shown(&self) -> Vec<String> {
-        self.cells.iter().map(|c| c.shape.line.as_ref().map_or(String::new(), |l| l.text.to_string())).collect()
+        self.cells
+            .iter()
+            .map(|c| {
+                c.shape
+                    .line
+                    .as_ref()
+                    .map_or(String::new(), |l| l.text.to_string())
+            })
+            .collect()
     }
 
     /// Visual lines of the cell where byte `i` is.
@@ -350,7 +403,10 @@ impl TableRow {
         let Some(cell) = self.cells.get(c) else {
             return Point::default();
         };
-        let p = cell.position(i.clamp(cell.range.start, cell.range.end) - cell.range.start, lh);
+        let p = cell.position(
+            i.clamp(cell.range.start, cell.range.end) - cell.range.start,
+            lh,
+        );
         point(self.left(c) + p.x, p.y)
     }
 
@@ -359,7 +415,11 @@ impl TableRow {
         let Some(last) = self.cells.len().checked_sub(1) else {
             return 0;
         };
-        let c = self.xs.partition_point(|&x| x <= p.x).saturating_sub(1).min(last);
+        let c = self
+            .xs
+            .partition_point(|&x| x <= p.x)
+            .saturating_sub(1)
+            .min(last);
         let cell = &self.cells[c];
         cell.range.start + cell.index(point(p.x - self.left(c), p.y), lh)
     }
@@ -372,7 +432,11 @@ impl TableRow {
             let (a, b) = (from.max(cell.range.start), to.min(cell.range.end));
             if a < b {
                 let at = self.left(c);
-                found.extend(cell.spans(a - cell.range.start, b - cell.range.start, lh).into_iter().map(|(x, y, w)| (at + x, y, w)));
+                found.extend(
+                    cell.spans(a - cell.range.start, b - cell.range.start, lh)
+                        .into_iter()
+                        .map(|(x, y, w)| (at + x, y, w)),
+                );
             }
         }
         found
@@ -380,16 +444,36 @@ impl TableRow {
 
     /// Header background, drawn under the text, over `area` (the visible width of the table, from
     /// the top of the line), its corners following the table's frame: the bottom ones too when `ends` (it is the only line).
-    pub fn paint_back(&self, area: Bounds<Pixels>, radius: Pixels, ends: bool, theme: &Theme, window: &mut Window) {
+    pub fn paint_back(
+        &self,
+        area: Bounds<Pixels>,
+        radius: Pixels,
+        ends: bool,
+        theme: &Theme,
+        window: &mut Window,
+    ) {
         if self.header {
             let low = if ends { radius } else { px(0.) };
-            let corners = gpui::Corners { top_left: radius, top_right: radius, bottom_right: low, bottom_left: low };
+            let corners = gpui::Corners {
+                top_left: radius,
+                top_right: radius,
+                bottom_right: low,
+                bottom_left: low,
+            };
             window.paint_quad(fill(area, theme.code_bg).corner_radii(corners));
         }
     }
 
     /// The cells' text and the strokes, drawn on top.
-    pub fn paint_front(&self, at: Point<Pixels>, height: Pixels, lh: Pixels, theme: &Theme, window: &mut Window, cx: &mut App) {
+    pub fn paint_front(
+        &self,
+        at: Point<Pixels>,
+        height: Pixels,
+        lh: Pixels,
+        theme: &Theme,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         if self.hidden() {
             return;
         }
@@ -399,15 +483,20 @@ impl TableRow {
                 let area = Bounds::new(origin, size(cell.width, lh * cell.lines() as f32));
                 if cell.clip {
                     window.with_content_mask(Some(ContentMask { bounds: area }), |window| {
-                        line.paint(origin, lh, cell.align, Some(area), window, cx).ok();
+                        line.paint(origin, lh, cell.align, Some(area), window, cx)
+                            .ok();
                     });
                 } else {
-                    line.paint(origin, lh, cell.align, Some(area), window, cx).ok();
+                    line.paint(origin, lh, cell.align, Some(area), window, cx)
+                        .ok();
                 }
             }
         }
         let mut rule = |x: Pixels, y: Pixels, w: Pixels, h: Pixels| {
-            window.paint_quad(fill(Bounds::new(at + point(x, y), size(w, h)), theme.code_bg));
+            window.paint_quad(fill(
+                Bounds::new(at + point(x, y), size(w, h)),
+                theme.code_bg,
+            ));
         };
         // The table's outer edge is one rounded hairline, drawn over the lines (`Editor::paint`).
         if !self.header {
@@ -421,9 +510,23 @@ impl TableRow {
 }
 
 /// A piece of text to lay out.
-fn key(text: &str, wrap: Option<Pixels>, bold: bool, marked: &Option<Range<usize>>, look: &Look) -> u64 {
+fn key(
+    text: &str,
+    wrap: Option<Pixels>,
+    bold: bool,
+    marked: &Option<Range<usize>>,
+    look: &Look,
+) -> u64 {
     let mut hasher = Fast::default();
-    (text, wrap.map(|w| f32::from(w).to_bits()), bold, marked, look.style, f32::from(font_size(look.theme)).to_bits()).hash(&mut hasher);
+    (
+        text,
+        wrap.map(|w| f32::from(w).to_bits()),
+        bold,
+        marked,
+        look.style,
+        f32::from(font_size(look.theme)).to_bits(),
+    )
+        .hash(&mut hasher);
     hasher.finish()
 }
 
@@ -437,7 +540,11 @@ fn shape(
     look: &Look,
 ) -> Shape {
     if text.is_empty() {
-        return Shape { line: None, narrow: px(0.), subs: Vec::new() };
+        return Shape {
+            line: None,
+            narrow: px(0.),
+            subs: Vec::new(),
+        };
     }
     let mut flags = vec![0u16; text.len()];
     md::inline(text, 0, &mut flags);
@@ -445,9 +552,19 @@ fn shape(
 }
 
 /// The result of a formula, shown in place of its text (`written` bytes): plain, in the style `flags`.
-fn shape_computed(text_system: &WindowTextSystem, shown: &Shown, wrap: Option<Pixels>, bold: bool, look: &Look) -> Shape {
+fn shape_computed(
+    text_system: &WindowTextSystem,
+    shown: &Shown,
+    wrap: Option<Pixels>,
+    bold: bool,
+    look: &Look,
+) -> Shape {
     if shown.text.is_empty() {
-        return Shape { line: None, narrow: px(0.), subs: Vec::new() };
+        return Shape {
+            line: None,
+            narrow: px(0.),
+            subs: Vec::new(),
+        };
     }
     let flags = vec![shown.flags | if bold { md::BOLD } else { 0 }; shown.text.len()];
     let mut shape = shape_flags(text_system, &shown.text, flags, wrap, false, &None, look);
@@ -469,7 +586,11 @@ fn shape_flags(
         flags.iter_mut().for_each(|f| *f |= md::BOLD);
     }
     // `\|` is written so as not to split the cell: show `|`.
-    let (mut shown_text, mut styles, mut subs) = (String::with_capacity(text.len()), Vec::with_capacity(text.len()), Vec::new());
+    let (mut shown_text, mut styles, mut subs) = (
+        String::with_capacity(text.len()),
+        Vec::with_capacity(text.len()),
+        Vec::new(),
+    );
     let mut chars = text.char_indices().peekable();
     while let Some((i, c)) = chars.next() {
         let mut end = i + c.len_utf8();
@@ -491,20 +612,36 @@ fn shape_flags(
         }
         styles.extend_from_slice(&flags[i..end]);
     }
-    let is_marked = |i: usize| marked.as_ref().is_some_and(|m| m.contains(&source(&subs, i)));
-    let style = RunStyle { heading: false, soft: false, italic: false, mono: false, tint: None };
+    let is_marked = |i: usize| {
+        marked
+            .as_ref()
+            .is_some_and(|m| m.contains(&source(&subs, i)))
+    };
+    let style = RunStyle {
+        heading: false,
+        soft: false,
+        italic: false,
+        mono: false,
+        tint: None,
+    };
     let runs = text_runs(look.theme, &shown_text, &styles, is_marked, &style);
     let line = text_system
         .shape_text(shown_text.into(), font_size(look.theme), &runs, wrap, None)
         .ok()
         .and_then(|lines| lines.into_iter().next());
-    let narrow = line.as_ref().filter(|_| wrap.is_none()).map_or(px(0.), longest);
+    let narrow = line
+        .as_ref()
+        .filter(|_| wrap.is_none())
+        .map_or(px(0.), longest);
     Shape { line, narrow, subs }
 }
 
 /// Alignment asked by a cell of the dash line: `:--`, `:-:` or `--:`.
 fn align_of(dashes: &str) -> TextAlign {
-    match (dashes.starts_with(':'), dashes.len() > 1 && dashes.ends_with(':')) {
+    match (
+        dashes.starts_with(':'),
+        dashes.len() > 1 && dashes.ends_with(':'),
+    ) {
         (true, true) => TextAlign::Center,
         (false, true) => TextAlign::Right,
         _ => TextAlign::Left,
@@ -526,20 +663,37 @@ fn editing(lines: &[(usize, &str)], cursor: usize) -> Option<(usize, usize)> {
     if !lines.iter().any(|(_, l)| l.contains('=')) {
         return None;
     }
-    let r = lines.iter().position(|&(at, l)| (at..=at + l.len()).contains(&cursor))?;
+    let r = lines
+        .iter()
+        .position(|&(at, l)| (at..=at + l.len()).contains(&cursor))?;
     let (at, line) = lines[r];
     let cells = md::cells(line);
-    let c = cells.iter().position(|cell| (at + cell.start..=at + cell.end).contains(&cursor))?;
+    let c = cells
+        .iter()
+        .position(|cell| (at + cell.start..=at + cell.end).contains(&cursor))?;
     formula::is_formula(&line[cells[c].clone()]).then_some((r, c))
 }
 
 /// The result of every formula of the table, by line and cell; `None` if it has none.
-fn results(lines: &[(usize, &str)], parsed: &[(Vec<Range<usize>>, Vec<usize>)], dash: Option<usize>) -> Option<Vec<Vec<Option<formula::Outcome>>>> {
+fn results(
+    lines: &[(usize, &str)],
+    parsed: &[(Vec<Range<usize>>, Vec<usize>)],
+    dash: Option<usize>,
+) -> Option<Vec<Vec<Option<formula::Outcome>>>> {
     if !lines.iter().any(|(_, l)| l.contains('=')) {
         return None;
     }
     let seen: Vec<usize> = (0..lines.len()).filter(|&r| Some(r) != dash).collect();
-    let grid: Vec<Vec<String>> = seen.iter().map(|&r| parsed[r].0.iter().map(|c| lines[r].1[c.clone()].to_string()).collect()).collect();
+    let grid: Vec<Vec<String>> = seen
+        .iter()
+        .map(|&r| {
+            parsed[r]
+                .0
+                .iter()
+                .map(|c| lines[r].1[c.clone()].to_string())
+                .collect()
+        })
+        .collect();
     if !formula::any(&grid) {
         return None;
     }
@@ -554,9 +708,27 @@ impl Shown {
     fn of(outcome: &formula::Outcome, written: usize) -> Shown {
         let decimal = crate::lang::tr(".", ",").chars().next().unwrap_or('.');
         match outcome {
-            Ok(value @ formula::Value::Num(_)) => Shown { text: formula::show(value, decimal), written, flags: md::NUMBER, right: true, reason: None },
-            Ok(value) => Shown { text: formula::show(value, decimal), written, flags: 0, right: false, reason: None },
-            Err(e) => Shown { text: "#ERR".into(), written, flags: md::TAG | md::BOLD, right: true, reason: Some(e.reason().into()) },
+            Ok(value @ formula::Value::Num(_)) => Shown {
+                text: formula::show(value, decimal),
+                written,
+                flags: md::NUMBER,
+                right: true,
+                reason: None,
+            },
+            Ok(value) => Shown {
+                text: formula::show(value, decimal),
+                written,
+                flags: 0,
+                right: false,
+                reason: None,
+            },
+            Err(e) => Shown {
+                text: "#ERR".into(),
+                written,
+                flags: md::TAG | md::BOLD,
+                right: true,
+                reason: Some(e.reason().into()),
+            },
         }
     }
 }
@@ -575,18 +747,39 @@ pub fn build(
 ) -> Tables {
     // What the layout depends on: the text, the width, the theme, the dash line
     // when the cursor is on it, and the text being composed when it touches the table.
-    let touched = lines.get(1).is_some_and(|&(at, line)| (at..=at + line.len()).contains(&cursor));
+    let touched = lines
+        .get(1)
+        .is_some_and(|&(at, line)| (at..=at + line.len()).contains(&cursor));
     let (first, last) = (lines[0].0, lines[lines.len() - 1]);
     let composing = marked.filter(|m| m.start <= last.0 + last.1.len() && m.end >= first);
     let mut hasher = Fast::default();
-    (look.style, f32::from(width).to_bits(), touched, composing.map(|m| (m.start - first.min(m.start), m.end)), lines.len(), editing(lines, cursor)).hash(&mut hasher);
-    lines.iter().for_each(|(at, line)| (composing.is_some().then_some(at - first), line).hash(&mut hasher));
+    (
+        look.style,
+        f32::from(width).to_bits(),
+        touched,
+        composing.map(|m| (m.start - first.min(m.start), m.end)),
+        lines.len(),
+        editing(lines, cursor),
+    )
+        .hash(&mut hasher);
+    lines
+        .iter()
+        .for_each(|(at, line)| (composing.is_some().then_some(at - first), line).hash(&mut hasher));
     let key = hasher.finish();
-    if let Some(rows) = cache.tables_old.remove(&key).or_else(|| cache.tables_new.get(&key).cloned()) {
+    if let Some(rows) = cache
+        .tables_old
+        .remove(&key)
+        .or_else(|| cache.tables_new.get(&key).cloned())
+    {
         cache.tables_new.insert(key, rows.clone());
         return rows;
     }
-    let rows: Tables = Rc::new(rows(cache, text_system, look, width, lines, cursor, marked).into_iter().map(|r| r.map(Rc::new)).collect());
+    let rows: Tables = Rc::new(
+        rows(cache, text_system, look, width, lines, cursor, marked)
+            .into_iter()
+            .map(|r| r.map(Rc::new))
+            .collect(),
+    );
     cache.tables_new.insert(key, rows.clone());
     rows
 }
@@ -600,26 +793,58 @@ fn rows(
     cursor: usize,
     marked: Option<&Range<usize>>,
 ) -> Vec<Option<TableRow>> {
-    let parsed: Vec<(Vec<Range<usize>>, Vec<usize>)> = lines.iter().map(|(_, l)| (md::cells(l), md::bars(l))).collect();
-    let cols = parsed.iter().map(|(cells, _)| cells.len()).max().unwrap_or(0).max(1);
-    let cell = |r: usize, c: usize| parsed[r].0.get(c).cloned().unwrap_or(lines[r].1.len()..lines[r].1.len());
+    let parsed: Vec<(Vec<Range<usize>>, Vec<usize>)> = lines
+        .iter()
+        .map(|(_, l)| (md::cells(l), md::bars(l)))
+        .collect();
+    let cols = parsed
+        .iter()
+        .map(|(cells, _)| cells.len())
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    let cell = |r: usize, c: usize| {
+        parsed[r]
+            .0
+            .get(c)
+            .cloned()
+            .unwrap_or(lines[r].1.len()..lines[r].1.len())
+    };
     let text = |r: usize, c: usize| &lines[r].1[cell(r, c)];
     // The dash line is the second, when it has only dashes and `:`.
     let dash = (lines.len() > 1)
-        .then(|| (0..parsed[1].0.len()).map(|c| text(1, c).to_string()).collect::<Vec<_>>())
+        .then(|| {
+            (0..parsed[1].0.len())
+                .map(|c| text(1, c).to_string())
+                .collect::<Vec<_>>()
+        })
         .filter(|row| md::is_dashes(row))
         .map(|_| 1);
-    let aligns: Vec<TextAlign> =
-        (0..cols).map(|c| dash.filter(|_| c < parsed[1].0.len()).map_or(TextAlign::Left, |d| align_of(text(d, c)))).collect();
+    let aligns: Vec<TextAlign> = (0..cols)
+        .map(|c| {
+            dash.filter(|_| c < parsed[1].0.len())
+                .map_or(TextAlign::Left, |d| align_of(text(d, c)))
+        })
+        .collect();
     let shown_rows: Vec<usize> = (0..lines.len()).filter(|&r| Some(r) != dash).collect();
     // Formulas show their result, except in the cell being edited. Only a table that has some is evaluated.
     let calc = results(lines, &parsed, dash);
     let edit = calc.as_ref().and_then(|_| editing(lines, cursor));
     let computed = |r: usize, c: usize| -> Option<Shown> {
-        let outcome = calc.as_ref()?.get(r)?.get(c)?.as_ref().filter(|_| edit != Some((r, c)))?;
+        let outcome = calc
+            .as_ref()?
+            .get(r)?
+            .get(c)?
+            .as_ref()
+            .filter(|_| edit != Some((r, c)))?;
         Some(Shown::of(outcome, text(r, c).len()))
     };
-    let computed_key = |shown: &Shown| format!("\u{1}{}\u{1}{}\u{1}{}", shown.flags, shown.written, shown.text);
+    let computed_key = |shown: &Shown| {
+        format!(
+            "\u{1}{}\u{1}{}\u{1}{}",
+            shown.flags, shown.written, shown.text
+        )
+    };
 
     // Widths: all the text on one line, and the longest word, of each column.
     let mut wide = vec![MIN_WIDE; cols];
@@ -629,8 +854,13 @@ fn rows(
         for c in 0..cols {
             let (text, bold) = (text(r, c), r == 0);
             let one = match computed(r, c) {
-                Some(shown) => cache.shape(key(&computed_key(&shown), None, bold, &None, look), || shape_computed(text_system, &shown, None, bold, look)),
-                None => cache.shape(key(text, None, bold, &None, look), || shape(text_system, text, None, bold, &None, look)),
+                Some(shown) => cache
+                    .shape(key(&computed_key(&shown), None, bold, &None, look), || {
+                        shape_computed(text_system, &shown, None, bold, look)
+                    }),
+                None => cache.shape(key(text, None, bold, &None, look), || {
+                    shape(text_system, text, None, bold, &None, look)
+                }),
             };
             if let Some(line) = &one.line {
                 alone[r][c] = line.unwrapped_layout.width;
@@ -641,7 +871,10 @@ fn rows(
     }
     let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(PAD_X);
     let avail = (f32::from(width) - frame).max(0.);
-    let widths: Vec<Pixels> = column_widths(&narrow, &wide, avail).into_iter().map(px).collect();
+    let widths: Vec<Pixels> = column_widths(&narrow, &wide, avail)
+        .into_iter()
+        .map(px)
+        .collect();
     let mut xs = vec![px(0.)];
     for w in &widths {
         xs.push(xs[xs.len() - 1] + LINE + PAD_X + *w + PAD_X);
@@ -674,17 +907,43 @@ fn rows(
                     // In the text being composed (input method), relative to the cell.
                     let here = marked
                         .filter(|m| m.start <= at + range.end && m.end >= at + range.start)
-                        .map(|m| m.start.saturating_sub(at + range.start)..m.end.saturating_sub(at + range.start));
+                        .map(|m| {
+                            m.start.saturating_sub(at + range.start)
+                                ..m.end.saturating_sub(at + range.start)
+                        });
                     // A text that fits on its line is not cut: GPUI's measure and wrapping
                     // differ by a few fractions of a pixel.
                     let wrap = (alone[r][c] > widths[c]).then_some(widths[c]);
                     if let Some(shown) = computed(r, c) {
-                        let shape = cache.shape(key(&computed_key(&shown), wrap, bold, &None, look), || shape_computed(text_system, &shown, wrap, bold, look));
-                        let align = if shown.right { TextAlign::Right } else { aligns[c] };
-                        return Cell { range, shape, align, width: widths[c], clip: false, reason: shown.reason };
+                        let shape = cache
+                            .shape(key(&computed_key(&shown), wrap, bold, &None, look), || {
+                                shape_computed(text_system, &shown, wrap, bold, look)
+                            });
+                        let align = if shown.right {
+                            TextAlign::Right
+                        } else {
+                            aligns[c]
+                        };
+                        return Cell {
+                            range,
+                            shape,
+                            align,
+                            width: widths[c],
+                            clip: false,
+                            reason: shown.reason,
+                        };
                     }
-                    let shape = cache.shape(key(text, wrap, bold, &here, look), || shape(text_system, text, wrap, bold, &here, look));
-                    Cell { range, shape, align: aligns[c], width: widths[c], clip: false, reason: None }
+                    let shape = cache.shape(key(text, wrap, bold, &here, look), || {
+                        shape(text_system, text, wrap, bold, &here, look)
+                    });
+                    Cell {
+                        range,
+                        shape,
+                        align: aligns[c],
+                        width: widths[c],
+                        clip: false,
+                        reason: None,
+                    }
                 })
                 .collect();
             Some(TableRow {
@@ -693,7 +952,11 @@ fn rows(
                 xs: xs.clone(),
                 header: r == 0,
                 // A thicker stroke separates the header from the table body.
-                top: if dash.is_some() && r == 2 { LINE * 2. } else { LINE },
+                top: if dash.is_some() && r == 2 {
+                    LINE * 2.
+                } else {
+                    LINE
+                },
                 bottom: if Some(r) == last { LINE } else { px(0.) },
                 bars,
                 written: parsed[r].0.len(),
@@ -730,7 +993,11 @@ impl Geometry {
             && self.dash == other.dash
             && self.widths == other.widths
             && *self.xs == *other.xs
-            && self.aligns.iter().zip(&other.aligns).all(|(a, b)| std::mem::discriminant(a) == std::mem::discriminant(b))
+            && self
+                .aligns
+                .iter()
+                .zip(&other.aligns)
+                .all(|(a, b)| std::mem::discriminant(a) == std::mem::discriminant(b))
     }
 
     /// Table width, strokes included.
@@ -745,27 +1012,52 @@ impl Geometry {
         if Some(r) == self.dash {
             return (px(0.), px(0.));
         }
-        let top = if self.dash.is_some() && r == 2 { LINE * 2. } else { LINE };
+        let top = if self.dash.is_some() && r == 2 {
+            LINE * 2.
+        } else {
+            LINE
+        };
         let bottom = if last { LINE } else { px(0.) };
         (top + PAD_Y, top + PAD_Y + lh + PAD_Y + bottom)
     }
 }
 
 /// Sets the columns of a very big table from its first lines.
-pub fn geometry(cache: &mut Cache, text_system: &WindowTextSystem, look: &Look, width: Pixels, lines: &[(usize, &str)]) -> Geometry {
+pub fn geometry(
+    cache: &mut Cache,
+    text_system: &WindowTextSystem,
+    look: &Look,
+    width: Pixels,
+    lines: &[(usize, &str)],
+) -> Geometry {
     let parsed: Vec<Vec<Range<usize>>> = lines.iter().map(|(_, l)| md::cells(l)).collect();
     let cols = parsed.iter().map(Vec::len).max().unwrap_or(0).max(1);
-    let text = |r: usize, c: usize| parsed[r].get(c).map_or("", |range| &lines[r].1[range.clone()]);
+    let text = |r: usize, c: usize| {
+        parsed[r]
+            .get(c)
+            .map_or("", |range| &lines[r].1[range.clone()])
+    };
     let dash = (lines.len() > 1)
-        .then(|| (0..parsed[1].len()).map(|c| text(1, c).to_string()).collect::<Vec<_>>())
+        .then(|| {
+            (0..parsed[1].len())
+                .map(|c| text(1, c).to_string())
+                .collect::<Vec<_>>()
+        })
         .filter(|row| md::is_dashes(row))
         .map(|_| 1);
-    let aligns = (0..cols).map(|c| dash.filter(|_| c < parsed[1].len()).map_or(TextAlign::Left, |d| align_of(text(d, c)))).collect();
+    let aligns = (0..cols)
+        .map(|c| {
+            dash.filter(|_| c < parsed[1].len())
+                .map_or(TextAlign::Left, |d| align_of(text(d, c)))
+        })
+        .collect();
     let mut wide = vec![MIN_WIDE; cols];
     for r in (0..lines.len()).filter(|&r| Some(r) != dash) {
         for (c, w) in wide.iter_mut().enumerate() {
             let (text, bold) = (text(r, c), r == 0);
-            let one = cache.shape(key(text, None, bold, &None, look), || shape(text_system, text, None, bold, &None, look));
+            let one = cache.shape(key(text, None, bold, &None, look), || {
+                shape(text_system, text, None, bold, &None, look)
+            });
             if let Some(line) = &one.line {
                 *w = w.max(f32::from(line.unwrapped_layout.width));
             }
@@ -780,7 +1072,13 @@ pub fn geometry(cache: &mut Cache, text_system: &WindowTextSystem, look: &Look, 
     for w in &widths {
         xs.push(xs[xs.len() - 1] + LINE + PAD_X + *w + PAD_X);
     }
-    Geometry { cols, widths, xs: Rc::new(xs), aligns, dash }
+    Geometry {
+        cols,
+        widths,
+        xs: Rc::new(xs),
+        aligns,
+        dash,
+    }
 }
 
 /// Line `r` of a very big table, its cells on a single line.
@@ -814,10 +1112,24 @@ pub fn big_row(
             let (text, bold) = (&line[range.clone()], r == 0);
             let here = marked
                 .filter(|m| m.start <= at + range.end && m.end >= at + range.start)
-                .map(|m| m.start.saturating_sub(at + range.start)..m.end.saturating_sub(at + range.start));
-            let shape = cache.shape(key(text, None, bold, &here, look), || shape(text_system, text, None, bold, &here, look));
-            let clip = shape.line.as_ref().is_some_and(|l| l.unwrapped_layout.width > geom.widths[c]);
-            Cell { range, shape, align: geom.aligns[c], width: geom.widths[c], clip, reason: None }
+                .map(|m| {
+                    m.start.saturating_sub(at + range.start)..m.end.saturating_sub(at + range.start)
+                });
+            let shape = cache.shape(key(text, None, bold, &here, look), || {
+                shape(text_system, text, None, bold, &here, look)
+            });
+            let clip = shape
+                .line
+                .as_ref()
+                .is_some_and(|l| l.unwrapped_layout.width > geom.widths[c]);
+            Cell {
+                range,
+                shape,
+                align: geom.aligns[c],
+                width: geom.widths[c],
+                clip,
+                reason: None,
+            }
         })
         .collect();
     TableRow {
@@ -825,7 +1137,11 @@ pub fn big_row(
         cells,
         xs: geom.xs.clone(),
         header: r == 0,
-        top: if geom.dash.is_some() && r == 2 { LINE * 2. } else { LINE },
+        top: if geom.dash.is_some() && r == 2 {
+            LINE * 2.
+        } else {
+            LINE
+        },
         bottom: if last { LINE } else { px(0.) },
         bars,
         written: ranges.len(),
@@ -860,8 +1176,14 @@ mod tests {
     fn substitutions_map_both_ways() {
         // `a\|b` shows as `a|b`: the `|` sign is worth two written bytes.
         let subs = [(1, 2, 1)];
-        assert_eq!((0..=4).map(|i| shown(&subs, i)).collect::<Vec<_>>(), [0, 1, 2, 2, 3]);
-        assert_eq!((0..=3).map(|i| source(&subs, i)).collect::<Vec<_>>(), [0, 1, 3, 4]);
+        assert_eq!(
+            (0..=4).map(|i| shown(&subs, i)).collect::<Vec<_>>(),
+            [0, 1, 2, 2, 3]
+        );
+        assert_eq!(
+            (0..=3).map(|i| source(&subs, i)).collect::<Vec<_>>(),
+            [0, 1, 3, 4]
+        );
     }
 
     /// Hundreds of random tables: columns never exceed what they
@@ -878,16 +1200,25 @@ mod tests {
         for case in 0..800 {
             let cols = 1 + roll(12) as usize;
             let wide: Vec<f32> = (0..cols).map(|_| MIN_WIDE + roll(900)).collect();
-            let narrow: Vec<f32> = wide.iter().map(|w| (NARROWEST + roll(200)).min(*w)).collect();
+            let narrow: Vec<f32> = wide
+                .iter()
+                .map(|w| (NARROWEST + roll(200)).min(*w))
+                .collect();
             let avail = roll(1200);
             let widths = column_widths(&narrow, &wide, avail);
             assert_eq!(widths.len(), cols);
             let total: f32 = widths.iter().sum();
             let floor = cols as f32 * NARROWEST;
-            assert!(total <= avail.max(floor) + 0.01, "case {case}: {total} for {avail}");
+            assert!(
+                total <= avail.max(floor) + 0.01,
+                "case {case}: {total} for {avail}"
+            );
             for ((w, n), x) in widths.iter().zip(&narrow).zip(&wide) {
                 assert!(*w <= x + 0.01, "case {case}: {w} > {x}");
-                assert!(*w >= n.min(NARROWEST).min(*x) - 0.01, "case {case}: {w} < {n}");
+                assert!(
+                    *w >= n.min(NARROWEST).min(*x) - 0.01,
+                    "case {case}: {w} < {n}"
+                );
             }
             // Everything fits on one line if the page allows it.
             if wide.iter().sum::<f32>() <= avail {
@@ -895,7 +1226,10 @@ mod tests {
             }
             // If the longest words fit, none is cut.
             if narrow.iter().sum::<f32>() <= avail {
-                assert!(widths.iter().zip(&narrow).all(|(w, n)| w + 0.01 >= *n), "case {case}");
+                assert!(
+                    widths.iter().zip(&narrow).all(|(w, n)| w + 0.01 >= *n),
+                    "case {case}"
+                );
             }
         }
     }

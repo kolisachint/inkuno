@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # Usage: scripts/record-demo.sh [output.gif]   (default: docs/screenshots/demo.gif)
 #
-# Records the GIF of the README: Bref typing a note on a virtual X screen, in a fresh vault and
+# Records the GIF of the README: Inkuno typing a note on a virtual X screen, in a fresh vault and
 # configuration. Linux only; needs Xvfb, xdotool, ffmpeg and a Vulkan driver (Mesa's software
 # one, lavapipe, works without a GPU: mesa-vulkan-drivers on Ubuntu).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(realpath -m "${1:-docs/screenshots/demo.gif}")
 cargo build --release --locked
-bref=$PWD/target/release/bref
+inkuno=$PWD/target/release/inkuno
 work=$(mktemp -d)
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$work"' EXIT
-mkdir -p "$work/vault" "$work/config/bref" "$work/home" "$work/run"
+mkdir -p "$work/vault" "$work/config/inkuno" "$work/home" "$work/run"
 chmod 700 "$work/run"
-echo "$work/vault" > "$work/config/bref/config"
-echo "theme=Bref Light" > "$work/config/bref/settings"
+echo "$work/vault" > "$work/config/inkuno/config"
+echo "theme=Inkuno Light" > "$work/config/inkuno/settings"
 printf '# Welcome\n\nNotes are plain Markdown files.\n' > "$work/vault/Welcome.md"
 
 export DISPLAY=:97
@@ -22,7 +22,7 @@ Xvfb "$DISPLAY" -screen 0 1280x800x24 &
 sleep 2
 lavapipe=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json 2>/dev/null | head -1 || true)
 if [ -n "$lavapipe" ]; then export VK_ICD_FILENAMES=$lavapipe; fi
-XDG_RUNTIME_DIR=$work/run XDG_CONFIG_HOME=$work/config HOME=$work/home LANG=en_US.UTF-8 "$bref" &
+XDG_RUNTIME_DIR=$work/run XDG_CONFIG_HOME=$work/config HOME=$work/home LANG=en_US.UTF-8 "$inkuno" &
 sleep 8
 window=$(xdotool search --name . | head -1)
 xdotool windowmove "$window" 0 0

@@ -7,7 +7,13 @@ impl Shell {
     /// Copies the note; with `block`, only the code block the cursor is in,
     /// if there is one.
     pub(super) fn copy_all(&mut self, block: bool, cx: &mut Context<Self>) {
-        if self.pane().file.is_some() || self.pane().tool.is_some() || self.pane().listing.is_some() || self.pane().figure.is_some() { return; }
+        if self.pane().file.is_some()
+            || self.pane().tool.is_some()
+            || self.pane().listing.is_some()
+            || self.pane().figure.is_some()
+        {
+            return;
+        }
         let editor = self.pane().editor.read(cx);
         let code = editor.code_at_cursor().filter(|_| block);
         let text = code.unwrap_or(editor.text()).to_string();
@@ -15,7 +21,9 @@ impl Shell {
         self.copied = true;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(1500)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(1500))
+                .await;
             this.update(cx, |this, cx| {
                 this.copied = false;
                 cx.notify();
@@ -29,7 +37,10 @@ impl Shell {
     pub(super) fn load_note(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
         // Already in the other pane: two editors on the same file would overwrite each other.
         // Input moves there; a mere preview does not move it.
-        if let Some(other) = self.pane_showing(path).filter(|other| *other != self.active) {
+        if let Some(other) = self
+            .pane_showing(path)
+            .filter(|other| *other != self.active)
+        {
             if !self.pane().peek {
                 self.active = other;
                 if self.pane().path.as_deref() == Some(path) {
@@ -56,8 +67,15 @@ impl Shell {
         }
         // A picture takes the note's place; the note stays loaded underneath.
         if vault::is_image(path) {
-            let svg = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg"));
-            let open = self.pane().file.as_ref().filter(|file| file.path == path).map(|file| file.kind.clone());
+            let svg = path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+            let open = self
+                .pane()
+                .file
+                .as_ref()
+                .filter(|file| file.path == path)
+                .map(|file| file.kind.clone());
             let theme = self.theme;
             let kind = match open {
                 _ if !svg => FileKind::Image,
@@ -72,12 +90,15 @@ impl Shell {
                             FileKind::Drawing(canvas)
                         }
                         // An SVG from elsewhere opens in the viewer: zoom in, move around. So does a
-                        // diagram of a newer Bref, which this one could only damage by saving it.
+                        // diagram of a newer Inkuno, which this one could only damage by saving it.
                         None => match open {
                             Some(FileKind::Svg(viewer)) => FileKind::Svg(viewer),
                             _ => {
                                 if text.as_deref().is_some_and(Diagram::newer) {
-                                    let notice = tr("Made by a newer Bref: shown read-only", "Fait par un Bref plus récent : en lecture seule");
+                                    let notice = tr(
+                                        "Made by a newer Inkuno: shown read-only",
+                                        "Fait par un Inkuno plus récent : en lecture seule",
+                                    );
                                     self.say(Tone::Info, notice, cx);
                                 }
                                 let source = viewer::Source::File(path.to_path_buf(), None);
@@ -87,7 +108,13 @@ impl Shell {
                     }
                 }
             };
-            self.set_file(Some(FileView { path: path.to_path_buf(), kind }), cx);
+            self.set_file(
+                Some(FileView {
+                    path: path.to_path_buf(),
+                    kind,
+                }),
+                cx,
+            );
             cx.notify();
             return false;
         }
@@ -109,14 +136,20 @@ impl Shell {
                 self.pane_mut().base = text.clone();
                 self.calm();
                 let cursor = markdown::body_start(&text);
-                self.pane().editor.update(cx, |e, cx| e.load(text, cursor, cx));
+                self.pane()
+                    .editor
+                    .update(cx, |e, cx| e.load(text, cursor, cx));
                 self.push_dirs(cx);
                 self.nav.reveal(path);
                 true
             }
             Err(e) => {
                 let what = tr("Cannot open", "Impossible d'ouvrir");
-                self.say(Tone::Failed, format!("{what} {} : {}", path.display(), crate::lang::io_reason(&e)), cx);
+                self.say(
+                    Tone::Failed,
+                    format!("{what} {} : {}", path.display(), crate::lang::io_reason(&e)),
+                    cx,
+                );
                 false
             }
         }
@@ -131,7 +164,12 @@ impl Shell {
     }
 
     /// Shows the note without counting it as opened.
-    pub(super) fn preview_note(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn preview_note(
+        &mut self,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // Already open: its tab is shown, input stays where it is, and the history does not count it.
         if let Some(tab) = self.pane_showing(path) {
             self.active = tab;
@@ -141,7 +179,12 @@ impl Shell {
         }
         // One preview tab per pane: each note browsed takes the place of the last one.
         let group = self.group();
-        match self.groups[group].tabs.iter().copied().find(|&tab| self.panes[tab].preview) {
+        match self.groups[group]
+            .tabs
+            .iter()
+            .copied()
+            .find(|&tab| self.panes[tab].preview)
+        {
             Some(tab) => {
                 self.active = tab;
                 self.show_active(cx);
@@ -176,7 +219,12 @@ impl Shell {
     }
 
     /// New note filed in `dir`; `None`: at the vault root.
-    pub(super) fn new_note_in(&mut self, dir: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn new_note_in(
+        &mut self,
+        dir: Option<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.vault.is_none() {
             return;
         }
@@ -206,7 +254,9 @@ impl Shell {
         self.pane_mut().dirty = !text.is_empty();
         (self.pane_mut().board.text, self.pane_mut().board.was) = (false, kanban::is_board(&text));
         let cursor = text.len();
-        self.pane().editor.update(cx, |e, cx| e.load(text, cursor, cx));
+        self.pane()
+            .editor
+            .update(cx, |e, cx| e.load(text, cursor, cx));
         self.push_dirs(cx);
         self.flush(cx);
         cx.notify();
@@ -240,13 +290,17 @@ impl Shell {
     /// A note created here then emptied leaves no empty file behind, nor in the
     /// recent list. Only an empty file on disk is removed: nothing written is lost.
     pub(super) fn drop_if_empty(&mut self, cx: &mut Context<Self>) {
-        if !std::mem::take(&mut self.pane_mut().fresh) || !self.pane_mut().editor.read(cx).text().trim().is_empty() {
+        if !std::mem::take(&mut self.pane_mut().fresh)
+            || !self.pane_mut().editor.read(cx).text().trim().is_empty()
+        {
             return;
         }
         let Some(path) = self.pane().path.clone() else {
             return;
         };
-        if fs::read_to_string(&path).is_ok_and(|text| text.trim().is_empty()) && fs::remove_file(&path).is_ok() {
+        if fs::read_to_string(&path).is_ok_and(|text| text.trim().is_empty())
+            && fs::remove_file(&path).is_ok()
+        {
             self.notes.retain(|n| n.path != path);
             self.recent.retain(|p| *p != path);
             if let Some(root) = &self.vault {
@@ -287,7 +341,11 @@ impl Shell {
         self.refresh_graph(cx);
         // The other pane's note is reloaded here; the active pane's is up to the caller
         // (it may be leaving it).
-        let showing = |pane: &Pane| pane.path.as_ref().is_some_and(|path| changed.contains(path));
+        let showing = |pane: &Pane| {
+            pane.path
+                .as_ref()
+                .is_some_and(|path| changed.contains(path))
+        };
         for pane in 0..self.panes.len() {
             if pane != self.active && showing(&self.panes[pane]) {
                 self.in_pane(pane, |this| this.reload(cx));
@@ -302,14 +360,28 @@ impl Shell {
     // typing a heading rewrites them at each save, which is as often as the note is written.
     fn follow_heading(&mut self, path: &Path, before: &str, after: &str, cx: &mut Context<Self>) {
         let (old, new): (Vec<_>, Vec<_>) = (markdown::headings(before), markdown::headings(after));
-        let changed: Vec<_> = old.iter().zip(&new).filter(|(a, b)| a.0 != b.0 || a.1 != b.1).collect();
-        let [(was, now)] = changed.as_slice() else { return };
-        if old.len() != new.len() || was.0 != now.0 || now.1.trim().is_empty() || was.1.trim().is_empty() {
+        let changed: Vec<_> = old
+            .iter()
+            .zip(&new)
+            .filter(|(a, b)| a.0 != b.0 || a.1 != b.1)
+            .collect();
+        let [(was, now)] = changed.as_slice() else {
+            return;
+        };
+        if old.len() != new.len()
+            || was.0 != now.0
+            || now.1.trim().is_empty()
+            || was.1.trim().is_empty()
+        {
             return;
         }
         let (name, key) = (vault::stem(path), vault::stem(path).to_lowercase());
         let mut rewritten = Vec::new();
-        for note in self.notes.iter_mut().filter(|n| n.path != path && n.links.contains(&key)) {
+        for note in self
+            .notes
+            .iter_mut()
+            .filter(|n| n.path != path && n.links.contains(&key))
+        {
             let fresh = fs::read_to_string(&note.path)
                 .ok()
                 .map(|text| embed::rename_heading(&text, &name, was.1.trim(), now.1.trim()))
@@ -321,7 +393,12 @@ impl Shell {
             }
         }
         for pane in 0..self.panes.len() {
-            if pane != self.active && self.panes[pane].path.as_ref().is_some_and(|p| rewritten.contains(p)) {
+            if pane != self.active
+                && self.panes[pane]
+                    .path
+                    .as_ref()
+                    .is_some_and(|p| rewritten.contains(p))
+            {
                 self.in_pane(pane, |this| this.reload(cx));
             }
         }
@@ -340,7 +417,9 @@ impl Shell {
             let (preview, listing) = (self.pane_mut().preview, self.pane_mut().listing.take());
             let (at, scroll) = self.pane().editor.read(cx).view();
             if self.load_note(&path, cx) {
-                self.pane().editor.update(cx, |e, cx| e.set_view(at, scroll, cx));
+                self.pane()
+                    .editor
+                    .update(cx, |e, cx| e.set_view(at, scroll, cx));
             }
             (self.pane_mut().preview, self.pane_mut().listing) = (preview, listing);
         }
@@ -348,7 +427,9 @@ impl Shell {
 
     /// Brings the disk up to date: each pane writes what is waiting in it.
     pub(super) fn flush(&mut self, cx: &mut Context<Self>) {
-        self.each_pane(|this| { this.flush_one(cx); });
+        self.each_pane(|this| {
+            this.flush_one(cx);
+        });
         // What was just written may be shown in an embed, in this window.
         for pane in &self.panes {
             pane.editor.update(cx, |e, cx| e.refresh_embeds(cx));
@@ -360,7 +441,9 @@ impl Shell {
     /// written next to the note, as a sync conflict is. False if that copy could not be written:
     /// the note is then not saved, so that nothing is lost.
     fn take_outside(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
-        let Ok(disk) = fs::read_to_string(path) else { return true };
+        let Ok(disk) = fs::read_to_string(path) else {
+            return true;
+        };
         if disk == self.pane().base {
             return true;
         }
@@ -372,11 +455,25 @@ impl Shell {
                     let date = date_name(today());
                     let copy = git::free_conflict_path(path, &date, "");
                     if let Err(e) = vault::write(&copy, &disk) {
-                        let what = tr("Changed here and elsewhere, and the other version could not be kept:", "Modifiée ici et ailleurs, et l'autre version n'a pas pu être gardée :");
-                        self.say(Tone::Failed, format!("{what} « {} » : {}", path.display(), crate::lang::io_reason(&e)), cx);
+                        let what = tr(
+                            "Changed here and elsewhere, and the other version could not be kept:",
+                            "Modifiée ici et ailleurs, et l'autre version n'a pas pu être gardée :",
+                        );
+                        self.say(
+                            Tone::Failed,
+                            format!(
+                                "{what} « {} » : {}",
+                                path.display(),
+                                crate::lang::io_reason(&e)
+                            ),
+                            cx,
+                        );
                         return false;
                     }
-                    let what = tr("Changed here and elsewhere on the same lines: the other version is in", "Modifiée ici et ailleurs sur les mêmes lignes : l'autre version est dans");
+                    let what = tr(
+                        "Changed here and elsewhere on the same lines: the other version is in",
+                        "Modifiée ici et ailleurs sur les mêmes lignes : l'autre version est dans",
+                    );
                     self.say(Tone::Info, format!("{what} {}", vault::stem(&copy)), cx);
                 }
             }
@@ -413,14 +510,23 @@ impl Shell {
             self.pane_mut().synced = true;
         }
         let dir = self.pane().new_dir.as_deref().unwrap_or(&root);
-        match vault::save(dir, self.pane().path.as_deref(), self.pane().synced, &content) {
+        match vault::save(
+            dir,
+            self.pane().path.as_deref(),
+            self.pane().synced,
+            &content,
+        ) {
             Ok(path) => {
                 self.pane_mut().dirty = false;
                 self.pane_mut().base = content.clone();
                 self.calm();
                 let (tags, links) = markdown::index(&content);
                 // A template has neither tags nor links.
-                let (tags, links) = if vault::in_templates(&root, &path) { (Vec::new(), Vec::new()) } else { (tags, links) };
+                let (tags, links) = if vault::in_templates(&root, &path) {
+                    (Vec::new(), Vec::new())
+                } else {
+                    (tags, links)
+                };
                 let old = self.pane().path.clone();
                 // The graph only changes if the note is new, renamed or linked differently.
                 let known = self.notes.iter().find(|n| Some(&n.path) == old.as_ref());
@@ -428,8 +534,13 @@ impl Shell {
                     self.graph_stale = true;
                 }
                 // The text as it was last saved, to see which heading was renamed.
-                let before = self.notes.iter().find(|n| Some(&n.path) == old.as_ref()).map(|n| n.body.clone());
-                self.notes.retain(|n| Some(&n.path) != old.as_ref() && n.path != path);
+                let before = self
+                    .notes
+                    .iter()
+                    .find(|n| Some(&n.path) == old.as_ref())
+                    .map(|n| n.body.clone());
+                self.notes
+                    .retain(|n| Some(&n.path) != old.as_ref() && n.path != path);
                 let body: Arc<str> = Arc::from(content);
                 self.notes.insert(
                     0,
@@ -466,8 +577,20 @@ impl Shell {
                 self.refresh_graph(cx);
             }
             Err(e) => {
-                let name = self.pane().path.as_deref().map_or_else(|| vault::title_of(&content), vault::stem);
-                self.say(Tone::Failed, format!("{} « {name} » : {}", tr("Note not saved", "Note non enregistrée"), crate::lang::io_reason(&e)), cx)
+                let name = self
+                    .pane()
+                    .path
+                    .as_deref()
+                    .map_or_else(|| vault::title_of(&content), vault::stem);
+                self.say(
+                    Tone::Failed,
+                    format!(
+                        "{} « {name} » : {}",
+                        tr("Note not saved", "Note non enregistrée"),
+                        crate::lang::io_reason(&e)
+                    ),
+                    cx,
+                )
             }
         }
         cx.notify();
@@ -481,7 +604,9 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(pane) = self.panes.iter().position(|pane| pane.editor == *editor) else { return };
+        let Some(pane) = self.panes.iter().position(|pane| pane.editor == *editor) else {
+            return;
+        };
         // A gesture made in a note (followed link, menu, replacement) applies to its pane;
         // typing, though, may come from elsewhere (a board card, a list cell).
         if !matches!(event, EditorEvent::Changed) {
@@ -501,7 +626,9 @@ impl Shell {
                 self.save_gen += 1;
                 let generation = self.save_gen;
                 cx.spawn(async move |this, cx| {
-                    cx.background_executor().timer(Duration::from_millis(400)).await;
+                    cx.background_executor()
+                        .timer(Duration::from_millis(400))
+                        .await;
                     this.update(cx, |this, cx| {
                         if this.save_gen == generation {
                             this.flush(cx);
@@ -523,10 +650,29 @@ impl Shell {
             EditorEvent::Swap(swap) => self.replace_in_vault(swap.clone(), window, cx),
             EditorEvent::Menu(at, link, commented, keys) => {
                 let chosen = keys.then_some(0);
-                self.show_menu(nav::Menu { at: *at, text: Some(link.clone()), commented: *commented, chosen, ..Default::default() }, window, cx);
+                self.show_menu(
+                    nav::Menu {
+                        at: *at,
+                        text: Some(link.clone()),
+                        commented: *commented,
+                        chosen,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
             }
             EditorEvent::BlockMenu(at) => {
-                self.show_menu(nav::Menu { at: *at, text: Some(None), block: true, ..Default::default() }, window, cx);
+                self.show_menu(
+                    nav::Menu {
+                        at: *at,
+                        text: Some(None),
+                        block: true,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
             }
             // The diagram, formula or picture takes the note's place; Escape returns to it.
             EditorEvent::View(source) => self.show_figure(source.clone(), window, cx),
@@ -539,17 +685,27 @@ impl Shell {
             Link::Url(url) => cx.open_url(url),
             Link::Tag(tag) => self.open_palette(&format!("#{tag}"), window, cx),
             // A folder reads as a list page, when no note bears its name.
-            Link::Wiki(name) if self.wiki_path(name).is_none() && self.wiki_file(name).is_none() => match self.wiki_dir(name) {
-                Some(dir) => self.open_listing(dir, window, cx),
-                None => self.open_wiki(name, window, cx),
-            },
+            Link::Wiki(name)
+                if self.wiki_path(name).is_none() && self.wiki_file(name).is_none() =>
+            {
+                match self.wiki_dir(name) {
+                    Some(dir) => self.open_listing(dir, window, cx),
+                    None => self.open_wiki(name, window, cx),
+                }
+            }
             Link::Wiki(name) => self.open_wiki(name, window, cx),
         }
     }
 
     /// Opens the note of an embed or of a link to a heading, scrolled to what it points at: the heading,
     /// the block (a note comes back from there with Alt+Left, like after any link).
-    pub(super) fn open_at(&mut self, target: &embed::Target, aside: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_at(
+        &mut self,
+        target: &embed::Target,
+        aside: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match (aside, self.wiki_path(&target.note)) {
             (true, Some(path)) => self.open_aside(&path, window, cx),
             _ => self.open_wiki(&target.note, window, cx),
@@ -565,13 +721,27 @@ impl Shell {
     /// The vault file (picture, table, attachment) that `[[name.ext]]` points to, case-insensitive.
     pub(super) fn wiki_file(&self, name: &str) -> Option<PathBuf> {
         let wanted = name.to_lowercase();
-        self.images.iter().find(|path| path.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase() == wanted)).cloned()
+        self.images
+            .iter()
+            .find(|path| {
+                path.file_name()
+                    .is_some_and(|n| n.to_string_lossy().to_lowercase() == wanted)
+            })
+            .cloned()
     }
 
     /// The vault folder that `[[Name]]` points to, except the templates folder.
     pub(super) fn wiki_dir(&self, name: &str) -> Option<PathBuf> {
         let (root, wanted) = (self.vault.as_ref()?, name.to_lowercase());
-        self.dirs.iter().find(|dir| !vault::in_templates(root, &dir.join("x")) && dir.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase() == wanted)).cloned()
+        self.dirs
+            .iter()
+            .find(|dir| {
+                !vault::in_templates(root, &dir.join("x"))
+                    && dir
+                        .file_name()
+                        .is_some_and(|n| n.to_string_lossy().to_lowercase() == wanted)
+            })
+            .cloned()
     }
 
     /// Daily note: the note named after the local date, wherever it is in the
@@ -584,7 +754,9 @@ impl Shell {
         // No daily note yet, and a `Daily` or `Journal` template: it is born from it.
         if self.wiki_path(&name).is_none()
             && let Some(template) = self.daily_template()
-            && self.create_from(&template, &name, &root, window, cx).is_some()
+            && self
+                .create_from(&template, &name, &root, window, cx)
+                .is_some()
         {
             return;
         }
@@ -595,7 +767,8 @@ impl Shell {
     /// front matter.
     pub(super) fn wiki_path(&self, name: &str) -> Option<PathBuf> {
         // A template answers no link: `[[Réunion]]` points to the note, not its template.
-        logic::wiki::resolve(&self.notes, name, |n| self.is_template(n)).map(|note| note.path.clone())
+        logic::wiki::resolve(&self.notes, name, |n| self.is_template(n))
+            .map(|note| note.path.clone())
     }
 
     pub(super) fn open_wiki(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {

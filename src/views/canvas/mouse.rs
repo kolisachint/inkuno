@@ -16,7 +16,11 @@ impl Canvas {
     /// The handles of a shape from which an arrow is drawn: the middle of each side, a little way out, and the
     /// place of the border an arrow from there leaves by (fractions of the width and the height).
     pub(super) fn handles(shape: &diagram::Shape, zoom: f32) -> [((f32, f32), (f32, f32)); 4] {
-        let (cx, cy, off) = (shape.x + shape.w / 2., shape.y + shape.h / 2., HANDLE_OUT / zoom);
+        let (cx, cy, off) = (
+            shape.x + shape.w / 2.,
+            shape.y + shape.h / 2.,
+            HANDLE_OUT / zoom,
+        );
         [
             ((cx, shape.y - off), (0.5, 0.)),
             ((shape.x + shape.w + off, cy), (1., 0.5)),
@@ -28,20 +32,34 @@ impl Canvas {
     /// Whether an arrow can be drawn from a handle of this shape: a lifeline is joined by messages, a pin
     /// sits on a border, a fragment is drawn around messages.
     pub(super) fn drawable_from(shape: &diagram::Shape) -> bool {
-        !matches!(shape.form, Form::Lifeline | Form::Pin | Form::Fragment | Form::Divider)
+        !matches!(
+            shape.form,
+            Form::Lifeline | Form::Pin | Form::Fragment | Form::Divider
+        )
     }
 
     /// The handle under this point, on the shape under the pointer: the shape, and where on its border it leaves from.
     /// Past the four handles, anywhere just outside the border (its halo) draws too, from the nearest place of the
     /// border: the pointer is on the edge it wants to leave by. Not near a corner: that is where a shape is resized.
     pub(super) fn handle_at(&self, p: (f32, f32)) -> Option<(u32, (f32, f32))> {
-        let shape = self.hover.and_then(|id| self.diagram.shape(id)).filter(|s| Self::drawable_from(s))?;
+        let shape = self
+            .hover
+            .and_then(|id| self.diagram.shape(id))
+            .filter(|s| Self::drawable_from(s))?;
         let reach = HANDLE_REACH / self.zoom;
-        if let Some((_, at)) = Self::handles(shape, self.zoom).into_iter().find(|(h, _)| (h.0 - p.0).hypot(h.1 - p.1) <= reach) {
+        if let Some((_, at)) = Self::handles(shape, self.zoom)
+            .into_iter()
+            .find(|(h, _)| (h.0 - p.0).hypot(h.1 - p.1) <= reach)
+        {
             return Some((shape.id, at));
         }
-        let inside = p.0 >= shape.x && p.0 <= shape.x + shape.w && p.1 >= shape.y && p.1 <= shape.y + shape.h;
-        let corner = Self::corners(shape).iter().any(|c| (c.0 - p.0).hypot(c.1 - p.1) <= reach);
+        let inside = p.0 >= shape.x
+            && p.0 <= shape.x + shape.w
+            && p.1 >= shape.y
+            && p.1 <= shape.y + shape.h;
+        let corner = Self::corners(shape)
+            .iter()
+            .any(|c| (c.0 - p.0).hypot(c.1 - p.1) <= reach);
         if inside || corner || !self.in_halo(shape, p) {
             return None;
         }
@@ -54,12 +72,18 @@ impl Canvas {
     /// Whether this point is around the shape, as far out as its handles reach.
     fn in_halo(&self, shape: &diagram::Shape, p: (f32, f32)) -> bool {
         let halo = (HANDLE_OUT + HANDLE_REACH) / self.zoom;
-        p.0 >= shape.x - halo && p.0 <= shape.x + shape.w + halo && p.1 >= shape.y - halo && p.1 <= shape.y + shape.h + halo
+        p.0 >= shape.x - halo
+            && p.0 <= shape.x + shape.w + halo
+            && p.1 >= shape.y - halo
+            && p.1 <= shape.y + shape.h + halo
     }
 
     /// What is under the pointer, when nothing is being dragged: it is lit, and a shape shows its handles.
     pub(super) fn aim_hover(&mut self, p: (f32, f32), cx: &mut Context<Self>) {
-        let idle = self.tool == Tool::Select && self.drag == Drag::None && self.editing.is_none() && self.context.is_none();
+        let idle = self.tool == Tool::Select
+            && self.drag == Drag::None
+            && self.editing.is_none()
+            && self.context.is_none();
         // Leaving a shape toward its handles keeps it pointed at: between the border and a handle there used to be
         // a gap where it was not, the handles went, and an arrow could only be drawn by jumping over it.
         let next = if !idle {
@@ -69,7 +93,12 @@ impl Canvas {
         } else {
             self.diagram.hit(p.0, p.1, 7. / self.zoom).or_else(|| {
                 // Coming from outside, to the edge of a shape: it is pointed at too.
-                self.diagram.shapes.iter().rev().find(|s| Self::drawable_from(s) && self.in_halo(s, p)).map(|s| s.id)
+                self.diagram
+                    .shapes
+                    .iter()
+                    .rev()
+                    .find(|s| Self::drawable_from(s) && self.in_halo(s, p))
+                    .map(|s| s.id)
             })
         };
         if next != self.hover {
@@ -81,13 +110,28 @@ impl Canvas {
     /// Arrow end for this point: attached to the shape found there, at the
     /// edge if close to it; otherwise the snapped point. With `mid` (an association class), near
     /// the middle of another arrow than `except`, it holds on to that.
-    pub(super) fn end_at(&self, p: (f32, f32), not: Option<u32>, mid: bool, except: Option<u32>) -> End {
+    pub(super) fn end_at(
+        &self,
+        p: (f32, f32),
+        not: Option<u32>,
+        mid: bool,
+        except: Option<u32>,
+    ) -> End {
         // A lifeline is joined whole, even by the arrow that began on it: a message to itself.
-        let shape = self.diagram.shapes_under(p.0, p.1, 7. / self.zoom).first().and_then(|id| self.diagram.shape(*id)).filter(|s| Some(s.id) != not || s.form == Form::Lifeline);
+        let shape = self
+            .diagram
+            .shapes_under(p.0, p.1, 7. / self.zoom)
+            .first()
+            .and_then(|id| self.diagram.shape(*id))
+            .filter(|s| Some(s.id) != not || s.form == Form::Lifeline);
         match shape {
             Some(shape) if shape.form == Form::Lifeline => End::Life(shape.id),
             Some(shape) => shape.hook(p.0, p.1),
-            None => match self.diagram.mid_at(p.0, p.1, 16. / self.zoom, except).filter(|_| mid) {
+            None => match self
+                .diagram
+                .mid_at(p.0, p.1, 16. / self.zoom, except)
+                .filter(|_| mid)
+            {
                 Some(id) => End::Mid(id),
                 None => End::Point(diagram::snap(p.0), diagram::snap(p.1)),
             },
@@ -97,7 +141,10 @@ impl Canvas {
     /// Zooms around the centre of the view.
     pub(super) fn zoom_by(&mut self, by: f32, cx: &mut Context<Self>) {
         let zoom = (self.zoom * by).clamp(0.2, 4.);
-        let (mx, my) = (f32::from(self.bounds.size.width) / 2., f32::from(self.bounds.size.height) / 2.);
+        let (mx, my) = (
+            f32::from(self.bounds.size.width) / 2.,
+            f32::from(self.bounds.size.height) / 2.,
+        );
         let k = zoom / self.zoom;
         self.pan = (mx - (mx - self.pan.0) * k, my - (my - self.pan.1) * k);
         self.zoom = zoom;
@@ -111,12 +158,20 @@ impl Canvas {
 
     /// Places a shape at its usual size, centred on this screen point.
     pub(super) fn place(&mut self, tool: Tool, at: Point<Pixels>, cx: &mut Context<Self>) {
-        let Some((form, preset)) = made_by(tool) else { return };
+        let Some((form, preset)) = made_by(tool) else {
+            return;
+        };
         self.stop_editing(cx);
         (self.shapes, self.relations) = (false, false);
         self.remember();
         let (p, (w, h)) = (self.world(at), usual(tool));
-        let id = self.diagram.add_shape(form, diagram::snap(p.0 - w / 2.), diagram::snap(p.1 - h / 2.), w, h);
+        let id = self.diagram.add_shape(
+            form,
+            diagram::snap(p.0 - w / 2.),
+            diagram::snap(p.1 - h / 2.),
+            w,
+            h,
+        );
         self.dress(id, preset);
         self.diagram.adopt(&[id]);
         (self.selected, self.tool) = (vec![id], Tool::Select);
@@ -129,12 +184,18 @@ impl Canvas {
     /// Writes in a shape what its preset begins with.
     pub(super) fn dress(&mut self, id: u32, preset: Option<Preset>) {
         if let (Some(preset), Some(shape)) = (preset, self.diagram.shape_mut(id)) {
-            (shape.text, shape.fill, shape.dashed) = (preset.text.to_string(), preset.fill, preset.dashed);
+            (shape.text, shape.fill, shape.dashed) =
+                (preset.text.to_string(), preset.fill, preset.dashed);
         }
     }
 
     /// A right click: what is under it is selected, and the menu of what can be done with it opens there.
-    pub(super) fn context_down(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn context_down(
+        &mut self,
+        e: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         window.focus(&self.focus);
         self.set_tool(Tool::Select, cx);
         self.library = None;
@@ -144,16 +205,22 @@ impl Canvas {
             Some(_) => {}
             None => self.selected.clear(),
         }
-        (self.drag, self.hover, self.context, self.cursor) = (Drag::None, None, Some(e.position), 0);
+        (self.drag, self.hover, self.context, self.cursor) =
+            (Drag::None, None, Some(e.position), 0);
         cx.notify();
     }
 
     /// The pointer is over the text being written: on one of its lines, or inside the shape it is in.
     pub(super) fn text_under(&self, at: Point<Pixels>) -> bool {
-        let Some(id) = self.writing_id() else { return false };
+        let Some(id) = self.writing_id() else {
+            return false;
+        };
         let (pad, tall) = (px(4.), px(diagram::LINE * self.zoom));
         let on_row = self.rows.iter().any(|r| {
-            let (left, right) = (r.origin.x - pad, r.origin.x + r.shaped.width.max(px(1.5)) + pad);
+            let (left, right) = (
+                r.origin.x - pad,
+                r.origin.x + r.shaped.width.max(px(1.5)) + pad,
+            );
             (left..=right).contains(&at.x) && (r.origin.y..=r.origin.y + tall).contains(&at.y)
         });
         let p = self.world(at);
@@ -171,8 +238,17 @@ impl Canvas {
         if at.y > last.origin.y + tall {
             return Some(last.end());
         }
-        let away = |r: &&Row| if at.y < r.origin.y { r.origin.y - at.y } else { (at.y - r.origin.y - tall).max(px(0.)) };
-        let row = self.rows.iter().min_by(|a, b| f32::from(away(a)).total_cmp(&f32::from(away(b))))?;
+        let away = |r: &&Row| {
+            if at.y < r.origin.y {
+                r.origin.y - at.y
+            } else {
+                (at.y - r.origin.y - tall).max(px(0.))
+            }
+        };
+        let row = self
+            .rows
+            .iter()
+            .min_by(|a, b| f32::from(away(a)).total_cmp(&f32::from(away(b))))?;
         Some(row.start + row.shaped.closest_index_for_x(at.x - row.origin.x))
     }
 
@@ -182,7 +258,9 @@ impl Canvas {
         if self.tool != Tool::Select || !self.text_under(e.position) {
             return false;
         }
-        let (Some(at), Some(writing)) = (self.byte_at(e.position), self.editing.as_mut()) else { return false };
+        let (Some(at), Some(writing)) = (self.byte_at(e.position), self.editing.as_mut()) else {
+            return false;
+        };
         match e.click_count {
             2 => writing.field.select_word(at),
             n if n >= 3 => writing.field.select_all(),
@@ -193,7 +271,12 @@ impl Canvas {
         true
     }
 
-    pub(super) fn mouse_down(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn mouse_down(
+        &mut self,
+        e: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         window.focus(&self.focus);
         if self.press_text(e) {
             (self.context, self.shapes, self.relations) = (None, false, false);
@@ -204,7 +287,11 @@ impl Canvas {
         let p = self.world(e.position);
         let near = 7. / self.zoom;
         let close = |a: (f32, f32)| (a.0 - p.0).hypot(a.1 - p.1) <= near;
-        let handle = if self.tool == Tool::Select { self.handle_at(p) } else { None };
+        let handle = if self.tool == Tool::Select {
+            self.handle_at(p)
+        } else {
+            None
+        };
         self.hover = None;
         self.drag = match self.tool {
             // A handle of a shape: the arrow that is drawn from it, with the look of the last relationship picked.
@@ -213,10 +300,20 @@ impl Canvas {
                 self.remember();
                 // A message needs lifelines, an association class a middle: those are not drawn from a handle.
                 let relation = match self.link_pick {
-                    Relation::AssociationClass | Relation::Sync | Relation::Create | Relation::Destroy | Relation::Found | Relation::Lost => Relation::Navigable,
+                    Relation::AssociationClass
+                    | Relation::Sync
+                    | Relation::Create
+                    | Relation::Destroy
+                    | Relation::Found
+                    | Relation::Lost => Relation::Navigable,
                     other => other,
                 };
-                let id = self.diagram.add_link(End::Pin(from, fx, fy), End::Point(p.0, p.1), diagram::Head::None, self.route);
+                let id = self.diagram.add_link(
+                    End::Pin(from, fx, fy),
+                    End::Point(p.0, p.1),
+                    diagram::Head::None,
+                    self.route,
+                );
                 if let Some(link) = self.diagram.link_mut(id) {
                     relation.apply(link);
                 }
@@ -237,7 +334,9 @@ impl Canvas {
                 let from = self.end_at(p, None, held, None);
                 // The dotted line of an association class is straight, to the middle of the association.
                 let route = if held { Route::Straight } else { self.route };
-                let id = self.diagram.add_link(from, End::Point(p.0, p.1), diagram::Head::None, route);
+                let id =
+                    self.diagram
+                        .add_link(from, End::Point(p.0, p.1), diagram::Head::None, route);
                 if let Some(link) = self.diagram.link_mut(id) {
                     relation.apply(link);
                 }
@@ -245,21 +344,40 @@ impl Canvas {
             }
             Tool::Select => {
                 let only = (self.selected.len() == 1).then(|| self.selected[0]);
-                let corner = only.and_then(|id| self.diagram.shape(id)).and_then(|shape| {
-                    let corners = Self::corners(shape);
-                    let i = corners.iter().position(|c| close(*c))?;
-                    Some(Drag::Resize { id: shape.id, fixed: corners[(i + 2) % 4] })
-                });
+                let corner = only
+                    .and_then(|id| self.diagram.shape(id))
+                    .and_then(|shape| {
+                        let corners = Self::corners(shape);
+                        let i = corners.iter().position(|c| close(*c))?;
+                        Some(Drag::Resize {
+                            id: shape.id,
+                            fixed: corners[(i + 2) % 4],
+                        })
+                    });
                 let tip = only.and_then(|id| self.diagram.link(id)).and_then(|link| {
                     let (a, b) = self.diagram.ends(link)?;
-                    let to = if close(b) { true } else if close(a) { false } else { return None };
+                    let to = if close(b) {
+                        true
+                    } else if close(a) {
+                        false
+                    } else {
+                        return None;
+                    };
                     Some(Drag::Tip { id: link.id, to })
                 });
                 // Alt+click: what lies under the selection there, in the order clicks go through it, then round to the top.
                 let under = self.diagram.under(p.0, p.1, near);
-                let below = under.iter().position(|id| self.selected.contains(id)).filter(|_| e.modifiers.alt);
-                let hit = below.map_or(under.first(), |i| under.get((i + 1) % under.len())).copied();
-                let label = self.diagram.tip_label_hit(p.0, p.1).filter(|_| hit.is_none_or(|id| self.diagram.link(id).is_some()));
+                let below = under
+                    .iter()
+                    .position(|id| self.selected.contains(id))
+                    .filter(|_| e.modifiers.alt);
+                let hit = below
+                    .map_or(under.first(), |i| under.get((i + 1) % under.len()))
+                    .copied();
+                let label = self
+                    .diagram
+                    .tip_label_hit(p.0, p.1)
+                    .filter(|_| hit.is_none_or(|id| self.diagram.link(id).is_some()));
                 match (corner.or(tip), label, hit) {
                     (Some(drag), ..) => {
                         self.remember();
@@ -272,7 +390,11 @@ impl Canvas {
                             self.start_editing_slot(id, slot, cx);
                             Drag::None
                         } else if self.selected == [id] {
-                            Drag::Along { id, slot, begun: false }
+                            Drag::Along {
+                                id,
+                                slot,
+                                begun: false,
+                            }
                         } else {
                             self.selected = vec![id];
                             Drag::None
@@ -297,13 +419,22 @@ impl Canvas {
                             // A message goes up or down, among the others.
                             Drag::Reorder { id, begun: false }
                         } else {
-                            Drag::Move { last: p, begun: false }
+                            Drag::Move {
+                                last: p,
+                                begun: false,
+                            }
                         }
                     }
                     // Double-click on empty space: a text, at that spot.
                     (None, None, None) if e.click_count >= 2 => {
                         self.remember();
-                        let id = self.diagram.add_shape(Form::Text, diagram::snap(p.0), diagram::snap(p.1), 80., diagram::LINE);
+                        let id = self.diagram.add_shape(
+                            Form::Text,
+                            diagram::snap(p.0),
+                            diagram::snap(p.1),
+                            80.,
+                            diagram::LINE,
+                        );
                         self.begin(id);
                         self.selected = vec![id];
                         Drag::None
@@ -322,7 +453,9 @@ impl Canvas {
 
     /// The text of arrow `id` a double click at `p` asks for: that of an end it is near, or the middle.
     pub(super) fn slot_near(&self, id: u32, p: (f32, f32)) -> Slot {
-        let Some(trace) = self.diagram.link(id).and_then(|l| self.diagram.trace(l)) else { return Slot::Middle };
+        let Some(trace) = self.diagram.link(id).and_then(|l| self.diagram.trace(l)) else {
+            return Slot::Middle;
+        };
         let close = |tip: &diagram::Tip| (tip.at.0 - p.0).hypot(tip.at.1 - p.1) <= 36.;
         match (close(&trace.tips[0]), close(&trace.tips[1])) {
             (true, false) => Slot::Start,
@@ -336,8 +469,16 @@ impl Canvas {
     pub(super) fn hand_at(&self, at: Point<Pixels>) -> CursorStyle {
         match self.drag {
             Drag::Text => return CursorStyle::IBeam,
-            Drag::Pan { .. } | Drag::Move { begun: true, .. } | Drag::Along { begun: true, .. } | Drag::Reorder { begun: true, .. } => return CursorStyle::ClosedHand,
-            Drag::Resize { .. } | Drag::Tip { .. } | Drag::Create { .. } | Drag::Marquee { .. } | Drag::Along { .. } | Drag::Reorder { .. } => return self.hand,
+            Drag::Pan { .. }
+            | Drag::Move { begun: true, .. }
+            | Drag::Along { begun: true, .. }
+            | Drag::Reorder { begun: true, .. } => return CursorStyle::ClosedHand,
+            Drag::Resize { .. }
+            | Drag::Tip { .. }
+            | Drag::Create { .. }
+            | Drag::Marquee { .. }
+            | Drag::Along { .. }
+            | Drag::Reorder { .. } => return self.hand,
             _ => {}
         }
         if self.tool != Tool::Select {
@@ -353,9 +494,15 @@ impl Canvas {
         if let Some(shape) = only.and_then(|id| self.diagram.shape(id))
             && let Some(i) = Self::corners(shape).iter().position(|c| close(*c))
         {
-            return if i % 2 == 0 { CursorStyle::ResizeUpLeftDownRight } else { CursorStyle::ResizeUpRightDownLeft };
+            return if i % 2 == 0 {
+                CursorStyle::ResizeUpLeftDownRight
+            } else {
+                CursorStyle::ResizeUpRightDownLeft
+            };
         }
-        if let Some((a, b)) = only.and_then(|id| self.diagram.link(id)).and_then(|link| self.diagram.ends(link))
+        if let Some((a, b)) = only
+            .and_then(|id| self.diagram.link(id))
+            .and_then(|link| self.diagram.ends(link))
             && (close(a) || close(b))
         {
             return CursorStyle::Crosshair;
@@ -363,7 +510,11 @@ impl Canvas {
         if self.text_under(at) {
             return CursorStyle::IBeam;
         }
-        match self.diagram.hit(p.0, p.1, near).or_else(|| self.diagram.tip_label_hit(p.0, p.1).map(|(id, _)| id)) {
+        match self
+            .diagram
+            .hit(p.0, p.1, near)
+            .or_else(|| self.diagram.tip_label_hit(p.0, p.1).map(|(id, _)| id))
+        {
             Some(_) => CursorStyle::PointingHand,
             None => CursorStyle::Arrow,
         }
@@ -377,7 +528,12 @@ impl Canvas {
         }
     }
 
-    pub(super) fn mouse_move(&mut self, e: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn mouse_move(
+        &mut self,
+        e: &MouseMoveEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let held = e.pressed_button;
         let p = self.world(e.position);
         self.pointer = Some(e.position);
@@ -391,7 +547,8 @@ impl Canvas {
             }
             _ if held != Some(MouseButton::Left) => return,
             Drag::Text => {
-                if let (Some(at), Some(writing)) = (self.byte_at(e.position), self.editing.as_mut()) {
+                if let (Some(at), Some(writing)) = (self.byte_at(e.position), self.editing.as_mut())
+                {
                     writing.field.extend(at);
                 }
             }
@@ -404,9 +561,15 @@ impl Canvas {
             }
             Drag::Tip { id, to } => {
                 // An end does not attach to the shape the other end starts from.
-                let other = self.diagram.link(id).map(|l| if to { l.from } else { l.to });
+                let other = self
+                    .diagram
+                    .link(id)
+                    .map(|l| if to { l.from } else { l.to });
                 let not = other.and_then(End::shape);
-                let held = self.diagram.link(id).is_some_and(|l| Relation::of(l) == Some(Relation::AssociationClass));
+                let held = self
+                    .diagram
+                    .link(id)
+                    .is_some_and(|l| Relation::of(l) == Some(Relation::AssociationClass));
                 let end = self.end_at(p, not, held, Some(id));
                 if let Some(link) = self.diagram.link_mut(id) {
                     *(if to { &mut link.to } else { &mut link.from }) = end;
@@ -425,8 +588,17 @@ impl Canvas {
                 self.drag = Drag::Reorder { id, begun: true };
             }
             Drag::Along { id, slot, begun } => {
-                let along = self.diagram.link(id).map_or(0., |l| self.diagram.along_to(l, slot, p.0, p.1).round());
-                let held = self.diagram.link(id).map_or(0., |l| if slot == Slot::Start { l.start_along } else { l.end_along });
+                let along = self
+                    .diagram
+                    .link(id)
+                    .map_or(0., |l| self.diagram.along_to(l, slot, p.0, p.1).round());
+                let held = self.diagram.link(id).map_or(0., |l| {
+                    if slot == Slot::Start {
+                        l.start_along
+                    } else {
+                        l.end_along
+                    }
+                });
                 if along == held {
                     return;
                 }
@@ -434,9 +606,17 @@ impl Canvas {
                     self.remember();
                 }
                 if let Some(link) = self.diagram.link_mut(id) {
-                    *(if slot == Slot::Start { &mut link.start_along } else { &mut link.end_along }) = along;
+                    *(if slot == Slot::Start {
+                        &mut link.start_along
+                    } else {
+                        &mut link.end_along
+                    }) = along;
                 }
-                self.drag = Drag::Along { id, slot, begun: true };
+                self.drag = Drag::Along {
+                    id,
+                    slot,
+                    begun: true,
+                };
             }
             Drag::Move { last, begun } => {
                 let (dx, dy) = (diagram::snap(p.0 - last.0), diagram::snap(p.1 - last.1));
@@ -447,13 +627,19 @@ impl Canvas {
                     self.remember();
                 }
                 self.shift(dx, dy);
-                self.drag = Drag::Move { last: (last.0 + dx, last.1 + dy), begun: true };
+                self.drag = Drag::Move {
+                    last: (last.0 + dx, last.1 + dy),
+                    begun: true,
+                };
             }
             Drag::Resize { id, fixed } => {
                 let to = (diagram::snap(p.0), diagram::snap(p.1));
                 if let Some(shape) = self.diagram.shape_mut(id) {
                     (shape.x, shape.y) = (fixed.0.min(to.0), fixed.1.min(to.1));
-                    (shape.w, shape.h) = ((to.0 - fixed.0).abs().max(diagram::GRID), (to.1 - fixed.1).abs().max(diagram::GRID));
+                    (shape.w, shape.h) = (
+                        (to.0 - fixed.0).abs().max(diagram::GRID),
+                        (to.1 - fixed.1).abs().max(diagram::GRID),
+                    );
                 }
             }
             Drag::Marquee { from, .. } => self.drag = Drag::Marquee { from, to: p },
@@ -467,7 +653,9 @@ impl Canvas {
         self.aim_hand(e.position, cx);
         match drag {
             Drag::Create { id, .. } => {
-                let Some(shape) = self.diagram.shape_mut(id) else { return };
+                let Some(shape) = self.diagram.shape_mut(id) else {
+                    return;
+                };
                 // A simple click places the shape at its usual size.
                 if shape.w < diagram::GRID || shape.h < diagram::GRID {
                     (shape.w, shape.h) = usual(self.tool);
@@ -486,12 +674,18 @@ impl Canvas {
                 // A line with no length has no reason to exist.
                 let flat = self.diagram.link(id).and_then(|l| self.diagram.ends(l));
                 // One begun at a handle that is let go next to it is a click, not an arrow.
-                let least = if self.from_handle.take() == Some(id) { (HANDLE_OUT + 12.) / self.zoom } else { diagram::GRID };
+                let least = if self.from_handle.take() == Some(id) {
+                    (HANDLE_OUT + 12.) / self.zoom
+                } else {
+                    diagram::GRID
+                };
                 if flat.is_none_or(|(a, b)| (a.0 - b.0).hypot(a.1 - b.1) < least) {
                     self.diagram.remove(&[id]);
                     self.selected.clear();
                     // A click on a handle changed nothing: it is no step of undo either.
-                    if self.undo.last().is_some_and(|d| d.shapes == self.diagram.shapes && d.links == self.diagram.links) {
+                    if self.undo.last().is_some_and(|d| {
+                        d.shapes == self.diagram.shapes && d.links == self.diagram.links
+                    }) {
                         self.undo.pop();
                     }
                 } else {
@@ -513,10 +707,23 @@ impl Canvas {
             }
             Drag::Resize { .. } | Drag::Along { begun: true, .. } => self.changed(cx),
             Drag::Marquee { from, to } => {
-                let (x0, y0, x1, y1) = (from.0.min(to.0), from.1.min(to.1), from.0.max(to.0), from.1.max(to.1));
+                let (x0, y0, x1, y1) = (
+                    from.0.min(to.0),
+                    from.1.min(to.1),
+                    from.0.max(to.0),
+                    from.1.max(to.1),
+                );
                 let inside = |p: (f32, f32)| (x0..=x1).contains(&p.0) && (y0..=y1).contains(&p.1);
-                let shapes = self.diagram.shapes.iter().filter(|s| inside((s.x, s.y)) && inside((s.x + s.w, s.y + s.h)));
-                let links = self.diagram.links.iter().filter(|l| self.diagram.ends(l).is_some_and(|(a, b)| inside(a) && inside(b)));
+                let shapes = self
+                    .diagram
+                    .shapes
+                    .iter()
+                    .filter(|s| inside((s.x, s.y)) && inside((s.x + s.w, s.y + s.h)));
+                let links = self.diagram.links.iter().filter(|l| {
+                    self.diagram
+                        .ends(l)
+                        .is_some_and(|(a, b)| inside(a) && inside(b))
+                });
                 let caught: Vec<u32> = shapes.map(|s| s.id).chain(links.map(|l| l.id)).collect();
                 for id in caught {
                     if !self.selected.contains(&id) {

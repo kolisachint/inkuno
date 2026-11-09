@@ -1,34 +1,44 @@
 //! The side panel as the shell drives it: rail, tree, recent notes, tags, graph, calendar, list pages, context menu and file operations.
 
+use crate::{
+    lang::tr,
+    logic::markdown::{self, Date},
+    logic::note::Note,
+    logic::wiki,
+    platform::vault,
+    ui::widgets::{button, tip},
+    views::palette::{Palette, PaletteEvent},
+};
+use gpui::{
+    Action, ClickEvent, Context, CursorStyle, Div, Focusable, MouseButton, MouseDownEvent, Pixels,
+    ScrollStrategy, Stateful, Window, div, point, prelude::*, px, svg, uniform_list,
+};
 use std::{
     collections::HashSet,
     hash::{BuildHasher, BuildHasherDefault, DefaultHasher, Hash, Hasher},
     ops::Range,
     path::{Path, PathBuf},
 };
-use gpui::{
-    Action, ClickEvent, Context, CursorStyle, Div, Focusable, MouseButton,
-    MouseDownEvent, Pixels, ScrollStrategy, Stateful, Window, div, point, prelude::*, px, svg, uniform_list,
-};
-use crate::{
-    ui::widgets::{button, tip},
-    logic::markdown::{self, Date},
-    logic::wiki,
-    views::palette::{Palette, PaletteEvent, Setting},
-    lang::tr,
-    platform::vault,
-    logic::note::Note,
-};
 
 use super::*;
 use crate::ui::assets::ICON_SET;
 use crate::views::nav::*;
 
+/// Room the native traffic lights float over at the window's top left: what the sidebar
+/// header leaves free on that side, at scale 1 (mirrors `PILL_ROOM` on the right under the drawn bar).
+const TRAFFIC_ROOM: f32 = 78.;
+
 impl Shell {
     /// Shows the tool where it lives (its dock, alone unless it is stacked there already, or its
     /// tab) and gives it the keys. Asking again for a tool in sight hides it (from the keyboard:
     /// only if it already has the keys); the last one of the left dock folds the panel.
-    pub(super) fn show_nav(&mut self, mode: Mode, toggle: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_nav(
+        &mut self,
+        mode: Mode,
+        toggle: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(tab) = self.tool_tab(mode) {
             return self.focus_pane(tab, window, cx);
         }
@@ -47,13 +57,25 @@ impl Shell {
     pub(super) fn refresh_graph(&mut self, cx: &mut Context<Self>) {
         if self.graph_stale && self.tool_shown(Mode::Graph) {
             self.graph_stale = false;
-            let notes: Vec<Note> = self.notes.iter().filter(|n| !self.is_template(n)).cloned().collect();
-            self.graph.update(cx, |graph, cx| graph.set_notes(&notes, &vault::pictures(&self.images), cx));
+            let notes: Vec<Note> = self
+                .notes
+                .iter()
+                .filter(|n| !self.is_template(n))
+                .cloned()
+                .collect();
+            self.graph.update(cx, |graph, cx| {
+                graph.set_notes(&notes, &vault::pictures(&self.images), cx)
+            });
         }
     }
 
     /// A graph node is selected: preview of the note if it has room.
-    pub(super) fn select_from_graph(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_from_graph(
+        &mut self,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.nav.panel == Panel::Split {
             self.preview_note(path, window, cx);
         }
@@ -89,8 +111,16 @@ impl Shell {
         let room = self.nav.total - self.theme.px(RAIL) - DIVIDER - self.nav.aside;
         // The month can no longer be read below 170 px: its days touch.
         let mode = self.nav.width_mode();
-        let floor = px(if self.dock_tools(false).contains(&Mode::Calendar) { 170. } else { 120. });
-        match if mode == Mode::Graph { self.nav.graph_w } else { self.nav.list_w } {
+        let floor = px(if self.dock_tools(false).contains(&Mode::Calendar) {
+            170.
+        } else {
+            120.
+        });
+        match if mode == Mode::Graph {
+            self.nav.graph_w
+        } else {
+            self.nav.list_w
+        } {
             w if w == px(0.) => room / 2.,
             w => w.min(room - NOTE_MIN).max(floor),
         }
@@ -115,8 +145,21 @@ impl Shell {
     /// costs ten times more than checking they are still right.
     pub(super) fn rows_source(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        let open = self.nav.open.iter().map(|dir| BuildHasherDefault::<DefaultHasher>::default().hash_one(dir)).fold(0u64, u64::wrapping_add);
-        (self.nav.mode, self.nav.panel == Panel::Rail, &self.vault, &self.dirs, &self.images, open).hash(&mut hasher);
+        let open = self
+            .nav
+            .open
+            .iter()
+            .map(|dir| BuildHasherDefault::<DefaultHasher>::default().hash_one(dir))
+            .fold(0u64, u64::wrapping_add);
+        (
+            self.nav.mode,
+            self.nav.panel == Panel::Rail,
+            &self.vault,
+            &self.dirs,
+            &self.images,
+            open,
+        )
+            .hash(&mut hasher);
         if self.nav.mode == Mode::Links {
             self.nav.anchor.hash(&mut hasher);
         }
@@ -141,11 +184,16 @@ impl Shell {
         };
         match self.nav.mode {
             Mode::Tree => tree_rows(root, &self.notes, &self.dirs, &self.images, &self.nav.open),
-            Mode::Graph | Mode::Calendar | Mode::Search => Vec::new(),
+            Mode::Graph | Mode::Calendar | Mode::Search | Mode::Outline => Vec::new(),
             Mode::Tags => tag_rows(&self.notes, &self.nav.open),
             Mode::Links => (self.nav.anchor.iter())
                 .flat_map(|target| wiki::backlinks(&self.notes, target))
-                .map(|n| Row { path: n.path.clone(), name: n.name.clone(), depth: 0, dir: None })
+                .map(|n| Row {
+                    path: n.path.clone(),
+                    name: n.name.clone(),
+                    depth: 0,
+                    dir: None,
+                })
                 .collect(),
             Mode::Recent => self
                 .by_recency()
@@ -189,8 +237,16 @@ impl Shell {
         };
         let marked = &mut self.nav.marked;
         if extend {
-            let from = self.nav.sel.as_ref().and_then(|sel| self.nav.rows.iter().position(|r| r.path == *sel)).unwrap_or(ix);
-            *marked = self.nav.rows[from.min(ix)..=from.max(ix)].iter().map(|r| r.path.clone()).collect();
+            let from = self
+                .nav
+                .sel
+                .as_ref()
+                .and_then(|sel| self.nav.rows.iter().position(|r| r.path == *sel))
+                .unwrap_or(ix);
+            *marked = self.nav.rows[from.min(ix)..=from.max(ix)]
+                .iter()
+                .map(|r| r.path.clone())
+                .collect();
             self.nav.sel.get_or_insert(path);
         } else {
             // The row already selected is part of the batch.
@@ -201,8 +257,18 @@ impl Shell {
                 marked.insert(path.clone());
             }
             // Removed, it leaves its chosen-row place to another of the batch.
-            let other = self.nav.rows.iter().map(|r| &r.path).find(|p| marked.contains(*p)).cloned();
-            self.nav.sel = if marked.contains(&path) { Some(path) } else { other.or(Some(path)) };
+            let other = self
+                .nav
+                .rows
+                .iter()
+                .map(|r| &r.path)
+                .find(|p| marked.contains(*p))
+                .cloned();
+            self.nav.sel = if marked.contains(&path) {
+                Some(path)
+            } else {
+                other.or(Some(path))
+            };
         }
         cx.notify();
     }
@@ -216,9 +282,13 @@ impl Shell {
         }
         let mut seen = HashSet::new();
         let rows = self.nav.rows.iter().map(|r| &r.path);
-        rows.filter(|p| marked.contains(*p) && !p.ancestors().skip(1).any(|a| marked.contains(a)) && seen.insert(*p))
-            .cloned()
-            .collect()
+        rows.filter(|p| {
+            marked.contains(*p)
+                && !p.ancestors().skip(1).any(|a| marked.contains(a))
+                && seen.insert(*p)
+        })
+        .cloned()
+        .collect()
     }
 
     /// Calendar: moves the chosen day by `days` days, or by `months` months.
@@ -244,10 +314,14 @@ impl Shell {
         let monday = tr("sunday", "monday") == "monday";
         let (lead, days) = markdown::month(year, month, monday);
         let names: HashSet<&str> = self.notes.iter().map(|n| n.name.as_str()).collect();
-        let (today, open) = (crate::platform::clock::today(), self.pane().path.as_deref().map(vault::stem));
+        let (today, open) = (
+            crate::platform::clock::today(),
+            self.pane().path.as_deref().map(vault::stem),
+        );
         let (en, fr) = markdown::MONTHS[month as usize - 1];
         let step = |id: &'static str, icon: &'static str, by: i32, cx: &mut Context<Self>| {
-            button(id, icon, false, t).on_click(cx.listener(move |this, _, _, cx| this.day_step(0, by, cx)))
+            button(id, icon, false, t)
+                .on_click(cx.listener(move |this, _, _, cx| this.day_step(0, by, cx)))
         };
         let head = div()
             .flex()
@@ -265,9 +339,26 @@ impl Shell {
             .child(step("month-prev", "chevron-left.svg", -1, cx))
             .child(step("month-next", "chevron-right.svg", 1, cx));
         // Seven equal columns, which shrink with the panel instead of going under the note.
-        let cell = || div().h(t.px(32.)).relative().flex().items_center().justify_center();
-        let initials = if monday { tr("MTWTFSS", "LMMJVSD") } else { tr("SMTWTFS", "DLMMJVS") };
-        let week = initials.chars().map(|c| cell().h(t.px(30.)).text_color(t.soft).text_size(t.px(11.)).child(c.to_string()));
+        let cell = || {
+            div()
+                .h(t.px(32.))
+                .relative()
+                .flex()
+                .items_center()
+                .justify_center()
+        };
+        let initials = if monday {
+            tr("MTWTFSS", "LMMJVSD")
+        } else {
+            tr("SMTWTFS", "DLMMJVS")
+        };
+        let week = initials.chars().map(|c| {
+            cell()
+                .h(t.px(30.))
+                .text_color(t.soft)
+                .text_size(t.px(11.))
+                .child(c.to_string())
+        });
         // Whole weeks: the last days of the previous month and the first of the next fill the grid.
         let first = markdown::day_number((year, month, 1));
         let trail = (7 - (lead + days) % 7) % 7;
@@ -304,7 +395,14 @@ impl Shell {
                 .hover(|s| s.bg(t.hover))
                 .child(digit)
                 .when(has, |d| {
-                    d.child(div().absolute().bottom(t.px(2.)).size(t.px(3.)).rounded_full().bg(if is_today { t.accent } else { t.soft }))
+                    d.child(
+                        div()
+                            .absolute()
+                            .bottom(t.px(2.))
+                            .size(t.px(3.))
+                            .rounded_full()
+                            .bg(if is_today { t.accent } else { t.soft }),
+                    )
                 })
                 .on_click(cx.listener(move |this, _, window, cx| this.open_day(date, window, cx)))
                 .into_any_element()
@@ -318,7 +416,16 @@ impl Shell {
             .flex_col()
             .gap_1()
             .child(head)
-            .child(div().debug_selector(|| "calendar".into()).w_full().max_w(t.px(224.)).grid().grid_cols(7).children(week).children(cells))
+            .child(
+                div()
+                    .debug_selector(|| "calendar".into())
+                    .w_full()
+                    .max_w(t.px(224.))
+                    .grid()
+                    .grid_cols(7)
+                    .children(week)
+                    .children(cells),
+            )
     }
 
     pub(super) fn nav_step(&mut self, down: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -354,7 +461,12 @@ impl Shell {
 
     /// Opens the note and puts focus in it; the note gets its place back if the
     /// panel took the whole window.
-    pub(super) fn open_from_nav(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_from_nav(
+        &mut self,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.open(path, window, cx);
         if self.nav.panel == Panel::Full {
             self.nav.panel = Panel::Split;
@@ -363,7 +475,9 @@ impl Shell {
         // of the note, and the panel keeps control.
         match self.shown_sheet() {
             Some(sheet) => window.focus(&sheet.focus_handle(cx)),
-            None if self.pane().file.is_none() => window.focus(&self.pane().editor.focus_handle(cx)),
+            None if self.pane().file.is_none() => {
+                window.focus(&self.pane().editor.focus_handle(cx))
+            }
             None => {}
         }
         self.settle_nav(window, cx);
@@ -388,7 +502,12 @@ impl Shell {
             (_, true) => return self.nav_step(true, window, cx),
             (_, false) => {
                 let parent = row.path.parent();
-                if let Some(up) = self.nav.rows.iter().position(|r| Some(r.path.as_path()) == parent) {
+                if let Some(up) = self
+                    .nav
+                    .rows
+                    .iter()
+                    .position(|r| Some(r.path.as_path()) == parent)
+                {
                     return self.nav_select(up, window, cx);
                 }
             }
@@ -448,16 +567,23 @@ impl Shell {
 
     /// Gives cell `i` of the grid (0: no icon) to the item, and closes the grid.
     fn pick_icon(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(path) = self.icon_pick.as_ref().map(|pick| pick.path.clone()) else { return };
+        let Some(path) = self.icon_pick.as_ref().map(|pick| pick.path.clone()) else {
+            return;
+        };
         self.close_icons(window, cx);
-        let name = i.checked_sub(1).and_then(|i| ICON_SET.get(i)).map(|(file, _)| &file[2..file.len() - 4]);
+        let name = i
+            .checked_sub(1)
+            .and_then(|i| ICON_SET.get(i))
+            .map(|(file, _)| &file[2..file.len() - 4]);
         self.set_icon(path, name, cx)
     }
 
     /// Arrows (eight cells a row), Home, End, Enter and Space in the icon grid.
     fn icons_key(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let n = ICON_SET.len() + 1;
-        let Some(pick) = self.icon_pick.as_mut() else { return false };
+        let Some(pick) = self.icon_pick.as_mut() else {
+            return false;
+        };
         let at = pick.chosen;
         pick.chosen = match key {
             "right" => (at + 1) % n,
@@ -478,13 +604,25 @@ impl Shell {
 
     /// Icon grid, opened from the menu: a click or Enter gives the icon, the cross removes it,
     /// a click elsewhere or Esc closes it.
-    pub(super) fn render_icons(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
-        let IconPick { at, path, chosen, .. } = self.icon_pick.as_ref()?;
+    pub(super) fn render_icons(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement + use<>> {
+        let IconPick {
+            at, path, chosen, ..
+        } = self.icon_pick.as_ref()?;
         let (at, chosen) = (*at, *chosen);
         let t = self.theme;
         let mine = self.icons.get(path).cloned();
-        let pick = |i: usize, file: &'static str, name: Option<&'static str>, cx: &mut Context<Self>| {
-            button(("icon", i), file, name.is_some() && name == mine.as_deref(), t)
+        let pick =
+            |i: usize, file: &'static str, name: Option<&'static str>, cx: &mut Context<Self>| {
+                button(
+                    ("icon", i),
+                    file,
+                    name.is_some() && name == mine.as_deref(),
+                    t,
+                )
                 .when(i == chosen, |d| d.border_2().border_color(t.accent))
                 .on_mouse_down(
                     MouseButton::Left,
@@ -493,50 +631,72 @@ impl Shell {
                         this.pick_icon(i, window, cx)
                     }),
                 )
-        };
+            };
         let mut cells = vec![pick(0, "close.svg", None, cx)];
-        cells.extend(ICON_SET.iter().enumerate().map(|(i, (file, _))| pick(i + 1, file, Some(&file[2..file.len() - 4]), cx)));
+        cells.extend(
+            ICON_SET
+                .iter()
+                .enumerate()
+                .map(|(i, (file, _))| pick(i + 1, file, Some(&file[2..file.len() - 4]), cx)),
+        );
         // Eight per row; the grid stays in the window, like the menu.
         let view = window.viewport_size();
-        let (width, height) = (px(8. * 30. - 2. + 12.), px(cells.len().div_ceil(8) as f32 * 30. - 2. + 12.));
+        let (width, height) = (
+            px(8. * 30. - 2. + 12.),
+            px(cells.len().div_ceil(8) as f32 * 30. - 2. + 12.),
+        );
         let at = point(
             (at.x - self.nav.left).min(view.width - self.nav.left * 2. - width - t.px(8.)),
             (at.y - self.nav.left).min(view.height - self.nav.left * 2. - height - t.px(8.)),
         );
-        let close = cx.listener(|this: &mut Self, _: &MouseDownEvent, window, cx| this.close_icons(window, cx));
+        let close = cx.listener(|this: &mut Self, _: &MouseDownEvent, window, cx| {
+            this.close_icons(window, cx)
+        });
         Some(
-            div().absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, close).child(
-                div()
-                    .debug_selector(|| "icons".into())
-                    .track_focus(&self.menu_focus)
-                    .key_context("Menu")
-                    .on_action(cx.listener(|this, _: &CloseHelp, window, cx| this.close_icons(window, cx)))
-                    .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
-                        if !e.keystroke.modifiers.modified() && this.icons_key(&e.keystroke.key, window, cx) {
-                            cx.stop_propagation();
-                        }
-                    }))
-                    .absolute()
-                    .left(at.x)
-                    .top(at.y)
-                    .w(width)
-                    .p(t.px(5.))
-                    .bg(t.panel)
-                    .border_1()
-                    .border_color(t.border)
-                    .rounded(t.large())
-                    .shadow(t.floating())
-                    .flex()
-                    .flex_wrap()
-                    .gap(t.px(2.))
-                    .children(cells),
-            ),
+            div()
+                .absolute()
+                .inset_0()
+                .occlude()
+                .on_mouse_down(MouseButton::Left, close)
+                .child(
+                    div()
+                        .debug_selector(|| "icons".into())
+                        .track_focus(&self.menu_focus)
+                        .key_context("Menu")
+                        .on_action(cx.listener(|this, _: &CloseHelp, window, cx| {
+                            this.close_icons(window, cx)
+                        }))
+                        .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
+                            if !e.keystroke.modifiers.modified()
+                                && this.icons_key(&e.keystroke.key, window, cx)
+                            {
+                                cx.stop_propagation();
+                            }
+                        }))
+                        .absolute()
+                        .left(at.x)
+                        .top(at.y)
+                        .w(width)
+                        .p(t.px(5.))
+                        .bg(t.panel)
+                        .border_1()
+                        .border_color(t.border)
+                        .rounded(t.large())
+                        .shadow(t.floating())
+                        .flex()
+                        .flex_wrap()
+                        .gap(t.px(2.))
+                        .children(cells),
+                ),
         )
     }
 
     /// The width the rows of the panel's list have: the dock it is in, the whole window when it is alone.
     fn list_room(&self) -> Pixels {
-        let (right, alone) = (self.dock_tools(true).contains(&self.nav.mode), self.nav.panel == Panel::Full);
+        let (right, alone) = (
+            self.dock_tools(true).contains(&self.nav.mode),
+            self.nav.panel == Panel::Full,
+        );
         let width = match (right, alone) {
             (true, _) => self.right_width(),
             (_, true) => self.nav.total - self.theme.px(RAIL),
@@ -544,6 +704,133 @@ impl Shell {
         };
         // The list's own margin (`px_2`) on both sides.
         width - px(16.)
+    }
+
+    /// The outline in the right dock: the note's headings, indented by level, the one of the
+    /// cursor's section lit; parents fold. A click jumps the cursor there and gives the note the
+    /// keys back; Escape in the list does the same (`nav::Close`).
+    fn render_outline(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let t = self.theme;
+        let (text, pos) = match self.vault.is_some() && self.pane().file.is_none() {
+            true => {
+                let editor = self.pane().editor.read(cx);
+                (editor.text().to_string(), editor.position())
+            }
+            // An image, a table, a diagram: no headings to list.
+            false => (String::new(), 0),
+        };
+        let (rows, _) =
+            outline_visible(&markdown::headings(&text), pos, &self.nav.outline_collapsed);
+        if rows.is_empty() {
+            return div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .items_start()
+                .justify_center()
+                .p_3()
+                .child(
+                    div()
+                        .debug_selector(|| "outline-empty".into())
+                        .text_size(t.px(13.))
+                        .text_color(t.soft)
+                        .child(tr(
+                            "This note has no headings",
+                            "Cette note n'a pas de titres",
+                        )),
+                )
+                .into_any_element();
+        }
+        let count = rows.len();
+        let rows = cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
+            let (text, pos) = match this.vault.is_some() && this.pane().file.is_none() {
+                true => {
+                    let editor = this.pane().editor.read(cx);
+                    (editor.text().to_string(), editor.position())
+                }
+                false => (String::new(), 0),
+            };
+            let (rows, active) =
+                outline_visible(&markdown::headings(&text), pos, &this.nav.outline_collapsed);
+            rows.into_iter()
+                .enumerate()
+                .skip(range.start)
+                .take(range.end - range.start)
+                .map(|(ix, row)| this.outline_item(ix, row, active == Some(ix), cx))
+                .collect()
+        });
+        uniform_list(("nav-rows", Mode::Outline as usize), count, rows)
+            .track_scroll(self.nav.scroll.clone())
+            .flex_1()
+            .min_h_0()
+            .into_any_element()
+    }
+
+    /// One row of the outline: its fold chevron (when it parents deeper headings) and its label,
+    /// indented by level. A click jumps there; the chevron folds without jumping.
+    fn outline_item(
+        &mut self,
+        ix: usize,
+        row: OutlineRow,
+        active: bool,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let t = self.theme;
+        let at = row.at;
+        let indent = t.px(INDENT * row.level.saturating_sub(1) as f32);
+        let mut slot = div()
+            .flex_none()
+            .w(t.px(20.))
+            .h_full()
+            .flex()
+            .items_center()
+            .justify_center();
+        if row.kids {
+            let icon = match row.shut {
+                true => "chevron-right.svg",
+                false => "chevron-down.svg",
+            };
+            slot = slot.child(
+                button(("outline-fold", ix), icon, false, t)
+                    .debug_selector(move || format!("outline-fold-{ix}"))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if !this.nav.outline_collapsed.remove(&at) {
+                            this.nav.outline_collapsed.insert(at);
+                        }
+                        cx.notify();
+                    })),
+            );
+        }
+        div()
+            .id(("outline-row", ix))
+            .debug_selector(move || format!("outline-row-{ix}"))
+            .w_full()
+            .h(t.px(ROW))
+            .flex()
+            .items_center()
+            .pl(t.px(8.))
+            .pr_2()
+            .gap_1()
+            .cursor_pointer()
+            .text_size(t.px(13.))
+            .text_color(match active {
+                true => t.accent,
+                false => t.text,
+            })
+            .when(active, |d| d.bg(t.hover))
+            .hover(|s| s.bg(t.hover))
+            .on_click(cx.listener(move |this, _, window, cx| this.outline_go(at, window, cx)))
+            .child(slot)
+            .child(
+                div()
+                    .min_w_0()
+                    .flex_1()
+                    .truncate()
+                    .pl(indent)
+                    .child(row.label),
+            )
+            .into_any_element()
     }
 
     pub(super) fn render_rows(
@@ -557,7 +844,11 @@ impl Shell {
         let tree = self.nav.mode == Mode::Tree;
         let marked = &self.nav.marked;
         // Dragging a row of the multiple selection carries the whole batch.
-        let lot = marked.iter().next().map(|any| self.targets(any)).unwrap_or_default();
+        let lot = marked
+            .iter()
+            .next()
+            .map(|any| self.targets(any))
+            .unwrap_or_default();
         let room = self.list_room();
         range
             .filter_map(|ix| {
@@ -618,7 +909,7 @@ impl Shell {
                 let shown = {
                     let used = 8. + nav::INDENT * row.depth as f32 + 8. + 8.;
                     let has_icon = tree || self.icons.contains_key(&row.path);
-                    let fixed = t.px(used + if foldable { 21. } else { 0. } + if has_icon { 23. } else { 0. }) ;
+                    let fixed = t.px(used + if foldable { 21. } else { 0. } + if has_icon { 21. } else { 0. }) ;
                     let avail = f32::from(room - fixed);
                     let measure = |text: &str, size: f32| -> f32 {
                         if text.is_empty() {
@@ -648,8 +939,7 @@ impl Shell {
                         .rounded(t.large())
                         .text_size(t.px(13.))
                         .when(!selected, |d| d.hover(|s| s.bg(t.hover)))
-                        // The displayed file: an accent pill; the selection wins on the same row.
-                        .when(current && !selected, |d| d.bg(crate::ui::widgets::pill_tint(t)))
+                        // The displayed file: accent text and icon, no second tint; the selection wins on the same row.
                         .when(selected, |d| {
                             let at = self.nav.sel_at.clone();
                             d.bg(if focused { t.selection } else { t.selection.opacity(0.5) })
@@ -661,7 +951,7 @@ impl Shell {
                                 d.child(svg().path(chevron).size(t.px(14.)).text_color(if selected { t.text } else { t.soft }))
                             }))
                         })
-                        // What the row is, in one 16 px column for every row so the names line up: the icon
+                        // What the row is, in one 14 px column for every row so the names line up: the icon
                         // the user gave it (a star is the accent's), else, in the tree, the one of its kind.
                         .children({
                             let given = self.icons.get(&row.path).and_then(|name| ICON_SET.iter().find(|(file, _)| file[2..file.len() - 4] == *name));
@@ -670,7 +960,7 @@ impl Shell {
                                 None => (row.icon(), if current { t.accent } else { t.soft }),
                             };
                             let selector = format!("nav-icon-{}", row.name);
-                            (given.is_some() || tree).then(|| svg().debug_selector(move || selector.clone()).path(file).size(t.px(16.)).flex_none().text_color(tint))
+                            (given.is_some() || tree).then(|| svg().debug_selector(move || selector.clone()).path(file).size(t.px(14.)).flex_none().text_color(tint))
                         })
                         .child(
                             div()
@@ -803,11 +1093,24 @@ impl Shell {
     }
 
     /// The rail, then the left dock and its separator if it is open.
-    pub(super) fn render_nav(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn render_nav(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let t = self.theme;
         // The keys stay with a tool in sight: the active one hidden, the first one shown takes them.
         if !self.docked_now(self.nav.mode)
-            && let Some(first) = self.dock_tools(false).into_iter().filter(|_| self.left_open()).chain(self.dock_tools(true).into_iter().filter(|_| self.right_open())).next()
+            && let Some(first) = self
+                .dock_tools(false)
+                .into_iter()
+                .filter(|_| self.left_open())
+                .chain(
+                    self.dock_tools(true)
+                        .into_iter()
+                        .filter(|_| self.right_open()),
+                )
+                .next()
         {
             self.nav.activate(first);
         }
@@ -825,32 +1128,31 @@ impl Shell {
             self.nav.followed = current.clone();
         }
         let selected = self.nav.sel.clone();
-        self.graph.update(cx, |graph, _| graph.sync(t, current.as_deref(), selected.as_deref()));
+        self.graph.update(cx, |graph, _| {
+            graph.sync(t, current.as_deref(), selected.as_deref())
+        });
 
-        let travel = |id: &'static str, icon: &'static str, on: bool| {
-            div()
-                .id(id)
-                .debug_selector(move || id.to_string())
-                .w(t.px(28.))
-                .h(t.px(24.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(t.small())
-                .when(on, |d| d.cursor_pointer().hover(|s| s.bg(t.hover)).active(|s| s.bg(t.pressed)))
-                .child(svg().path(icon).size(t.px(14.)).flex_none().text_color(if on { t.soft } else { t.dim }))
-        };
         // The view in sight is a small sheet laid on the rail, its icon in the accent.
-        let on_sheet = |b: Stateful<Div>, on: bool| b.rounded(t.large()).when(on, |d| d.bg(t.bg).shadow(t.lifted()));
-        let shown: Vec<Mode> = Mode::ALL.into_iter().filter(|m| self.tool_shown(*m)).collect();
+        let on_sheet = |b: Stateful<Div>, on: bool| {
+            b.rounded(t.large())
+                .when(on, |d| d.bg(t.bg).shadow(t.lifted()))
+        };
+        let shown: Vec<Mode> = Mode::ALL
+            .into_iter()
+            .filter(|m| self.tool_shown(*m))
+            .collect();
         let mode_button = |id: &'static str, icon, m: Mode, label: &'static str, keys: String| {
             on_sheet(button(id, icon, shown.contains(&m), t), shown.contains(&m))
                 .debug_selector(move || id.to_string())
                 .tooltip(tip(label, keys, t))
                 // Shift+click: with the others of its dock, one above the other.
-                .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| match e.modifiers().shift {
-                    true => this.stack_tool(m, window, cx),
-                    false => this.show_nav(m, true, window, cx),
+                // A plain click never hides: the sidebar stays shown (hiding is on the keys
+                // and the palette; bring back by restoring `true`).
+                .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
+                    match e.modifiers().shift {
+                        true => this.stack_tool(m, window, cx),
+                        false => this.show_nav(m, false, window, cx),
+                    }
                 }))
         };
         let keys = |action: &dyn Action| crate::ui::keys::of(cx, action);
@@ -882,26 +1184,39 @@ impl Shell {
                     .focus(|s| s.border_2().border_color(t.accent))
                     .hover(|s| s.bg(t.hover))
                     .active(|s| s.bg(t.pressed))
-                    .child(div().debug_selector(|| "rail-logo".into()).child(crate::ui::assets::logo(t)))
-                    .tooltip(tip(tr("Commands", "Commandes"), keys(&crate::actions::ToggleCommands), t))
+                    .child(
+                        div()
+                            .debug_selector(|| "rail-logo".into())
+                            .child(crate::ui::assets::logo(t)),
+                    )
+                    .tooltip(tip(
+                        tr("Commands", "Commandes"),
+                        keys(&crate::actions::ToggleCommands),
+                        t,
+                    ))
                     .on_click(cx.listener(|this, _, window, cx| this.open_commands(window, cx))),
             )
-            // Three groups, one button's height apart: navigation, the panel's views, actions.
+            // Two groups, one button's height apart: the vault tree, then find and new.
+            // Everything else left the rail for the palette (back/forward, trash, sync,
+            // backup, theme, help all stay one `› word` away, chords unchanged).
             .child(
                 div()
                     .mt(t.px(28.))
                     .flex()
                     .flex_col()
-                    .child(
-                        travel("nav-back", "chevron-left.svg", self.history.can_back())
-                            .tooltip(tip(tr("Back", "Précédent"), keys(&crate::actions::GoBack), t))
-                            .on_click(cx.listener(|this, _, window, cx| this.travel(false, window, cx))),
-                    )
-                    .child(
-                        travel("nav-forward", "chevron-right.svg", self.history.can_forward())
-                            .tooltip(tip(tr("Forward", "Suivant"), keys(&crate::actions::GoForward), t))
-                            .on_click(cx.listener(|this, _, window, cx| this.travel(true, window, cx))),
-                    ),
+                    .items_center()
+                    .gap_1()
+                    // Calm default: the rail shows the vault tree only. Recent, graph, tags,
+                    // backlinks, calendar and vault search stay as modes (Mode::ALL) and reopen
+                    // on demand through the palette, their chords, or the dock tool gate
+                    // (put_tool/stack_tool/place_tool/tool_as_tab) — none of that code moves.
+                    .child(mode_button(
+                        "nav-tree",
+                        "tree.svg",
+                        Mode::Tree,
+                        tr("Vault tree", "Arbre du coffre"),
+                        keys(&ShowTree),
+                    )),
             )
             .child(
                 div()
@@ -910,96 +1225,70 @@ impl Shell {
                     .flex_col()
                     .items_center()
                     .gap_1()
-            .child(mode_button("nav-tree", "tree.svg", Mode::Tree, tr("Vault tree", "Arbre du coffre"), keys(&ShowTree)))
-            .child(mode_button("nav-recent", "clock.svg", Mode::Recent, tr("Recent notes", "Notes récentes"), keys(&ShowRecent)))
-            .child(mode_button("nav-graph", "graph.svg", Mode::Graph, tr("Graph of the notes", "Graphe des notes"), keys(&ShowGraph)))
-            .child(mode_button("nav-tags", "tag.svg", Mode::Tags, "Tags", keys(&ShowTags)))
-            .child(mode_button("nav-links", "backlink.svg", Mode::Links, tr("Backlinks", "Rétroliens"), keys(&ShowLinks)))
-            .child(mode_button("nav-calendar", "i-calendar.svg", Mode::Calendar, tr("Calendar", "Calendrier"), keys(&ShowCalendar)))
-            .child(
-                on_sheet(button("nav-find", "find-text.svg", shown.contains(&Mode::Search), t), shown.contains(&Mode::Search))
-                    .debug_selector(|| "nav-find".into())
-                    .tooltip(tip(tr("Search the text of the vault", "Chercher dans le texte du coffre"), keys(&crate::actions::SearchVault), t))
-                    .on_click(cx.listener(|this, _, window, cx| match this.tool_shown(Mode::Search) {
-                        true => this.show_nav(Mode::Search, true, window, cx),
-                        false => this.open_vault_find(window, cx),
-                    })),
-            ))
-            .child(
-                div().mt(t.px(28.)).flex().flex_col().items_center().gap_1().child(
-                button("nav-search", "search.svg", false, t)
-                    .debug_selector(|| "nav-search".into())
-                    .tooltip(tip(tr("Find or create a note", "Chercher ou créer une note"), keys(&crate::actions::OpenPalette), t))
-                    .on_click(cx.listener(|this, _, window, cx| this.open_palette("", window, cx))),
+                    .child(
+                        button("nav-search", "search.svg", false, t)
+                            .debug_selector(|| "nav-search".into())
+                            .tooltip(tip(
+                                tr("Find or create a note", "Chercher ou créer une note"),
+                                keys(&crate::actions::OpenPalette),
+                                t,
+                            ))
+                            .on_click(
+                                cx.listener(|this, _, window, cx| {
+                                    this.open_palette("", window, cx)
+                                }),
+                            ),
+                    )
+                    .child(
+                        button("nav-new", "plus.svg", false, t)
+                            .debug_selector(|| "nav-new".into())
+                            .tooltip(tip(
+                                tr("New note", "Nouvelle note"),
+                                keys(&crate::actions::NewNote),
+                                t,
+                            ))
+                            .on_click(
+                                cx.listener(|this, _, window, cx| this.new_note_here(window, cx)),
+                            ),
+                    ),
             )
             .child(
-                button("nav-new", "plus.svg", false, t)
-                    .debug_selector(|| "nav-new".into())
-                    .tooltip(tip(tr("New note", "Nouvelle note"), keys(&crate::actions::NewNote), t))
-                    .on_click(cx.listener(|this, _, window, cx| this.new_note_here(window, cx))),
-            ))
-            .child(div().debug_selector(|| "rail-free".into()).flex_1().w_full().when(!self.nav.native_bar, |d| d.map(crate::ui::widgets::drag_window)))
-            // Vault trash (what it holds, to take it back) and backup.
-            .child(
-                button("nav-trash", "trash.svg", false, t)
-                    .debug_selector(|| "nav-trash".into())
-                    .tooltip(tip(tr("Trash: restore a note", "Corbeille : restaurer une note"), String::new(), t))
-                    .on_click(cx.listener(|this, _, window, cx| this.open_trash(window, cx))),
-            )
-            // A vault kept in git: its sync, turning while it runs, with a mark when the last one failed.
-            .when(self.vault.as_ref().is_some_and(|root| root.join(".git").exists()), |d| {
-                let (busy, broken) = (self.syncing, self.sync_broken);
-                let said = if broken {
-                    tr("Sync the vault (the last sync failed)", "Synchroniser le coffre (la dernière synchronisation a échoué)")
-                } else {
-                    tr("Sync the vault with git", "Synchroniser le coffre par git")
-                };
-                let mut sync = button("nav-sync", if busy { "spinner.svg" } else { "sync.svg" }, busy, t)
-                    .debug_selector(|| "nav-sync".into())
-                    .relative()
-                    .tooltip(tip(said, keys(&crate::actions::SyncVault), t))
-                    .on_click(cx.listener(|this, _, window, cx| this.git_sync(window, cx)));
-                if broken && !busy {
-                    sync = sync.child(div().debug_selector(|| "nav-sync-broken".into()).absolute().top(t.px(3.)).right(t.px(3.)).size(t.px(7.)).rounded_full().bg(t.hue(crate::ui::theme::RED, t.panel)));
-                }
-                d.child(sync)
-            })
-            .child(
-                button("nav-backup", "backup.svg", false, t)
-                    .tooltip(tip(tr("Back up the vault", "Sauvegarder le coffre"), String::new(), t))
-                    .on_click(cx.listener(|this, _, window, cx| this.choose_backup(window, cx))),
-            )
-            .child(button("nav-theme", "theme.svg", false, t).tooltip(tip(tr("Choose a theme…", "Choisir un thème…"), String::new(), t)).on_click(cx.listener(
-                |this, _, window, cx| this.choose_setting(Setting::Theme, window, cx),
-            )))
-            .child(
-                button("nav-help", "help.svg", false, t)
-                    .debug_selector(|| "nav-help".into())
-                    .tooltip(tip(tr("Shortcuts and help", "Raccourcis et aide"), keys(&crate::actions::ToggleHelp), t))
-                    .on_click(cx.listener(|this, _, window, cx| this.set_help(true, window, cx))),
+                div()
+                    .debug_selector(|| "rail-free".into())
+                    .flex_1()
+                    .w_full()
+                    .when(!self.nav.native_bar, |d| {
+                        d.map(crate::ui::widgets::drag_window)
+                    }),
             );
 
         let wrapper = div().h_full().flex().min_w_0();
         // A header dragged from the right dock: the rail of a folded panel takes it.
         let rail = rail
-            .on_drag_move(cx.listener(|this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                this.tool_drag = true;
-                if !this.left_open() {
-                    let inside = e.bounds.contains(&e.event.position);
-                    match inside {
-                        true => this.aim_tool(Some((false, 0)), cx),
-                        false if this.tool_aim == Some((false, 0)) => this.aim_tool(None, cx),
-                        false => {}
+            .on_drag_move(cx.listener(
+                |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
+                    this.tool_drag = true;
+                    if !this.left_open() {
+                        let inside = e.bounds.contains(&e.event.position);
+                        match inside {
+                            true => this.aim_tool(Some((false, 0)), cx),
+                            false if this.tool_aim == Some((false, 0)) => this.aim_tool(None, cx),
+                            false => {}
+                        }
                     }
-                }
-            }))
+                },
+            ))
             .when(!unfolded, |d| {
-                d.on_drop(cx.listener(|this, dragged: &docks::ToolDragged, window, cx| {
-                    if this.tool_aim.take() == Some((false, 0)) {
-                        this.place_tool(dragged.mode, false, 0, window, cx);
-                    }
-                }))
-                .when(self.tool_aim == Some((false, 0)), |d| d.bg(t.accent.opacity(0.12)))
+                d.on_drop(
+                    cx.listener(|this, dragged: &docks::ToolDragged, window, cx| {
+                        if this.tool_aim.take() == Some((false, 0)) {
+                            this.place_tool(dragged.mode, false, 0, window, cx);
+                        }
+                    }),
+                )
+                .when(self.tool_aim == Some((false, 0)), |d| {
+                    d.bg(t.accent.opacity(0.12))
+                })
             });
         if !unfolded {
             return wrapper.flex_none().child(rail);
@@ -1028,7 +1317,11 @@ impl Shell {
                 MouseButton::Left,
                 cx.listener(|this, e: &MouseDownEvent, window, cx| {
                     if e.click_count >= 2 {
-                        *this.nav.width() = if this.nav.width_mode() == Mode::Graph { px(0.) } else { LIST_W };
+                        *this.nav.width() = if this.nav.width_mode() == Mode::Graph {
+                            px(0.)
+                        } else {
+                            LIST_W
+                        };
                         this.nav.panel = Panel::Split;
                         this.settle_nav(window, cx);
                     } else {
@@ -1046,7 +1339,11 @@ impl Shell {
 
     /// The right dock, if it is open and the window leaves the note its room; while a tool's
     /// header is dragged and it is closed, a strip on the right edge to drop it there.
-    pub(super) fn render_right_dock(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+    pub(super) fn render_right_dock(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
         let t = self.theme;
         if !self.right_open() || self.right_width() <= px(0.) {
             if !self.tool_drag || self.nav.panel == Panel::Full {
@@ -1063,19 +1360,29 @@ impl Shell {
                     .border_l_1()
                     .border_color(if aimed { t.accent } else { t.border })
                     .rounded(t.sheet())
-                    .bg(if aimed { t.accent.opacity(0.12) } else { t.panel })
-                    .on_drag_move(cx.listener(|this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                        match e.bounds.contains(&e.event.position) {
-                            true => this.aim_tool(Some((true, 0)), cx),
-                            false if this.tool_aim == Some((true, 0)) => this.aim_tool(None, cx),
-                            false => {}
-                        }
-                    }))
-                    .on_drop(cx.listener(|this, dragged: &docks::ToolDragged, window, cx| {
-                        if this.tool_aim.take() == Some((true, 0)) {
-                            this.place_tool(dragged.mode, true, 0, window, cx);
-                        }
-                    }))
+                    .bg(if aimed {
+                        t.accent.opacity(0.12)
+                    } else {
+                        t.panel
+                    })
+                    .on_drag_move(cx.listener(
+                        |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
+                            match e.bounds.contains(&e.event.position) {
+                                true => this.aim_tool(Some((true, 0)), cx),
+                                false if this.tool_aim == Some((true, 0)) => {
+                                    this.aim_tool(None, cx)
+                                }
+                                false => {}
+                            }
+                        },
+                    ))
+                    .on_drop(
+                        cx.listener(|this, dragged: &docks::ToolDragged, window, cx| {
+                            if this.tool_aim.take() == Some((true, 0)) {
+                                this.place_tool(dragged.mode, true, 0, window, cx);
+                            }
+                        }),
+                    )
                     .into_any_element(),
             );
         }
@@ -1090,7 +1397,13 @@ impl Shell {
             .justify_center()
             .cursor(CursorStyle::ResizeLeftRight)
             .group("dock-divider")
-            .child(div().w_full().h_full().when(self.nav.right_dragging, |d| d.bg(t.hover)).group_hover("dock-divider", |s| s.bg(t.hover)))
+            .child(
+                div()
+                    .w_full()
+                    .h_full()
+                    .when(self.nav.right_dragging, |d| d.bg(t.hover))
+                    .group_hover("dock-divider", |s| s.bg(t.hover)),
+            )
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, e: &MouseDownEvent, window, cx| {
@@ -1103,69 +1416,132 @@ impl Shell {
                     cx.stop_propagation();
                 }),
             );
-        Some(div().h_full().flex().flex_none().child(divider).child(crate::ui::widgets::fade_in(content, "dock-in", &t)).into_any_element())
+        Some(
+            div()
+                .h_full()
+                .flex()
+                .flex_none()
+                .child(divider)
+                .child(crate::ui::widgets::fade_in(content, "dock-in", &t))
+                .into_any_element(),
+        )
     }
 
     /// The tool is drawn in a dock this frame.
     fn docked_now(&self, mode: Mode) -> bool {
-        self.left_open() && self.dock_tools(false).contains(&mode) || self.right_open() && self.right_width() > px(0.) && self.dock_tools(true).contains(&mode)
+        self.left_open() && self.dock_tools(false).contains(&mode)
+            || self.right_open()
+                && self.right_width() > px(0.)
+                && self.dock_tools(true).contains(&mode)
     }
 
     /// A dock: its tools one above the other, each under its header, the folded ones reduced to it;
     /// a header dragged over it shows by a line where it would land.
-    fn render_stack(&mut self, right: bool, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn render_stack(
+        &mut self,
+        right: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
         let t = self.theme;
         let tools = self.dock_tools(right);
         let (count, stacked) = (tools.len(), tools.len() > 1);
         let active = self.nav.mode;
         let aim = self.tool_aim.filter(|(r, _)| *r == right).map(|(_, at)| at);
         let full = !right && self.nav.panel == Panel::Full;
-        let width = if right { self.right_width() } else { self.split_width() };
-        let line = move || div().debug_selector(|| "tool-aim".into()).absolute().left_0().right_0().h(t.px(2.)).bg(t.accent);
+        let width = if right {
+            self.right_width()
+        } else {
+            self.split_width()
+        };
+        let line = move || {
+            div()
+                .debug_selector(|| "tool-aim".into())
+                .absolute()
+                .left_0()
+                .right_0()
+                .h(t.px(2.))
+                .bg(t.accent)
+        };
         let mut sections = Vec::new();
         for (at, mode) in tools.into_iter().enumerate() {
             self.nav.activate(mode);
-            let section = self.render_dock(right, stacked, mode == active, window, cx)
+            let section = self
+                .render_dock(right, stacked, mode == active, window, cx)
                 .when(aim == Some(at), |d| d.child(line().top_0()))
-                .when(aim == Some(count) && at + 1 == count, |d| d.child(line().bottom_0()))
-                .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                    let p = e.event.position;
-                    if e.bounds.contains(&p) {
-                        this.aim_tool(Some((right, at + usize::from(p.y > e.bounds.center().y))), cx);
-                    }
-                }));
+                .when(aim == Some(count) && at + 1 == count, |d| {
+                    d.child(line().bottom_0())
+                })
+                .on_drag_move(cx.listener(
+                    move |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
+                        let p = e.event.position;
+                        if e.bounds.contains(&p) {
+                            this.aim_tool(
+                                Some((right, at + usize::from(p.y > e.bounds.center().y))),
+                                cx,
+                            );
+                        }
+                    },
+                ));
             sections.push(section);
         }
         self.nav.activate(active);
-        // A sheet on the ground, like the note.
-        crate::ui::widgets::sheet(t)
-            .debug_selector(move || if right { "dock-right".into() } else { "nav-panel".into() })
+        // Flat on the ground, not a sheet: a hairline border instead of a card and its shadow.
+        div()
+            .bg(t.bg)
+            .border_1()
+            .border_color(t.border)
+            .overflow_hidden()
+            .debug_selector(move || {
+                if right {
+                    "dock-right".into()
+                } else {
+                    "nav-panel".into()
+                }
+            })
             .id(if right { "dock-right" } else { "nav-panel" })
             .h_full()
             .min_w_0()
             .flex()
             .flex_col()
-            .map(|d| if full { d.flex_1() } else { d.flex_none().w(width) })
+            .map(|d| {
+                if full {
+                    d.flex_1()
+                } else {
+                    d.flex_none().w(width)
+                }
+            })
             .children(sections)
-            .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
-                this.tool_drag = true;
-                let mine = this.tool_aim.is_some_and(|(r, _)| r == right);
-                match e.bounds.contains(&e.event.position) {
-                    true if !mine => this.aim_tool(Some((right, count)), cx),
-                    false if mine => this.aim_tool(None, cx),
-                    _ => {}
-                }
-            }))
-            .on_drop(cx.listener(move |this, dragged: &docks::ToolDragged, window, cx| {
-                if let Some((_, at)) = this.tool_aim.take().filter(|(r, _)| *r == right) {
-                    this.place_tool(dragged.mode, right, at, window, cx);
-                }
-            }))
+            .on_drag_move(cx.listener(
+                move |this, e: &gpui::DragMoveEvent<docks::ToolDragged>, _, cx| {
+                    this.tool_drag = true;
+                    let mine = this.tool_aim.is_some_and(|(r, _)| r == right);
+                    match e.bounds.contains(&e.event.position) {
+                        true if !mine => this.aim_tool(Some((right, count)), cx),
+                        false if mine => this.aim_tool(None, cx),
+                        _ => {}
+                    }
+                },
+            ))
+            .on_drop(
+                cx.listener(move |this, dragged: &docks::ToolDragged, window, cx| {
+                    if let Some((_, at)) = this.tool_aim.take().filter(|(r, _)| *r == right) {
+                        this.place_tool(dragged.mode, right, at, window, cx);
+                    }
+                }),
+            )
     }
 
     /// Header and content of the tool whose view is in `Nav`, in the right dock or the left one;
     /// `stacked` with others, `keys`: the one that takes the keys of the panel.
-    fn render_dock(&mut self, right: bool, stacked: bool, keys_here: bool, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn render_dock(
+        &mut self,
+        right: bool,
+        stacked: bool,
+        keys_here: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
         let t = self.theme;
         let (mode, panel) = (self.nav.mode, self.nav.panel);
         let shut = stacked && self.nav.folded.contains(&mode);
@@ -1190,18 +1566,36 @@ impl Shell {
             (Mode::Tags, _) => "Tags".to_string(),
             (Mode::Calendar, _) => tr("Calendar", "Calendrier").to_string(),
             (Mode::Search, _) => tr("Search", "Recherche").to_string(),
+            (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
             (Mode::Links, _) => {
-                let name = self.nav.anchor.as_deref().map(vault::stem).unwrap_or_default();
+                let name = self
+                    .nav
+                    .anchor
+                    .as_deref()
+                    .map(vault::stem)
+                    .unwrap_or_default();
                 format!("{} {name}", tr("Links to", "Liens vers"))
             }
             _ => tr("Recent", "Récents").to_string(),
         };
         let header = div()
             .flex_none()
-            .h(t.px(44.))
-            .pl_2()
+            .h(t.px(32.))
+            // Under the native bar the traffic lights float over the window's left edge, rail
+            // included: the header clears them from its own edge, so its title starts exactly at
+            // the traffic inset from the window (TRAFFIC_ROOM past the rail), in line with every
+            // other top row, instead of the whole inset twice.
+            .pl(if !right && first && self.nav.native_bar {
+                (t.px(TRAFFIC_ROOM) - t.px(RAIL)).max(t.px(8.))
+            } else {
+                t.px(8.)
+            })
             // Over the whole window, the window buttons float over the right end of the header.
-            .pr(if (full || right) && first && !self.nav.native_bar { t.px(super::render::PILL_ROOM) } else { t.px(4.) })
+            .pr(if (full || right) && first && !self.nav.native_bar {
+                t.px(super::render::PILL_ROOM)
+            } else {
+                t.px(4.)
+            })
             // A narrow panel at a large scale: its buttons are cut at its edge, never drawn over the note
             // (they are in the palette too).
             .overflow_hidden()
@@ -1211,10 +1605,27 @@ impl Shell {
             // Stacked, a tool folds down to its header.
             .when(stacked, |d| {
                 d.child(
-                    button(("tool-fold", mode as usize), if shut { "chevron-right.svg" } else { "chevron-down.svg" }, false, t)
-                        .debug_selector(move || format!("tool-fold-{}", mode.name()))
-                        .tooltip(tip(if shut { tr("Unfold", "Déplier") } else { tr("Fold", "Replier") }, String::new(), t))
-                        .on_click(cx.listener(move |this, _, _, cx| this.fold_tool(mode, cx))),
+                    button(
+                        ("tool-fold", mode as usize),
+                        if shut {
+                            "chevron-right.svg"
+                        } else {
+                            "chevron-down.svg"
+                        },
+                        false,
+                        t,
+                    )
+                    .debug_selector(move || format!("tool-fold-{}", mode.name()))
+                    .tooltip(tip(
+                        if shut {
+                            tr("Unfold", "Déplier")
+                        } else {
+                            tr("Fold", "Replier")
+                        },
+                        String::new(),
+                        t,
+                    ))
+                    .on_click(cx.listener(move |this, _, _, cx| this.fold_tool(mode, cx))),
                 )
             })
             // The title is the handle: dragged, the tool goes to the other dock or another place in
@@ -1228,7 +1639,9 @@ impl Shell {
                     .h_full()
                     .flex()
                     .items_center()
-                    .when(!self.nav.native_bar, |d| d.map(crate::ui::widgets::drag_window))
+                    .when(!self.nav.native_bar, |d| {
+                        d.map(crate::ui::widgets::drag_window)
+                    })
                     .child(
                         div()
                             .id(("tool-title", mode as usize))
@@ -1238,115 +1651,271 @@ impl Shell {
                             .flex()
                             .items_center()
                             .truncate()
-                            .when(!full, |d| d.cursor_grab().on_drag(docks::ToolDragged { mode, name: title.clone(), theme: t }, |dragged, _, _, cx| cx.new(|_| dragged.clone())))
-                            .map(|d| crate::ui::widgets::serif_title(d, t, 15.))
+                            .when(!full, |d| {
+                                d.cursor_grab().on_drag(
+                                    docks::ToolDragged {
+                                        mode,
+                                        name: title.clone(),
+                                        theme: t,
+                                    },
+                                    |dragged, _, _, cx| cx.new(|_| dragged.clone()),
+                                )
+                            })
+                            // Quiet sans-semibold title (13 px) for a 32 px header: no serif at this size.
+                            .map(|d| {
+                                d.font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_size(t.px(13.))
+                                    .text_color(t.text)
+                            })
                             .child(title.clone()),
                     ),
             )
             .when(mode == Mode::Graph, |d| {
-                d.child(button("nav-center", "target.svg", false, t).tooltip(tip(tr("Show the whole graph", "Voir tout le graphe"), String::new(), t)).on_click(cx.listener(
-                    |this, _, _, cx| this.graph.update(cx, |graph, cx| graph.recenter(cx)),
-                )))
+                d.child(
+                    button("nav-center", "target.svg", false, t)
+                        .tooltip(tip(
+                            tr("Show the whole graph", "Voir tout le graphe"),
+                            String::new(),
+                            t,
+                        ))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.graph.update(cx, |graph, cx| graph.recenter(cx))
+                        })),
+                )
             })
             .when(mode == Mode::Tree, |d| {
                 // A note at the vault root, whatever the selection.
-                d.child(button("nav-file", "file-plus.svg", false, t).debug_selector(|| "nav-file".into()).tooltip(tip(tr("New note at the root", "Nouvelle note à la racine"), String::new(), t)).on_click(cx.listener(
-                    |this, _, window, cx| this.new_note_in(None, window, cx),
-                )))
-                .child(button("nav-folder", "folder-plus.svg", false, t).debug_selector(|| "nav-folder".into()).tooltip(tip(tr("New folder", "Nouveau dossier"), keys(&NewFolder), t)).on_click(cx.listener(
-                    |this, _, window, cx| this.menu_do(Do::NewFolder, this.nav.sel.clone(), window, cx),
-                )))
+                d.child(
+                    button("nav-file", "file-plus.svg", false, t)
+                        .debug_selector(|| "nav-file".into())
+                        .tooltip(tip(
+                            tr("New note at the root", "Nouvelle note à la racine"),
+                            String::new(),
+                            t,
+                        ))
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.new_note_in(None, window, cx)),
+                        ),
+                )
+                .child(
+                    button("nav-folder", "folder-plus.svg", false, t)
+                        .debug_selector(|| "nav-folder".into())
+                        .tooltip(tip(
+                            tr("New folder", "Nouveau dossier"),
+                            keys(&NewFolder),
+                            t,
+                        ))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.menu_do(Do::NewFolder, this.nav.sel.clone(), window, cx)
+                        })),
+                )
                 // Collapse all; if all already is, expand all.
-                .child(button("nav-fold", if folded { "unfold.svg" } else { "fold.svg" }, false, t).debug_selector(|| "nav-fold".into()).tooltip(tip(if folded { tr("Unfold every folder", "Déplier tous les dossiers") } else { tr("Fold every folder", "Replier tous les dossiers") }, String::new(), t)).on_click(
-                    cx.listener(|this, _, _, cx| {
+                .child(
+                    button(
+                        "nav-fold",
+                        if folded { "unfold.svg" } else { "fold.svg" },
+                        false,
+                        t,
+                    )
+                    .debug_selector(|| "nav-fold".into())
+                    .tooltip(tip(
+                        if folded {
+                            tr("Unfold every folder", "Déplier tous les dossiers")
+                        } else {
+                            tr("Fold every folder", "Replier tous les dossiers")
+                        },
+                        String::new(),
+                        t,
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| {
                         this.fold_all();
                         cx.notify();
-                    }),
-                ))
+                    })),
+                )
             })
             // The tool elsewhere: as a tab (the graph, the calendar), in the other dock. Not from the
             // panel on the whole window, where neither is in sight.
             .when(mode.tabs() && !full, |d| {
                 d.child(
-                    button(if right { "dock-tab-right" } else { "dock-tab" }, "c-split.svg", false, t)
-                        .debug_selector(move || if right { "dock-tab-right".into() } else { "dock-tab".into() })
-                        .tooltip(tip(tr("Open as a tab", "Ouvrir dans un onglet"), keys(&crate::actions::ToolAsTab), t))
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.nav.activate(mode);
-                            this.tool_as_tab(window, cx)
-                        })),
+                    button(
+                        if right { "dock-tab-right" } else { "dock-tab" },
+                        "c-split.svg",
+                        false,
+                        t,
+                    )
+                    .debug_selector(move || {
+                        if right {
+                            "dock-tab-right".into()
+                        } else {
+                            "dock-tab".into()
+                        }
+                    })
+                    .tooltip(tip(
+                        tr("Open as a tab", "Ouvrir dans un onglet"),
+                        keys(&crate::actions::ToolAsTab),
+                        t,
+                    ))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.nav.activate(mode);
+                        this.tool_as_tab(window, cx)
+                    })),
                 )
             })
-            .when(!full, |d| d.child(
-                button(if right { "dock-move-right" } else { "dock-move" }, if right { "c-left.svg" } else { "c-right.svg" }, false, t)
-                    .debug_selector(move || if right { "dock-move-right".into() } else { "dock-move".into() })
-                    .tooltip(tip(if right { tr("Move to the left dock", "Déplacer dans le dock de gauche") } else { tr("Move to the right dock", "Déplacer dans le dock de droite") }, keys(&crate::actions::MoveTool), t))
+            .when(!full, |d| {
+                d.child(
+                    button(
+                        if right {
+                            "dock-move-right"
+                        } else {
+                            "dock-move"
+                        },
+                        if right { "c-left.svg" } else { "c-right.svg" },
+                        false,
+                        t,
+                    )
+                    .debug_selector(move || {
+                        if right {
+                            "dock-move-right".into()
+                        } else {
+                            "dock-move".into()
+                        }
+                    })
+                    .tooltip(tip(
+                        if right {
+                            tr("Move to the left dock", "Déplacer dans le dock de gauche")
+                        } else {
+                            tr("Move to the right dock", "Déplacer dans le dock de droite")
+                        },
+                        keys(&crate::actions::MoveTool),
+                        t,
+                    ))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.nav.activate(mode);
                         this.move_tool(window, cx)
                     })),
-            ))
-            .when(stacked, |d| {
-                d.child(
-                    button(("tool-close", mode as usize), "close.svg", false, t)
-                        .debug_selector(move || format!("tool-close-{}", mode.name()))
-                        .tooltip(tip(tr("Hide", "Masquer"), String::new(), t))
-                        .on_click(cx.listener(move |this, _, window, cx| this.hide_tool(mode, window, cx))),
                 )
             })
+            // No hide button in the header: the sidebar stays shown; hiding is on the keys
+            // and the palette (`hide_tool` unchanged, bring the button back below to restore it).
             .when(!right && first, |d| {
                 d.child(
-                    button("nav-full", if full { "shrink.svg" } else { "expand.svg" }, false, t)
-                        .debug_selector(|| "nav-full".into())
-                        .tooltip(tip(if full { tr("Back beside the note", "Revenir à côté de la note") } else { tr("Panel on the whole window", "Panneau en pleine fenêtre") }, keys(&ToggleFull), t))
-                        .on_click(cx.listener(|this, _, window, cx| this.toggle_full(window, cx))),
+                    button(
+                        "nav-full",
+                        if full { "shrink.svg" } else { "expand.svg" },
+                        false,
+                        t,
+                    )
+                    .debug_selector(|| "nav-full".into())
+                    .tooltip(tip(
+                        if full {
+                            tr("Back beside the note", "Revenir à côté de la note")
+                        } else {
+                            tr("Panel on the whole window", "Panneau en pleine fenêtre")
+                        },
+                        keys(&ToggleFull),
+                        t,
+                    ))
+                    .on_click(cx.listener(|this, _, window, cx| this.toggle_full(window, cx))),
                 )
             });
         // A vault that cannot be read is not an empty one: whatever the mode, the panel says so, why and
         // where, and offers another vault rather than a note that could not be written.
-        let unreadable = self.vault.as_ref().and_then(|root| self.unreadable.iter().find(|(dir, _)| dir == root).map(|(_, why)| (root.clone(), *why)));
+        let unreadable = self.vault.as_ref().and_then(|root| {
+            self.unreadable
+                .iter()
+                .find(|(dir, _)| dir == root)
+                .map(|(_, why)| (root.clone(), *why))
+        });
         let nothing = self.nav.rows.is_empty().then(|| {
             if let Some((root, why)) = &unreadable {
-                return div().absolute().inset_0().flex().items_center().justify_center().px_4().text_center().text_size(t.px(13.)).text_color(t.soft).child(
-                    div()
-                        .debug_selector(|| "nav-unreadable".into())
-                        .max_w_full()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .gap_1()
-                        .child(format!(
-                            "{} {}\n« {} »",
-                            tr("This vault cannot be read:", "Ce coffre ne peut pas être lu :"),
-                            crate::lang::io_reason(&std::io::Error::from(*why)),
-                            vault::shown(root)
-                        ))
-                        .child(
-                            div()
-                                .id("nav-other-vault")
-                                .debug_selector(|| "nav-other-vault".into())
-                                .px_2()
-                                .py_1()
-                                .rounded(t.small())
-                                .cursor_pointer()
-                                .text_color(t.accent)
-                                .hover(|s| s.bg(t.hover))
-                                .child(tr("Open another vault…", "Ouvrir un autre coffre…"))
-                                .on_click(cx.listener(|this, _, window, cx| this.choose_vault(window, cx))),
-                        ),
-                );
+                return div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .px_4()
+                    .text_center()
+                    .text_size(t.px(13.))
+                    .text_color(t.soft)
+                    .child(
+                        div()
+                            .debug_selector(|| "nav-unreadable".into())
+                            .max_w_full()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap_1()
+                            .child(format!(
+                                "{} {}\n« {} »",
+                                tr(
+                                    "This vault cannot be read:",
+                                    "Ce coffre ne peut pas être lu :"
+                                ),
+                                crate::lang::io_reason(&std::io::Error::from(*why)),
+                                vault::shown(root)
+                            ))
+                            .child(
+                                div()
+                                    .id("nav-other-vault")
+                                    .debug_selector(|| "nav-other-vault".into())
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(t.small())
+                                    .cursor_pointer()
+                                    .text_color(t.accent)
+                                    .hover(|s| s.bg(t.hover))
+                                    .child(tr("Open another vault…", "Ouvrir un autre coffre…"))
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.choose_vault(window, cx)
+                                    })),
+                            ),
+                    );
             }
             let said = match mode {
                 Mode::Tree => match keys(&crate::actions::NewNote) {
-                    key if key.is_empty() => tr("Nothing here yet", "Rien ici pour l'instant").to_string(),
-                    key => format!("{}\n{} {key}", tr("Nothing here yet", "Rien ici pour l'instant"), tr("New note:", "Nouvelle note :")),
+                    key if key.is_empty() => {
+                        tr("Nothing here yet", "Rien ici pour l'instant").to_string()
+                    }
+                    key => format!(
+                        "{}\n{} {key}",
+                        tr("Nothing here yet", "Rien ici pour l'instant"),
+                        tr("New note:", "Nouvelle note :")
+                    ),
                 },
-                Mode::Tags => tr("No tag yet: write #tag in a note", "Aucun tag pour l'instant : écrivez #tag dans une note").to_string(),
-                Mode::Links if self.nav.anchor.is_none() => tr("Open a note to see what links to it", "Ouvrez une note pour voir ce qui renvoie vers elle").to_string(),
-                Mode::Links => tr("No note links here yet", "Aucune note ne renvoie ici pour l'instant").to_string(),
+                Mode::Tags => tr(
+                    "No tag yet: write #tag in a note",
+                    "Aucun tag pour l'instant : écrivez #tag dans une note",
+                )
+                .to_string(),
+                Mode::Links if self.nav.anchor.is_none() => tr(
+                    "Open a note to see what links to it",
+                    "Ouvrez une note pour voir ce qui renvoie vers elle",
+                )
+                .to_string(),
+                Mode::Links => tr(
+                    "No note links here yet",
+                    "Aucune note ne renvoie ici pour l'instant",
+                )
+                .to_string(),
                 _ => tr("No recent note", "Aucune note récente").to_string(),
             };
-            div().absolute().inset_0().flex().items_center().justify_center().px_4().text_center().text_size(t.px(13.)).text_color(t.soft).child(div().debug_selector(|| "nav-empty".into()).max_w_full().child(said))
+            div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .px_4()
+                .text_center()
+                .text_size(t.px(13.))
+                .text_color(t.soft)
+                .child(
+                    div()
+                        .debug_selector(|| "nav-empty".into())
+                        .max_w_full()
+                        .child(said),
+                )
         });
         // Set again by the selected row if it is drawn.
         self.nav.sel_at.set(None);
@@ -1365,17 +1934,29 @@ impl Shell {
             // Outside any row: a drop goes to the root, right-click targets the vault.
             .when(mode == Mode::Tree, |d| {
                 // System files dropped outside any row: at the vault root.
-                d.on_drag_move(cx.listener(|this, e: &gpui::DragMoveEvent<gpui::ExternalPaths>, _, cx| {
-                    let root = matches!(&this.drop_aim, Some(super::DropAim { aim: super::Aim::Root, .. }));
-                    if !e.bounds.contains(&e.event.position) {
-                        if root {
-                            this.aim_drop(None, cx);
+                d.on_drag_move(cx.listener(
+                    |this, e: &gpui::DragMoveEvent<gpui::ExternalPaths>, _, cx| {
+                        let root = matches!(
+                            &this.drop_aim,
+                            Some(super::DropAim {
+                                aim: super::Aim::Root,
+                                ..
+                            })
+                        );
+                        if !e.bounds.contains(&e.event.position) {
+                            if root {
+                                this.aim_drop(None, cx);
+                            }
+                        } else if this.drop_aim.is_none() || root {
+                            let aim = super::DropAim {
+                                aim: super::Aim::Root,
+                                items: e.drag(cx).paths().len(),
+                                pointer: e.event.position,
+                            };
+                            this.aim_drop(Some(aim), cx);
                         }
-                    } else if this.drop_aim.is_none() || root {
-                        let aim = super::DropAim { aim: super::Aim::Root, items: e.drag(cx).paths().len(), pointer: e.event.position };
-                        this.aim_drop(Some(aim), cx);
-                    }
-                }))
+                    },
+                ))
                 .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
                     this.drop_paths(paths.paths().to_vec(), super::Aim::Root, cx);
                 }))
@@ -1387,7 +1968,14 @@ impl Shell {
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(|this, e: &MouseDownEvent, window, cx| {
-                        this.show_menu(Menu { at: e.position, ..Default::default() }, window, cx);
+                        this.show_menu(
+                            Menu {
+                                at: e.position,
+                                ..Default::default()
+                            },
+                            window,
+                            cx,
+                        );
                     }),
                 )
             });
@@ -1401,7 +1989,13 @@ impl Shell {
             .flex()
             .flex_col()
             // Its share of the dock's height, or its header alone when folded.
-            .map(|d| if shut { d.flex_none() } else { d.flex_1().flex_basis(px(0.)) })
+            .map(|d| {
+                if shut {
+                    d.flex_none()
+                } else {
+                    d.flex_1().flex_basis(px(0.))
+                }
+            })
             // A press in a tool brings its view into `Nav` before any of its gestures read it.
             .capture_any_mouse_down(cx.listener(move |this, _, _, cx| {
                 if this.nav.mode != mode {
@@ -1455,7 +2049,17 @@ impl Shell {
                 Mode::Graph => d.child(div().flex_1().min_h_0().child(self.graph.clone())),
                 Mode::Calendar => d.child(self.render_calendar(cx)),
                 Mode::Search => d.child(self.render_vault_find(window, cx)),
-                _ => d.child(div().flex_1().min_h_0().relative().flex().flex_col().child(list).children(nothing)),
+                Mode::Outline => d.child(self.render_outline(cx)),
+                _ => d.child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .relative()
+                        .flex()
+                        .flex_col()
+                        .child(list)
+                        .children(nothing),
+                ),
             })
     }
 }

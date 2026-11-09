@@ -70,7 +70,9 @@ impl Encoding {
 
     pub fn from_label(s: &str) -> Option<Encoding> {
         let s = s.trim();
-        Self::ALL.into_iter().find(|e| e.label().eq_ignore_ascii_case(s))
+        Self::ALL
+            .into_iter()
+            .find(|e| e.label().eq_ignore_ascii_case(s))
     }
 
     fn bom(self) -> &'static [u8] {
@@ -97,7 +99,9 @@ const CP1252: [u16; 32] = [
 
 fn cp1252_char(b: u8) -> char {
     match b {
-        0x80..=0x9F => char::from_u32(u32::from(CP1252[usize::from(b) - 0x80])).unwrap_or('\u{FFFD}'),
+        0x80..=0x9F => {
+            char::from_u32(u32::from(CP1252[usize::from(b) - 0x80])).unwrap_or('\u{FFFD}')
+        }
         _ => char::from(b),
     }
 }
@@ -259,7 +263,11 @@ pub fn detect(bytes: &[u8]) -> Format {
     let sample = decode(bytes[..end].to_vec(), encoding);
     let delimiter = detect_delimiter(&sample);
     let header = detect_header(&Table::parse(sample, delimiter));
-    Format { encoding, delimiter, header }
+    Format {
+        encoding,
+        delimiter,
+        header,
+    }
 }
 
 // ───────────────────────── Fields ─────────────────────────
@@ -370,7 +378,9 @@ fn nth_field(s: &str, d: u8, col: usize) -> Cow<'_, str> {
 
 /// Appends a field, quoted if it contains the delimiter, `"` or a line break.
 fn push_field(out: &mut String, f: &str, d: u8) {
-    if f.bytes().any(|c| c == d || matches!(c, b'"' | b'\n' | b'\r')) {
+    if f.bytes()
+        .any(|c| c == d || matches!(c, b'"' | b'\n' | b'\r'))
+    {
         out.push('"');
         for c in f.chars() {
             if c == '"' {
@@ -511,7 +521,11 @@ impl Table {
                 }
             }
         }
-        codes.iter().zip(&seen).map(|(&code, &any)| code && any).collect()
+        codes
+            .iter()
+            .zip(&seen)
+            .map(|(&code, &any)| code && any)
+            .collect()
     }
 
     /// Fields of the row; may be shorter than `cols()`.
@@ -522,7 +536,8 @@ impl Table {
             Some(&Rec::Raw(s, e)) => fields_in(self.raw(s, e), self.delimiter, cols),
             Some(&Rec::Owned(k)) => {
                 let fields = &self.owned[k as usize];
-                cols.map(|c| Cow::Borrowed(fields.get(c).map_or("", String::as_str))).collect()
+                cols.map(|c| Cow::Borrowed(fields.get(c).map_or("", String::as_str)))
+                    .collect()
             }
             None => vec![Cow::Borrowed(""); cols.len()],
         }
@@ -531,9 +546,10 @@ impl Table {
     pub fn row(&self, row: usize) -> Vec<Cow<'_, str>> {
         match self.recs.get(row) {
             Some(&Rec::Raw(s, e)) => split_fields(self.raw(s, e), self.delimiter),
-            Some(&Rec::Owned(k)) => {
-                self.owned[k as usize].iter().map(|f| Cow::Borrowed(f.as_str())).collect()
-            }
+            Some(&Rec::Owned(k)) => self.owned[k as usize]
+                .iter()
+                .map(|f| Cow::Borrowed(f.as_str()))
+                .collect(),
             None => Vec::new(),
         }
     }
@@ -744,7 +760,10 @@ impl fmt::Display for WriteError {
             WriteError::Unrepresentable(c) => write!(
                 f,
                 "{} '{c}'",
-                tr("Character not representable in this encoding:", "Caractère impossible à représenter dans cet encodage :")
+                tr(
+                    "Character not representable in this encoding:",
+                    "Caractère impossible à représenter dans cet encodage :"
+                )
             ),
         }
     }
@@ -779,7 +798,6 @@ impl Style {
             Style::Json => "json",
         }
     }
-
 }
 
 fn render(grid: &[Vec<Cow<str>>], style: Style) -> String {
@@ -818,7 +836,9 @@ fn render(grid: &[Vec<Cow<str>>], style: Style) -> String {
             }
         }
         Style::Json => {
-            let Some((head, body)) = grid.split_first() else { return "[]".into() };
+            let Some((head, body)) = grid.split_first() else {
+                return "[]".into();
+            };
             if body.is_empty() {
                 return "[]".into();
             }
@@ -884,7 +904,9 @@ pub fn parse_grid(text: &str) -> Vec<Vec<String>> {
 // ponytail: `1 000` and `+33 6 12…` have a space, so their column stays text.
 fn is_code(value: &str) -> bool {
     value.chars().any(|c| c.is_ascii_digit())
-        && value.chars().all(|c| c.is_ascii_alphanumeric() || "-_.,:/#+%".contains(c))
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.,:/#+%".contains(c))
 }
 
 #[cfg(test)]
@@ -936,10 +958,21 @@ mod tests {
         }
         // Outside Latin1: only UTF-8, UTF-16 and Windows-1252 (for €).
         let euro = "5€ 😀";
-        for e in [Encoding::Utf8, Encoding::Utf8Bom, Encoding::Utf16Le, Encoding::Utf16Be] {
+        for e in [
+            Encoding::Utf8,
+            Encoding::Utf8Bom,
+            Encoding::Utf16Le,
+            Encoding::Utf16Be,
+        ] {
             assert_eq!(decode(encode(euro, e).unwrap(), e), euro);
         }
-        assert_eq!(decode(encode("5€", Encoding::Windows1252).unwrap(), Encoding::Windows1252), "5€");
+        assert_eq!(
+            decode(
+                encode("5€", Encoding::Windows1252).unwrap(),
+                Encoding::Windows1252
+            ),
+            "5€"
+        );
         assert_eq!(encode("€", Encoding::Windows1252).unwrap(), [0x80]);
     }
 
@@ -950,7 +983,10 @@ mod tests {
             let s = decode(all.clone(), e);
             assert_eq!(encode(&s, e).unwrap(), all, "{}", e.label());
         }
-        assert_eq!(decode(vec![0x81, 0x8D], Encoding::Windows1252), "\u{81}\u{8D}");
+        assert_eq!(
+            decode(vec![0x81, 0x8D], Encoding::Windows1252),
+            "\u{81}\u{8D}"
+        );
     }
 
     #[test]
@@ -966,7 +1002,10 @@ mod tests {
         assert_eq!(encode("日", Encoding::Windows1252), Err('日'));
         let t = table("a,€\n", b',');
         let mut out = Vec::new();
-        assert!(matches!(t.write_to(&mut out, Encoding::Latin1), Err(WriteError::Unrepresentable('€'))));
+        assert!(matches!(
+            t.write_to(&mut out, Encoding::Latin1),
+            Err(WriteError::Unrepresentable('€'))
+        ));
     }
 
     #[test]
@@ -978,9 +1017,14 @@ mod tests {
         assert_eq!(detect_delimiter("a b c\n1 2 3\n"), b' ');
         // The delimiter inside a quoted field does not count.
         assert_eq!(detect_delimiter("n;note\nx;\"a,b,c,d\"\ny;\"e,f\"\n"), b';');
-        assert_eq!(detect_delimiter("rien
+        assert_eq!(
+            detect_delimiter(
+                "rien
 special
-"), b',');
+"
+            ),
+            b','
+        );
         assert_eq!(detect_delimiter(""), b',');
     }
 
@@ -990,7 +1034,10 @@ special
         assert!(detect_header(&t));
         assert!(!detect_header(&table("bob,3\nann,4\n", b',')));
         assert!(!detect_header(&table("nom,age\n", b',')), "a single line");
-        assert!(!detect_header(&table("1,5;2\nx,y\n", b';')), "decimal comma");
+        assert!(
+            !detect_header(&table("1,5;2\nx,y\n", b';')),
+            "decimal comma"
+        );
     }
 
     #[test]
@@ -998,13 +1045,20 @@ special
         let bytes = "nom;ville\nzoé;Orléans\n".as_bytes();
         assert_eq!(
             detect(bytes),
-            Format { encoding: Encoding::Utf8, delimiter: b';', header: true }
+            Format {
+                encoding: Encoding::Utf8,
+                delimiter: b';',
+                header: true
+            }
         );
         let latin = b"nom;ville\nzo\xE9;Orl\xE9ans\n";
         assert_eq!(detect(latin).encoding, Encoding::Windows1252);
         let utf16 = encode("a\tb\n1\t2\n", Encoding::Utf16Le).unwrap();
         let f = detect(&utf16);
-        assert_eq!((f.encoding, f.delimiter, f.header), (Encoding::Utf16Le, b'\t', true));
+        assert_eq!(
+            (f.encoding, f.delimiter, f.header),
+            (Encoding::Utf16Le, b'\t', true)
+        );
     }
 
     #[test]
@@ -1032,14 +1086,24 @@ special
         assert_eq!(table("a,\n", b',').row(0), vec!["a", ""]);
         // Quote in the middle of a field: literal.
         let t = table("5\" pipe,x\nb,c\n", b',');
-        assert_eq!((t.rows(), t.cell(0, 0).into_owned()), (2, "5\" pipe".to_string()));
+        assert_eq!(
+            (t.rows(), t.cell(0, 0).into_owned()),
+            (2, "5\" pipe".to_string())
+        );
         // Quote never closed: up to the end.
         assert_eq!(table("a,\"b\nc", b',').rows(), 1);
     }
 
     #[test]
     fn crlf_and_final_newline_are_preserved() {
-        for src in ["a,b\r\nc,d\r\n", "a,b\r\nc,d", "a,b\nc,d\n", "a,b\nc,d", "\n", "a\n\n"] {
+        for src in [
+            "a,b\r\nc,d\r\n",
+            "a,b\r\nc,d",
+            "a,b\nc,d\n",
+            "a,b\nc,d",
+            "\n",
+            "a\n\n",
+        ] {
             let mut t = table(src, b',');
             assert_eq!(text_of(&t), src);
             let v = t.cell(0, 0).into_owned();
@@ -1095,7 +1159,12 @@ special
     fn columns_come_and_go_with_their_cells() {
         let text = "a,b,c\n1,2,3\n4\n,,\n";
         let mut t = table(text, b',');
-        let flat = |t: &Table| (0..t.rows()).map(|r| t.row(r).join("|")).collect::<Vec<_>>().join("/");
+        let flat = |t: &Table| {
+            (0..t.rows())
+                .map(|r| t.row(r).join("|"))
+                .collect::<Vec<_>>()
+                .join("/")
+        };
         // Inserting an empty column: the too-short row is not touched, an empty row gains its cell.
         t.insert_cols(1, 1, &[]);
         assert_eq!((flat(&t), t.cols()), ("a||b|c/1||2|3/4/|||".to_string(), 4));
@@ -1137,7 +1206,18 @@ special
     fn big_table_columns() {
         let rows = 300_000;
         let text: String = std::iter::once("id,name,score\n".to_string())
-            .chain((0..rows).map(|i| format!("{},nom{},{}\n", (i * 7919) % rows, i, if i % 50 == 0 { String::new() } else { (i % 97).to_string() })))
+            .chain((0..rows).map(|i| {
+                format!(
+                    "{},nom{},{}\n",
+                    (i * 7919) % rows,
+                    i,
+                    if i % 50 == 0 {
+                        String::new()
+                    } else {
+                        (i % 97).to_string()
+                    }
+                )
+            }))
             .collect();
         let mut t = table(&text, b',');
         let timed = |what: &str, start: Instant| eprintln!("{what}: {:?}", start.elapsed());
@@ -1187,7 +1267,10 @@ special
             written(&t, Encoding::Utf16Be),
             [0xFE, 0xFF, 0, 0xE9, 0, b';', 0, b'1', 0, b'\n']
         );
-        assert_eq!(decode(written(&t, Encoding::Utf16Le), Encoding::Utf16Le), "é;1\n");
+        assert_eq!(
+            decode(written(&t, Encoding::Utf16Le), Encoding::Utf16Le),
+            "é;1\n"
+        );
     }
 
     #[test]
@@ -1210,9 +1293,15 @@ special
     #[test]
     fn text_range_each_style() {
         let t = table("nom,note\nbob,\"a|b\"\nann,\"x\ny\"\n", b',');
-        assert_eq!(t.text_range(1..3, 0..2, Style::Tsv), "bob\ta|b\nann\t\"x\ny\"");
+        assert_eq!(
+            t.text_range(1..3, 0..2, Style::Tsv),
+            "bob\ta|b\nann\t\"x\ny\""
+        );
         assert_eq!(t.text_range(0..1, 0..2, Style::Tsv), "nom\tnote");
-        assert_eq!(t.text_range(0..2, 0..2, Style::Csv(b';')), "nom;note\nbob;a|b");
+        assert_eq!(
+            t.text_range(0..2, 0..2, Style::Csv(b';')),
+            "nom;note\nbob;a|b"
+        );
         assert_eq!(t.text_range(1..2, 1..2, Style::Csv(b'|')), "\"a|b\"");
         assert_eq!(
             t.text_range(0..3, 0..2, Style::Markdown),
@@ -1230,7 +1319,10 @@ special
     #[test]
     fn json_escapes() {
         let t = table("k\n\"q\"\"\\\"\n", b',');
-        assert_eq!(t.text_range(0..2, 0..1, Style::Json), "[\n  {\"k\": \"q\\\"\\\\\"}\n]");
+        assert_eq!(
+            t.text_range(0..2, 0..1, Style::Json),
+            "[\n  {\"k\": \"q\\\"\\\\\"}\n]"
+        );
         let mut out = String::new();
         json_string(&mut out, "\u{1}\t");
         assert_eq!(out, "\"\\u0001\\t\"");
@@ -1238,11 +1330,23 @@ special
 
     #[test]
     fn parse_grid_variants() {
-        assert_eq!(parse_grid("a\tb\r\nc\td\r\n"), vec![vec!["a", "b"], vec!["c", "d"]]);
-        assert_eq!(parse_grid("a,b\nc,\"d,e\"\n"), vec![vec!["a", "b"], vec!["c", "d,e"]]);
-        assert_eq!(parse_grid("a;b;c\n1;2;3"), vec![vec!["a", "b", "c"], vec!["1", "2", "3"]]);
+        assert_eq!(
+            parse_grid("a\tb\r\nc\td\r\n"),
+            vec![vec!["a", "b"], vec!["c", "d"]]
+        );
+        assert_eq!(
+            parse_grid("a,b\nc,\"d,e\"\n"),
+            vec![vec!["a", "b"], vec!["c", "d,e"]]
+        );
+        assert_eq!(
+            parse_grid("a;b;c\n1;2;3"),
+            vec![vec!["a", "b", "c"], vec!["1", "2", "3"]]
+        );
         assert_eq!(parse_grid("bonjour"), vec![vec!["bonjour"]]);
-        assert_eq!(parse_grid("une phrase, avec virgule"), vec![vec!["une phrase, avec virgule"]]);
+        assert_eq!(
+            parse_grid("une phrase, avec virgule"),
+            vec![vec!["une phrase, avec virgule"]]
+        );
         assert_eq!(parse_grid("deux mots\n"), vec![vec!["deux mots"]]);
         assert!(parse_grid("").is_empty());
     }
@@ -1268,11 +1372,23 @@ special
         let t0 = Instant::now();
         let mut s = String::with_capacity(48_000_000);
         for i in 0..1_000_000u32 {
-            writeln!(s, "{i},nom{},{}.5,\"a, b\",x{},ligne {},{},fin", i % 977, i % 31, i % 13, i % 7, i * 3)
-                .unwrap();
+            writeln!(
+                s,
+                "{i},nom{},{}.5,\"a, b\",x{},ligne {},{},fin",
+                i % 977,
+                i % 31,
+                i % 13,
+                i % 7,
+                i * 3
+            )
+            .unwrap();
         }
         let mb = s.len() as f64 / 1_048_576.0;
-        println!("generation: {:?}, text {mb:.1} MB, RSS {:.0} MB", t0.elapsed(), rss_mb());
+        println!(
+            "generation: {:?}, text {mb:.1} MB, RSS {:.0} MB",
+            t0.elapsed(),
+            rss_mb()
+        );
 
         let rss0 = rss_mb();
         let t0 = Instant::now();
@@ -1308,7 +1424,12 @@ special
     #[test]
     fn reads_a_range_of_cells_in_one_pass() {
         let t = Table::parse("a,\"b,1\",c,d\ne\n".to_string(), b',');
-        let cells = |row, from, to| t.cells(row, from..to).iter().map(|c| c.to_string()).collect::<Vec<_>>();
+        let cells = |row, from, to| {
+            t.cells(row, from..to)
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(cells(0, 1, 3), ["b,1", "c"]);
         assert_eq!(cells(0, 2, 6), ["c", "d", "", ""]);
         assert_eq!(cells(1, 0, 3), ["e", "", ""]);
@@ -1331,7 +1452,10 @@ special
         assert_eq!(t.code_columns(0, 200), [false; 8]);
         // Only the sampled rows count: a word further down does not change the column.
         assert!(!t.code_columns(1, 2)[3]);
-        let long: String = (0..300).map(|i| format!("{i}\n")).chain(["mot\n".to_string()]).collect();
+        let long: String = (0..300)
+            .map(|i| format!("{i}\n"))
+            .chain(["mot\n".to_string()])
+            .collect();
         assert_eq!(table(&long, b',').code_columns(0, 200), [true]);
         assert_eq!(table(&long, b',').code_columns(0, 301), [false]);
         // No data row, no table at all, one cell, an empty cell, spaces.
@@ -1341,7 +1465,24 @@ special
         assert_eq!(table(" 7 \n\n", b',').code_columns(0, 200), [true]);
         assert_eq!(table("1 000\n", b',').code_columns(0, 200), [false]);
         // Accents, fullwidth digits, emoji, `|`, `\`, a line break, words, a dash alone, nothing.
-        for (value, code) in [("-12", true), ("+3", true), ("12%", true), ("v1.2.3", true), ("a/b/1", true), ("#42", true), ("0", true), ("é1", false), ("１２", false), ("🎉1", false), ("a|1", false), ("\\1", false), ("1\n2", false), ("abc", false), ("-", false), ("", false)] {
+        for (value, code) in [
+            ("-12", true),
+            ("+3", true),
+            ("12%", true),
+            ("v1.2.3", true),
+            ("a/b/1", true),
+            ("#42", true),
+            ("0", true),
+            ("é1", false),
+            ("１２", false),
+            ("🎉1", false),
+            ("a|1", false),
+            ("\\1", false),
+            ("1\n2", false),
+            ("abc", false),
+            ("-", false),
+            ("", false),
+        ] {
             assert_eq!(is_code(value), code, "{value:?}");
         }
     }

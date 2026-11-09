@@ -1,5 +1,5 @@
 //! A note laid out on A4 pages for print: one SVG per page, with its headings, lists, quotes,
-//! code, tables, pictures and figures, in Bref Light on white whatever the window's theme.
+//! code, tables, pictures and figures, in Inkuno Light on white whatever the window's theme.
 //! Pure functions: the pictures and the embedded notes come from the caller (`find`).
 //!
 //! Each source line is a line of the page, as in the editor. The text stays text (`<text>`),
@@ -61,15 +61,24 @@ pub struct Printed {
 /// Lays out `text` on pages. `find` is asked for each picture and embed, by the path or name written.
 pub fn print(text: &str, find: &dyn Fn(&str) -> Found) -> Printed {
     let ink = Ink::new();
-    let mut out = Rows { rows: Vec::new(), missing: Vec::new(), group: 0, gap: 0., boxed: 0 };
+    let mut out = Rows {
+        rows: Vec::new(),
+        missing: Vec::new(),
+        group: 0,
+        gap: 0.,
+        boxed: 0,
+    };
     out.note(&text[md::front_matter(text)..], find, &ink, 0);
     if out.boxed > 0 {
         out.missing.push(format!("{} emoji ({BOX})", out.boxed));
     }
-    Printed { pages: paginate(&out.rows, &ink), missing: out.missing }
+    Printed {
+        pages: paginate(&out.rows, &ink),
+        missing: out.missing,
+    }
 }
 
-/// The print colours: Bref Light's text, accent and code tints, on white.
+/// The print colours: Inkuno Light's text, accent and code tints, on white.
 struct Ink {
     text: String,
     soft: String,
@@ -85,7 +94,10 @@ struct Ink {
 
 impl Ink {
     fn new() -> Self {
-        let t = theme::Theme::of(&crate::logic::prefs::Prefs::parse("theme=Bref Light"), gpui::WindowAppearance::Light);
+        let t = theme::Theme::of(
+            &crate::logic::prefs::Prefs::parse("theme=Inkuno Light"),
+            gpui::WindowAppearance::Light,
+        );
         let rgb = |c: gpui::Hsla| {
             let c = gpui::Rgba::from(c);
             [c.r, c.g, c.b].map(|v| (v * 255.).round() as u8)
@@ -114,8 +126,12 @@ impl Ink {
 
 // ----- Measuring: the advances of the app's fonts, with no shaping (no kerning).
 
-static FACES: LazyLock<Vec<Face<'static>>> =
-    LazyLock::new(|| crate::ui::assets::FONT_FILES.iter().filter_map(|data| Face::parse(data, 0).ok()).collect());
+static FACES: LazyLock<Vec<Face<'static>>> = LazyLock::new(|| {
+    crate::ui::assets::FONT_FILES
+        .iter()
+        .filter_map(|data| Face::parse(data, 0).ok())
+        .collect()
+});
 
 /// Font of a piece of text: the base (body or heading) and the inline styles.
 #[derive(Clone, Copy, PartialEq)]
@@ -136,7 +152,11 @@ fn face(style: u16, font: Font) -> usize {
 
 /// Size of `style` over `font`: inline code a little smaller.
 fn size(style: u16, font: Font) -> f32 {
-    if style & md::CODE != 0 && !font.serif && font.size > MONO { font.size * 0.9 } else { font.size }
+    if style & md::CODE != 0 && !font.serif && font.size > MONO {
+        font.size * 0.9
+    } else {
+        font.size
+    }
 }
 
 /// Advance of `c`, in points.
@@ -149,7 +169,9 @@ fn advance(c: char, style: u16, font: Font) -> f32 {
         Some(2) => true,
         _ => false,
     };
-    let Some(f) = FACES.get(face(style, font)) else { return size * 0.6 };
+    let Some(f) = FACES.get(face(style, font)) else {
+        return size * 0.6;
+    };
     match f.glyph_index(c).and_then(|g| f.glyph_hor_advance(g)) {
         Some(a) => a as f32 / f.units_per_em() as f32 * size,
         None if wide => size,
@@ -184,8 +206,10 @@ const BOX: char = '\u{FFFD}';
 
 /// A character of the emoji ranges that the app's text font does not draw.
 fn is_emoji(c: char) -> bool {
-    let symbol = matches!(c, '\u{2300}'..='\u{23FF}' | '\u{2600}'..='\u{27BF}' | '\u{2B00}'..='\u{2BFF}');
-    matches!(c, '\u{1F000}'..='\u{1FAFF}') || symbol && FACES.first().is_some_and(|f| f.glyph_index(c).is_none())
+    let symbol =
+        matches!(c, '\u{2300}'..='\u{23FF}' | '\u{2600}'..='\u{27BF}' | '\u{2B00}'..='\u{2BFF}');
+    matches!(c, '\u{1F000}'..='\u{1FAFF}')
+        || symbol && FACES.first().is_some_and(|f| f.glyph_index(c).is_none())
 }
 
 /// Colour emoji cannot go in a PDF font (their font cannot be subset, the whole export would fail):
@@ -202,7 +226,11 @@ fn tame(glyphs: &mut Vec<Glyph>, font: Font) -> usize {
             c if is_emoji(c) => {
                 if !(in_emoji && joined) {
                     boxed += 1;
-                    out.push(Glyph { c: BOX, w: advance(BOX, g.style, font), ..g });
+                    out.push(Glyph {
+                        c: BOX,
+                        w: advance(BOX, g.style, font),
+                        ..g
+                    });
                 }
                 (in_emoji, joined) = (true, false);
             }
@@ -216,7 +244,17 @@ fn tame(glyphs: &mut Vec<Glyph>, font: Font) -> usize {
     boxed
 }
 
-const SHOWN: u16 = md::BOLD | md::ITALIC | md::CODE | md::STRIKE | md::LINK | md::TAG | md::HIGHLIGHT | md::UNDER | md::KEYWORD | md::STRING | md::NUMBER;
+const SHOWN: u16 = md::BOLD
+    | md::ITALIC
+    | md::CODE
+    | md::STRIKE
+    | md::LINK
+    | md::TAG
+    | md::HIGHLIGHT
+    | md::UNDER
+    | md::KEYWORD
+    | md::STRING
+    | md::NUMBER;
 
 /// The printed characters of `line` from byte `from`: the marks of the styles, the address of a
 /// `[text](address)` and the text of a comment are left out, as on screen when the cursor is elsewhere.
@@ -255,11 +293,19 @@ fn inline(line: &str, from: usize, font: Font) -> Inline {
             let c = line[i..].chars().next().unwrap_or(' ');
             if !hidden[i] {
                 let c = if c == '\t' { ' ' } else { c };
-                out.glyphs.push(Glyph { c, style: flags[i] & SHOWN, link: link[i], w: advance(c, flags[i] & SHOWN, font), mark: 0 });
+                out.glyphs.push(Glyph {
+                    c,
+                    style: flags[i] & SHOWN,
+                    link: link[i],
+                    w: advance(c, flags[i] & SHOWN, font),
+                    mark: 0,
+                });
             }
             i + c.len_utf8()
         };
-        out.glyphs[shown..].iter_mut().for_each(|g| g.mark = mark[i]);
+        out.glyphs[shown..]
+            .iter_mut()
+            .for_each(|g| g.mark = mark[i]);
         i = next;
     }
     out.boxed = tame(&mut out.glyphs, font);
@@ -268,7 +314,13 @@ fn inline(line: &str, from: usize, font: Font) -> Inline {
 
 impl Inline {
     fn push_str(&mut self, text: &str, style: u16, link: Option<usize>, font: Font) {
-        self.glyphs.extend(text.chars().map(|c| Glyph { c, style, link, w: advance(c, style, font), mark: 0 }));
+        self.glyphs.extend(text.chars().map(|c| Glyph {
+            c,
+            style,
+            link,
+            w: advance(c, style, font),
+            mark: 0,
+        }));
     }
 
     fn plain(text: &str, style: u16, font: Font) -> Self {
@@ -320,7 +372,10 @@ fn wrap(glyphs: &[Glyph], width: f32, anywhere: bool) -> Vec<std::ops::Range<usi
 }
 
 fn escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// Height of a line of `font`, and the distance from its top to its baseline.
@@ -331,20 +386,45 @@ fn metrics(font: Font) -> (f32, f32) {
 
 /// Draws the glyphs of one printed line at `x`, its top at `top`, in `color`: their backgrounds
 /// (inline code, highlight), then their text, piece by piece of the same style.
-fn draw_line(svg: &mut String, links: &mut Vec<([f32; 4], String)>, text: &Inline, glyphs: &[Glyph], (x, top): (f32, f32), font: Font, color: &str, ink: &Ink) {
+fn draw_line(
+    svg: &mut String,
+    links: &mut Vec<([f32; 4], String)>,
+    text: &Inline,
+    glyphs: &[Glyph],
+    (x, top): (f32, f32),
+    font: Font,
+    color: &str,
+    ink: &Ink,
+) {
     let (lh, base) = metrics(font);
     let mut at = x;
     let mut i = 0;
     while i < glyphs.len() {
         // A character the app's font lacks is drawn on its own: the font found for it would
         // otherwise draw the whole piece.
-        let own = |g: &Glyph| g.c == ' ' || FACES.get(face(g.style, font)).is_some_and(|f| f.glyph_index(g.c).is_some());
-        let (style, link, mark, has) = (glyphs[i].style, glyphs[i].link, glyphs[i].mark, own(&glyphs[i]));
-        let n = glyphs[i..].iter().take_while(|g| g.style == style && g.link == link && g.mark == mark && own(g) == has).count();
+        let own = |g: &Glyph| {
+            g.c == ' '
+                || FACES
+                    .get(face(g.style, font))
+                    .is_some_and(|f| f.glyph_index(g.c).is_some())
+        };
+        let (style, link, mark, has) = (
+            glyphs[i].style,
+            glyphs[i].link,
+            glyphs[i].mark,
+            own(&glyphs[i]),
+        );
+        let n = glyphs[i..]
+            .iter()
+            .take_while(|g| g.style == style && g.link == link && g.mark == mark && own(g) == has)
+            .count();
         let piece = &glyphs[i..i + n];
         let w: f32 = piece.iter().map(|g| g.w).sum();
         let shown: String = piece.iter().map(|g| g.c).collect();
-        let fill = if style & md::CODE != 0 && style & (md::KEYWORD | md::STRING | md::NUMBER) == 0 && font.size > MONO {
+        let fill = if style & md::CODE != 0
+            && style & (md::KEYWORD | md::STRING | md::NUMBER) == 0
+            && font.size > MONO
+        {
             Some(&ink.code_bg)
         } else if style & md::HIGHLIGHT != 0 {
             Some(&ink.marks[(mark as usize).min(ink.marks.len() - 1)])
@@ -352,11 +432,30 @@ fn draw_line(svg: &mut String, links: &mut Vec<([f32; 4], String)>, text: &Inlin
             None
         };
         if let Some(fill) = fill.filter(|_| !shown.trim().is_empty()) {
-            let _ = write!(svg, r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" rx="2" fill="{fill}"/>"#, at - 1., top + (lh - font.size * 1.3) / 2., w + 2., font.size * 1.3);
+            let _ = write!(
+                svg,
+                r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" rx="2" fill="{fill}"/>"#,
+                at - 1.,
+                top + (lh - font.size * 1.3) / 2.,
+                w + 2.,
+                font.size * 1.3
+            );
         }
         if !shown.trim().is_empty() {
-            let family = if style & md::CODE != 0 { MONO_FONT } else if font.serif { SERIF } else { SANS };
-            let weight = if font.serif && style & md::CODE == 0 { "600" } else if style & md::BOLD != 0 { "700" } else { "400" };
+            let family = if style & md::CODE != 0 {
+                MONO_FONT
+            } else if font.serif {
+                SERIF
+            } else {
+                SANS
+            };
+            let weight = if font.serif && style & md::CODE == 0 {
+                "600"
+            } else if style & md::BOLD != 0 {
+                "700"
+            } else {
+                "400"
+            };
             let fill = match () {
                 _ if style & md::KEYWORD != 0 => &ink.accent,
                 _ if style & md::STRING != 0 => &ink.string,
@@ -376,8 +475,16 @@ fn draw_line(svg: &mut String, links: &mut Vec<([f32; 4], String)>, text: &Inlin
                 r#"<text x="{at:.2}" y="{:.2}" font-family="{family}" font-size="{:.2}" font-weight="{weight}" font-style="{}" fill="{fill}"{}>{}</text>"#,
                 top + base,
                 size(style, font),
-                if style & md::ITALIC != 0 { "italic" } else { "normal" },
-                if deco.is_empty() { String::new() } else { format!(r#" text-decoration="{}""#, deco.join(" ")) },
+                if style & md::ITALIC != 0 {
+                    "italic"
+                } else {
+                    "normal"
+                },
+                if deco.is_empty() {
+                    String::new()
+                } else {
+                    format!(r#" text-decoration="{}""#, deco.join(" "))
+                },
                 escape(&shown)
             );
         }
@@ -424,12 +531,28 @@ struct Rows {
 }
 
 /// Text rows of a source line: its glyphs from x `indent`, wrapped at the page width.
-fn text_rows(text: &Inline, indent: f32, font: Font, color: &str, ink: &Ink, anywhere: bool) -> Vec<(String, Vec<([f32; 4], String)>)> {
+fn text_rows(
+    text: &Inline,
+    indent: f32,
+    font: Font,
+    color: &str,
+    ink: &Ink,
+    anywhere: bool,
+) -> Vec<(String, Vec<([f32; 4], String)>)> {
     wrap(&text.glyphs, WIDTH - indent, anywhere)
         .into_iter()
         .map(|r| {
             let (mut svg, mut links) = (String::new(), Vec::new());
-            draw_line(&mut svg, &mut links, text, &text.glyphs[r], (indent, 0.), font, color, ink);
+            draw_line(
+                &mut svg,
+                &mut links,
+                text,
+                &text.glyphs[r],
+                (indent, 0.),
+                font,
+                color,
+                ink,
+            );
             (svg, links)
         })
         .collect()
@@ -442,19 +565,43 @@ impl Rows {
     }
 
     /// Rows of one wrapped source line, the first with `before` and `lead` (a bullet) drawn in it.
-    fn lines(&mut self, text: &Inline, indent: f32, font: Font, color: &str, ink: &Ink, before: f32, lead: &str, frame: Option<(usize, Frame)>, keep: bool) {
+    fn lines(
+        &mut self,
+        text: &Inline,
+        indent: f32,
+        font: Font,
+        color: &str,
+        ink: &Ink,
+        before: f32,
+        lead: &str,
+        frame: Option<(usize, Frame)>,
+        keep: bool,
+    ) {
         let (lh, _) = metrics(font);
         self.boxed += text.boxed;
-        for (i, (mut svg, links)) in text_rows(text, indent, font, color, ink, false).into_iter().enumerate() {
+        for (i, (mut svg, links)) in text_rows(text, indent, font, color, ink, false)
+            .into_iter()
+            .enumerate()
+        {
             if i == 0 {
                 svg.insert_str(0, lead);
             }
-            self.push(Row { before: if i == 0 { before } else { 0. }, h: lh, svg, links, keep, frame });
+            self.push(Row {
+                before: if i == 0 { before } else { 0. },
+                h: lh,
+                svg,
+                links,
+                keep,
+                frame,
+            });
         }
     }
 
     fn missing(&mut self, what: String, ink: &Ink) {
-        let font = Font { serif: false, size: BODY };
+        let font = Font {
+            serif: false,
+            size: BODY,
+        };
         let said = format!("[{} : {what}]", tr("Not printed", "Non imprimé"));
         let text = Inline::plain(&said, md::ITALIC, font);
         self.lines(&text, 0., font, &ink.soft, ink, 0., "", None, false);
@@ -466,8 +613,17 @@ impl Rows {
         let scale = ((WIDTH - indent) / w).min(HEIGHT * 0.9 / h).min(1.);
         let (w, h) = (w * scale, h * scale);
         let data = base64::engine::general_purpose::STANDARD.encode(data);
-        let svg = format!(r#"<image x="{indent:.2}" y="0" width="{w:.2}" height="{h:.2}" preserveAspectRatio="xMidYMid meet" xlink:href="data:{mime};base64,{data}"/>"#);
-        self.push(Row { before: 4., h: h + 4., svg, links: Vec::new(), keep: false, frame: None });
+        let svg = format!(
+            r#"<image x="{indent:.2}" y="0" width="{w:.2}" height="{h:.2}" preserveAspectRatio="xMidYMid meet" xlink:href="data:{mime};base64,{data}"/>"#
+        );
+        self.push(Row {
+            before: 4.,
+            h: h + 4.,
+            svg,
+            links: Vec::new(),
+            keep: false,
+            frame: None,
+        });
     }
 
     /// An SVG figure, at its own size (CSS pixels).
@@ -486,10 +642,19 @@ impl Rows {
                     Some(size) => self.picture(&bytes, mime, size, 0.),
                     None => self.missing(path.to_string(), ink),
                 },
-                None => self.missing(format!("{path} ({})", tr("format not supported", "format non pris en charge")), ink),
+                None => self.missing(
+                    format!(
+                        "{path} ({})",
+                        tr("format not supported", "format non pris en charge")
+                    ),
+                    ink,
+                ),
             },
             Found::Svg(text) => {
-                let drawn = Diagram::from_svg(&text).map_or_else(|| svg::readable(&text, false), |d| d.to_svg(u32::from_be_bytes([0, ink.rgb[0], ink.rgb[1], ink.rgb[2]])));
+                let drawn = Diagram::from_svg(&text).map_or_else(
+                    || svg::readable(&text, false),
+                    |d| d.to_svg(u32::from_be_bytes([0, ink.rgb[0], ink.rgb[1], ink.rgb[2]])),
+                );
                 self.figure(&drawn, path, 0., ink);
             }
             // ponytail: the embedded rows are moved 12 points right after being laid out at full width,
@@ -508,7 +673,10 @@ impl Rows {
             }
             // An embed inside an embed is left as its link.
             Found::Section(_) => {
-                let font = Font { serif: false, size: BODY };
+                let font = Font {
+                    serif: false,
+                    size: BODY,
+                };
                 let text = Inline::plain(&format!("[[{path}]]"), md::LINK, font);
                 self.lines(&text, 0., font, &ink.text, ink, 0., "", None, false);
             }
@@ -518,7 +686,10 @@ impl Rows {
 
     /// The rows of a note's text.
     fn note(&mut self, text: &str, find: &dyn Fn(&str) -> Found, ink: &Ink, depth: usize) {
-        let body = Font { serif: false, size: BODY };
+        let body = Font {
+            serif: false,
+            size: BODY,
+        };
         let lines: Vec<&str> = text.lines().collect();
         let mut i = 0;
         let mut quoted = false;
@@ -536,7 +707,9 @@ impl Rows {
             }
             // A fenced block, if it is closed: code, or a Mermaid diagram.
             if kind == Kind::Fence
-                && let Some(len) = lines[i..].iter().position(|l| md::classify(l, true).0 == Kind::Fence)
+                && let Some(len) = lines[i..]
+                    .iter()
+                    .position(|l| md::classify(l, true).0 == Kind::Fence)
             {
                 let lang = line.trim_start()[3..].trim().to_lowercase();
                 let block = &lines[i..i + len];
@@ -561,20 +734,43 @@ impl Rows {
                 continue;
             }
             if kind == Kind::Table {
-                let len = lines[i..].iter().take_while(|l| md::classify(l, false).0 == Kind::Table).count();
+                let len = lines[i..]
+                    .iter()
+                    .take_while(|l| md::classify(l, false).0 == Kind::Table)
+                    .count();
                 self.table(&lines[i - 1..i + len], ink);
                 i += len;
                 continue;
             }
             if kind == Kind::Rule {
-                let svg = format!(r#"<line x1="0" y1="6" x2="{WIDTH:.2}" y2="6" stroke="{}" stroke-width="0.75"/>"#, ink.line);
-                self.push(Row { before: 4., h: 12., svg, links: Vec::new(), keep: false, frame: None });
+                let svg = format!(
+                    r#"<line x1="0" y1="6" x2="{WIDTH:.2}" y2="6" stroke="{}" stroke-width="0.75"/>"#,
+                    ink.line
+                );
+                self.push(Row {
+                    before: 4.,
+                    h: 12.,
+                    svg,
+                    links: Vec::new(),
+                    keep: false,
+                    frame: None,
+                });
                 continue;
             }
             if let Some((range, path)) = md::image(line) {
                 let rest = format!("{}{}", &line[..range.start], &line[range.end..]);
                 if !rest.trim().is_empty() {
-                    self.lines(&inline(&rest, 0, body), 0., body, &ink.text, ink, 0., "", None, false);
+                    self.lines(
+                        &inline(&rest, 0, body),
+                        0.,
+                        body,
+                        &ink.text,
+                        ink,
+                        0.,
+                        "",
+                        None,
+                        false,
+                    );
                 }
                 self.embed(&path, find, ink, depth);
                 continue;
@@ -589,9 +785,26 @@ impl Rows {
             match kind {
                 Kind::Heading(level) => {
                     let scale = [1.94, 1.44, 1.19, 1.06, 1., 1.][(level as usize - 1).min(5)];
-                    let font = Font { serif: true, size: BODY * scale };
-                    let before = if self.rows.is_empty() { 0. } else { font.size * 0.8 };
-                    self.lines(&inline(line, marker, font), 0., font, &ink.text, ink, before, "", None, true);
+                    let font = Font {
+                        serif: true,
+                        size: BODY * scale,
+                    };
+                    let before = if self.rows.is_empty() {
+                        0.
+                    } else {
+                        font.size * 0.8
+                    };
+                    self.lines(
+                        &inline(line, marker, font),
+                        0.,
+                        font,
+                        &ink.text,
+                        ink,
+                        before,
+                        "",
+                        None,
+                        true,
+                    );
                 }
                 Kind::Quote => {
                     if !quoted {
@@ -606,7 +819,8 @@ impl Rows {
                         if let Some(c) = label.first_mut() {
                             *c = c.to_ascii_uppercase();
                         }
-                        let mut head = Inline::plain(&label.into_iter().collect::<String>(), md::BOLD, body);
+                        let mut head =
+                            Inline::plain(&label.into_iter().collect::<String>(), md::BOLD, body);
                         let after = inline(line, r.end, body);
                         head.glyphs.extend(after.glyphs.into_iter().map(|mut g| {
                             g.link = g.link.map(|l| l + head.urls.len());
@@ -620,28 +834,69 @@ impl Rows {
                 }
                 Kind::Bullet | Kind::Ordered | Kind::Task(_) => {
                     let spaces = line.len() - line.trim_start_matches([' ', '\t']).len();
-                    let cols: usize = line.chars().take_while(|c| matches!(c, ' ' | '\t')).map(|c| if c == '\t' { 4 } else { 1 }).sum();
+                    let cols: usize = line
+                        .chars()
+                        .take_while(|c| matches!(c, ' ' | '\t'))
+                        .map(|c| if c == '\t' { 4 } else { 1 })
+                        .sum();
                     let x = cols as f32 / 4. * 16.;
                     let (lh, base) = metrics(body);
                     let lead = match kind {
                         Kind::Task(done) => {
                             let (s, y) = (8., (lh - 8.) / 2.);
                             let check = if done {
-                                format!(r#"<path d="M{:.2} {:.2} l2.2 2.4 l4 -5" fill="none" stroke="{}" stroke-width="1.3"/>"#, x + 1.8, y + 4.2, ink.accent)
+                                format!(
+                                    r#"<path d="M{:.2} {:.2} l2.2 2.4 l4 -5" fill="none" stroke="{}" stroke-width="1.3"/>"#,
+                                    x + 1.8,
+                                    y + 4.2,
+                                    ink.accent
+                                )
                             } else {
                                 String::new()
                             };
-                            format!(r#"<rect x="{x:.2}" y="{y:.2}" width="{s}" height="{s}" rx="1.5" fill="none" stroke="{}" stroke-width="0.9"/>{check}"#, ink.soft)
+                            format!(
+                                r#"<rect x="{x:.2}" y="{y:.2}" width="{s}" height="{s}" rx="1.5" fill="none" stroke="{}" stroke-width="0.9"/>{check}"#,
+                                ink.soft
+                            )
                         }
                         Kind::Ordered => {
                             let number = line[spaces..marker].trim_end();
-                            format!(r#"<text x="{x:.2}" y="{base:.2}" font-family="{SANS}" font-size="{BODY}" fill="{}">{}</text>"#, ink.soft, escape(number))
+                            format!(
+                                r#"<text x="{x:.2}" y="{base:.2}" font-family="{SANS}" font-size="{BODY}" fill="{}">{}</text>"#,
+                                ink.soft,
+                                escape(number)
+                            )
                         }
-                        _ => format!(r#"<circle cx="{:.2}" cy="{:.2}" r="1.8" fill="{}"/>"#, x + 4., lh / 2., ink.soft),
+                        _ => format!(
+                            r#"<circle cx="{:.2}" cy="{:.2}" r="1.8" fill="{}"/>"#,
+                            x + 4.,
+                            lh / 2.,
+                            ink.soft
+                        ),
                     };
-                    self.lines(&inline(line, marker, body), x + 16., body, &ink.text, ink, 0., &lead, None, false);
+                    self.lines(
+                        &inline(line, marker, body),
+                        x + 16.,
+                        body,
+                        &ink.text,
+                        ink,
+                        0.,
+                        &lead,
+                        None,
+                        false,
+                    );
                 }
-                _ => self.lines(&inline(line, marker, body), 0., body, &ink.text, ink, 0., "", None, false),
+                _ => self.lines(
+                    &inline(line, marker, body),
+                    0.,
+                    body,
+                    &ink.text,
+                    ink,
+                    0.,
+                    "",
+                    None,
+                    false,
+                ),
             }
         }
     }
@@ -659,11 +914,21 @@ impl Rows {
 
     /// A code block: its lines in mono, cut anywhere to fit, coloured as in the editor, on a tinted sheet.
     fn code(&mut self, block: &[&str], lang: &str, ink: &Ink) {
-        let font = Font { serif: false, size: MONO };
+        let font = Font {
+            serif: false,
+            size: MONO,
+        };
         let (lh, _) = metrics(font);
         self.group += 1;
         let frame = Some((self.group, Frame::Code));
-        let pad = |before| Row { before, h: 6., svg: String::new(), links: Vec::new(), keep: false, frame };
+        let pad = |before| Row {
+            before,
+            h: 6.,
+            svg: String::new(),
+            links: Vec::new(),
+            keep: false,
+            frame,
+        };
         self.push(pad(4.));
         for line in block {
             let mut flags = vec![0u16; line.len()];
@@ -673,11 +938,26 @@ impl Rows {
                 let style = md::CODE | (flags[i] & (md::KEYWORD | md::STRING | md::NUMBER));
                 let c = if c == '\t' { ' ' } else { c };
                 let n = if line[i..].starts_with('\t') { 4 } else { 1 };
-                (0..n).for_each(|_| text.glyphs.push(Glyph { c, style, link: None, w: advance(c, style, font), mark: 0 }));
+                (0..n).for_each(|_| {
+                    text.glyphs.push(Glyph {
+                        c,
+                        style,
+                        link: None,
+                        w: advance(c, style, font),
+                        mark: 0,
+                    })
+                });
             }
             self.boxed += tame(&mut text.glyphs, font);
             for (svg, _) in text_rows(&text, 8., font, &ink.text, ink, true) {
-                self.push(Row { before: 0., h: lh, svg, links: Vec::new(), keep: false, frame });
+                self.push(Row {
+                    before: 0.,
+                    h: lh,
+                    svg,
+                    links: Vec::new(),
+                    keep: false,
+                    frame,
+                });
             }
         }
         self.push(pad(0.));
@@ -688,10 +968,21 @@ impl Rows {
     /// A table: columns as wide as their text, shared out when they do not fit; its cells wrap.
     // ponytail: a row taller than a page runs off it, and the header is not repeated on the next page.
     fn table(&mut self, lines: &[&str], ink: &Ink) {
-        let font = Font { serif: false, size: BODY * 0.9 };
-        let bold = Font { serif: false, size: font.size };
+        let font = Font {
+            serif: false,
+            size: BODY * 0.9,
+        };
+        let bold = Font {
+            serif: false,
+            size: font.size,
+        };
         let (rows, _) = md::table(&lines.join("\n"));
-        let rows: Vec<&Vec<String>> = rows.iter().enumerate().filter(|(i, _)| *i != 1).map(|(_, r)| r).collect();
+        let rows: Vec<&Vec<String>> = rows
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != 1)
+            .map(|(_, r)| r)
+            .collect();
         let cells: Vec<Vec<Inline>> = rows
             .iter()
             .enumerate()
@@ -713,29 +1004,71 @@ impl Rows {
             .collect();
         let pad = 4.;
         let cols = cells.first().map_or(0, Vec::len);
-        let natural: Vec<f32> = (0..cols).map(|c| cells.iter().map(|row| row[c].width()).fold(0., f32::max) + 2. * pad).collect();
+        let natural: Vec<f32> = (0..cols)
+            .map(|c| cells.iter().map(|row| row[c].width()).fold(0., f32::max) + 2. * pad)
+            .collect();
         let widths = share(&natural, WIDTH);
         let (lh, _) = metrics(font);
         for (r, row) in cells.iter().enumerate() {
-            let wrapped: Vec<Vec<std::ops::Range<usize>>> = row.iter().enumerate().map(|(c, t)| wrap(&t.glyphs, widths[c] - 2. * pad, false)).collect();
+            let wrapped: Vec<Vec<std::ops::Range<usize>>> = row
+                .iter()
+                .enumerate()
+                .map(|(c, t)| wrap(&t.glyphs, widths[c] - 2. * pad, false))
+                .collect();
             let h = wrapped.iter().map(Vec::len).max().unwrap_or(1) as f32 * lh + 2. * pad;
             let (mut svg, mut links) = (String::new(), Vec::new());
             let total: f32 = widths.iter().sum();
             if r == 0 {
-                let _ = write!(svg, r#"<rect x="0" y="0" width="{total:.2}" height="{h:.2}" fill="{}"/>"#, ink.code_bg);
-                let _ = write!(svg, r#"<line x1="0" y1="0" x2="{total:.2}" y2="0" stroke="{}" stroke-width="0.6"/>"#, ink.line);
+                let _ = write!(
+                    svg,
+                    r#"<rect x="0" y="0" width="{total:.2}" height="{h:.2}" fill="{}"/>"#,
+                    ink.code_bg
+                );
+                let _ = write!(
+                    svg,
+                    r#"<line x1="0" y1="0" x2="{total:.2}" y2="0" stroke="{}" stroke-width="0.6"/>"#,
+                    ink.line
+                );
             }
-            let _ = write!(svg, r#"<line x1="0" y1="{h:.2}" x2="{total:.2}" y2="{h:.2}" stroke="{}" stroke-width="0.6"/>"#, ink.line);
+            let _ = write!(
+                svg,
+                r#"<line x1="0" y1="{h:.2}" x2="{total:.2}" y2="{h:.2}" stroke="{}" stroke-width="0.6"/>"#,
+                ink.line
+            );
             let mut x = 0.;
             for (c, text) in row.iter().enumerate() {
-                let _ = write!(svg, r#"<line x1="{x:.2}" y1="0" x2="{x:.2}" y2="{h:.2}" stroke="{}" stroke-width="0.6"/>"#, ink.line);
+                let _ = write!(
+                    svg,
+                    r#"<line x1="{x:.2}" y1="0" x2="{x:.2}" y2="{h:.2}" stroke="{}" stroke-width="0.6"/>"#,
+                    ink.line
+                );
                 for (l, range) in wrapped[c].iter().enumerate() {
-                    draw_line(&mut svg, &mut links, text, &text.glyphs[range.clone()], (x + pad, pad + l as f32 * lh), font, &ink.text, ink);
+                    draw_line(
+                        &mut svg,
+                        &mut links,
+                        text,
+                        &text.glyphs[range.clone()],
+                        (x + pad, pad + l as f32 * lh),
+                        font,
+                        &ink.text,
+                        ink,
+                    );
                 }
                 x += widths[c];
             }
-            let _ = write!(svg, r#"<line x1="{x:.2}" y1="0" x2="{x:.2}" y2="{h:.2}" stroke="{}" stroke-width="0.6"/>"#, ink.line);
-            self.push(Row { before: if r == 0 { 4. } else { 0. }, h, svg, links, keep: r == 0, frame: None });
+            let _ = write!(
+                svg,
+                r#"<line x1="{x:.2}" y1="0" x2="{x:.2}" y2="{h:.2}" stroke="{}" stroke-width="0.6"/>"#,
+                ink.line
+            );
+            self.push(Row {
+                before: if r == 0 { 4. } else { 0. },
+                h,
+                svg,
+                links,
+                keep: r == 0,
+                frame: None,
+            });
         }
         self.gap = 4.;
     }
@@ -769,8 +1102,13 @@ fn mime(bytes: &[u8]) -> Option<&'static str> {
 
 /// An SVG holding only the raster picture `bytes`, if the PDF can hold its format.
 pub fn picture(bytes: &[u8]) -> Option<String> {
-    let (mime, data) = (mime(bytes)?, base64::engine::general_purpose::STANDARD.encode(bytes));
-    Some(format!(r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><image xlink:href="data:{mime};base64,{data}"/></svg>"#))
+    let (mime, data) = (
+        mime(bytes)?,
+        base64::engine::general_purpose::STANDARD.encode(bytes),
+    );
+    Some(format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><image xlink:href="data:{mime};base64,{data}"/></svg>"#
+    ))
 }
 
 /// Size of a raster picture, in points (a pixel for a CSS pixel).
@@ -804,7 +1142,12 @@ fn paginate(rows: &[Row], ink: &Ink) -> Vec<Page> {
         y += before + row.h;
     }
     let count = page + 1;
-    let mut pages: Vec<Page> = (0..count).map(|_| Page { svg: String::new(), links: Vec::new() }).collect();
+    let mut pages: Vec<Page> = (0..count)
+        .map(|_| Page {
+            svg: String::new(),
+            links: Vec::new(),
+        })
+        .collect();
     // Frames, per page: the extent of each run of rows of the same group.
     let mut i = 0;
     while i < rows.len() {
@@ -814,7 +1157,10 @@ fn paginate(rows: &[Row], ink: &Ink) -> Vec<Page> {
         };
         let (top, page) = placed[i];
         let mut j = i;
-        while j + 1 < rows.len() && rows[j + 1].frame.is_some_and(|f| f.0 == group) && placed[j + 1].1 == page {
+        while j + 1 < rows.len()
+            && rows[j + 1].frame.is_some_and(|f| f.0 == group)
+            && placed[j + 1].1 == page
+        {
             j += 1;
         }
         let bottom = placed[j].0 + rows[j].h;
@@ -822,21 +1168,48 @@ fn paginate(rows: &[Row], ink: &Ink) -> Vec<Page> {
         let svg = &mut pages[page].svg;
         match frame {
             Frame::Code => {
-                let _ = write!(svg, r#"<rect x="{x:.2}" y="{y:.2}" width="{WIDTH:.2}" height="{h:.2}" rx="4" fill="{}"/>"#, ink.code_bg);
+                let _ = write!(
+                    svg,
+                    r#"<rect x="{x:.2}" y="{y:.2}" width="{WIDTH:.2}" height="{h:.2}" rx="4" fill="{}"/>"#,
+                    ink.code_bg
+                );
             }
             Frame::Bar => {
-                let _ = write!(svg, r#"<rect x="{x:.2}" y="{y:.2}" width="2.5" height="{h:.2}" rx="1.25" fill="{}"/>"#, ink.line);
+                let _ = write!(
+                    svg,
+                    r#"<rect x="{x:.2}" y="{y:.2}" width="2.5" height="{h:.2}" rx="1.25" fill="{}"/>"#,
+                    ink.line
+                );
             }
         }
         i = j + 1;
     }
     for (row, (top, page)) in rows.iter().zip(&placed) {
         let p = &mut pages[*page];
-        let _ = write!(p.svg, r#"<g transform="translate({MARGIN:.2} {:.2})">{}</g>"#, MARGIN + top, row.svg);
-        p.links.extend(row.links.iter().map(|([x, y, w, h], url)| ([x + MARGIN, y + MARGIN + top, *w, *h], url.clone())));
+        let _ = write!(
+            p.svg,
+            r#"<g transform="translate({MARGIN:.2} {:.2})">{}</g>"#,
+            MARGIN + top,
+            row.svg
+        );
+        p.links.extend(
+            row.links
+                .iter()
+                .map(|([x, y, w, h], url)| ([x + MARGIN, y + MARGIN + top, *w, *h], url.clone())),
+        );
     }
     for (n, p) in pages.iter_mut().enumerate() {
-        let number = if count > 1 { format!(r#"<text x="{:.2}" y="{:.2}" font-family="{SANS}" font-size="8" fill="{}" text-anchor="middle">{} / {count}</text>"#, PAGE.0 / 2., PAGE.1 - MARGIN / 2., ink.soft, n + 1) } else { String::new() };
+        let number = if count > 1 {
+            format!(
+                r#"<text x="{:.2}" y="{:.2}" font-family="{SANS}" font-size="8" fill="{}" text-anchor="middle">{} / {count}</text>"#,
+                PAGE.0 / 2.,
+                PAGE.1 - MARGIN / 2.,
+                ink.soft,
+                n + 1
+            )
+        } else {
+            String::new()
+        };
         p.svg = format!(
             r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" width="{0:.2}" height="{1:.2}" viewBox="0 0 {0:.2} {1:.2}"><rect width="{0:.2}" height="{1:.2}" fill="#ffffff"/>{2}{number}</svg>"##,
             PAGE.0, PAGE.1, p.svg
@@ -877,10 +1250,16 @@ mod tests {
 
     #[test]
     fn marks_are_left_out_and_links_kept() {
-        let printed = print("# Titre\n\n**gras** et *ital* `code` [site](https://ex.fr) [[Note|alias]] -> fin", &none);
+        let printed = print(
+            "# Titre\n\n**gras** et *ital* `code` [site](https://ex.fr) [[Note|alias]] -> fin",
+            &none,
+        );
         let text = words(&printed.pages[0]);
         assert!(text.contains("Titre"), "{text}");
-        assert!(!text.contains("**") && !text.contains("](") && !text.contains("[["), "{text}");
+        assert!(
+            !text.contains("**") && !text.contains("](") && !text.contains("[["),
+            "{text}"
+        );
         assert!(text.contains("alias") && !text.contains("Note|"), "{text}");
         assert!(text.contains('→'), "{text}");
         assert_eq!(printed.pages[0].links.len(), 1);
@@ -921,26 +1300,51 @@ mod tests {
         let printed = print(&format!("{word}\n```\n{word}\n```\n"), &none);
         let svg = &printed.pages[0].svg;
         // Every piece of text starts within the page's text column.
-        for x in svg.split("<text x=\"").skip(1).map(|s| s[..s.find('"').unwrap()].parse::<f32>().unwrap()) {
+        for x in svg
+            .split("<text x=\"")
+            .skip(1)
+            .map(|s| s[..s.find('"').unwrap()].parse::<f32>().unwrap())
+        {
             assert!(x <= WIDTH, "{x}");
         }
         assert!(words(&printed.pages[0]).matches('a').count() >= 800);
-        let lines = wrap(&Inline::plain(&word, 0, Font { serif: false, size: BODY }).glyphs, WIDTH, false);
+        let lines = wrap(
+            &Inline::plain(
+                &word,
+                0,
+                Font {
+                    serif: false,
+                    size: BODY,
+                },
+            )
+            .glyphs,
+            WIDTH,
+            false,
+        );
         assert!(lines.len() > 1);
         assert!(lines.iter().all(|r| !r.is_empty()));
     }
 
     #[test]
     fn wrapping_breaks_on_spaces_and_cjk() {
-        let font = Font { serif: false, size: BODY };
+        let font = Font {
+            serif: false,
+            size: BODY,
+        };
         let text = Inline::plain("mot mot mot mot", 0, font);
         let w = text.glyphs[..7].iter().map(|g| g.w).sum::<f32>() + 1.;
         let lines = wrap(&text.glyphs, w, false);
-        let shown: Vec<String> = lines.iter().map(|r| text.glyphs[r.clone()].iter().map(|g| g.c).collect()).collect();
+        let shown: Vec<String> = lines
+            .iter()
+            .map(|r| text.glyphs[r.clone()].iter().map(|g| g.c).collect())
+            .collect();
         assert_eq!(shown, ["mot mot ", "mot mot"]);
         let cjk = Inline::plain("日本語の文章日本語の文章", 0, font);
         let lines = wrap(&cjk.glyphs, BODY * 5., false);
-        assert!(lines.len() >= 2 && lines.iter().all(|r| r.len() <= 5), "{lines:?}");
+        assert!(
+            lines.len() >= 2 && lines.iter().all(|r| r.len() <= 5),
+            "{lines:?}"
+        );
     }
 
     #[test]
@@ -954,7 +1358,11 @@ mod tests {
         let printed = print(&format!("{row}\n|{}\n{row}\n", "---|".repeat(30)), &none);
         let svg = &printed.pages[0].svg;
         assert_eq!(words(&printed.pages[0]).matches('c').count(), 60);
-        for x in svg.split("<text x=\"").skip(1).map(|s| s[..s.find('"').unwrap()].parse::<f32>().unwrap()) {
+        for x in svg
+            .split("<text x=\"")
+            .skip(1)
+            .map(|s| s[..s.find('"').unwrap()].parse::<f32>().unwrap())
+        {
             assert!(x <= WIDTH, "{x}");
         }
     }
@@ -970,7 +1378,13 @@ mod tests {
 
     #[test]
     fn embeds_print_their_section_once() {
-        let find = |p: &str| if p == "Autre" { Found::Section("Texte incorporé\n![[Autre]]".into()) } else { Found::Missing };
+        let find = |p: &str| {
+            if p == "Autre" {
+                Found::Section("Texte incorporé\n![[Autre]]".into())
+            } else {
+                Found::Missing
+            }
+        };
         let printed = print("Avant\n![[Autre]]\nAprès", &find);
         let text = words(&printed.pages[0]);
         assert_eq!(text.matches("Texte incorporé").count(), 1, "{text}");
@@ -993,12 +1407,17 @@ mod tests {
         let png = base64::engine::general_purpose::STANDARD.decode("iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGPYEqwFRAAJcgJjO/BPNwAAAABJRU5ErkJggg==").unwrap();
         assert_eq!(raster_size(&png), Some((2. * PX, PX)));
         let printed = print("![](p.png)", &|_| Found::Picture(png.clone()));
-        assert!(printed.missing.is_empty() && printed.pages[0].svg.contains("data:image/png;base64"));
+        assert!(
+            printed.missing.is_empty() && printed.pages[0].svg.contains("data:image/png;base64")
+        );
     }
 
     #[test]
     fn emoji_become_boxes_and_are_counted() {
-        let font = Font { serif: false, size: BODY };
+        let font = Font {
+            serif: false,
+            size: BODY,
+        };
         let shown = |s: &str| {
             let mut t = Inline::plain(s, 0, font);
             let n = t.boxed;
@@ -1006,10 +1425,14 @@ mod tests {
             (t.glyphs.iter().map(|g| g.c).collect::<String>(), n)
         };
         assert_eq!(shown("a🎉b"), ("a�b".into(), 1));
-        // Joined, toned, flagged, keycap, variant: one box per emoji as seen.
-        assert_eq!(shown("👩‍💻 👍🏽 ❤️ #️⃣"), ("� � � #".into(), 3));
+        // Joined, toned, flagged, keycap, variant: one box per emoji as seen. The app's font
+        // draws ❤ itself, so only it stays (counted with the boxes in `missing`).
+        assert_eq!(shown("👩‍💻 👍🏽 ❤️ #️⃣"), ("� � ❤ #".into(), 2));
         assert_eq!(shown("é 漢 → ✓ 1+1"), ("é 漢 → ✓ 1+1".into(), 0));
-        assert!(FACES[0].glyph_index(BOX).is_some(), "the box is in the app's font");
+        assert!(
+            FACES[0].glyph_index(BOX).is_none(),
+            "Inter has no box of its own: it is drawn on its own, like any missing glyph"
+        );
         let printed = print("# 🎉\n```\n🎉🎉\n```\n| 🎉 |\n|---|\n", &none);
         assert_eq!(printed.missing, ["4 emoji (�)"]);
     }
@@ -1018,7 +1441,10 @@ mod tests {
     fn highlights_keep_their_colour() {
         let printed = print("==a== <mark class=\"green\">b</mark>", &none);
         let ink = Ink::new();
-        assert!(printed.pages[0].svg.contains(&ink.marks[0]) && printed.pages[0].svg.contains(&ink.marks[1]));
+        assert!(
+            printed.pages[0].svg.contains(&ink.marks[0])
+                && printed.pages[0].svg.contains(&ink.marks[1])
+        );
         assert_ne!(ink.marks[0], ink.marks[1]);
     }
 

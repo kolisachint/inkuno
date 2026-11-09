@@ -1,27 +1,27 @@
 //! The whole app driven by simulated keystrokes, chapter by chapter. The chapters run in order,
 //! as one session: each starts from the vault, panel and settings the previous one left.
 
-mod writing;
-mod settings;
-mod panel;
-mod files;
-mod media;
-mod vault_views;
-mod diagrams;
-mod md_tables;
 mod blocks;
-mod outline;
 mod boards;
+mod csv;
 mod cursors_comments;
 mod dates_lists;
+mod diagrams;
+mod embeds;
+mod files;
+mod find_mouse;
+mod git_sync;
+mod history_panes;
+mod md_tables;
+mod media;
+mod outline;
+mod panel;
+mod settings;
+mod table_formulas;
 mod table_handles;
 mod table_styles;
-mod table_formulas;
-mod embeds;
-mod find_mouse;
-mod csv;
-mod history_panes;
-mod git_sync;
+mod vault_views;
+mod writing;
 
 use super::*;
 
@@ -34,18 +34,24 @@ pub(super) struct Journey {
 impl Journey {
     /// Text of the note in the active pane.
     pub fn text(&self, cx: &mut gpui::VisualTestContext) -> String {
-        self.shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
+        self.shell
+            .read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
     }
 
     /// Loads `text` in the active editor, the cursor at byte `cursor`.
     pub fn load(&self, cx: &mut gpui::VisualTestContext, text: &str, cursor: usize) {
-        self.shell.update(cx, |s, cx| s.pane().editor.update(cx, |e, cx| e.load(text.to_string(), cursor, cx)));
+        self.shell.update(cx, |s, cx| {
+            s.pane()
+                .editor
+                .update(cx, |e, cx| e.load(text.to_string(), cursor, cx))
+        });
         cx.run_until_parked();
     }
 
     /// Kind of the line at byte `at` in the active editor.
     pub fn kind(&self, cx: &mut gpui::VisualTestContext, at: usize) -> Option<markdown::Kind> {
-        self.shell.read_with(cx, |s, cx| s.pane().editor.read(cx).kind_at(at))
+        self.shell
+            .read_with(cx, |s, cx| s.pane().editor.read(cx).kind_at(at))
     }
 
     /// Lets the vault watcher see what changed on disk.
@@ -61,14 +67,14 @@ impl Journey {
 /// Full keyboard run: typing, lists, saving, palette, wikilink.
 #[gpui::test]
 fn end_to_end(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-e2e-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-e2e-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Courses.md"), "# Courses\n\n- lait #maison\n").unwrap();
     fs::create_dir(root.join("Projets")).unwrap();
     fs::write(root.join("Projets/Plan.md"), "# Plan\n\n[[Courses]]\n").unwrap();
-        // The test config must not touch the user's.
+    // The test config must not touch the user's.
     let _config = isolated_config(&root);
-        // What a version named "encre" left is read again as long as nothing exists under the new name.
+    // What a version named "encre" left is read again as long as nothing exists under the new name.
     let old = vault::config_dir().join("encre");
     fs::create_dir_all(&old).unwrap();
     fs::write(old.join("config"), format!("{}\n", root.display())).unwrap();
