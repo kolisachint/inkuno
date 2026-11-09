@@ -1,6 +1,6 @@
 # Inkuno
 
-Inkuno is a fast, minimal note-taking app. Your notes are plain Markdown files in a folder you choose, styled as you type. It is written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework.
+Inkuno is a fast, minimal note-taking app. Your notes are plain Markdown files in a folder you choose, styled as you type. It is written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework. It continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet Marin under a new name.
 
 New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 

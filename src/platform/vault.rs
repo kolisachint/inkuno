@@ -21,9 +21,7 @@ use crate::logic::note::{Note, lowered};
 /// The user's configuration folder, per platform.
 pub fn config_dir() -> PathBuf {
     let var = |key: &str| env::var_os(key).map(PathBuf::from);
-    let dir = if cfg!(windows) {
-        var("APPDATA")
-    } else if cfg!(target_os = "macos") {
+    let dir = if cfg!(target_os = "macos") {
         var("HOME").map(|home| home.join("Library/Application Support"))
     } else {
         var("XDG_CONFIG_HOME").or_else(|| var("HOME").map(|home| home.join(".config")))
@@ -35,9 +33,28 @@ fn config_path() -> PathBuf {
     config_dir().join("inkuno/config")
 }
 
+/// Best-effort copy of `from` to `to` when `to` is absent and `from` exists.
+fn copy_if_absent(from: &Path, to: &Path) {
+    if fs::metadata(to).is_err() && fs::metadata(from).is_ok() {
+        if let Some(parent) = to.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::copy(from, to);
+    }
+}
+
+/// Settings saved by a bref release live on: a missing `inkuno/<name>` is copied
+/// from `bref/<name>` once, the old file staying where it is. Best effort.
+fn migrate_config(name: &str) {
+    let dir = config_dir();
+    copy_if_absent(&dir.join("bref").join(name), &dir.join("inkuno").join(name));
+}
+
 /// (vault, open notes from most recent to oldest): one line each.
 pub fn load_config() -> (Option<PathBuf>, Vec<PathBuf>) {
-    // Falls back to the config of the app's old name; it is never rewritten.
+    // A bref config is copied over once; older still, the config of the app's first
+    // name is read but never rewritten.
+    migrate_config("config");
     let text = fs::read_to_string(config_path())
         .or_else(|_| fs::read_to_string(config_dir().join("encre/config")))
         .unwrap_or_default();
@@ -71,7 +88,9 @@ pub fn load_file(name: &str) -> String {
             return crate::ui::keys::legacy_lines(&json);
         }
     }
-    // Same fallback as for the config: settings left under the old name are read again.
+    // Same fallbacks as for the config: a bref file is copied over once, one left
+    // under the first name is read again.
+    migrate_config(name);
     fs::read_to_string(config_dir().join("inkuno").join(name))
         .or_else(|_| fs::read_to_string(config_dir().join("encre").join(name)))
         .unwrap_or_default()
@@ -117,7 +136,12 @@ pub fn themes_path() -> PathBuf {
 
 /// Contents of `keybindings.json`, empty when the file is absent.
 pub fn load_keybindings() -> String {
-    fs::read_to_string(keybindings_path()).unwrap_or_default()
+    // The agent-editable JSON migrates like the other files, and reads the first
+    // name's file when neither the new one nor the bref one is there.
+    migrate_config("keybindings.json");
+    fs::read_to_string(keybindings_path())
+        .or_else(|_| fs::read_to_string(config_dir().join("encre/keybindings.json")))
+        .unwrap_or_default()
 }
 
 pub fn save_keybindings(text: &str) {
@@ -128,7 +152,11 @@ pub fn save_keybindings(text: &str) {
 
 /// Contents of `themes.json`, empty when the file is absent.
 pub fn load_themes() -> String {
-    fs::read_to_string(themes_path()).unwrap_or_default()
+    // Same migration and fallback as the other agent-editable JSON.
+    migrate_config("themes.json");
+    fs::read_to_string(themes_path())
+        .or_else(|_| fs::read_to_string(config_dir().join("encre/themes.json")))
+        .unwrap_or_default()
 }
 
 pub fn save_themes(text: &str) {
@@ -139,16 +167,16 @@ pub fn save_themes(text: &str) {
 /// Folder offered for a first vault: `Notes` in the user's Documents, or
 /// in their home folder if they have no Documents.
 pub fn default_vault() -> Option<PathBuf> {
-    let home = env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)?;
+    let home = env::var_os("HOME").map(PathBuf::from)?;
     let documents = home.join("Documents");
     Some(if documents.is_dir() { documents } else { home }.join("Notes"))
 }
 
 /// A path as shown: the home folder shortened to `~` outside Windows.
 pub fn shown(path: &Path) -> String {
-    let home = env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+    let home = env::var_os("HOME").map(PathBuf::from);
     match home.as_deref().and_then(|home| path.strip_prefix(home).ok()) {
-        Some(rest) if !cfg!(windows) => format!("~/{}", rest.display()),
+        Some(rest) => format!("~/{}", rest.display()),
         _ => path.display().to_string(),
     }
 }
@@ -488,7 +516,13 @@ const ICONS: &str = ".inkuno-icons";
 
 /// Icons chosen for notes, files and folders of the vault, by path.
 pub fn load_icons(root: &Path) -> HashMap<PathBuf, String> {
-    let text = fs::read_to_string(root.join(ICONS)).unwrap_or_default();
+    // The vault's icons migrate like the config files: a bref list is copied over
+    // once, an older one is read but stays where it is.
+    copy_if_absent(&root.join(".bref-icons"), &root.join(ICONS));
+    let text = fs::read_to_string(root.join(ICONS))
+        .or_else(|_| fs::read_to_string(root.join(".bref-icons")))
+        .or_else(|_| fs::read_to_string(root.join(".encre-icons")))
+        .unwrap_or_default();
     text.lines().filter_map(|line| line.split_once('\t')).map(|(icon, path)| (root.join(path), icon.to_string())).collect()
 }
 
@@ -1432,6 +1466,26 @@ mod tests {
         fs::create_dir(&empty).unwrap();
         assert!(rescan_full(&empty, &[]).3.is_empty());
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn copy_if_absent_copies_once() {
+        let root = std::env::temp_dir().join(format!("inkuno-migrate-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (from, to) = (root.join("bref/settings"), root.join("inkuno/settings"));
+        fs::create_dir_all(from.parent().unwrap()).unwrap();
+        fs::write(&from, "theme=Inkuno Dark").unwrap();
+        copy_if_absent(&from, &to);
+        assert_eq!(fs::read_to_string(&to).unwrap(), "theme=Inkuno Dark");
+        // Present already: left alone, the old file staying where it is.
+        fs::write(&to, "theme=Inkuno Light").unwrap();
+        copy_if_absent(&from, &to);
+        assert_eq!(fs::read_to_string(&to).unwrap(), "theme=Inkuno Light");
+        assert_eq!(fs::read_to_string(&from).unwrap(), "theme=Inkuno Dark");
+        // Nothing to copy from: nothing happens, the new folder is not even made.
+        copy_if_absent(&root.join("bref/missing"), &root.join("nowhere/missing"));
+        assert!(fs::metadata(root.join("nowhere")).is_err());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

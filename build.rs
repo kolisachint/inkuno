@@ -1,11 +1,6 @@
-// Icon of the Windows executable: GPUI loads resource no. 1 for the window and the taskbar.
+// Nothing to embed: the Linux desktop file and icons install from the sources
+// (see the Makefile), and the macOS bundle takes its icon and property list
+// from packaging/macos (see scripts/bundle-macos.sh).
 fn main() {
-    // Without it, cargo reruns this script (and rebuilds the whole binary, a few minutes in release) when any
-    // file of the folder changes, even one `makepkg` writes in `aur/`.
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=packaging/windows");
-    #[cfg(windows)]
-    embed_resource::compile("packaging/windows/inkuno.rc", embed_resource::NONE)
-        .manifest_optional()
-        .unwrap();
 }

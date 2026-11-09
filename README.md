@@ -6,6 +6,8 @@
 
 A fast, minimal note-taking app. Notes are plain Markdown files in a folder you choose, styled as you type. Written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework.
 
+Inkuno is [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet Marin under a new name; upstream links still point there until its future home is decided.
+
 ![Inkuno, light and dark](docs/screenshots/inkuno.png)
 
 **[Install](#install)** · **[User guide](book/src/introduction.md)** · [Shortcuts](book/src/shortcuts.md) · [Website](https://alarboulletmarin.github.io/bref/) · [Contributing](CONTRIBUTING.md)

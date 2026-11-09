@@ -1,4 +1,4 @@
-# Single install recipe, used by the PKGBUILD and by `sudo make install` on any distro.
+# Single install recipe, used by `sudo make install` on any distro.
 PREFIX ?= /usr/local
 DESTDIR ?=
 
@@ -9,12 +9,14 @@ install:
 	install -Dm755 target/release/inkuno $(DESTDIR)$(PREFIX)/bin/inkuno
 	install -Dm644 com.inkuno.Inkuno.desktop $(DESTDIR)$(PREFIX)/share/applications/com.inkuno.Inkuno.desktop
 	install -Dm644 com.inkuno.Inkuno.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/com.inkuno.Inkuno.svg
+	install -Dm644 inkuno.metainfo.xml $(DESTDIR)$(PREFIX)/share/metainfo/inkuno.metainfo.xml
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/inkuno/LICENSE
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/inkuno \
 	  $(DESTDIR)$(PREFIX)/share/applications/com.inkuno.Inkuno.desktop \
-	  $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/com.inkuno.Inkuno.svg
+	  $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/com.inkuno.Inkuno.svg \
+	  $(DESTDIR)$(PREFIX)/share/metainfo/inkuno.metainfo.xml
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/inkuno
 
 test:

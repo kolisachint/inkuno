@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.inkuno.Inkuno</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Inkuno</name>
+  <summary>Fast, minimal Markdown note-taking app</summary>
+  <description>
+    <p>
+      Inkuno is a fast, minimal note-taking app. Notes are plain Markdown files
+      in a folder you choose, styled as you type, with links, tags, a graph, tables,
+      boards and diagrams, and an agent interface over the Model Context Protocol.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.inkuno.Inkuno.desktop</launchable>
+  <provides>
+    <binary>inkuno</binary>
+  </provides>
+  <url type="homepage">https://github.com/alarboulletmarin/bref</url>
+  <url type="bugtracker">https://github.com/alarboulletmarin/bref/issues</url>
+</component>

@@ -13,10 +13,6 @@
 /*.src.tar.*
 /*.log
 
-# makepkg builds of aur/*
-/aur/*/*/
-/aur/*/*.pkg.tar.*
-
 # Claude Code local caches
 /.claude/
 /book/book/

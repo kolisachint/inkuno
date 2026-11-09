@@ -1,8 +1,5 @@
 //! Inkuno: a fast, minimal Markdown note-taking app. ARCHITECTURE.md maps the code.
 
-// No console behind the window on Windows.
-#![cfg_attr(windows, windows_subsystem = "windows")]
-
 mod actions;
 mod config_watch;
 mod lang;
@@ -30,8 +27,7 @@ fn help_text() -> String {
          \u{20} inkuno --help            show this text\n\
          \n\
          config dir:\n\
-         \u{20} {} (Linux ~/.config/inkuno/, macOS ~/Library/Application Support/inkuno/,\n\
-         \u{20} Windows %APPDATA%\\inkuno\\)\n\
+         \u{20} {} (Linux ~/.config/inkuno/, macOS ~/Library/Application Support/inkuno/)\n\
          \n\
          agent-editable JSON: when present, it wins over the legacy `keys` and `settings`\n\
          files; the first run without it exports the current state there (nothing is\n\
@@ -182,7 +178,7 @@ fn main() {
     if std::env::args().any(|arg| arg == "--check-config") {
         std::process::exit(check_config());
     }
-    // The window has no console on Windows: the last panic is kept in the config folder.
+    // The last panic is kept in the config folder.
     let report = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         platform::vault::save_file("crash", &format!("inkuno {}\n{info}\n", env!("CARGO_PKG_VERSION")));

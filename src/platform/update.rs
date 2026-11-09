@@ -193,7 +193,7 @@ fn run(command: &mut Command) -> Result<(), String> {
 }
 
 /// Relaunches `program` once this process has quit.
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn relaunch(program: &str, args: &[&Path]) -> Result<(), String> {
     Command::new("sh")
         .args(["-c", r#"while kill -0 "$0" 2>/dev/null; do sleep 0.2; done; exec "$@""#])
@@ -206,29 +206,6 @@ fn relaunch(program: &str, args: &[&Path]) -> Result<(), String> {
         .spawn()
         .map(drop)
         .map_err(|e| e.to_string())
-}
-
-/// Windows: the version's installer, silent. It replaces `inkuno.exe` (closing it
-/// if still running) then relaunches the app (`/RELAUNCH=1`, read by `packaging/windows/inkuno.iss`).
-#[cfg(windows)]
-fn apply(file: &Path) -> Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    Command::new(file)
-        .args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/RELAUNCH=1"])
-        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: the installer outlives the app that launched it.
-        .creation_flags(0x0000_0208)
-        .stdin(Stdio::null())
-        .spawn()
-        .map(drop)
-        .map_err(|e| e.to_string())
-}
-
-/// Only an app installed by its installer (which leaves `unins000.exe` beside it) can
-/// update this way, not the zip one nor the `cargo install` one.
-#[cfg(windows)]
-fn asset_name() -> Option<&'static str> {
-    let exe = std::env::current_exe().ok()?;
-    exe.with_file_name("unins000.exe").is_file().then_some("inkuno-windows-x86_64-setup.exe")
 }
 
 /// The `.app` bundle that contains this program.
@@ -297,12 +274,12 @@ fn apply(file: &Path) -> Result<(), String> {
     relaunch("/usr/bin/inkuno", &[])
 }
 
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn asset_name() -> Option<&'static str> {
     None
 }
 
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn apply(_: &Path) -> Result<(), String> {
     Err("not supported on this system".into())
 }
