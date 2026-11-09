@@ -9,8 +9,8 @@ build-dir = "book"
 create-missing = false
 
 [output.html]
-git-repository-url = "https://github.com/alarboulletmarin/bref"
-edit-url-template = "https://github.com/alarboulletmarin/bref/edit/main/book/{path}"
+git-repository-url = "https://github.com/kolisachint/inkuno"
+edit-url-template = "https://github.com/kolisachint/inkuno/edit/main/book/{path}"
 site-url = "/inkuno/guide/"
 no-section-label = true
 

@@ -32,7 +32,7 @@ See [Changes from other programs](vault.md#changes-from-other-programs).
 
 ## Inkuno crashed
 
-The last crash is written to the file `crash` of the [configuration folder](vault.md#configuration-files), with the version of Inkuno. Attach it to a [bug report](https://github.com/alarboulletmarin/bref/issues): on Windows, the window has no console to show it.
+The last crash is written to the file `crash` of the [configuration folder](vault.md#configuration-files), with the version of Inkuno. Attach it to a [bug report](https://github.com/kolisachint/inkuno/issues): on Windows, the window has no console to show it.
 
 ## Known limits
 

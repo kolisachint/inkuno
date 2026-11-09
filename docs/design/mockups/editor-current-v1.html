@@ -1,17 +1,17 @@
 <!DOCTYPE html>
 <!--
-  bref editor CURRENT-state mockup v1 — ground truth for design discussion. NO redesign.
+  inkuno editor CURRENT-state mockup v1 — ground truth for design discussion. NO redesign.
   Renders docs/design/app-ui.md §12 (Visual spec v1, PROPOSED 2026-11-08) under §10 Phase-1 locks.
   Source refs (file:line, repo /Users/sachinkoli/github/noteapp):
   - Footer band:      src/views/editor/mod.rs:180 FOOTER 56px; MAX_WIDTH 800; SIDE 24; PILL_CLEAR 56; TOP 20; COPY_SIZE 22
   - Format bar:       src/views/editor/format_bar.rs:1 BAR_WIDTH (eleven 26px btns + 14px color chevron); Bar::Inline vs Compact; Tools{styles,list,table}; swatches 5 colors
   - Tabs:             src/shell/tabs.rs:6 TAB_BAR 34px; TAB_PILL 30px; pill radius 9 (theme.tab); text 13px; dirty-dot; preview italic
-  - Tokens:           src/ui/theme.rs:100 THEMES (13: Bref Dark/Light, Dracula, One Dark, Gruvbox Dark, Nord, Catppuccin Mocha, Tokyo Night, Rosé Pine, Solarized Dark/Light, Catppuccin Latte, Gruvbox Light, Sepia); Page Narrow560/Normal800/Wide960/Full; size 16 body; rail 44; tab/corner radii
+  - Tokens:           src/ui/theme.rs:100 THEMES (13: Inkuno Dark/Light, Dracula, One Dark, Gruvbox Dark, Nord, Catppuccin Mocha, Tokyo Night, Rosé Pine, Solarized Dark/Light, Catppuccin Latte, Gruvbox Light, Sepia); Page Narrow560/Normal800/Wide960/Full; size 16 body; rail 44; tab/corner radii
   - Fonts:            src/ui/assets.rs:16 IBM Plex Sans/Mono bundled (target per app-ui.md §3: Inter + JetBrains Mono)
   - Regions:          src/views/nav.rs; src/shell/sidebar.rs; src/shell/docks.rs:42 (left explorer dock); src/shell/pane.rs:467 (canvas); src/shell/palette_open.rs:29 open_outline/open_comments (palette-only); src/shell/render.rs:88 (window/pill room)
   - Live rendering:   headings grow, dimmed markers, code copy btn, callouts, math/mermaid underline, tables align-as-you-type, atomic save 400ms src/shell/notes.rs:491
   - Keybindings:      app-ui.md §11 (source of truth: src/shell/keymap.rs defaults(); display src/ui/keys.rs; generated book/src/shortcuts.md)
-  - Vision ref:       docs/screenshots/bref.png (Typora-calm target); docs/design/app-ui.md §§1-10 (calm, doc-first)
+  - Vision ref:       docs/screenshots/inkuno.png (Typora-calm target); docs/design/app-ui.md §§1-10 (calm, doc-first)
   Locks honored (§10): Normal 800 (landed 2026-11-08, §14); format bar stays SHOWN; paragraph spacing as-is.
   Badge key (§12.5): [CURRENT] = matches app today, do not regress. [TBD] = proposal/mockup-only, do not mistake for shipped.
   NOTE per §12.3: the word-count pill is MOCKUP-ONLY (word counts not found in app) — badged TBD below.
@@ -20,7 +20,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>bref — editor current-state mockup v1 (ground truth, no redesign)</title>
+<title>inkuno — editor current-state mockup v1 (ground truth, no redesign)</title>
 <style>
   :root{
     --bg:#fbfaf8; --sheet:#ffffff; --text:#26231f; --soft:#8a8478; --dim:#a8a29a;
@@ -142,9 +142,9 @@
   <span class="badge cur">Current · format bar shown</span>
   <span class="badge tbd">TBD · outline dock</span>
   <span class="spacer"></span>
-  <span class="note">13 themes: <span class="mono" id="themes">Bref Dark · Bref Light · Dracula · One Dark · Gruvbox Dark · Nord · Catppuccin Mocha · Tokyo Night · Rosé Pine · Solarized Dark · Solarized Light · Catppuccin Latte · Gruvbox Light · Sepia</span> — mockup toggles Light/Dark only</span>
-  <button class="themebtn" id="btnLight" aria-pressed="true" title="Preview with Bref Light tokens">Light</button>
-  <button class="themebtn" id="btnDark" aria-pressed="false" title="Preview with Bref Dark tokens">Dark</button>
+  <span class="note">13 themes: <span class="mono" id="themes">Inkuno Dark · Inkuno Light · Dracula · One Dark · Gruvbox Dark · Nord · Catppuccin Mocha · Tokyo Night · Rosé Pine · Solarized Dark · Solarized Light · Catppuccin Latte · Gruvbox Light · Sepia</span> — mockup toggles Light/Dark only</span>
+  <button class="themebtn" id="btnLight" aria-pressed="true" title="Preview with Inkuno Light tokens">Light</button>
+  <button class="themebtn" id="btnDark" aria-pressed="false" title="Preview with Inkuno Dark tokens">Dark</button>
 </div>
 
 <div class="app">

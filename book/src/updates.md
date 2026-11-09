@@ -22,7 +22,7 @@ Inkuno checks nothing but HTTPS. The files are not signed (see [Install](install
 
 ## Privacy
 
-The check is the only network request the app makes until you press **Update**. It runs `curl` against `api.github.com/repos/alarboulletmarin/bref/releases/latest`, which sees your IP address and the client name `inkuno`, and nothing else. Without `curl`, or offline, nothing is shown.
+The check is the only network request the app makes until you press **Update**. It runs `curl` against `api.github.com/repos/kolisachint/inkuno/releases/latest`, which sees your IP address and the client name `inkuno`, and nothing else. Without `curl`, or offline, nothing is shown.
 
 ## Controls
 

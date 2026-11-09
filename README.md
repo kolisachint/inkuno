@@ -1,7 +1,7 @@
 # Inkuno
 
-[![CI](https://github.com/alarboulletmarin/bref/actions/workflows/ci.yml/badge.svg)](https://github.com/alarboulletmarin/bref/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/alarboulletmarin/bref)](https://github.com/alarboulletmarin/bref/releases/latest)
+[![CI](https://github.com/kolisachint/inkuno/actions/workflows/ci.yml/badge.svg)](https://github.com/kolisachint/inkuno/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/kolisachint/inkuno)](https://github.com/kolisachint/inkuno/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 A fast, minimal note-taking app. Notes are plain Markdown files in a folder you choose, styled as you type. Written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework.
@@ -10,7 +10,7 @@ Inkuno is [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet 
 
 ![Inkuno, light and dark](docs/screenshots/inkuno.png)
 
-**[Install](#install)** · **[User guide](book/src/introduction.md)** · [Shortcuts](book/src/shortcuts.md) · [Website](https://alarboulletmarin.github.io/bref/) · [Contributing](CONTRIBUTING.md)
+**[Install](#install)** · **[User guide](book/src/introduction.md)** · [Shortcuts](book/src/shortcuts.md) · [Website](https://kolisachint.github.io/inkuno/) · [Contributing](CONTRIBUTING.md)
 
 ## Why Inkuno
 
@@ -34,19 +34,19 @@ Inkuno is [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet 
 | System | Get it |
 |---|---|
 | Arch Linux | the prebuilt package, below |
-| macOS 11 or later | [`inkuno-macos.dmg`](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-macos.dmg) |
-| Windows 10 or 11 | [installer](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64-setup.exe) or [zip](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64.zip) |
+| macOS 11 or later | [`inkuno-macos.dmg`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-macos.dmg) |
+| Windows 10 or 11 | [installer](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64-setup.exe) or [zip](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64.zip) |
 | Ubuntu, Debian, Fedora, other Linux | build from source, below |
 
 ```bash
 # Arch Linux
-curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-x86_64.pkg.tar.zst
+curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-x86_64.pkg.tar.zst
 sudo pacman -U ./inkuno-x86_64.pkg.tar.zst
 ```
 
 ```bash
 # Other Linux: needs Rust 1.88 or later, and the libraries listed in the install guide
-git clone https://github.com/alarboulletmarin/bref.git
+git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 make && sudo make install
 ```
@@ -65,7 +65,7 @@ On macOS, read `Cmd` for `Ctrl`. More in [First steps](book/src/first-steps.md).
 
 ## Documentation
 
-The [user guide](book/src/introduction.md) covers everything. It is also published as a website: [alarboulletmarin.github.io/bref/guide](https://alarboulletmarin.github.io/bref/guide/).
+The [user guide](book/src/introduction.md) covers everything. It is also published as a website: [kolisachint.github.io/inkuno/guide](https://kolisachint.github.io/inkuno/guide/).
 
 | Page | What it covers |
 |---|---|

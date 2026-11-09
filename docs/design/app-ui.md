@@ -23,7 +23,7 @@ Rules of the flow:
 
 1. Doc first, code second. No UI code changes without a matching approved doc line.
 2. Small steps. One proposal = one component or one interaction, never a redesign PR.
-3. Every claim about *what Bref/the app does today* cites a `file:line`.
+3. Every claim about *what Inkuno/the app does today* cites a `file:line`.
    Anything unverified is marked **TBD** — never invented.
 4. The user may edit any section at any time, especially §6 (preferences).
 
@@ -47,7 +47,7 @@ A **Typora-inspired, document-first writing app**:
 
 ## 3. Design tokens + typography system
 
-> Target system. Bref's current values are noted where they differ; deltas are
+> Target system. Inkuno's current values are noted where they differ; deltas are
 > decided in §6 by the user.
 
 ### Typefaces (target)
@@ -55,7 +55,7 @@ A **Typora-inspired, document-first writing app**:
 - **UI / body / headings:** Inter (variable if available, else regular/medium/
   semibold cuts).
 - **Code:** JetBrains Mono.
-- **Current state (Bref):** the bundled fonts are **IBM Plex Sans + IBM Plex Mono**
+- **Current state (Inkuno):** the bundled fonts are **IBM Plex Sans + IBM Plex Mono**
   (`src/ui/assets.rs:16`), exposed as `sans()` (`src/ui/assets.rs:38`) and
   `mono()` (`src/ui/assets.rs:42`), overridable from prefs
   (`src/ui/assets.rs:70`). → **RESKIN**: swap the bundled families to
@@ -79,7 +79,7 @@ A **Typora-inspired, document-first writing app**:
 
 - **Doc max-width: 800 px** at body 16.
 - **Paragraph spacing: 16 px** between blocks.
-- **Current state (Bref):** page widths are Narrow 560 / Normal 800 / Wide 960 /
+- **Current state (Inkuno):** page widths are Narrow 560 / Normal 800 / Wide 960 /
   Full (`src/ui/theme.rs:49-51`), width follows zoom
   (`Page::measure`, `src/ui/theme.rs:44-54`), default Normal
   (`src/logic/prefs.rs:28`, `Page::of` fallback `src/ui/theme.rs:34`). 800 px
@@ -90,7 +90,7 @@ A **Typora-inspired, document-first writing app**:
 ### Color + shape (target: quiet neutrals, one accent)
 
 - Three themes: **light, dark, sepia**. Warm paper for sepia (new).
-- **Current state (Bref):** 13 built-in themes in `THEMES`
+- **Current state (Inkuno):** 13 built-in themes in `THEMES`
   (`src/ui/theme.rs:129`), picked from prefs or system appearance
   (`Theme::of`, `src/ui/theme.rs:134`), with WCAG-AA enforcement for text,
   accent, and callouts (`src/ui/theme.rs:300-330` approx; tests
@@ -103,7 +103,7 @@ A **Typora-inspired, document-first writing app**:
   (`src/ui/theme.rs:150-162` approx). Keep; no new elevation levels without §1 flow.
 - All tokens centralize in `src/ui/theme.rs` (`Theme` struct,
   `src/ui/theme.rs:100-124`); views must not hard-code colors/sizes.
-  (Bref rule: layers depend downwards only, `ARCHITECTURE.md:19-27`.)
+  (Inkuno rule: layers depend downwards only, `ARCHITECTURE.md:19-27`.)
 
 ## 4. Layout standard: three regions
 
@@ -116,7 +116,7 @@ A **Typora-inspired, document-first writing app**:
 ```
 
 - **Left region — explorer.** The file tree, recent notes, calendar, tags, links,
-  graph (Bref: `Mode::Tree/Recent/Calendar/Tags/Links/Graph` shown via
+  graph (Inkuno: `Mode::Tree/Recent/Calendar/Tags/Links/Graph` shown via
   `Nav::left_shown`, `src/shell/docks.rs:70-75`; tree state `src/views/nav.rs`,
   drawing `src/shell/sidebar.rs`). Default: visible, narrow rail + panel.
 - **Center region — canvas.** The note(s): tab bar + editor, arranged by the
@@ -261,7 +261,7 @@ Every Phase 1 proposal must name which mockup element it implements.
 1. **Phase 1 = document canvas + typography first** (not full shell).
    Touch `src/ui/theme.rs`, `src/ui/assets.rs`, `views/editor/style.rs`,
    `views/editor/render.rs`. Shell keeps working as-is until Phase 2.
-2. **Bref power features are KEEP + reskin, none hidden:** tabs, panes,
+2. **Inkuno power features are KEEP + reskin, none hidden:** tabs, panes,
    palette, tree, graph, docks, calendar/tags all stay, dressed in §3 tokens.
    > **SUPERSEDED by §13 (user-approved 2026-11-08).** The KEEP-all stance
    > above is replaced by the Strip-down v1 direction: graph / calendar / tags /

@@ -7,7 +7,7 @@
 <meta name="description" content="A fast, minimal note-taking app. Notes are plain Markdown files in a folder you choose, styled as you type. Written in Rust with GPUI.">
 <meta property="og:title" content="Inkuno — fast, minimal Markdown notes">
 <meta property="og:description" content="Plain Markdown files, styled as you type. Opens in about 75 ms. Rust + GPUI.">
-<meta property="og:image" content="https://alarboulletmarin.github.io/bref/screenshots/inkuno.png">
+<meta property="og:image" content="https://kolisachint.github.io/inkuno/screenshots/inkuno.png">
 <link rel="icon" href="Inkuno.svg" type="image/svg+xml">
 <style>
 /* The app's colours: the "Inkuno Light" and "Inkuno Dark" themes (src/ui/theme.rs). */
@@ -164,7 +164,7 @@ footer a:hover { color: var(--text); }
       <a href="#install" class="keep">Install</a>
       <a href="#releases">Releases</a>
       <a href="guide/">Guide</a>
-      <a href="https://github.com/alarboulletmarin/bref" class="keep">GitHub</a>
+      <a href="https://github.com/kolisachint/inkuno" class="keep">GitHub</a>
     </nav>
   </div>
 </header>
@@ -175,7 +175,7 @@ footer a:hover { color: var(--text); }
     <p class="sub">A fast, minimal note-taking app. Your notes are plain Markdown files in a folder you choose, styled as you type.</p>
     <div class="cta">
       <a class="btn primary" id="dl" href="#install">Download Inkuno</a>
-      <a class="btn" href="https://github.com/alarboulletmarin/bref">View on GitHub</a>
+      <a class="btn" href="https://github.com/kolisachint/inkuno">View on GitHub</a>
       <span class="os">Free and open source · Linux, macOS, Windows</span>
     </div>
 
@@ -227,14 +227,14 @@ footer a:hover { color: var(--text); }
 
       <div class="panel" data-panel="windows" hidden>
         <p>Windows 10 or 11, 64-bit. Installs for your user only, no administrator rights needed.</p>
-        <p><a class="btn primary" href="https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64-setup.exe">Download the installer</a>
-           &nbsp;<a href="https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64.zip">or the .zip</a>, to install nothing</p>
+        <p><a class="btn primary" href="https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64-setup.exe">Download the installer</a>
+           &nbsp;<a href="https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64.zip">or the .zip</a>, to install nothing</p>
         <p class="fine">The files are not signed. If SmartScreen shows “Windows protected your PC”, click <b>More info</b>, then <b>Run anyway</b>.</p>
       </div>
 
       <div class="panel" data-panel="macos" hidden>
         <p>Apple Silicon and Intel, macOS 11 or later. Open the .dmg and drag Inkuno to Applications.</p>
-        <p><a class="btn primary" href="https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-macos.dmg">Download the .dmg</a></p>
+        <p><a class="btn primary" href="https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-macos.dmg">Download the .dmg</a></p>
         <p class="fine">The app is not notarized, so the first launch needs <b>Open Anyway</b> in System Settings, Privacy &amp; Security.</p>
       </div>
 
@@ -248,7 +248,7 @@ footer a:hover { color: var(--text); }
 
         <div data-distro-panel="arch">
           <p>A prebuilt package ships with every release, no compiler needed. pacman then tracks it as <code>inkuno</code>.</p>
-          <div class="code"><pre><code>curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-x86_64.pkg.tar.zst
+          <div class="code"><pre><code>curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-x86_64.pkg.tar.zst
 sudo pacman -U ./inkuno-x86_64.pkg.tar.zst</code></pre></div>
         </div>
 
@@ -257,7 +257,7 @@ sudo pacman -U ./inkuno-x86_64.pkg.tar.zst</code></pre></div>
           <div class="code"><pre><code>sudo apt install build-essential pkg-config libfontconfig-dev libfreetype-dev \
   libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libvulkan1 \
   fonts-noto-color-emoji
-git clone https://github.com/alarboulletmarin/bref.git
+git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 make
 sudo make install</code></pre></div>
@@ -268,7 +268,7 @@ sudo make install</code></pre></div>
           <div class="code"><pre><code>sudo dnf install gcc pkgconf-pkg-config fontconfig-devel freetype-devel \
   wayland-devel libxcb-devel libxkbcommon-devel libxkbcommon-x11-devel vulkan-loader \
   google-noto-color-emoji-fonts
-git clone https://github.com/alarboulletmarin/bref.git
+git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 make
 sudo make install</code></pre></div>
@@ -276,7 +276,7 @@ sudo make install</code></pre></div>
 
         <div data-distro-panel="other" hidden>
           <p>You need the development files of fontconfig, freetype, Wayland, libxcb and libxkbcommon, a Vulkan driver, an emoji font and <a href="https://rustup.rs">Rust</a> 1.88 or later.</p>
-          <div class="code"><pre><code>git clone https://github.com/alarboulletmarin/bref.git
+          <div class="code"><pre><code>git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 make
 sudo make install</code></pre></div>
@@ -292,7 +292,7 @@ sudo make install</code></pre></div>
   <section id="releases">
     <div class="wrap">
       <div class="head"><h2 class="md">Releases</h2></div>
-      <div id="release-list"><p><a href="https://github.com/alarboulletmarin/bref/releases">Releases on GitHub →</a></p></div>
+      <div id="release-list"><p><a href="https://github.com/kolisachint/inkuno/releases">Releases on GitHub →</a></p></div>
     </div>
   </section>
 
@@ -301,8 +301,8 @@ sudo make install</code></pre></div>
       <a class="brand" href="#"><img src="Inkuno.svg" alt="">Inkuno</a>
       <span style="margin-right:auto">MIT licence</span>
       <a href="guide/">Guide</a>
-      <a href="https://github.com/alarboulletmarin/bref">Source</a>
-      <a href="https://github.com/alarboulletmarin/bref/issues">Issues</a>
+      <a href="https://github.com/kolisachint/inkuno">Source</a>
+      <a href="https://github.com/kolisachint/inkuno/issues">Issues</a>
       <a href="https://ko-fi.com/T6T01WC5ZC">Ko-fi</a>
     </footer>
   </div>
@@ -334,7 +334,7 @@ distroTabs.forEach(t => t.onclick = () => pick(distroTabs, "distro", distroPanel
 // Open on the visitor's system, and point the main button at its download.
 (() => {
   const ua = navigator.userAgent;
-  const rel = "https://github.com/alarboulletmarin/bref/releases/latest/download/";
+  const rel = "https://github.com/kolisachint/inkuno/releases/latest/download/";
   const os = /Windows/i.test(ua) ? "windows" : /Mac/i.test(ua) && !/iPhone|iPad/i.test(ua) ? "macos" : /Linux/i.test(ua) && !/Android/i.test(ua) ? "linux" : null;
   if (!os) return;
   pick(osTabs, "os", osPanels, "data-panel", os);
@@ -345,7 +345,7 @@ distroTabs.forEach(t => t.onclick = () => pick(distroTabs, "distro", distroPanel
 })();
 
 // Latest releases read from the GitHub API; without network, the static link stays.
-fetch("https://api.github.com/repos/alarboulletmarin/bref/releases?per_page=3")
+fetch("https://api.github.com/repos/kolisachint/inkuno/releases?per_page=3")
   .then(r => r.ok ? r.json() : Promise.reject())
   .then(list => {
     if (!list.length) return;
@@ -370,7 +370,7 @@ fetch("https://api.github.com/repos/alarboulletmarin/bref/releases?per_page=3")
       out.append(box);
     }
     const more = document.createElement("p");
-    more.innerHTML = '<a href="https://github.com/alarboulletmarin/bref/releases">All releases →</a>';
+    more.innerHTML = '<a href="https://github.com/kolisachint/inkuno/releases">All releases →</a>';
     out.append(more);
   })
   .catch(() => {});
