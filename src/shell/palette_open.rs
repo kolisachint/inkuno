@@ -3,35 +3,6 @@
 use super::*;
 
 impl Shell {
-    /// Asks for a line of free text (a URL) in the palette, then passes it to `then`.
-    pub(super) fn ask_text(
-        &mut self,
-        label: &'static str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-        then: fn(&mut Self, String, &mut Window, &mut Context<Self>),
-    ) {
-        let theme = self.theme;
-        let palette = cx.new(|cx| Palette::prompt(label, "", theme, cx));
-        cx.subscribe_in(&palette, window, move |this, _, event, window, cx| {
-            this.palette = None;
-            match this.vault {
-                Some(_) => window.focus(&this.pane().editor.focus_handle(cx)),
-                None => window.focus(&this.focus),
-            }
-            if let PaletteEvent::Submit(text) = event
-                && !text.trim().is_empty()
-            {
-                then(this, text.trim().to_string(), window, cx);
-            }
-            cx.notify();
-        })
-        .detach();
-        window.focus(&palette.focus_handle(cx));
-        self.palette = Some(palette);
-        cx.notify();
-    }
-
     /// The note's comments, in the same list as its outline: the commented text, then
     /// what is said about it.
     pub(super) fn open_comments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -156,12 +127,6 @@ impl Shell {
             .collect();
         let root = self.vault.clone().unwrap_or_default();
         let theme = self.theme;
-        let updates = self.prefs.updates;
-        let installable = self
-            .update
-            .as_ref()
-            .filter(|r| r.asset.is_some())
-            .map(|r| r.version.clone());
         let table = self.shown_sheet().is_some();
         let lists =
             self.pane().file.is_none() && self.pane().listing.is_none() && !self.board_shown(cx);
@@ -172,7 +137,6 @@ impl Shell {
         let palette = cx.new(|cx| {
             Palette::new(entries, query, theme, cx)
                 .with_root(root)
-                .with_updates(updates, installable)
                 .with_table(table)
                 .with_lists(lists)
                 .with_cells(cells)
@@ -194,8 +158,14 @@ impl Shell {
                 PaletteEvent::NewFolder => this.new_folder(window, cx),
                 PaletteEvent::Table(pick) => this.choose_table(*pick, window, cx),
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
-                PaletteEvent::ToggleUpdates => this.toggle_updates(cx),
-                PaletteEvent::CheckUpdate => this.check_now(cx),
+                // Removed: in-app git sync and self-update (see REPORT). The
+                // palette still offers these rows until the shared registry is
+                // cleaned; choosing one does nothing.
+                PaletteEvent::ToggleUpdates
+                | PaletteEvent::CheckUpdate
+                | PaletteEvent::Sync
+                | PaletteEvent::CloneVault
+                | PaletteEvent::InstallUpdate => {}
                 PaletteEvent::Outline => this.toggle_outline(window, cx),
                 PaletteEvent::Comments => this.open_comments(window, cx),
                 PaletteEvent::Template(TemplateAct::Save) => this.save_as_template(window, cx),
@@ -230,11 +200,8 @@ impl Shell {
                 PaletteEvent::Travel(forward) => this.travel(*forward, window, cx),
                 PaletteEvent::Trash => this.open_trash(window, cx),
                 PaletteEvent::Backup => this.choose_backup(window, cx),
-                PaletteEvent::Sync => this.git_sync(window, cx),
-                PaletteEvent::CloneVault => this.ask_clone(window, cx),
                 PaletteEvent::Terminal => this.open_terminal(cx),
                 PaletteEvent::CaptureKey => this.capture_shortcut(cx),
-                PaletteEvent::InstallUpdate => this.install_update(cx),
                 // Closed without a choice: we get back what the pane showed, table or diagram included.
                 PaletteEvent::Dismiss => this.focus_pane(this.active, window, cx),
                 PaletteEvent::Submit(_) | PaletteEvent::Preview(_) => {}

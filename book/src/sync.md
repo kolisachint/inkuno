@@ -1,60 +1,24 @@
 # Syncing a vault
 
-A vault is a folder of plain files. There are two ways to have the same notes on every computer, safely copied somewhere else. Pick one, never both: a git repository inside a cloud folder ends up corrupted.
+A vault is a folder of plain files. To have the same notes on every computer, and a copy somewhere else, sync that folder with the tool of your choice: git, Syncthing, iCloud, Dropbox or Google Drive. Inkuno itself syncs nothing: it [follows what changes in the folder](vault.md#changes-from-other-programs), whatever put it there.
+
+Pick one tool, never two on the same folder: a git repository inside a cloud folder ends up corrupted.
 
 ## With a cloud folder
 
-Put the vault in a folder synced by iCloud, Dropbox, Google Drive or Syncthing. Inkuno [follows what changes there](vault.md#changes-from-other-programs). Nothing more is needed.
+Put the vault in a folder synced by iCloud, Dropbox, Google Drive or Syncthing. Nothing more is needed.
 
 ## With git
 
-`Ctrl + Shift + S`, or **Sync the vault** in the palette, does everything in the background while you keep typing:
+Keep the vault in a git repository and commit, pull and push with git itself, in a terminal or with the graphical tool you prefer. Any empty repository works: create one on GitHub, GitLab or Codeberg, or on any server you reach by SSH with `git init --bare notes.git`.
 
-1. The open notes are saved, and everything that changed is committed, with the message `Inkuno: sync`.
-2. What the server has is fetched and merged.
-3. The result is sent. If another computer pushed in the meantime, Inkuno fetches and merges again, three times at most, then asks you to try again.
+A repository that already has a history is never overwritten by a clone: fetch it first, then move your notes in.
 
-![The git sync: commit, then fetch, merge and push, again while the server rejects the push, three times at most](img/git-sync.svg)
+## Conflicts
 
-A message says what was sent and received, or why it failed. The sync button of the rail turns while it runs; a red dot says the last sync failed.
+When the same note changed on both sides between two syncs, both versions are kept, as Dropbox and Syncthing do: the note keeps the version of this computer, and the other one is written next to it as `Note (conflict 2026-10-09).md`. You never get `<<<<<<<` markers in a note, and nothing is overwritten.
 
-### Conflicts
+## Limits
 
-- Two computers that changed different notes, or different parts of the same note, are merged without a question.
-- When the same lines changed on both sides, both versions are kept, as Dropbox and Syncthing do. The note keeps the version of this computer. The other one is written next to it as `Note (conflict 2026-10-09 laptop).md`, and the sync completes.
-- You never get `<<<<<<<` markers in a note.
-- A note deleted on one side and edited on the other stays, edited.
-- A note renamed on one side and edited on the other is a conflict two copies cannot settle: the sync stops, changes nothing, and asks you to merge with git yourself.
-- Line endings are never converted.
-
-### A vault not in git yet
-
-The same command asks for the address of an *empty* repository. Create one on GitHub, GitLab or Codeberg, or on any server you reach by SSH with `git init --bare notes.git`. Inkuno then connects the vault and sends its notes.
-
-The trash (`.trash`) is left out of the repository, through a `.gitignore`. A repository that already has a history is not overwritten.
-
-### On another computer
-
-**Clone a vault from a git address…**, in the palette or on the welcome screen, asks for the address and a folder, then opens the clone as the vault. The vault's folder is named after the last part of the address, without `.git`, and must not exist yet.
-
-### Requirements
-
-- `git` must be installed, and able to reach the repository without asking anything: an SSH key, or a credential helper for HTTPS.
-- Inkuno never shows a password prompt: ssh runs in batch mode, unless you set `GIT_SSH_COMMAND` yourself. A refused sign-in is reported.
-- Without `git`, the sync says so.
-- Without a name and an email in the git configuration, the commits are signed `Inkuno`.
-
-### What it refuses
-
-Inkuno refuses to sync, says why, and touches nothing, when it finds:
-
-- a merge or a rebase in progress;
-- a detached HEAD;
-- a branch that follows no branch of the server;
-- a locked index;
-- a vault that is only a folder of a larger repository.
-
-### Limits
-
-- Syncing happens when you ask, not on a timer, nor when quitting.
+- Syncing happens in your sync tool, not in Inkuno: there is no timer, no sync on quit, and no sync button.
 - git syncs computers. There is no Inkuno on a phone, where the repository stays readable with another app.

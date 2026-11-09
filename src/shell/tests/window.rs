@@ -455,159 +455,6 @@ fn bottom_band_keeps_the_text_clear(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// The new-version banner is a row of the window under the panes: it never covers the formatting bar (inline, or
-/// folded and open with its colour badges), the counter or the note, whatever the width, the panel or the version.
-#[gpui::test]
-fn update_banner_stays_clear_of_the_formatting_bar(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("inkuno-banner-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    let _config = isolated_config(&root);
-    let note = root.join("Note.md");
-    fs::write(&note, "un mot ici\n").unwrap();
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let (shell, cx) = cx.add_window_view(|window, cx| {
-        Shell::new(Some(root.clone()), vec![note.clone()], window, cx)
-    });
-    cx.run_until_parked();
-    let settle = |cx: &mut gpui::VisualTestContext| {
-        for _ in 0..3 {
-            cx.update(|window, _| window.refresh());
-            cx.run_until_parked();
-        }
-    };
-    let release = |version: &str| update::Release {
-        version: version.into(),
-        asset: Some("https://x/y".into()),
-        sha256: None,
-    };
-    let mut checked = 0;
-    for panel in [Panel::Rail, Panel::Split] {
-        for second_pane in [false, true] {
-            // Split while there is room, then dismiss the content picker before testing the footer.
-            shell.update(cx, |s, cx| {
-                s.nav.panel = panel;
-                s.nav.list_w = px(600.);
-                cx.notify();
-            });
-            cx.simulate_resize(size(px(1400.), px(600.)));
-            settle(cx);
-            if second_pane {
-                cx.simulate_keystrokes("secondary-\\");
-                cx.simulate_keystrokes("escape");
-                settle(cx);
-                assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
-                assert_eq!(shell.read_with(cx, |s, _| s.groups.len()), 2);
-            }
-            for width in [1400., 900., 860., 560., 420., 320., 240.] {
-                for (version, updating) in [
-                    (None, false),
-                    (Some("0.4.0"), false),
-                    (Some("100.200.300"), false),
-                    (Some("0.4.0"), true),
-                ] {
-                    shell.update(cx, |s, cx| {
-                        s.nav.panel = panel;
-                        s.nav.list_w = px(600.);
-                        s.update = version.map(release);
-                        s.updating = updating;
-                        cx.notify();
-                    });
-                    cx.simulate_resize(size(px(width), px(600.)));
-                    settle(cx);
-                    // Folded, the bar is open as well: its buttons and colour badges are the highest thing in the footer.
-                    let folded = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).bar_folded());
-                    let stage = format!(
-                        "{panel:?} second={second_pane} width={width} version={version:?} updating={updating}"
-                    );
-                    if folded {
-                        assert!(
-                            !shell.read_with(cx, |s, cx| s.pane().editor.read(cx).bar_shown()),
-                            "initially open: {stage}"
-                        );
-                        let at = cx.debug_bounds("format-toggle").unwrap().center();
-                        cx.simulate_click(at, gpui::Modifiers::none());
-                        settle(cx);
-                        assert!(
-                            shell.read_with(cx, |s, cx| s.pane().editor.read(cx).bar_shown()),
-                            "toggle failed: {stage}"
-                        );
-                        let at = cx.debug_bounds("format-colors").unwrap().center();
-                        cx.simulate_click(at, gpui::Modifiers::none());
-                        settle(cx);
-                        assert!(
-                            shell.read_with(cx, |s, cx| s.pane().editor.read(cx).swatches_open()),
-                            "the color button opens its badges at {stage}"
-                        );
-                    }
-                    let what = format!(
-                        "{panel:?} two panes {second_pane} {width} {version:?} updating {updating} folded {folded}"
-                    );
-                    // The pane with input: a window too small for two shows it alone.
-                    let group = shell.read_with(cx, |s, _| s.group());
-                    let window = cx.debug_bounds(leak(format!("pane-{group}"))).unwrap();
-                    let mut footer = vec![
-                        cx.debug_bounds("counts").unwrap(),
-                        cx.debug_bounds(if folded {
-                            "format-toggle"
-                        } else {
-                            "format-bar"
-                        })
-                        .unwrap(),
-                    ];
-                    if folded {
-                        footer.extend(
-                            ["format-bar", "format-swatches"]
-                                .map(|name| cx.debug_bounds(name).unwrap()),
-                        );
-                    }
-                    if version.is_some() {
-                        let banner = cx
-                            .debug_bounds("update-banner")
-                            .expect("the banner is drawn");
-                        for part in &footer {
-                            assert!(
-                                !banner.intersects(part),
-                                "{what}: the banner covers {part:?}, banner {banner:?}"
-                            );
-                        }
-                        assert!(
-                            banner.top() >= window.bottom(),
-                            "{what}: the banner is under the note {banner:?} {window:?}"
-                        );
-                        assert!(
-                            banner.left() >= px(0.) && banner.right() <= px(width),
-                            "{what}: the banner fits the window {banner:?}"
-                        );
-                        assert!(
-                            banner.size.width > px(0.) && banner.size.height > px(20.),
-                            "{what}: {banner:?}"
-                        );
-                    }
-                    checked += 1;
-                    // Escape closes the badges first, then the folded bar. Verify the next
-                    // round starts closed: GPUI retains debug bounds for elements no longer drawn.
-                    if folded {
-                        cx.simulate_keystrokes("escape escape");
-                        settle(cx);
-                        assert!(!shell.read_with(cx, |s, cx| s.pane().editor.read(cx).bar_shown()));
-                        assert!(
-                            !shell.read_with(cx, |s, cx| s.pane().editor.read(cx).swatches_open())
-                        );
-                    }
-                }
-            }
-            if second_pane {
-                cx.dispatch_action(ClosePane);
-                cx.run_until_parked();
-            }
-        }
-    }
-    assert_eq!(checked, 2 * 2 * 7 * 4);
-    let _ = fs::remove_dir_all(&root);
-}
-
 /// Where the app draws the window buttons (Linux), they float over the top right corner: the panel header, on the whole window,
 /// keeps its four buttons clear of them, and a narrow note starts under them, whatever the panel, the width or the language.
 #[gpui::test]
@@ -1087,8 +934,8 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     }
 }
 
-/// Every small target is at least 24 × 24 px: the window buttons, back and forward, the note's copy button, the
-/// update banner's cross, "Reset all" and "default" in the help.
+/// Every small target is at least 24 × 24 px: the window buttons, back and forward, the note's copy button,
+/// "Reset all" and "default" in the help.
 #[gpui::test]
 fn small_targets_are_24_px(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "targets");
@@ -1098,10 +945,6 @@ fn small_targets_are_24_px(cx: &mut TestAppContext) {
         s.client = true;
         s.rescan(&root, cx);
         s.open_note(&root.join("Alpha.md"), cx);
-        s.update = Some(update::Release {
-            version: "9.9.9".into(),
-            ..Default::default()
-        });
     });
     cx.simulate_resize(size(px(1400.), px(900.)));
     cx.run_until_parked();
@@ -1113,7 +956,6 @@ fn small_targets_are_24_px(cx: &mut TestAppContext) {
         "nav-back",
         "nav-forward",
         "copy-all",
-        "update-close",
     ] {
         let b = cx
             .debug_bounds(name)
@@ -1139,7 +981,7 @@ fn small_targets_are_24_px(cx: &mut TestAppContext) {
     assert!(small.is_empty(), "under 24 px: {small:?}");
 }
 
-/// Small clarity fixes: the help's table of contents, the sync button of a git vault, the theme's default that
+/// Small clarity fixes: the help's table of contents, the theme's default that
 /// says it follows the system, the line of the active pane.
 #[gpui::test]
 fn clear_at_a_glance(cx: &mut TestAppContext) {
@@ -1210,19 +1052,6 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
     }
     assert_eq!(scroll(cx), px(0.), "back at the top");
     cx.simulate_keystrokes("escape escape");
-
-    // The sync button: only in a git vault; a mark while the last sync failed.
-    assert!(cx.debug_bounds("nav-sync").is_none());
-    fs::create_dir(root.join(".git")).unwrap();
-    shell.update(cx, |_, cx| cx.notify());
-    cx.run_until_parked();
-    assert!(cx.debug_bounds("nav-sync").is_some() && cx.debug_bounds("nav-sync-broken").is_none());
-    shell.update(cx, |s, cx| {
-        s.sync_broken = true;
-        cx.notify();
-    });
-    cx.run_until_parked();
-    assert!(cx.debug_bounds("nav-sync-broken").is_some());
 
     // The theme's default says what it is.
     cx.dispatch_action(ChooseTheme);

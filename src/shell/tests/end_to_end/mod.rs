@@ -9,7 +9,6 @@ mod dates_lists;
 mod embeds;
 mod files;
 mod find_mouse;
-mod git_sync;
 mod history_panes;
 mod md_tables;
 mod media;
@@ -111,6 +110,5 @@ fn end_to_end(cx: &mut TestAppContext) {
     find_mouse::run(&j, cx);
     csv::run(&j, cx);
     history_panes::run(&j, cx);
-    git_sync::run(&j, cx);
     fs::remove_dir_all(&j.root).unwrap();
 }

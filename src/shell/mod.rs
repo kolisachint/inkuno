@@ -20,13 +20,11 @@ mod search;
 mod settings;
 mod sharing;
 mod sidebar;
-mod sync;
 mod tables;
 mod tabs;
 mod templates;
 mod toasts;
 mod travel;
-mod updates;
 
 use capture::*;
 use drops::*;
@@ -47,7 +45,7 @@ use crate::logic::{
 use crate::platform::{
     self,
     clock::{clock, today},
-    git, update, vault,
+    vault,
 };
 use crate::ui::keys::{self, MOD};
 use crate::ui::{
@@ -137,10 +135,6 @@ struct Shell {
     client: bool,
     /// The active pane changed without input following: the next render gives it focus.
     grab: bool,
-    /// A git sync is in progress: only one at a time.
-    syncing: bool,
-    /// The last sync failed: the rail's sync button says so until one succeeds.
-    sync_broken: bool,
 
     /// The pane arrangement as saved (file `panes`).
     panes_saved: String,
@@ -186,10 +180,8 @@ struct Shell {
     toasts: Vec<Toast>,
     /// Number of the last message, to remove the right one when it expires.
     toasted: usize,
-    /// Newer version than the running one, found on GitHub.
-    update: Option<update::Release>,
-    /// Its install is in progress.
-    updating: bool,
+    /// A starting point asked for from the library of a canvas, to open when the window is drawn.
+    template: Option<usize>,
     title: String,
     prefs: Prefs,
     theme: Theme,
@@ -278,8 +270,6 @@ impl Shell {
             client: false,
             grab: false,
             panes_saved: String::new(),
-            syncing: false,
-            sync_broken: false,
 
             focus: cx.focus_handle(),
             menu_focus: cx.focus_handle(),
@@ -307,8 +297,7 @@ impl Shell {
             comments_seen: None,
             toasts: Vec::new(),
             toasted: 0,
-            update: None,
-            updating: false,
+            template: None,
             title: String::new(),
             prefs,
             theme,
@@ -337,7 +326,6 @@ impl Shell {
         }
         this.watch(cx);
         this.listen(window, cx);
-        this.check_updates(cx);
         let weak = cx.weak_entity();
         this.help.key_tap = Some(cx.intercept_keystrokes(move |event, window, cx| {
             // Escape in the middle of a drag: nothing moves (before any binding takes the key).
