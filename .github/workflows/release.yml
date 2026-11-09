@@ -1,28 +1,17 @@
 name: release
 
+# Manual macOS + Linux artifact builder. This workflow never publishes: tagged
+# releases are published by release-native.yml, and the old push-driven nightly
+# release was removed. Dispatch it to inspect raw archives for any ref.
 on:
-  push:
-    branches:
-      - main
-      - "claude/**"
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  # Tag builds get their own group; all branch/dispatch builds share one global
-  # group so two branches cannot race on the single `nightly` release and tag.
-  group: ${{ startsWith(github.ref, 'refs/tags/') && github.ref || 'release-nightly' }}
-  # Let a running build finish; only a queued (pending) run is replaced by a newer push.
+  group: release-artifacts-${{ github.ref }}
   cancel-in-progress: false
-
-env:
-  GITHUB_TOKEN: ${{ github.token }}
-  GH_TOKEN: ${{ github.token }}
-  GH_REPO: ${{ github.repository }}
 
 jobs:
   macos:
@@ -131,102 +120,3 @@ jobs:
           path: dist/inkuno-linux-x86_64.tar.gz
           if-no-files-found: error
 
-  publish:
-    needs: [macos, linux]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: List archives
-        run: ls -la dist
-
-      - name: Generate SHA256SUMS and release notes
-        env:
-          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
-        run: |
-          set -euo pipefail
-          (cd dist && sha256sum inkuno-macos-arm64.zip inkuno-macos-arm64.tar.gz inkuno-linux-x86_64.tar.gz > SHA256SUMS)
-          cat dist/SHA256SUMS
-          (cd dist && sha256sum -c SHA256SUMS)
-          {
-            echo "Build: ${GITHUB_SHA}"
-            echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            echo ""
-            echo "Verify downloads: \`shasum -a 256 -c SHA256SUMS\`"
-            echo ""
-            echo "The macOS build is unsigned and ad-hoc signed (not notarized by Apple)."
-            echo "After unzipping inkuno-macos-arm64.zip, run the following before opening the app:"
-            echo ""
-            echo "    xattr -dr com.apple.quarantine inkuno.app"
-            echo ""
-            echo "inkuno-macos-arm64.tar.gz and inkuno-linux-x86_64.tar.gz each contain"
-            echo "only the \`inkuno\` executable (Apple Silicon macOS and Linux x86_64)."
-            echo ""
-            echo "## Changes"
-            echo ""
-            if [ "${IS_TAG}" = "true" ]; then
-              PREV_TAG="$(git describe --tags --match 'v*' --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
-              if [ -n "${PREV_TAG}" ]; then
-                echo "Commits since ${PREV_TAG}:"
-                echo ""
-                git log --no-merges --pretty='- %s (%h)' "${PREV_TAG}..${GITHUB_REF_NAME}" | head -n 200
-              else
-                echo "Commits in this release:"
-                echo ""
-                git log --no-merges --pretty='- %s (%h)' "${GITHUB_REF_NAME}" | head -n 200
-              fi
-            else
-              PREV_SHA="$(gh release view nightly --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
-              if [ -n "${PREV_SHA}" ] && git cat-file -e "${PREV_SHA}^{commit}" 2>/dev/null; then
-                echo "Commits since previous nightly (${PREV_SHA}):"
-                echo ""
-                git log --no-merges --pretty='- %s (%h)' "${PREV_SHA}..HEAD" | head -n 200
-              else
-                echo "Recent commits:"
-                echo ""
-                git log --no-merges --pretty='- %s (%h)' -n 50
-              fi
-            fi
-          } > release-notes.md
-          cat release-notes.md
-
-      - name: Delete previous nightly release and tag
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        run: gh release delete nightly --cleanup-tag -y || true
-
-      - name: Publish tagged release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          prerelease: false
-          body_path: release-notes.md
-          files: |
-            dist/inkuno-macos-arm64.zip
-            dist/inkuno-macos-arm64.tar.gz
-            dist/inkuno-linux-x86_64.tar.gz
-            dist/SHA256SUMS
-
-      - name: Publish nightly release
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: nightly
-          name: "Nightly (${{ github.sha }})"
-          prerelease: true
-          target_commitish: ${{ github.sha }}
-          body_path: release-notes.md
-          files: |
-            dist/inkuno-macos-arm64.zip
-            dist/inkuno-macos-arm64.tar.gz
-            dist/inkuno-linux-x86_64.tar.gz
-            dist/SHA256SUMS

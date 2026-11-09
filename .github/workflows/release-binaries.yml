@@ -1,4 +1,4 @@
-# Reusable packaging jobs. They never attach to or publish a release.
+# Reusable packaging jobs for macOS and Linux. They never attach to or publish a release.
 name: Binaries
 on:
   workflow_call:
@@ -20,45 +20,6 @@ defaults:
   run:
     shell: bash
 jobs:
-  windows:
-    runs-on: windows-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-      - run: rustup toolchain install stable --profile minimal
-      - run: cargo build --release --locked
-      - run: cargo test --locked
-      - name: The C runtime is linked in (no Visual C++ redistributable needed)
-        shell: pwsh
-        run: |
-          if (Select-String -Path target\release\inkuno.exe -Pattern 'VCRUNTIME|MSVCP' -Quiet) {
-            throw 'inkuno.exe still imports the Visual C++ runtime'
-          }
-      - name: Package
-        run: |
-          INKUNO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-          export INKUNO_VERSION
-          mkdir dist
-          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
-          # Preinstalled on the runner image; install it only if that ever changes.
-          [ -f "$iscc" ] || { choco install innosetup -y --no-progress; }
-          "$iscc" packaging/windows/inkuno.iss
-          7z a -tzip dist/inkuno-windows-x86_64.zip ./target/release/inkuno.exe LICENSE
-          ls -l dist
-      - name: The installer installs inkuno.exe
-        shell: pwsh
-        run: |
-          Start-Process -Wait dist\inkuno-windows-x86_64-setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\inkuno-test'
-          if (-not (Test-Path C:\inkuno-test\inkuno.exe)) { throw 'the installer did not install inkuno.exe' }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: native-windows
-          path: dist/*
-          retention-days: 7
-          overwrite: true
-          if-no-files-found: error
   macos:
     runs-on: macos-latest
     timeout-minutes: 45
@@ -90,6 +51,50 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: native-macos
+          path: dist/*
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Install GPUI system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libfontconfig-dev \
+            libfreetype-dev \
+            libssl-dev \
+            libzstd-dev \
+            libasound2-dev \
+            pkg-config \
+            clang
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo build --release --locked
+      - name: Package Linux archive
+        run: |
+          set -euo pipefail
+          # Follows Cargo.toml so the rename needs no edit here; the rename
+          # crew owns the remaining hardcoded `bref` strings in this file.
+          app=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          mkdir -p dist
+          cp "target/release/$app" "dist/$app"
+          tar -C dist -czf "dist/$app-linux-x86_64.tar.gz" "$app"
+          rm "dist/$app"
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-linux
           path: dist/*
           retention-days: 7
           overwrite: true

@@ -8,6 +8,12 @@ on:
         description: Existing version tag and draft release (vX.Y.Z)
         type: string
         required: true
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing version tag and draft release (vX.Y.Z)
+        type: string
+        required: true
 permissions:
   contents: read
 concurrency:

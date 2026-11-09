@@ -41,13 +41,6 @@ elif name=='gh':
         assert 'release-native.yml' in args and '--ref' in args and 'main' in args
         if (state/'fail-dispatch').exists(): sys.exit(29)
     else: raise RuntimeError('unexpected gh call: '+repr(args))
-elif name=='curl':
-    if (state/'fail-curl').exists(): sys.exit(22)
-    pathlib.Path(args[args.index('-o')+1]).write_bytes(b'tagged source archive')
-elif name=='makepkg':
-    if (state/'fail-makepkg').exists(): sys.exit(31)
-    print(pathlib.Path('PKGBUILD').read_text())
-elif name=='sleep': pass
 else: raise RuntimeError(name)
 """
 
@@ -68,7 +61,7 @@ class ReleaseTest(unittest.TestCase):
                         MOCK_STATE=str(self.state), PATH=f"{self.bin}:{self.env['PATH']}")
         self.env.pop("DRY_RUN", None)
         self.env.pop("RESUME", None)
-        for name in ["cargo", "gh", "curl", "makepkg", "sleep"]:
+        for name in ["cargo", "gh"]:
             tool = self.bin / name
             tool.write_text(MOCK.replace("#!PYTHON", f"#!{sys.executable}", 1))
             tool.chmod(0o755)
@@ -80,16 +73,7 @@ class ReleaseTest(unittest.TestCase):
         shutil.copy2(SCRIPT, self.repo / "scripts/release.sh")
         (self.repo / "Cargo.toml").write_text(f'[package]\nname = "{APP}"\nversion = "0.1.0"\n')
         (self.repo / "Cargo.lock").write_text("original lock\n")
-        (self.repo / "PKGBUILD").write_text("pkgver=0.1.0\npkgrel=3\nsha256sums=('SKIP')\n")
-        (self.repo / ".SRCINFO").write_text("original source metadata\n")
         (self.repo / "CHANGELOG.md").write_text("# Changelog\n\n## [0.2.0]\n\n- User-facing change.\n")
-        if APP == "spot":
-            (self.repo / "aur/spot").mkdir(parents=True)
-            shutil.copy2(self.repo / "PKGBUILD", self.repo / "aur/spot/PKGBUILD")
-            shutil.copy2(self.repo / ".SRCINFO", self.repo / "aur/spot/.SRCINFO")
-        if APP == "inkuno":
-            (self.repo / "aur/inkuno-git").mkdir(parents=True)
-            (self.repo / "aur/inkuno-git/PKGBUILD").write_text("pkgver=generated\n")
         self.git("add", ".")
         self.git("commit", "-qm", "feat: initial feature")
         self.original_head = self.git("rev-parse", "HEAD")
@@ -153,10 +137,6 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(sum(call[1:3] == ["workflow", "run"] for call in self.calls()), 1)
         self.assertIn("tag=v0.2.0", self.calls()[-1])
         self.assertFalse(any(call[1:3] == ["release", "edit"] for call in self.calls()))
-        self.assertIn("pkgrel=1", (self.repo / "PKGBUILD").read_text())
-        if APP == "spot":
-            self.assertEqual((self.repo / "PKGBUILD").read_bytes(), (self.repo / "aur/spot/PKGBUILD").read_bytes())
-            self.assertEqual((self.repo / ".SRCINFO").read_bytes(), (self.repo / "aur/spot/.SRCINFO").read_bytes())
 
     def test_first_release_without_changelog_includes_root_commit(self):
         (self.repo / "CHANGELOG.md").unlink()
@@ -177,15 +157,6 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD"), head)
         self.assertEqual(sum(call[1:3] == ["release", "create"] for call in self.calls()), 1)
         self.assertEqual(sum(call[1:3] == ["workflow", "run"] for call in self.calls()), 2)
-
-    def test_checksum_failure_is_clean_and_resumable(self):
-        (self.state / "fail-makepkg").touch()
-        self.run_release(success=False)
-        self.assertEqual(self.git("status", "--porcelain"), "")
-        self.assertFalse((self.state / "release").exists())
-        (self.state / "fail-makepkg").unlink()
-        self.run_release(resume=True)
-        self.assertEqual((self.state / "release").read_text(), "true")
 
     def test_public_release_is_refused_before_local_mutation(self):
         (self.state / "release").write_text("false")
@@ -213,16 +184,6 @@ class ReleaseTest(unittest.TestCase):
         self.assert_original()
         self.assertEqual({call[0] for call in self.calls()}, {"gh"})
 
-    def test_curl_failure_does_not_hash_an_error_page(self):
-        (self.state / "fail-curl").touch()
-        self.run_release(success=False)
-        self.assertEqual(self.git("status", "--porcelain"), "")
-        self.assertFalse((self.state / "release").exists())
-        self.assertEqual(sum(call[0] == "curl" for call in self.calls()), 5)
-        (self.state / "fail-curl").unlink()
-        self.run_release(resume=True)
-        self.assertEqual((self.state / "release").read_text(), "true")
-
     def test_api_failure_is_refused_before_local_mutation(self):
         (self.state / "fail-api").touch()
         self.run_release(success=False)
@@ -241,14 +202,6 @@ class ReleaseTest(unittest.TestCase):
         self.run_release(success=False)
         self.assertEqual(self.git("rev-parse", "HEAD"), head)
         self.assertEqual(len(self.calls()), before)
-
-    @unittest.skipUnless(APP == "inkuno", "Inkuno-specific generated recipe")
-    def test_inkuno_preserves_generated_git_recipe(self):
-        recipe = self.repo / "aur/inkuno-git/PKGBUILD"
-        recipe.write_text("pkgver=user-generated\n")
-        self.run_release(dry=True)
-        self.assertEqual(recipe.read_text(), "pkgver=user-generated\n")
-        self.assertEqual(self.git("status", "--porcelain"), "M aur/inkuno-git/PKGBUILD")
 
 
 if __name__ == "__main__":
