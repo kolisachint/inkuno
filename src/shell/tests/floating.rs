@@ -97,20 +97,17 @@ fn the_palette_and_the_menu_keep_their_rows(cx: &mut TestAppContext) {
                     }
                 }
                 // The line of keys is under the rows, inside the panel; an empty list has none.
-                match (listed > 0).then(|| bounds_of(cx, "palette-footer")) {
-                    Some(foot) => {
-                        assert!(
-                            foot.left() >= panel.left()
-                                && foot.right() <= panel.right() + px(0.5)
-                                && foot.bottom() <= panel.bottom() + px(0.5),
-                            "{query}: {foot:?} in {panel:?}"
-                        );
-                        assert!(
-                            foot.top() >= lowest - px(0.5),
-                            "{query}: {foot:?} over the rows (down to {lowest:?})"
-                        );
-                    }
-                    None => {}
+                if let Some(foot) = (listed > 0).then(|| bounds_of(cx, "palette-footer")) {
+                    assert!(
+                        foot.left() >= panel.left()
+                            && foot.right() <= panel.right() + px(0.5)
+                            && foot.bottom() <= panel.bottom() + px(0.5),
+                        "{query}: {foot:?} in {panel:?}"
+                    );
+                    assert!(
+                        foot.top() >= lowest - px(0.5),
+                        "{query}: {foot:?} over the rows (down to {lowest:?})"
+                    );
                 }
                 cx.simulate_keystrokes("escape");
                 settle(cx);

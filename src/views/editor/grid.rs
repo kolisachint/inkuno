@@ -678,6 +678,7 @@ pub fn build(
     rows
 }
 
+#[allow(clippy::too_many_arguments)]
 fn rows(
     cache: &mut Cache,
     text_system: &WindowTextSystem,

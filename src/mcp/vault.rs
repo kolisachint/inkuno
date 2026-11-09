@@ -151,8 +151,7 @@ impl Vault {
             .or_else(|_| joined.strip_prefix(&root))
             .map_err(|_| "a path cannot leave the vault".to_string())?;
         let mut cur = root.clone();
-        let mut depth = 0;
-        for component in rel.components() {
+        for (depth, component) in rel.components().enumerate() {
             let Component::Normal(name) = component else {
                 return Err("a path cannot leave the vault".into());
             };
@@ -161,7 +160,6 @@ impl Vault {
                 return Err("hidden folders are not part of the vault".into());
             }
             cur.push(name.as_ref());
-            depth += 1;
             if cur
                 .symlink_metadata()
                 .is_ok_and(|meta| meta.file_type().is_symlink())

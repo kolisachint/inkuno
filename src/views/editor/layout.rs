@@ -1782,9 +1782,11 @@ impl Editor {
                                     | Kind::Ordered
                                     | Kind::Task(_)
                             );
-                        let elide = hide
-                            .then(|| elided(line, marker, kind, &flags))
-                            .unwrap_or_default();
+                        let elide = if hide {
+                            elided(line, marker, kind, &flags)
+                        } else {
+                            Default::default()
+                        };
                         let mut shown = Cow::Borrowed(line);
                         let mut subs = Vec::new();
                         if !signs.is_empty() || !elide.is_empty() {
@@ -2755,7 +2757,7 @@ mod tests {
         editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
         cx.run_until_parked();
         let draw = |cx: &mut gpui::VisualTestContext| {
-            cx.update(|window, cx| window.draw(cx));
+            let _ = cx.update(|window, cx| window.draw(cx));
             cx.run_until_parked();
         };
         draw(cx);
@@ -2784,7 +2786,7 @@ mod tests {
             (
                 row.visual_rows(),
                 meta.wide > e.width,
-                frame.map_or(false, |f| f.size.width <= e.width),
+                frame.is_some_and(|f| f.size.width <= e.width),
             )
         });
         assert_eq!(visual, 1);
@@ -2820,7 +2822,7 @@ mod tests {
         cx.run_until_parked();
         // A real frame: the editor lays itself out while painting.
         let draw = |cx: &mut gpui::VisualTestContext| {
-            cx.update(|window, cx| window.draw(cx));
+            let _ = cx.update(|window, cx| window.draw(cx));
             cx.run_until_parked();
         };
         draw(cx);
@@ -2963,7 +2965,7 @@ mod tests {
         editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
         cx.run_until_parked();
         let draw = |cx: &mut gpui::VisualTestContext| {
-            cx.update(|window, cx| window.draw(cx));
+            let _ = cx.update(|window, cx| window.draw(cx));
             cx.run_until_parked();
         };
         draw(cx);
@@ -3045,7 +3047,7 @@ mod tests {
         editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
         cx.run_until_parked();
         let draw = |cx: &mut gpui::VisualTestContext| {
-            cx.update(|window, cx| window.draw(cx));
+            let _ = cx.update(|window, cx| window.draw(cx));
             cx.run_until_parked();
         };
         draw(cx);

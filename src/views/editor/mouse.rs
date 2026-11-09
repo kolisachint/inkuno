@@ -658,25 +658,25 @@ impl Editor {
         }
         let line = self.content[lr.clone()].to_string();
         let col = at - lr.start;
-        if let Some((label, marker, _)) = md::footnote_def(&line) {
-            if marker.contains(&col) {
-                let key = label.to_lowercase();
-                let hit = self
-                    .feet()
-                    .iter()
-                    .find(|d| d.label.to_lowercase() == key)
-                    .map(|d| (d.at, d.refs.clone()));
-                let (def_at, refs) = hit?;
-                if refs.is_empty() {
-                    return None;
-                }
-                let next = match self.foot_jump {
-                    Some((prev, k)) if prev == def_at => (k + 1) % refs.len(),
-                    _ => 0,
-                };
-                self.foot_jump = Some((def_at, next));
-                return Some(refs[next]);
+        if let Some((label, marker, _)) = md::footnote_def(&line)
+            && marker.contains(&col)
+        {
+            let key = label.to_lowercase();
+            let hit = self
+                .feet()
+                .iter()
+                .find(|d| d.label.to_lowercase() == key)
+                .map(|d| (d.at, d.refs.clone()));
+            let (def_at, refs) = hit?;
+            if refs.is_empty() {
+                return None;
             }
+            let next = match self.foot_jump {
+                Some((prev, k)) if prev == def_at => (k + 1) % refs.len(),
+                _ => 0,
+            };
+            self.foot_jump = Some((def_at, next));
+            return Some(refs[next]);
         }
         let hit = md::footnote_ref(&line)
             .into_iter()

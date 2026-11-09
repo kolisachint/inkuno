@@ -228,16 +228,11 @@ impl Server {
                 "invalid request",
             ));
         }
-        let Some(method) = obj
+        let method = obj
             .get("method")
             .and_then(|v| v.as_str())
-            .map(str::to_string)
-        else {
-            return None;
-        };
-        let Some(id) = obj.get("id").cloned() else {
-            return None;
-        };
+            .map(str::to_string)?;
+        let id = obj.get("id").cloned()?;
         if id.is_null() {
             return Some(failure(Value::Null, INVALID, "invalid request"));
         }

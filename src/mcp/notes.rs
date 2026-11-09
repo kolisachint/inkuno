@@ -140,7 +140,7 @@ pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
                 .then_with(|| files::natural(&a.0).cmp(&files::natural(&b.0)))
         });
     } else {
-        rows.sort_by(|a, b| files::natural(&a.0).cmp(&files::natural(&b.0)));
+        rows.sort_by_key(|a| files::natural(&a.0));
     }
     let next = (cursor + limit < rows.len()).then(|| (cursor + limit).to_string());
     let notes: Vec<Value> = rows
@@ -616,8 +616,7 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(path) => path,
         Err(message) => return Outcome::err(message),
     };
-    // find_file borrows vault. Clone before mut.
-    let path = path;
+    // find_file borrows vault: `path` is owned, so the vault stays mutable below.
     let old_file = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -681,17 +680,17 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         (old_stem.clone(), new_stem.clone())
     };
     // A note whose title was its name keeps the title in step.
-    if dest.extension().is_some_and(|e| e == "md") && old_stem != new_stem {
-        if let Ok(text) = fs::read_to_string(&dest)
-            && files::h1_of(&text).as_deref() == Some(old_stem.as_str())
-        {
-            let meta = markdown::front_matter(&text);
-            let (head, body) = text.split_at(meta);
-            if let Some(first) = body.lines().find(|l| !l.trim().is_empty()) {
-                let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
-                let title = format!("{} {new_stem}", "#".repeat(hashes.max(1)));
-                let _ = files::write(&dest, &format!("{head}{}", body.replacen(first, &title, 1)));
-            }
+    if dest.extension().is_some_and(|e| e == "md")
+        && old_stem != new_stem
+        && let Ok(text) = fs::read_to_string(&dest)
+        && files::h1_of(&text).as_deref() == Some(old_stem.as_str())
+    {
+        let meta = markdown::front_matter(&text);
+        let (head, body) = text.split_at(meta);
+        if let Some(first) = body.lines().find(|l| !l.trim().is_empty()) {
+            let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
+            let title = format!("{} {new_stem}", "#".repeat(hashes.max(1)));
+            let _ = files::write(&dest, format!("{head}{}", body.replacen(first, &title, 1)));
         }
     }
     let rewritten = if old_link != new_link {
