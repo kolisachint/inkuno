@@ -95,7 +95,7 @@ fn the_tree_lines_names_up_after_an_icon(cx: &mut TestAppContext) {
     );
     assert!(inside.left() > folder.left(), "{inside:?} {folder:?}");
     // The rows are 28 px high with 8 px of sheet on each side: the icon of a root folder starts after that
-    // margin and the row's own 8 px (the indent is 16 px a level, whatever the zoom).
+    // margin and the row's own 8 px (the indent is 12 px a level, whatever the zoom).
     let (panel, row) = (
         bounds(cx, "nav-panel".into()).unwrap(),
         bounds(cx, "nav-row-Dossier".into()).unwrap(),
@@ -107,7 +107,7 @@ fn the_tree_lines_names_up_after_an_icon(cx: &mut TestAppContext) {
         "{folder:?} {panel:?}"
     );
     assert!(
-        (inside.left() - folder.left() - px(16.)).abs() < px(0.5),
+        (inside.left() - folder.left() - px(12.)).abs() < px(0.5),
         "{inside:?} {folder:?}"
     );
     let _ = fs::remove_dir_all(&root);

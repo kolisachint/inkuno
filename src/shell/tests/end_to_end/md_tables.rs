@@ -276,7 +276,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(i).unwrap())
     };
     let (top, below) = (rows_of(cx, start).y, rows_of(cx, start + 140).y);
-    assert!(below > top + px(30.), "the cell wraps: {top:?} {below:?}");
+    let theme = shell.read_with(cx, |s, _| s.theme);
+    assert!(
+        below > top && (below - top - grid::line_height(&theme)).abs() < px(1.),
+        "the cell wraps by one line: {top:?} {below:?}"
+    );
     cx.simulate_keystrokes("down");
     let first = caret(cx);
     assert!(

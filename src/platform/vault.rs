@@ -82,16 +82,6 @@ pub fn save_config(vault: &Path, recent: &[PathBuf]) {
 }
 
 pub fn load_file(name: &str) -> String {
-    // The JSON keybindings win over the legacy `keys` file when present: they are
-    // replayed as `action=chord` lines (see `ui::keys::legacy_lines`), so the reader
-    // keeps its clash, refusal and readability checks, and faulty entries are
-    // reported as usual. Nothing else goes through this detour.
-    if name == "keys" {
-        let json = load_keybindings();
-        if !json.trim().is_empty() {
-            return crate::ui::keys::legacy_lines(&json);
-        }
-    }
     // Same fallbacks as for the config: a bref file is copied over once, one left
     // under the first name is read again.
     migrate_config(name);

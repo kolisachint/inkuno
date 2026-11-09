@@ -67,6 +67,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     }
     // The room moves the text down, not the clicks: the caret and a click land on the same byte on the first and last
     // lines of a fence and of a callout, whether the cursor is inside the block or not.
+    // Only the cursor's line shows its markers (Typora-style): anywhere else the markers take no
+    // room, so a click on one lands on the title's first letter instead of the marker byte.
+    // The cursor is at 0, on `# un`: that line alone shows its markers from the start.
     let note = "avant\n\n```rust\nfin\n```\n\n> [!NOTE]\n> fin\n\napres\n";
     for inside in [false, true] {
         j.load(cx, note, if inside { note.find("fin").unwrap() } else { 0 });
@@ -85,7 +88,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             });
             cx.simulate_click(p + point(px(1.), px(0.)), gpui::Modifiers::none());
             let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
-            assert_eq!(caret, target, "inside {inside}, click on byte {target}");
+            // A hidden block prefix takes no room: a click on the line's first visible byte
+            // lands on the line start (the keys can still put the caret under the prefix).
+            // Here the `> ` of `> fin` is hidden in both passes: neither cursor is on its line.
+            let expected = match target == note.rfind("fin").unwrap() {
+                true => target - "> ".len(),
+                false => target,
+            };
+            assert_eq!(caret, expected, "inside {inside}, click on byte {target}");
         }
     }
 }
@@ -156,7 +166,13 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
         });
         cx.simulate_click(p + point(px(1.), px(1.)), gpui::Modifiers::none());
         let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
-        assert_eq!(caret, start, "click on {target:?}");
+        let hashes = target.bytes().take_while(|&b| b == b'#').count();
+        // Markers shown (the cursor's line): the marker byte. Hidden: the title's first letter.
+        let expected = match hashes == 0 || start == 0 {
+            true => start,
+            false => start + hashes + 1,
+        };
+        assert_eq!(caret, expected, "click on {target:?}");
     }
 }
 

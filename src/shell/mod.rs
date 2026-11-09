@@ -363,7 +363,7 @@ impl Shell {
         }));
         // Changed shortcuts; a faulty line of the file is dropped and reported.
         let open = editable();
-        let (changes, faults) = keys::read(&vault::load_file("keys"), &this.bound, &|action| {
+        let (changes, faults) = keys::read(&keys::user_lines(), &this.bound, &|action| {
             open.contains(action)
         });
         if !changes.is_empty() {

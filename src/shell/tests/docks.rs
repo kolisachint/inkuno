@@ -246,9 +246,10 @@ fn tools_stacked_folded_and_dragged(cx: &mut TestAppContext) {
         (folded - px(32.)).abs() < px(2.) && folded < tags,
         "{folded:?} {tags:?}"
     );
-    // Its cross hides it from the stack.
-    let at = bounds(cx, "tool-close-recent").center();
-    cx.simulate_click(at, none);
+    // No cross in the header anymore: Shift+click on the rail (the stack gate) hides a tool
+    // from the stack again, the palette and the keys do the same.
+    shell.update_in(cx, |s, window, cx| s.stack_tool(Mode::Recent, window, cx));
+    cx.run_until_parked();
     assert_eq!(
         tools(cx).0,
         [

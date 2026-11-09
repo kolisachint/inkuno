@@ -62,6 +62,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(bounds(cx, "outline-empty").is_some());
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
     assert_eq!(caret(cx), 0);
+    // No headings and no comments: the comments palette says so instead of opening, which
+    // leaves the status message the clicks below dismiss (the outline keeps its empty state
+    // to itself now that it lives in the dock, not in the palette).
+    cx.simulate_keystrokes("secondary-p");
+    cx.simulate_input("commentaires");
+    cx.simulate_keystrokes("down enter");
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none()
+        && s.told(Tone::Info, "commentaires")));
     // Status messages: a click removes the one it targets, the others go by themselves after four
     // seconds; the one of an operation in progress stays, until the message that gives its outcome.
     shell.update(cx, |s, cx| s.say(Tone::Busy, "En cours", cx));
@@ -70,8 +78,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         point(view.width - px(60.), view.height - px(70.)),
         gpui::Modifiers::none(),
     );
-    assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "titres")
-        && !s.told(Tone::Busy, "")));
+    assert!(
+        shell.read_with(cx, |s, _| s.told(Tone::Info, "commentaires")
+            && !s.told(Tone::Busy, ""))
+    );
     shell.update(cx, |s, cx| s.say(Tone::Busy, "En cours", cx));
     cx.executor().advance_clock(TOAST);
     cx.run_until_parked();
@@ -85,7 +95,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
 
     // Links: an address pasted on a selection makes it a link; Ctrl+K on a link
     // selects its address, to retype; Ctrl+K on a selection waits for the address.
+    // (The clicks above went through to the outline dock, so the note needs its focus back.)
     j.load(cx, "voir la doc ici", 5);
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
     cx.simulate_keystrokes(
         "shift-right shift-right shift-right shift-right shift-right shift-right",
     );

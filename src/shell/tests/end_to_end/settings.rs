@@ -98,7 +98,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         (format!("{MOD}+Maj+Y"), true)
     );
     assert_eq!(
-        vault::load_file("keys"),
+        crate::ui::keys::user_lines(),
         "nav::ShowGraph=secondary-shift-y\n"
     );
     cx.simulate_keystrokes("escape escape");
@@ -157,12 +157,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert_eq!(keys_of(cx, "nav::ShowGraph"), (graph, false));
-    assert_eq!(vault::load_file("keys"), "app::OpenPalette=\n");
+    assert_eq!(crate::ui::keys::user_lines(), "app::OpenPalette=\n");
     // « Tout rétablir »: nothing changed anymore.
     let at = cx.debug_bounds("keys-reset").unwrap().center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert!(shell.read_with(cx, |s, _| s.changes.is_empty()));
-    assert_eq!(vault::load_file("keys"), "");
+    assert_eq!(crate::ui::keys::user_lines(), "");
     cx.simulate_keystrokes("escape escape secondary-p");
     assert!(shell.read_with(cx, |s, _| s.palette.is_some()));
     cx.simulate_keystrokes("escape");

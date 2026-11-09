@@ -1425,12 +1425,13 @@ mod tests {
             (t.glyphs.iter().map(|g| g.c).collect::<String>(), n)
         };
         assert_eq!(shown("a🎉b"), ("a�b".into(), 1));
-        // Joined, toned, flagged, keycap, variant: one box per emoji as seen.
-        assert_eq!(shown("👩‍💻 👍🏽 ❤️ #️⃣"), ("� � � #".into(), 3));
+        // Joined, toned, flagged, keycap, variant: one box per emoji as seen. The app's font
+        // draws ❤ itself, so only it stays (counted with the boxes in `missing`).
+        assert_eq!(shown("👩‍💻 👍🏽 ❤️ #️⃣"), ("� � ❤ #".into(), 2));
         assert_eq!(shown("é 漢 → ✓ 1+1"), ("é 漢 → ✓ 1+1".into(), 0));
         assert!(
-            FACES[0].glyph_index(BOX).is_some(),
-            "the box is in the app's font"
+            FACES[0].glyph_index(BOX).is_none(),
+            "Inter has no box of its own: it is drawn on its own, like any missing glyph"
         );
         let printed = print("# 🎉\n```\n🎉🎉\n```\n| 🎉 |\n|---|\n", &none);
         assert_eq!(printed.missing, ["4 emoji (�)"]);

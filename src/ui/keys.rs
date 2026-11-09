@@ -475,8 +475,8 @@ pub fn read_json(
     (changes, faults)
 }
 
-/// `keybindings.json` replayed as legacy `action=chord` lines: what `vault::load_file("keys")`
-/// hands the unchanged reader when the JSON file is present, so it wins over the legacy file.
+/// `keybindings.json` replayed as legacy `action=chord` lines: what [`user_lines`] hands
+/// the unchanged reader when the JSON file is present, so it wins over the legacy file.
 /// Fault markers hold no `=`, so [`read`] sets them aside and reports them like faulty lines.
 /// A `reset` restores the default keys: no legacy line, so `read` keeps the default (an unknown
 /// reset action is silent here, without the default table: `--check-config` names it).
@@ -494,6 +494,18 @@ pub fn legacy_lines(text: &str) -> String {
     lines.append(&mut faults);
     lines.join("\n") + "\n"
 }
+
+/// What the shortcut reader reads: the JSON keybindings when present (replayed as legacy
+/// lines, so clash, refusal and readability checks stay the reader's own), else the legacy
+/// `keys` file. Lives here, not in the vault: the platform layer never sees the ui one.
+pub fn user_lines() -> String {
+    let json = crate::platform::vault::load_keybindings();
+    match json.trim().is_empty() {
+        true => crate::platform::vault::load_file("keys"),
+        false => legacy_lines(&json),
+    }
+}
+
 /// Writes the JSON keybindings file from the user changes (see [`write`] for the legacy
 /// form): `{"version": 1, "bindings": {action: [chord], …}}`, actions sorted.
 pub fn write_json(changes: &Changes) -> String {
@@ -1026,7 +1038,7 @@ mod tests {
 
     #[test]
     fn json_replayed_as_legacy_lines_reads_the_same() {
-        // What `vault::load_file("keys")` hands the reader: valid entries as lines, faulty
+        // What `user_lines` hands the reader: valid entries as lines, faulty
         // ones as markers that `read` sets aside, `reset` restoring the defaults silently.
         let text = r#"{"version": 1, "bindings": {
             "app::Palette": "f9", "nav::Graph": [], "app::Help": ["secondary-p", "f9"], "app::CopyAll": 7
