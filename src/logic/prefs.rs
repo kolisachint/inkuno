@@ -8,8 +8,6 @@ pub struct Prefs {
     pub mono: String,
     /// Size of the note's body text, in pixels.
     pub size: f32,
-    /// Look for a new version of the app (one request per day).
-    pub updates: bool,
     /// Width of the text column and placement of wide tables (keys of `editor::Page` and
     /// `editor::Wide`); empty: the default choice.
     pub page: String,
@@ -29,7 +27,6 @@ impl Prefs {
             font: String::new(),
             mono: String::new(),
             size: Self::SIZE,
-            updates: true,
             page: String::new(),
             wide: String::new(),
             bar: String::new(),
@@ -47,7 +44,6 @@ impl Prefs {
                         .filter(|s: &f32| s.is_finite())
                         .unwrap_or(Self::SIZE)
                 }
-                "updates" => prefs.updates = value != "off",
                 "page" => prefs.page = value.into(),
                 "wide" => prefs.wide = value.into(),
                 "bar" => prefs.bar = value.into(),
@@ -64,10 +60,6 @@ impl Prefs {
             "theme={}\nfont={}\nmono={}\nsize={}\n",
             self.theme, self.font, self.mono, self.size
         );
-        // Absent until turned off: the default value does not clutter the file.
-        if !self.updates {
-            text.push_str("updates=off\n");
-        }
         for (key, value) in [
             ("page", &self.page),
             ("wide", &self.wide),
@@ -100,13 +92,8 @@ mod tests {
         // Size clamped, and unreadable value ignored.
         assert_eq!((prefs.size, Prefs::parse("size=NaN").size), (32., 16.));
         assert_eq!(Prefs::parse(&prefs.to_text()), prefs);
-        // The new-version check is on until turned off.
-        assert!(
-            prefs.updates
-                && !Prefs::parse("updates=off\n").updates
-                && Prefs::parse("updates=on").updates
-        );
-        assert!(!Prefs::parse(&Prefs::parse("updates=off").to_text()).updates);
+        // Unknown keys are ignored (the removed `updates` check reads back as one).
+        assert_eq!(Prefs::parse("updates=off\n").to_text(), "");
         // Page width and wide tables: absent until chosen.
         let wide = Prefs::parse("page=wide\nwide=column\n");
         assert_eq!((wide.page.as_str(), wide.wide.as_str()), ("wide", "column"));

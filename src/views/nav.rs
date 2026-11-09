@@ -284,8 +284,6 @@ pub struct Menu {
     pub block: bool,
     /// Right click on a tab: what to close.
     pub tab: Option<usize>,
-    /// Share/export menu, pinned to the document tab that opened it.
-    pub share: Option<usize>,
     /// The entry the arrow keys are on.
     pub chosen: Option<usize>,
     /// What had the focus before it opened, to give it back.
@@ -294,7 +292,6 @@ pub struct Menu {
 
 #[derive(Clone, Copy)]
 pub enum Do {
-    Share(Share),
     Open,
     OpenAside,
     NewNote,
@@ -339,32 +336,6 @@ pub enum Do {
     CloseTab,
     CloseOtherTabs,
     CloseTabsInPane,
-}
-
-/// Formats available from the current document's sharing menu.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Share {
-    MarkdownCopy,
-    PlainCopy,
-    MarkdownSave,
-    PlainSave,
-    SvgCopy,
-    SvgSave,
-    ImageSave,
-}
-
-impl Share {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::MarkdownCopy => tr("Copy note as Markdown", "Copier la note en Markdown"),
-            Self::PlainCopy => tr("Copy note as plain text", "Copier la note en texte brut"),
-            Self::MarkdownSave => tr("Save a Markdown copy…", "Enregistrer une copie Markdown…"),
-            Self::PlainSave => tr("Save a text copy…", "Enregistrer une copie texte…"),
-            Self::SvgCopy => tr("Copy as SVG", "Copier en SVG"),
-            Self::SvgSave => tr("Save an SVG copy…", "Enregistrer une copie SVG…"),
-            Self::ImageSave => tr("Save an image copy…", "Enregistrer une copie de l’image…"),
-        }
-    }
 }
 
 impl Do {

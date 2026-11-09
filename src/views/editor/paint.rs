@@ -239,17 +239,26 @@ impl Editor {
                 }
                 _ => {}
             }
-            // A table wider than the page is cut at its edges.
-            let frame = (row.kind == Kind::Table)
-                .then(|| {
-                    self.tables
-                        .iter()
-                        .find(|(range, _)| range.contains(&row.start))
-                        .map(|(_, frame)| *frame)
-                })
-                .flatten();
+            // Folded lines of a code block take no room: nothing to draw.
+            if row.height == px(0.) && matches!(row.kind, Kind::Code | Kind::Fence) {
+                continue;
+            }
+            // A table or code block wider than the page is cut at its edges.
+            let frame = if row.kind == Kind::Table {
+                self.tables
+                    .iter()
+                    .find(|(range, _)| range.contains(&row.start))
+                    .map(|(_, frame)| *frame)
+            } else if row.kind == Kind::Code {
+                self.codes
+                    .iter()
+                    .find(|(range, _)| range.contains(&row.start))
+                    .map(|(_, frame)| *frame)
+            } else {
+                None
+            };
             let (left, wide) = frame.map_or((o.x, w), |f| (f.left(), f.size.width));
-            let mask = (row.kind == Kind::Table).then(|| ContentMask {
+            let mask = matches!(row.kind, Kind::Table | Kind::Code).then(|| ContentMask {
                 bounds: Bounds::new(point(left - px(2.), top), size(wide + px(4.), row.height)),
             });
             if row.hidden() {
@@ -548,6 +557,26 @@ impl Editor {
                         .ok();
                     if let Some((_, hitbox)) =
                         self.view_hitboxes.iter().find(|(s, _)| *s == row.start)
+                    {
+                        window.set_cursor_style(CursorStyle::PointingHand, hitbox);
+                    }
+                }
+                // Fold chevron of a code block: shut shows ▸, open ▾.
+                if self.folds(row) {
+                    let bounds = self.fold_bounds(row);
+                    if self.fold_hover == Some(row.start) {
+                        window.paint_quad(fill(bounds, t.border).corner_radii(px(6.)));
+                    }
+                    let chevron = if self.code_open_at(row.start) {
+                        "▾"
+                    } else {
+                        "▸"
+                    };
+                    label(chevron, t.soft, window)
+                        .paint(bounds.origin + point(px(5.), px(1.)), px(14.), window, cx)
+                        .ok();
+                    if let Some((_, hitbox)) =
+                        self.fold_hitboxes.iter().find(|(s, _)| *s == row.start)
                     {
                         window.set_cursor_style(CursorStyle::PointingHand, hitbox);
                     }

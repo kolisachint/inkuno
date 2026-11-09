@@ -10,7 +10,6 @@
 # Writing
 
 - [Writing notes](writing.md)
-- [Tables and formulas](tables.md)
 - [Links, embeds and files](links.md)
 - [Comments](comments.md)
 - [Daily notes, templates and capture](daily-notes.md)
@@ -23,10 +22,6 @@
 
 # More than notes
 
-- [Kanban boards and list pages](boards.md)
-- [Diagrams](diagrams.md)
-- [UML diagrams](uml.md)
-- [CSV and TSV files](csv.md)
 
 # Your vault
 

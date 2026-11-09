@@ -711,7 +711,7 @@ mod tests {
             b("secondary-f", "editor::Find", Some("Editor")),
             b("secondary-f", "editor::Find", Some("Find")),
             b("secondary-d", "nav::Twin", Some("Nav")),
-            b("secondary-z", "sheet::Undo", Some("Sheet")),
+            b("secondary-z", "palette::ConfirmAside", Some("Palette")),
         ]
     }
 
@@ -762,12 +762,12 @@ mod tests {
 
     #[test]
     fn contexts_that_meet() {
-        assert!(meets(None, Some("Editor")) && meets(Some("Sheet"), Some("Shell")));
+        assert!(meets(None, Some("Editor")) && meets(Some("Palette"), Some("Shell")));
         assert!(meets(Some("Nav"), Some("Nav")));
-        // A table's arrows and a diagram's never meet.
-        assert!(!meets(Some("Sheet"), Some("Canvas")) && !meets(Some("Editor"), Some("Find")));
+        // The palette's keys and a panel list's never meet.
+        assert!(!meets(Some("Palette"), Some("Nav")) && !meets(Some("Editor"), Some("Find")));
         // A cell being edited receives the keys of a text line.
-        assert!(meets(Some("Line"), Some("Sheet")) && meets(Some("Palette"), Some("Line")));
+        assert!(meets(Some("Line"), Some("Palette")) && meets(Some("Palette"), Some("Line")));
     }
 
     #[test]
@@ -811,7 +811,7 @@ mod tests {
         assert!(of(&now, "app::Palette").is_empty());
         // In contexts that do not meet, both stay.
         let mut changes = Changes::new();
-        changes.insert("sheet::Undo".into(), "secondary-d".into());
+        changes.insert("palette::ConfirmAside".into(), "secondary-d".into());
         let now = effective(&base(), &changes, &open);
         assert_eq!(
             of(&now, "editor::Next").len() + of(&now, "nav::Twin").len(),
@@ -857,7 +857,7 @@ mod tests {
             Some("nav::Graph")
         );
         // Two views that do not meet.
-        assert_eq!(clash(&base, &base, "sheet::Undo", "secondary-d"), None);
+        assert_eq!(clash(&base, &base, "palette::ConfirmAside", "secondary-d"), None);
         // In its own context.
         assert_eq!(
             clash(&base, &base, "editor::Find", "secondary-d"),
@@ -886,7 +886,7 @@ mod tests {
         );
         assert_eq!((swap.len(), faults.len()), (2, 0));
         // Each faulty line is set aside and named, the others stay.
-        let text = "# à la main\n\napp::Help=f9\nno::Such=f8\neditor::Type=f7\napp::Palette=ctrl-foo\nnav::Graph=a\nsans égal\neditor::Find=enter\nsheet::Undo=f9\n";
+        let text = "# à la main\n\napp::Help=f9\nno::Such=f8\neditor::Type=f7\napp::Palette=ctrl-foo\nnav::Graph=a\nsans égal\neditor::Find=enter\npalette::ConfirmAside=f9\n";
         let (kept, faults) = read(text, &base, &open);
         assert_eq!(
             kept,
@@ -901,7 +901,7 @@ mod tests {
                 "nav::Graph=a",
                 "sans égal",
                 "editor::Find=enter",
-                "sheet::Undo=f9"
+                "palette::ConfirmAside=f9"
             ]
         );
     }

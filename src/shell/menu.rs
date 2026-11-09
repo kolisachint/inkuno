@@ -24,7 +24,6 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         let menu = self.menu.take();
-        let share = menu.as_ref().and_then(|m| m.share);
         if let Some(back) = menu.as_ref().and_then(|menu| menu.back.as_ref()) {
             window.focus(back);
         }
@@ -38,13 +37,6 @@ impl Shell {
             .filter(|tab| *tab < self.panes.len());
         let link = menu.and_then(|menu| menu.text).flatten();
         cx.notify();
-        if let Do::Share(choice) = what {
-            if let Some(pane) = share.filter(|p| self.share_choices(*p).contains(&choice)) {
-                self.active = pane;
-                self.share_document(choice, window, cx);
-            }
-            return;
-        }
         match (what, tab) {
             (Do::CloseTab, Some(tab)) => return self.close_tab(tab, window, cx),
             (Do::CloseOtherTabs, Some(tab)) => return self.close_other_tabs(tab, window, cx),
@@ -435,14 +427,6 @@ impl Shell {
         let Some(menu) = self.menu.as_ref() else {
             return Vec::new();
         };
-        if let Some(pane) = menu.share {
-            return vec![
-                self.share_choices(pane)
-                    .into_iter()
-                    .map(|choice| (choice.label(), Do::Share(choice)))
-                    .collect(),
-            ];
-        }
         let is_dir = menu.target.as_ref().is_none_or(|p| self.dirs.contains(p));
         let tree = self.nav.mode == Mode::Tree;
         let many = menu

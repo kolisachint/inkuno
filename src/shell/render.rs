@@ -50,16 +50,11 @@ impl Render for Shell {
         }
         self.show_active(cx);
         #[cfg(test)]
-        let dragging = cx.has_active_drag() || self.keep_aim;
+        let dragging = cx.has_active_drag();
         #[cfg(not(test))]
         let dragging = cx.has_active_drag();
         if !dragging {
-            (self.pane_aim, self.tab_aim, self.tool_aim, self.tool_drag) =
-                (None, None, None, false);
-            // The drag is over (dropped, or out of the window): no more label or line.
-            if self.drop_aim.is_some() {
-                self.aim_drop(None, cx);
-            }
+            (self.pane_aim, self.tab_aim) = (None, None);
         }
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             self.keep_preview();
@@ -239,12 +234,6 @@ impl Render for Shell {
                 }
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| this.new_note_here(window, cx)))
-            .on_action(cx.listener(|this, _: &canvas::Cancel, window, cx| {
-                if this.has_note(cx) {
-                    window.focus(&this.pane().editor.focus_handle(cx));
-                    cx.notify();
-                }
-            }))
             .on_action(cx.listener(|this, _: &nav::ShowTree, window, cx| {
                 this.show_nav(Mode::Tree, false, window, cx)
             }))
@@ -295,16 +284,6 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &OpenVault, window, cx| this.choose_vault(window, cx)))
             .on_action(cx.listener(|this, _: &CopyAll, _, cx| this.copy_all(true, cx)))
             .on_action(
-                cx.listener(|this, _: &ShareDocument, window, cx| this.show_share(window, cx)),
-            )
-            .on_action(cx.listener(|this, _: &Outline, window, cx| this.toggle_outline(window, cx)))
-            .on_action(
-                cx.listener(|this, _: &docks::ToggleFocus, window, cx| {
-                    this.toggle_focus(window, cx)
-                }),
-            )
-            .on_action(cx.listener(|this, _: &Today, window, cx| this.open_today(window, cx)))
-            .on_action(
                 cx.listener(|this, _: &SplitPane, window, cx| this.split(Side::Right, window, cx)),
             )
             .on_action(
@@ -349,7 +328,6 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &TabToDown, window, cx| {
                 this.tab_to_side(Side::Down, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &MoveTool, window, cx| this.move_tool(window, cx)))
             .on_action(cx.listener(|this, _: &EvenPanes, _, cx| {
                 this.layout.even();
                 cx.notify();
@@ -376,20 +354,6 @@ impl Render for Shell {
             )
             .on_action(cx.listener(|this, _: &MoveTabLeft, _, cx| this.move_tab(false, cx)))
             .on_action(cx.listener(|this, _: &MoveTabRight, _, cx| this.move_tab(true, cx)))
-            .on_action(cx.listener(|this, _: &GoBack, window, cx| this.travel(false, window, cx)))
-            .on_action(cx.listener(|this, _: &GoForward, window, cx| this.travel(true, window, cx)))
-            // The mouse back and forward buttons.
-            .on_mouse_down(
-                MouseButton::Navigate(gpui::NavigationDirection::Back),
-                cx.listener(|this, _, window, cx| this.travel(false, window, cx)),
-            )
-            .on_mouse_down(
-                MouseButton::Navigate(gpui::NavigationDirection::Forward),
-                cx.listener(|this, _, window, cx| this.travel(true, window, cx)),
-            )
-            .on_action(
-                cx.listener(|this, _: &SearchVault, window, cx| this.open_vault_find(window, cx)),
-            )
             .on_action(cx.listener(|this, _: &ChooseTheme, window, cx| {
                 this.choose_setting(Setting::Theme, window, cx)
             }))
@@ -411,14 +375,10 @@ impl Render for Shell {
                 cx.listener(|this, _: &ToggleCommands, window, cx| this.open_commands(window, cx)),
             )
             // Escape in the note, when it has nothing to close: the right-click menu.
-            // In focus mode, Escape leaves it too: the docks come back as they were.
             .on_action(cx.listener(|this, _: &editor::Cancel, window, cx| {
                 this.dismiss_failures();
                 this.close_icons(window, cx);
                 this.close_menu(window, cx);
-                if this.in_focus() {
-                    this.toggle_focus(window, cx);
-                }
             }))
             .on_action(
                 cx.listener(|this, _: &ContextMenu, window, cx| this.menu_from_keys(window, cx)),
@@ -463,7 +423,6 @@ impl Render for Shell {
             .when(client, |d| d.child(pill))
             .children(self.render_menu(window, cx))
             .children(self.render_icons(window, cx))
-            .children(self.render_drop_chip(window.viewport_size()))
             .when(self.help.open, |d| {
                 d.child(self.render_help(window.viewport_size().height < px(420.), cx))
             });
@@ -1043,36 +1002,6 @@ impl Shell {
                 )
                 .children(cards)
         });
-        let copy = ui::widgets::button(
-            "copy-all",
-            if self.copied {
-                "check.svg"
-            } else {
-                "export.svg"
-            },
-            false,
-            t,
-        )
-        .debug_selector(|| "copy-all".into())
-        .tooltip(ui::widgets::tip(
-            tr("Share / Export", "Partager / Exporter"),
-            keys::of(cx, &ShareDocument),
-            t,
-        ))
-        .absolute()
-        // In an exceptionally narrow note, keep the centered formatting toggle reachable.
-        .map(|d| {
-            if self.pane().file.is_none() && self.pane().editor.read(cx).crowded_footer() {
-                d.top(t.px(52.))
-            } else {
-                d.bottom_4()
-            }
-        })
-        .right_4()
-        .size(t.px(30.))
-        .rounded(t.large())
-        .occlude()
-        .on_click(cx.listener(|this, _, window, cx| this.show_share(window, cx)));
         // The image picked in the panel; it goes away as soon as the note takes over again.
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             if !self.set_file(None, cx) {
@@ -1147,14 +1076,6 @@ impl Shell {
                     .children(talk)
             }
         };
-        let note = note.when(
-            !self.share_choices(pane).is_empty()
-                && matches!(
-                    self.pane().file.as_ref().map(|f| &f.kind),
-                    None | Some(FileKind::Image)
-                ),
-            |d| d.child(copy),
-        );
         // While a tab or a file from the tree is dragged, the area that would receive it is tinted:
         // the whole pane, or the half a new pane would take.
         let tint = self
@@ -1194,23 +1115,6 @@ impl Shell {
                 if this.active != pane && pane < this.panes.len() {
                     this.active = pane;
                     cx.notify();
-                }
-            }))
-            // System files over the note: a line between two lines says where they would go.
-            .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<gpui::ExternalPaths>, _, cx| {
-                let mine = matches!(&this.drop_aim, Some(DropAim { aim: Aim::Note { pane: p, .. }, .. }) if *p == pane);
-                let at = e.event.position;
-                match e.bounds.contains(&at).then(|| this.note_aim(pane, at, e.drag(cx).paths().len(), cx)).flatten() {
-                    Some(aim) => this.aim_drop(Some(aim), cx),
-                    None if mine => this.aim_drop(None, cx),
-                    None => {}
-                }
-            }))
-            .on_drop(cx.listener(move |this, paths: &gpui::ExternalPaths, _, cx| {
-                if let Some(DropAim { aim: aim @ Aim::Note { pane: p, .. }, .. }) = this.drop_aim.clone()
-                    && p == pane
-                {
-                    this.drop_paths(paths.paths().to_vec(), aim, cx);
                 }
             }))
             .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<nav::Dragged>, _, cx| this.aim_pane(group, None, e.bounds, e.event.position, cx)))

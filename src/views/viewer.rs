@@ -22,13 +22,10 @@ use crate::{
     ui::svg,
     ui::theme::Theme,
     ui::widgets::{button, tip},
-    views::canvas::{Cancel, Down, Left, Right, Up, ZoomFit, ZoomIn, ZoomOut},
 };
 
 /// What the viewer asks of the window.
 pub enum ViewerEvent {
-    /// The Mermaid diagram shown, to be made a canvas diagram.
-    ToCanvas(String),
 }
 
 impl gpui::EventEmitter<ViewerEvent> for Viewer {}
@@ -230,13 +227,6 @@ impl Viewer {
             bounds: Bounds::default(),
             tiles: VecDeque::new(),
             flying: Vec::new(),
-        }
-    }
-
-    /// Asks for the Mermaid diagram shown to become a canvas diagram; nothing for another source.
-    pub fn edit_on_canvas(&mut self, cx: &mut Context<Self>) {
-        if let Source::Mermaid(text) = &self.source {
-            cx.emit(ViewerEvent::ToCanvas(text.clone()));
         }
     }
 
@@ -568,34 +558,7 @@ impl Render for Viewer {
                 button("v-zoom-in", "plus.svg", false, t)
                     .tooltip(tip(tr("Zoom in", "Zoomer"), "+".into(), t))
                     .on_click(cx.listener(|this, _, _, cx| this.zoom_by(1.25, cx))),
-            )
-            .when(matches!(self.source, Source::File(..)), |d| {
-                d.child(
-                    button("v-share", "export.svg", false, t)
-                        .tooltip(tip(
-                            tr("Share / Export", "Partager / Exporter"),
-                            crate::ui::keys::of(cx, &crate::actions::ShareDocument),
-                            t,
-                        ))
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Box::new(crate::actions::ShareDocument), cx)
-                        }),
-                )
-            });
-        // A Mermaid class, sequence or state diagram can be carried on by hand, on the canvas.
-        let edit = matches!(&self.source, Source::Mermaid(text) if crate::logic::mermaid::kind(text).is_some()).then(|| {
-            div()
-                .absolute()
-                .top_3()
-                .left_3()
-                .p(px(2.))
-                .rounded(t.large())
-                .bg(t.panel)
-                .border_1()
-                .border_color(t.border)
-                .occlude()
-                .child(button("v-to-canvas", "pencil.svg", false, t).tooltip(tip(tr("Edit on the canvas", "Modifier sur le canevas"), String::new(), t)).on_click(cx.listener(|this, _, _, cx| this.edit_on_canvas(cx))))
-        });
+            );
         let note = |text: &'static str| {
             div()
                 .absolute()
@@ -619,7 +582,6 @@ impl Render for Viewer {
             .id("viewer")
             .size_full()
             .relative()
-            .key_context("Canvas")
             .track_focus(&self.focus)
             // The sheet's corners: the sheet under it clips to a rectangle, not to its corners.
             .bg(t.bg)
@@ -629,18 +591,6 @@ impl Render for Viewer {
             } else {
                 CursorStyle::OpenHand
             })
-            .on_action(cx.listener(|this, _: &ZoomIn, _, cx| this.zoom_by(1.25, cx)))
-            .on_action(cx.listener(|this, _: &ZoomOut, _, cx| this.zoom_by(0.8, cx)))
-            .on_action(cx.listener(|this, _: &ZoomFit, _, cx| {
-                this.fit = true;
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &Left, _, cx| this.nudge(1., 0., cx)))
-            .on_action(cx.listener(|this, _: &Right, _, cx| this.nudge(-1., 0., cx)))
-            .on_action(cx.listener(|this, _: &Up, _, cx| this.nudge(0., 1., cx)))
-            .on_action(cx.listener(|this, _: &Down, _, cx| this.nudge(0., -1., cx)))
-            // Escape: the window decides (back to the note).
-            .on_action(cx.listener(|_, _: &Cancel, _, cx| cx.propagate()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, e: &MouseDownEvent, window, cx| {
@@ -686,7 +636,6 @@ impl Render for Viewer {
             }))
             .child(drawing)
             .children(status)
-            .children(edit)
             .child(zoom)
     }
 }

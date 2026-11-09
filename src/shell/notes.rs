@@ -261,7 +261,6 @@ impl Shell {
     /// avoids rewriting the links at every intermediate title while typing.
     /// False means the current view must stay alive, with its dirty state and undo history.
     pub(super) fn leave(&mut self, cx: &mut Context<Self>) -> bool {
-        self.mark_place(cx);
         if !self.flush_one(cx) {
             return false;
         }
@@ -300,7 +299,6 @@ impl Shell {
             if let Some(root) = &self.vault {
                 vault::save_config(root, &self.recent);
             }
-            self.history.remove(&path);
             self.pane_mut().path = None;
             self.push_names(cx);
         }
@@ -529,9 +527,6 @@ impl Shell {
                         self.icons.insert(path.clone(), icon);
                         self.save_icons(cx);
                     }
-                    if let Some(old) = &old {
-                        self.history.rename(old, &path);
-                    }
                     self.recent.retain(|p| Some(p) != old.as_ref());
                     self.touch(&path);
                     self.nav.reveal(&path);
@@ -609,7 +604,9 @@ impl Shell {
                 _ => self.follow(link, window, cx),
             },
             EditorEvent::OpenAt(target, aside) => self.open_at(target, *aside, window, cx),
-            EditorEvent::Swap(swap) => self.replace_in_vault(swap.clone(), window, cx),
+            // Vault-wide replace went with the panel's vault search: the find bar keeps
+            // its keys, but there is nothing left to apply them to.
+            EditorEvent::Swap(_) => {}
             EditorEvent::Menu(at, link, commented, keys) => {
                 let chosen = keys.then_some(0);
                 self.show_menu(

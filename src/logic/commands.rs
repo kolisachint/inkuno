@@ -368,21 +368,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Note,
         ),
         (
-            "app::Outline",
-            tr("Outline of the note", "Plan de la note"),
-            "c-outline.svg",
-            Note,
-        ),
-        (
-            "app::ShareDocument",
-            tr(
-                "Share / Export the current document",
-                "Partager / Exporter le document courant",
-            ),
-            "export.svg",
-            Note,
-        ),
-        (
             "app::CopyAll",
             tr("Copy the whole note", "Copier toute la note"),
             "copy.svg",
@@ -458,18 +443,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Create,
         ),
         (
-            "app::Today",
-            tr("Today's note", "Note du jour"),
-            "c-calendar.svg",
-            Go,
-        ),
-        (
-            "app::SearchVault",
-            tr("Search the whole vault", "Chercher dans tout le coffre"),
-            "find-text.svg",
-            Go,
-        ),
-        (
             "nav::ShowTree",
             tr("Vault tree", "Arbre du coffre"),
             "tree.svg",
@@ -479,18 +452,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             "nav::ShowRecent",
             tr("Recent notes", "Notes récentes"),
             "clock.svg",
-            Go,
-        ),
-        (
-            "app::GoBack",
-            tr("Back", "Précédent"),
-            "chevron-left.svg",
-            Go,
-        ),
-        (
-            "app::GoForward",
-            tr("Forward", "Suivant"),
-            "chevron-right.svg",
             Go,
         ),
         (
@@ -575,15 +536,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
-            "app::MoveTool",
-            tr(
-                "Move the panel's view to the other dock",
-                "Déplacer la vue du panneau dans l'autre dock",
-            ),
-            "c-right.svg",
-            Go,
-        ),
-        (
             "app::MaximizePane",
             tr(
                 "Pane on the whole window, and back",
@@ -597,12 +549,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             tr("Panel on the whole window", "Panneau sur toute la fenêtre"),
             "expand.svg",
             Go,
-        ),
-        (
-            "app::SyncVault",
-            tr("Sync the vault", "Synchroniser le coffre"),
-            "backup.svg",
-            Vault,
         ),
         (
             "app::OpenVault",

@@ -44,10 +44,7 @@ use crate::ui::{
     theme::{Page, THEMES, Theme, Wide},
     widgets::{drag_window, icon_button, icon_button_over, keycaps},
 };
-// `canvas` stays only for `keymap`'s `canvas::` actions (owned by another crew);
-// the stub module defines no view. The integrator removes both.
-#[allow(unused_imports)]
-use crate::views::{canvas, editor, field, kanban, nav, palette, sheet, viewer};
+use crate::views::{editor, field, nav, palette, viewer};
 
 use std::{
     fs,

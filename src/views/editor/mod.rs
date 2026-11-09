@@ -35,7 +35,7 @@ pub use table::*;
 
 use std::{
     borrow::Cow,
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     hash::{BuildHasherDefault, Hash, Hasher},
     ops::Range,
@@ -354,6 +354,20 @@ pub struct Editor {
     table_x: HashMap<usize, Pixels>,
     /// Scrollbar of each too-wide table, in the last frame.
     thumbs: Vec<Bounds<Pixels>>,
+    /// Horizontal scroll of code blocks with lines wider than the page, by opening fence start.
+    code_x: HashMap<usize, Pixels>,
+    /// Starts of the expanded code blocks: hidden by default, a block shows its header only.
+    code_open: HashSet<usize>,
+    /// Bumps on every fold toggle: the layout keeps collapsed heights until it changes.
+    code_gen: u64,
+    /// Each fenced code block of the note: its extent, its rows and its width.
+    code_meta: Vec<CodeMeta>,
+    /// Extent and frame of each code block wider than the page, in the last frame.
+    codes: Vec<(Range<usize>, Bounds<Pixels>)>,
+    /// Areas of the fold chevrons, by opening fence start.
+    fold_hitboxes: Vec<(usize, Hitbox)>,
+    /// Start of the line whose fold chevron is hovered.
+    fold_hover: Option<usize>,
     theme: Theme,
     // Layout of the last frame.
     rows: Vec<Row>,
@@ -488,6 +502,13 @@ impl Editor {
             moving: None,
             table_x: HashMap::new(),
             thumbs: Vec::new(),
+            code_x: HashMap::new(),
+            code_open: HashSet::new(),
+            code_gen: 0,
+            code_meta: Vec::new(),
+            codes: Vec::new(),
+            fold_hitboxes: Vec::new(),
+            fold_hover: None,
             theme,
             rows: Vec::new(),
             version: 0,
@@ -551,6 +572,8 @@ impl Editor {
         self.revealed = Some(self.line_range(self.clamp(cursor)).start);
         self.scroll_y = px(0.);
         self.table_x.clear();
+        self.code_x.clear();
+        self.code_open.clear();
         self.selecting = false;
         self.reveal = true;
         cx.notify();
@@ -862,6 +885,56 @@ impl Editor {
     fn in_code(&self, line_start: usize) -> bool {
         self.fences_before(line_start) % 2 == 1
             && self.content[line_start..].lines().any(md::is_fence)
+    }
+
+    /// The opening fence at `start` names Mermaid: its diagram shows instead of a fold chevron.
+    pub(super) fn code_is_mermaid(&self, start: usize, len: usize) -> bool {
+        self.content[start..start + len]
+            .trim_start()
+            .get(3..)
+            .is_some_and(|lang| lang.trim().eq_ignore_ascii_case("mermaid"))
+    }
+
+    /// The row can fold its code block: a paired opening fence, Mermaid excepted
+    /// (its diagram has the enlarge button instead).
+    pub(super) fn folds(&self, row: &Row) -> bool {
+        row.opens && row.kind == Kind::Fence && !self.code_is_mermaid(row.start, row.len)
+    }
+
+    /// The block starting at `start` shows its source: expanded, or holding the
+    /// cursor or the revealed line in its body (like the clicked-line reveal).
+    pub(super) fn code_open_at(&self, start: usize) -> bool {
+        if self.code_open.contains(&start) {
+            return true;
+        }
+        let Some(meta) = self.code_meta.iter().find(|m| m.range.start == start) else {
+            return true;
+        };
+        if meta.rows.len() < 2 {
+            return true;
+        }
+        let body = self.rows[meta.rows.start + 1].start..meta.range.end;
+        body.contains(&self.cursor()) || self.revealed.is_some_and(|r| body.contains(&r))
+    }
+
+    /// Folds or unfolds the block starting at `start`. Folding with the cursor
+    /// inside moves it to the header, so it never sits on a hidden line.
+    pub(super) fn toggle_code(&mut self, start: usize, cx: &mut Context<Self>) {
+        if !self.code_open.remove(&start) {
+            self.code_open.insert(start);
+        } else if let Some(meta) = self.code_meta.iter().find(|m| m.range.start == start)
+            && meta.rows.len() > 1
+        {
+            let body = self.rows[meta.rows.start + 1].start..=meta.range.end;
+            if body.contains(&self.cursor()) {
+                self.move_to(start, cx);
+            }
+            if self.revealed.is_some_and(|r| body.contains(&r)) {
+                self.revealed = Some(start);
+            }
+        }
+        self.code_gen += 1;
+        cx.notify();
     }
 
     // ----- Search in the note -----
