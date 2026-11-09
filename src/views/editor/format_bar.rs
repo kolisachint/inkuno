@@ -56,12 +56,6 @@ impl Editor {
         false
     }
 
-    /// The note is too narrow for the bar: it collapses into a button.
-    #[cfg(test)]
-    pub fn bar_folded(&self) -> bool {
-        self.bar.at == Some(Bar::Compact)
-    }
-
     /// Where to put the bar: centred on the page (the text column is centred in the pane), further left when
     /// the counter and the corner buttons would touch it, collapsed into a button, at the same centre, when
     /// it no longer has room; `None` if it is off or
