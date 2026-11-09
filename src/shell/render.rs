@@ -65,9 +65,16 @@ impl Render for Shell {
             self.keep_preview();
         }
         self.track(cx);
-        let title = match (self.pane().displayed_path(), &self.vault) {
-            (Some(p), _) => vault::stem(p),
-            (None, Some(_)) => tr("New note", "Nouvelle note").to_string(),
+        // Zed-style window title: the folder first, then the app — the tree header no longer
+        // shows the vault name, so the title bar carries it on every system (drawn below on
+        // Linux, native elsewhere through `set_window_title`).
+        let vault_name = self.vault.as_ref().map(|v| vault::stem(v));
+        let title = match (self.pane().displayed_path(), vault_name) {
+            (Some(p), Some(vault)) => format!("{} — {vault} — Inkuno", vault::stem(p)),
+            (Some(p), None) => format!("{} — Inkuno", vault::stem(p)),
+            (None, Some(vault)) => {
+                format!("{} — {vault} — Inkuno", tr("New note", "Nouvelle note"))
+            }
             (None, None) => "Inkuno".to_string(),
         };
         if title != self.title {
@@ -1305,7 +1312,24 @@ impl Shell {
                 // Under the native bar the strip keeps its room but takes no handle: the lights
                 // stay clickable. Its left edge is window-relative (see `traffic_pad`).
                 let edge = traffic_edge;
-                let bare = div().debug_selector(move || format!("drag-strip-{group}")).absolute().top_0().left(edge).right_0().h(t.px(STRIP));
+                // Zed-style: where the app draws the bar itself, the vault name sits centered in
+                // the window's top row — the corner group's, under the window buttons. Plain text:
+                // it takes no pointer, the strip stays a handle; it clears the buttons on the right.
+                let name = (strip && group == self.corner_group())
+                    .then(|| self.vault.as_ref().map(|v| vault::stem(v)))
+                    .flatten()
+                    .map(|name| {
+                        div()
+                            .debug_selector(|| "window-title".into())
+                            .min_w_0()
+                            .truncate()
+                            .mr(t.px(PILL_ROOM))
+                            .text_size(t.px(13.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(t.soft)
+                            .child(name)
+                    });
+                let bare = div().debug_selector(move || format!("drag-strip-{group}")).absolute().top_0().left(edge).right_0().h(t.px(STRIP)).flex().items_center().justify_center().children(name);
                 d.child(if traffic { bare } else { bare.map(drag_window) })
             })
             // The active pane of several: a 1 px ring around its sheet, the accent at 30 %. Alone, a pane needs none.
