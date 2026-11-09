@@ -1,10 +1,10 @@
 name: Feature request
-description: An idea for Bref
+description: An idea for Inkuno
 labels: [enhancement]
 body:
   - type: markdown
     attributes:
-      value: Bref aims to stay fast and minimal, so many ideas are declined. Describing the need rather than the solution helps the most.
+      value: Inkuno aims to stay fast and minimal, so many ideas are declined. Describing the need rather than the solution helps the most.
   - type: textarea
     attributes:
       label: Problem

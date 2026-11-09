@@ -111,12 +111,12 @@ mod tests {
         );
         assert_eq!(link_line(body, &notes[1]), None);
         // A front matter alias counts as the name.
-        let mut notes = vec![note("Appli", &[]), note("Journal", &["bref app"])];
-        notes[0].aliases = vec!["Bref App".into()].into();
+        let mut notes = vec![note("Appli", &[]), note("Journal", &["inkuno app"])];
+        notes[0].aliases = vec!["Inkuno App".into()].into();
         assert_eq!(backlinks(&notes, Path::new("/v/Appli.md")).len(), 1);
         assert_eq!(
-            link_line("vu [[bref app]]", &notes[0]),
-            Some("vu [[bref app]]")
+            link_line("vu [[inkuno app]]", &notes[0]),
+            Some("vu [[inkuno app]]")
         );
     }
 

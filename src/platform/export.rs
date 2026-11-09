@@ -14,7 +14,7 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let dir = path.parent().unwrap_or(Path::new("."));
     let (temp, mut file) = loop {
         let temp = dir.join(format!(
-            ".bref-export-{}-{}",
+            ".inkuno-export-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
@@ -40,7 +40,7 @@ mod tests {
 
     #[test]
     fn copies_never_replace_an_occupied_name() {
-        let dir = std::env::temp_dir().join(format!("bref-export-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("inkuno-export-test-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("copie été.md");
         save(&path, "é😀\nline".as_bytes()).unwrap();
@@ -83,7 +83,7 @@ mod tests {
             !p.unwrap()
                 .file_name()
                 .to_string_lossy()
-                .starts_with(".bref-export-")
+                .starts_with(".inkuno-export-")
         }));
         fs::remove_dir_all(dir).unwrap();
     }

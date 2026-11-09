@@ -1,6 +1,6 @@
 [book]
-title = "Bref user guide"
-description = "How to use Bref, a fast, minimal note-taking app for plain Markdown files."
+title = "Inkuno user guide"
+description = "How to use Inkuno, a fast, minimal note-taking app for plain Markdown files."
 language = "en"
 src = "src"
 
@@ -11,7 +11,7 @@ create-missing = false
 [output.html]
 git-repository-url = "https://github.com/alarboulletmarin/bref"
 edit-url-template = "https://github.com/alarboulletmarin/bref/edit/main/book/{path}"
-site-url = "/bref/guide/"
+site-url = "/inkuno/guide/"
 no-section-label = true
 
 [output.html.fold]

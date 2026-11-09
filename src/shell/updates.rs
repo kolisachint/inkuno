@@ -66,7 +66,7 @@ impl Shell {
                 Tone::Done,
                 format!(
                     "{} ({})",
-                    tr("Bref is up to date", "Bref est à jour"),
+                    tr("Inkuno is up to date", "Inkuno est à jour"),
                     env!("CARGO_PKG_VERSION")
                 ),
                 cx,
@@ -147,8 +147,8 @@ impl Shell {
             };
             if self.updating {
                 return row(banner.pr_3().child(tr(
-                    "Updating, Bref restarts…",
-                    "Mise à jour, Bref redémarre…",
+                    "Updating, Inkuno restarts…",
+                    "Mise à jour, Inkuno redémarre…",
                 )));
             }
             // "Update" when the app can do it alone, otherwise the download page.

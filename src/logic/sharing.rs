@@ -1,4 +1,4 @@
-//! Readable text copies of Bref's Markdown dialect. No linked files are expanded.
+//! Readable text copies of Inkuno's Markdown dialect. No linked files are expanded.
 
 use super::markdown as md;
 

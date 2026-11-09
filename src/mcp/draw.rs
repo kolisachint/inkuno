@@ -24,7 +24,7 @@ use super::{
 };
 
 const FLOW: &str = "this Mermaid diagram cannot become a canvas (only classDiagram, sequenceDiagram and stateDiagram can). Put it in a note as a ```mermaid block, then render that block.";
-const NEWER: &str = "this diagram was written by a newer version of Bref and is read-only";
+const NEWER: &str = "this diagram was written by a newer version of Inkuno and is read-only";
 
 /// Stable names of the library's starting points, in the order `library::templates` returns them.
 const TEMPLATES: [&str; 8] = [
@@ -38,7 +38,7 @@ const TEMPLATES: [&str; 8] = [
     "deployment",
 ];
 
-/// The key an agent passes for each family of the library, by its English name (`bref mcp`
+/// The key an agent passes for each family of the library, by its English name (`inkuno mcp`
 /// speaks English: `lang::speak_english`).
 const FAMILIES: [(&str, &str); 6] = [
     ("Class", "class"),
@@ -156,7 +156,7 @@ pub fn read_diagram(vault: &Vault, args: &Value) -> Outcome {
         }));
     }
     let Some(diagram) = Diagram::from_svg(&text) else {
-        return Outcome::err("this SVG is not a Bref diagram");
+        return Outcome::err("this SVG is not a Inkuno diagram");
     };
     Outcome::ok(described(&diagram, &vault::rel(&vault.root, &path), false))
 }
@@ -174,7 +174,7 @@ pub fn edit_diagram(vault: &mut Vault, args: &Value) -> Outcome {
         return Outcome::err(NEWER);
     }
     let Some(diagram) = Diagram::from_svg(&text) else {
-        return Outcome::err("this SVG is not a Bref diagram");
+        return Outcome::err("this SVG is not a Inkuno diagram");
     };
     let Some(ops) = args.get("ops").and_then(|v| v.as_array()) else {
         return Outcome::err("`ops` must be a list");
@@ -242,7 +242,7 @@ pub fn import_diagram(vault: &mut Vault, args: &Value) -> Outcome {
     .unwrap_or_else(|e| e)
 }
 
-/// What `diagram_library` returns, also served at `bref://library`.
+/// What `diagram_library` returns, also served at `inkuno://library`.
 pub fn library_value(family: Option<&str>) -> Result<Value, String> {
     if let Some(family) = family
         && !FAMILIES.iter().any(|(_, key)| *key == family)

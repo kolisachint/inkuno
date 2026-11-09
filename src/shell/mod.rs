@@ -405,7 +405,7 @@ pub fn run() {
         let (vault, recent) = vault::load_config();
         let lost = vault.clone().filter(|v| !v.is_dir());
         let vault = vault.filter(|v| v.is_dir());
-        // `bref --capture`: the input line alone, in a small undecorated window.
+        // `inkuno --capture`: the input line alone, in a small undecorated window.
         // Without a chosen vault, the app opens as usual to ask for one.
         if let Some(root) = vault
             .clone()
@@ -419,7 +419,7 @@ pub fn run() {
                         cx,
                     ))),
                     titlebar: None,
-                    app_id: Some("dev.andrea.Bref".into()),
+                    app_id: Some("com.inkuno.Inkuno".into()),
                     window_decorations: Some(WindowDecorations::Client),
                     window_background: WindowBackgroundAppearance::Transparent,
                     is_resizable: false,
@@ -435,11 +435,11 @@ pub fn run() {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
-                    title: Some("Bref".into()),
+                    title: Some("Inkuno".into()),
                     ..Default::default()
                 }),
                 // Must match the .desktop file name for the desktop to associate the icon.
-                app_id: Some("dev.andrea.Bref".into()),
+                app_id: Some("com.inkuno.Inkuno".into()),
                 // On Linux the app draws its title bar. Asking for
                 // `Server` does not work on GNOME/Wayland, which provides none
                 // while gpui 0.2 still believes it is decorated. macOS and Windows

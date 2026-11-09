@@ -242,7 +242,7 @@ pub(super) fn start<'a>(
     &'a mut gpui::VisualTestContext,
     std::sync::MutexGuard<'static, ()>,
 ) {
-    let root = std::env::temp_dir().join(format!("bref-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let config = isolated_config(&root);

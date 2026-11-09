@@ -1,5 +1,5 @@
 //! A note laid out on A4 pages for print: one SVG per page, with its headings, lists, quotes,
-//! code, tables, pictures and figures, in Bref Light on white whatever the window's theme.
+//! code, tables, pictures and figures, in Inkuno Light on white whatever the window's theme.
 //! Pure functions: the pictures and the embedded notes come from the caller (`find`).
 //!
 //! Each source line is a line of the page, as in the editor. The text stays text (`<text>`),
@@ -78,7 +78,7 @@ pub fn print(text: &str, find: &dyn Fn(&str) -> Found) -> Printed {
     }
 }
 
-/// The print colours: Bref Light's text, accent and code tints, on white.
+/// The print colours: Inkuno Light's text, accent and code tints, on white.
 struct Ink {
     text: String,
     soft: String,
@@ -95,7 +95,7 @@ struct Ink {
 impl Ink {
     fn new() -> Self {
         let t = theme::Theme::of(
-            &crate::logic::prefs::Prefs::parse("theme=Bref Light"),
+            &crate::logic::prefs::Prefs::parse("theme=Inkuno Light"),
             gpui::WindowAppearance::Light,
         );
         let rgb = |c: gpui::Hsla| {

@@ -1,11 +1,11 @@
-//! Quick capture: a one-line window (`bref --capture`) and its system shortcut.
+//! Quick capture: a one-line window (`inkuno --capture`) and its system shortcut.
 
 use super::*;
 
-/// The capture window (`bref --capture`, to bind to a desktop shortcut): one input
+/// The capture window (`inkuno --capture`, to bind to a desktop shortcut): one input
 /// line, nothing else. Enter appends it to the daily note and closes; Escape closes. The vault
 /// is not read, the window is up as fast as the app.
-// ponytail: if Bref is open on the daily note, its vault watcher reloads it;
+// ponytail: if Inkuno is open on the daily note, its vault watcher reloads it;
 // a keystroke pending there is saved 400 ms later (well before anything is typed here).
 // Talk to the open instance if that delay ever grew longer.
 pub(super) struct Capture {
@@ -74,7 +74,7 @@ impl Render for Capture {
 }
 
 impl Shell {
-    /// Binds capture to a desktop shortcut, and says which. Where Bref cannot set it
+    /// Binds capture to a desktop shortcut, and says which. Where Inkuno cannot set it
     /// itself, the command to bind is copied: all that is left is to paste it.
     pub(super) fn capture_shortcut(&mut self, cx: &mut Context<Self>) {
         let Ok(exe) = std::env::current_exe() else {
@@ -87,7 +87,7 @@ impl Shell {
                     vault::Shortcut::Bound(keys) => format!("{} : {keys}", tr("Quick capture, from anywhere", "Capture rapide, depuis n'importe où")),
                     vault::Shortcut::Unbound(keys) => format!(
                         "{keys} {}",
-                        tr("is taken: choose the keys of “Bref: capture” in Settings › Keyboard", "est pris : choisir les touches de « Bref : capture » dans Réglages › Clavier")
+                        tr("is taken: choose the keys of “Inkuno: capture” in Settings › Keyboard", "est pris : choisir les touches de « Inkuno : capture » dans Réglages › Clavier")
                     ),
                     vault::Shortcut::Manual(command) => {
                         cx.write_to_clipboard(ClipboardItem::new_string(command));

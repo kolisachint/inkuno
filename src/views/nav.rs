@@ -1011,7 +1011,7 @@ mod tests {
 
     #[test]
     fn a_file_selected_in_the_tree_is_not_a_folder() {
-        let root = std::env::temp_dir().join(format!("bref-nav-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("inkuno-nav-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("Dossier.v2")).unwrap();
         for file in [

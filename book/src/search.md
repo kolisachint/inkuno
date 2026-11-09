@@ -42,7 +42,7 @@
 From the vault search, `Ctrl + R` (or the chevron) shows the *Replace with* field. From the note's search bar, `Ctrl + Shift + Enter` does the same job.
 
 - The field's button, `Ctrl + Enter`, or `Enter` in the field replaces in every note.
-- Bref first shows how many matches in how many notes, and writes nothing until you accept.
+- Inkuno first shows how many matches in how many notes, and writes nothing until you accept.
 - The button on a note's header replaces in that note only.
 - The cross at the end of a match sets it aside: it is neither listed nor replaced.
 - A note that cannot be written is reported; the others are replaced.

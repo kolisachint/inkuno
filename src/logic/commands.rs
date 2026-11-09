@@ -35,7 +35,7 @@ impl Group {
             (Group::Go, _) => tr("Go to", "Aller à"),
             (Group::Vault, _) => tr("Vault", "Coffre"),
             (Group::Look, _) => tr("Appearance", "Apparence"),
-            (Group::App, _) => "Bref",
+            (Group::App, _) => "Inkuno",
         }
     }
 }
@@ -743,7 +743,7 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
         ),
         (
             "app::Quit",
-            tr("Quit Bref", "Quitter Bref"),
+            tr("Quit Inkuno", "Quitter Inkuno"),
             "c-quit.svg",
             App,
         ),

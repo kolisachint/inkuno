@@ -1,5 +1,5 @@
-//! The running app's door, for `bref mcp`: a TCP port on 127.0.0.1 and a secret, both written in
-//! `<config>/bref/agent` when the window opens. One request a connection, one JSON line each way:
+//! The running app's door, for `inkuno mcp`: a TCP port on 127.0.0.1 and a secret, both written in
+//! `<config>/inkuno/agent` when the window opens. One request a connection, one JSON line each way:
 //! `{"secret", "show": path}` asks the window to show a file of its vault; the answer is
 //! `{"ok": true}` or `{"error": sentence}`. The secret keeps out the other programs of the machine,
 //! which can all reach 127.0.0.1. Only the standard library: TCP is the one local channel it has
@@ -30,11 +30,11 @@ pub struct Asked {
     pub answer: mpsc::Sender<Answer>,
 }
 
-/// What `bref mcp` says when no window answers: the file is written all the same.
-pub const NOT_OPEN: &str = "Bref is not open: start it to see the file";
+/// What `inkuno mcp` says when no window answers: the file is written all the same.
+pub const NOT_OPEN: &str = "Inkuno is not open: start it to see the file";
 
 fn door() -> PathBuf {
-    config_dir().join("bref/agent")
+    config_dir().join("inkuno/agent")
 }
 
 /// Opens the door: each request lands in `asked`, and `signal` is raised for it.
@@ -90,7 +90,7 @@ fn serve(
             asked.lock().unwrap().push(Asked { path, answer });
             signal.raise();
             wait.recv_timeout(Duration::from_secs(5))
-                .unwrap_or_else(|_| Err("Bref did not answer".into()))
+                .unwrap_or_else(|_| Err("Inkuno did not answer".into()))
         }
     };
     let reply = match answer {
@@ -133,7 +133,7 @@ fn show_at(file: &Path, path: &Path) -> Answer {
     let mut line = String::new();
     BufReader::new(&stream)
         .read_line(&mut line)
-        .map_err(|_| "Bref did not answer".to_string())?;
+        .map_err(|_| "Inkuno did not answer".to_string())?;
     let reply: Value = serde_json::from_str(&line).map_err(|_| NOT_OPEN.to_string())?;
     match reply["error"].as_str() {
         Some(error) => Err(error.to_string()),
@@ -148,7 +148,7 @@ mod tests {
 
     /// A window that answers each request with `answer`, through a door in `dir`.
     fn window(dir: &Path, answer: fn(&Path) -> Answer) -> PathBuf {
-        let file = dir.join("bref/agent");
+        let file = dir.join("inkuno/agent");
         let (asked, signal) = (
             Arc::new(Mutex::new(Vec::<Asked>::new())),
             Arc::new(Signal::default()),
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn the_window_answers_through_the_door() {
-        let dir = std::env::temp_dir().join(format!("bref-link-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("inkuno-link-{}", std::process::id()));
         let file = window(&dir.join("a"), |path| {
             if path.ends_with("Note é.md") {
                 Ok(())

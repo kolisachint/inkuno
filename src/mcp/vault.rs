@@ -220,7 +220,7 @@ fn looks_like_path(note: &str) -> bool {
         || note.to_lowercase().ends_with(".svg")
 }
 
-/// A Bref diagram, including one this build can only open read-only.
+/// A Inkuno diagram, including one this build can only open read-only.
 fn is_diagram(path: &Path) -> bool {
     if path
         .extension()

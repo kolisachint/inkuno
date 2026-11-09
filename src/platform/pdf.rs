@@ -74,7 +74,7 @@ pub fn document(
     pdf.pages(tree).count(kids.len() as i32).kids(kids);
     pdf.document_info(info)
         .title(TextStr(title))
-        .creator(TextStr("Bref"));
+        .creator(TextStr("Inkuno"));
     chunks.iter().for_each(|c| pdf.extend(c));
     Ok((pdf.finish(), outlined))
 }

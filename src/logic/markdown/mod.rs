@@ -1906,9 +1906,9 @@ mod tests {
             None
         );
         // Front matter tags and aliases, in their three spellings.
-        let inline = "---\ntags: [projet, \"#idée\", projet]\naliases: Bref app, 'Bref'\ntagsx: [non]\n---\n#corps #projet\n";
+        let inline = "---\ntags: [projet, \"#idée\", projet]\naliases: Inkuno app, 'Inkuno'\ntagsx: [non]\n---\n#corps #projet\n";
         assert_eq!(index(inline).0, ["projet", "idée", "corps"]);
-        assert_eq!(aliases(inline), ["Bref app", "Bref"]);
+        assert_eq!(aliases(inline), ["Inkuno app", "Inkuno"]);
         let dashes = "---\naliases:\n  - \"Un nom\"\n  - Autre\ntags:\n- a\n---\n";
         assert_eq!(
             (aliases(dashes), index(dashes).0),

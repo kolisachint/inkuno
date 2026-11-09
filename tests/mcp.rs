@@ -1,4 +1,4 @@
-//! `bref mcp` over real pipes: one session, the way a client drives the binary.
+//! `inkuno mcp` over real pipes: one session, the way a client drives the binary.
 
 use std::{
     fs,
@@ -18,7 +18,7 @@ struct Client {
 
 impl Client {
     fn start(root: &Path, read_only: bool) -> Self {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_bref"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_inkuno"));
         // A French system: what the server tells the model stays in English.
         command
             .arg("mcp")
@@ -26,7 +26,7 @@ impl Client {
             .arg(root)
             .env("LC_ALL", "fr_FR.UTF-8")
             .env("LANG", "fr_FR.UTF-8");
-        // A config of its own: `show` must never reach a Bref window open on this machine.
+        // A config of its own: `show` must never reach a Inkuno window open on this machine.
         let config = config(root);
         command
             .env("XDG_CONFIG_HOME", &config)
@@ -88,11 +88,11 @@ fn door(config: &Path) -> std::path::PathBuf {
     } else {
         config.to_path_buf()
     };
-    dir.join("bref/agent")
+    dir.join("inkuno/agent")
 }
 
 fn scratch(name: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("bref-mcp-bin-{}-{name}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-mcp-bin-{}-{name}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     root
@@ -104,7 +104,7 @@ fn a_session_over_pipes() {
     let mut client = Client::start(&root, false);
     let init = client.ask("initialize", json!({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}}));
     assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
-    assert_eq!(init["result"]["serverInfo"]["name"], "bref");
+    assert_eq!(init["result"]["serverInfo"]["name"], "inkuno");
     client.notify("notifications/initialized");
     let ping = client.ask("ping", json!({}));
     assert_eq!(ping["result"], json!({}));
@@ -154,14 +154,14 @@ fn a_session_over_pipes() {
         library["result"]["structuredContent"]["shapes"][0]["name"],
         "Class"
     );
-    let guide = client.ask("resources/read", json!({"uri": "bref://guide/links"}));
+    let guide = client.ask("resources/read", json!({"uri": "inkuno://guide/links"}));
     assert!(
         guide["result"]["contents"][0]["text"]
             .as_str()
             .unwrap()
             .contains("[[")
     );
-    // `show` with no Bref open: a sentence, the note is there all the same.
+    // `show` with no Inkuno open: a sentence, the note is there all the same.
     let alone = client.ask(
         "tools/call",
         json!({"name": "show", "arguments": {"note": "Session"}}),
@@ -171,7 +171,7 @@ fn a_session_over_pipes() {
         alone["result"]["content"][0]["text"]
             .as_str()
             .unwrap()
-            .contains("Bref is not open")
+            .contains("Inkuno is not open")
     );
     // A window listening at its door: it is asked for the note's absolute path, with the secret.
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

@@ -13,7 +13,7 @@ fn label_editing_goes_by_displayed_character(cx: &mut TestAppContext) {
     let file = root.join("Schéma.svg");
     fs::write(
         &file,
-        "<svg><metadata id=\"bref-diagram\">\nversion 1\n</metadata></svg>\n",
+        "<svg><metadata id=\"inkuno-diagram\">\nversion 1\n</metadata></svg>\n",
     )
     .unwrap();
     let canvas = shell.update_in(cx, |s, window, cx| {

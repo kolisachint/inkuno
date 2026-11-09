@@ -199,9 +199,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         text(cx)
     );
 
-    // A diagram written by a newer Bref opens in the viewer, with a notice: whatever is typed,
+    // A diagram written by a newer Inkuno opens in the viewer, with a notice: whatever is typed,
     // its bytes do not change.
-    let future = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 60\"><rect width=\"100\" height=\"60\"/><metadata id=\"bref-diagram\">\nversion 99\nshape 1 hexagon 0 0 100 60 0 0 0 A\n</metadata></svg>\n";
+    let future = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 60\"><rect width=\"100\" height=\"60\"/><metadata id=\"inkuno-diagram\">\nversion 99\nshape 1 hexagon 0 0 100 60 0 0 0 A\n</metadata></svg>\n";
     let newer = j.root.join("Futur.svg");
     fs::write(&newer, future).unwrap();
     // The editor must not have the focus when the window is drawn, or the file is put away.
@@ -214,13 +214,13 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     assert!(shell.read_with(cx, |s, _| s.pane().drawing().is_none()
         && s.pane().viewer().is_some()
-        && s.told(Tone::Info, "Bref plus récent")));
+        && s.told(Tone::Info, "Inkuno plus récent")));
     cx.simulate_keystrokes("+ - 0 delete secondary-z secondary-a backspace");
     assert_eq!(fs::read_to_string(&newer).unwrap(), future);
     // One of this version keeps the lines it cannot read, and does not reuse their ids.
     let mixed = j.root.join("Mixte.svg");
     let unknown = "shape 9 hexagon 0 0 10 10 0 0 0 H";
-    fs::write(&mixed, format!("<svg><metadata id=\"bref-diagram\">\nversion 1\n{unknown}\nshape 1 rect 0 0 100 60 0 0 0 \n</metadata></svg>\n")).unwrap();
+    fs::write(&mixed, format!("<svg><metadata id=\"inkuno-diagram\">\nversion 1\n{unknown}\nshape 1 rect 0 0 100 60 0 0 0 \n</metadata></svg>\n")).unwrap();
     let canvas = shell.update_in(cx, |s, window, cx| {
         s.toasts.clear();
         s.load_note(&mixed, cx);
@@ -288,7 +288,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(!svg.contains(">*abstract()*"));
     // A diagram of a note's age: its stars stay, until the bar's button is used (and undone).
     let old = j.root.join("Ancien.svg");
-    fs::write(&old, "<svg><metadata id=\"bref-diagram\">\nversion 1\nshape 1 rect 0 0 200 60 0 0 0 a *b* c\n</metadata></svg>\n").unwrap();
+    fs::write(&old, "<svg><metadata id=\"inkuno-diagram\">\nversion 1\nshape 1 rect 0 0 200 60 0 0 0 a *b* c\n</metadata></svg>\n").unwrap();
     let canvas = shell.update_in(cx, |s, window, cx| {
         s.load_note(&old, cx);
         let canvas = s.pane().drawing().cloned().unwrap();

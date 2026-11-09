@@ -71,7 +71,7 @@ impl Render for Shell {
         let title = match (self.pane().displayed_path(), &self.vault) {
             (Some(p), _) => vault::stem(p),
             (None, Some(_)) => tr("New note", "Nouvelle note").to_string(),
-            (None, None) => "Bref".to_string(),
+            (None, None) => "Inkuno".to_string(),
         };
         if title != self.title {
             window.set_window_title(&title);
@@ -641,7 +641,7 @@ impl Shell {
                     div()
                         .text_size(t.px(26.))
                         .font_weight(gpui::FontWeight::BOLD)
-                        .child("Bref"),
+                        .child("Inkuno"),
                 )
                 .child(
                     div()

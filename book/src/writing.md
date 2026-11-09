@@ -1,6 +1,6 @@
 # Writing notes
 
-What you type is what is saved. Bref only changes how it looks: markers stay visible but dimmed, and the file on disk is always plain Markdown.
+What you type is what is saved. Inkuno only changes how it looks: markers stay visible but dimmed, and the file on disk is always plain Markdown.
 
 ## Markdown
 
@@ -39,7 +39,7 @@ Some details:
 |---|---|---|
 | `**bold**` | `Ctrl + B` | bold |
 | `*italic*` | `Ctrl + I` | italic |
-| `<u>underlined</u>` | `Ctrl + U` | underline (Markdown has none, so Bref uses the HTML tag) |
+| `<u>underlined</u>` | `Ctrl + U` | underline (Markdown has none, so Inkuno uses the HTML tag) |
 | `~~struck~~` | `Ctrl + Shift + X` | strikethrough |
 | `==highlighted==` | `Ctrl + Shift + H` | highlight |
 | `<mark class="green">colored</mark>` | | a colored highlight: `yellow`, `green`, `blue`, `pink` or `purple` |
@@ -154,7 +154,7 @@ Headings inside code blocks are not listed.
 - Markdown tables become tab-separated rows, without the separator row. Values stay as written, including formulas.
 - Code keeps its text and indentation. Inline backticks and matching code fences are removed. An unclosed fence keeps the remaining code. Backtick and tilde fences are supported.
 - Images become `[image: label (path)]`; embeds become `[embed: target]`, with any alias. No image or embedded document is read or expanded.
-- Closed front matter and HTML comments are omitted. Bref comments keep the annotated text and omit the discussion. Code keeps comment-like text literally.
+- Closed front matter and HTML comments are omitted. Inkuno comments keep the annotated text and omit the discussion. Code keeps comment-like text literally.
 - Horizontal rules become blank lines. Unknown syntax stays literal. Line endings become LF; Unicode and paragraph breaks are preserved.
 
 ### Portability
@@ -168,7 +168,7 @@ Copies contain the document alone. Relative image paths, relative links, interna
 - **What is printed**: the note as written now, unsaved edits included; the file of the note is not touched. The front matter is left out.
 - **The look**: the light theme on white paper, whatever the theme of the window. Titles in IBM Plex Serif, text in IBM Plex Sans, code in IBM Plex Mono, 20 mm margins, the page number at the bottom.
 - **The text stays text**: it can be searched, selected and copied in a PDF reader. Letters the app's fonts lack (Japanese, Korean, Hebrew…) are taken from the fonts of the system. Web links can be clicked; `[[links]]` are printed as their text.
-- **Pictures and figures**: PNG, JPEG and GIF pictures, SVG files, Bref diagrams, Mermaid diagrams and `$$` formulas are drawn in, shrunk to fit the page. An embedded section (`![[Note#Heading]]`) is printed under a bar, once (an embed inside it stays a link).
+- **Pictures and figures**: PNG, JPEG and GIF pictures, SVG files, Inkuno diagrams, Mermaid diagrams and `$$` formulas are drawn in, shrunk to fit the page. An embedded section (`![[Note#Heading]]`) is printed under a bar, once (an embed inside it stays a link).
 - **Pages**: a line, a picture or a table row is never cut by a page break, and a heading always goes with the line after it. A long code line or a word longer than the page goes to the next line wherever it must. A table too wide for the page shares the width between its columns, and its cells wrap.
 - **The name**: the PDF never replaces a file. If the name is taken, a number is added (`Note 2.pdf`); without `.pdf`, the extension is added. The message at the bottom says the name written.
 - **What is not printed is said**: a picture that is missing, damaged or in another format (WebP, BMP, TIFF, AVIF, a web address), a note embedded that cannot be found, a diagram the engine cannot read. Each is replaced on the page by *[Not printed: …]* and listed in the message.

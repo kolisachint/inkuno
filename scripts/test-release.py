@@ -15,7 +15,7 @@ import unittest
 
 SCRIPT = Path(__file__).with_name("release.sh")
 APP = SCRIPT.parent.parent.name
-if APP not in {"bref", "spot", "astrolabe"}:
+if APP not in {"inkuno", "spot", "astrolabe"}:
     raise RuntimeError("run this test from one of the native application repositories")
 GIT = shutil.which("git")
 MOCK = r"""#!PYTHON
@@ -87,9 +87,9 @@ class ReleaseTest(unittest.TestCase):
             (self.repo / "aur/spot").mkdir(parents=True)
             shutil.copy2(self.repo / "PKGBUILD", self.repo / "aur/spot/PKGBUILD")
             shutil.copy2(self.repo / ".SRCINFO", self.repo / "aur/spot/.SRCINFO")
-        if APP == "bref":
-            (self.repo / "aur/bref-git").mkdir(parents=True)
-            (self.repo / "aur/bref-git/PKGBUILD").write_text("pkgver=generated\n")
+        if APP == "inkuno":
+            (self.repo / "aur/inkuno-git").mkdir(parents=True)
+            (self.repo / "aur/inkuno-git/PKGBUILD").write_text("pkgver=generated\n")
         self.git("add", ".")
         self.git("commit", "-qm", "feat: initial feature")
         self.original_head = self.git("rev-parse", "HEAD")
@@ -242,13 +242,13 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD"), head)
         self.assertEqual(len(self.calls()), before)
 
-    @unittest.skipUnless(APP == "bref", "Bref-specific generated recipe")
-    def test_bref_preserves_generated_git_recipe(self):
-        recipe = self.repo / "aur/bref-git/PKGBUILD"
+    @unittest.skipUnless(APP == "inkuno", "Inkuno-specific generated recipe")
+    def test_inkuno_preserves_generated_git_recipe(self):
+        recipe = self.repo / "aur/inkuno-git/PKGBUILD"
         recipe.write_text("pkgver=user-generated\n")
         self.run_release(dry=True)
         self.assertEqual(recipe.read_text(), "pkgver=user-generated\n")
-        self.assertEqual(self.git("status", "--porcelain"), "M aur/bref-git/PKGBUILD")
+        self.assertEqual(self.git("status", "--porcelain"), "M aur/inkuno-git/PKGBUILD")
 
 
 if __name__ == "__main__":

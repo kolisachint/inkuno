@@ -19,7 +19,7 @@ pub fn tr(en: &'static str, fr: &'static str) -> &'static str {
     }
 }
 
-/// English from now on, whatever the system's language: `bref mcp` talks to a model, and
+/// English from now on, whatever the system's language: `inkuno mcp` talks to a model, and
 /// the library's names and templates it returns are part of what the model reads.
 pub fn speak_english() {
     let _ = FRENCH.set(false);
@@ -219,7 +219,7 @@ mod tests {
     fn tells_why_a_disk_operation_failed() {
         use std::io::{Error, ErrorKind};
         // A real system error, whatever the system: a file that is not there.
-        let os = std::fs::read(std::env::temp_dir().join("bref-absent-ici/rien")).unwrap_err();
+        let os = std::fs::read(std::env::temp_dir().join("inkuno-absent-ici/rien")).unwrap_err();
         assert_eq!(io_reason(&os), "introuvable");
         assert!(!io_reason(&os).contains("os error"));
         for (kind, said) in [

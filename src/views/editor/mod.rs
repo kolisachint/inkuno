@@ -502,7 +502,7 @@ impl Editor {
             laid: None,
             force_full: false,
             #[cfg(test)]
-            compare: std::env::var("BREF_NO_COMPARE").is_err(),
+            compare: std::env::var("INKUNO_NO_COMPARE").is_err(),
             #[cfg(test)]
             counts: (0, 0, 0),
             laid_out: None,
@@ -845,7 +845,7 @@ mod tests {
     /// A vault image is reached through `..` (sibling folder); nothing leaves the vault.
     #[test]
     fn images_stay_inside_the_vault() {
-        let base = std::env::temp_dir().join(format!("bref-inside-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("inkuno-inside-{}", std::process::id()));
         let (vault, outside) = (base.join("vault"), base.join("outside.png"));
         fs::create_dir_all(vault.join("notes")).unwrap();
         fs::create_dir_all(vault.join("assets")).unwrap();

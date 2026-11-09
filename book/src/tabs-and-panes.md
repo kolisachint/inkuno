@@ -46,7 +46,7 @@ Tabs come back at the next start. A tab out of sight keeps its text, cursor and 
 
 `Ctrl + \` splits the pane to the right, `Ctrl + Alt + \` below, as many times as the window has room for. Write a note while reading two others, or keep a table under a note.
 
-- A new pane opens on the palette, to choose what goes there. Each pane shows anything Bref can show.
+- A new pane opens on the palette, to choose what goes there. Each pane shows anything Inkuno can show.
 - A pane is split only if both halves keep room to write: 300 px wide, 200 px high. Otherwise a message says so. The very first split folds the panel onto its rail when that is enough.
 - The pane with the focus is marked by a line at its top, and a thin accent ring. The palette, the tree and the shortcuts act on it.
 - A note already shown in one pane is not opened twice: the focus moves to it.

@@ -192,7 +192,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("down down enter");
     assert_eq!(
         look(cx),
-        ("Bref Light".to_string(), Hsla::from(gpui::rgb(0xfbfaf8)))
+        ("Inkuno Light".to_string(), Hsla::from(gpui::rgb(0xfbfaf8)))
     );
     // Code font, from the palette; text size from the keyboard.
     cx.simulate_keystrokes("secondary-p");
@@ -205,7 +205,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 17.);
     assert_eq!(
         vault::load_settings(),
-        "theme=Bref Light\nfont=\nmono=.SystemUIFont\nsize=17\n"
+        "theme=Inkuno Light\nfont=\nmono=.SystemUIFont\nsize=17\n"
     );
     cx.simulate_keystrokes("secondary-0");
     assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 16.);

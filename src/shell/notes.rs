@@ -90,14 +90,14 @@ impl Shell {
                             FileKind::Drawing(canvas)
                         }
                         // An SVG from elsewhere opens in the viewer: zoom in, move around. So does a
-                        // diagram of a newer Bref, which this one could only damage by saving it.
+                        // diagram of a newer Inkuno, which this one could only damage by saving it.
                         None => match open {
                             Some(FileKind::Svg(viewer)) => FileKind::Svg(viewer),
                             _ => {
                                 if text.as_deref().is_some_and(Diagram::newer) {
                                     let notice = tr(
-                                        "Made by a newer Bref: shown read-only",
-                                        "Fait par un Bref plus récent : en lecture seule",
+                                        "Made by a newer Inkuno: shown read-only",
+                                        "Fait par un Inkuno plus récent : en lecture seule",
                                     );
                                     self.say(Tone::Info, notice, cx);
                                 }

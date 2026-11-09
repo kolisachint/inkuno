@@ -352,8 +352,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
 
     // Hundreds of random gestures (fixed seed) in tables of every kind: no
     // crash, the cursor stays on a character boundary, and a well-formed table stays regular.
-    // `BREF_FUZZ_SEED=n cargo test end_to_end` tries another sequence of gestures.
-    let mut seed = std::env::var("BREF_FUZZ_SEED")
+    // `INKUNO_FUZZ_SEED=n cargo test end_to_end` tries another sequence of gestures.
+    let mut seed = std::env::var("INKUNO_FUZZ_SEED")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0x9E3779B97F4A7C15u64);

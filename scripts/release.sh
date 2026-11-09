@@ -6,8 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP=bref
-TITLE=Bref
+APP=inkuno
+TITLE=Inkuno
 REPO="alarboulletmarin/$APP"
 package_files=(PKGBUILD)
 managed=(Cargo.toml Cargo.lock PKGBUILD .SRCINFO)
@@ -19,8 +19,8 @@ dry=${DRY_RUN:-0}
 resume=${RESUME:-0}
 [[ $dry != 1 || $resume != 1 ]] || die "DRY_RUN and RESUME cannot be combined"
 tag="v$ver"
-# Only the generated development recipe in Bref may already differ.
-git diff --quiet -- . ':!aur/bref-git/PKGBUILD' || die "uncommitted changes"
+# Only the generated development recipe in Inkuno may already differ.
+git diff --quiet -- . ':!aur/inkuno-git/PKGBUILD' || die "uncommitted changes"
 git diff --cached --quiet || die "staged changes"
 if [ "$dry" = 0 ]; then
     [ "$(git branch --show-current)" = main ] || die "not on main"
@@ -73,7 +73,7 @@ cleanup() {
     trap - EXIT
     if [ "$rollback" = 1 ]; then
         # The index was clean on entry. Restore only the files owned by this
-        # script; preserve untracked files and Bref's generated -git recipe.
+        # script; preserve untracked files and Inkuno's generated -git recipe.
         git reset -q HEAD -- "${managed[@]}" || code=1
         for file in "${managed[@]}"; do
             cp "$scratch/original/$file" "$file" || code=1

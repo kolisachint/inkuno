@@ -63,7 +63,7 @@ fn folded_bar_button_hides_what_it_covers() {
 /// and reported, the others apply.
 #[gpui::test]
 fn keys_survive_a_restart(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-keys-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-keys-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -90,7 +90,7 @@ fn keys_survive_a_restart(cx: &mut TestAppContext) {
 /// from before panes, leaves a single pane.
 #[gpui::test]
 fn panes_come_back(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-panes-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-panes-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -134,7 +134,7 @@ fn panes_come_back(cx: &mut TestAppContext) {
 /// Without a vault, the welcome screen creates one with a click, in `Notes` of the home folder.
 #[gpui::test]
 fn starts_in_a_new_vault(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-start-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-start-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -162,7 +162,7 @@ fn starts_in_a_new_vault(cx: &mut TestAppContext) {
 /// rename the note after its title, which would rewrite the other notes' links.
 #[gpui::test]
 fn opens_on_the_body(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-body-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-body-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -209,11 +209,11 @@ fn opens_on_the_body(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Capture (`bref --capture`): a line typed, Enter, it is in the daily note
+/// Capture (`inkuno --capture`): a line typed, Enter, it is in the daily note
 /// and the window has closed. Escape closes without writing anything.
 #[gpui::test]
 fn capture_window(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-capture-window-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-capture-window-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -288,7 +288,7 @@ fn capture_window(cx: &mut TestAppContext) {
 /// where one writes. Everything fits in a narrow window, and disappears on the first keystroke.
 #[gpui::test]
 fn empty_page(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-empty-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-empty-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -394,7 +394,7 @@ fn empty_page(cx: &mut TestAppContext) {
 /// stays above the band, never under them.
 #[gpui::test]
 fn bottom_band_keeps_the_text_clear(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-band-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-band-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -459,7 +459,7 @@ fn bottom_band_keeps_the_text_clear(cx: &mut TestAppContext) {
 /// folded and open with its colour badges), the counter or the note, whatever the width, the panel or the version.
 #[gpui::test]
 fn update_banner_stays_clear_of_the_formatting_bar(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-banner-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-banner-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -612,7 +612,7 @@ fn update_banner_stays_clear_of_the_formatting_bar(cx: &mut TestAppContext) {
 /// keeps its four buttons clear of them, and a narrow note starts under them, whatever the panel, the width or the language.
 #[gpui::test]
 fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-pill-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-pill-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -728,7 +728,7 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
 /// end before the buttons or start below them.
 #[gpui::test]
 fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-pill-row-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-pill-row-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -794,7 +794,7 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
 /// title and the empty part of the rail. The text never starts under the strip.
 #[gpui::test]
 fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-grab-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-grab-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
@@ -1232,7 +1232,7 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             .palette
             .as_ref()
             .and_then(|p| p.read(cx).choice_at(0))),
-        Some("Par défaut : Bref, clair ou sombre comme le système".to_string())
+        Some("Par défaut : Inkuno, clair ou sombre comme le système".to_string())
     );
     cx.simulate_keystrokes("escape");
 
@@ -1253,7 +1253,7 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
 /// button apart (at 480 px the rail scrolls, so the layout is the same).
 #[gpui::test]
 fn rail_groups_keep_their_order_and_room(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-rail-groups-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-rail-groups-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);

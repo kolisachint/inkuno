@@ -557,7 +557,7 @@ impl Canvas {
         }
     }
 
-    /// The diagram was rewritten elsewhere (an agent through `bref mcp`, a sync): it is shown as it is now,
+    /// The diagram was rewritten elsewhere (an agent through `inkuno mcp`, a sync): it is shown as it is now,
     /// with the view and what is left of the selection kept, and one step of undo goes back to what was
     /// shown. Not in the middle of a gesture or of a text being written: `false`, and the write that ends it wins.
     pub fn replace(&mut self, diagram: Diagram, cx: &mut Context<Self>) -> bool {
@@ -829,7 +829,7 @@ mod ghost_tests {
                 Tool::Select,
                 "d-rect.svg",
                 crate::ui::theme::Theme::of(
-                    &crate::logic::prefs::Prefs::parse("theme=Bref Light\n"),
+                    &crate::logic::prefs::Prefs::parse("theme=Inkuno Light\n"),
                     gpui::WindowAppearance::Light,
                 ),
                 point(px(grab.0), px(grab.1)),

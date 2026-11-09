@@ -362,7 +362,7 @@ fn tabs_dragged_into_place(cx: &mut TestAppContext) {
     );
 }
 
-/// A note rewritten outside the app (an agent through `bref mcp`, a sync) is reread where the
+/// A note rewritten outside the app (an agent through `inkuno mcp`, a sync) is reread where the
 /// reader is: the scroll and the cursor stay, the new text is there.
 #[gpui::test]
 fn an_outside_write_keeps_the_place(cx: &mut TestAppContext) {
@@ -408,7 +408,7 @@ fn an_outside_write_keeps_the_place(cx: &mut TestAppContext) {
     assert_eq!(at, "# Long\n\nCourt é\n".len());
 }
 
-/// A diagram rewritten outside the app (an agent through `bref mcp`) is redrawn in its open canvas, without
+/// A diagram rewritten outside the app (an agent through `inkuno mcp`) is redrawn in its open canvas, without
 /// closing it: the view stays where it was, and one step of undo goes back to what was shown.
 #[gpui::test]
 fn an_outside_write_redraws_the_open_diagram(cx: &mut TestAppContext) {
@@ -470,7 +470,7 @@ fn an_outside_write_redraws_the_open_diagram(cx: &mut TestAppContext) {
     assert_eq!(canvas.read_with(cx, |c, _| c.diagram().shapes.len()), 1);
 }
 
-/// A note written by another program while it is typed in (an agent through `bref mcp`): both
+/// A note written by another program while it is typed in (an agent through `inkuno mcp`): both
 /// changes stay, as one undo step; on the same lines, the other version goes next to the note.
 #[gpui::test]
 fn an_outside_write_while_typing_is_merged(cx: &mut TestAppContext) {
@@ -585,7 +585,7 @@ fn an_outside_write_while_typing_is_merged(cx: &mut TestAppContext) {
     }
 }
 
-/// An agent asks the window to show a file (`bref mcp`, tool `show`): it opens in a tab of its own;
+/// An agent asks the window to show a file (`inkuno mcp`, tool `show`): it opens in a tab of its own;
 /// a file of another vault, or none, is refused with a sentence.
 #[gpui::test]
 fn an_agent_shows_a_file(cx: &mut TestAppContext) {
@@ -639,13 +639,13 @@ fn an_agent_shows_a_file(cx: &mut TestAppContext) {
             .unwrap_err()
             .starts_with("no file at")
     );
-    let elsewhere = std::env::temp_dir().join(format!("bref-elsewhere-{}.md", std::process::id()));
+    let elsewhere = std::env::temp_dir().join(format!("inkuno-elsewhere-{}.md", std::process::id()));
     fs::write(&elsewhere, "# Ailleurs\n").unwrap();
     let refused = shell
         .update_in(cx, |s, window, cx| s.show_asked(&elsewhere, window, cx))
         .unwrap_err();
     assert!(
-        refused.starts_with("Bref has another vault open"),
+        refused.starts_with("Inkuno has another vault open"),
         "{refused}"
     );
     fs::remove_file(&elsewhere).ok();

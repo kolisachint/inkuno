@@ -754,8 +754,8 @@ mod tests {
     #[test]
     fn an_alias_is_an_edge() {
         // A front matter alias counts as the name.
-        let mut notes = vec![note("Appli", &[]), note("Journal", &["bref app"])];
-        notes[0].aliases = vec!["Bref App".into()].into();
+        let mut notes = vec![note("Appli", &[]), note("Journal", &["inkuno app"])];
+        notes[0].aliases = vec!["Inkuno App".into()].into();
         assert_eq!(edges(&notes, &[]), [(0, 1)]);
     }
 

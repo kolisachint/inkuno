@@ -133,21 +133,21 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     // with one of them opens the note instead of creating one.
     fs::write(
         root.join("Appli.md"),
-        "---\ntags:\n  - enyaml\naliases: [Bref app]\n---\n# Appli\n",
+        "---\ntags:\n  - enyaml\naliases: [Inkuno app]\n---\n# Appli\n",
     )
     .unwrap();
     j.settle(cx);
     assert!(
         shell.read_with(cx, |s, _| s.notes.iter().any(|n| n.name == "Appli"
             && n.tags[..] == ["enyaml"]
-            && n.aliases[..] == ["Bref app"]))
+            && n.aliases[..] == ["Inkuno app"]))
     );
     let count = shell.read_with(cx, |s, _| s.notes.len());
     cx.simulate_keystrokes("secondary-end enter");
-    cx.simulate_input("[[bref a");
+    cx.simulate_input("[[inkuno a");
     cx.simulate_keystrokes("enter");
-    assert!(text(cx).ends_with("[[Bref app]]"));
-    shell.update_in(cx, |s, window, cx| s.open_wiki("bref APP", window, cx));
+    assert!(text(cx).ends_with("[[Inkuno app]]"));
+    shell.update_in(cx, |s, window, cx| s.open_wiki("inkuno APP", window, cx));
     j.settle(cx);
     assert!(shell.read_with(cx, |s, _| s.pane().path.as_deref()
         == Some(&*root.join("Appli.md"))

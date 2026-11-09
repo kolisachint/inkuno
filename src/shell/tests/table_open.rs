@@ -11,7 +11,7 @@ fn window<'a>(
     &'a mut gpui::VisualTestContext,
     std::sync::MutexGuard<'static, ()>,
 ) {
-    let root = std::env::temp_dir().join(format!("bref-table-open-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-table-open-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     let config = isolated_config(&root);

@@ -4,15 +4,15 @@ A vault is a folder of plain files. There are two ways to have the same notes on
 
 ## With a cloud folder
 
-Put the vault in a folder synced by iCloud, Dropbox, Google Drive or Syncthing. Bref [follows what changes there](vault.md#changes-from-other-programs). Nothing more is needed.
+Put the vault in a folder synced by iCloud, Dropbox, Google Drive or Syncthing. Inkuno [follows what changes there](vault.md#changes-from-other-programs). Nothing more is needed.
 
 ## With git
 
 `Ctrl + Shift + S`, or **Sync the vault** in the palette, does everything in the background while you keep typing:
 
-1. The open notes are saved, and everything that changed is committed, with the message `Bref: sync`.
+1. The open notes are saved, and everything that changed is committed, with the message `Inkuno: sync`.
 2. What the server has is fetched and merged.
-3. The result is sent. If another computer pushed in the meantime, Bref fetches and merges again, three times at most, then asks you to try again.
+3. The result is sent. If another computer pushed in the meantime, Inkuno fetches and merges again, three times at most, then asks you to try again.
 
 ![The git sync: commit, then fetch, merge and push, again while the server rejects the push, three times at most](img/git-sync.svg)
 
@@ -29,7 +29,7 @@ A message says what was sent and received, or why it failed. The sync button of 
 
 ### A vault not in git yet
 
-The same command asks for the address of an *empty* repository. Create one on GitHub, GitLab or Codeberg, or on any server you reach by SSH with `git init --bare notes.git`. Bref then connects the vault and sends its notes.
+The same command asks for the address of an *empty* repository. Create one on GitHub, GitLab or Codeberg, or on any server you reach by SSH with `git init --bare notes.git`. Inkuno then connects the vault and sends its notes.
 
 The trash (`.trash`) is left out of the repository, through a `.gitignore`. A repository that already has a history is not overwritten.
 
@@ -40,13 +40,13 @@ The trash (`.trash`) is left out of the repository, through a `.gitignore`. A re
 ### Requirements
 
 - `git` must be installed, and able to reach the repository without asking anything: an SSH key, or a credential helper for HTTPS.
-- Bref never shows a password prompt: ssh runs in batch mode, unless you set `GIT_SSH_COMMAND` yourself. A refused sign-in is reported.
+- Inkuno never shows a password prompt: ssh runs in batch mode, unless you set `GIT_SSH_COMMAND` yourself. A refused sign-in is reported.
 - Without `git`, the sync says so.
-- Without a name and an email in the git configuration, the commits are signed `Bref`.
+- Without a name and an email in the git configuration, the commits are signed `Inkuno`.
 
 ### What it refuses
 
-Bref refuses to sync, says why, and touches nothing, when it finds:
+Inkuno refuses to sync, says why, and touches nothing, when it finds:
 
 - a merge or a rebase in progress;
 - a detached HEAD;
@@ -57,4 +57,4 @@ Bref refuses to sync, says why, and touches nothing, when it finds:
 ### Limits
 
 - Syncing happens when you ask, not on a timer, nor when quitting.
-- git syncs computers. There is no Bref on a phone, where the repository stays readable with another app.
+- git syncs computers. There is no Inkuno on a phone, where the repository stays readable with another app.
