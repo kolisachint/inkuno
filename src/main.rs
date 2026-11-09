@@ -46,8 +46,8 @@ fn help_text() -> String {
          \n\
          themes.json:\n\
          \u{20} {{\"version\": 1, \"themes\": [{{\"name\": \"My Dark\", \"base\": \"Inkuno Dark\",\n\
-         \u{20} \u{20} \"colors\": {{\"bg\": \"#1b1a19\", \"text\": \"#e4e0da\", \"dim\": \"#77716a\",\n\
-         \u{20} \u{20} \"accent\": \"#e0926b\", \"code_bg\": \"#262423\", \"panel\": \"#242221\",\n\
+         \u{20} \u{20} \"colors\": {{\"bg\": \"#171a22\", \"text\": \"#f5f5f2\", \"dim\": \"#77716a\",\n\
+         \u{20} \u{20} \"accent\": \"#4263eb\", \"code_bg\": \"#262423\", \"panel\": \"#242221\",\n\
          \u{20} \u{20} \"border\": \"#3a3735\"}}]}}\n\
          \u{20} 7 seed tokens (`bg text dim accent code_bg panel border`); the rest is derived.\n\
          \u{20} a missing token inherits `base` (a built-in theme); low contrast is auto-fixed\n\
