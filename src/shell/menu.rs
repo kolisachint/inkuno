@@ -1,35 +1,41 @@
 //! The context menu of the tree and the note, and what each entry does.
 
+use super::*;
+use crate::ui::assets::ICON_SET;
+use crate::views::nav::*;
+use crate::{lang::tr, logic::markdown::Link, platform::vault, views::editor, views::graph};
+use gpui::{
+    Action, Animation, AnimationExt, ClipboardItem, Context, Focusable, MouseButton,
+    MouseDownEvent, Window, div, ease_out_quint, prelude::*, px,
+};
 use std::{
     fs,
     path::{Path, PathBuf},
     time::Duration,
 };
-use gpui::{
-    Action, Animation, AnimationExt, ClipboardItem, Context, Focusable, MouseButton,
-    MouseDownEvent, Window, div, ease_out_quint, prelude::*, px,
-};
-use crate::{
-    views::editor, views::graph,
-    logic::markdown::Link,
-    lang::tr,
-    platform::vault,
-};
-use super::*;
-use crate::ui::assets::ICON_SET;
-use crate::views::nav::*;
 
 impl Shell {
     /// Runs a context menu entry on `target` (`None`: the vault).
-    pub(super) fn menu_do(&mut self, what: Do, target: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn menu_do(
+        &mut self,
+        what: Do,
+        target: Option<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let menu = self.menu.take();
         let share = menu.as_ref().and_then(|m| m.share);
         if let Some(back) = menu.as_ref().and_then(|menu| menu.back.as_ref()) {
             window.focus(back);
         }
         // Without a menu (from the palette), the icon grid opens near the top of the note.
-        let at = menu.as_ref().map_or(point(px(80.), px(80.)), |menu| menu.at);
-        let tab = menu.as_ref().and_then(|menu| menu.tab).filter(|tab| *tab < self.panes.len());
+        let at = menu
+            .as_ref()
+            .map_or(point(px(80.), px(80.)), |menu| menu.at);
+        let tab = menu
+            .as_ref()
+            .and_then(|menu| menu.tab)
+            .filter(|tab| *tab < self.panes.len());
         let link = menu.and_then(|menu| menu.text).flatten();
         cx.notify();
         if let Do::Share(choice) = what {
@@ -42,13 +48,28 @@ impl Shell {
         match (what, tab) {
             (Do::CloseTab, Some(tab)) => return self.close_tab(tab, window, cx),
             (Do::CloseOtherTabs, Some(tab)) => return self.close_other_tabs(tab, window, cx),
-            (Do::CloseTabsInPane, Some(tab)) => return self.close_tabs_in_pane(self.group_of(tab), window, cx),
+            (Do::CloseTabsInPane, Some(tab)) => {
+                return self.close_tabs_in_pane(self.group_of(tab), window, cx);
+            }
             _ => {}
         }
         if let (Do::Icon, Some(path)) = (what, &target) {
             // On the item's icon if it has one, else on "no icon".
-            let chosen = self.icons.get(path).and_then(|mine| ICON_SET.iter().position(|(file, _)| file[2..file.len() - 4] == *mine)).map_or(0, |i| i + 1);
-            self.icon_pick = Some(IconPick { at, path: path.clone(), chosen, back: window.focused(cx) });
+            let chosen = self
+                .icons
+                .get(path)
+                .and_then(|mine| {
+                    ICON_SET
+                        .iter()
+                        .position(|(file, _)| file[2..file.len() - 4] == *mine)
+                })
+                .map_or(0, |i| i + 1);
+            self.icon_pick = Some(IconPick {
+                at,
+                path: path.clone(),
+                chosen,
+                back: window.focused(cx),
+            });
             window.focus(&self.menu_focus);
             return;
         }
@@ -72,7 +93,9 @@ impl Shell {
             (Do::Table(op), _) => Some(op.action()),
             (Do::Block(op), _) => Some(op.action()),
             (Do::OpenLink, Some(link)) => return self.follow(&link, window, cx),
-            (Do::CopyAddress, Some(Link::Url(url))) => return cx.write_to_clipboard(ClipboardItem::new_string(url)),
+            (Do::CopyAddress, Some(Link::Url(url))) => {
+                return cx.write_to_clipboard(ClipboardItem::new_string(url));
+            }
             _ => None,
         };
         if let Some(action) = action {
@@ -97,7 +120,9 @@ impl Shell {
             None => root.clone(),
         };
         // Trash, copies and duplication apply to the whole multiple selection.
-        let all = target.as_deref().map_or_else(|| vec![root.clone()], |t| self.targets(t));
+        let all = target
+            .as_deref()
+            .map_or_else(|| vec![root.clone()], |t| self.targets(t));
         let copy = |lines: Vec<String>, cx: &mut Context<Self>| {
             cx.write_to_clipboard(ClipboardItem::new_string(lines.join("\n")));
         };
@@ -123,7 +148,11 @@ impl Shell {
             (Do::NewFolder, _) => {
                 // The folder is created in the selection's: the field says so.
                 let label = match dir.file_name().filter(|_| dir != root) {
-                    Some(name) => format!("{} « {} »", tr("Folder name, in", "Nom du dossier, dans"), name.to_string_lossy()),
+                    Some(name) => format!(
+                        "{} « {} »",
+                        tr("Folder name, in", "Nom du dossier, dans"),
+                        name.to_string_lossy()
+                    ),
                     None => tr("Folder name", "Nom du dossier").to_string(),
                 };
                 self.ask(label, "", window, cx, move |this, name, _, cx| {
@@ -134,47 +163,64 @@ impl Shell {
                             this.dirs.push(new.clone());
                             this.nav.reveal(&new);
                         }
-                        Err(e) => this.fail(tr("Folder not created", "Dossier non créé"), &new, e, cx),
+                        Err(e) => {
+                            this.fail(tr("Folder not created", "Dossier non créé"), &new, e, cx)
+                        }
                     }
                 });
             }
             (Do::Rename, Some(path)) => {
                 let label = tr("Rename: new name", "Renommer : nouveau nom");
-                let current = if is_dir { path.file_name().unwrap_or_default().to_string_lossy().into_owned() } else { vault::stem(&path) };
-                self.ask(label, &current.clone(), window, cx, move |this, name, _, cx| {
-                    if name == current {
-                        return;
-                    }
-                    this.flush(cx);
-                    let image = vault::is_image(&path) || vault::is_attachment(&path);
-                    let renamed = if is_dir {
-                        let to = path.with_file_name(&name);
-                        vault::rename(&path, &to).map(|()| to)
-                    } else if image || vault::is_table(&path) {
-                        // An image or a table keeps its extension.
-                        let extension = path.extension().unwrap_or_default().to_string_lossy();
-                        let to = path.with_file_name(format!("{name}.{extension}"));
-                        vault::rename(&path, &to).map(|()| to)
-                    } else {
-                        vault::rename_note(&path, &name)
-                    };
-                    match renamed {
-                        Ok(to) => {
-                            // The title of a renamed note may have changed: reread it.
-                            this.relocate(&path, &to, !is_dir, cx);
-                            // Links follow: by note name, or by file name for an image.
-                            let (old, new) = if image {
-                                (graph::image_name(&path), graph::image_name(&to))
-                            } else {
-                                (current.clone(), name)
-                            };
-                            if !is_dir && this.relink(&old, &new, cx) {
-                                this.reload(cx);
+                let current = if is_dir {
+                    path.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned()
+                } else {
+                    vault::stem(&path)
+                };
+                self.ask(
+                    label,
+                    &current.clone(),
+                    window,
+                    cx,
+                    move |this, name, _, cx| {
+                        if name == current {
+                            return;
+                        }
+                        this.flush(cx);
+                        let image = vault::is_image(&path) || vault::is_attachment(&path);
+                        let renamed = if is_dir {
+                            let to = path.with_file_name(&name);
+                            vault::rename(&path, &to).map(|()| to)
+                        } else if image || vault::is_table(&path) {
+                            // An image or a table keeps its extension.
+                            let extension = path.extension().unwrap_or_default().to_string_lossy();
+                            let to = path.with_file_name(format!("{name}.{extension}"));
+                            vault::rename(&path, &to).map(|()| to)
+                        } else {
+                            vault::rename_note(&path, &name)
+                        };
+                        match renamed {
+                            Ok(to) => {
+                                // The title of a renamed note may have changed: reread it.
+                                this.relocate(&path, &to, !is_dir, cx);
+                                // Links follow: by note name, or by file name for an image.
+                                let (old, new) = if image {
+                                    (graph::image_name(&path), graph::image_name(&to))
+                                } else {
+                                    (current.clone(), name)
+                                };
+                                if !is_dir && this.relink(&old, &new, cx) {
+                                    this.reload(cx);
+                                }
+                            }
+                            Err(e) => {
+                                this.fail(tr("Not renamed", "Renommage impossible"), &path, e, cx)
                             }
                         }
-                        Err(e) => this.fail(tr("Not renamed", "Renommage impossible"), &path, e, cx),
-                    }
-                });
+                    },
+                );
             }
             (Do::Trash, Some(_)) => {
                 all.iter().for_each(|path| self.trash(&root, path, cx));
@@ -194,7 +240,8 @@ impl Shell {
             }
             (Do::CopyPath, _) => copy(all.iter().map(|p| p.display().to_string()).collect(), cx),
             (Do::CopyRelative, _) => {
-                let relative = |p: &PathBuf| p.strip_prefix(&root).unwrap_or(p).display().to_string();
+                let relative =
+                    |p: &PathBuf| p.strip_prefix(&root).unwrap_or(p).display().to_string();
                 copy(all.iter().map(relative).collect(), cx);
             }
             (Do::Reveal, _) => cx.reveal_path(&all[0]),
@@ -206,10 +253,21 @@ impl Shell {
                 let mut last = None;
                 for path in all.iter().filter(|p| p.is_file()) {
                     let extension = path.extension().unwrap_or_default().to_string_lossy();
-                    let twin = vault::free_path(path.parent().unwrap_or(&root), &vault::stem(path), &extension);
+                    let twin = vault::free_path(
+                        path.parent().unwrap_or(&root),
+                        &vault::stem(path),
+                        &extension,
+                    );
                     match fs::copy(path, &twin) {
                         Ok(_) => last = Some(twin),
-                        Err(e) => return self.fail(tr("Not duplicated", "Duplication impossible"), path, e, cx),
+                        Err(e) => {
+                            return self.fail(
+                                tr("Not duplicated", "Duplication impossible"),
+                                path,
+                                e,
+                                cx,
+                            );
+                        }
                     }
                 }
                 if let Some(twin) = last {
@@ -225,30 +283,52 @@ impl Shell {
 
     /// A row menu's entry on the file of the active pane; "Show as a list" lists its folder.
     pub(super) fn file_do(&mut self, what: Do, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(path) = self.pane().path.clone() else { return };
-        let target = if matches!(what, Do::List) { path.parent().map(Path::to_path_buf) } else { Some(path) };
+        let Some(path) = self.pane().path.clone() else {
+            return;
+        };
+        let target = if matches!(what, Do::List) {
+            path.parent().map(Path::to_path_buf)
+        } else {
+            Some(path)
+        };
         self.menu_do(what, target, window, cx)
     }
 
     /// The folders of the vault in a list, the vault first; the one chosen receives `items`. A folder is
     /// not offered for itself, nor what is inside it.
     fn ask_move(&mut self, items: Vec<PathBuf>, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(root) = self.vault.clone() else { return };
-        let mut dirs: Vec<PathBuf> = self.dirs.iter().filter(|d| !items.iter().any(|item| d.starts_with(item))).cloned().collect();
+        let Some(root) = self.vault.clone() else {
+            return;
+        };
+        let mut dirs: Vec<PathBuf> = self
+            .dirs
+            .iter()
+            .filter(|d| !items.iter().any(|item| d.starts_with(item)))
+            .cloned()
+            .collect();
         dirs.sort();
         dirs.insert(0, root.clone());
-        let names = dirs.iter().map(|d| match d.strip_prefix(&root) {
-            Ok(rel) if !rel.as_os_str().is_empty() => rel.to_string_lossy().into_owned(),
-            _ => format!("{} ({})", vault::shown(&root), tr("the vault", "le coffre")),
-        }).collect();
+        let names = dirs
+            .iter()
+            .map(|d| match d.strip_prefix(&root) {
+                Ok(rel) if !rel.as_os_str().is_empty() => rel.to_string_lossy().into_owned(),
+                _ => format!("{} ({})", vault::shown(&root), tr("the vault", "le coffre")),
+            })
+            .collect();
         let back = window.focused(cx);
         let theme = self.theme;
-        let palette = cx.new(|cx| Palette::choose(tr("Move to", "Déplacer vers"), names, "", theme, cx));
+        let palette =
+            cx.new(|cx| Palette::choose(tr("Move to", "Déplacer vers"), names, "", theme, cx));
         cx.subscribe_in(&palette, window, move |this, palette, event, window, cx| {
             if matches!(event, PaletteEvent::Preview(_)) {
                 return;
             }
-            let chosen = palette.read(cx).chosen().and_then(|i| dirs.get(i)).cloned().filter(|_| matches!(event, PaletteEvent::Submit(_)));
+            let chosen = palette
+                .read(cx)
+                .chosen()
+                .and_then(|i| dirs.get(i))
+                .cloned()
+                .filter(|_| matches!(event, PaletteEvent::Submit(_)));
             this.palette = None;
             if let Some(back) = &back {
                 window.focus(back);
@@ -266,7 +346,11 @@ impl Shell {
 
     /// Opens `menu`; it takes the keys until it closes.
     pub(super) fn show_menu(&mut self, menu: Menu, window: &mut Window, cx: &mut Context<Self>) {
-        let back = self.menu.take().and_then(|old| old.back).or_else(|| window.focused(cx));
+        let back = self
+            .menu
+            .take()
+            .and_then(|old| old.back)
+            .or_else(|| window.focused(cx));
         self.menu = Some(Menu { back, ..menu });
         window.focus(&self.menu_focus);
         cx.notify();
@@ -283,20 +367,52 @@ impl Shell {
     /// Shift+F10 or the Menu key: the menu of the selected row in the panel, or of the cursor in the note.
     pub(super) fn menu_from_keys(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.nav.focus.is_focused(window) {
-            let Some(target) = self.nav.sel.clone() else { return };
-            let at = self.nav.sel_at.get().map_or(point(px(60.), px(60.)), |row| row.bottom_left() + point(px(24.), px(0.)));
-            if self.vault.as_ref().is_some_and(|root| target.starts_with(root)) || tag_of(&target).is_some() {
-                self.show_menu(Menu { at, target: Some(target), chosen: Some(0), ..Default::default() }, window, cx);
+            let Some(target) = self.nav.sel.clone() else {
+                return;
+            };
+            let at = self
+                .nav
+                .sel_at
+                .get()
+                .map_or(point(px(60.), px(60.)), |row| {
+                    row.bottom_left() + point(px(24.), px(0.))
+                });
+            if self
+                .vault
+                .as_ref()
+                .is_some_and(|root| target.starts_with(root))
+                || tag_of(&target).is_some()
+            {
+                self.show_menu(
+                    Menu {
+                        at,
+                        target: Some(target),
+                        chosen: Some(0),
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
             }
         } else if self.pane().editor.focus_handle(cx).is_focused(window) {
-            self.pane().editor.clone().update(cx, |editor, cx| editor.menu_at_cursor(cx));
+            self.pane()
+                .editor
+                .clone()
+                .update(cx, |editor, cx| editor.menu_at_cursor(cx));
         }
     }
 
     /// Arrows, Home, End, Enter and Escape in the open menu.
     fn menu_key(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let entries: Vec<Do> = self.menu_groups(cx).into_iter().flatten().map(|(_, what)| what).collect();
-        let (Some(menu), n) = (self.menu.as_mut(), entries.len()) else { return false };
+        let entries: Vec<Do> = self
+            .menu_groups(cx)
+            .into_iter()
+            .flatten()
+            .map(|(_, what)| what)
+            .collect();
+        let (Some(menu), n) = (self.menu.as_mut(), entries.len()) else {
+            return false;
+        };
         if n == 0 {
             self.close_menu(window, cx);
             return true;
@@ -326,24 +442,52 @@ impl Shell {
 
     /// The entries of the open menu, by group; a line separates the groups.
     pub(super) fn menu_groups(&self, cx: &App) -> Vec<Vec<(&'static str, Do)>> {
-        let Some(menu) = self.menu.as_ref() else { return Vec::new() };
+        let Some(menu) = self.menu.as_ref() else {
+            return Vec::new();
+        };
         if let Some(pane) = menu.share {
-            return vec![self.share_choices(pane).into_iter().map(|choice| (choice.label(), Do::Share(choice))).collect()];
+            return vec![
+                self.share_choices(pane)
+                    .into_iter()
+                    .map(|choice| (choice.label(), Do::Share(choice)))
+                    .collect(),
+            ];
         }
         let is_dir = menu.target.as_ref().is_none_or(|p| self.dirs.contains(p));
         let tree = self.nav.mode == Mode::Tree;
-        let many = menu.target.as_ref().is_some_and(|p| self.nav.marked.contains(p)) && self.nav.marked.len() > 1;
+        let many = menu
+            .target
+            .as_ref()
+            .is_some_and(|p| self.nav.marked.contains(p))
+            && self.nav.marked.len() > 1;
         // Groups of entries; a line separates those that have any.
         let mut groups: Vec<Vec<(&'static str, Do)>> = vec![Vec::new(); 7];
         if menu.tab.is_some() {
             groups[0].push((tr("Close", "Fermer"), Do::CloseTab));
-            groups[0].push((tr("Close other tabs", "Fermer les autres onglets"), Do::CloseOtherTabs));
-            groups[0].push((tr("Close all tabs in this pane", "Fermer tous les onglets de ce volet"), Do::CloseTabsInPane));
+            groups[0].push((
+                tr("Close other tabs", "Fermer les autres onglets"),
+                Do::CloseOtherTabs,
+            ));
+            groups[0].push((
+                tr(
+                    "Close all tabs in this pane",
+                    "Fermer tous les onglets de ce volet",
+                ),
+                Do::CloseTabsInPane,
+            ));
         } else if menu.block {
             // A block's handle: what it can become, move or duplicate it, copy it, delete it.
             use editor::BlockOp;
-            groups[0].extend(BlockOp::ALL.into_iter().filter(|op| matches!(op, BlockOp::Turn(_))).map(|op| (op.label(), Do::Block(op))));
-            groups[1].extend([BlockOp::Duplicate, BlockOp::Up, BlockOp::Down].map(|op| (op.label(), Do::Block(op))));
+            groups[0].extend(
+                BlockOp::ALL
+                    .into_iter()
+                    .filter(|op| matches!(op, BlockOp::Turn(_)))
+                    .map(|op| (op.label(), Do::Block(op))),
+            );
+            groups[1].extend(
+                [BlockOp::Duplicate, BlockOp::Up, BlockOp::Down]
+                    .map(|op| (op.label(), Do::Block(op))),
+            );
             groups[2].push((tr("Copy", "Copier"), Do::Copy));
             groups[2].push((tr("Cut", "Couper"), Do::Cut));
             groups[2].push((tr("Comment", "Commenter"), Do::Comment));
@@ -363,8 +507,30 @@ impl Shell {
                 // In a table: its rows, its columns, then the table.
                 use editor::TableOp::*;
                 for (group, ops) in [
-                    (2, [RowAbove, RowBelow, DuplicateRow, MoveRowUp, MoveRowDown, DeleteRow].as_slice()),
-                    (3, [ColLeft, ColRight, DuplicateCol, MoveColLeft, MoveColRight, DeleteCol].as_slice()),
+                    (
+                        2,
+                        [
+                            RowAbove,
+                            RowBelow,
+                            DuplicateRow,
+                            MoveRowUp,
+                            MoveRowDown,
+                            DeleteRow,
+                        ]
+                        .as_slice(),
+                    ),
+                    (
+                        3,
+                        [
+                            ColLeft,
+                            ColRight,
+                            DuplicateCol,
+                            MoveColLeft,
+                            MoveColRight,
+                            DeleteCol,
+                        ]
+                        .as_slice(),
+                    ),
                     (4, [SortAsc, SortDesc, Transpose, DeleteTable].as_slice()),
                 ] {
                     groups[group].extend(ops.iter().map(|&op| (op.label(), Do::Table(op))));
@@ -377,8 +543,22 @@ impl Shell {
                 groups[2].push((tr("Strikethrough", "Barré"), Do::Strike));
                 groups[2].push((tr("Highlight", "Surligné"), Do::Highlight));
                 groups[2].push((tr("Code", "Code"), Do::Code));
-                groups[2].push((if web { tr("Edit the link", "Modifier le lien") } else { tr("Make a link", "Faire un lien") }, Do::Link));
-                groups[2].push((if menu.commented { tr("Resolve the comment", "Résoudre le commentaire") } else { tr("Comment", "Commenter") }, Do::Comment));
+                groups[2].push((
+                    if web {
+                        tr("Edit the link", "Modifier le lien")
+                    } else {
+                        tr("Make a link", "Faire un lien")
+                    },
+                    Do::Link,
+                ));
+                groups[2].push((
+                    if menu.commented {
+                        tr("Resolve the comment", "Résoudre le commentaire")
+                    } else {
+                        tr("Comment", "Commenter")
+                    },
+                    Do::Comment,
+                ));
                 // The targeted lines, from one kind of list to another.
                 groups[3].push((tr("Bulleted list", "Liste à puces"), Do::Bullets));
                 groups[3].push((tr("Numbered list", "Liste numérotée"), Do::Numbered));
@@ -395,8 +575,15 @@ impl Shell {
             }
             if tree && !many {
                 groups[1].push((tr("New note here", "Nouvelle note ici"), Do::NewNote));
-                if self.vault.as_ref().is_some_and(|root| vault::template_dir(root, &self.dirs).is_some()) {
-                    groups[1].push((tr("New note from a template", "Nouvelle note depuis un modèle"), Do::FromTemplate));
+                if self
+                    .vault
+                    .as_ref()
+                    .is_some_and(|root| vault::template_dir(root, &self.dirs).is_some())
+                {
+                    groups[1].push((
+                        tr("New note from a template", "Nouvelle note depuis un modèle"),
+                        Do::FromTemplate,
+                    ));
                 }
                 groups[1].push((tr("New diagram here", "Nouveau schéma ici"), Do::NewDiagram));
                 groups[1].push((tr("New folder", "Nouveau dossier"), Do::NewFolder));
@@ -406,7 +593,10 @@ impl Shell {
             }
             groups[2].push((tr("Copy path", "Copier le chemin"), Do::CopyPath));
             if menu.target.is_some() {
-                groups[2].push((tr("Copy relative path", "Copier le chemin relatif"), Do::CopyRelative));
+                groups[2].push((
+                    tr("Copy relative path", "Copier le chemin relatif"),
+                    Do::CopyRelative,
+                ));
             }
             if !many {
                 groups[2].push((reveal_label(), Do::Reveal));
@@ -431,7 +621,11 @@ impl Shell {
     }
 
     /// Context menu, over the whole window: a click elsewhere closes it.
-    pub(super) fn render_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+    pub(super) fn render_menu(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement + use<>> {
         let menu = self.menu.as_ref()?;
         let t = self.theme;
         let groups = self.menu_groups(cx);
@@ -456,8 +650,21 @@ impl Shell {
                 .when(matches!(what, Do::Trash), |d| d.text_color(t.accent))
                 // The whole label, then its shortcut, dimmer, pinned to the right: the
                 // menu takes the width they need.
-                .child(div().flex_1().min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap().child(label))
-                .child(keycaps(&what.keys(cx), t, on).debug_selector(move || format!("menu-keys-{label}")).flex_none().ml_4())
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .child(label),
+                )
+                .child(
+                    keycaps(&what.keys(cx), t, on)
+                        .debug_selector(move || format!("menu-keys-{label}"))
+                        .flex_none()
+                        .ml_4(),
+                )
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _, window, cx| {
@@ -471,7 +678,13 @@ impl Shell {
         let mut i = 0;
         for (g, group) in groups.into_iter().enumerate() {
             if g > 0 {
-                rows.push(div().h(t.px(1.)).my(t.px(4.)).bg(t.border).into_any_element());
+                rows.push(
+                    div()
+                        .h(t.px(1.))
+                        .my(t.px(4.))
+                        .bg(t.border)
+                        .into_any_element(),
+                );
             }
             for item in group {
                 rows.push(entry(i, item, cx));
@@ -480,7 +693,11 @@ impl Shell {
         }
         // Never larger than the window minus the anchor margin: long labels are ellipsized, the list scrolls.
         let room = window.viewport_size() - gpui::size(t.px(16.), t.px(16.));
-        let close = || cx.listener(|this: &mut Self, _: &MouseDownEvent, window, cx| this.close_menu(window, cx));
+        let close = || {
+            cx.listener(|this: &mut Self, _: &MouseDownEvent, window, cx| {
+                this.close_menu(window, cx)
+            })
+        };
         Some(
             div()
                 .absolute()
@@ -490,35 +707,45 @@ impl Shell {
                 .on_mouse_down(MouseButton::Right, close())
                 // The menu is as wide as its longest label with its shortcut, whatever
                 // the font, and stays in the window, even opened near an edge.
-                .child(gpui::anchored().position(at).snap_to_window_with_margin(t.px(8.)).child(
-                    crate::ui::widgets::floating(t)
-                        .debug_selector(|| "menu".into())
-                        .track_focus(&self.menu_focus)
-                        .key_context("Menu")
-                        // Escape is the window's `CloseHelp` before it is a key.
-                        .on_action(cx.listener(|this, _: &CloseHelp, window, cx| this.close_menu(window, cx)))
-                        .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
-                            if e.keystroke.modifiers.modified() {
-                                return;
-                            }
-                            if this.menu_key(&e.keystroke.key, window, cx) {
-                                cx.stop_propagation();
-                            }
-                        }))
-                        .id("menu-list")
-                        .min_w(t.px(230.).min(room.width))
-                        .max_w(room.width)
-                        .max_h(room.height)
-                        .overflow_y_scroll()
-                        .py(t.px(6.))
-                        .text_size(t.px(13.))
-                        .children(rows)
-                        .with_animation(
-                            "menu-in",
-                            Animation::new(Duration::from_millis(110)).with_easing(ease_out_quint()),
-                            |menu, delta| menu.opacity(delta),
+                .child(
+                    gpui::anchored()
+                        .position(at)
+                        .snap_to_window_with_margin(t.px(8.))
+                        .child(
+                            crate::ui::widgets::floating(t)
+                                .debug_selector(|| "menu".into())
+                                .track_focus(&self.menu_focus)
+                                .key_context("Menu")
+                                // Escape is the window's `CloseHelp` before it is a key.
+                                .on_action(cx.listener(|this, _: &CloseHelp, window, cx| {
+                                    this.close_menu(window, cx)
+                                }))
+                                .on_key_down(cx.listener(
+                                    |this, e: &gpui::KeyDownEvent, window, cx| {
+                                        if e.keystroke.modifiers.modified() {
+                                            return;
+                                        }
+                                        if this.menu_key(&e.keystroke.key, window, cx) {
+                                            cx.stop_propagation();
+                                        }
+                                    },
+                                ))
+                                .id("menu-list")
+                                .min_w(t.px(230.).min(room.width))
+                                .max_w(room.width)
+                                .max_h(room.height)
+                                .overflow_y_scroll()
+                                .py(t.px(6.))
+                                .text_size(t.px(13.))
+                                .children(rows)
+                                .with_animation(
+                                    "menu-in",
+                                    Animation::new(Duration::from_millis(110))
+                                        .with_easing(ease_out_quint()),
+                                    |menu, delta| menu.opacity(delta),
+                                ),
                         ),
-                )),
+                ),
         )
     }
 }

@@ -24,14 +24,29 @@ impl Prefs {
     pub const SIZE: f32 = 16.;
 
     pub fn parse(text: &str) -> Self {
-        let mut prefs =
-            Self { theme: String::new(), font: String::new(), mono: String::new(), size: Self::SIZE, updates: true, page: String::new(), wide: String::new(), bar: String::new(), motion: String::new() };
+        let mut prefs = Self {
+            theme: String::new(),
+            font: String::new(),
+            mono: String::new(),
+            size: Self::SIZE,
+            updates: true,
+            page: String::new(),
+            wide: String::new(),
+            bar: String::new(),
+            motion: String::new(),
+        };
         for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
             match key {
                 "theme" => prefs.theme = value.into(),
                 "font" => prefs.font = value.into(),
                 "mono" => prefs.mono = value.into(),
-                "size" => prefs.size = value.parse().ok().filter(|s: &f32| s.is_finite()).unwrap_or(Self::SIZE),
+                "size" => {
+                    prefs.size = value
+                        .parse()
+                        .ok()
+                        .filter(|s: &f32| s.is_finite())
+                        .unwrap_or(Self::SIZE)
+                }
                 "updates" => prefs.updates = value != "off",
                 "page" => prefs.page = value.into(),
                 "wide" => prefs.wide = value.into(),
@@ -45,12 +60,20 @@ impl Prefs {
     }
 
     pub fn to_text(&self) -> String {
-        let mut text = format!("theme={}\nfont={}\nmono={}\nsize={}\n", self.theme, self.font, self.mono, self.size);
+        let mut text = format!(
+            "theme={}\nfont={}\nmono={}\nsize={}\n",
+            self.theme, self.font, self.mono, self.size
+        );
         // Absent until turned off: the default value does not clutter the file.
         if !self.updates {
             text.push_str("updates=off\n");
         }
-        for (key, value) in [("page", &self.page), ("wide", &self.wide), ("bar", &self.bar), ("motion", &self.motion)] {
+        for (key, value) in [
+            ("page", &self.page),
+            ("wide", &self.wide),
+            ("bar", &self.bar),
+            ("motion", &self.motion),
+        ] {
             if !value.is_empty() {
                 text.push_str(&format!("{key}={value}\n"));
             }
@@ -66,12 +89,23 @@ mod tests {
     #[test]
     fn reads_settings() {
         let prefs = Prefs::parse("theme=Dracula\nfont=Inter\nsize=99\nbogus\nmono=\n");
-        assert_eq!((prefs.theme.as_str(), prefs.font.as_str(), prefs.mono.as_str()), ("Dracula", "Inter", ""));
+        assert_eq!(
+            (
+                prefs.theme.as_str(),
+                prefs.font.as_str(),
+                prefs.mono.as_str()
+            ),
+            ("Dracula", "Inter", "")
+        );
         // Size clamped, and unreadable value ignored.
         assert_eq!((prefs.size, Prefs::parse("size=NaN").size), (32., 16.));
         assert_eq!(Prefs::parse(&prefs.to_text()), prefs);
         // The new-version check is on until turned off.
-        assert!(prefs.updates && !Prefs::parse("updates=off\n").updates && Prefs::parse("updates=on").updates);
+        assert!(
+            prefs.updates
+                && !Prefs::parse("updates=off\n").updates
+                && Prefs::parse("updates=on").updates
+        );
         assert!(!Prefs::parse(&Prefs::parse("updates=off").to_text()).updates);
         // Page width and wide tables: absent until chosen.
         let wide = Prefs::parse("page=wide\nwide=column\n");

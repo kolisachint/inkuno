@@ -7,23 +7,41 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use crate::{
-    logic::diagram::{COLORS, Diagram, End, Form, Head, RULE, Route},
     lang::tr,
+    logic::diagram::{COLORS, Diagram, End, Form, Head, RULE, Route},
 };
 
 /// Index of Bref's colour closest to `#rrggbb`; black, white
 /// and greys give neutral.
 fn color(hex: &str) -> u8 {
-    let Some(rgb) = hex.strip_prefix('#').filter(|h| h.len() == 6).and_then(|h| u32::from_str_radix(h, 16).ok()) else {
+    let Some(rgb) = hex
+        .strip_prefix('#')
+        .filter(|h| h.len() == 6)
+        .and_then(|h| u32::from_str_radix(h, 16).ok())
+    else {
         return 0;
     };
-    let parts = |c: u32| [(c >> 16) as i32 & 255, (c >> 8) as i32 & 255, c as i32 & 255];
+    let parts = |c: u32| {
+        [
+            (c >> 16) as i32 & 255,
+            (c >> 8) as i32 & 255,
+            c as i32 & 255,
+        ]
+    };
     let [r, g, b] = parts(rgb);
     if r.max(g).max(b) - r.min(g).min(b) < 40 {
         return 0;
     }
-    let far = |c: &u32| parts(*c).iter().zip([r, g, b]).map(|(a, b)| (a - b).pow(2)).sum::<i32>();
-    (1..COLORS.len()).min_by_key(|i| far(&COLORS[*i])).unwrap_or(0) as u8
+    let far = |c: &u32| {
+        parts(*c)
+            .iter()
+            .zip([r, g, b])
+            .map(|(a, b)| (a - b).pow(2))
+            .sum::<i32>()
+    };
+    (1..COLORS.len())
+        .min_by_key(|i| far(&COLORS[*i]))
+        .unwrap_or(0) as u8
 }
 
 /// A diagram read from a file, and how many of its items Bref cannot draw: free strokes, pictures, frames, arrows with
@@ -35,9 +53,20 @@ pub struct Imported {
 
 /// A `.excalidraw` file.
 pub fn excalidraw(json: &str) -> Result<Imported, String> {
-    let unreadable = || tr("not an Excalidraw file", "ce n'est pas un fichier Excalidraw").to_string();
+    let unreadable = || {
+        tr(
+            "not an Excalidraw file",
+            "ce n'est pas un fichier Excalidraw",
+        )
+        .to_string()
+    };
     let file: Value = serde_json::from_str(json).map_err(|_| unreadable())?;
-    let elements: Vec<&Value> = file["elements"].as_array().ok_or_else(unreadable)?.iter().filter(|e| e["isDeleted"] != true).collect();
+    let elements: Vec<&Value> = file["elements"]
+        .as_array()
+        .ok_or_else(unreadable)?
+        .iter()
+        .filter(|e| e["isDeleted"] != true)
+        .collect();
     let n = |e: &Value, key: &str| e[key].as_f64().unwrap_or(0.) as f32;
     let mut diagram = Diagram::default();
     // Excalidraw identifier → that of the created shape or arrow.
@@ -56,7 +85,9 @@ pub fn excalidraw(json: &str) -> Result<Imported, String> {
         let id = diagram.add_shape(form, n(e, "x"), n(e, "y"), n(e, "width"), n(e, "height"));
         let shape = diagram.shape_mut(id).unwrap();
         shape.color = color(e["strokeColor"].as_str().unwrap_or(""));
-        shape.fill = e["backgroundColor"].as_str().is_some_and(|c| c != "transparent");
+        shape.fill = e["backgroundColor"]
+            .as_str()
+            .is_some_and(|c| c != "transparent");
         shape.dashed = e["strokeStyle"].as_str().is_some_and(|s| s != "solid");
         shape.text = e["text"].as_str().unwrap_or("").to_string();
         made.insert(e["id"].as_str().unwrap_or(""), id);
@@ -66,9 +97,21 @@ pub fn excalidraw(json: &str) -> Result<Imported, String> {
         if !matches!(e["type"].as_str(), Some("arrow" | "line")) {
             continue;
         }
-        let point = |i: usize| e["points"][i].as_array().map(|p| (p[0].as_f64().unwrap_or(0.) as f32, p[1].as_f64().unwrap_or(0.) as f32));
-        let last = e["points"].as_array().map_or(0, |p| p.len().saturating_sub(1));
-        let end = |binding: &str, i: usize| match e[binding]["elementId"].as_str().and_then(|id| made.get(id)) {
+        let point = |i: usize| {
+            e["points"][i].as_array().map(|p| {
+                (
+                    p[0].as_f64().unwrap_or(0.) as f32,
+                    p[1].as_f64().unwrap_or(0.) as f32,
+                )
+            })
+        };
+        let last = e["points"]
+            .as_array()
+            .map_or(0, |p| p.len().saturating_sub(1));
+        let end = |binding: &str, i: usize| match e[binding]["elementId"]
+            .as_str()
+            .and_then(|id| made.get(id))
+        {
             Some(id) => Some(End::Shape(*id)),
             None => point(i).map(|(x, y)| End::Point(n(e, "x") + x, n(e, "y") + y)),
         };
@@ -79,7 +122,9 @@ pub fn excalidraw(json: &str) -> Result<Imported, String> {
             Some("diamond_outline") => Head::Diamond,
             Some(_) => Head::Arrow,
         };
-        let (Some(from), Some(to)) = (end("startBinding", 0), end("endBinding", last)) else { continue };
+        let (Some(from), Some(to)) = (end("startBinding", 0), end("endBinding", last)) else {
+            continue;
+        };
         let bent = e["points"].as_array().is_some_and(|p| p.len() > 2);
         let route = match (e["elbowed"] == true, bent && !e["roundness"].is_null()) {
             (true, _) => Route::Elbow,
@@ -96,7 +141,13 @@ pub fn excalidraw(json: &str) -> Result<Imported, String> {
     }
     // A text held by a shape or an arrow becomes its text.
     for e in elements.iter().filter(|e| e["type"] == "text") {
-        let Some(id) = e["containerId"].as_str().and_then(|id| made.get(id)).copied() else { continue };
+        let Some(id) = e["containerId"]
+            .as_str()
+            .and_then(|id| made.get(id))
+            .copied()
+        else {
+            continue;
+        };
         let text = e["text"].as_str().unwrap_or("").to_string();
         if let Some(shape) = diagram.shape_mut(id) {
             shape.text = text;
@@ -106,7 +157,10 @@ pub fn excalidraw(json: &str) -> Result<Imported, String> {
             taken += 1;
         }
     }
-    Ok(Imported { diagram, skipped: elements.len().saturating_sub(taken) })
+    Ok(Imported {
+        diagram,
+        skipped: elements.len().saturating_sub(taken),
+    })
 }
 
 /// The text of a draw.io label, which may be HTML.
@@ -115,9 +169,16 @@ fn plain(label: &str) -> String {
     let mut rest = label;
     while let Some(open) = rest.find('<') {
         out.push_str(&rest[..open]);
-        let Some(close) = rest[open..].find('>') else { break };
-        let tag = rest[open + 1..open + close].trim_start_matches('/').to_lowercase();
-        let name = tag.split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or("");
+        let Some(close) = rest[open..].find('>') else {
+            break;
+        };
+        let tag = rest[open + 1..open + close]
+            .trim_start_matches('/')
+            .to_lowercase();
+        let name = tag
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .next()
+            .unwrap_or("");
         match name {
             "hr" => out.push_str(&format!("\n{RULE}\n")),
             "br" | "div" | "p" if !out.ends_with('\n') && !out.is_empty() => out.push('\n'),
@@ -128,8 +189,18 @@ fn plain(label: &str) -> String {
     if !rest.contains('<') {
         out.push_str(rest);
     }
-    let out = out.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
-    out.lines().map(str::trim).collect::<Vec<_>>().join("\n").trim().to_string()
+    let out = out
+        .replace("&nbsp;", " ")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&amp;", "&");
+    out.lines()
+        .map(str::trim)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 fn geometry<'a, 'i>(cell: &roxmltree::Node<'a, 'i>) -> Option<roxmltree::Node<'a, 'i>> {
@@ -141,8 +212,12 @@ fn geometry<'a, 'i>(cell: &roxmltree::Node<'a, 'i>) -> Option<roxmltree::Node<'a
 // base64); we then ask to save it again without compression. Add
 // decompression (`flate2`, `base64`) if such files are common.
 pub fn drawio(xml: &str) -> Result<Imported, String> {
-    let file = roxmltree::Document::parse(xml).map_err(|_| tr("not a draw.io file", "ce n'est pas un fichier draw.io").to_string())?;
-    let cells: Vec<roxmltree::Node> = file.descendants().filter(|n| n.has_tag_name("mxCell")).collect();
+    let file = roxmltree::Document::parse(xml)
+        .map_err(|_| tr("not a draw.io file", "ce n'est pas un fichier draw.io").to_string())?;
+    let cells: Vec<roxmltree::Node> = file
+        .descendants()
+        .filter(|n| n.has_tag_name("mxCell"))
+        .collect();
     if cells.is_empty() {
         return Err(tr(
             "this draw.io file is compressed: untick File › Properties › Compressed, then save it again",
@@ -151,19 +226,37 @@ pub fn drawio(xml: &str) -> Result<Imported, String> {
         .to_string());
     }
     let style = |cell: &roxmltree::Node, key: &str| -> Option<String> {
-        cell.attribute("style")?.split(';').find_map(|part| match part.split_once('=') {
-            Some((k, v)) if k == key => Some(v.to_string()),
-            None if part == key => Some(String::new()),
-            _ => None,
-        })
+        cell.attribute("style")?
+            .split(';')
+            .find_map(|part| match part.split_once('=') {
+                Some((k, v)) if k == key => Some(v.to_string()),
+                None if part == key => Some(String::new()),
+                _ => None,
+            })
     };
     // The label and identifier are sometimes carried by an `<object>` around the cell.
     let around = |cell: &roxmltree::Node, name: &str| {
-        cell.attribute(name).or_else(|| cell.parent().filter(|p| !p.has_tag_name("root")).and_then(|p| p.attribute(name))).map(str::to_string)
+        cell.attribute(name)
+            .or_else(|| {
+                cell.parent()
+                    .filter(|p| !p.has_tag_name("root"))
+                    .and_then(|p| p.attribute(name))
+            })
+            .map(str::to_string)
     };
     let id_of = |cell: &roxmltree::Node| around(cell, "id").unwrap_or_default();
-    let label = |cell: &roxmltree::Node| plain(&around(cell, "value").or_else(|| around(cell, "label")).unwrap_or_default());
-    let n = |node: &roxmltree::Node, key: &str| node.attribute(key).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.);
+    let label = |cell: &roxmltree::Node| {
+        plain(
+            &around(cell, "value")
+                .or_else(|| around(cell, "label"))
+                .unwrap_or_default(),
+        )
+    };
+    let n = |node: &roxmltree::Node, key: &str| {
+        node.attribute(key)
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.)
+    };
     let by_id: HashMap<String, &roxmltree::Node> = cells.iter().map(|c| (id_of(c), c)).collect();
     // A container's cells are placed relative to it.
     let origin = |cell: &roxmltree::Node| {
@@ -182,11 +275,22 @@ pub fn drawio(xml: &str) -> Result<Imported, String> {
     let mut taken = 0;
     for cell in cells.iter().filter(|c| c.attribute("vertex") == Some("1")) {
         // A line of a UML class: it is appended to its box's text.
-        let holder = cell.attribute("parent").and_then(|id| by_id.get(id)).filter(|p| boxed(p));
+        let holder = cell
+            .attribute("parent")
+            .and_then(|id| by_id.get(id))
+            .filter(|p| boxed(p));
         if let Some(id) = holder.and_then(|p| made.get(&id_of(p))) {
-            let line = if style(cell, "line").is_some() { RULE.to_string() } else { label(cell) };
+            let line = if style(cell, "line").is_some() {
+                RULE.to_string()
+            } else {
+                label(cell)
+            };
             let shape = diagram.shape_mut(*id).unwrap();
-            let rule = if shape.text.contains(RULE) || line == RULE { String::new() } else { format!("{RULE}\n") };
+            let rule = if shape.text.contains(RULE) || line == RULE {
+                String::new()
+            } else {
+                format!("{RULE}\n")
+            };
             shape.text = format!("{}\n{rule}{line}", shape.text);
             made.insert(id_of(cell), *id);
             taken += 1;
@@ -212,20 +316,33 @@ pub fn drawio(xml: &str) -> Result<Imported, String> {
             Form::Rect
         };
         let (ox, oy) = origin(cell);
-        let id = diagram.add_shape(form, ox + n(&g, "x"), oy + n(&g, "y"), n(&g, "width"), n(&g, "height"));
+        let id = diagram.add_shape(
+            form,
+            ox + n(&g, "x"),
+            oy + n(&g, "y"),
+            n(&g, "width"),
+            n(&g, "height"),
+        );
         let shape = diagram.shape_mut(id).unwrap();
         shape.text = label(cell);
         shape.color = color(&style(cell, "strokeColor").unwrap_or_default());
-        shape.fill = style(cell, "fillColor").is_some_and(|c| c.starts_with('#') && !c.eq_ignore_ascii_case("#ffffff"));
+        shape.fill = style(cell, "fillColor")
+            .is_some_and(|c| c.starts_with('#') && !c.eq_ignore_ascii_case("#ffffff"));
         shape.dashed = style(cell, "dashed").as_deref() == Some("1");
         made.insert(id_of(cell), id);
         taken += 1;
     }
     for cell in cells.iter().filter(|c| c.attribute("edge") == Some("1")) {
         let (ox, oy) = origin(cell);
-        let end = |attached: &str, loose: &str| match cell.attribute(attached).and_then(|id| made.get(id)) {
+        let end = |attached: &str, loose: &str| match cell
+            .attribute(attached)
+            .and_then(|id| made.get(id))
+        {
             Some(id) => Some(End::Shape(*id)),
-            None => geometry(cell)?.children().find(|p| p.attribute("as") == Some(loose)).map(|p| End::Point(ox + n(&p, "x"), oy + n(&p, "y"))),
+            None => geometry(cell)?
+                .children()
+                .find(|p| p.attribute("as") == Some(loose))
+                .map(|p| End::Point(ox + n(&p, "x"), oy + n(&p, "y"))),
         };
         // Without an indication, a draw.io arrow has a head at its end.
         let head = |key: &str, fill: &str, default: &str| {
@@ -238,7 +355,10 @@ pub fn drawio(xml: &str) -> Result<Imported, String> {
                 _ => Head::Arrow,
             }
         };
-        let (Some(from), Some(to)) = (end("source", "sourcePoint"), end("target", "targetPoint")) else { continue };
+        let (Some(from), Some(to)) = (end("source", "sourcePoint"), end("target", "targetPoint"))
+        else {
+            continue;
+        };
         let route = match style(cell, "edgeStyle") {
             _ if style(cell, "curved").as_deref() == Some("1") => Route::Curve,
             Some(_) => Route::Elbow,
@@ -255,12 +375,22 @@ pub fn drawio(xml: &str) -> Result<Imported, String> {
     }
     // An arrow's label is sometimes a separate cell, held by it.
     for cell in cells.iter().filter(|c| style(c, "edgeLabel").is_some()) {
-        if let Some(link) = cell.attribute("parent").and_then(|id| made.get(id)).and_then(|id| diagram.link_mut(*id)) {
+        if let Some(link) = cell
+            .attribute("parent")
+            .and_then(|id| made.get(id))
+            .and_then(|id| diagram.link_mut(*id))
+        {
             link.text = label(cell);
         }
     }
-    let drawn = cells.iter().filter(|c| c.attribute("vertex") == Some("1") || c.attribute("edge") == Some("1")).count();
-    Ok(Imported { diagram, skipped: drawn.saturating_sub(taken) })
+    let drawn = cells
+        .iter()
+        .filter(|c| c.attribute("vertex") == Some("1") || c.attribute("edge") == Some("1"))
+        .count();
+    Ok(Imported {
+        diagram,
+        skipped: drawn.saturating_sub(taken),
+    })
 }
 
 #[cfg(test)]
@@ -284,10 +414,29 @@ mod tests {
         assert_eq!(d.skipped, 0);
         let d = d.diagram;
         let a = &d.shapes[0];
-        assert_eq!((d.shapes.len(), a.form, a.text.as_str(), a.color, a.fill, a.dashed), (2, Form::Round, "Client", 1, true, true));
+        assert_eq!(
+            (
+                d.shapes.len(),
+                a.form,
+                a.text.as_str(),
+                a.color,
+                a.fill,
+                a.dashed
+            ),
+            (2, Form::Round, "Client", 1, true, true)
+        );
         assert_eq!((d.shapes[1].form, d.shapes[1].color), (Form::Ellipse, 0));
         let l = &d.links[0];
-        assert_eq!((l.from, l.to, l.end, l.color, l.text.as_str()), (End::Shape(a.id), End::Point(300., 60.), Head::Triangle, 4, "appelle"));
+        assert_eq!(
+            (l.from, l.to, l.end, l.color, l.text.as_str()),
+            (
+                End::Shape(a.id),
+                End::Point(300., 60.),
+                Head::Triangle,
+                4,
+                "appelle"
+            )
+        );
         assert!(excalidraw("{}").is_err());
     }
 
@@ -306,7 +455,13 @@ mod tests {
         let got = excalidraw(json).unwrap();
         assert_eq!((got.diagram.shapes.len(), got.skipped), (1, 5));
         // Nothing but strokes: an empty diagram and every item counted; an empty file: nothing left out.
-        let strokes = format!(r##"{{"elements":[{}]}}"##, (0..1000).map(|i| format!(r##"{{"id":"s{i}","type":"freedraw"}}"##)).collect::<Vec<_>>().join(","));
+        let strokes = format!(
+            r##"{{"elements":[{}]}}"##,
+            (0..1000)
+                .map(|i| format!(r##"{{"id":"s{i}","type":"freedraw"}}"##))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
         let got = excalidraw(&strokes).unwrap();
         assert_eq!((got.diagram.shapes.len(), got.skipped), (0, 1000));
         assert_eq!(excalidraw(r#"{"elements":[]}"#).unwrap().skipped, 0);
@@ -321,7 +476,14 @@ mod tests {
             <mxCell id="e" edge="1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
             </root></mxGraphModel></diagram></mxfile>"##;
         let got = drawio(xml).unwrap();
-        assert_eq!((got.diagram.shapes.len(), got.diagram.links.len(), got.skipped), (1, 0, 2));
+        assert_eq!(
+            (
+                got.diagram.shapes.len(),
+                got.diagram.links.len(),
+                got.skipped
+            ),
+            (1, 0, 2)
+        );
     }
 
     #[test]
@@ -341,14 +503,40 @@ mod tests {
         assert_eq!(d.skipped, 0);
         let d = d.diagram;
         assert_eq!(d.shapes.len(), 2);
-        assert_eq!((d.shapes[0].form, d.shapes[0].text.as_str()), (Form::Rect, "Compte\n---\n+ solde: f32\n---\n+ cr&eacute;diter()"));
+        assert_eq!(
+            (d.shapes[0].form, d.shapes[0].text.as_str()),
+            (
+                Form::Rect,
+                "Compte\n---\n+ solde: f32\n---\n+ cr&eacute;diter()"
+            )
+        );
         let db = &d.shapes[1];
-        assert_eq!((db.form, db.text.as_str(), db.color, db.fill, db.x), (Form::Cylinder, "Base\nclients", 3, true, 300.));
+        assert_eq!(
+            (db.form, db.text.as_str(), db.color, db.fill, db.x),
+            (Form::Cylinder, "Base\nclients", 3, true, 300.)
+        );
         // An arrow dragged from a line of the class starts from the class.
         let e = &d.links[0];
-        assert_eq!((e.from, e.to, e.end, e.dashed, e.text.as_str()), (End::Shape(d.shapes[0].id), End::Shape(db.id), Head::Triangle, true, "lit"));
-        assert_eq!((d.links[1].from, d.links[1].end), (End::Point(10., 200.), Head::None));
-        assert!(drawio("<mxfile><diagram>dVHBcoMg</diagram></mxfile>").err().unwrap().contains("compress"));
+        assert_eq!(
+            (e.from, e.to, e.end, e.dashed, e.text.as_str()),
+            (
+                End::Shape(d.shapes[0].id),
+                End::Shape(db.id),
+                Head::Triangle,
+                true,
+                "lit"
+            )
+        );
+        assert_eq!(
+            (d.links[1].from, d.links[1].end),
+            (End::Point(10., 200.), Head::None)
+        );
+        assert!(
+            drawio("<mxfile><diagram>dVHBcoMg</diagram></mxfile>")
+                .err()
+                .unwrap()
+                .contains("compress")
+        );
         assert!(drawio("pas du xml").is_err());
     }
 }

@@ -9,8 +9,16 @@ use super::{Diagram, LINE, RULE, snap};
 /// Width and height of a box that holds these lines, at least `min`.
 pub fn fit(lines: &[String], min: (f32, f32)) -> (f32, f32) {
     let rules = lines.iter().filter(|l| l.as_str() == RULE).count() as f32;
-    let wide = lines.iter().map(|l| Diagram::guess_width(l)).fold(0., f32::max);
-    ((wide + 28.).max(min.0).ceil(), ((lines.len() as f32 - rules) * LINE + rules * 8. + 18.).max(min.1).ceil())
+    let wide = lines
+        .iter()
+        .map(|l| Diagram::guess_width(l))
+        .fold(0., f32::max);
+    (
+        (wide + 28.).max(min.0).ceil(),
+        ((lines.len() as f32 - rules) * LINE + rules * 8. + 18.)
+            .max(min.1)
+            .ceil(),
+    )
 }
 
 /// Places boxes of these sizes by layers: each is under what points to it (`edges` run from the upper to
@@ -25,7 +33,13 @@ pub fn layered(sizes: &[(f32, f32)], edges: &[(usize, usize)]) -> (Vec<(f32, f32
     // A depth-first walk finds the edges that go back (loops), and a topological order.
     let (mut seen, mut order, mut back) = (vec![0u8; n], Vec::new(), HashSet::new());
     // ponytail: the walk recurses as deep as the longest chain (a few thousand states are fine); make it iterative if a block ever has tens of thousands.
-    fn walk(u: usize, next: &[Vec<usize>], seen: &mut [u8], order: &mut Vec<usize>, back: &mut HashSet<(usize, usize)>) {
+    fn walk(
+        u: usize,
+        next: &[Vec<usize>],
+        seen: &mut [u8],
+        order: &mut Vec<usize>,
+        back: &mut HashSet<(usize, usize)>,
+    ) {
         seen[u] = 1;
         for &v in &next[u] {
             match seen[v] {
@@ -51,8 +65,15 @@ pub fn layered(sizes: &[(f32, f32)], edges: &[(usize, usize)]) -> (Vec<(f32, f32
         }
     }
     let layers = rank.iter().copied().max().map_or(0, |m| m + 1);
-    let rows: Vec<Vec<usize>> = (0..layers).map(|r| (0..n).filter(|i| rank[*i] == r).collect()).collect();
-    let widths: Vec<f32> = rows.iter().map(|row| row.iter().map(|i| sizes[*i].0).sum::<f32>() + 50. * row.len().saturating_sub(1) as f32).collect();
+    let rows: Vec<Vec<usize>> = (0..layers)
+        .map(|r| (0..n).filter(|i| rank[*i] == r).collect())
+        .collect();
+    let widths: Vec<f32> = rows
+        .iter()
+        .map(|row| {
+            row.iter().map(|i| sizes[*i].0).sum::<f32>() + 50. * row.len().saturating_sub(1) as f32
+        })
+        .collect();
     let wide = widths.iter().copied().fold(0., f32::max);
     let (mut at, mut y) = (vec![(0., 0.); n], 0.);
     for (row, width) in rows.iter().zip(&widths) {

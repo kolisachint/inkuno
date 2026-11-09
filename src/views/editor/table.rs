@@ -71,8 +71,14 @@ impl TableOp {
         match self {
             TableOp::RowAbove => tr("Insert a row above", "Insérer une ligne au-dessus"),
             TableOp::RowBelow => tr("Insert a row below", "Insérer une ligne en dessous"),
-            TableOp::ColLeft => tr("Insert a column on the left", "Insérer une colonne à gauche"),
-            TableOp::ColRight => tr("Insert a column on the right", "Insérer une colonne à droite"),
+            TableOp::ColLeft => tr(
+                "Insert a column on the left",
+                "Insérer une colonne à gauche",
+            ),
+            TableOp::ColRight => tr(
+                "Insert a column on the right",
+                "Insérer une colonne à droite",
+            ),
             TableOp::DuplicateRow => tr("Duplicate the row", "Dupliquer la ligne"),
             TableOp::DuplicateCol => tr("Duplicate the column", "Dupliquer la colonne"),
             TableOp::MoveRowUp => tr("Move the row up", "Monter la ligne"),
@@ -82,8 +88,14 @@ impl TableOp {
             TableOp::DeleteRow => tr("Delete the row", "Supprimer la ligne"),
             TableOp::DeleteCol => tr("Delete the column", "Supprimer la colonne"),
             TableOp::DeleteTable => tr("Delete the table", "Supprimer le tableau"),
-            TableOp::SortAsc => tr("Sort the rows by this column, A to Z", "Trier les lignes sur cette colonne, de A à Z"),
-            TableOp::SortDesc => tr("Sort the rows by this column, Z to A", "Trier les lignes sur cette colonne, de Z à A"),
+            TableOp::SortAsc => tr(
+                "Sort the rows by this column, A to Z",
+                "Trier les lignes sur cette colonne, de A à Z",
+            ),
+            TableOp::SortDesc => tr(
+                "Sort the rows by this column, Z to A",
+                "Trier les lignes sur cette colonne, de Z à A",
+            ),
             TableOp::Transpose => tr("Swap rows and columns", "Échanger lignes et colonnes"),
         }
     }
@@ -135,8 +147,14 @@ pub(super) fn table_lead(wide: Wide, frame: Pixels, text: Pixels) -> Pixels {
 /// "+" buttons of a table: under it for a row, to its right for a column.
 pub(super) fn plus_bars(frame: Bounds<Pixels>) -> [Bounds<Pixels>; 2] {
     [
-        Bounds::new(point(frame.left(), frame.bottom() + px(3.)), size(frame.size.width, PLUS)),
-        Bounds::new(point(frame.right() + px(4.), frame.top()), size(PLUS, frame.size.height)),
+        Bounds::new(
+            point(frame.left(), frame.bottom() + px(3.)),
+            size(frame.size.width, PLUS),
+        ),
+        Bounds::new(
+            point(frame.right() + px(4.), frame.top()),
+            size(PLUS, frame.size.height),
+        ),
     ]
 }
 
@@ -157,14 +175,20 @@ impl Editor {
         let rows = self.rows.iter().filter(|r| r.kind == Kind::Table);
         let tall = rows.clone().map(Row::visual_rows).max()?;
         let frame = self.tables.first()?.1;
-        let scrolled = rows.map(|r| r.dx).next()? - table_lead(self.theme.wide, frame.size.width, self.width);
+        let scrolled =
+            rows.map(|r| r.dx).next()? - table_lead(self.theme.wide, frame.size.width, self.width);
         Some((scrolled, tall, frame, self.width, self.viewport))
     }
 
     /// Center of handle `part` of the first table.
     #[cfg(test)]
     pub fn part_center(&self, part: Part) -> Option<Point<Pixels>> {
-        self.geos.first()?.parts().into_iter().find(|(p, _)| *p == part).map(|(_, zone)| zone.center())
+        self.geos
+            .first()?
+            .parts()
+            .into_iter()
+            .find(|(p, _)| *p == part)
+            .map(|(_, zone)| zone.center())
     }
 
     /// Center of a table picker cell, if it is open.
@@ -190,10 +214,21 @@ impl Editor {
 
     /// The line is a table's dash line: the second one, when it has only dashes.
     pub(super) fn is_dash_row(&self, line: &Range<usize>) -> bool {
-        let first = self.next_line(line, false).filter(|l| self.is_table_line(l));
-        let none_before = first.as_ref().is_some_and(|f| self.next_line(f, false).is_none_or(|l| !self.is_table_line(&l)));
+        let first = self
+            .next_line(line, false)
+            .filter(|l| self.is_table_line(l));
+        let none_before = first.as_ref().is_some_and(|f| {
+            self.next_line(f, false)
+                .is_none_or(|l| !self.is_table_line(&l))
+        });
         let text = &self.content[line.clone()];
-        none_before && md::is_dashes(&md::cells(text).into_iter().map(|r| text[r].to_string()).collect::<Vec<_>>())
+        none_before
+            && md::is_dashes(
+                &md::cells(text)
+                    .into_iter()
+                    .map(|r| text[r].to_string())
+                    .collect::<Vec<_>>(),
+            )
     }
 
     /// Cells (text bytes) of the table line containing `c`, and the one
@@ -205,8 +240,14 @@ impl Editor {
             return None;
         }
         let text = &self.content[line.clone()];
-        let cells: Vec<Range<usize>> = md::cells(text).into_iter().map(|r| line.start + r.start..line.start + r.end).collect();
-        let before = md::bars(text).into_iter().filter(|&bar| line.start + bar < c).count();
+        let cells: Vec<Range<usize>> = md::cells(text)
+            .into_iter()
+            .map(|r| line.start + r.start..line.start + r.end)
+            .collect();
+        let before = md::bars(text)
+            .into_iter()
+            .filter(|&bar| line.start + bar < c)
+            .count();
         let k = before.saturating_sub(1).min(cells.len().checked_sub(1)?);
         Some((cells, k))
     }
@@ -239,7 +280,9 @@ impl Editor {
             }
             if !self.is_dash_row(&line) {
                 let inside = |at: usize| (sel.start..sel.end).contains(&at);
-                bars |= md::bars(&self.content[line.clone()]).into_iter().any(|bar| inside(line.start + bar));
+                bars |= md::bars(&self.content[line.clone()])
+                    .into_iter()
+                    .any(|bar| inside(line.start + bar));
                 found.extend(self.line_cells(&line, &sel));
             }
             if line.end >= last.end {
@@ -255,7 +298,10 @@ impl Editor {
         md::cells(&self.content[line.clone()])
             .into_iter()
             .filter_map(|cell| {
-                let (from, to) = ((line.start + cell.start).max(sel.start), (line.start + cell.end).min(sel.end));
+                let (from, to) = (
+                    (line.start + cell.start).max(sel.start),
+                    (line.start + cell.end).min(sel.end),
+                );
                 (from < to).then(|| self.off_escape(from, false)..self.off_escape(to, true))
             })
             .collect()
@@ -263,8 +309,14 @@ impl Editor {
 
     /// Runs a gesture that edits cells, then realigns the tables it touched: the selection
     /// follows its text, and the cells a handle took stay taken, if the gesture left a selection.
-    pub(super) fn aligned(&mut self, cx: &mut Context<Self>, act: impl FnOnce(&mut Self, &mut Context<Self>)) {
-        let pick = self.table_at(self.sel.start).and_then(|(range, ..)| self.live_pick(range.start).cloned());
+    pub(super) fn aligned(
+        &mut self,
+        cx: &mut Context<Self>,
+        act: impl FnOnce(&mut Self, &mut Context<Self>),
+    ) {
+        let pick = self
+            .table_at(self.sel.start)
+            .and_then(|(range, ..)| self.live_pick(range.start).cloned());
         let version = self.version;
         act(self, cx);
         if self.version == version {
@@ -310,7 +362,12 @@ impl Editor {
         if !ranges.is_empty() {
             self.push_undo(true);
             // A byte moves back by what was removed before it; one in an emptied cell goes to its start.
-            self.follow(|p| p - ranges.iter().map(|r| p.min(r.end).saturating_sub(r.start)).sum::<usize>());
+            self.follow(|p| {
+                p - ranges
+                    .iter()
+                    .map(|r| p.min(r.end).saturating_sub(r.start))
+                    .sum::<usize>()
+            });
             for r in ranges.iter().rev() {
                 self.damaged(r);
                 self.content.replace_range(r.clone(), "");
@@ -345,37 +402,53 @@ impl Editor {
         let at = c.clamp(cell.start, cell.end);
         let line = self.line_range(self.clamp(c));
         let prev_cell = || match k {
-            0 => self.table_neighbour(c, false).and_then(|cells| Some(cells.last()?.end)).unwrap_or(line.start.saturating_sub(1)),
+            0 => self
+                .table_neighbour(c, false)
+                .and_then(|cells| Some(cells.last()?.end))
+                .unwrap_or(line.start.saturating_sub(1)),
             _ => cells[k - 1].end,
         };
         let next_cell = || match cells.get(k + 1) {
             Some(next) => next.start,
             None => {
-                let first = self.table_neighbour(c, true).and_then(|cells| Some(cells.first()?.start));
+                let first = self
+                    .table_neighbour(c, true)
+                    .and_then(|cells| Some(cells.first()?.start));
                 first.unwrap_or((line.end + 1).min(self.content.len()))
             }
         };
         let inside = &self.content[cell.clone()];
         Some(match m {
             Motion::Left if at > cell.start => {
-                let t = cell.start + inside[..at - cell.start].grapheme_indices(true).next_back().map_or(0, |(i, _)| i);
+                let t = cell.start
+                    + inside[..at - cell.start]
+                        .grapheme_indices(true)
+                        .next_back()
+                        .map_or(0, |(i, _)| i);
                 self.off_escape(t, false)
             }
             Motion::Right if at < cell.end => {
-                let t = at + inside[at - cell.start..].graphemes(true).next().map_or(0, str::len);
+                let t = at
+                    + inside[at - cell.start..]
+                        .graphemes(true)
+                        .next()
+                        .map_or(0, str::len);
                 self.off_escape(t, true)
             }
-            Motion::WordLeft if at > cell.start => cell.start
-                + inside[..at - cell.start]
+            Motion::WordLeft if at > cell.start => {
+                cell.start
+                    + inside[..at - cell.start]
+                        .split_word_bound_indices()
+                        .rev()
+                        .find(|(_, w)| !w.trim().is_empty())
+                        .map_or(0, |(i, _)| i)
+            }
+            Motion::WordRight if at < cell.end => {
+                at + inside[at - cell.start..]
                     .split_word_bound_indices()
-                    .rev()
                     .find(|(_, w)| !w.trim().is_empty())
-                    .map_or(0, |(i, _)| i),
-            Motion::WordRight if at < cell.end => at
-                + inside[at - cell.start..]
-                    .split_word_bound_indices()
-                    .find(|(_, w)| !w.trim().is_empty())
-                    .map_or(cell.end - at, |(i, w)| i + w.len()),
+                    .map_or(cell.end - at, |(i, w)| i + w.len())
+            }
             Motion::Left | Motion::WordLeft => prev_cell(),
             Motion::Right | Motion::WordRight => next_cell(),
             Motion::Home => cells[0].start,
@@ -385,7 +458,8 @@ impl Editor {
     }
 
     pub(super) fn target(&self, m: Motion, gx: Pixels) -> usize {
-        self.table_move(self.cursor(), m).unwrap_or_else(|| self.plain_target(m, gx))
+        self.table_move(self.cursor(), m)
+            .unwrap_or_else(|| self.plain_target(m, gx))
     }
 
     /// Where move `m` leads, counting only the text.
@@ -398,7 +472,11 @@ impl Editor {
         match m {
             Motion::Left if col == 0 => c.saturating_sub(1),
             Motion::Left => {
-                lr.start + line[..col].grapheme_indices(true).next_back().map_or(0, |(i, _)| i)
+                lr.start
+                    + line[..col]
+                        .grapheme_indices(true)
+                        .next_back()
+                        .map_or(0, |(i, _)| i)
             }
             Motion::Right if c == lr.end => (c + 1).min(self.content.len()),
             Motion::Right => c + line[col..].graphemes(true).next().map_or(0, str::len),
@@ -428,11 +506,17 @@ impl Editor {
         let Some((cols, rows)) = self.grid else {
             return false;
         };
-        if !text.chars().all(|c| c.is_ascii_digit() || matches!(c, 'x' | 'X' | '×' | '*' | ' ')) {
+        if !text
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, 'x' | 'X' | '×' | '*' | ' '))
+        {
             return false;
         }
         self.grid_typed.push_str(text);
-        let mut sizes = self.grid_typed.split(|c: char| !c.is_ascii_digit()).filter_map(|n| n.parse::<usize>().ok());
+        let mut sizes = self
+            .grid_typed
+            .split(|c: char| !c.is_ascii_digit())
+            .filter_map(|n| n.parse::<usize>().ok());
         let cols = sizes.next().unwrap_or(cols).clamp(1, GRID_MAX.0);
         let rows = sizes.next().unwrap_or(rows).clamp(1, GRID_MAX.1);
         self.grid = Some((cols, rows));
@@ -444,7 +528,8 @@ impl Editor {
     /// (row, column) where `at` is.
     /// Byte `at` is in a very big table (see `grid::BIG`).
     pub(super) fn in_big(&self, at: usize) -> bool {
-        self.row_at(at).is_some_and(|r| self.big.iter().any(|b| b.rows.contains(&r)))
+        self.row_at(at)
+            .is_some_and(|r| self.big.iter().any(|b| b.rows.contains(&r)))
     }
 
     pub(super) fn table_at(&self, at: usize) -> Option<TableAt> {
@@ -478,7 +563,10 @@ impl Editor {
         // The missing dash line shifts the ones after the header.
         r += (added && r > 0) as usize;
         let col = at - line.start;
-        let bars = md::bars(&self.content[line]).into_iter().filter(|&bar| bar < col).count();
+        let bars = md::bars(&self.content[line])
+            .into_iter()
+            .filter(|&bar| bar < col)
+            .count();
         let c = bars.saturating_sub(1).min(rows[0].len() - 1);
         Some((start..end, rows, (r, c)))
     }
@@ -490,7 +578,13 @@ impl Editor {
 
     /// Rewrites table `range`, columns aligned, and selects the content
     /// of the cell: typing replaces it.
-    pub(super) fn set_table(&mut self, range: Range<usize>, rows: &[Vec<String>], (r, c): (usize, usize), cx: &mut Context<Self>) {
+    pub(super) fn set_table(
+        &mut self,
+        range: Range<usize>,
+        rows: &[Vec<String>],
+        (r, c): (usize, usize),
+        cx: &mut Context<Self>,
+    ) {
         let text = self.format_table(&range, rows);
         if self.content[range.clone()] != text {
             self.push_undo(true);
@@ -520,7 +614,9 @@ impl Editor {
         if !formed || text == self.content[range.clone()] {
             return;
         }
-        let old = md::cells(&self.content[line.clone()]).get(col).map_or(c, |cell| line.start + cell.start);
+        let old = md::cells(&self.content[line.clone()])
+            .get(col)
+            .map_or(c, |cell| line.start + cell.start);
         let at = range.start + text.split('\n').take(r).map(|l| l.len() + 1).sum::<usize>();
         let new = text.split('\n').nth(r).unwrap_or_default();
         // At the furthest, just before the `|` that closes the cell.
@@ -542,22 +638,33 @@ impl Editor {
         let cursor = self.cursor();
         let line = self.line_range(cursor);
         let cells = md::cells(&self.content[line.clone()]);
-        let here = cells.iter().position(|c| line.start + c.end >= cursor).unwrap_or(cells.len().saturating_sub(1));
+        let here = cells
+            .iter()
+            .position(|c| line.start + c.end >= cursor)
+            .unwrap_or(cells.len().saturating_sub(1));
         let next = |line: &Range<usize>, first: bool| {
             let cells = md::cells(&self.content[line.clone()]);
             let cell = if first { cells.first() } else { cells.last() }?;
             Some(line.start + cell.start..line.start + cell.end)
         };
         let target = match (forward, here) {
-            (true, i) if i + 1 < cells.len() => Some(line.start + cells[i + 1].start..line.start + cells[i + 1].end),
-            (false, i) if i > 0 => Some(line.start + cells[i - 1].start..line.start + cells[i - 1].end),
+            (true, i) if i + 1 < cells.len() => {
+                Some(line.start + cells[i + 1].start..line.start + cells[i + 1].end)
+            }
+            (false, i) if i > 0 => {
+                Some(line.start + cells[i - 1].start..line.start + cells[i - 1].end)
+            }
             (true, _) if line.end < self.content.len() => {
                 let below = self.line_range(line.end + 1);
-                self.is_table_line(&below).then(|| next(&below, true)).flatten()
+                self.is_table_line(&below)
+                    .then(|| next(&below, true))
+                    .flatten()
             }
             (false, _) if line.start > 0 => {
                 let above = self.line_range(line.start - 1);
-                self.is_table_line(&above).then(|| next(&above, false)).flatten()
+                self.is_table_line(&above)
+                    .then(|| next(&above, false))
+                    .flatten()
             }
             _ => None,
         };
@@ -579,7 +686,11 @@ impl Editor {
         let mut cell = r * cols + c;
         // The dash line (the second one) is skipped.
         loop {
-            cell = if forward { cell + 1 } else { cell.saturating_sub(1) };
+            cell = if forward {
+                cell + 1
+            } else {
+                cell.saturating_sub(1)
+            };
             if cell / cols != 1 {
                 break;
             }
@@ -604,8 +715,19 @@ impl Editor {
         let Some((range, rows, _)) = self.table_at(self.sel.start) else {
             return;
         };
-        let cols = self.live_pick(range.start).is_some_and(|p| p.rows.start == 0 && p.rows.end >= md::visible_rows(&rows) && p.cols.len() < rows[0].len());
-        self.table_op(if cols { TableOp::DeleteCol } else { TableOp::DeleteRow }, cx)
+        let cols = self.live_pick(range.start).is_some_and(|p| {
+            p.rows.start == 0
+                && p.rows.end >= md::visible_rows(&rows)
+                && p.cols.len() < rows[0].len()
+        });
+        self.table_op(
+            if cols {
+                TableOp::DeleteCol
+            } else {
+                TableOp::DeleteRow
+            },
+            cx,
+        )
     }
 
     pub(super) fn table_op(&mut self, op: TableOp, cx: &mut Context<Self>) {
@@ -615,11 +737,24 @@ impl Editor {
         // Visible rank: the dash line counts for the header.
         let seen = |r: usize| r.saturating_sub(1);
         let slot = |v: usize| if v == 0 { 0 } else { v + 1 };
-        let end = self.table_at(self.sel.end).filter(|(other, ..)| *other == range).map_or((r, c), |(.., cell)| cell);
+        let end = self
+            .table_at(self.sel.end)
+            .filter(|(other, ..)| *other == range)
+            .map_or((r, c), |(.., cell)| cell);
         // What a handle grabbed counts more than the selected text.
         let (r0, r1, c0, c1) = match self.live_pick(range.start) {
-            Some(pick) => (pick.rows.start, pick.rows.end - 1, pick.cols.start, pick.cols.end - 1),
-            None => (seen(r).min(seen(end.0)), seen(r).max(seen(end.0)), c.min(end.1), c.max(end.1)),
+            Some(pick) => (
+                pick.rows.start,
+                pick.rows.end - 1,
+                pick.cols.start,
+                pick.cols.end - 1,
+            ),
+            None => (
+                seen(r).min(seen(end.0)),
+                seen(r).max(seen(end.0)),
+                c.min(end.1),
+                c.max(end.1),
+            ),
         };
         let (tall, wide) = (md::visible_rows(&rows), rows[0].len());
         let (grid, at) = match op {
@@ -629,12 +764,26 @@ impl Editor {
             TableOp::ColRight => (Some(md::insert_col(&rows, c1 + 1)), (slot(r0), c1 + 1)),
             TableOp::DuplicateRow => (Some(md::duplicate_row(&rows, r0)), (slot(r0 + 1), c0)),
             TableOp::DuplicateCol => (Some(md::duplicate_col(&rows, c0)), (slot(r0), c0 + 1)),
-            TableOp::MoveRowUp if r0 > 1 => (Some(md::move_row(&rows, r0 - 1, r1)), (slot(r0 - 1), c0)),
-            TableOp::MoveRowDown if r0 > 0 && r1 + 1 < tall => (Some(md::move_row(&rows, r1 + 1, r0)), (slot(r0 + 1), c0)),
-            TableOp::MoveColLeft if c0 > 0 => (Some(md::move_col(&rows, c0 - 1, c1)), (slot(r0), c0 - 1)),
-            TableOp::MoveColRight if c1 + 1 < wide => (Some(md::move_col(&rows, c1 + 1, c0)), (slot(r0), c0 + 1)),
-            TableOp::DeleteRow => (md::delete_rows(&rows, r0..r1 + 1), (slot(r0.min(tall.saturating_sub(r1 - r0 + 2))), c0)),
-            TableOp::DeleteCol => (md::delete_cols(&rows, c0..c1 + 1), (slot(r0), c0.min(wide.saturating_sub(c1 - c0 + 2)))),
+            TableOp::MoveRowUp if r0 > 1 => {
+                (Some(md::move_row(&rows, r0 - 1, r1)), (slot(r0 - 1), c0))
+            }
+            TableOp::MoveRowDown if r0 > 0 && r1 + 1 < tall => {
+                (Some(md::move_row(&rows, r1 + 1, r0)), (slot(r0 + 1), c0))
+            }
+            TableOp::MoveColLeft if c0 > 0 => {
+                (Some(md::move_col(&rows, c0 - 1, c1)), (slot(r0), c0 - 1))
+            }
+            TableOp::MoveColRight if c1 + 1 < wide => {
+                (Some(md::move_col(&rows, c1 + 1, c0)), (slot(r0), c0 + 1))
+            }
+            TableOp::DeleteRow => (
+                md::delete_rows(&rows, r0..r1 + 1),
+                (slot(r0.min(tall.saturating_sub(r1 - r0 + 2))), c0),
+            ),
+            TableOp::DeleteCol => (
+                md::delete_cols(&rows, c0..c1 + 1),
+                (slot(r0), c0.min(wide.saturating_sub(c1 - c0 + 2))),
+            ),
             TableOp::SortAsc => (Some(md::sort_rows(&rows, c0, true)), (0, c0)),
             TableOp::SortDesc => (Some(md::sort_rows(&rows, c0, false)), (0, c0)),
             TableOp::Transpose => (Some(md::transpose(&rows)), (0, 0)),
@@ -648,24 +797,48 @@ impl Editor {
         let held = self.held;
         if tracks {
             let shift = |n: usize, gone: Range<usize>| -> Vec<Option<usize>> {
-                (0..n).map(|i| (!gone.contains(&i)).then(|| i - gone.clone().filter(|g| *g < i).count())).collect()
+                (0..n)
+                    .map(|i| {
+                        (!gone.contains(&i)).then(|| i - gone.clone().filter(|g| *g < i).count())
+                    })
+                    .collect()
             };
             let (old_rows, old_cols) = md::keys(&rows);
             let old = md::scopes(&rows);
             let (rows_to, cols_to, new, gone) = match (&grid, op) {
                 (None, _) => (vec![None; tall], vec![None; wide], Default::default(), true),
-                (Some(_), TableOp::DeleteRow) => (shift(tall, r0..r1 + 1), (0..wide).map(Some).collect(), md::scopes(grid.as_ref().unwrap()), false),
-                (Some(_), TableOp::DeleteCol) => ((0..tall).map(Some).collect(), shift(wide, c0..c1 + 1), md::scopes(grid.as_ref().unwrap()), false),
+                (Some(_), TableOp::DeleteRow) => (
+                    shift(tall, r0..r1 + 1),
+                    (0..wide).map(Some).collect(),
+                    md::scopes(grid.as_ref().unwrap()),
+                    false,
+                ),
+                (Some(_), TableOp::DeleteCol) => (
+                    (0..tall).map(Some).collect(),
+                    shift(wide, c0..c1 + 1),
+                    md::scopes(grid.as_ref().unwrap()),
+                    false,
+                ),
                 // Rows become columns: each is looked for among the other kind, and named by it.
                 (Some(g), TableOp::Transpose) => {
                     let (new_rows, new_cols) = md::keys(g);
                     let (names, cols) = md::scopes(g);
-                    (md::track(&old_rows, &new_cols), md::track(&old_cols, &new_rows), (cols, names), false)
+                    (
+                        md::track(&old_rows, &new_cols),
+                        md::track(&old_cols, &new_rows),
+                        (cols, names),
+                        false,
+                    )
                 }
                 // Moved, inserted, duplicated, sorted: found again by their content.
                 (Some(g), _) => {
                     let (new_rows, new_cols) = md::keys(g);
-                    (md::track(&old_rows, &new_rows), md::track(&old_cols, &new_cols), md::scopes(g), false)
+                    (
+                        md::track(&old_rows, &new_rows),
+                        md::track(&old_cols, &new_cols),
+                        md::scopes(g),
+                        false,
+                    )
                 }
             };
             self.push_undo(true);
@@ -676,7 +849,11 @@ impl Editor {
             Some(grid) => self.set_table(range, &grid, at, cx),
             // Nothing left in the table: it goes with the line break that follows it.
             None => {
-                let stop = if self.content[range.end..].starts_with('\n') { range.end + 1 } else { range.end };
+                let stop = if self.content[range.end..].starts_with('\n') {
+                    range.end + 1
+                } else {
+                    range.end
+                };
                 self.push_undo(true);
                 self.edit(range.start..stop, "", cx);
                 self.move_to(range.start.min(self.content.len()), cx);
@@ -701,12 +878,17 @@ impl Editor {
         let line = self.line_range(c);
         // An empty line separates it from what comes before: stuck to a quote, it would be part of it.
         let above = self.content[..line.start].trim_end_matches(' ');
-        let apart = self.content[line.start..c].trim().is_empty() && (above.is_empty() || above.ends_with("\n\n"));
+        let apart = self.content[line.start..c].trim().is_empty()
+            && (above.is_empty() || above.ends_with("\n\n"));
         let lead = if apart { "" } else { "\n" };
         let tail = if c == line.end { "" } else { "\n" };
         let table = md::new_table(cols, rows);
         self.push_undo(true);
-        self.edit(c..c, &format!("{lead}{}{tail}", md::format_table(&table, "")), cx);
+        self.edit(
+            c..c,
+            &format!("{lead}{}{tail}", md::format_table(&table, "")),
+            cx,
+        );
         if let Some((range, rows, _)) = self.table_at(c + lead.len()) {
             self.set_table(range, &rows, (0, 0), cx);
         }
@@ -716,7 +898,10 @@ impl Editor {
     /// for a column).
     pub(super) fn plus_at(&self, at: Point<Pixels>) -> Option<(usize, usize)> {
         self.tables.iter().find_map(|(range, frame)| {
-            Some((range.start, plus_bars(*frame).iter().position(|bar| bar.contains(&at))?))
+            Some((
+                range.start,
+                plus_bars(*frame).iter().position(|bar| bar.contains(&at))?,
+            ))
         })
     }
 
@@ -743,14 +928,18 @@ impl Editor {
         let mut rows: Vec<Vec<String>> = Vec::new();
         let mut line = None;
         // A "select all" ends after the last line break: outside the table.
-        let end = self.content[..self.sel.end].trim_end_matches('\n').len().max(self.sel.start);
+        let end = self.content[..self.sel.end]
+            .trim_end_matches('\n')
+            .len()
+            .max(self.sel.start);
         for cell in self.cells_in(self.sel.start..end)? {
             let start = self.line_range(cell.start).start;
             if line != Some(start) {
                 rows.push(Vec::new());
                 line = Some(start);
             }
-            rows.last_mut()?.push(self.content[cell].trim().replace("\\|", "|"));
+            rows.last_mut()?
+                .push(self.content[cell].trim().replace("\\|", "|"));
         }
         Some(md::grid_markdown(&rows))
     }
@@ -772,11 +961,20 @@ impl Editor {
             let line = self.line_range(sel.start);
             let bars = md::bars(&self.content[line.clone()]);
             let col = sel.start - line.start;
-            let cell = md::cells(&self.content[line.clone()]).get(c).cloned().unwrap_or(0..0);
+            let cell = md::cells(&self.content[line.clone()])
+                .get(c)
+                .cloned()
+                .unwrap_or(0..0);
             let sel = match (bars.first(), bars.last()) {
                 _ if !sel.is_empty() => sel,
-                (Some(&first), _) if col <= first => line.start + cell.start..line.start + cell.start,
-                (Some(_), Some(&last)) if col > last && self.content[line.clone()].trim_end().ends_with('|') => line.start + cell.end..line.start + cell.end,
+                (Some(&first), _) if col <= first => {
+                    line.start + cell.start..line.start + cell.start
+                }
+                (Some(_), Some(&last))
+                    if col > last && self.content[line.clone()].trim_end().ends_with('|') =>
+                {
+                    line.start + cell.end..line.start + cell.end
+                }
                 _ => sel,
             };
             self.push_undo(true);
@@ -784,7 +982,9 @@ impl Editor {
             self.realign(cx);
             return true;
         };
-        let width = rows[0].len().max(c + grid.iter().map(Vec::len).max().unwrap_or(0));
+        let width = rows[0]
+            .len()
+            .max(c + grid.iter().map(Vec::len).max().unwrap_or(0));
         for (i, row) in rows.iter_mut().enumerate() {
             row.resize(width, if i == 1 { "---" } else { "" }.to_string());
         }
@@ -811,7 +1011,11 @@ impl Editor {
 
 /// Where byte `p` lands once the table at `range` is rewritten from `old` to `text` (realigned):
 /// the same offset in the same cell, cut to the cell's new length.
-fn realigned<'a>(range: &'a Range<usize>, old: &'a str, text: &'a str) -> impl Fn(usize) -> usize + 'a {
+fn realigned<'a>(
+    range: &'a Range<usize>,
+    old: &'a str,
+    text: &'a str,
+) -> impl Fn(usize) -> usize + 'a {
     let start_of = |t: &str, l: usize| t.split('\n').take(l).map(|x| x.len() + 1).sum::<usize>();
     move |p| {
         if p <= range.start {
@@ -822,7 +1026,10 @@ fn realigned<'a>(range: &'a Range<usize>, old: &'a str, text: &'a str) -> impl F
         }
         let q = p - range.start;
         let l = old[..q].matches('\n').count();
-        let (ol, nl) = (old.split('\n').nth(l).unwrap_or_default(), text.split('\n').nth(l).unwrap_or_default());
+        let (ol, nl) = (
+            old.split('\n').nth(l).unwrap_or_default(),
+            text.split('\n').nth(l).unwrap_or_default(),
+        );
         let (col, base) = (q - start_of(old, l), range.start + start_of(text, l));
         let (oc, nc) = (md::cells(ol), md::cells(nl));
         let Some(k) = oc.iter().rposition(|c| c.start <= col) else {

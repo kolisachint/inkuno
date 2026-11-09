@@ -16,11 +16,11 @@ use gpui::{
 
 use crate::{
     lang::tr,
+    logic::note::Note,
+    platform::vault,
+    ui::assets::sans,
     ui::theme::Theme,
     views::nav::{Fold, Next, Open, Prev, Unfold},
-    ui::assets::sans,
-    platform::vault,
-    logic::note::Note,
 };
 
 actions!(graph, [Cycle]);
@@ -42,7 +42,10 @@ pub enum GraphEvent {
 
 /// Name of an image in the graph and in links: its file name.
 pub fn image_name(path: &Path) -> String {
-    path.file_name().unwrap_or_default().to_string_lossy().into_owned()
+    path.file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Edges `(i, j)`, `i < j`, without duplicates: wikilinks targeting a note of the
@@ -59,7 +62,9 @@ pub fn edges(notes: &[Note], images: &[PathBuf]) -> Vec<(usize, usize)> {
         }
     }
     for (i, image) in images.iter().enumerate() {
-        by_name.entry(image_name(image).to_lowercase()).or_insert(notes.len() + i);
+        by_name
+            .entry(image_name(image).to_lowercase())
+            .or_insert(notes.len() + i);
     }
     let mut edges: Vec<(usize, usize)> = notes
         .iter()
@@ -89,8 +94,11 @@ fn spiral(i: usize) -> (f32, f32) {
 // move to Barnes-Hut if vaults grow.
 pub fn layout(seed: &[Option<(f32, f32)>], edges: &[(usize, usize)]) -> Vec<(f32, f32)> {
     let n = seed.len();
-    let mut pos: Vec<(f32, f32)> =
-        seed.iter().enumerate().map(|(i, s)| s.unwrap_or_else(|| spiral(i))).collect();
+    let mut pos: Vec<(f32, f32)> = seed
+        .iter()
+        .enumerate()
+        .map(|(i, s)| s.unwrap_or_else(|| spiral(i)))
+        .collect();
     let iterations = (40_000_000 / (n * n).max(1)).clamp(30, 300);
     let start = 0.5 + (n as f32).sqrt() * 0.1;
     let mut push = vec![(0f32, 0f32); n];
@@ -146,7 +154,8 @@ pub fn ring(count: usize, inner: f32) -> Vec<(f32, f32)> {
     let radius = inner.max(count as f32 * ORPHAN_GAP / std::f32::consts::TAU);
     (0..count)
         .map(|k| {
-            let angle = k as f32 / count as f32 * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
+            let angle =
+                k as f32 / count as f32 * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
             (radius * angle.cos(), radius * angle.sin())
         })
         .collect()
@@ -170,7 +179,15 @@ pub fn arrange(seed: &[Option<(f32, f32)>], edges: &[(usize, usize)]) -> Vec<(f3
     let placed = layout(&inner_seed, &inner_edges);
     let reach = placed.iter().map(|p| p.0.hypot(p.1)).fold(0., f32::max);
     let mut outer = ring(seed.len() - placed.len(), reach + 1.5).into_iter();
-    (0..seed.len()).map(|i| if linked[i] { placed[slot[i]] } else { outer.next().unwrap_or_default() }).collect()
+    (0..seed.len())
+        .map(|i| {
+            if linked[i] {
+                placed[slot[i]]
+            } else {
+                outer.next().unwrap_or_default()
+            }
+        })
+        .collect()
 }
 
 /// One drag step: the held node's move propagates along links.
@@ -179,15 +196,24 @@ pub fn arrange(seed: &[Option<(f32, f32)>], edges: &[(usize, usize)]) -> Vec<(f3
 // ponytail: no repulsion during the drag, a dragged-along node can
 // cover another; rerun `layout` on release if that gets in the way.
 fn follow(pos: &mut [(f32, f32)], rest: &[(f32, f32)], near: &[Vec<usize>], held: usize) {
-    let shift: Vec<(f32, f32)> = pos.iter().zip(rest).map(|(p, r)| (p.0 - r.0, p.1 - r.1)).collect();
+    let shift: Vec<(f32, f32)> = pos
+        .iter()
+        .zip(rest)
+        .map(|(p, r)| (p.0 - r.0, p.1 - r.1))
+        .collect();
     for (i, links) in near.iter().enumerate() {
         if i == held || links.is_empty() {
             continue;
         }
         let n = links.len() as f32;
-        let mean = links.iter().fold((0., 0.), |a, &j| (a.0 + shift[j].0 / n, a.1 + shift[j].1 / n));
+        let mean = links.iter().fold((0., 0.), |a, &j| {
+            (a.0 + shift[j].0 / n, a.1 + shift[j].1 / n)
+        });
         let ease = |own: f32, mean: f32| own + 0.12 * (mean - own) - 0.012 * own;
-        pos[i] = (rest[i].0 + ease(shift[i].0, mean.0), rest[i].1 + ease(shift[i].1, mean.1));
+        pos[i] = (
+            rest[i].0 + ease(shift[i].0, mean.0),
+            rest[i].1 + ease(shift[i].1, mean.1),
+        );
     }
 }
 
@@ -266,10 +292,16 @@ impl Graph {
             .map(|n| (n.path.clone(), n.name.clone().into()))
             .chain(images.iter().map(|p| (p.clone(), image_name(p).into())))
             .collect();
-        let known: HashMap<&Path, (f32, f32)> =
-            self.nodes.iter().zip(&self.pos).map(|((path, _), p)| (path.as_path(), *p)).collect();
-        let seed: Vec<Option<(f32, f32)>> =
-            nodes.iter().map(|(path, _)| known.get(path.as_path()).copied()).collect();
+        let known: HashMap<&Path, (f32, f32)> = self
+            .nodes
+            .iter()
+            .zip(&self.pos)
+            .map(|((path, _), p)| (path.as_path(), *p))
+            .collect();
+        let seed: Vec<Option<(f32, f32)>> = nodes
+            .iter()
+            .map(|(path, _)| known.get(path.as_path()).copied())
+            .collect();
         drop(known);
         let first = self.nodes.is_empty();
         self.edges = edges(notes, images);
@@ -278,13 +310,20 @@ impl Graph {
             self.near[i].push(j);
             self.near[j].push(i);
         }
-        self.pos = seed.iter().enumerate().map(|(i, s)| s.unwrap_or_else(|| spiral(i))).collect();
+        self.pos = seed
+            .iter()
+            .enumerate()
+            .map(|(i, s)| s.unwrap_or_else(|| spiral(i)))
+            .collect();
         self.nodes = nodes;
         (self.hover, self.cycle, self.drag, self.pull) = (None, None, None, None);
         self.generation += 1;
         let (generation, edges) = (self.generation, self.edges.clone());
         cx.spawn(async move |this, cx| {
-            let pos = cx.background_executor().spawn(async move { arrange(&seed, &edges) }).await;
+            let pos = cx
+                .background_executor()
+                .spawn(async move { arrange(&seed, &edges) })
+                .await;
             this.update(cx, |this, cx| {
                 if this.generation == generation {
                     this.pos = pos;
@@ -300,7 +339,11 @@ impl Graph {
 
     /// Theme, displayed document and selected node, as the window knows them.
     pub fn sync(&mut self, theme: Theme, current: Option<&Path>, selected: Option<&Path>) {
-        let find = |path: Option<&Path>| self.nodes.iter().position(|(p, _)| Some(p.as_path()) == path);
+        let find = |path: Option<&Path>| {
+            self.nodes
+                .iter()
+                .position(|(p, _)| Some(p.as_path()) == path)
+        };
         (self.current, self.selected) = (find(current), find(selected));
         self.theme = theme;
     }
@@ -339,13 +382,20 @@ impl Graph {
     }
 
     fn radius(&self, i: usize) -> f32 {
-        let grown = if self.hover == Some(i) || self.drag == Some(i) { 1.5 } else { 0. };
+        let grown = if self.hover == Some(i) || self.drag == Some(i) {
+            1.5
+        } else {
+            0.
+        };
         node_size(self.near[i].len()) * (self.zoom / 40.).clamp(0.6, 1.5) + grown
     }
 
     /// Offset and zoom that show the whole graph.
     fn framing(&self) -> Option<((f32, f32), f32)> {
-        let (w, h) = (f32::from(self.bounds.size.width), f32::from(self.bounds.size.height));
+        let (w, h) = (
+            f32::from(self.bounds.size.width),
+            f32::from(self.bounds.size.height),
+        );
         if self.pos.is_empty() || w <= 0. || h <= 0. {
             return None;
         }
@@ -355,8 +405,13 @@ impl Graph {
             max = (max.0.max(p.0), max.1.max(p.1));
         }
         // One unit of margin on each side, for names.
-        let zoom = (w / (max.0 - min.0 + 2.)).min(h / (max.1 - min.1 + 2.)).clamp(6., 80.);
-        Some(((-(min.0 + max.0) / 2. * zoom, -(min.1 + max.1) / 2. * zoom), zoom))
+        let zoom = (w / (max.0 - min.0 + 2.))
+            .min(h / (max.1 - min.1 + 2.))
+            .clamp(6., 80.);
+        Some((
+            (-(min.0 + max.0) / 2. * zoom, -(min.1 + max.1) / 2. * zoom),
+            zoom,
+        ))
     }
 
     /// Advances the animations by one frame: view glide, dragged-along nodes.
@@ -365,13 +420,19 @@ impl Graph {
             let toward = |from: f32, to: f32| from + (to - from) * 0.2;
             self.pan = (toward(self.pan.0, pan.0), toward(self.pan.1, pan.1));
             self.zoom = toward(self.zoom, zoom);
-            if (self.zoom - zoom).abs() < 0.05 && (self.pan.0 - pan.0).hypot(self.pan.1 - pan.1) < 0.5 {
+            if (self.zoom - zoom).abs() < 0.05
+                && (self.pan.0 - pan.0).hypot(self.pan.1 - pan.1) < 0.5
+            {
                 (self.pan, self.zoom, self.aim) = (pan, zoom, None);
             }
         }
         if let Some((held, left)) = self.pull {
             follow(&mut self.pos, &self.rest, &self.near, held);
-            let left = if self.drag.is_some() { SETTLE } else { left - 1 };
+            let left = if self.drag.is_some() {
+                SETTLE
+            } else {
+                left - 1
+            };
             self.pull = (left > 0).then_some((held, left));
         }
         if self.aim.is_some() || self.pull.is_some() {
@@ -490,7 +551,8 @@ impl Graph {
 
     /// The wheel zooms around the pointer.
     fn scroll(&mut self, e: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let zoom = (self.zoom * (f32::from(e.delta.pixel_delta(px(26.)).y) * 0.004).exp()).clamp(4., 240.);
+        let zoom =
+            (self.zoom * (f32::from(e.delta.pixel_delta(px(26.)).y) * 0.004).exp()).clamp(4., 240.);
         let c = self.bounds.center();
         let (mx, my) = (f32::from(e.position.x - c.x), f32::from(e.position.y - c.y));
         let k = zoom / self.zoom;
@@ -510,7 +572,13 @@ impl Graph {
         let t = self.theme;
         let focus = self.hover.or(self.selected);
         let lit = |i: usize| focus.is_none_or(|f| f == i || self.near[f].contains(&i));
-        let fade = |color: Hsla, on: bool| if on { color } else { t.bg.blend(color.opacity(0.4)) };
+        let fade = |color: Hsla, on: bool| {
+            if on {
+                color
+            } else {
+                t.bg.blend(color.opacity(0.4))
+            }
+        };
 
         // The open note and its neighbors stand out; everything else stays quiet.
         let open = self.current;
@@ -523,7 +591,8 @@ impl Graph {
             if !bounds.contains(&a) && !bounds.contains(&b) {
                 continue;
             }
-            let line = if focus == Some(i) || focus == Some(j) || open == Some(i) || open == Some(j) {
+            let line = if focus == Some(i) || focus == Some(j) || open == Some(i) || open == Some(j)
+            {
                 any_strong = true;
                 &mut strong
             } else {
@@ -534,7 +603,11 @@ impl Graph {
             line.line_to(b);
         }
         // Away from the focused note, the edges step back.
-        let edge_color = if focus.is_none() { t.border } else { t.border.opacity(0.4) };
+        let edge_color = if focus.is_none() {
+            t.border
+        } else {
+            t.border.opacity(0.4)
+        };
         if any_plain && let Ok(path) = plain.build() {
             window.paint_path(path, edge_color);
         }
@@ -542,7 +615,12 @@ impl Graph {
             window.paint_path(path, t.text.opacity(0.8));
         }
 
-        let disc = |c: Point<Pixels>, r: f32| Bounds::new(point(c.x - px(r), c.y - px(r)), size(px(r * 2.), px(r * 2.)));
+        let disc = |c: Point<Pixels>, r: f32| {
+            Bounds::new(
+                point(c.x - px(r), c.y - px(r)),
+                size(px(r * 2.), px(r * 2.)),
+            )
+        };
         for i in 0..self.pos.len() {
             let (c, r) = (self.screen(i), self.radius(i));
             if !bounds.dilate(px(r)).contains(&c) {
@@ -558,12 +636,26 @@ impl Graph {
             };
             if self.selected == Some(i) {
                 let ring = disc(c, r + 4.);
-                window.paint_quad(quad(ring, px(r + 4.), t.selection, px(1.5), t.accent, BorderStyle::default()));
+                window.paint_quad(quad(
+                    ring,
+                    px(r + 4.),
+                    t.selection,
+                    px(1.5),
+                    t.accent,
+                    BorderStyle::default(),
+                ));
             }
             // An image: a rounded square, to tell it from a note (the hovered name says so).
             let image = vault::is_image(&self.nodes[i].0);
             let corner = if image { r * 0.3 } else { r };
-            window.paint_quad(quad(disc(c, r), px(corner), fade(color, on), px(0.), t.bg, BorderStyle::default()));
+            window.paint_quad(quad(
+                disc(c, r),
+                px(corner),
+                fade(color, on),
+                px(0.),
+                t.bg,
+                BorderStyle::default(),
+            ));
 
             let named = self.zoom >= LABEL_ZOOM
                 || focus.is_some_and(|_| on)
@@ -573,14 +665,22 @@ impl Graph {
                 continue;
             }
             let name = if image && self.hover == Some(i) {
-                SharedString::from(format!("{} · {}", self.nodes[i].1, tr("attachment", "pièce jointe")))
+                SharedString::from(format!(
+                    "{} · {}",
+                    self.nodes[i].1,
+                    tr("attachment", "pièce jointe")
+                ))
             } else {
                 self.nodes[i].1.clone()
             };
             let run = TextRun {
                 len: name.len(),
                 font: font(sans()),
-                color: if focus == Some(i) || self.current == Some(i) { t.text } else { fade(t.soft, on) },
+                color: if focus == Some(i) || self.current == Some(i) {
+                    t.text
+                } else {
+                    fade(t.soft, on)
+                },
                 background_color: None,
                 underline: None,
                 strikethrough: None,
@@ -661,7 +761,11 @@ mod tests {
 
     #[test]
     fn resolves_edges() {
-        let notes = [note("A", &["b", "a", "absente"]), note("B", &["a", "c"]), note("c", &[])];
+        let notes = [
+            note("A", &["b", "a", "absente"]),
+            note("B", &["a", "c"]),
+            note("c", &[]),
+        ];
         // No duplicate, no loop, no link to a missing note.
         assert_eq!(edges(&notes, &[]), [(0, 1), (1, 2)]);
         // An image shown by a note is linked to it; it comes after the notes.
@@ -702,11 +806,16 @@ mod tests {
         let r = |i: usize| pos[i].0.hypot(pos[i].1);
         let reach = (0..3).map(r).fold(0., f32::max);
         let ring: Vec<f32> = (3..n).map(r).collect();
-        assert!(ring.iter().all(|&d| d > reach && (d - ring[0]).abs() < 1e-3));
+        assert!(
+            ring.iter()
+                .all(|&d| d > reach && (d - ring[0]).abs() < 1e-3)
+        );
         // Evenly spaced: every neighbour at the same distance, none on top of another.
         let gap = |i: usize, j: usize| (pos[i].0 - pos[j].0).hypot(pos[i].1 - pos[j].1);
         let first = gap(3, 4);
-        assert!((3..n - 1).all(|i| (gap(i, i + 1) - first).abs() < 1e-3) && first >= ORPHAN_GAP * 0.99);
+        assert!(
+            (3..n - 1).all(|i| (gap(i, i + 1) - first).abs() < 1e-3) && first >= ORPHAN_GAP * 0.99
+        );
         assert_eq!(pos, arrange(&vec![None; n], &[(0, 1), (1, 2)]));
     }
 

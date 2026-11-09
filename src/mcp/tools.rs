@@ -18,7 +18,11 @@ struct Tool {
 }
 
 pub fn list(read_only: bool) -> Vec<Value> {
-    tools().into_iter().filter(|tool| !read_only || tool.read_only).map(schema).collect()
+    tools()
+        .into_iter()
+        .filter(|tool| !read_only || tool.read_only)
+        .map(schema)
+        .collect()
 }
 
 pub fn call(server: &mut Server, name: &str, args: &Value) -> Outcome {

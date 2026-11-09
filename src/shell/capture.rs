@@ -19,23 +19,41 @@ impl Capture {
         let prefs = Prefs::parse(&vault::load_settings());
         apply_fonts(&prefs);
         let theme = Theme::of(&prefs, window.appearance());
-        let field = Self::ask(tr("Add to today's note", "Ajouter à la note du jour").into(), "", theme, window, cx);
+        let field = Self::ask(
+            tr("Add to today's note", "Ajouter à la note du jour").into(),
+            "",
+            theme,
+            window,
+            cx,
+        );
         Self { root, theme, field }
     }
 
     /// The input field: the palette's, announcing `label` and starting from `text`.
-    pub(super) fn ask(label: String, text: &str, theme: Theme, window: &mut Window, cx: &mut Context<Self>) -> Entity<Palette> {
+    pub(super) fn ask(
+        label: String,
+        text: &str,
+        theme: Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<Palette> {
         let field = cx.new(|cx| Palette::prompt(label, text, theme, cx).at_top());
         cx.subscribe_in(&field, window, |this, _, event, window, cx| match event {
-            PaletteEvent::Submit(text) if !text.is_empty() => match vault::capture(&this.root, &date_name(today()), text) {
-                Ok(_) => window.remove_window(),
-                // Nothing is lost: the line stays, with the reason.
-                Err(e) => {
-                    let label = format!("{} : {}", tr("Not saved", "Non enregistré"), crate::lang::io_reason(&e));
-                    this.field = Self::ask(label, text, this.theme, window, cx);
-                    cx.notify();
+            PaletteEvent::Submit(text) if !text.is_empty() => {
+                match vault::capture(&this.root, &date_name(today()), text) {
+                    Ok(_) => window.remove_window(),
+                    // Nothing is lost: the line stays, with the reason.
+                    Err(e) => {
+                        let label = format!(
+                            "{} : {}",
+                            tr("Not saved", "Non enregistré"),
+                            crate::lang::io_reason(&e)
+                        );
+                        this.field = Self::ask(label, text, this.theme, window, cx);
+                        cx.notify();
+                    }
                 }
-            },
+            }
             PaletteEvent::Submit(_) | PaletteEvent::Dismiss => window.remove_window(),
             _ => {}
         })
@@ -47,7 +65,11 @@ impl Capture {
 
 impl Render for Capture {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().font_family(sans()).text_color(self.theme.text).child(self.field.clone())
+        div()
+            .size_full()
+            .font_family(sans())
+            .text_color(self.theme.text)
+            .child(self.field.clone())
     }
 }
 

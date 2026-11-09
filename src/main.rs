@@ -5,6 +5,8 @@
 
 mod actions;
 mod config_watch;
+#[cfg(test)]
+mod dbg_test;
 mod lang;
 mod logic;
 mod mcp;
@@ -81,7 +83,11 @@ fn check_config() -> i32 {
     let text = vault::load_keybindings();
     if text.trim().is_empty() {
         let legacy = vault::load_file("keys");
-        let lines: Vec<&str> = legacy.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with('#')).collect();
+        let lines: Vec<&str> = legacy
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .collect();
         if lines.is_empty() {
             println!("keybindings.json: OK: absent, defaults in force");
         } else {
@@ -100,7 +106,10 @@ fn check_config() -> i32 {
             if faults > 0 {
                 failed = true;
             } else {
-                println!("keybindings.json: OK: absent, legacy keys file in force ({} shortcuts)", lines.len());
+                println!(
+                    "keybindings.json: OK: absent, legacy keys file in force ({} shortcuts)",
+                    lines.len()
+                );
             }
         }
     } else {
@@ -113,7 +122,10 @@ fn check_config() -> i32 {
         }
         if errors.is_empty() {
             let unbound = changes.values().filter(|keys| keys.is_empty()).count();
-            println!("keybindings.json: OK: {} bindings ({unbound} unbound)", changes.len());
+            println!(
+                "keybindings.json: OK: {} bindings ({unbound} unbound)",
+                changes.len()
+            );
         } else {
             failed = true;
         }
@@ -131,7 +143,11 @@ fn check_config() -> i32 {
             println!("themes.json: WARN: {warn}");
         }
         if errors.is_empty() {
-            println!("themes.json: OK: {} custom themes ({})", names.len(), names.join(", "));
+            println!(
+                "themes.json: OK: {} custom themes ({})",
+                names.len(),
+                names.join(", ")
+            );
         } else {
             failed = true;
         }
@@ -185,7 +201,10 @@ fn main() {
     // The window has no console on Windows: the last panic is kept in the config folder.
     let report = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        platform::vault::save_file("crash", &format!("bref {}\n{info}\n", env!("CARGO_PKG_VERSION")));
+        platform::vault::save_file(
+            "crash",
+            &format!("bref {}\n{info}\n", env!("CARGO_PKG_VERSION")),
+        );
         report(info);
     }));
     export_json_once();

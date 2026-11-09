@@ -12,24 +12,32 @@ mod render;
 use std::ops::Range;
 
 use gpui::{
-    App, Bounds, ClipboardItem, ContentMask, Context, CursorStyle, ElementInputHandler, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, FontStyle, FontWeight, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, PathBuilder, Pixels, Point, Rgba, ScrollWheelEvent, SharedString, StrikethroughStyle, TextRun, UTF16Selection, UnderlineStyle,
+    App, Bounds, ClipboardItem, ContentMask, Context, CursorStyle, ElementInputHandler,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontStyle, FontWeight, Hsla,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PathBuilder, Pixels, Point, Rgba,
+    ScrollWheelEvent, SharedString, StrikethroughStyle, TextRun, UTF16Selection, UnderlineStyle,
     Window, actions, canvas, div, fill, font, point, prelude::*, px, quad, rgb, size, svg,
 };
 
 use crate::{
-    ui::theme::Theme,
+    lang::tr,
     logic::diagram::{self, Anchor, Cmd, Diagram, End, Form, Route, Slot},
     logic::library::{self, Preset},
     logic::relation::Relation,
     logic::richtext::{self, Span},
+    ui::assets::{mono, sans},
     ui::line::{self as input, Line as Input, To},
+    ui::theme::Theme,
     ui::widgets::{button, tip},
-    ui::assets::{mono, sans}, lang::tr,
 };
 
-actions!(canvas, [ZoomIn, ZoomOut, ZoomFit, Erase, EraseNext, Duplicate, SelectAll, Undo, Redo, Confirm, Cancel, Left, Right, Up, Down, SelectUp, SelectDown, Paste, NextText]);
+actions!(
+    canvas,
+    [
+        ZoomIn, ZoomOut, ZoomFit, Erase, EraseNext, Duplicate, SelectAll, Undo, Redo, Confirm,
+        Cancel, Left, Right, Up, Down, SelectUp, SelectDown, Paste, NextText
+    ]
+);
 
 pub enum CanvasEvent {
     /// The diagram changed: it needs saving.
@@ -102,14 +110,24 @@ fn tool_label(tool: Tool) -> &'static str {
         Tool::Shape(Form::Round) => tr("Rounded rectangle", "Rectangle arrondi"),
         Tool::Shape(Form::Ellipse) => "Ellipse",
         Tool::Shape(Form::Diamond) => tr("Diamond", "Losange"),
-        Tool::Shape(Form::Cylinder) => tr("Cylinder (a database)", "Cylindre (une base de données)"),
+        Tool::Shape(Form::Cylinder) => {
+            tr("Cylinder (a database)", "Cylindre (une base de données)")
+        }
         Tool::Shape(Form::Actor) => tr("Person (an actor)", "Personnage (un acteur)"),
         Tool::Shape(Form::Note) => "Note",
         Tool::Shape(Form::Text) => tr("Text", "Texte"),
-        Tool::Shape(Form::Package) => tr("Package (holds shapes)", "Paquetage (contient des formes)"),
-        Tool::Shape(Form::Frame) => tr("Frame: a system boundary, a composite state (holds shapes)", "Cadre : frontière d'un système, état composite (contient des formes)"),
+        Tool::Shape(Form::Package) => {
+            tr("Package (holds shapes)", "Paquetage (contient des formes)")
+        }
+        Tool::Shape(Form::Frame) => tr(
+            "Frame: a system boundary, a composite state (holds shapes)",
+            "Cadre : frontière d'un système, état composite (contient des formes)",
+        ),
         Tool::Shape(Form::Lane) => tr("Swimlane (holds shapes)", "Couloir (contient des formes)"),
-        Tool::Shape(Form::Branch) => tr("N-ary association (a small diamond)", "Association n-aire (un petit losange)"),
+        Tool::Shape(Form::Branch) => tr(
+            "N-ary association (a small diamond)",
+            "Association n-aire (un petit losange)",
+        ),
         // The shapes of state machines and the like come from the library, by their preset.
         Tool::Shape(_) => "",
         Tool::Link(Relation::Association) => tr("Line", "Trait"),
@@ -163,7 +181,10 @@ impl Placing {
     /// How far the picture is moved so that it is centred on the pointer: gpui draws a dragged view at
     /// the pointer minus the place it was taken hold of at, which is far from the pointer for a wide row.
     fn shift(&self) -> (f32, f32) {
-        (f32::from(self.3.x) - GHOST / 2., f32::from(self.3.y) - GHOST / 2.)
+        (
+            f32::from(self.3.x) - GHOST / 2.,
+            f32::from(self.3.y) - GHOST / 2.,
+        )
     }
 }
 
@@ -171,16 +192,24 @@ impl Render for Placing {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let (dx, dy) = self.shift();
         // A margin on the root itself is ignored: the picture is moved inside it.
-        div().child(div().ml(px(dx)).mt(px(dy)).child(button("d-placing", self.1, true, self.2).debug_selector(|| "d-placing".into())))
+        div().child(
+            div().ml(px(dx)).mt(px(dy)).child(
+                button("d-placing", self.1, true, self.2).debug_selector(|| "d-placing".into()),
+            ),
+        )
     }
 }
 
 /// Size of a shape placed with a click or dropped from the bar or the library.
 fn usual(tool: Tool) -> (f32, f32) {
     if let Tool::Preset(i) = tool {
-        return library::presets().get(i).map_or((140., 60.), |p| (p.w, p.h));
+        return library::presets()
+            .get(i)
+            .map_or((140., 60.), |p| (p.w, p.h));
     }
-    let Tool::Shape(form) = tool else { return (140., 60.) };
+    let Tool::Shape(form) = tool else {
+        return (140., 60.);
+    };
     match form {
         Form::Text => (80., diagram::LINE),
         Form::Actor => (40., 80.),
@@ -198,7 +227,10 @@ fn usual(tool: Tool) -> (f32, f32) {
 fn made_by(tool: Tool) -> Option<(Form, Option<Preset>)> {
     match tool {
         Tool::Shape(form) => Some((form, None)),
-        Tool::Preset(i) => library::presets().into_iter().nth(i).map(|p| (p.form, Some(p))),
+        Tool::Preset(i) => library::presets()
+            .into_iter()
+            .nth(i)
+            .map(|p| (p.form, Some(p))),
         _ => None,
     }
 }
@@ -208,18 +240,42 @@ fn made_by(tool: Tool) -> Option<(Form, Option<Preset>)> {
 enum Drag {
     None,
     /// Moving the selection, from `last`; `begun` once it has moved.
-    Move { last: (f32, f32), begun: bool },
+    Move {
+        last: (f32, f32),
+        begun: bool,
+    },
     /// Dragged corner of a shape: the opposite corner, `fixed`, does not move.
-    Resize { id: u32, fixed: (f32, f32) },
-    Marquee { from: (f32, f32), to: (f32, f32) },
-    Create { id: u32, from: (f32, f32) },
+    Resize {
+        id: u32,
+        fixed: (f32, f32),
+    },
+    Marquee {
+        from: (f32, f32),
+        to: (f32, f32),
+    },
+    Create {
+        id: u32,
+        from: (f32, f32),
+    },
     /// End of an arrow (`to`: its head) being dragged.
-    Tip { id: u32, to: bool },
+    Tip {
+        id: u32,
+        to: bool,
+    },
     /// A message of a sequence diagram dragged up or down: it takes the place among the others its height gives it.
-    Reorder { id: u32, begun: bool },
+    Reorder {
+        id: u32,
+        begun: bool,
+    },
     /// Text at an end of an arrow being dragged along its stroke; `begun` once it has moved.
-    Along { id: u32, slot: Slot, begun: bool },
-    Pan { last: Point<Pixels> },
+    Along {
+        id: u32,
+        slot: Slot,
+        begun: bool,
+    },
+    Pan {
+        last: Point<Pixels>,
+    },
     /// Selecting in the text being written, from where the button went down.
     Text,
 }
@@ -427,7 +483,9 @@ impl Canvas {
         self.exported = true;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(std::time::Duration::from_millis(1500)).await;
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(1500))
+                .await;
             this.update(cx, |this, cx| {
                 this.exported = false;
                 cx.notify();
@@ -441,7 +499,9 @@ impl Canvas {
     /// The text being written, and its selection (bytes), if any.
     #[cfg(test)]
     pub fn label(&self) -> Option<(&str, Range<usize>)> {
-        self.editing.as_ref().map(|w| (w.field.text.as_str(), w.field.selection()))
+        self.editing
+            .as_ref()
+            .map(|w| (w.field.text.as_str(), w.field.selection()))
     }
 
     /// Where the byte `at` of the text being written was drawn: the left of the character, the top of its line.
@@ -471,12 +531,18 @@ impl Canvas {
 
     pub fn spot(&self, x: f32, y: f32) -> Point<Pixels> {
         let o = self.bounds.origin;
-        point(o.x + px(self.pan.0 + x * self.zoom), o.y + px(self.pan.1 + y * self.zoom))
+        point(
+            o.x + px(self.pan.0 + x * self.zoom),
+            o.y + px(self.pan.1 + y * self.zoom),
+        )
     }
 
     fn world(&self, at: Point<Pixels>) -> (f32, f32) {
         let o = self.bounds.origin;
-        ((f32::from(at.x - o.x) - self.pan.0) / self.zoom, (f32::from(at.y - o.y) - self.pan.1) / self.zoom)
+        (
+            (f32::from(at.x - o.x) - self.pan.0) / self.zoom,
+            (f32::from(at.y - o.y) - self.pan.1) / self.zoom,
+        )
     }
 
     /// Colour of an element: neutral takes the theme's text colour.
@@ -484,7 +550,10 @@ impl Canvas {
         match color {
             0 => self.theme.text,
             // Darkened on a light theme, lightened on a dark one, until it reads.
-            i => crate::ui::theme::legible(rgb(diagram::COLORS[i as usize % diagram::COLORS.len()]).into(), self.theme.bg),
+            i => crate::ui::theme::legible(
+                rgb(diagram::COLORS[i as usize % diagram::COLORS.len()]).into(),
+                self.theme.bg,
+            ),
         }
     }
 
@@ -498,7 +567,8 @@ impl Canvas {
         self.remember();
         self.diagram = diagram;
         let diagram = &self.diagram;
-        self.selected.retain(|id| diagram.shape(*id).is_some() || diagram.link(*id).is_some());
+        self.selected
+            .retain(|id| diagram.shape(*id).is_some() || diagram.link(*id).is_some());
         self.hover = None;
         cx.notify();
         true
@@ -524,7 +594,11 @@ impl Canvas {
     }
 
     fn restore(&mut self, redo: bool, cx: &mut Context<Self>) {
-        let (from, to) = if redo { (&mut self.redo, &mut self.undo) } else { (&mut self.undo, &mut self.redo) };
+        let (from, to) = if redo {
+            (&mut self.redo, &mut self.undo)
+        } else {
+            (&mut self.undo, &mut self.redo)
+        };
         if let Some(diagram) = from.pop() {
             to.push(std::mem::replace(&mut self.diagram, diagram));
             (self.editing, self.drag, self.slot) = (None, Drag::None, Slot::Middle);
@@ -544,17 +618,33 @@ impl Canvas {
     pub(super) fn toggle_library(&mut self, cx: &mut Context<Self>) {
         self.shapes = false;
         self.relations = false;
-        self.library = if self.library.is_some() { None } else { Some(String::new()) };
+        self.library = if self.library.is_some() {
+            None
+        } else {
+            Some(String::new())
+        };
         cx.notify();
     }
 
     /// A shape of the library picked: it is the tool that draws the next one; a combined fragment, with
     /// messages selected, wraps them instead.
     pub(super) fn choose_preset(&mut self, preset: usize, cx: &mut Context<Self>) {
-        let wrapper = library::presets().into_iter().nth(preset).filter(|p| p.form == Form::Fragment);
+        let wrapper = library::presets()
+            .into_iter()
+            .nth(preset)
+            .filter(|p| p.form == Form::Fragment);
         let messages = self.diagram.messages();
-        let ids: Vec<u32> = self.selected.iter().copied().filter(|id| messages.contains(id)).collect();
-        if let (Some(wrapper), false, true) = (wrapper, ids.is_empty(), self.editing.is_none() && self.tool == Tool::Select) {
+        let ids: Vec<u32> = self
+            .selected
+            .iter()
+            .copied()
+            .filter(|id| messages.contains(id))
+            .collect();
+        if let (Some(wrapper), false, true) = (
+            wrapper,
+            ids.is_empty(),
+            self.editing.is_none() && self.tool == Tool::Select,
+        ) {
             let mut next = self.diagram.clone();
             if let Some(id) = next.wrap(&ids, wrapper.text) {
                 self.remember();
@@ -568,7 +658,12 @@ impl Canvas {
 
     pub(super) fn choose_relation(&mut self, relation: Relation, cx: &mut Context<Self>) {
         self.relations = false;
-        let links: Vec<u32> = self.selected.iter().copied().filter(|id| self.diagram.link(*id).is_some()).collect();
+        let links: Vec<u32> = self
+            .selected
+            .iter()
+            .copied()
+            .filter(|id| self.diagram.link(*id).is_some())
+            .collect();
         if self.editing.is_none() && self.tool == Tool::Select && !links.is_empty() {
             self.remember();
             for id in links {
@@ -586,26 +681,48 @@ impl Canvas {
         self.stop_editing(cx);
         (self.shapes, self.relations, self.context) = (false, false, None);
         match tool {
-            Tool::Shape(form) if form != Form::Text && form != Form::Branch => self.shape_pick = form,
+            Tool::Shape(form) if form != Form::Text && form != Form::Branch => {
+                self.shape_pick = form
+            }
             Tool::Link(relation) => self.link_pick = relation,
             _ => {}
         }
         self.tool = tool;
-        self.hand = if tool == Tool::Select { CursorStyle::Arrow } else { CursorStyle::Crosshair };
+        self.hand = if tool == Tool::Select {
+            CursorStyle::Arrow
+        } else {
+            CursorStyle::Crosshair
+        };
         cx.notify();
     }
 }
 
-
 // The text and the selection an input method works on are those of the label being written; outside
 // writing, a composition does nothing (a dead key must not pick a tool) and committed text goes to `typed`.
 impl EntityInputHandler for Canvas {
-    fn text_for_range(&mut self, range: Range<usize>, _: &mut Option<Range<usize>>, _: &mut Window, _: &mut Context<Self>) -> Option<String> {
+    fn text_for_range(
+        &mut self,
+        range: Range<usize>,
+        _: &mut Option<Range<usize>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<String> {
         self.editing.as_ref().map(|w| w.field.text_utf16(range))
     }
 
-    fn selected_text_range(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) -> Option<UTF16Selection> {
-        Some(self.editing.as_ref().map_or(UTF16Selection { range: 0..0, reversed: false }, |w| w.field.utf16()))
+    fn selected_text_range(
+        &mut self,
+        _: bool,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        Some(self.editing.as_ref().map_or(
+            UTF16Selection {
+                range: 0..0,
+                reversed: false,
+            },
+            |w| w.field.utf16(),
+        ))
     }
 
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
@@ -619,7 +736,13 @@ impl EntityInputHandler for Canvas {
         }
     }
 
-    fn replace_text_in_range(&mut self, range: Option<Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
+    fn replace_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match &mut self.editing {
             Some(writing) => {
                 writing.field.commit(range, text);
@@ -629,7 +752,14 @@ impl EntityInputHandler for Canvas {
         }
     }
 
-    fn replace_and_mark_text_in_range(&mut self, range: Option<Range<usize>>, text: &str, selected: Option<Range<usize>>, _: &mut Window, cx: &mut Context<Self>) {
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        selected: Option<Range<usize>>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(writing) = &mut self.editing {
             writing.field.compose(range, text, selected);
             self.wrote(cx);
@@ -637,18 +767,40 @@ impl EntityInputHandler for Canvas {
     }
 
     /// The candidate window opens under the character, where its line was last drawn.
-    fn bounds_for_range(&mut self, range: Range<usize>, _: Bounds<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<Bounds<Pixels>> {
-        let at = self.editing.as_ref()?.field.text_utf16(0..range.start).len();
+    fn bounds_for_range(
+        &mut self,
+        range: Range<usize>,
+        _: Bounds<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        let at = self
+            .editing
+            .as_ref()?
+            .field
+            .text_utf16(0..range.start)
+            .len();
         let row = self.rows.iter().rev().find(|r| r.start <= at)?;
-        Some(Bounds::new(point(row.x(at.min(row.end())), row.origin.y), size(px(2.), px(diagram::LINE * self.zoom))))
+        Some(Bounds::new(
+            point(row.x(at.min(row.end())), row.origin.y),
+            size(px(2.), px(diagram::LINE * self.zoom)),
+        ))
     }
 
-    fn character_index_for_point(&mut self, at: Point<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<usize> {
+    fn character_index_for_point(
+        &mut self,
+        at: Point<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<usize> {
         let byte = self.byte_at(at)?;
-        Some(self.editing.as_ref()?.field.text[..byte].encode_utf16().count())
+        Some(
+            self.editing.as_ref()?.field.text[..byte]
+                .encode_utf16()
+                .count(),
+        )
     }
 }
-
 
 /// Theme text colour as `0xrrggbb`, for the neutral stroke of a diagram
 /// drawn outside the canvas.
@@ -658,7 +810,6 @@ pub fn neutral(theme: Theme) -> u32 {
     byte(c.r) << 16 | byte(c.g) << 8 | byte(c.b)
 }
 
-
 #[cfg(test)]
 mod ghost_tests {
     use super::*;
@@ -666,8 +817,23 @@ mod ghost_tests {
     #[test]
     fn the_picture_dragged_is_centred_on_the_pointer_wherever_it_was_taken_hold_of() {
         // gpui draws it at pointer - grab; moved by `shift`, its centre is the pointer, for a button and for a wide row.
-        for grab in [(0., 0.), (14., 14.), (3., 25.), (240., 12.), (600., 30.), (-4., -2.)] {
-            let placing = Placing(Tool::Select, "d-rect.svg", crate::ui::theme::Theme::of(&crate::logic::prefs::Prefs::parse("theme=Bref Light\n"), gpui::WindowAppearance::Light), point(px(grab.0), px(grab.1)));
+        for grab in [
+            (0., 0.),
+            (14., 14.),
+            (3., 25.),
+            (240., 12.),
+            (600., 30.),
+            (-4., -2.),
+        ] {
+            let placing = Placing(
+                Tool::Select,
+                "d-rect.svg",
+                crate::ui::theme::Theme::of(
+                    &crate::logic::prefs::Prefs::parse("theme=Bref Light\n"),
+                    gpui::WindowAppearance::Light,
+                ),
+                point(px(grab.0), px(grab.1)),
+            );
             let (dx, dy) = placing.shift();
             let (left, top) = (-grab.0 + dx, -grab.1 + dy);
             assert_eq!((left + GHOST / 2., top + GHOST / 2.), (0., 0.), "{grab:?}");
@@ -677,12 +843,22 @@ mod ghost_tests {
     #[test]
     fn every_head_and_every_route_has_an_icon_the_assets_know() {
         use gpui::AssetSource;
-        let icons = diagram::Head::ALL.iter().map(|(h, _)| head_icon(*h).0).chain(Route::ALL.iter().map(|(r, _)| route_icon(*r))).chain(["d-reverse.svg"]);
+        let icons = diagram::Head::ALL
+            .iter()
+            .map(|(h, _)| head_icon(*h).0)
+            .chain(Route::ALL.iter().map(|(r, _)| route_icon(*r)))
+            .chain(["d-reverse.svg"]);
         for icon in icons {
-            assert!(crate::ui::assets::Assets.load(icon).unwrap().is_some(), "{icon} is not an asset");
+            assert!(
+                crate::ui::assets::Assets.load(icon).unwrap().is_some(),
+                "{icon} is not an asset"
+            );
         }
         // Two heads of one family are not drawn alike: the buttons tell them apart.
-        let mut seen: Vec<&str> = diagram::Head::ALL.iter().map(|(h, _)| head_icon(*h).0).collect();
+        let mut seen: Vec<&str> = diagram::Head::ALL
+            .iter()
+            .map(|(h, _)| head_icon(*h).0)
+            .collect();
         seen.sort_unstable();
         seen.dedup();
         assert_eq!(seen.len(), diagram::Head::ALL.len());

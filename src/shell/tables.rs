@@ -5,7 +5,9 @@ use super::*;
 impl Shell {
     /// A table takes the note's place, like a picture; the note stays loaded underneath.
     pub(super) fn open_table(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
-        if self.pane().sheet().is_some() && self.pane().file_path().map(PathBuf::as_path) == Some(path) {
+        if self.pane().sheet().is_some()
+            && self.pane().file_path().map(PathBuf::as_path) == Some(path)
+        {
             cx.notify();
             return false;
         }
@@ -15,7 +17,13 @@ impl Shell {
                 let theme = self.theme;
                 let sheet = cx.new(|cx| Sheet::new(path.to_path_buf(), loaded, theme, cx));
                 cx.subscribe(&sheet, Self::on_sheet_event).detach();
-                self.set_file(Some(FileView { path: path.to_path_buf(), kind: FileKind::Sheet(sheet) }), cx);
+                self.set_file(
+                    Some(FileView {
+                        path: path.to_path_buf(),
+                        kind: FileKind::Sheet(sheet),
+                    }),
+                    cx,
+                );
                 self.calm();
             }
             Err(e) => {
@@ -27,12 +35,24 @@ impl Shell {
         false
     }
 
-    pub(super) fn on_sheet_event(&mut self, _: Entity<Sheet>, event: &SheetEvent, cx: &mut Context<Self>) {
+    pub(super) fn on_sheet_event(
+        &mut self,
+        _: Entity<Sheet>,
+        event: &SheetEvent,
+        cx: &mut Context<Self>,
+    ) {
         match event {
             SheetEvent::Error(message) => self.say(Tone::Failed, message.clone(), cx),
             // A file appeared next to the table: the tree shows it.
             SheetEvent::Exported => {
-                self.say(Tone::Done, tr("Table exported beside the source file", "Tableau exporté à côté du fichier source"), cx);
+                self.say(
+                    Tone::Done,
+                    tr(
+                        "Table exported beside the source file",
+                        "Tableau exporté à côté du fichier source",
+                    ),
+                    cx,
+                );
                 if let Some(root) = self.vault.clone() {
                     let (notes, dirs, images) = vault::rescan(&root, &self.notes);
                     self.sync(notes, dirs, images, cx);
@@ -60,14 +80,21 @@ impl Shell {
         ];
         let (options, current): (Vec<String>, String) = match pick {
             Pick::Delimiter => (
-                std::iter::once(auto.to_string()).chain(table::DELIMITERS.map(sheet::delimiter_option)).collect(),
+                std::iter::once(auto.to_string())
+                    .chain(table::DELIMITERS.map(sheet::delimiter_option))
+                    .collect(),
                 sheet::delimiter_option(format.delimiter),
             ),
             Pick::Encoding => (
-                std::iter::once(auto.to_string()).chain(table::Encoding::ALL.map(|e| e.label().to_string())).collect(),
+                std::iter::once(auto.to_string())
+                    .chain(table::Encoding::ALL.map(|e| e.label().to_string()))
+                    .collect(),
                 format.encoding.label().to_string(),
             ),
-            _ => (styles.iter().map(|(name, _)| name.to_string()).collect(), styles[0].0.to_string()),
+            _ => (
+                styles.iter().map(|(name, _)| name.to_string()).collect(),
+                styles[0].0.to_string(),
+            ),
         };
         let theme = self.theme;
         let palette = cx.new(|cx| Palette::choose(pick.label(), options, &current, theme, cx));
@@ -83,12 +110,23 @@ impl Shell {
             };
             this.palette = None;
             window.focus(&sheet.focus_handle(cx));
-            let style = styles.iter().find(|(label, _)| label == name).map(|&(_, style)| style);
+            let style = styles
+                .iter()
+                .find(|(label, _)| label == name)
+                .map(|&(_, style)| style);
             sheet.update(cx, |sheet, cx| match pick {
                 Pick::Delimiter | Pick::Encoding if name == auto => sheet.reformat(None, cx),
                 Pick::Delimiter => {
-                    let delimiter = table::DELIMITERS.into_iter().find(|&d| sheet::delimiter_option(d) == *name);
-                    sheet.reformat(delimiter.map(|delimiter| Format { delimiter, ..format }), cx)
+                    let delimiter = table::DELIMITERS
+                        .into_iter()
+                        .find(|&d| sheet::delimiter_option(d) == *name);
+                    sheet.reformat(
+                        delimiter.map(|delimiter| Format {
+                            delimiter,
+                            ..format
+                        }),
+                        cx,
+                    )
                 }
                 Pick::Encoding => {
                     let encoding = Encoding::from_label(name);

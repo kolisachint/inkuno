@@ -8,10 +8,28 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // A table: its rows and columns are handled from the menu, the palette or the keyboard,
     // and the cursor follows the gesture.
     let flat = |cx: &mut gpui::VisualTestContext| {
-        markdown::table(&text(cx).lines().filter(|l| l.starts_with('|')).collect::<Vec<_>>().join("\n")).0.iter().map(|r| r.iter().map(|c| if c.starts_with("--") { "---" } else { c }).collect::<Vec<_>>().join("|")).collect::<Vec<_>>().join("/")
+        markdown::table(
+            &text(cx)
+                .lines()
+                .filter(|l| l.starts_with('|'))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .0
+        .iter()
+        .map(|r| {
+            r.iter()
+                .map(|c| if c.starts_with("--") { "---" } else { c })
+                .collect::<Vec<_>>()
+                .join("|")
+        })
+        .collect::<Vec<_>>()
+        .join("/")
     };
     let op = |cx: &mut gpui::VisualTestContext, op: editor::TableOp| {
-        shell.update_in(cx, |s, window, cx| s.menu_do(nav::Do::Table(op), None, window, cx));
+        shell.update_in(cx, |s, window, cx| {
+            s.menu_do(nav::Do::Table(op), None, window, cx)
+        });
     };
     use editor::TableOp::*;
     let grid = "| Nom | Âge |\n| --- | --- |\n| Léa | 31  |\n| Max | 7   |\n\nsuite";
@@ -23,7 +41,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("alt-up");
     assert_eq!(flat(cx), "Nom|Âge/---|---/Zoé|/Léa|31/Max|7");
     cx.simulate_keystrokes("alt-up");
-    assert_eq!(flat(cx), "Nom|Âge/---|---/Zoé|/Léa|31/Max|7", "the first line goes no higher");
+    assert_eq!(
+        flat(cx),
+        "Nom|Âge/---|---/Zoé|/Léa|31/Max|7",
+        "the first line goes no higher"
+    );
     op(cx, ColRight);
     cx.simulate_input("Ville");
     assert_eq!(flat(cx), "Nom||Âge/---|---|---/Zoé|Ville|/Léa||31/Max||7");
@@ -49,7 +71,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let indented = "  | a | b |\n  | - | - |\n  | 1 | 2 |";
     j.load(cx, indented, indented.find('1').unwrap());
     op(cx, RowBelow);
-    assert!(text(cx).lines().all(|l| l.starts_with("  | ")) && text(cx).lines().count() == 4, "{:?}", text(cx));
+    assert!(
+        text(cx).lines().all(|l| l.starts_with("  | ")) && text(cx).lines().count() == 4,
+        "{:?}",
+        text(cx)
+    );
     cx.simulate_keystrokes("secondary-z");
     j.load(cx, "| a |\n| - |\n| b |", 8);
     op(cx, DeleteTable);
@@ -60,12 +86,19 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // the "+" of a line inserts; the corner grabs the whole table.
     j.load(cx, grid, grid.find("Léa").unwrap());
     cx.run_until_parked();
-    let center = |cx: &mut gpui::VisualTestContext, part: editor::Part| shell.read_with(cx, |s, cx| s.pane().editor.read(cx).part_center(part).unwrap());
+    let center = |cx: &mut gpui::VisualTestContext, part: editor::Part| {
+        shell.read_with(cx, |s, cx| {
+            s.pane().editor.read(cx).part_center(part).unwrap()
+        })
+    };
     let none = gpui::Modifiers::none();
     let at = center(cx, editor::Part::Col(1));
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-c");
-    assert_eq!(cx.read_from_clipboard().and_then(|c| c.text()).as_deref(), Some("| Âge |\n| --- |\n| 31  |\n| 7   |"));
+    assert_eq!(
+        cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
+        Some("| Âge |\n| --- |\n| 31  |\n| 7   |")
+    );
     cx.simulate_keystrokes("delete");
     assert_eq!(flat(cx), "Nom|/---|---/Léa|/Max|");
     cx.simulate_keystrokes("secondary-z");
@@ -75,7 +108,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(flat(cx), "Âge/---/31/7");
     cx.simulate_keystrokes("secondary-z");
     cx.run_until_parked();
-    let (from, to) = (center(cx, editor::Part::Row(2)), center(cx, editor::Part::JoinRow(1)));
+    let (from, to) = (
+        center(cx, editor::Part::Row(2)),
+        center(cx, editor::Part::JoinRow(1)),
+    );
     cx.simulate_mouse_down(from, MouseButton::Left, none);
     cx.simulate_mouse_move(to, MouseButton::Left, none);
     cx.simulate_mouse_up(to, MouseButton::Left, none);
@@ -91,11 +127,17 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = center(cx, editor::Part::Corner);
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-c");
-    assert_eq!(cx.read_from_clipboard().and_then(|c| c.text()).as_deref(), Some("| Nom | Âge |\n| --- | --- |\n| Léa | 31  |\n| Max | 7   |"));
+    assert_eq!(
+        cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
+        Some("| Nom | Âge |\n| --- | --- |\n| Léa | 31  |\n| Max | 7   |")
+    );
     // Copied table, pasted in another note: the same table, and a one-column copy pastes into a table's cells.
     j.load(cx, "avant\n\n", 7);
     cx.simulate_keystrokes("secondary-v");
-    assert_eq!(text(cx), "avant\n\n| Nom | Âge |\n| --- | --- |\n| Léa | 31  |\n| Max | 7   |");
+    assert_eq!(
+        text(cx),
+        "avant\n\n| Nom | Âge |\n| --- | --- |\n| Léa | 31  |\n| Max | 7   |"
+    );
     j.load(cx, grid, grid.find("Léa").unwrap());
     cx.run_until_parked();
     // The limits of the handles. A table of one column and one row: deleting its column deletes it.
@@ -106,7 +148,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = center(cx, Part::Col(0));
     cx.simulate_click(at, none);
     op(cx, DeleteCol);
-    assert!(!text(cx).contains('|') && text(cx).contains("suite") && text(cx).starts_with("avant"), "{:?}", text(cx));
+    assert!(
+        !text(cx).contains('|') && text(cx).contains("suite") && text(cx).starts_with("avant"),
+        "{:?}",
+        text(cx)
+    );
     // The header can be grabbed but not dragged; a row dropped where it is moves nothing, neither under the
     // last one, nor on its own line; a column dragged beyond the last one goes last.
     j.load(cx, grid, grid.find("Léa").unwrap());
@@ -171,14 +217,33 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(flat(cx), "Nom|Âge/---|---/Léa|31/Max|7");
     // Thirty columns: those that go out of the frame have no handle on screen; a table
     // of more than 1,500 rows has none (it keeps Tab).
-    let wide = format!("|{}\n|{}\n|{}\n", " colonne |".repeat(30), " --- |".repeat(30), " texte |".repeat(30));
+    let wide = format!(
+        "|{}\n|{}\n|{}\n",
+        " colonne |".repeat(30),
+        " --- |".repeat(30),
+        " texte |".repeat(30)
+    );
     j.load(cx, &wide, 0);
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).part_center(Part::Col(0)).is_some() && s.pane().editor.read(cx).part_center(Part::Col(29)).is_none()));
-    let big = format!("| a | b |\n| - | - |\n{}", "| 1 | 2 |\n".repeat(grid::BIG + 5));
+    assert!(shell.read_with(cx, |s, cx| {
+        s.pane().editor.read(cx).part_center(Part::Col(0)).is_some()
+            && s.pane()
+                .editor
+                .read(cx)
+                .part_center(Part::Col(29))
+                .is_none()
+    }));
+    let big = format!(
+        "| a | b |\n| - | - |\n{}",
+        "| 1 | 2 |\n".repeat(grid::BIG + 5)
+    );
     j.load(cx, &big, 0);
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).part_center(Part::Col(0)).is_none() && !s.pane().editor.read(cx).in_table()));
+    assert!(shell.read_with(
+        cx,
+        |s, cx| s.pane().editor.read(cx).part_center(Part::Col(0)).is_none()
+            && !s.pane().editor.read(cx).in_table()
+    ));
     // In the note's menu: the table gestures, and its palette.
     j.load(cx, grid, grid.find("Léa").unwrap());
     assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).in_table()));

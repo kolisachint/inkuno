@@ -61,7 +61,10 @@ impl History {
             return;
         }
         self.list.truncate(self.at + 1);
-        self.list.push(Entry { shown, place: Place::default() });
+        self.list.push(Entry {
+            shown,
+            place: Place::default(),
+        });
         if self.list.len() > KEPT {
             self.list.remove(0);
         }
@@ -70,7 +73,11 @@ impl History {
 
     /// Remembers where one is in `shown`, if it is indeed the current entry.
     pub fn mark(&mut self, shown: &Shown, place: Place) {
-        if let Some(entry) = self.list.get_mut(self.at).filter(|entry| entry.shown == *shown) {
+        if let Some(entry) = self
+            .list
+            .get_mut(self.at)
+            .filter(|entry| entry.shown == *shown)
+        {
             entry.place = place;
         }
     }
@@ -102,7 +109,11 @@ impl History {
         for entry in &mut self.list {
             let path = entry.shown.path_mut();
             if let Ok(rest) = path.strip_prefix(from) {
-                *path = if rest.as_os_str().is_empty() { to.to_path_buf() } else { to.join(rest) };
+                *path = if rest.as_os_str().is_empty() {
+                    to.to_path_buf()
+                } else {
+                    to.join(rest)
+                };
             }
         }
         self.keep(|_| true);
@@ -139,11 +150,18 @@ mod tests {
 
     fn names(history: &History) -> Vec<String> {
         // On Windows, a rebuilt path is written with `\\`.
-        history.list.iter().map(|entry| entry.shown.path().display().to_string().replace('\\', "/")).collect()
+        history
+            .list
+            .iter()
+            .map(|entry| entry.shown.path().display().to_string().replace('\\', "/"))
+            .collect()
     }
 
     fn at(cursor: usize) -> Place {
-        Place { at: (cursor, 0), scroll: (0., cursor as f32) }
+        Place {
+            at: (cursor, 0),
+            scroll: (0., cursor as f32),
+        }
     }
 
     #[test]
@@ -199,7 +217,13 @@ mod tests {
     #[test]
     fn follows_renames_and_forgets_what_is_gone() {
         let mut h = History::default();
-        for shown in [note("dir/a.md"), note("b.md"), Shown::File("dir/t.csv".into()), Shown::List("dir".into()), note("b.md")] {
+        for shown in [
+            note("dir/a.md"),
+            note("b.md"),
+            Shown::File("dir/t.csv".into()),
+            Shown::List("dir".into()),
+            note("b.md"),
+        ] {
             h.visit(shown);
         }
         // A renamed folder carries everything it contains, and its own list.

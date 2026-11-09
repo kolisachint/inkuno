@@ -3,7 +3,6 @@
 //! per file. Only visible cells are built; parsing the file lives
 //! in `table`.
 
-
 mod clipboard;
 mod disk;
 mod edit;
@@ -25,37 +24,86 @@ use std::{
 };
 
 use gpui::{
-    Action, App, Bounds, ClipboardItem, Context, ElementInputHandler, EntityInputHandler, EventEmitter, FocusHandle,
-    Focusable, FontWeight, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    ScrollWheelEvent, Stateful, UTF16Selection, Window, actions, canvas, div, prelude::*, px,
+    Action, App, Bounds, ClipboardItem, Context, ElementInputHandler, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, FontWeight, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Point, ScrollWheelEvent, Stateful, UTF16Selection, Window, actions,
+    canvas, div, prelude::*, px,
 };
 
 use crate::{
-    ui::theme::Theme,
-    views::editor::{self, TableOp},
-    ui::line::{self, Line},
-    logic::markdown, ui::assets::{mono, sans},
-    ui::widgets::{self, button, pill, tip},
+    lang::tr,
+    logic::markdown,
     logic::table::{self, Encoding, Format, Style, Table, WriteError},
-    lang::tr, platform::vault,
+    platform::vault,
+    ui::assets::{mono, sans},
+    ui::line::{self, Line},
+    ui::theme::Theme,
+    ui::widgets::{self, button, pill, tip},
+    views::editor::{self, TableOp},
 };
 
 actions!(
     sheet,
     [
-        Left, Right, Up, Down, ExtendLeft, ExtendRight, ExtendUp, ExtendDown, PageUp, PageDown, RowStart, RowEnd,
-        Origin, Corner, FirstRow, LastRow, Next, Previous, Enter, Edit, Cancel, Backspace, Delete, Copy, Cut,
-        Paste, SelectAll, SelectRow, SelectCol, Undo, Redo, InsertBelow, InsertAbove, DeleteRows, PickDelimiter,
-        PickEncoding, PickHeader,
-        PickCopyAs, PickExport
+        Left,
+        Right,
+        Up,
+        Down,
+        ExtendLeft,
+        ExtendRight,
+        ExtendUp,
+        ExtendDown,
+        PageUp,
+        PageDown,
+        RowStart,
+        RowEnd,
+        Origin,
+        Corner,
+        FirstRow,
+        LastRow,
+        Next,
+        Previous,
+        Enter,
+        Edit,
+        Cancel,
+        Backspace,
+        Delete,
+        Copy,
+        Cut,
+        Paste,
+        SelectAll,
+        SelectRow,
+        SelectCol,
+        Undo,
+        Redo,
+        InsertBelow,
+        InsertAbove,
+        DeleteRows,
+        PickDelimiter,
+        PickEncoding,
+        PickHeader,
+        PickCopyAs,
+        PickExport
     ]
 );
 
 /// "6 rows · 5 columns" (the header row counts as a row), numbers grouped, French singular for 0 and 1.
 pub fn summary(rows: usize, cols: usize) -> String {
-    let (r, c) = (if rows == 1 { "row" } else { "rows" }, if cols == 1 { "column" } else { "columns" });
-    let (fr, fc) = (if rows < 2 { "ligne" } else { "lignes" }, if cols < 2 { "colonne" } else { "colonnes" });
-    format!("{} {} · {} {}", crate::lang::number(rows), tr(r, fr), crate::lang::number(cols), tr(c, fc))
+    let (r, c) = (
+        if rows == 1 { "row" } else { "rows" },
+        if cols == 1 { "column" } else { "columns" },
+    );
+    let (fr, fc) = (
+        if rows < 2 { "ligne" } else { "lignes" },
+        if cols < 2 { "colonne" } else { "colonnes" },
+    );
+    format!(
+        "{} {} · {} {}",
+        crate::lang::number(rows),
+        tr(r, fr),
+        crate::lang::number(cols),
+        tr(c, fc)
+    )
 }
 
 const ROW: f32 = 26.;
@@ -78,7 +126,13 @@ pub enum Pick {
 }
 
 impl Pick {
-    pub const ALL: [Pick; 5] = [Pick::Delimiter, Pick::Encoding, Pick::Header, Pick::CopyAs, Pick::Export];
+    pub const ALL: [Pick; 5] = [
+        Pick::Delimiter,
+        Pick::Encoding,
+        Pick::Header,
+        Pick::CopyAs,
+        Pick::Export,
+    ];
 
     /// The action the app listens to to open the choice: it bubbles up to it from any focus.
     pub fn action(self) -> Box<dyn Action> {
@@ -262,7 +316,10 @@ impl Sheet {
             }
         }
         let px = self.text_px();
-        self.widths = ems.iter().map(|&em| em.clamp(MIN_CHARS as f32 * 0.6, MAX_CHARS as f32 * 0.6) * px + 2. * PAD).collect();
+        self.widths = ems
+            .iter()
+            .map(|&em| em.clamp(MIN_CHARS as f32 * 0.6, MAX_CHARS as f32 * 0.6) * px + 2. * PAD)
+            .collect();
         self.place();
     }
 
@@ -289,13 +346,19 @@ impl Sheet {
 
     fn view(&self) -> (f32, f32) {
         let size = self.body.size;
-        ((f32::from(size.width) - GUTTER).max(0.), (f32::from(size.height) - ROW).max(0.))
+        (
+            (f32::from(size.width) - GUTTER).max(0.),
+            (f32::from(size.height) - ROW).max(0.),
+        )
     }
 
     fn max_scroll(&self) -> (f32, f32) {
         let (w, h) = self.view();
         let lines = self.table.rows().saturating_sub(self.first());
-        ((self.xs.last().copied().unwrap_or(0.) - w).max(0.), (lines as f32 * ROW - h).max(0.))
+        (
+            (self.xs.last().copied().unwrap_or(0.) - w).max(0.),
+            (lines as f32 * ROW - h).max(0.),
+        )
     }
 
     /// Puts the view, cursor and selection back inside the table.
@@ -303,7 +366,9 @@ impl Sheet {
         let (rows, cols) = (self.table.rows().max(1), self.cols());
         let fit = |(r, c): (usize, usize)| (r.min(rows - 1), c.min(cols - 1));
         (self.cursor, self.anchor) = (fit(self.cursor), fit(self.anchor));
-        self.more.iter_mut().for_each(|(a, b)| (*a, *b) = (fit(*a), fit(*b)));
+        self.more
+            .iter_mut()
+            .for_each(|(a, b)| (*a, *b) = (fit(*a), fit(*b)));
         let (mx, my) = self.max_scroll();
         self.scroll = (self.scroll.0.clamp(0., mx), self.scroll.1.clamp(0., my));
     }
@@ -317,7 +382,10 @@ impl Sheet {
     }
 
     fn col_at(&self, x: f32) -> usize {
-        self.xs.partition_point(|&edge| edge <= x).saturating_sub(1).min(self.cols() - 1)
+        self.xs
+            .partition_point(|&edge| edge <= x)
+            .saturating_sub(1)
+            .min(self.cols() - 1)
     }
 
     /// Scrolls the view to the cell.
@@ -354,7 +422,12 @@ impl Sheet {
     /// All selections, top to bottom: those kept by Ctrl+click and the current one.
     /// Copy, cut, clear and delete rows take them all.
     fn selections(&self) -> Vec<(Range<usize>, Range<usize>)> {
-        let mut all: Vec<_> = self.more.iter().map(|&(a, b)| Self::span(a, b)).chain([self.selection()]).collect();
+        let mut all: Vec<_> = self
+            .more
+            .iter()
+            .map(|&(a, b)| Self::span(a, b))
+            .chain([self.selection()])
+            .collect();
         all.sort_by_key(|(rows, cols)| (rows.start, cols.start));
         all.dedup();
         all
@@ -389,7 +462,8 @@ impl Sheet {
         self.finish(cx);
         let (r, c) = self.cursor;
         let to = (
-            r.saturating_add_signed(rows).min(self.table.rows().max(1) - 1),
+            r.saturating_add_signed(rows)
+                .min(self.table.rows().max(1) - 1),
             c.saturating_add_signed(cols).min(self.cols() - 1),
         );
         self.select_to(to, extend, cx);
@@ -423,7 +497,10 @@ impl Sheet {
     /// which contains it.
     fn visible(&self, window: gpui::Size<Pixels>) -> (Range<usize>, Range<usize>) {
         let (vw, vh) = self.view();
-        let (vw, vh) = (vw.max(f32::from(window.width) - GUTTER), vh.max(f32::from(window.height) - ROW));
+        let (vw, vh) = (
+            vw.max(f32::from(window.width) - GUTTER),
+            vh.max(f32::from(window.height) - ROW),
+        );
         let c0 = self.col_at(self.scroll.0);
         let c1 = (self.col_at(self.scroll.0 + vw) + 1).min(self.cols());
         let r0 = self.first() + (self.scroll.1 / ROW) as usize;
@@ -505,6 +582,9 @@ mod tests {
         assert_eq!(summary(0, 0), "0 ligne · 0 colonne");
         assert_eq!(summary(1, 1), "1 ligne · 1 colonne");
         assert_eq!(summary(2, 2), "2 lignes · 2 colonnes");
-        assert_eq!(summary(300_000, 1_000), "300\u{202f}000 lignes · 1\u{202f}000 colonnes");
+        assert_eq!(
+            summary(300_000, 1_000),
+            "300\u{202f}000 lignes · 1\u{202f}000 colonnes"
+        );
     }
 }

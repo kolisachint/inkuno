@@ -18,11 +18,25 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
     // A palette command: its keys, then the word to type in it.
     let p = |word: &str, effect: &'static str| {
         let palette = keys::shown(bound, OpenPalette.name());
-        Row::text(format!("{} › {word}", if palette.is_empty() { "Palette" } else { &palette }), effect)
+        Row::text(
+            format!(
+                "{} › {word}",
+                if palette.is_empty() {
+                    "Palette"
+                } else {
+                    &palette
+                }
+            ),
+            effect,
+        )
     };
     let click = tr("click", "clic");
     let shift = tr("Shift", "Maj");
-    let word = if cfg!(target_os = "macos") { "Alt" } else { "Ctrl" };
+    let word = if cfg!(target_os = "macos") {
+        "Alt"
+    } else {
+        "Ctrl"
+    };
     vec![
         (
             "Notes",
@@ -40,7 +54,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t("Tab", tr("Search bar: replace field", "Barre de recherche : champ de remplacement")),
                 k(&editor::ReplaceAll, tr("Search bar: replace all (Enter: this match)", "Barre de recherche : tout remplacer (Entrée : ce passage)")),
                 k(&editor::ReplaceInVault, tr("Search bar: replace in the whole vault, after showing the count", "Barre de recherche : remplacer dans tout le coffre, après en avoir montré le compte")),
-                k(&Outline, tr("Outline: jump to a heading of the note", "Plan : aller à un titre de la note")),
+                k(&Outline, tr("Outline: the headings of the note, in the right dock", "Plan : les titres de la note, dans le panneau de droite")),
                 k(&NewNote, tr("New note", "Nouvelle note")),
                 k(&NewFromTemplate, tr("New note from a template (a note of the Templates folder: {{title}} {{date}} {{time}} {{cursor}})", "Nouvelle note depuis un modèle (une note du dossier Templates ou Modèles : {{title}} {{date}} {{time}} {{cursor}})")),
                 p(tr("template", "modèle"), tr("Insert a template at the cursor, or make a template of the open note", "Insérer un modèle au curseur, ou faire un modèle de la note ouverte")),
@@ -108,6 +122,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t(tr("A picture", "Une image"), tr("Shown in place of the note; a square in the graph", "Affichée à la place de la note ; un carré dans le graphe")),
                 t(tr("A .csv or .tsv", "Un .csv ou .tsv"), tr("A grid in place of the note; not in the graph", "Une grille à la place de la note ; absent du graphe")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
+                k(&docks::ToggleFocus, tr("Focus: the note alone, sidebars hidden (F9 again or Esc brings them back)", "Focus : la note seule, panneaux cachés (F9 ou Échap pour revenir)")),
                 t(tr("Arrows / Tab", "Flèches / Tab"), tr("Select and preview / linked notes (graph)", "Sélectionner en aperçu / notes liées (graphe)")),
                 t(tr("Enter / Esc", "Entrée / Échap"), tr("Open the note / back to the note", "Ouvrir la note / revenir à la note")),
                 k(&nav::NewFolder, tr("New folder (also in the palette)", "Nouveau dossier (aussi dans la palette)")),
@@ -118,6 +133,14 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&nav::Trash, tr("Panel: move to the trash", "Panneau : mettre à la corbeille")),
                 t(&format!("{MOD}+{click} / {shift}+{click}"), tr("Select several rows: move, duplicate, trash them together", "Sélectionner plusieurs lignes : les déplacer, dupliquer, jeter ensemble")),
                 t(tr("Right click", "Clic droit"), tr("Copy the link or the path, set an icon, show a folder or a tag as a list…", "Copier le lien ou le chemin, donner une icône, afficher un dossier ou un tag en liste…")),
+                k(&nav::OpenAside, tr("Open the note in the other pane", "Ouvrir la note dans l'autre volet")),
+                k(&nav::CopyLink, tr("Copy the [[link]] of the note", "Copier le [[lien]] de la note")),
+                k(&nav::CopyPath, tr("Copy the path of the note", "Copier le chemin de la note")),
+                k(&nav::CopyRelative, tr("Copy the relative path of the note", "Copier le chemin relatif de la note")),
+                k(&nav::Reveal, commands::reveal_label()),
+                k(&nav::MoveTo, tr("Move the note to a folder…", "Déplacer la note vers un dossier…")),
+                k(&nav::SetIcon, tr("Icon of the note…", "Icône de la note…")),
+                k(&nav::ShowFolder, tr("Show the note's folder as a list", "Afficher le dossier de la note en liste")),
                 k(&FocusNext, tr("From the panel: go from button to button (Shift+Tab: back); Enter or Space presses it", "Depuis le panneau : aller de bouton en bouton (Maj+Tab : revenir) ; Entrée ou Espace l'actionne")),
                 k(&FocusPrev, tr("Back to the previous button", "Revenir au bouton précédent")),
                 k(&ContextMenu, tr("The same menu from the keys, for the selected row or the cursor: arrows, Enter, Esc", "Le même menu au clavier, pour la ligne choisie ou le curseur : flèches, Entrée, Échap")),
@@ -154,6 +177,11 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&canvas::Duplicate, tr("Diagram: duplicate the selection", "Schéma : dupliquer la sélection")),
                 k(&canvas::Undo, tr("Diagram: undo", "Schéma : annuler")),
                 k(&canvas::Redo, tr("Diagram: redo", "Schéma : rétablir")),
+                k(&canvas::SelectAll, tr("Diagram: select everything", "Schéma : tout sélectionner")),
+                k(&canvas::Erase, tr("Diagram: delete the selection", "Schéma : supprimer la sélection")),
+                k(&canvas::ZoomIn, tr("Diagram: zoom in", "Schéma : zoomer")),
+                k(&canvas::ZoomOut, tr("Diagram: zoom out", "Schéma : dézoomer")),
+                k(&canvas::ZoomFit, tr("Diagram: fit the whole diagram", "Schéma : voir tout le schéma")),
                 t(tr("Edge of a shape", "Bord d'une forme"), tr("An arrow end dropped there stays there; in the middle, it follows the other end", "Un bout de flèche lâché là y reste ; au milieu, il suit l'autre bout")),
                 t(tr("Wheel / + - 0", "Molette / + - 0"), tr("Move the view / zoom in, out, fit all", "Déplacer la vue / zoomer, dézoomer, tout cadrer")),
                 t("![](Schéma.svg)", tr("Show the diagram in a note", "Afficher le schéma dans une note")),
@@ -179,6 +207,11 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&sheet::DeleteRows, tr("Table: remove the selected rows, or the columns when whole columns are selected", "Tableau : retirer les lignes sélectionnées, ou les colonnes si des colonnes entières sont sélectionnées")),
                 k(&sheet::Undo, tr("Table: undo", "Tableau : annuler")),
                 k(&sheet::Redo, tr("Table: redo", "Tableau : rétablir")),
+                k(&sheet::PickDelimiter, tr("Table: change the delimiter…", "Tableau : changer le délimiteur…")),
+                k(&sheet::PickEncoding, tr("Table: change the encoding…", "Tableau : changer l'encodage…")),
+                k(&sheet::PickHeader, tr("Table: header row…", "Tableau : ligne d'en-tête…")),
+                k(&sheet::PickCopyAs, tr("Table: copy the table as…", "Tableau : copier le tableau en…")),
+                k(&sheet::PickExport, tr("Table: export the table…", "Tableau : exporter le tableau…")),
                 p("table", tr("Delimiter, encoding, header row, copy as…, export (CSV, TSV, Markdown, JSON)", "Délimiteur, encodage, en-tête, copier en…, exporter (CSV, TSV, Markdown, JSON)")),
             ],
         ),
@@ -186,6 +219,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
             tr("Appearance", "Apparence"),
             vec![
                 p(tr("theme", "thème"), tr("Theme, previewed as you browse", "Thème, en aperçu pendant le choix")),
+                k(&ChooseTheme, tr("Theme…", "Thème…")),
                 p(tr("font", "police"), tr("Font of the app / of the code", "Police de l'app / du code")),
                 p(tr("page width", "largeur de page"), tr("Width of the text column: narrow, normal, wide, full", "Largeur de la colonne de texte : étroite, normale, large, pleine")),
                 p(tr("wide tables", "grands tableaux"), tr("A table wider than the text: in the column, or centered and wider", "Un tableau plus large que le texte : dans la colonne, ou centré et plus large")),
@@ -318,7 +352,11 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
 
 /// The actions whose shortcut can be changed: those that have their line in the help.
 pub(super) fn editable() -> std::collections::HashSet<&'static str> {
-    help_sections(&[], &keys::Changes::new()).into_iter().flat_map(|(_, rows)| rows).filter_map(|row| row.action).collect()
+    help_sections(&[], &keys::Changes::new())
+        .into_iter()
+        .flat_map(|(_, rows)| rows)
+        .filter_map(|row| row.action)
+        .collect()
 }
 
 /// The default shortcut table. Its order matters: for the same context, the last binding
@@ -334,7 +372,11 @@ pub(super) fn defaults() -> Vec<keys::Bind> {
     let c = Some("Canvas");
     let sh = Some("Sheet");
     // `secondary` = Cmd on macOS, Ctrl elsewhere; words are traversed with Alt on macOS.
-    let word = if cfg!(target_os = "macos") { "alt" } else { "ctrl" };
+    let word = if cfg!(target_os = "macos") {
+        "alt"
+    } else {
+        "ctrl"
+    };
     let mut all = vec![
         b("secondary-p", &OpenPalette, None),
         b("secondary-n", &NewNote, None),
@@ -352,20 +394,70 @@ pub(super) fn defaults() -> Vec<keys::Bind> {
         b("secondary-1", &FocusLeft, None),
         b("secondary-2", &FocusRight, None),
         // Ctrl+Alt+arrows belong to the desktop (workspaces) on Linux: Alt+Shift there.
-        b(if cfg!(target_os = "macos") { "cmd-alt-left" } else { "alt-shift-left" }, &PaneLeft, None),
-        b(if cfg!(target_os = "macos") { "cmd-alt-right" } else { "alt-shift-right" }, &PaneRight, None),
-        b(if cfg!(target_os = "macos") { "cmd-alt-up" } else { "alt-shift-up" }, &PaneUp, None),
-        b(if cfg!(target_os = "macos") { "cmd-alt-down" } else { "alt-shift-down" }, &PaneDown, None),
+        b(
+            if cfg!(target_os = "macos") {
+                "cmd-alt-left"
+            } else {
+                "alt-shift-left"
+            },
+            &PaneLeft,
+            None,
+        ),
+        b(
+            if cfg!(target_os = "macos") {
+                "cmd-alt-right"
+            } else {
+                "alt-shift-right"
+            },
+            &PaneRight,
+            None,
+        ),
+        b(
+            if cfg!(target_os = "macos") {
+                "cmd-alt-up"
+            } else {
+                "alt-shift-up"
+            },
+            &PaneUp,
+            None,
+        ),
+        b(
+            if cfg!(target_os = "macos") {
+                "cmd-alt-down"
+            } else {
+                "alt-shift-down"
+            },
+            &PaneDown,
+            None,
+        ),
         b("alt-shift-enter", &MaximizePane, None),
         b("secondary-w", &ClosePane, None),
-        b("secondary-alt-t", &ReopenTab, None),
+        // Reopen: the browser chord. Recent notes keep no chord: Ctrl+P already opens on
+        // them, and the palette lists them as `Recent notes`. Frees Ctrl+Alt+T.
+        b("secondary-shift-t", &ReopenTab, None),
         b("ctrl-tab", &NextTab, None),
         b("ctrl-shift-tab", &PrevTab, None),
         b("ctrl-shift-pageup", &MoveTabLeft, None),
         b("ctrl-shift-pagedown", &MoveTabRight, None),
         // On macOS, Alt+arrow traverses words: brackets, as in a browser.
-        b(if cfg!(target_os = "macos") { "cmd-[" } else { "alt-left" }, &GoBack, None),
-        b(if cfg!(target_os = "macos") { "cmd-]" } else { "alt-right" }, &GoForward, None),
+        b(
+            if cfg!(target_os = "macos") {
+                "cmd-["
+            } else {
+                "alt-left"
+            },
+            &GoBack,
+            None,
+        ),
+        b(
+            if cfg!(target_os = "macos") {
+                "cmd-]"
+            } else {
+                "alt-right"
+            },
+            &GoForward,
+            None,
+        ),
         b("secondary-shift-f", &SearchVault, None),
         b("secondary-=", &ZoomIn, None),
         b("secondary-+", &ZoomIn, None),
@@ -375,6 +467,8 @@ pub(super) fn defaults() -> Vec<keys::Bind> {
         // The command palette: F10, like the menu bar of a desktop app.
         b("f10", &ToggleCommands, None),
         b("secondary-shift-p", &ToggleCommands, None),
+        // Focus mode: the note alone, the docks hidden (F9 again or Escape brings them back).
+        b("f9", &docks::ToggleFocus, None),
         // From button to button, where Tab has no other use (the note indents with it). In the window's own
         // context: a binding with none counts as the deepest and would take Tab from the views that use it.
         b("tab", &FocusNext, Some("Shell")),
@@ -443,7 +537,6 @@ pub(super) fn defaults() -> Vec<keys::Bind> {
         b("ctrl-space", &sheet::SelectCol, sh),
         b("secondary-shift-backspace", &TableDeleteSpan, sh),
         b("secondary-e", &nav::ShowTree, Some("Shell")),
-        b("secondary-shift-t", &nav::ShowRecent, Some("Shell")),
         b("secondary-g", &nav::ShowGraph, Some("Shell")),
         b("secondary-t", &nav::ShowTags, Some("Shell")),
         b("secondary-l", &nav::ShowLinks, Some("Shell")),
@@ -591,8 +684,20 @@ pub(super) fn install(cx: &mut App, binds: &[keys::Bind]) {
         .iter()
         .filter_map(|bind| {
             let action = cx.build_action(bind.action, None).ok()?;
-            let context = bind.context.map(|context| gpui::KeyBindingContextPredicate::parse(context).unwrap().into());
-            KeyBinding::load(&bind.keys, action, context, false, None, &gpui::DummyKeyboardMapper).ok()
+            let context = bind.context.map(|context| {
+                gpui::KeyBindingContextPredicate::parse(context)
+                    .unwrap()
+                    .into()
+            });
+            KeyBinding::load(
+                &bind.keys,
+                action,
+                context,
+                false,
+                None,
+                &gpui::DummyKeyboardMapper,
+            )
+            .ok()
         })
         .collect();
     cx.clear_key_bindings();

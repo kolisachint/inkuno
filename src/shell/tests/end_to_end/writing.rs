@@ -7,7 +7,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
     cx.simulate_input("# Test");
     // Footer: the counter follows typing, then counts only the selection.
-    let counts = |cx: &mut gpui::VisualTestContext| shell.update(cx, |s, cx| s.pane().editor.update(cx, |e, _| e.counts()));
+    let counts = |cx: &mut gpui::VisualTestContext| {
+        shell.update(cx, |s, cx| s.pane().editor.update(cx, |e, _| e.counts()))
+    };
     assert_eq!(counts(cx), "1 mot · 6 caractères");
     cx.simulate_keystrokes("shift-left shift-left");
     assert_eq!(counts(cx), "Sélection : 1 mot · 2 caractères");
@@ -44,7 +46,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(recent, [root.join("Courses.md"), root.join("Test.md")]);
     assert_eq!(vault::load_config(), (Some(root.clone()), recent));
     let names = shell.read_with(cx, |s, _| {
-        s.by_recency().iter().map(|n| n.name.clone()).collect::<Vec<_>>()
+        s.by_recency()
+            .iter()
+            .map(|n| n.name.clone())
+            .collect::<Vec<_>>()
     });
     assert_eq!(names, ["Courses", "Test", "Plan"]);
 
@@ -60,7 +65,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(text(cx), "# Courses\n\n- lait #maison\n");
 
     // Updates: the palette turns off checking (and the banner), then turns it back on.
-    shell.update(cx, |s, _| s.update = Some(update::Release { version: "9.9.9".into(), ..Default::default() }));
+    shell.update(cx, |s, _| {
+        s.update = Some(update::Release {
+            version: "9.9.9".into(),
+            ..Default::default()
+        })
+    });
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("mises à jour");
     cx.simulate_keystrokes("down enter");
@@ -74,13 +84,18 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
 
     // Install the new version: the palette offers it when the app can do it alone.
     // Tests install nothing: the failure leaves the app in place, with its message.
-    let release = update::Release { version: "9.9.9".into(), asset: Some("file:///absent".into()), ..Default::default() };
+    let release = update::Release {
+        version: "9.9.9".into(),
+        asset: Some("file:///absent".into()),
+        ..Default::default()
+    };
     shell.update(cx, |s, _| s.update = Some(release));
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("mettre à jour");
     cx.simulate_keystrokes("down enter");
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| !s.updating && s.told(Tone::Failed, "Mise à jour impossible")));
+    assert!(shell.read_with(cx, |s, _| !s.updating
+        && s.told(Tone::Failed, "Mise à jour impossible")));
     shell.update(cx, |s, _| (s.update, s.toasts) = (None, Vec::new()));
 
     // Manual check: the palette starts it, then the answer says Bref is up to date,
@@ -89,13 +104,23 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_input("maintenant");
     cx.simulate_keystrokes("down enter");
     assert!(shell.read_with(cx, |s, _| s.told(Tone::Busy, "Recherche")));
-    let version = |v: &str| Some(update::Release { version: v.into(), ..Default::default() });
-    shell.update(cx, |s, cx| s.checked(version(env!("CARGO_PKG_VERSION")), cx));
-    assert!(shell.read_with(cx, |s, _| s.update.is_none() && s.told(Tone::Done, "à jour") && !s.told(Tone::Busy, "")));
+    let version = |v: &str| {
+        Some(update::Release {
+            version: v.into(),
+            ..Default::default()
+        })
+    };
+    shell.update(cx, |s, cx| {
+        s.checked(version(env!("CARGO_PKG_VERSION")), cx)
+    });
+    assert!(shell.read_with(cx, |s, _| s.update.is_none()
+        && s.told(Tone::Done, "à jour")
+        && !s.told(Tone::Busy, "")));
     shell.update(cx, |s, cx| s.checked(None, cx));
     assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "GitHub")));
     shell.update(cx, |s, cx| s.checked(version("9.9.9"), cx));
-    assert!(shell.read_with(cx, |s, _| !s.told(Tone::Busy, "") && s.update.as_ref().is_some_and(|r| r.version == "9.9.9")));
+    assert!(shell.read_with(cx, |s, _| !s.told(Tone::Busy, "")
+        && s.update.as_ref().is_some_and(|r| r.version == "9.9.9")));
     shell.update(cx, |s, _| (s.update, s.toasts) = (None, Vec::new()));
 
     // Wikilink completed then new note created from the palette.
@@ -108,5 +133,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("enter");
     assert_eq!(text(cx), "# Idées\n\n");
     assert!(root.join("Idées.md").is_file());
-    assert!(fs::read_to_string(root.join("Courses.md")).unwrap().ends_with("[[Test]]"));
+    assert!(
+        fs::read_to_string(root.join("Courses.md"))
+            .unwrap()
+            .ends_with("[[Test]]")
+    );
 }

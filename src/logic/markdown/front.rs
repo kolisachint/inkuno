@@ -24,7 +24,7 @@ pub fn body_start(text: &str) -> usize {
     let start = front_matter(text);
     let rest = &text[start..];
     let Some(title) = rest.find('\n') else {
-                // A single line, with no ending: the cursor follows it, as it was left.
+        // A single line, with no ending: the cursor follows it, as it was left.
         return text.len();
     };
     let mut at = start + title + 1;
@@ -44,21 +44,37 @@ pub fn body_start(text: &str) -> usize {
 pub fn front_values(text: &str, key: &str) -> Vec<String> {
     let clean = |value: &str| value.trim().trim_matches(['"', '\'']).trim().to_string();
     let mut lines = text[..front_matter(text)].lines().skip(1);
-    let Some(rest) = lines.find_map(|line| Some(line.strip_prefix(key)?.strip_prefix(':')?.trim())) else {
+    let Some(rest) = lines.find_map(|line| Some(line.strip_prefix(key)?.strip_prefix(':')?.trim()))
+    else {
         return Vec::new();
     };
     let values: Vec<String> = match rest.is_empty() {
-        true => lines.map_while(|line| line.trim_start().strip_prefix("- ")).map(clean).collect(),
-        false => rest.strip_prefix('[').and_then(|list| list.strip_suffix(']')).unwrap_or(rest).split(',').map(clean).collect(),
+        true => lines
+            .map_while(|line| line.trim_start().strip_prefix("- "))
+            .map(clean)
+            .collect(),
+        false => rest
+            .strip_prefix('[')
+            .and_then(|list| list.strip_suffix(']'))
+            .unwrap_or(rest)
+            .split(',')
+            .map(clean)
+            .collect(),
     };
-    values.into_iter().filter(|value| !value.is_empty()).collect()
+    values
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect()
 }
 
 /// Front matter keys, in the order they are written.
 pub fn front_keys(text: &str) -> Vec<&str> {
     let lines = text[..front_matter(text)].lines().skip(1);
-    let keys = lines.filter_map(|line| line.split_once(':')).map(|(key, _)| key);
-    keys.filter(|key| !key.is_empty() && !key.starts_with([' ', '\t', '-', '#'])).collect()
+    let keys = lines
+        .filter_map(|line| line.split_once(':'))
+        .map(|(key, _)| key);
+    keys.filter(|key| !key.is_empty() && !key.starts_with([' ', '\t', '-', '#']))
+        .collect()
 }
 
 /// Table of notes: one column per key of their front matter, in order of appearance,
@@ -70,7 +86,14 @@ pub fn list_table(notes: &[&str]) -> (Vec<String>, Vec<Vec<String>>) {
             keys.push(key.to_string());
         }
     }
-    let rows = notes.iter().map(|text| keys.iter().map(|key| front_values(text, key).join(", ")).collect()).collect();
+    let rows = notes
+        .iter()
+        .map(|text| {
+            keys.iter()
+                .map(|key| front_values(text, key).join(", "))
+                .collect()
+        })
+        .collect();
     (keys, rows)
 }
 
@@ -82,12 +105,28 @@ pub fn set_front(text: &str, key: &str, value: &str) -> String {
     let value = value.trim();
     let block = front_matter(text);
     if block == 0 {
-        return if value.is_empty() { text.to_string() } else { format!("---\n{key}: {value}\n---\n{text}") };
+        return if value.is_empty() {
+            text.to_string()
+        } else {
+            format!("---\n{key}: {value}\n---\n{text}")
+        };
     }
     let lines: Vec<&str> = text[..block].split_inclusive('\n').collect();
-    let rest_of = |line: &str| Some(line.strip_prefix(key)?.strip_prefix(':')?.trim().to_string());
-        // The key spans its line, plus those of its dash list.
-    let (first, rest) = match lines.iter().enumerate().skip(1).find_map(|(i, line)| Some((i, rest_of(line)?))) {
+    let rest_of = |line: &str| {
+        Some(
+            line.strip_prefix(key)?
+                .strip_prefix(':')?
+                .trim()
+                .to_string(),
+        )
+    };
+    // The key spans its line, plus those of its dash list.
+    let (first, rest) = match lines
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(i, line)| Some((i, rest_of(line)?)))
+    {
         Some(found) => found,
         None if value.is_empty() => return text.to_string(),
         None => {
@@ -95,15 +134,34 @@ pub fn set_front(text: &str, key: &str, value: &str) -> String {
             return format!("{}{key}: {value}\n{}", &text[..close], &text[close..]);
         }
     };
-    let dashes = if rest.is_empty() { lines[first + 1..].iter().take_while(|line| line.trim_start().starts_with("- ")).count() } else { 0 };
-    let end = if lines[first].ends_with("\r\n") { "\r\n" } else { "\n" };
+    let dashes = if rest.is_empty() {
+        lines[first + 1..]
+            .iter()
+            .take_while(|line| line.trim_start().starts_with("- "))
+            .count()
+    } else {
+        0
+    };
+    let end = if lines[first].ends_with("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
     let written = match (value.is_empty(), dashes > 0 || rest.starts_with('[')) {
         (true, _) => String::new(),
-        (_, true) => format!("{key}: [{}]{end}", value.split(',').map(str::trim).filter(|v| !v.is_empty()).collect::<Vec<_>>().join(", ")),
+        (_, true) => format!(
+            "{key}: [{}]{end}",
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         (_, false) => format!("{key}: {value}{end}"),
     };
     let head: String = lines[..first].concat() + &written + &lines[first + 1 + dashes..].concat();
-        // Only the opening and closing lines are left: no more front matter.
+    // Only the opening and closing lines are left: no more front matter.
     let emptied = head.lines().count() == 2;
     format!("{}{}", if emptied { "" } else { &head }, &text[block..])
 }
@@ -112,19 +170,34 @@ pub fn set_front(text: &str, key: &str, value: &str) -> String {
 /// written `key:text`, in that key's column; ignoring case.
 pub fn row_kept(keys: &[String], cells: &[String], filter: &str) -> bool {
     let filter = filter.trim().to_lowercase();
-    let column = filter.split_once(':').and_then(|(key, word)| Some((keys.iter().rposition(|k| k.to_lowercase() == key.trim())?, word.trim().to_string())));
+    let column = filter.split_once(':').and_then(|(key, word)| {
+        Some((
+            keys.iter().rposition(|k| k.to_lowercase() == key.trim())?,
+            word.trim().to_string(),
+        ))
+    });
     match column {
-        Some((at, word)) => cells.get(at).is_some_and(|cell| cell.to_lowercase().contains(&word)),
-        None => cells.iter().any(|cell| cell.to_lowercase().contains(&filter)),
+        Some((at, word)) => cells
+            .get(at)
+            .is_some_and(|cell| cell.to_lowercase().contains(&word)),
+        None => cells
+            .iter()
+            .any(|cell| cell.to_lowercase().contains(&filter)),
     }
 }
 
 /// Order of two table cells: numbers by their value, the rest ignoring case;
 /// an empty cell comes after the others.
 pub fn cell_order(a: &str, b: &str) -> std::cmp::Ordering {
-    match (a.trim().replace(',', ".").parse::<f64>(), b.trim().replace(',', ".").parse::<f64>()) {
+    match (
+        a.trim().replace(',', ".").parse::<f64>(),
+        b.trim().replace(',', ".").parse::<f64>(),
+    ) {
         (Ok(x), Ok(y)) => x.total_cmp(&y),
-        _ => a.is_empty().cmp(&b.is_empty()).then_with(|| a.to_lowercase().cmp(&b.to_lowercase())),
+        _ => a
+            .is_empty()
+            .cmp(&b.is_empty())
+            .then_with(|| a.to_lowercase().cmp(&b.to_lowercase())),
     }
 }
 

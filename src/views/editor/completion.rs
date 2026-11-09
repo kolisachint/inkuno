@@ -5,7 +5,13 @@ use super::*;
 /// Choices shown at once in the completion list.
 pub(super) const SHOWN: usize = 8;
 
-pub(super) type Command = (&'static str, &'static str, &'static str, &'static str, &'static str);
+pub(super) type Command = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+);
 
 pub(super) const COMMANDS: &[Command] = &[
     ("h1", "Heading 1", "Titre 1", "# ", ""),
@@ -16,15 +22,45 @@ pub(super) const COMMANDS: &[Command] = &[
     ("todo", "Task", "Tâche à cocher", "- [ ] ", ""),
     ("table", "Table", "Tableau", "", ""),
     ("date", "Today's date", "Date du jour", "", ""),
-    ("meta", "Front matter: tags, aliases", "En-tête : tags, alias", "", ""),
+    (
+        "meta",
+        "Front matter: tags, aliases",
+        "En-tête : tags, alias",
+        "",
+        "",
+    ),
     ("note", "Panel: note", "Panneau : note", "> [!NOTE]\n> ", ""),
     ("tip", "Panel: tip", "Panneau : astuce", "> [!TIP]\n> ", ""),
-    ("important", "Panel: important", "Panneau : important", "> [!IMPORTANT]\n> ", ""),
-    ("warning", "Panel: warning", "Panneau : attention", "> [!WARNING]\n> ", ""),
-    ("caution", "Panel: danger", "Panneau : danger", "> [!CAUTION]\n> ", ""),
+    (
+        "important",
+        "Panel: important",
+        "Panneau : important",
+        "> [!IMPORTANT]\n> ",
+        "",
+    ),
+    (
+        "warning",
+        "Panel: warning",
+        "Panneau : attention",
+        "> [!WARNING]\n> ",
+        "",
+    ),
+    (
+        "caution",
+        "Panel: danger",
+        "Panneau : danger",
+        "> [!CAUTION]\n> ",
+        "",
+    ),
     ("quote", "Quote", "Citation", "> ", ""),
     ("code", "Code block", "Bloc de code", "```", "\n\n```"),
-    ("mermaid", "Mermaid diagram", "Diagramme Mermaid", "```mermaid\n", "\n```"),
+    (
+        "mermaid",
+        "Mermaid diagram",
+        "Diagramme Mermaid",
+        "```mermaid\n",
+        "\n```",
+    ),
     ("math", "Formula", "Formule", "$$\n", "\n$$"),
     ("rule", "Divider", "Séparateur", "---\n", ""),
     ("link", "Link to a note", "Lien vers une note", "[[", ""),
@@ -36,7 +72,7 @@ pub(super) const COMMANDS: &[Command] = &[
 pub(super) enum Choice<'a> {
     Name(&'a str),
     Command(&'static Command),
-        /// Day offered after `@`: its English and French name, its date.
+    /// Day offered after `@`: its English and French name, its date.
     Date(&'static str, &'static str, md::Date),
     /// In a formula: a function or a name, then a column (its letter and its header).
     Word(&'static Word),
@@ -46,17 +82,21 @@ pub(super) enum Choice<'a> {
 }
 
 impl Editor {
-        /// Corner of a floating panel of size `panel`: below the cursor, or
-        /// above if it does not fit.
+    /// Corner of a floating panel of size `panel`: below the cursor, or
+    /// above if it does not fit.
     pub(super) fn popup_at(&self, panel: Size<Pixels>) -> Option<Point<Pixels>> {
         let c = self.cursor();
         let row = &self.rows[self.row_at(c)?];
         let p = row.pos(c - row.start);
         let top = self.origin.y + row.y + row.pad + p.y;
         let (below, above) = (top + row.lh + px(4.), top - panel.height - px(4.));
-        let fits = below + panel.height <= self.viewport.bottom() - FOOTER || above < self.viewport.top();
+        let fits =
+            below + panel.height <= self.viewport.bottom() - FOOTER || above < self.viewport.top();
         let x = (self.origin.x + p.x).min(self.viewport.right() - panel.width - px(8.));
-        Some(point(x.max(self.viewport.left()), if fits { below } else { above }))
+        Some(point(
+            x.max(self.viewport.left()),
+            if fits { below } else { above },
+        ))
     }
 
     /// Start of the query (after `[[` or `/`) and what matches it.
@@ -70,7 +110,10 @@ impl Editor {
         // In a formula, only what a formula takes: a `/` there is a division.
         let found = match self.formula_cell(c) {
             Some(_) => self.formulas(c),
-            None => self.names(before, c).or_else(|| self.commands(before, c, line)).or_else(|| self.days(before, c, line)),
+            None => self
+                .names(before, c)
+                .or_else(|| self.commands(before, c, line))
+                .or_else(|| self.days(before, c, line)),
         };
         let (start, items) = found?;
         (!items.is_empty() && self.ac_dismissed != Some(start)).then_some((start, items))
@@ -89,11 +132,15 @@ impl Editor {
         }
         let start = c - query.len();
         let query = query.to_lowercase();
-                // `![[` displays a file: the vault's images and diagrams are
-                // offered, by file name; `[[` offers notes.
+        // `![[` displays a file: the vault's images and diagrams are
+        // offered, by file name; `[[` offers notes.
         let embed = before[..open].ends_with('!');
         let mut items: Vec<&str> = match embed {
-            true => self.images.values().filter_map(|p| p.file_name()?.to_str()).collect(),
+            true => self
+                .images
+                .values()
+                .filter_map(|p| p.file_name()?.to_str())
+                .collect(),
             false => self.notes.iter().map(String::as_str).collect(),
         };
         items.retain(|name| name.to_lowercase().contains(&query));
@@ -104,45 +151,86 @@ impl Editor {
         Some((start, items.into_iter().map(Choice::Name).collect()))
     }
 
-        /// The headings of `note` that contain `query`, or its block ids if `query` starts with `^`.
+    /// The headings of `note` that contain `query`, or its block ids if `query` starts with `^`.
     fn anchors(&self, note: &str, query: &str) -> Vec<Choice<'_>> {
-        let text = self.embeds.sources.get(&note.trim().to_lowercase()).and_then(|path| fs::read_to_string(path).ok()).unwrap_or_default();
+        let text = self
+            .embeds
+            .sources
+            .get(&note.trim().to_lowercase())
+            .and_then(|path| fs::read_to_string(path).ok())
+            .unwrap_or_default();
         let wanted = query.to_lowercase();
         let mut found: Vec<String> = match wanted.strip_prefix('^') {
-            Some(id) => crate::logic::embed::block_ids(&text).into_iter().filter(|b| b.to_lowercase().contains(id)).map(|b| format!("^{b}")).collect(),
-            None => md::headings(&text).into_iter().filter(|(_, label, _)| label.to_lowercase().contains(&wanted)).map(|(_, label, _)| label.to_string()).collect(),
+            Some(id) => crate::logic::embed::block_ids(&text)
+                .into_iter()
+                .filter(|b| b.to_lowercase().contains(id))
+                .map(|b| format!("^{b}"))
+                .collect(),
+            None => md::headings(&text)
+                .into_iter()
+                .filter(|(_, label, _)| label.to_lowercase().contains(&wanted))
+                .map(|(_, label, _)| label.to_string())
+                .collect(),
         };
         found.truncate(SHOWN);
         found.into_iter().map(Choice::Anchor).collect()
     }
 
-        /// After a `/` at the start of a line or word, outside code: the commands whose
-        /// name starts with the query, then those whose label contains it.
-    pub(super) fn commands(&self, before: &str, c: usize, line: usize) -> Option<(usize, Vec<Choice<'_>>)> {
+    /// After a `/` at the start of a line or word, outside code: the commands whose
+    /// name starts with the query, then those whose label contains it.
+    pub(super) fn commands(
+        &self,
+        before: &str,
+        c: usize,
+        line: usize,
+    ) -> Option<(usize, Vec<Choice<'_>>)> {
         let slash = before.rfind('/')?;
         let query = before[slash + 1..].to_lowercase();
-        let starts_word = before[..slash].chars().next_back().is_none_or(char::is_whitespace);
+        let starts_word = before[..slash]
+            .chars()
+            .next_back()
+            .is_none_or(char::is_whitespace);
         if !starts_word || !query.chars().all(char::is_alphanumeric) || self.in_code(line) {
             return None;
         }
         let mut items: Vec<&'static Command> = COMMANDS
             .iter()
-            .filter(|(name, en, fr, ..)| name.starts_with(&query) || tr(en, fr).to_lowercase().contains(&query))
+            .filter(|(name, en, fr, ..)| {
+                name.starts_with(&query) || tr(en, fr).to_lowercase().contains(&query)
+            })
             .collect();
         items.sort_by_key(|(name, ..)| !name.starts_with(&query));
-        Some((c - query.len(), items.into_iter().map(Choice::Command).collect()))
+        Some((
+            c - query.len(),
+            items.into_iter().map(Choice::Command).collect(),
+        ))
     }
 
-        /// After an `@` at the start of a line or word, outside code: the days the rest names
-        /// (`@demain`, `@lundi`, `@2026-10-09`). An address `name@domain` opens nothing.
-    pub(super) fn days(&self, before: &str, c: usize, line: usize) -> Option<(usize, Vec<Choice<'_>>)> {
+    /// After an `@` at the start of a line or word, outside code: the days the rest names
+    /// (`@demain`, `@lundi`, `@2026-10-09`). An address `name@domain` opens nothing.
+    pub(super) fn days(
+        &self,
+        before: &str,
+        c: usize,
+        line: usize,
+    ) -> Option<(usize, Vec<Choice<'_>>)> {
         let at = before.rfind('@')?;
         let query = &before[at + 1..];
-        let starts_word = before[..at].chars().next_back().is_none_or(char::is_whitespace);
-        if !starts_word || !query.chars().all(|ch| ch.is_alphanumeric() || matches!(ch, '-' | '\'' | '’')) || self.in_code(line) {
+        let starts_word = before[..at]
+            .chars()
+            .next_back()
+            .is_none_or(char::is_whitespace);
+        if !starts_word
+            || !query
+                .chars()
+                .all(|ch| ch.is_alphanumeric() || matches!(ch, '-' | '\'' | '’'))
+            || self.in_code(line)
+        {
             return None;
         }
-        let items = md::dates(query, crate::platform::clock::today()).into_iter().map(|(en, fr, date)| Choice::Date(en, fr, date));
+        let items = md::dates(query, crate::platform::clock::today())
+            .into_iter()
+            .map(|(en, fr, date)| Choice::Date(en, fr, date));
         Some((c - query.len(), items.collect()))
     }
 
@@ -161,7 +249,7 @@ impl Editor {
                     self.splice(end..end + 2, "", cx);
                 }
             }
-                        // The day becomes a link to its daily note, created when first opened.
+            // The day becomes a link to its daily note, created when first opened.
             Choice::Anchor(text) => {
                 let closed = self.content[c..].starts_with("]]");
                 self.edit(start..c, &format!("{text}]]"), cx);
@@ -180,7 +268,11 @@ impl Editor {
             }
             Choice::Date(_, _, date) => {
                 self.push_undo(true);
-                self.edit(start - 1..c, &format!("[[{}]]", crate::lang::date_name(date)), cx);
+                self.edit(
+                    start - 1..c,
+                    &format!("[[{}]]", crate::lang::date_name(date)),
+                    cx,
+                );
             }
             Choice::Command(&(name, _, _, before, after)) => {
                 let slash = start - 1;
@@ -191,28 +283,39 @@ impl Editor {
                     self.grid_typed.clear();
                     return true;
                 }
-                                // The front matter goes at the top of the note, wherever it is asked for; if it is already there,
-                                // the cursor goes to it. Either way it waits between the tag brackets.
+                // The front matter goes at the top of the note, wherever it is asked for; if it is already there,
+                // the cursor goes to it. Either way it waits between the tag brackets.
                 if name == "meta" {
                     self.edit(slash..c, "", cx);
                     if md::front_matter(&self.content) == 0 {
                         self.edit(0..0, "---\ntags: []\naliases: []\n---\n", cx);
                     }
                     let block = &self.content[..md::front_matter(&self.content)];
-                    let at = block.find("tags: [").map_or("---\n".len(), |i| i + "tags: [".len());
+                    let at = block
+                        .find("tags: [")
+                        .map_or("---\n".len(), |i| i + "tags: [".len());
                     self.move_to(at, cx);
                     return true;
                 }
-                                // Today's date is written where it is asked for.
+                // Today's date is written where it is asked for.
                 if name == "date" {
-                    self.edit(slash..c, &crate::lang::date_name(crate::platform::clock::today()), cx);
+                    self.edit(
+                        slash..c,
+                        &crate::lang::date_name(crate::platform::clock::today()),
+                        cx,
+                    );
                     return true;
                 }
-                                // A link goes in the sentence; everything else starts its own line.
+                // A link goes in the sentence; everything else starts its own line.
                 let line = self.line_range(c);
-                let inline = before.ends_with("[[") || self.content[line.start..slash].trim().is_empty();
+                let inline =
+                    before.ends_with("[[") || self.content[line.start..slash].trim().is_empty();
                 let lead = if inline { "" } else { "\n" };
-                let tail = if after.is_empty() || c == line.end { "" } else { "\n" };
+                let tail = if after.is_empty() || c == line.end {
+                    ""
+                } else {
+                    "\n"
+                };
                 self.edit(slash..c, &format!("{lead}{before}{after}{tail}"), cx);
                 self.move_to(slash + lead.len() + before.len(), cx);
             }

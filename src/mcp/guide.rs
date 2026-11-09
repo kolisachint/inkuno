@@ -5,7 +5,10 @@ use serde_json::{Value, json};
 use super::{Outcome, Server, arg_opt, draw, vault};
 
 const PAGES: &[(&str, &str)] = &[
-    ("introduction", include_str!("../../book/src/introduction.md")),
+    (
+        "introduction",
+        include_str!("../../book/src/introduction.md"),
+    ),
     ("install", include_str!("../../book/src/install.md")),
     ("first-steps", include_str!("../../book/src/first-steps.md")),
     ("writing", include_str!("../../book/src/writing.md")),
@@ -14,7 +17,10 @@ const PAGES: &[(&str, &str)] = &[
     ("comments", include_str!("../../book/src/comments.md")),
     ("daily-notes", include_str!("../../book/src/daily-notes.md")),
     ("navigation", include_str!("../../book/src/navigation.md")),
-    ("tabs-and-panes", include_str!("../../book/src/tabs-and-panes.md")),
+    (
+        "tabs-and-panes",
+        include_str!("../../book/src/tabs-and-panes.md"),
+    ),
     ("search", include_str!("../../book/src/search.md")),
     ("boards", include_str!("../../book/src/boards.md")),
     ("diagrams", include_str!("../../book/src/diagrams.md")),
@@ -25,8 +31,14 @@ const PAGES: &[(&str, &str)] = &[
     ("settings", include_str!("../../book/src/settings.md")),
     ("updates", include_str!("../../book/src/updates.md")),
     ("shortcuts", include_str!("../../book/src/shortcuts.md")),
-    ("compatibility", include_str!("../../book/src/compatibility.md")),
-    ("troubleshooting", include_str!("../../book/src/troubleshooting.md")),
+    (
+        "compatibility",
+        include_str!("../../book/src/compatibility.md"),
+    ),
+    (
+        "troubleshooting",
+        include_str!("../../book/src/troubleshooting.md"),
+    ),
     ("performance", include_str!("../../book/src/performance.md")),
     ("agents", include_str!("../../book/src/agents.md")),
 ];
@@ -36,7 +48,10 @@ const PROMPTS: &[(&str, &str, &str, &[(&str, &str, bool)])] = &[
         "document_feature",
         "Document a feature",
         "Write a note about a feature: context, decisions, how it works, diagrams, and links to the notes it touches.",
-        &[("feature", "The feature to document", true), ("code", "The code or files the feature lives in", false)],
+        &[
+            ("feature", "The feature to document", true),
+            ("code", "The code or files the feature lives in", false),
+        ],
     ),
     (
         "architecture_overview",
@@ -48,7 +63,14 @@ const PROMPTS: &[(&str, &str, &str, &[(&str, &str, bool)])] = &[
         "uml_from_code",
         "UML diagram from code",
         "One UML diagram of the given kind, drawn from the code in scope and checked with render.",
-        &[("scope", "The code the diagram describes", true), ("kind", "class, sequence, state, component, package, activity, use-case or deployment", true)],
+        &[
+            ("scope", "The code the diagram describes", true),
+            (
+                "kind",
+                "class, sequence, state, component, package, activity, use-case or deployment",
+                true,
+            ),
+        ],
     ),
     (
         "review_note",
@@ -60,13 +82,21 @@ const PROMPTS: &[(&str, &str, &str, &[(&str, &str, bool)])] = &[
         "weekly_review",
         "Weekly review",
         "Read the daily notes of a week and write one note that sums it up, with links to the days and the notes they mention.",
-        &[("date", "A day of the week to review, YYYY-MM-DD (default today)", false)],
+        &[(
+            "date",
+            "A day of the week to review, YYYY-MM-DD (default today)",
+            false,
+        )],
     ),
     (
         "link_orphans",
         "Link orphan notes",
         "Find the notes with no link in or out, and propose where to link each one.",
-        &[("folder", "Only the notes in this folder (default the whole vault)", false)],
+        &[(
+            "folder",
+            "Only the notes in this folder (default the whole vault)",
+            false,
+        )],
     ),
     (
         "tidy_tags",
@@ -77,7 +107,10 @@ const PROMPTS: &[(&str, &str, &str, &[(&str, &str, bool)])] = &[
 ];
 
 pub fn list() -> Vec<Value> {
-    let mut resources: Vec<Value> = PAGES.iter().map(|(page, text)| page_resource(page, text)).collect();
+    let mut resources: Vec<Value> = PAGES
+        .iter()
+        .map(|(page, text)| page_resource(page, text))
+        .collect();
     resources.push(json!({
         "uri": "bref://library",
         "name": "library",
@@ -117,13 +150,21 @@ pub fn read(server: &mut Server, uri: &str) -> Result<Vec<Value>, String> {
     }
     if uri == "bref://library" {
         let value = draw::library_value(None)?;
-        return Ok(vec![text_content(&uri, "application/json", &value.to_string())]);
+        return Ok(vec![text_content(
+            &uri,
+            "application/json",
+            &value.to_string(),
+        )]);
     }
     if let Some(path) = uri.strip_prefix("bref://note/") {
         let vault = server.need().map_err(|outcome| sentence(&outcome))?;
         let note = vault.find_note(path)?;
         let (text, _) = vault::read_text(&note.path)?;
-        return Ok(vec![text_content(&format!("bref://note/{path}"), "text/markdown", &text)]);
+        return Ok(vec![text_content(
+            &format!("bref://note/{path}"),
+            "text/markdown",
+            &text,
+        )]);
     }
     if let Some(path) = uri.strip_prefix("bref://diagram/") {
         let vault = server.need().map_err(|outcome| sentence(&outcome))?;
@@ -134,13 +175,21 @@ pub fn read(server: &mut Server, uri: &str) -> Result<Vec<Value>, String> {
         if body.is_error {
             return Err(sentence(&body));
         }
-        return Ok(vec![text_content(&shown, "application/json", &body.structured.to_string()), text_content(&shown, "image/svg+xml", &svg)]);
+        return Ok(vec![
+            text_content(&shown, "application/json", &body.structured.to_string()),
+            text_content(&shown, "image/svg+xml", &svg),
+        ]);
     }
     Err(format!("no resource `{uri}`"))
 }
 
 pub fn prompts() -> Vec<Value> {
-    PROMPTS.iter().map(|(name, title, description, arguments)| prompt_info(name, title, description, arguments)).collect()
+    PROMPTS
+        .iter()
+        .map(|(name, title, description, arguments)| {
+            prompt_info(name, title, description, arguments)
+        })
+        .collect()
 }
 
 pub fn prompt(name: &str, args: &Value) -> Result<Value, String> {
@@ -172,7 +221,10 @@ pub fn prompt(name: &str, args: &Value) -> Result<Value, String> {
 }
 
 fn page_resource(page: &str, text: &str) -> Value {
-    let title = text.lines().find_map(|line| line.strip_prefix("# ")).unwrap_or(page);
+    let title = text
+        .lines()
+        .find_map(|line| line.strip_prefix("# "))
+        .unwrap_or(page);
     json!({
         "uri": format!("bref://guide/{page}"),
         "name": page,
@@ -182,7 +234,12 @@ fn page_resource(page: &str, text: &str) -> Value {
     })
 }
 
-fn prompt_info(name: &str, title: &str, description: &str, arguments: &[(&str, &str, bool)]) -> Value {
+fn prompt_info(
+    name: &str,
+    title: &str,
+    description: &str,
+    arguments: &[(&str, &str, bool)],
+) -> Value {
     json!({
         "name": name,
         "title": title,
@@ -200,11 +257,20 @@ fn text_content(uri: &str, mime: &str, text: &str) -> Value {
 }
 
 fn sentence(outcome: &Outcome) -> String {
-    outcome.structured.get("error").and_then(|v| v.as_str()).unwrap_or("the resource could not be read").to_string()
+    outcome
+        .structured
+        .get("error")
+        .and_then(|v| v.as_str())
+        .unwrap_or("the resource could not be read")
+        .to_string()
 }
 
 fn value<'a>(values: &'a [(&str, String)], key: &str) -> &'a str {
-    values.iter().find(|(name, _)| *name == key).map(|(_, value)| value.as_str()).unwrap_or("")
+    values
+        .iter()
+        .find(|(name, _)| *name == key)
+        .map(|(_, value)| value.as_str())
+        .unwrap_or("")
 }
 
 /// How a UML diagram is drawn on Bref's canvas, so that it stays a diagram the user can edit and
@@ -311,7 +377,10 @@ fn decode(uri: &str) -> String {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() && let Ok(byte) = u8::from_str_radix(&uri[i + 1..i + 3], 16) {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Ok(byte) = u8::from_str_radix(&uri[i + 1..i + 3], 16)
+        {
             out.push(byte);
             i += 3;
         } else {

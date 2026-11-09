@@ -14,7 +14,7 @@ The half-filled circle at the bottom of the rail, or `theme` in the palette.
 **The look.** The window is a warm ground, a little darker than the page in every theme. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart. Page titles are in a serif, while note titles follow your font.
 
 - The active pane of a split has a thin accent ring.
-- The open row of a list, a tag in the text, a commented passage and the current tab take a quiet tint of the accent.
+- The open row of a list, a tag in the text, a commented passage and the current tab take the accent colour as text.
 - Tables and code blocks have a rounded band.
 - Menus, the palette, help and notices float above, with a shadow.
 

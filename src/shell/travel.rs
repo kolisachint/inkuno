@@ -5,7 +5,11 @@ use super::*;
 impl Shell {
     /// What is shown in place of the note; nothing for a new note not saved yet.
     pub(super) fn shown(&self) -> Option<Shown> {
-        match (&self.pane().listing, self.pane().file_path(), &self.pane().path) {
+        match (
+            &self.pane().listing,
+            self.pane().file_path(),
+            &self.pane().path,
+        ) {
             (Some(listing), ..) => Some(Shown::List(listing.of.clone())),
             (None, Some(file), _) => Some(Shown::File(file.clone())),
             (None, None, Some(note)) => Some(Shown::Note(note.clone())),
@@ -16,13 +20,22 @@ impl Shell {
     /// Remembers, in the current history entry, where we are in what it shows:
     /// to call while the view being left still exists.
     pub(super) fn mark_place(&mut self, cx: &App) {
-        let Some(shown) = self.history.current().map(|entry| entry.shown.clone()) else { return };
+        let Some(shown) = self.history.current().map(|entry| entry.shown.clone()) else {
+            return;
+        };
         let place = match &shown {
             Shown::Note(path) if self.pane().path.as_ref() == Some(path) => {
                 let (at, scroll) = self.pane().editor.read(cx).view();
-                Place { at: (at, 0), scroll: (0., scroll) }
+                Place {
+                    at: (at, 0),
+                    scroll: (0., scroll),
+                }
             }
-            Shown::File(path) => match self.pane().sheet().filter(|_| self.pane().file_path() == Some(path)) {
+            Shown::File(path) => match self
+                .pane()
+                .sheet()
+                .filter(|_| self.pane().file_path() == Some(path))
+            {
                 Some(sheet) => {
                     let (at, scroll) = sheet.read(cx).whereabouts();
                     Place { at, scroll }
@@ -42,7 +55,11 @@ impl Shell {
             return;
         }
         let Some(shown) = self.shown() else { return };
-        if self.history.current().is_none_or(|entry| entry.shown != shown) {
+        if self
+            .history
+            .current()
+            .is_none_or(|entry| entry.shown != shown)
+        {
             self.mark_place(cx);
             self.history.visit(shown);
         }
@@ -53,7 +70,11 @@ impl Shell {
         self.mark_place(cx);
         // On what the history does not keep (a preview, a new note), "back"
         // returns to the current entry: that is where we came from.
-        let mut stay = !forward && self.history.current().is_some_and(|entry| Some(&entry.shown) != self.shown().as_ref());
+        let mut stay = !forward
+            && self
+                .history
+                .current()
+                .is_some_and(|entry| Some(&entry.shown) != self.shown().as_ref());
         loop {
             let entry = match (std::mem::take(&mut stay), forward) {
                 (true, _) => self.history.current().cloned(),
@@ -80,7 +101,12 @@ impl Shell {
     }
 
     /// Shows a history entry, where it was left.
-    pub(super) fn show(&mut self, entry: history::Entry, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show(
+        &mut self,
+        entry: history::Entry,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.pane_mut().peek = false;
         // A file closed since comes back in a tab of its own, never in place of the shown one; an
         // open one is found in its tab (`load_note`).
@@ -97,7 +123,9 @@ impl Shell {
             Shown::Note(path) => {
                 if self.load_note(&path, cx) {
                     self.pane_mut().preview = false;
-                    self.pane().editor.update(cx, |editor, cx| editor.set_view(entry.place.at.0, entry.place.scroll.1, cx));
+                    self.pane().editor.update(cx, |editor, cx| {
+                        editor.set_view(entry.place.at.0, entry.place.scroll.1, cx)
+                    });
                 }
                 window.focus(&self.pane().editor.focus_handle(cx));
             }
@@ -105,7 +133,9 @@ impl Shell {
                 self.load_note(&path, cx);
                 // A table takes back its cell and input; an image has nothing to take back.
                 if let Some(sheet) = self.shown_sheet() {
-                    sheet.update(cx, |sheet, cx| sheet.set_view(entry.place.at, entry.place.scroll, cx));
+                    sheet.update(cx, |sheet, cx| {
+                        sheet.set_view(entry.place.at, entry.place.scroll, cx)
+                    });
                     window.focus(&sheet.focus_handle(cx));
                 }
             }

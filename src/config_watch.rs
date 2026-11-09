@@ -65,7 +65,12 @@ impl ConfigWatcher {
             watcher.watch(dir, RecursiveMode::NonRecursive).ok()?;
             Some(watcher)
         });
-        Self { rx, _watcher, quiet_until: None, pending: Vec::new() }
+        Self {
+            rx,
+            _watcher,
+            quiet_until: None,
+            pending: Vec::new(),
+        }
     }
 
     /// The files changed since the last call, each at most once: a burst of saves is
@@ -110,7 +115,10 @@ mod tests {
             // A burst is coalesced: what the quiet window held back arrives next round.
             std::thread::sleep(Duration::from_millis(50));
         }
-        assert!(seen.contains(&wanted), "no {wanted:?} event within 10 s (got {seen:?})");
+        assert!(
+            seen.contains(&wanted),
+            "no {wanted:?} event within 10 s (got {seen:?})"
+        );
     }
 
     #[test]

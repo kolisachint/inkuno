@@ -21,15 +21,23 @@ pub fn day_of(days: i64) -> Date {
     let shifted = (5 * of_year + 2) / 153;
     let month = (shifted + 2) % 12 + 1;
     let year = year_of_era + era * 400 + i64::from(month <= 2);
-    (year as i32, month as u32, (of_year - (153 * shifted + 2) / 5 + 1) as u32)
+    (
+        year as i32,
+        month as u32,
+        (of_year - (153 * shifted + 2) / 5 + 1) as u32,
+    )
 }
 
 /// The month of `year`: the rank in the week of its first day (0: the first day of the
 /// week, a Monday if `monday`, otherwise a Sunday) and its number of days.
 pub fn month(year: i32, month: u32, monday: bool) -> (u32, u32) {
     let first = day_number((year, month, 1));
-    let next = if month == 12 { (year + 1, 1, 1) } else { (year, month + 1, 1) };
-        // January 1st 1970 was a Thursday: Monday is 0.
+    let next = if month == 12 {
+        (year + 1, 1, 1)
+    } else {
+        (year, month + 1, 1)
+    };
+    // January 1st 1970 was a Thursday: Monday is 0.
     let weekday = (first + 3 + i64::from(!monday)).rem_euclid(7);
     (weekday as u32, (day_number(next) - first) as u32)
 }
@@ -58,8 +66,18 @@ pub const DAYS: [(&str, &str); 10] = [
 
 /// The months: (English, French).
 pub const MONTHS: [(&str, &str); 12] = [
-    ("January", "janvier"), ("February", "février"), ("March", "mars"), ("April", "avril"), ("May", "mai"), ("June", "juin"),
-    ("July", "juillet"), ("August", "août"), ("September", "septembre"), ("October", "octobre"), ("November", "novembre"), ("December", "décembre"),
+    ("January", "janvier"),
+    ("February", "février"),
+    ("March", "mars"),
+    ("April", "avril"),
+    ("May", "mai"),
+    ("June", "juin"),
+    ("July", "juillet"),
+    ("August", "août"),
+    ("September", "septembre"),
+    ("October", "octobre"),
+    ("November", "novembre"),
+    ("December", "décembre"),
 ];
 
 /// The dates `query` (what follows an `@`) can name from `today`: the days whose
@@ -70,17 +88,25 @@ pub fn dates(query: &str, today: Date) -> Vec<(&'static str, &'static str, Date)
     let now = day_number(today);
     let typed = || {
         let mut parts = query.split('-').map(|p| p.parse::<u32>().ok());
-        let date = (parts.next()??.try_into().ok()?, parts.next()??, parts.next()??);
-                // A date that exists: it survives the round trip.
-        (parts.next().is_none() && query.len() == 10 && day_of(day_number(date)) == date).then_some(("", "", date))
+        let date = (
+            parts.next()??.try_into().ok()?,
+            parts.next()??,
+            parts.next()??,
+        );
+        // A date that exists: it survives the round trip.
+        (parts.next().is_none() && query.len() == 10 && day_of(day_number(date)) == date)
+            .then_some(("", "", date))
     };
-    let named = DAYS.iter().enumerate().filter(|(_, (en, fr))| en.starts_with(&query) || fr.starts_with(&query));
+    let named = DAYS
+        .iter()
+        .enumerate()
+        .filter(|(_, (en, fr))| en.starts_with(&query) || fr.starts_with(&query));
     let named = named.map(|(i, &(en, fr))| {
         let ahead = match i {
             0 => 0,
             1 => 1,
             2 => -1,
-                        // January 1st 1970 was a Thursday: Monday is 0.
+            // January 1st 1970 was a Thursday: Monday is 0.
             _ => (i as i64 - 3 - (now + 3).rem_euclid(7) - 1).rem_euclid(7) + 1,
         };
         (en, fr, day_of(now + ahead))

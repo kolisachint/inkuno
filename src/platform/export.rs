@@ -1,6 +1,11 @@
 //! Publish a local document copy atomically, without replacing an occupied destination.
 
-use std::{fs, io::{self, Write}, path::Path, sync::atomic::{AtomicU64, Ordering}};
+use std::{
+    fs,
+    io::{self, Write},
+    path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 /// Stage beside the destination, then link it into place. Unlike rename, a hard link
 /// refuses an existing name (including a symlink), even if it appeared during the write.
@@ -8,7 +13,11 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let dir = path.parent().unwrap_or(Path::new("."));
     let (temp, mut file) = loop {
-        let temp = dir.join(format!(".bref-export-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let temp = dir.join(format!(
+            ".bref-export-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         match fs::File::create_new(&temp) {
             Ok(file) => break (temp, file),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -42,11 +51,19 @@ mod tests {
         save(&dir.join("empty.txt"), b"").unwrap();
         // Two writers racing for the same name cannot both publish or mix their bytes.
         let race = dir.join("race.txt");
-        let writers: Vec<_> = (0..8).map(|i| {
-            let path = race.clone();
-            std::thread::spawn(move || save(&path, format!("writer {i}").as_bytes()).is_ok())
-        }).collect();
-        assert_eq!(writers.into_iter().filter_map(|w| w.join().unwrap().then_some(())).count(), 1);
+        let writers: Vec<_> = (0..8)
+            .map(|i| {
+                let path = race.clone();
+                std::thread::spawn(move || save(&path, format!("writer {i}").as_bytes()).is_ok())
+            })
+            .collect();
+        assert_eq!(
+            writers
+                .into_iter()
+                .filter_map(|w| w.join().unwrap().then_some(()))
+                .count(),
+            1
+        );
         assert!(fs::read_to_string(race).unwrap().starts_with("writer "));
         #[cfg(unix)]
         {
@@ -62,7 +79,12 @@ mod tests {
             assert!(save(&link, b"replacement").is_err());
             assert_eq!(fs::read_to_string(&path).unwrap(), "é😀\nline");
         }
-        assert!(fs::read_dir(&dir).unwrap().all(|p| !p.unwrap().file_name().to_string_lossy().starts_with(".bref-export-")));
+        assert!(fs::read_dir(&dir).unwrap().all(|p| {
+            !p.unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".bref-export-")
+        }));
         fs::remove_dir_all(dir).unwrap();
     }
 }

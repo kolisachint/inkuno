@@ -24,7 +24,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Tab` | Search bar: replace field |
 | `Ctrl+Enter` | Search bar: replace all (Enter: this match) |
 | `Ctrl+Shift+Enter` | Search bar: replace in the whole vault, after showing the count |
-| `Ctrl+Shift+O` | Outline: jump to a heading of the note |
+| `Ctrl+Shift+O` | Outline: the headings of the note, in the right dock |
 | `Ctrl+N` | New note |
 |  | New note from a template (a note of the Templates folder: {{title}} {{date}} {{time}} {{cursor}}) |
 | `Ctrl+P › template` | Insert a template at the cursor, or make a template of the open note |
@@ -73,7 +73,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Close all the tabs of the pane; the other panes keep theirs |
 |  | Close all files, in every pane, without deleting any; the window is left on a new empty note |
 | Right click on a tab | Close it, close the other tabs, or all the tabs of its pane |
-| `Ctrl+Alt+T` | Reopen the last closed tab |
+| `Ctrl+Shift+T` | Reopen the last closed tab |
 | `Ctrl+Tab` | Next tab |
 | `Ctrl+Shift+Tab` | Previous tab |
 | `Ctrl+Shift+Page Up` | Move the tab one place to the left |
@@ -84,7 +84,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Drag from the tree | Onto a pane: open the file there; onto the right half of a single pane: open a second one |
 | `Ctrl+E` | Vault tree |
 | Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate. The graph marks it when it has a node. Backlinks stay on the last note |
-| `Ctrl+Shift+T` | Recent notes |
+|  | Recent notes |
 | `Ctrl+G` | Graph of the notes |
 | `Ctrl+T` | Tags |
 | `Ctrl+L` | Backlinks: the notes that link to this one |

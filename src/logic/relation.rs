@@ -91,7 +91,9 @@ impl Relation {
             Composition => (Head::DiamondFull, Head::None, false),
             Generalization => (Head::None, Head::Triangle, false),
             Realization => (Head::None, Head::Triangle, true),
-            Dependency | Use | Import | Access | Include | Extend | Merge | Deploy | Manifest => (Head::None, Head::Arrow, true),
+            Dependency | Use | Import | Access | Include | Extend | Merge | Deploy | Manifest => {
+                (Head::None, Head::Arrow, true)
+            }
             AssociationClass => (Head::None, Head::None, true),
             Ball => (Head::None, Head::Ball, false),
             Socket => (Head::None, Head::Socket, false),
@@ -136,14 +138,19 @@ impl Relation {
     /// The relationship whose stereotype is written in `text` (`«use»` or `<<use>>`).
     fn stereotyped(text: &str) -> Option<Relation> {
         let name = super::uml::stereotype(text)?;
-        Relation::ALL.into_iter().find(|r| r.stereotype() == Some(name))
+        Relation::ALL
+            .into_iter()
+            .find(|r| r.stereotype() == Some(name))
     }
 
     /// What an arrow is: the relationship that looks like it, if any. Several look alike (a dashed
     /// open arrow is a dependency, whatever its text; its stereotype tells which).
     pub fn of(link: &Link) -> Option<Relation> {
         let look = (link.start, link.end, link.dashed);
-        let same: Vec<Relation> = Relation::ALL.into_iter().filter(|r| r.look() == look).collect();
+        let same: Vec<Relation> = Relation::ALL
+            .into_iter()
+            .filter(|r| r.look() == look)
+            .collect();
         match Relation::stereotyped(&link.text) {
             Some(named) if same.contains(&named) => Some(named),
             _ => same.into_iter().find(|r| r.stereotype().is_none()),
@@ -185,13 +192,28 @@ impl Relation {
         use Relation::*;
         match self {
             Association => tr("Association", "Association"),
-            Navigable => tr("Navigable association (arrow)", "Association navigable (flèche)"),
-            NonNavigable => tr("Non-navigable end (cross)", "Extrémité non navigable (croix)"),
+            Navigable => tr(
+                "Navigable association (arrow)",
+                "Association navigable (flèche)",
+            ),
+            NonNavigable => tr(
+                "Non-navigable end (cross)",
+                "Extrémité non navigable (croix)",
+            ),
             Aggregation => tr("Aggregation (hollow diamond)", "Agrégation (losange vide)"),
             Composition => tr("Composition (full diamond)", "Composition (losange plein)"),
-            Generalization => tr("Generalization (hollow triangle)", "Généralisation (triangle vide)"),
-            Realization => tr("Realization (dashed, hollow triangle)", "Réalisation (pointillés, triangle vide)"),
-            Dependency => tr("Dependency (dashed arrow)", "Dépendance (flèche en pointillés)"),
+            Generalization => tr(
+                "Generalization (hollow triangle)",
+                "Généralisation (triangle vide)",
+            ),
+            Realization => tr(
+                "Realization (dashed, hollow triangle)",
+                "Réalisation (pointillés, triangle vide)",
+            ),
+            Dependency => tr(
+                "Dependency (dashed arrow)",
+                "Dépendance (flèche en pointillés)",
+            ),
             Use => "«use»",
             Import => "«import»",
             Access => "«access»",
@@ -200,14 +222,26 @@ impl Relation {
             Merge => "«merge»",
             Deploy => "«deploy»",
             Manifest => "«manifest»",
-            AssociationClass => tr("Association class (dotted line to the middle of an association)", "Classe d'association (pointillés vers le milieu d'une association)"),
+            AssociationClass => tr(
+                "Association class (dotted line to the middle of an association)",
+                "Classe d'association (pointillés vers le milieu d'une association)",
+            ),
             Ball => tr("Provided interface (ball)", "Interface fournie (boule)"),
             Socket => tr("Required interface (socket)", "Interface requise (prise)"),
-            Sync => tr("Synchronous call (filled triangle)", "Appel synchrone (triangle plein)"),
+            Sync => tr(
+                "Synchronous call (filled triangle)",
+                "Appel synchrone (triangle plein)",
+            ),
             Create => "«create»",
             Destroy => "«destroy»",
-            Found => tr("Found message (from nowhere)", "Message trouvé (venu de nulle part)"),
-            Lost => tr("Lost message (to nowhere)", "Message perdu (vers nulle part)"),
+            Found => tr(
+                "Found message (from nowhere)",
+                "Message trouvé (venu de nulle part)",
+            ),
+            Lost => tr(
+                "Lost message (to nowhere)",
+                "Message perdu (vers nulle part)",
+            ),
         }
     }
 
@@ -238,9 +272,14 @@ impl Relation {
     pub fn group(self) -> &'static str {
         use Relation::*;
         match self {
-            Association | Navigable | NonNavigable | Aggregation | Composition | AssociationClass => tr("Associations", "Associations"),
-            Generalization | Realization | Ball | Socket => tr("Inheritance and interfaces", "Héritage et interfaces"),
-            Dependency | Use | Import | Access | Include | Extend | Merge | Deploy | Manifest => tr("Dependencies", "Dépendances"),
+            Association | Navigable | NonNavigable | Aggregation | Composition
+            | AssociationClass => tr("Associations", "Associations"),
+            Generalization | Realization | Ball | Socket => {
+                tr("Inheritance and interfaces", "Héritage et interfaces")
+            }
+            Dependency | Use | Import | Access | Include | Extend | Merge | Deploy | Manifest => {
+                tr("Dependencies", "Dépendances")
+            }
             Sync | Create | Destroy | Found | Lost => tr("Messages", "Messages"),
         }
     }
@@ -263,7 +302,8 @@ impl Relation {
             Sync => "d-rel-sync.svg",
             Found => "d-rel-found.svg",
             Lost => "d-rel-lost.svg",
-            Use | Import | Access | Include | Extend | Merge | Deploy | Manifest | Create | Destroy => return None,
+            Use | Import | Access | Include | Extend | Merge | Deploy | Manifest | Create
+            | Destroy => return None,
         })
     }
 }
@@ -318,8 +358,16 @@ mod tests {
             // Two shapes of one path each, then the stroke, then its heads.
             let paths: Vec<&str> = svg.lines().filter(|l| l.starts_with("<path")).collect();
             assert_eq!(paths.len(), 2 + 1 + heads, "{relation:?}: {svg}");
-            assert_eq!(paths[2].contains("stroke-dasharray"), dashed, "{relation:?}");
-            assert_eq!(paths.iter().skip(3).any(|p| p.contains("fill=\"#7d8590\"")), full, "{relation:?}");
+            assert_eq!(
+                paths[2].contains("stroke-dasharray"),
+                dashed,
+                "{relation:?}"
+            );
+            assert_eq!(
+                paths.iter().skip(3).any(|p| p.contains("fill=\"#7d8590\"")),
+                full,
+                "{relation:?}"
+            );
             // It is recognised again from the file: no mark, only what the arrow has.
             let back = Diagram::from_svg(&svg).unwrap();
             assert_eq!(Relation::of(&back.links[0]), Some(relation), "{relation:?}");
@@ -336,22 +384,51 @@ mod tests {
     fn the_shapes_of_the_heads() {
         // A ball is a closed circle of 25 points; a socket an open half circle; a cross two strokes.
         let (_, ball) = drawn(Relation::Ball);
-        let line = ball.lines().filter(|l| l.starts_with("<path")).nth(3).unwrap();
-        assert!(line.ends_with("Z\" stroke=\"#7d8590\"/>") && line.matches('L').count() == 24, "{line}");
+        let line = ball
+            .lines()
+            .filter(|l| l.starts_with("<path"))
+            .nth(3)
+            .unwrap();
+        assert!(
+            line.ends_with("Z\" stroke=\"#7d8590\"/>") && line.matches('L').count() == 24,
+            "{line}"
+        );
         let (_, socket) = drawn(Relation::Socket);
-        let line = socket.lines().filter(|l| l.starts_with("<path")).nth(3).unwrap();
-        assert!(!line.contains('Z') && line.matches('L').count() == 12, "{line}");
+        let line = socket
+            .lines()
+            .filter(|l| l.starts_with("<path"))
+            .nth(3)
+            .unwrap();
+        assert!(
+            !line.contains('Z') && line.matches('L').count() == 12,
+            "{line}"
+        );
         let (_, cross) = drawn(Relation::NonNavigable);
-        let line = cross.lines().filter(|l| l.starts_with("<path")).nth(3).unwrap();
-        assert!(line.matches('M').count() == 2 && line.matches('L').count() == 2, "{line}");
+        let line = cross
+            .lines()
+            .filter(|l| l.starts_with("<path"))
+            .nth(3)
+            .unwrap();
+        assert!(
+            line.matches('M').count() == 2 && line.matches('L').count() == 2,
+            "{line}"
+        );
         // The stroke stops at the ball's edge and at the socket's apex.
-        assert!(ball.contains("M100 30L288 30\"") && socket.contains("M100 30L292 30\""), "{ball}\n{socket}");
+        assert!(
+            ball.contains("M100 30L288 30\"") && socket.contains("M100 30L292 30\""),
+            "{ball}\n{socket}"
+        );
     }
 
     #[test]
     fn applying_changes_the_stereotype_with_the_relationship() {
         let mut d = Diagram::default();
-        let id = d.add_link(End::Point(0., 0.), End::Point(100., 0.), Head::None, Route::Straight);
+        let id = d.add_link(
+            End::Point(0., 0.),
+            End::Point(100., 0.),
+            Head::None,
+            Route::Straight,
+        );
         let link = d.link_mut(id).unwrap();
         Relation::Use.apply(link);
         assert_eq!(link.text, "«use»");
@@ -382,14 +459,22 @@ mod tests {
         keys.dedup();
         assert_eq!(keys.len(), Relation::ALL.len());
         // Those with no icon are drawn as their stereotype.
-        assert!(Relation::ALL.iter().all(|r| r.icon().is_some() || r.stereotype().is_some()));
+        assert!(
+            Relation::ALL
+                .iter()
+                .all(|r| r.icon().is_some() || r.stereotype().is_some())
+        );
     }
 
     #[test]
     fn every_relationship_has_a_short_name_and_a_family_for_the_menu() {
         let families: Vec<&str> = Relation::ALL.iter().map(|r| r.group()).collect();
         for relation in Relation::ALL {
-            assert!(!relation.label().is_empty() && relation.label().chars().count() <= 24, "{relation:?}: {}", relation.label());
+            assert!(
+                !relation.label().is_empty() && relation.label().chars().count() <= 24,
+                "{relation:?}: {}",
+                relation.label()
+            );
         }
         // Four families, each with at least one relationship; the menu lists them in this order.
         let mut seen: Vec<&str> = Vec::new();

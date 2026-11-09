@@ -73,7 +73,10 @@ impl Node {
     pub fn panes(&self) -> Vec<usize> {
         match self {
             Node::Pane(pane) => vec![*pane],
-            Node::Split(_, children) => children.iter().flat_map(|(_, child)| child.panes()).collect(),
+            Node::Split(_, children) => children
+                .iter()
+                .flat_map(|(_, child)| child.panes())
+                .collect(),
         }
     }
 
@@ -83,22 +86,33 @@ impl Node {
         let axis = side.axis();
         if let Node::Split(own, children) = self
             && *own == axis
-            && let Some(at) = children.iter().position(|(_, child)| *child == Node::Pane(pane))
+            && let Some(at) = children
+                .iter()
+                .position(|(_, child)| *child == Node::Pane(pane))
         {
             let half = children[at].0 / 2.;
             children[at].0 = half;
-            children.insert(if side.before() { at } else { at + 1 }, (half, Node::Pane(new)));
+            children.insert(
+                if side.before() { at } else { at + 1 },
+                (half, Node::Pane(new)),
+            );
             return true;
         }
         match self {
             Node::Pane(own) if *own == pane => {
                 let pair = [(0.5, Node::Pane(new)), (0.5, Node::Pane(pane))];
-                let pair = if side.before() { pair.to_vec() } else { pair.into_iter().rev().collect() };
+                let pair = if side.before() {
+                    pair.to_vec()
+                } else {
+                    pair.into_iter().rev().collect()
+                };
                 *self = Node::Split(axis, pair);
                 true
             }
             Node::Pane(_) => false,
-            Node::Split(_, children) => children.iter_mut().any(|(_, child)| child.split(pane, side, new)),
+            Node::Split(_, children) => children
+                .iter_mut()
+                .any(|(_, child)| child.split(pane, side, new)),
         }
     }
 
@@ -111,8 +125,13 @@ impl Node {
     }
 
     fn cut(&mut self, pane: usize) -> bool {
-        let Node::Split(_, children) = self else { return false };
-        if let Some(at) = children.iter().position(|(_, child)| *child == Node::Pane(pane)) {
+        let Node::Split(_, children) = self else {
+            return false;
+        };
+        if let Some(at) = children
+            .iter()
+            .position(|(_, child)| *child == Node::Pane(pane))
+        {
             let (gone, _) = children.remove(at);
             let left: f32 = children.iter().map(|(share, _)| share).sum();
             for (share, _) in children.iter_mut() {
@@ -127,7 +146,9 @@ impl Node {
         match self {
             Node::Pane(pane) if *pane > gone => *pane -= 1,
             Node::Pane(_) => {}
-            Node::Split(_, children) => children.iter_mut().for_each(|(_, child)| child.renumber(gone)),
+            Node::Split(_, children) => children
+                .iter_mut()
+                .for_each(|(_, child)| child.renumber(gone)),
         }
     }
 
@@ -140,7 +161,9 @@ impl Node {
             let mut flat = Vec::with_capacity(children.len());
             for (share, child) in children.drain(..) {
                 match child {
-                    Node::Split(inner, grand) if inner == axis => flat.extend(grand.into_iter().map(|(s, g)| (s * share, g))),
+                    Node::Split(inner, grand) if inner == axis => {
+                        flat.extend(grand.into_iter().map(|(s, g)| (s * share, g)))
+                    }
                     child => flat.push((share, child)),
                 }
             }
@@ -154,7 +177,15 @@ impl Node {
     /// Where each pane is, in the space of the panes.
     pub fn rects(&self) -> Vec<(usize, Rect)> {
         let mut out = Vec::new();
-        self.place(Rect { x: 0., y: 0., w: 1., h: 1. }, &mut out);
+        self.place(
+            Rect {
+                x: 0.,
+                y: 0.,
+                w: 1.,
+                h: 1.,
+            },
+            &mut out,
+        );
         out
     }
 
@@ -165,8 +196,16 @@ impl Node {
                 let mut from = 0.;
                 for (share, child) in children {
                     let part = match axis {
-                        Axis::Row => Rect { x: at.x + from * at.w, w: share * at.w, ..at },
-                        Axis::Column => Rect { y: at.y + from * at.h, h: share * at.h, ..at },
+                        Axis::Row => Rect {
+                            x: at.x + from * at.w,
+                            w: share * at.w,
+                            ..at
+                        },
+                        Axis::Column => Rect {
+                            y: at.y + from * at.h,
+                            h: share * at.h,
+                            ..at
+                        },
                     };
                     child.place(part, out);
                     from += share;
@@ -177,14 +216,34 @@ impl Node {
 
     /// The rectangle of the node at `path` (child indices from the root).
     pub fn rect_of(&self, path: &[usize]) -> Rect {
-        let (mut node, mut at) = (self, Rect { x: 0., y: 0., w: 1., h: 1. });
+        let (mut node, mut at) = (
+            self,
+            Rect {
+                x: 0.,
+                y: 0.,
+                w: 1.,
+                h: 1.,
+            },
+        );
         for &step in path {
-            let Node::Split(axis, children) = node else { break };
-            let Some((share, child)) = children.get(step) else { break };
+            let Node::Split(axis, children) = node else {
+                break;
+            };
+            let Some((share, child)) = children.get(step) else {
+                break;
+            };
             let from: f32 = children[..step].iter().map(|(s, _)| s).sum();
             at = match axis {
-                Axis::Row => Rect { x: at.x + from * at.w, w: share * at.w, ..at },
-                Axis::Column => Rect { y: at.y + from * at.h, h: share * at.h, ..at },
+                Axis::Row => Rect {
+                    x: at.x + from * at.w,
+                    w: share * at.w,
+                    ..at
+                },
+                Axis::Column => Rect {
+                    y: at.y + from * at.h,
+                    h: share * at.h,
+                    ..at
+                },
             };
             node = child;
         }
@@ -212,17 +271,25 @@ impl Node {
             Axis::Row => (r.y..r.bottom()).contains(&(me.y + me.h / 2. - EPS)),
             Axis::Column => (r.x..r.right()).contains(&(me.x + me.w / 2. - EPS)),
         };
-        let near: Vec<&(usize, Rect)> = rects.iter().filter(|(p, r)| *p != pane && touches(r) && facing(r) > EPS).collect();
+        let near: Vec<&(usize, Rect)> = rects
+            .iter()
+            .filter(|(p, r)| *p != pane && touches(r) && facing(r) > EPS)
+            .collect();
         near.iter()
             .find(|(_, r)| middle(r))
-            .or_else(|| near.iter().max_by(|a, b| facing(&a.1).total_cmp(&facing(&b.1))))
+            .or_else(|| {
+                near.iter()
+                    .max_by(|a, b| facing(&a.1).total_cmp(&facing(&b.1)))
+            })
             .map(|(p, _)| *p)
     }
 
     /// Moves the border after child `border` of the split at `path` to `pos`, a fraction of that
     /// split's size; each of the two children keeps `min` of it at least.
     pub fn drag(&mut self, path: &[usize], border: usize, pos: f32, min: f32) {
-        let Some(Node::Split(_, children)) = self.at_mut(path) else { return };
+        let Some(Node::Split(_, children)) = self.at_mut(path) else {
+            return;
+        };
         if border + 1 >= children.len() {
             return;
         }
@@ -238,7 +305,9 @@ impl Node {
     pub fn at(&self, path: &[usize]) -> Option<&Node> {
         let mut node = self;
         for &step in path {
-            let Node::Split(_, children) = node else { return None };
+            let Node::Split(_, children) = node else {
+                return None;
+            };
             node = &children.get(step)?.1;
         }
         Some(node)
@@ -247,7 +316,9 @@ impl Node {
     pub fn at_mut(&mut self, path: &[usize]) -> Option<&mut Node> {
         let mut node = self;
         for &step in path {
-            let Node::Split(_, children) = node else { return None };
+            let Node::Split(_, children) = node else {
+                return None;
+            };
             node = &mut children.get_mut(step)?.1;
         }
         Some(node)
@@ -270,7 +341,10 @@ impl Node {
             Node::Pane(pane) => pane.to_string(),
             Node::Split(axis, children) => {
                 let name = if *axis == Axis::Row { "row" } else { "col" };
-                let inner: Vec<String> = children.iter().map(|(share, child)| format!("{share} {}", child.write())).collect();
+                let inner: Vec<String> = children
+                    .iter()
+                    .map(|(share, child)| format!("{share} {}", child.write()))
+                    .collect();
                 format!("{name}({})", inner.join(", "))
             }
         }
@@ -296,7 +370,11 @@ impl Node {
     fn normalize(&mut self) {
         if let Node::Split(_, children) = self {
             for (share, child) in children.iter_mut() {
-                *share = if share.is_finite() { share.clamp(0.05, 1.) } else { 0.5 };
+                *share = if share.is_finite() {
+                    share.clamp(0.05, 1.)
+                } else {
+                    0.5
+                };
                 child.normalize();
             }
             let sum: f32 = children.iter().map(|(s, _)| s).sum();
@@ -310,7 +388,12 @@ impl Node {
             0 | 1 => Node::Pane(0),
             _ => {
                 let rest = (1. - first) / (count - 1) as f32;
-                Node::Split(Axis::Row, (0..count).map(|p| (if p == 0 { first } else { rest }, Node::Pane(p))).collect())
+                Node::Split(
+                    Axis::Row,
+                    (0..count)
+                        .map(|p| (if p == 0 { first } else { rest }, Node::Pane(p)))
+                        .collect(),
+                )
             }
         }
     }
@@ -337,7 +420,9 @@ fn parse(text: &str) -> Option<(Node, &str)> {
             }
         }
     }
-    let end = text.find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len());
+    let end = text
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(text.len());
     Some((Node::Pane(text[..end].parse().ok()?), &text[end..]))
 }
 
@@ -355,8 +440,17 @@ pub fn zone(x: f32, y: f32, w: f32, h: f32, band: f32) -> Zone {
         return Zone::Center;
     }
     let (bx, by) = ((w / 4.).min(band), (h / 4.).min(band));
-    let near = [(x / bx, Side::Left), ((w - x) / bx, Side::Right), (y / by, Side::Up), ((h - y) / by, Side::Down)];
-    match near.into_iter().filter(|(d, _)| *d < 1.).min_by(|a, b| a.0.total_cmp(&b.0)) {
+    let near = [
+        (x / bx, Side::Left),
+        ((w - x) / bx, Side::Right),
+        (y / by, Side::Up),
+        ((h - y) / by, Side::Down),
+    ];
+    match near
+        .into_iter()
+        .filter(|(d, _)| *d < 1.)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+    {
         Some((_, side)) => Zone::Edge(side),
         None => Zone::Center,
     }
@@ -381,7 +475,9 @@ mod tests {
                     children.len() >= 2
                         && Some(*axis) != parent
                         && (sum - 1.).abs() < 1e-3
-                        && children.iter().all(|(s, child)| *s > 0. && ok(child, Some(*axis)))
+                        && children
+                            .iter()
+                            .all(|(s, child)| *s > 0. && ok(child, Some(*axis)))
                 }
             }
         }
@@ -397,7 +493,10 @@ mod tests {
         assert_eq!(tree, Node::Split(Row, vec![(0.5, pane(0)), (0.5, pane(1))]));
         // Same axis: a sibling, sharing the half of the one split.
         tree.split(1, Side::Left, 2);
-        assert_eq!(tree, Node::Split(Row, vec![(0.5, pane(0)), (0.25, pane(2)), (0.25, pane(1))]));
+        assert_eq!(
+            tree,
+            Node::Split(Row, vec![(0.5, pane(0)), (0.25, pane(2)), (0.25, pane(1))])
+        );
         // Across: the pane becomes a column.
         tree.split(0, Side::Down, 3);
         assert_eq!(tree.write(), "row(0.5 col(0.5 0, 0.5 3), 0.25 2, 0.25 1)");
@@ -411,7 +510,10 @@ mod tests {
         let mut tree = Node::read("row(0.5 col(0.5 0, 0.5 3), 0.25 2, 0.25 1)", 4).unwrap();
         tree.remove(2);
         // Its quarter goes to the others in proportion; 3 becomes 2.
-        assert_eq!(tree.write(), "row(0.6666667 col(0.5 0, 0.5 2), 0.33333334 1)");
+        assert_eq!(
+            tree.write(),
+            "row(0.6666667 col(0.5 0, 0.5 2), 0.33333334 1)"
+        );
         tree.remove(2);
         assert_eq!(tree.write(), "row(0.6666667 0, 0.33333334 1)");
         tree.remove(0);
@@ -431,15 +533,46 @@ mod tests {
         // 2 | 1
         let tree = Node::read("row(0.5 col(0.5 0, 0.5 2), 0.5 1)", 3).unwrap();
         let rects = tree.rects();
-        assert_eq!(rects[1], (2, Rect { x: 0., y: 0.5, w: 0.5, h: 0.5 }));
+        assert_eq!(
+            rects[1],
+            (
+                2,
+                Rect {
+                    x: 0.,
+                    y: 0.5,
+                    w: 0.5,
+                    h: 0.5
+                }
+            )
+        );
         assert_eq!(tree.neighbour(0, Side::Right), Some(1));
         assert_eq!(tree.neighbour(0, Side::Down), Some(2));
-        assert_eq!(tree.neighbour(1, Side::Left), Some(0), "two face it equally: the upper one wins");
+        assert_eq!(
+            tree.neighbour(1, Side::Left),
+            Some(0),
+            "two face it equally: the upper one wins"
+        );
         assert_eq!(tree.neighbour(2, Side::Up), Some(0));
         assert_eq!(tree.neighbour(0, Side::Left), None);
         assert_eq!(tree.neighbour(1, Side::Up), None);
-        assert_eq!(tree.rect_of(&[0]), Rect { x: 0., y: 0., w: 0.5, h: 1. });
-        assert_eq!(tree.rect_of(&[0, 1]), Rect { x: 0., y: 0.5, w: 0.5, h: 0.5 });
+        assert_eq!(
+            tree.rect_of(&[0]),
+            Rect {
+                x: 0.,
+                y: 0.,
+                w: 0.5,
+                h: 1.
+            }
+        );
+        assert_eq!(
+            tree.rect_of(&[0, 1]),
+            Rect {
+                x: 0.,
+                y: 0.5,
+                w: 0.5,
+                h: 0.5
+            }
+        );
         // 0 above a wide 1: from 1, up goes to the one over the middle of its edge.
         let tree = Node::read("col(0.5 row(0.3 0, 0.7 2), 0.5 1)", 3).unwrap();
         assert_eq!(tree.neighbour(1, Side::Up), Some(2));
@@ -447,7 +580,10 @@ mod tests {
 
     fn shares(tree: &Node) -> Vec<f32> {
         match tree {
-            Node::Split(_, children) => children.iter().map(|(s, _)| (s * 1000.).round() / 1000.).collect(),
+            Node::Split(_, children) => children
+                .iter()
+                .map(|(s, _)| (s * 1000.).round() / 1000.)
+                .collect(),
             Node::Pane(_) => vec![1.],
         }
     }
@@ -475,15 +611,33 @@ mod tests {
     #[test]
     fn reading_refuses_what_does_not_fit() {
         assert_eq!(Node::read("0", 1), Some(pane(0)));
-        assert_eq!(Node::read("row(0.4 0, 0.6 1)", 2).unwrap().write(), "row(0.4 0, 0.6 1)");
-        for bad in ["", "row(", "row(0.5 0)", "row(0.5 0, 0.5 0)", "row(0.5 0, 0.5 2)", "col(0.5 0; 0.5 1)", "row(a 0, 0.5 1)", "row(0.5 0, 0.5 1) x", "1"] {
+        assert_eq!(
+            Node::read("row(0.4 0, 0.6 1)", 2).unwrap().write(),
+            "row(0.4 0, 0.6 1)"
+        );
+        for bad in [
+            "",
+            "row(",
+            "row(0.5 0)",
+            "row(0.5 0, 0.5 0)",
+            "row(0.5 0, 0.5 2)",
+            "col(0.5 0; 0.5 1)",
+            "row(a 0, 0.5 1)",
+            "row(0.5 0, 0.5 1) x",
+            "1",
+        ] {
             assert_eq!(Node::read(bad, 2), None, "{bad}");
         }
         // Shares out of range or not summing to 1 are brought back.
         let tree = Node::read("row(7 0, NaN 1)", 2).unwrap();
         assert!(valid(&tree, 2), "{}", tree.write());
         // Nested along the same axis: flattened on reading.
-        assert_eq!(Node::read("row(0.5 0, 0.5 row(0.5 1, 0.5 2))", 3).unwrap().write(), "row(0.5 0, 0.25 1, 0.25 2)");
+        assert_eq!(
+            Node::read("row(0.5 0, 0.5 row(0.5 1, 0.5 2))", 3)
+                .unwrap()
+                .write(),
+            "row(0.5 0, 0.25 1, 0.25 2)"
+        );
         assert_eq!(Node::row(2, 0.4).write(), "row(0.4 0, 0.6 1)");
         assert_eq!(Node::row(1, 0.4), pane(0));
     }
@@ -520,7 +674,11 @@ mod tests {
                 assert!(valid(&tree, count), "{}", tree.write());
                 // What is saved reads back to the same panes in the same places.
                 let back = Node::read(&tree.write(), count).expect("saved tree reads back");
-                assert!(valid(&back, count) && back.panes() == tree.panes(), "{}", tree.write());
+                assert!(
+                    valid(&back, count) && back.panes() == tree.panes(),
+                    "{}",
+                    tree.write()
+                );
                 let area: f32 = tree.rects().iter().map(|(_, r)| r.w * r.h).sum();
                 assert!((area - 1.).abs() < 1e-3);
             }

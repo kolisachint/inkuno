@@ -38,12 +38,23 @@ use pane::*;
 use toasts::*;
 
 use crate::actions::*;
-use crate::ui::keys::{self, MOD};
 use crate::lang::{date_name, time_name, tr};
-use crate::logic::{self, commands, diagram, embed, history, import, layout::{self, Node, Side, Zone}, markdown, prefs::Prefs, recall, table};
-use crate::platform::{self, clock::{clock, today}, git, update, vault};
-use crate::ui::{self,
-    assets::{Assets, FAMILIES, init_fonts, apply_fonts, logo, mono, sans},
+use crate::logic::{
+    self, commands, diagram, embed, history, import,
+    layout::{self, Node, Side, Zone},
+    markdown,
+    prefs::Prefs,
+    recall, table,
+};
+use crate::platform::{
+    self,
+    clock::{clock, today},
+    git, update, vault,
+};
+use crate::ui::keys::{self, MOD};
+use crate::ui::{
+    self,
+    assets::{Assets, FAMILIES, apply_fonts, init_fonts, logo, mono, sans},
     figure, line,
     theme::{Page, THEMES, Theme, Wide},
     widgets::{drag_window, icon_button, icon_button_over, keycaps},
@@ -58,11 +69,10 @@ use std::{
 };
 
 use gpui::{
-    Animation, AnimationExt, App, Application, Bounds, ClipboardItem, Context,
-    CursorStyle, Decorations, Div, Entity, FocusHandle, Focusable, KeyBinding, MouseButton,
-    MouseMoveEvent, ObjectFit, Stateful, PathPromptOptions, Pixels, Point, ResizeEdge, Size, TitlebarOptions,
-    Transformation,
-    Window, WindowBounds, WindowBackgroundAppearance, WindowDecorations,
+    Animation, AnimationExt, App, Application, Bounds, ClipboardItem, Context, CursorStyle,
+    Decorations, Div, Entity, FocusHandle, Focusable, KeyBinding, MouseButton, MouseMoveEvent,
+    ObjectFit, PathPromptOptions, Pixels, Point, ResizeEdge, Size, Stateful, TitlebarOptions,
+    Transformation, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
     WindowOptions, div, ease_out_quint, img, percentage, point, prelude::*, px, size, svg,
 };
 
@@ -71,12 +81,12 @@ use diagram::Diagram;
 use editor::{Editor, EditorEvent};
 use graph::{Graph, GraphEvent};
 use history::{History, Place, Shown};
+use logic::note::Note;
 use markdown::Link;
 use nav::{Mode, Nav, Panel};
 use palette::{Entry, Palette, PaletteEvent, Setting, TemplateAct};
 use sheet::{Pick, Sheet, SheetEvent};
 use table::{Encoding, Format, Style};
-use logic::note::Note;
 
 /// The icon grid: where it opens, for which item, the cell the keys are on (0: no icon), and what
 /// had the focus before it.
@@ -168,6 +178,8 @@ struct Shell {
     icon_pick: Option<IconPick>,
     /// The comments panel was closed: it waits to be asked for again.
     comments_shut: bool,
+    /// Focus mode (F9) stashes the chrome it hides here; `None` when the docks are as usual.
+    focus_mode: Option<docks::FocusStash>,
     /// Scroll of the comments column, and the comment it last showed (the caret's).
     comments_scroll: gpui::ScrollHandle,
     comments_seen: Option<usize>,
@@ -220,13 +232,18 @@ impl Shell {
         apply_fonts(&prefs);
         let theme = Theme::of(&prefs, window.appearance());
         let pane = Self::new_pane(theme, window, cx);
-        cx.observe_window_appearance(window, |this, window, cx| this.restyle(window, cx)).detach();
+        cx.observe_window_appearance(window, |this, window, cx| this.restyle(window, cx))
+            .detach();
         let shell = cx.entity().downgrade();
         window.on_window_should_close(cx, move |window, cx| {
-            shell.update(cx, |this, cx| this.may_close_window(window, cx)).unwrap_or(true)
+            shell
+                .update(cx, |this, cx| this.may_close_window(window, cx))
+                .unwrap_or(true)
         });
         cx.on_app_quit(|this, cx| {
-            this.each_pane(|this| { this.leave(cx); });
+            this.each_pane(|this| {
+                this.leave(cx);
+            });
             async {}
         })
         .detach();
@@ -285,7 +302,10 @@ impl Shell {
             vault_find: None,
             icons: Default::default(),
             icon_pick: None,
-            comments_shut: false,
+            // Calm UI (ui.md §12): the comments column starts collapsed to its dot;
+            // the palette (`› comments`) reopens it via `open_comments`.
+            comments_shut: true,
+            focus_mode: None,
             comments_scroll: gpui::ScrollHandle::new(),
             comments_seen: None,
             toasts: Vec::new(),
@@ -328,29 +348,48 @@ impl Shell {
             if event.keystroke.key == "escape" && cx.has_active_drag() {
                 cx.stop_active_drag(window);
                 let _ = weak.update(cx, |this, cx| {
-                    (this.pane_aim, this.tab_aim, this.tool_aim, this.tool_drag) = (None, None, None, false);
+                    (this.pane_aim, this.tab_aim, this.tool_aim, this.tool_drag) =
+                        (None, None, None, false);
                     cx.notify();
                 });
                 return cx.stop_propagation();
             }
-            if weak.update(cx, |this, cx| this.key_pressed(&event.keystroke, cx)).unwrap_or(false) {
+            if weak
+                .update(cx, |this, cx| this.key_pressed(&event.keystroke, cx))
+                .unwrap_or(false)
+            {
                 cx.stop_propagation();
             }
         }));
         // Changed shortcuts; a faulty line of the file is dropped and reported.
         let open = editable();
-        let (changes, faults) = keys::read(&vault::load_file("keys"), &this.bound, &|action| open.contains(action));
+        let (changes, faults) = keys::read(&vault::load_file("keys"), &this.bound, &|action| {
+            open.contains(action)
+        });
         if !changes.is_empty() {
             this.changes = changes;
             this.rebind(cx);
         }
         if let Some(first) = faults.first() {
-            let more = if faults.len() > 1 { format!(" (+{})", faults.len() - 1) } else { String::new() };
-            this.say(Tone::Failed, format!("{} {first}{more}", tr("Shortcut ignored in the keys file:", "Raccourci ignoré dans le fichier keys :")), cx);
+            let more = if faults.len() > 1 {
+                format!(" (+{})", faults.len() - 1)
+            } else {
+                String::new()
+            };
+            this.say(
+                Tone::Failed,
+                format!(
+                    "{} {first}{more}",
+                    tr(
+                        "Shortcut ignored in the keys file:",
+                        "Raccourci ignoré dans le fichier keys :"
+                    )
+                ),
+                cx,
+            );
         }
         this
     }
-
 }
 
 /// Opens the main window, or the quick-capture window with `--capture`.
@@ -368,10 +407,17 @@ pub fn run() {
         let vault = vault.filter(|v| v.is_dir());
         // `bref --capture`: the input line alone, in a small undecorated window.
         // Without a chosen vault, the app opens as usual to ask for one.
-        if let Some(root) = vault.clone().filter(|_| std::env::args().any(|arg| arg == "--capture")) {
+        if let Some(root) = vault
+            .clone()
+            .filter(|_| std::env::args().any(|arg| arg == "--capture"))
+        {
             cx.open_window(
                 WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(560.), px(96.)), cx))),
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                        None,
+                        size(px(560.), px(96.)),
+                        cx,
+                    ))),
                     titlebar: None,
                     app_id: Some("dev.andrea.Bref".into()),
                     window_decorations: Some(WindowDecorations::Client),

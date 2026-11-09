@@ -7,7 +7,9 @@ impl Sheet {
         self.copied = true;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(1500)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(1500))
+                .await;
             this.update(cx, |this, cx| {
                 this.copied = false;
                 cx.notify();
@@ -29,8 +31,11 @@ impl Sheet {
     /// Ctrl+C: the selection as TSV, which spreadsheets and note tables paste as is.
     pub(super) fn copy(&mut self, cx: &mut Context<Self>) {
         // Several selections: their blocks one under the other, top to bottom.
-        let blocks: Vec<String> =
-            self.selections().into_iter().map(|(rows, cols)| self.table.text_range(rows, cols, Style::Tsv)).collect();
+        let blocks: Vec<String> = self
+            .selections()
+            .into_iter()
+            .map(|(rows, cols)| self.table.text_range(rows, cols, Style::Tsv))
+            .collect();
         cx.write_to_clipboard(ClipboardItem::new_string(blocks.join("\n")));
         self.flash(cx);
     }
@@ -42,8 +47,16 @@ impl Sheet {
         self.copy_range(rows, cols, style, cx);
     }
 
-    pub(super) fn copy_range(&mut self, rows: Range<usize>, cols: Range<usize>, style: Style, cx: &mut Context<Self>) {
-        cx.write_to_clipboard(ClipboardItem::new_string(self.table.text_range(rows, cols, style)));
+    pub(super) fn copy_range(
+        &mut self,
+        rows: Range<usize>,
+        cols: Range<usize>,
+        style: Style,
+        cx: &mut Context<Self>,
+    ) {
+        cx.write_to_clipboard(ClipboardItem::new_string(
+            self.table.text_range(rows, cols, style),
+        ));
         self.flash(cx);
     }
 
@@ -62,15 +75,26 @@ impl Sheet {
         let (rows, cols) = self.selection();
         let (top, left) = (rows.start, cols.start);
         let one = grid.len() == 1 && grid[0].len() == 1;
-        let (height, width) = if one { (rows.len(), cols.len()) } else { (grid.len(), grid.iter().map(Vec::len).max().unwrap_or(0)) };
+        let (height, width) = if one {
+            (rows.len(), cols.len())
+        } else {
+            (grid.len(), grid.iter().map(Vec::len).max().unwrap_or(0))
+        };
         let mut changes = Vec::new();
         if top + height > self.table.rows() {
-            changes.push(Change::Insert(self.table.rows(), vec![Vec::new(); top + height - self.table.rows()]));
+            changes.push(Change::Insert(
+                self.table.rows(),
+                vec![Vec::new(); top + height - self.table.rows()],
+            ));
         }
         let cells = (0..height)
             .flat_map(|i| (0..width).map(move |j| (i, j)))
             .filter_map(|(i, j)| {
-                let value = if one { grid[0][0].clone() } else { grid[i].get(j)?.clone() };
+                let value = if one {
+                    grid[0][0].clone()
+                } else {
+                    grid[i].get(j)?.clone()
+                };
                 Some((top + i, left + j, value))
             })
             .collect();
@@ -86,12 +110,23 @@ impl Sheet {
         self.finish(cx);
         let (rows, cols, partial) = self.scope();
         let text = self.table.text_range(rows, cols, style);
-        let suffix = if partial { tr(" (selection)", " (sélection)") } else { "" };
+        let suffix = if partial {
+            tr(" (selection)", " (sélection)")
+        } else {
+            ""
+        };
         let name = format!("{}{suffix}", vault::stem(&self.path));
-        let file = vault::free_path(self.path.parent().unwrap_or(Path::new("")), &name, style.extension());
+        let file = vault::free_path(
+            self.path.parent().unwrap_or(Path::new("")),
+            &name,
+            style.extension(),
+        );
         match crate::platform::export::save(&file, text.as_bytes()) {
             Ok(()) => cx.emit(SheetEvent::Exported),
-            Err(e) => cx.emit(SheetEvent::Error(format!("{} : {e}", tr("Not exported", "Export impossible")))),
+            Err(e) => cx.emit(SheetEvent::Error(format!(
+                "{} : {e}",
+                tr("Not exported", "Export impossible")
+            ))),
         }
     }
 }

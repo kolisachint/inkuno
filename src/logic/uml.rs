@@ -25,10 +25,18 @@ pub enum Visibility {
 }
 
 impl Visibility {
-    const ALL: [(Visibility, char); 4] = [(Visibility::Public, '+'), (Visibility::Private, '-'), (Visibility::Protected, '#'), (Visibility::Package, '~')];
+    const ALL: [(Visibility, char); 4] = [
+        (Visibility::Public, '+'),
+        (Visibility::Private, '-'),
+        (Visibility::Protected, '#'),
+        (Visibility::Package, '~'),
+    ];
 
     pub fn sign(self) -> char {
-        Visibility::ALL.iter().find(|(v, _)| *v == self).map_or('+', |(_, c)| *c)
+        Visibility::ALL
+            .iter()
+            .find(|(v, _)| *v == self)
+            .map_or('+', |(_, c)| *c)
     }
 }
 
@@ -120,12 +128,22 @@ impl Member {
             rest = rest[end + 1..].trim_start();
         }
         if let Some(after) = rest.strip_prefix('=') {
-            let end = after.rfind('{').filter(|at| after.trim_end().ends_with('}') && !after[..*at].trim().is_empty()).unwrap_or(after.len());
+            let end = after
+                .rfind('{')
+                .filter(|at| after.trim_end().ends_with('}') && !after[..*at].trim().is_empty())
+                .unwrap_or(after.len());
             m.default = Some(after[..end].trim().to_string());
             rest = after[end..].trim_start();
         }
-        if rest.starts_with('{') && rest.ends_with('}') && closing(rest, '{', '}') == Some(rest.len() - 1) {
-            for prop in rest[1..rest.len() - 1].split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        if rest.starts_with('{')
+            && rest.ends_with('}')
+            && closing(rest, '{', '}') == Some(rest.len() - 1)
+        {
+            for prop in rest[1..rest.len() - 1]
+                .split(',')
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+            {
                 match prop {
                     "static" => m.is_static = true,
                     "abstract" => m.is_abstract = true,
@@ -214,20 +232,28 @@ impl Member {
 /// The name of a stereotype line: `«interface»` or `<<interface>>`.
 pub fn stereotype(line: &str) -> Option<&str> {
     let line = line.trim();
-    let inner = line.strip_prefix('«').and_then(|l| l.strip_suffix('»')).or_else(|| line.strip_prefix("<<")?.strip_suffix(">>"))?;
+    let inner = line
+        .strip_prefix('«')
+        .and_then(|l| l.strip_suffix('»'))
+        .or_else(|| line.strip_prefix("<<")?.strip_suffix(">>"))?;
     Some(inner.trim()).filter(|name| !name.is_empty())
 }
 
 /// An *object* (an instance) is written `name : Type`, or `: Type` when it has no name (a class name has no single colon).
 fn is_object(name: &str) -> bool {
-    let mut colons = name.match_indices(':').filter(|(i, _)| !name[..*i].ends_with(':') && !name[i + 1..].starts_with(':'));
-    colons.next().is_some_and(|(i, _)| !name[i + 1..].trim().is_empty())
+    let mut colons = name
+        .match_indices(':')
+        .filter(|(i, _)| !name[..*i].ends_with(':') && !name[i + 1..].starts_with(':'));
+    colons
+        .next()
+        .is_some_and(|(i, _)| !name[i + 1..].trim().is_empty())
 }
 
 /// A title line of a compartment after the second: `Responsibilities:`.
 fn is_title(line: &str) -> bool {
     let line = line.trim();
-    line.strip_suffix(':').is_some_and(|name| !name.is_empty() && !name.contains(':'))
+    line.strip_suffix(':')
+        .is_some_and(|name| !name.is_empty() && !name.contains(':'))
 }
 
 /// Puts a style on every run of a line.
@@ -251,10 +277,14 @@ pub fn class_runs(text: &str, rule: &str) -> Option<Vec<Vec<Span>>> {
     if !lines.iter().any(|l| l.trim() == rule) {
         return None;
     }
-    let first_rule = lines.iter().position(|l| l.trim() == rule).unwrap_or(lines.len());
+    let first_rule = lines
+        .iter()
+        .position(|l| l.trim() == rule)
+        .unwrap_or(lines.len());
     let head = &lines[..first_rule];
     let stereotypes: Vec<&str> = head.iter().filter_map(|l| stereotype(l)).collect();
-    let abstract_class = stereotypes.contains(&"abstract") || head.iter().any(|l| l.trim_end().ends_with("{abstract}"));
+    let abstract_class = stereotypes.contains(&"abstract")
+        || head.iter().any(|l| l.trim_end().ends_with("{abstract}"));
     let enumeration = stereotypes.contains(&"enumeration");
     let mut compartment = 0;
     let mut at_top = true;
@@ -272,7 +302,12 @@ pub fn class_runs(text: &str, rule: &str) -> Option<Vec<Vec<Span>>> {
                     Some(name) => richtext::spans(&format!("«{name}»"), false),
                     None => {
                         let name = line.trim_end().trim_end_matches("{abstract}").trim_end();
-                        styled(richtext::spans(name, true), abstract_class, is_object(name), true)
+                        styled(
+                            richtext::spans(name, true),
+                            abstract_class,
+                            is_object(name),
+                            true,
+                        )
                     }
                 };
             }
@@ -280,10 +315,20 @@ pub fn class_runs(text: &str, rule: &str) -> Option<Vec<Vec<Span>>> {
                 return richtext::spans(line, false);
             }
             if compartment >= 2 && top && is_title(line) {
-                return styled(richtext::spans(line.trim().trim_end_matches(':'), false), true, false, true);
+                return styled(
+                    richtext::spans(line.trim().trim_end_matches(':'), false),
+                    true,
+                    false,
+                    true,
+                );
             }
             match Member::parse(line) {
-                Some(m) => styled(richtext::spans(&m.shown(), false), m.is_abstract, m.is_static, false),
+                Some(m) => styled(
+                    richtext::spans(&m.shown(), false),
+                    m.is_abstract,
+                    m.is_static,
+                    false,
+                ),
                 None => richtext::spans(line, false),
             }
         })
@@ -302,20 +347,61 @@ mod tests {
     #[test]
     fn reads_attributes_and_operations() {
         let m = member("- /total: Map<String, List<T>>[0..*] = {1, 2} {readOnly, ordered}");
-        assert_eq!((m.visibility, m.derived, m.name.as_str(), m.params.as_ref()), (Some(Visibility::Private), true, "total", None));
-        assert_eq!((m.ty.as_deref(), m.multiplicity.as_deref(), m.default.as_deref()), (Some("Map<String, List<T>>"), Some("0..*"), Some("{1, 2}")));
+        assert_eq!(
+            (m.visibility, m.derived, m.name.as_str(), m.params.as_ref()),
+            (Some(Visibility::Private), true, "total", None)
+        );
+        assert_eq!(
+            (
+                m.ty.as_deref(),
+                m.multiplicity.as_deref(),
+                m.default.as_deref()
+            ),
+            (Some("Map<String, List<T>>"), Some("0..*"), Some("{1, 2}"))
+        );
         assert_eq!(m.props, ["readOnly", "ordered"]);
         let m = member("# static abstract area(width: int = 2, h: List<T>): f32 {query}");
-        assert_eq!((m.visibility, m.is_static, m.is_abstract, m.is_operation()), (Some(Visibility::Protected), true, true, true));
-        assert_eq!((m.params.as_deref(), m.ty.as_deref(), m.props.as_slice()), (Some("width: int = 2, h: List<T>"), Some("f32"), &["query".to_string()][..]));
+        assert_eq!(
+            (m.visibility, m.is_static, m.is_abstract, m.is_operation()),
+            (Some(Visibility::Protected), true, true, true)
+        );
+        assert_eq!(
+            (m.params.as_deref(), m.ty.as_deref(), m.props.as_slice()),
+            (
+                Some("width: int = 2, h: List<T>"),
+                Some("f32"),
+                &["query".to_string()][..]
+            )
+        );
         // The properties `static` and `abstract` are styles too; `[]` is an array, not a multiplicity.
         let m = member("~ items: int[] {static}");
-        assert_eq!((m.visibility, m.ty.as_deref(), m.multiplicity.as_deref(), m.is_static, m.props.is_empty()), (Some(Visibility::Package), Some("int[]"), None, true, true));
+        assert_eq!(
+            (
+                m.visibility,
+                m.ty.as_deref(),
+                m.multiplicity.as_deref(),
+                m.is_static,
+                m.props.is_empty()
+            ),
+            (Some(Visibility::Package), Some("int[]"), None, true, true)
+        );
         // Nothing but a name is a member (an attribute with no type); the sign can be missing.
-        assert_eq!((member("count").name.as_str(), member("count").visibility), ("count", None));
+        assert_eq!(
+            (member("count").name.as_str(), member("count").visibility),
+            ("count", None)
+        );
         assert_eq!(member("+ draw()").shown(), "+ draw()");
         // What is not notation is not a member: it is drawn as typed.
-        for text in ["", "   ", "+", "+ (x)", "see the note: (a", "a(b", "a: b[1", "x {oops"] {
+        for text in [
+            "",
+            "   ",
+            "+",
+            "+ (x)",
+            "see the note: (a",
+            "a(b",
+            "a: b[1",
+            "x {oops",
+        ] {
             assert!(Member::parse(text).is_none(), "{text:?}");
         }
     }
@@ -325,14 +411,20 @@ mod tests {
         let m = member("+ static abstract /x: int {static}");
         assert_eq!(m.shown(), "+ /x: int");
         assert_eq!(m.written(), "+ static abstract /x: int");
-        assert_eq!(member("  -   count  :   int  =  3  ").written(), "- count: int = 3");
+        assert_eq!(
+            member("  -   count  :   int  =  3  ").written(),
+            "- count: int = 3"
+        );
     }
 
     /// A small deterministic generator, for lines nobody wrote by hand.
     struct Dice(u64);
     impl Dice {
         fn pick<'a>(&mut self, of: &[&'a str]) -> &'a str {
-            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             of[(self.0 >> 33) as usize % of.len()]
         }
     }
@@ -340,10 +432,38 @@ mod tests {
     #[test]
     fn round_trips_a_hundred_lines() {
         let mut dice = Dice(7);
-        let names = ["x", "solde", "Ünï", "日本語", "名前😀", "a|b", "a\\b", "snake_case", "veryLong".repeat(40).leak(), "é", "n1"];
-        let types = ["int", "List<T>", "Map<String, List<Ünï>>", "日本", "int[]", "(a, b)", "Σ", "T"];
+        let names = [
+            "x",
+            "solde",
+            "Ünï",
+            "日本語",
+            "名前😀",
+            "a|b",
+            "a\\b",
+            "snake_case",
+            "veryLong".repeat(40).leak(),
+            "é",
+            "n1",
+        ];
+        let types = [
+            "int",
+            "List<T>",
+            "Map<String, List<Ünï>>",
+            "日本",
+            "int[]",
+            "(a, b)",
+            "Σ",
+            "T",
+        ];
         let mults = ["", "[0..*]", "[1]", "[*]", "[2..5]"];
-        let defaults = ["", " = 0", " = \"a|b\"", " = {1, 2}", " = 日本", " = x == y"];
+        let defaults = [
+            "",
+            " = 0",
+            " = \"a|b\"",
+            " = {1, 2}",
+            " = 日本",
+            " = x == y",
+        ];
         let props = ["", " {readOnly}", " {ordered, unique}"];
         let mut lines = Vec::new();
         for _ in 0..100 {
@@ -351,10 +471,24 @@ mod tests {
             let keywords = dice.pick(&["", "static ", "abstract ", "static abstract "]);
             let derived = dice.pick(&["", "/"]);
             let name = dice.pick(&names);
-            let op = dice.pick(&["", "()", "(a: int)", "(a: int, b: List<T>)", "(日本: Σ = 2)"]);
+            let op = dice.pick(&[
+                "",
+                "()",
+                "(a: int)",
+                "(a: int, b: List<T>)",
+                "(日本: Σ = 2)",
+            ]);
             let ty = dice.pick(&types);
-            let tail = if dice.pick(&["a", "b"]) == "a" { format!(": {ty}{}", dice.pick(&mults)) } else { String::new() };
-            lines.push(format!("{vis}{keywords}{derived}{name}{op}{tail}{}{}", dice.pick(&defaults), dice.pick(&props)));
+            let tail = if dice.pick(&["a", "b"]) == "a" {
+                format!(": {ty}{}", dice.pick(&mults))
+            } else {
+                String::new()
+            };
+            lines.push(format!(
+                "{vis}{keywords}{derived}{name}{op}{tail}{}{}",
+                dice.pick(&defaults),
+                dice.pick(&props)
+            ));
         }
         assert_eq!(lines.len(), 100);
         for line in &lines {
@@ -362,7 +496,11 @@ mod tests {
             assert_eq!(&m.written(), line, "{line:?}");
             // And what is shown is the same line, without the keywords.
             let bare = line.replacen("static ", "", 1).replacen("abstract ", "", 1);
-            assert_eq!(m.shown(), bare.replacen("static ", "", 1).replacen("abstract ", "", 1), "{line:?}");
+            assert_eq!(
+                m.shown(),
+                bare.replacen("static ", "", 1).replacen("abstract ", "", 1),
+                "{line:?}"
+            );
         }
     }
 
@@ -370,28 +508,97 @@ mod tests {
     fn never_panics_whatever_the_line() {
         // Tens of thousands of strange lines: no panic, and a member always writes back to a member.
         let mut dice = Dice(99);
-        let bits = ["+", "-", "#", "~", " ", "static ", "abstract ", "/", "(", ")", "[", "]", "{", "}", ":", "=", ",", "x", "日本", "é", "😀", "<", ">", "|", "\\", "«", "»", "0..*", "a b"];
+        let bits = [
+            "+",
+            "-",
+            "#",
+            "~",
+            " ",
+            "static ",
+            "abstract ",
+            "/",
+            "(",
+            ")",
+            "[",
+            "]",
+            "{",
+            "}",
+            ":",
+            "=",
+            ",",
+            "x",
+            "日本",
+            "é",
+            "😀",
+            "<",
+            ">",
+            "|",
+            "\\",
+            "«",
+            "»",
+            "0..*",
+            "a b",
+        ];
         for _ in 0..30_000 {
-            let line: String = (0..dice.pick(&["1", "3", "6", "12"]).parse().unwrap()).map(|_| dice.pick(&bits)).collect();
+            let line: String = (0..dice.pick(&["1", "3", "6", "12"]).parse().unwrap())
+                .map(|_| dice.pick(&bits))
+                .collect();
             if let Some(m) = Member::parse(&line) {
-                assert!(Member::parse(&m.written()).is_some(), "{line:?} -> {:?}", m.written());
+                assert!(
+                    Member::parse(&m.written()).is_some(),
+                    "{line:?} -> {:?}",
+                    m.written()
+                );
             }
         }
     }
 
     #[test]
     fn reads_stereotypes_names_and_objects() {
-        assert_eq!((stereotype("«interface»"), stereotype("<<enumeration>>"), stereotype(" « a b » ")), (Some("interface"), Some("enumeration"), Some("a b")));
-        assert_eq!((stereotype("«»"), stereotype("<<>>"), stereotype("Name"), stereotype("«open")), (None, None, None, None));
-        assert!(is_object("order : Order") && is_object("a:B") && is_object(": B") && is_object(":pkg::Order") && is_object("pkg::order : Order"));
-        assert!(!is_object("Order") && !is_object("pkg::Order") && !is_object("a :") && !is_object(":") && !is_object(""));
+        assert_eq!(
+            (
+                stereotype("«interface»"),
+                stereotype("<<enumeration>>"),
+                stereotype(" « a b » ")
+            ),
+            (Some("interface"), Some("enumeration"), Some("a b"))
+        );
+        assert_eq!(
+            (
+                stereotype("«»"),
+                stereotype("<<>>"),
+                stereotype("Name"),
+                stereotype("«open")
+            ),
+            (None, None, None, None)
+        );
+        assert!(
+            is_object("order : Order")
+                && is_object("a:B")
+                && is_object(": B")
+                && is_object(":pkg::Order")
+                && is_object("pkg::order : Order")
+        );
+        assert!(
+            !is_object("Order")
+                && !is_object("pkg::Order")
+                && !is_object("a :")
+                && !is_object(":")
+                && !is_object("")
+        );
     }
 
     fn describe(runs: &[Span]) -> String {
         runs.iter()
             .map(|s| {
                 let st = s.style;
-                format!("{}{}{}{}", s.text, if st.bold { "·b" } else { "" }, if st.italic { "·i" } else { "" }, if st.under { "·u" } else { "" })
+                format!(
+                    "{}{}{}{}",
+                    s.text,
+                    if st.bold { "·b" } else { "" },
+                    if st.italic { "·i" } else { "" },
+                    if st.under { "·u" } else { "" }
+                )
             })
             .collect::<Vec<_>>()
             .join("|")
@@ -416,7 +623,10 @@ mod tests {
         let runs = class_runs("order : Order\n---\n+ total = 3", "---").unwrap();
         assert_eq!(describe(&runs[0]), "order : Order·b·u");
         let runs = class_runs("«enumeration»\nColor\n---\nRED\n+ static GREEN", "---").unwrap();
-        assert_eq!((describe(&runs[3]), describe(&runs[4])), ("RED".into(), "+ static GREEN".into()));
+        assert_eq!(
+            (describe(&runs[3]), describe(&runs[4])),
+            ("RED".into(), "+ static GREEN".into())
+        );
         // `{abstract}` after the name does the same as the stereotype, and is not drawn.
         let runs = class_runs("Shape {abstract}\n---\n", "---").unwrap();
         assert_eq!(describe(&runs[0]), "Shape·b·i");

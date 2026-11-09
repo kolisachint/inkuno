@@ -6,7 +6,11 @@ use super::*;
 impl Diagram {
     /// The shapes held directly by `id`.
     pub fn children(&self, id: u32) -> Vec<u32> {
-        self.shapes.iter().filter(|s| s.parent == Some(id)).map(|s| s.id).collect()
+        self.shapes
+            .iter()
+            .filter(|s| s.parent == Some(id))
+            .map(|s| s.id)
+            .collect()
     }
 
     /// The shapes held by `id`, directly or through others.
@@ -40,14 +44,22 @@ impl Diagram {
 
     /// The topmost shape that holds others and covers this point, apart from `except`.
     pub fn container_at(&self, x: f32, y: f32, except: &[u32]) -> Option<u32> {
-        self.shapes.iter().rev().find(|s| s.form.holds() && s.contains(x, y) && !except.contains(&s.id)).map(|s| s.id)
+        self.shapes
+            .iter()
+            .rev()
+            .find(|s| s.form.holds() && s.contains(x, y) && !except.contains(&s.id))
+            .map(|s| s.id)
     }
 
     /// Makes `parent` the holder of `id` (`None`: none). `false` if nothing changes: the same holder,
     /// or one that is `id` or inside it. A held shape moves to the top of the drawing order, above its holder.
     pub fn set_parent(&mut self, id: u32, parent: Option<u32>) -> bool {
-        let Some(current) = self.shape(id).map(|s| s.parent) else { return false };
-        if current == parent || parent.is_some_and(|p| self.shape(p).is_none() || self.within(p, id)) {
+        let Some(current) = self.shape(id).map(|s| s.parent) else {
+            return false;
+        };
+        if current == parent
+            || parent.is_some_and(|p| self.shape(p).is_none() || self.within(p, id))
+        {
             return false;
         }
         if let Some(shape) = self.shape_mut(id) {
@@ -56,7 +68,9 @@ impl Diagram {
         if parent.is_some() {
             let mut family = self.descendants(id);
             family.push(id);
-            let (moved, kept): (Vec<Shape>, Vec<Shape>) = std::mem::take(&mut self.shapes).into_iter().partition(|s| family.contains(&s.id));
+            let (moved, kept): (Vec<Shape>, Vec<Shape>) = std::mem::take(&mut self.shapes)
+                .into_iter()
+                .partition(|s| family.contains(&s.id));
             self.shapes = kept.into_iter().chain(moved).collect();
         }
         true
@@ -65,7 +79,20 @@ impl Diagram {
     /// Gives each of the shapes `ids`, the ones no other of them holds, the holder it is over: the
     /// topmost container that covers its center. `true` if one changed.
     pub fn adopt(&mut self, ids: &[u32]) -> bool {
-        let roots: Vec<u32> = ids.iter().copied().filter(|id| self.shape(*id).is_some() && !ids.iter().any(|other| other != id && self.shape(*id).and_then(|s| s.parent).is_some_and(|p| self.within(p, *other)))).collect();
+        let roots: Vec<u32> = ids
+            .iter()
+            .copied()
+            .filter(|id| {
+                self.shape(*id).is_some()
+                    && !ids.iter().any(|other| {
+                        other != id
+                            && self
+                                .shape(*id)
+                                .and_then(|s| s.parent)
+                                .is_some_and(|p| self.within(p, *other))
+                    })
+            })
+            .collect();
         let mut changed = false;
         for id in roots {
             // A pin is not held like what a container holds: it sits on a border.
@@ -73,7 +100,9 @@ impl Diagram {
                 changed |= self.seat(id);
                 continue;
             }
-            let Some((cx, cy)) = self.shape(id).map(Shape::center) else { continue };
+            let Some((cx, cy)) = self.shape(id).map(Shape::center) else {
+                continue;
+            };
             let mut except = self.descendants(id);
             except.push(id);
             let holder = self.container_at(cx, cy, &except);
@@ -86,9 +115,18 @@ impl Diagram {
     /// it: drawn around them, it takes them in. One that only overlaps it stays as it was: seen over a frame
     /// is not held by it. `true` if one changed.
     pub fn gather(&mut self, id: u32) -> bool {
-        let Some(c) = self.shape(id).cloned().filter(|s| s.form.holds()) else { return false };
-        let inside = |s: &Shape| s.x >= c.x && s.y >= c.y && s.x + s.w <= c.x + c.w && s.y + s.h <= c.y + c.h;
-        let taken: Vec<u32> = self.shapes.iter().filter(|s| s.id != id && s.parent == c.parent && inside(s)).map(|s| s.id).collect();
+        let Some(c) = self.shape(id).cloned().filter(|s| s.form.holds()) else {
+            return false;
+        };
+        let inside = |s: &Shape| {
+            s.x >= c.x && s.y >= c.y && s.x + s.w <= c.x + c.w && s.y + s.h <= c.y + c.h
+        };
+        let taken: Vec<u32> = self
+            .shapes
+            .iter()
+            .filter(|s| s.id != id && s.parent == c.parent && inside(s))
+            .map(|s| s.id)
+            .collect();
         let mut changed = false;
         for s in taken {
             changed |= self.set_parent(s, Some(id));
@@ -99,29 +137,64 @@ impl Diagram {
     /// Sits pin `id` on the border of the shape it was let go on (the topmost one that is not a pin, whose border
     /// is within `PIN` of its center), and has that shape hold it; far from every border it is let go. `true` if it changed.
     pub fn seat(&mut self, id: u32) -> bool {
-        let Some(pin) = self.shape(id).cloned() else { return false };
+        let Some(pin) = self.shape(id).cloned() else {
+            return false;
+        };
         let (cx, cy) = pin.center();
         let reach = |s: &Shape| {
             // How far the center is from the border of the box: inside or outside.
             let inside = (s.x..=s.x + s.w).contains(&cx) && (s.y..=s.y + s.h).contains(&cy);
-            if inside { (cx - s.x).min(s.x + s.w - cx).min(cy - s.y).min(s.y + s.h - cy) } else { (s.x - cx).max(cx - s.x - s.w).max(0.).hypot((s.y - cy).max(cy - s.y - s.h).max(0.)) }
+            if inside {
+                (cx - s.x)
+                    .min(s.x + s.w - cx)
+                    .min(cy - s.y)
+                    .min(s.y + s.h - cy)
+            } else {
+                (s.x - cx)
+                    .max(cx - s.x - s.w)
+                    .max(0.)
+                    .hypot((s.y - cy).max(cy - s.y - s.h).max(0.))
+            }
         };
         let mut except = self.descendants(id);
         except.push(id);
-        let holder = self.shapes.iter().rev().filter(|s| s.form != Form::Pin && s.form != Form::Text && !except.contains(&s.id) && reach(s) <= PIN).min_by(|a, b| reach(a).total_cmp(&reach(b))).map(|s| s.id);
+        let holder = self
+            .shapes
+            .iter()
+            .rev()
+            .filter(|s| {
+                s.form != Form::Pin
+                    && s.form != Form::Text
+                    && !except.contains(&s.id)
+                    && reach(s) <= PIN
+            })
+            .min_by(|a, b| reach(a).total_cmp(&reach(b)))
+            .map(|s| s.id);
         let changed = self.set_parent(id, holder);
         holder.is_some_and(|h| self.snap_to(id, h)) || changed
     }
 
     /// Moves pin `id` onto the nearest point of the border of `holder`. `true` if it moved.
     fn snap_to(&mut self, id: u32, holder: u32) -> bool {
-        let (Some(h), Some(pin)) = (self.shape(holder).cloned(), self.shape(id).cloned()) else { return false };
+        let (Some(h), Some(pin)) = (self.shape(holder).cloned(), self.shape(id).cloned()) else {
+            return false;
+        };
         let (cx, cy) = pin.center();
         let (px, py) = (cx.clamp(h.x, h.x + h.w), cy.clamp(h.y, h.y + h.h));
         // On the side the point is nearest.
-        let sides = [(px - h.x, (h.x, py)), (h.x + h.w - px, (h.x + h.w, py)), (py - h.y, (px, h.y)), (h.y + h.h - py, (px, h.y + h.h))];
-        let (x, y) = sides.into_iter().min_by(|a, b| a.0.total_cmp(&b.0)).map_or((px, py), |(_, at)| at);
-        let Some(shape) = self.shape_mut(id) else { return false };
+        let sides = [
+            (px - h.x, (h.x, py)),
+            (h.x + h.w - px, (h.x + h.w, py)),
+            (py - h.y, (px, h.y)),
+            (h.y + h.h - py, (px, h.y + h.h)),
+        ];
+        let (x, y) = sides
+            .into_iter()
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map_or((px, py), |(_, at)| at);
+        let Some(shape) = self.shape_mut(id) else {
+            return false;
+        };
         let (x, y) = (x - shape.w / 2., y - shape.h / 2.);
         let moved = (shape.x, shape.y) != (x, y);
         (shape.x, shape.y) = (x, y);
@@ -133,11 +206,16 @@ impl Diagram {
         let (cx, cy) = shape.center();
         let lines: Vec<&str> = shape.text.split('\n').collect();
         let tall = LINE * lines.len() as f32;
-        let wide = lines.iter().map(|l| Diagram::guess_width(l)).fold(0., f32::max);
+        let wide = lines
+            .iter()
+            .map(|l| Diagram::guess_width(l))
+            .fold(0., f32::max);
         // 0 right, 1 left, 2 above, 3 under: the side of the holder the pin is nearest.
         let side = shape.parent.and_then(|p| self.shape(p)).map_or(3, |h| {
             let near = [h.x + h.w - cx, cx - h.x, cy - h.y, h.y + h.h - cy];
-            (0..4).min_by(|a, b| near[*a].total_cmp(&near[*b])).unwrap_or(3)
+            (0..4)
+                .min_by(|a, b| near[*a].total_cmp(&near[*b]))
+                .unwrap_or(3)
         });
         let (x, y, centered) = match side {
             // Above the line an arrow leaves along, not on it.
@@ -146,12 +224,28 @@ impl Diagram {
             2 => (cx, shape.y - 2. - tall, true),
             _ => (cx, shape.y + shape.h + 4., true),
         };
-        lines.into_iter().enumerate().map(|(index, text)| TextLine { x, y: y + LINE * index as f32, text, centered, bold: false, index }).collect()
+        lines
+            .into_iter()
+            .enumerate()
+            .map(|(index, text)| TextLine {
+                x,
+                y: y + LINE * index as f32,
+                text,
+                centered,
+                bold: false,
+                index,
+            })
+            .collect()
     }
 
     /// Keeps each pin on the border of its holder when that was moved or resized.
     pub fn seat_pins(&mut self) {
-        let pins: Vec<(u32, u32)> = self.shapes.iter().filter(|s| s.form == Form::Pin).filter_map(|s| Some((s.id, s.parent?))).collect();
+        let pins: Vec<(u32, u32)> = self
+            .shapes
+            .iter()
+            .filter(|s| s.form == Form::Pin)
+            .filter_map(|s| Some((s.id, s.parent?)))
+            .collect();
         for (id, holder) in pins {
             self.snap_to(id, holder);
         }
@@ -159,13 +253,28 @@ impl Diagram {
 
     /// Resizes container `id` around what it holds, leaving room for its title.
     pub fn fit(&mut self, id: u32) {
-        let inside: Vec<&Shape> = self.descendants(id).into_iter().filter_map(|d| self.shape(d)).collect();
-        let Some(form) = self.shape(id).map(|s| (s.form, s.text.lines().count().max(1))) else { return };
+        let inside: Vec<&Shape> = self
+            .descendants(id)
+            .into_iter()
+            .filter_map(|d| self.shape(d))
+            .collect();
+        let Some(form) = self
+            .shape(id)
+            .map(|s| (s.form, s.text.lines().count().max(1)))
+        else {
+            return;
+        };
         if inside.is_empty() {
             return;
         }
-        let (x0, y0) = (inside.iter().map(|s| s.x).fold(f32::MAX, f32::min), inside.iter().map(|s| s.y).fold(f32::MAX, f32::min));
-        let (x1, y1) = (inside.iter().map(|s| s.x + s.w).fold(f32::MIN, f32::max), inside.iter().map(|s| s.y + s.h).fold(f32::MIN, f32::max));
+        let (x0, y0) = (
+            inside.iter().map(|s| s.x).fold(f32::MAX, f32::min),
+            inside.iter().map(|s| s.y).fold(f32::MAX, f32::min),
+        );
+        let (x1, y1) = (
+            inside.iter().map(|s| s.x + s.w).fold(f32::MIN, f32::max),
+            inside.iter().map(|s| s.y + s.h).fold(f32::MIN, f32::max),
+        );
         let top = match form.0 {
             Form::Row => 20.,
             Form::Node => DEPTH + 6. + LINE * form.1 as f32 + 12.,
@@ -173,7 +282,13 @@ impl Diagram {
             Form::Lane | Form::Composite => LANE + 16.,
             _ => 6. + LINE * form.1 as f32 + 12.,
         };
-        let grid = |v: f32, up: bool| if up { (v / GRID).ceil() * GRID } else { (v / GRID).floor() * GRID };
+        let grid = |v: f32, up: bool| {
+            if up {
+                (v / GRID).ceil() * GRID
+            } else {
+                (v / GRID).floor() * GRID
+            }
+        };
         // A horizontal swimlane has its header on the left.
         let (side, behind) = match form.0 {
             Form::Row => (ROW + 20., 20.),
@@ -181,7 +296,12 @@ impl Diagram {
             Form::Node => (20., 20. + DEPTH),
             _ => (20., 20.),
         };
-        let (left, above, right, below) = (grid(x0 - side, false), grid(y0 - top, false), grid(x1 + behind, true), grid(y1 + 20., true));
+        let (left, above, right, below) = (
+            grid(x0 - side, false),
+            grid(y0 - top, false),
+            grid(x1 + behind, true),
+            grid(y1 + 20., true),
+        );
         if let Some(shape) = self.shape_mut(id) {
             (shape.x, shape.y, shape.w, shape.h) = (left, above, right - left, below - above);
         }
@@ -223,16 +343,36 @@ mod tests {
         let mut d = Diagram::default();
         let inner = d.add_shape(Form::Rect, 200., 200., 200., 100.);
         let across = d.add_shape(Form::Rect, 700., 100., 200., 100.);
-        let link = d.add_link(End::Point(50., 500.), End::Point(750., 500.), Head::None, Route::Straight);
+        let link = d.add_link(
+            End::Point(50., 500.),
+            End::Point(750., 500.),
+            Head::None,
+            Route::Straight,
+        );
         let frame = d.add_shape(Form::Frame, 0., 0., 800., 600.);
         // Placing it is not enough: what was there before stays loose, and under the frame in the drawing order.
         d.adopt(&[frame]);
-        assert_eq!((d.shape(inner).unwrap().parent, d.shapes.last().unwrap().id), (None, frame));
+        assert_eq!(
+            (d.shape(inner).unwrap().parent, d.shapes.last().unwrap().id),
+            (None, frame)
+        );
         // Drawn around them, it takes in what is wholly inside, and draws it over itself; not what only overlaps it.
         assert!(d.gather(frame));
-        assert_eq!((d.shape(inner).unwrap().parent, d.shape(across).unwrap().parent), (Some(frame), None));
-        assert_eq!(d.shapes.iter().map(|s| s.id).collect::<Vec<_>>(), vec![across, frame, inner]);
-        assert_eq!((d.hit(300., 250., 7.), d.hit(400., 500., 7.)), (Some(inner), Some(link)));
+        assert_eq!(
+            (
+                d.shape(inner).unwrap().parent,
+                d.shape(across).unwrap().parent
+            ),
+            (Some(frame), None)
+        );
+        assert_eq!(
+            d.shapes.iter().map(|s| s.id).collect::<Vec<_>>(),
+            vec![across, frame, inner]
+        );
+        assert_eq!(
+            (d.hit(300., 250., 7.), d.hit(400., 500., 7.)),
+            (Some(inner), Some(link))
+        );
         assert!(!d.gather(frame));
         // Asking it to adopt the inner one gives the same: the one explicit repair there was.
         let mut e = Diagram::default();
@@ -248,16 +388,29 @@ mod tests {
     fn a_frame_drawn_inside_a_package_takes_only_its_neighbours() {
         let mut d = Diagram::default();
         let pack = d.add_shape(Form::Package, 0., 0., 1000., 1000.);
-        let (a, b) = (d.add_shape(Form::Rect, 100., 100., 50., 50.), d.add_shape(Form::Rect, 600., 600., 50., 50.));
+        let (a, b) = (
+            d.add_shape(Form::Rect, 100., 100., 50., 50.),
+            d.add_shape(Form::Rect, 600., 600., 50., 50.),
+        );
         d.adopt(&[a, b]);
         let frame = d.add_shape(Form::Frame, 50., 50., 300., 300.);
         d.adopt(&[frame]);
         assert!(d.gather(frame));
-        assert_eq!((d.shape(frame).unwrap().parent, d.shape(a).unwrap().parent, d.shape(b).unwrap().parent), (Some(pack), Some(frame), Some(pack)));
+        assert_eq!(
+            (
+                d.shape(frame).unwrap().parent,
+                d.shape(a).unwrap().parent,
+                d.shape(b).unwrap().parent
+            ),
+            (Some(pack), Some(frame), Some(pack))
+        );
         // Drawn around the package, a bigger one takes it whole, with what it holds.
         let outer = d.add_shape(Form::Frame, -10., -10., 1100., 1100.);
         assert!(d.gather(outer));
-        assert_eq!((d.shape(pack).unwrap().parent, d.shape(a).unwrap().parent), (Some(outer), Some(frame)));
+        assert_eq!(
+            (d.shape(pack).unwrap().parent, d.shape(a).unwrap().parent),
+            (Some(outer), Some(frame))
+        );
         assert_eq!(d.descendants(outer).len(), 4);
     }
 
@@ -278,7 +431,10 @@ mod tests {
     #[test]
     fn holders_come_first_and_loops_are_refused() {
         let (mut d, [pack, a, b, frame, _]) = sample();
-        assert_eq!((d.children(pack), d.descendants(pack)), (vec![a, b], vec![a, b]));
+        assert_eq!(
+            (d.children(pack), d.descendants(pack)),
+            (vec![a, b], vec![a, b])
+        );
         // A frame inside the package, a class inside the frame: any depth.
         assert!(d.set_parent(frame, Some(pack)) && d.set_parent(a, Some(frame)));
         assert_eq!(d.descendants(pack).len(), 3);
@@ -287,7 +443,12 @@ mod tests {
         let at = |d: &Diagram, id: u32| d.shapes.iter().position(|s| s.id == id).unwrap();
         assert!(at(&d, pack) < at(&d, frame) && at(&d, frame) < at(&d, a));
         // A holder cannot be put in what it holds, nor in itself; the same holder changes nothing.
-        assert!(!d.set_parent(pack, Some(a)) && !d.set_parent(pack, Some(pack)) && !d.set_parent(a, Some(frame)) && !d.set_parent(a, Some(999)));
+        assert!(
+            !d.set_parent(pack, Some(a))
+                && !d.set_parent(pack, Some(pack))
+                && !d.set_parent(a, Some(frame))
+                && !d.set_parent(a, Some(999))
+        );
         assert!(d.set_parent(a, None) && d.shape(a).unwrap().parent.is_none());
         let _ = b;
     }
@@ -295,7 +456,15 @@ mod tests {
     #[test]
     fn follows_the_pointer_and_leaves_where_it_is_dropped() {
         let (mut d, [pack, a, _, frame, note]) = sample();
-        assert_eq!((d.container_at(50., 50., &[]), d.container_at(450., 50., &[]), d.container_at(700., 20., &[]), d.container_at(50., 50., &[pack])), (Some(pack), Some(frame), None, None));
+        assert_eq!(
+            (
+                d.container_at(50., 50., &[]),
+                d.container_at(450., 50., &[]),
+                d.container_at(700., 20., &[]),
+                d.container_at(50., 50., &[pack])
+            ),
+            (Some(pack), Some(frame), None, None)
+        );
         // The note dragged over the frame is adopted; over nothing, it is let go.
         d.shape_mut(note).unwrap().x = 450.;
         assert!(d.adopt(&[note]) && d.shape(note).unwrap().parent == Some(frame));
@@ -320,15 +489,27 @@ mod tests {
     fn copies_and_removes_what_a_holder_holds() {
         let (mut d, [pack, a, b, frame, _]) = sample();
         let inside = d.add_link(End::Shape(a), End::Shape(b), Head::Arrow, Route::Straight);
-        let across = d.add_link(End::Shape(a), End::Shape(frame), Head::Arrow, Route::Straight);
+        let across = d.add_link(
+            End::Shape(a),
+            End::Shape(frame),
+            Head::Arrow,
+            Route::Straight,
+        );
         // Copying the package copies the classes, their arrow, and keeps the nesting; not the arrow that leaves.
         let made = d.duplicate(&[pack], 20.);
         assert_eq!((made.len(), d.shapes.len(), d.links.len()), (4, 8, 3));
         let copy = d.shape(made[0]).unwrap().clone();
         assert_eq!((copy.form, copy.x, copy.parent), (Form::Package, 20., None));
-        assert!(made[1..3].iter().all(|id| d.shape(*id).unwrap().parent == Some(copy.id)));
+        assert!(
+            made[1..3]
+                .iter()
+                .all(|id| d.shape(*id).unwrap().parent == Some(copy.id))
+        );
         let held = d.links.iter().find(|l| l.id == made[3]).unwrap();
-        assert_eq!((held.from, held.to), (End::Shape(made[1]), End::Shape(made[2])));
+        assert_eq!(
+            (held.from, held.to),
+            (End::Shape(made[1]), End::Shape(made[2]))
+        );
         // A held shape copied alone stays in its holder.
         let one = d.duplicate(&[a], 20.);
         assert_eq!(d.shape(one[0]).unwrap().parent, Some(pack));
@@ -358,7 +539,12 @@ mod tests {
     fn a_damaged_file_is_put_in_order() {
         // A held shape before its holder, a holder that is not there, and two that hold each other.
         let mut d = Diagram::default();
-        let (a, b, c, e) = (d.add_shape(Form::Rect, 0., 0., 10., 10.), d.add_shape(Form::Package, 0., 0., 10., 10.), d.add_shape(Form::Frame, 0., 0., 10., 10.), d.add_shape(Form::Frame, 0., 0., 10., 10.));
+        let (a, b, c, e) = (
+            d.add_shape(Form::Rect, 0., 0., 10., 10.),
+            d.add_shape(Form::Package, 0., 0., 10., 10.),
+            d.add_shape(Form::Frame, 0., 0., 10., 10.),
+            d.add_shape(Form::Frame, 0., 0., 10., 10.),
+        );
         d.shape_mut(a).unwrap().parent = Some(b);
         d.shape_mut(b).unwrap().parent = Some(99);
         d.shape_mut(c).unwrap().parent = Some(e);
@@ -386,19 +572,37 @@ mod tests {
         for (x, y) in [(255., 120.), (265., 120.), (260., 120.)] {
             at(&mut d, x, y);
             d.adopt(&[pin]);
-            assert_eq!((d.shape(pin).unwrap().parent, centre(&d)), (Some(action), (260., 120.)), "{x} {y}");
+            assert_eq!(
+                (d.shape(pin).unwrap().parent, centre(&d)),
+                (Some(action), (260., 120.)),
+                "{x} {y}"
+            );
         }
         // The four sides, and a corner (the nearer side, never off the box).
-        for ((x, y), want) in [((180., 98.), (180., 100.)), ((180., 152.), (180., 150.)), ((102., 125.), (100., 125.)), ((100., 100.), (100., 100.)), ((258., 148.), (260., 148.))] {
+        for ((x, y), want) in [
+            ((180., 98.), (180., 100.)),
+            ((180., 152.), (180., 150.)),
+            ((102., 125.), (100., 125.)),
+            ((100., 100.), (100., 100.)),
+            ((258., 148.), (260., 148.)),
+        ] {
             at(&mut d, x, y);
             d.adopt(&[pin]);
-            assert_eq!((d.shape(pin).unwrap().parent, centre(&d)), (Some(action), want), "{x} {y}");
+            assert_eq!(
+                (d.shape(pin).unwrap().parent, centre(&d)),
+                (Some(action), want),
+                "{x} {y}"
+            );
         }
         // Far from every border, inside or outside, it is let go and stays where it is.
         for (x, y) in [(180., 125.), (400., 400.), (180., 60.)] {
             at(&mut d, x, y);
             d.adopt(&[pin]);
-            assert_eq!((d.shape(pin).unwrap().parent, centre(&d)), (None, (x, y)), "{x} {y}");
+            assert_eq!(
+                (d.shape(pin).unwrap().parent, centre(&d)),
+                (None, (x, y)),
+                "{x} {y}"
+            );
         }
         // Held, it follows the action when that is moved or resized, staying on the border.
         at(&mut d, 260., 120.);
@@ -410,7 +614,10 @@ mod tests {
         d.shape_mut(action).unwrap().h = 4.;
         d.seat_pins();
         let c = centre(&d);
-        assert!(c.0 >= 100. && c.0 <= 200. && c.1 >= 100. && c.1 <= 104., "{c:?}");
+        assert!(
+            c.0 >= 100. && c.0 <= 200. && c.1 >= 100. && c.1 <= 104.,
+            "{c:?}"
+        );
         // A shape of no size, and two pins on the same spot, never panic or leave a pin off the box.
         let other = d.add_shape(Form::Pin, 0., 0., PIN, PIN);
         d.shape_mut(action).unwrap().w = 0.;
@@ -421,7 +628,12 @@ mod tests {
         d.adopt(&[other]);
         assert!(d.shape(other).unwrap().center().0.is_finite());
         // Removing the action removes its pins, and the arrows on them.
-        let arrow = d.add_link(End::Shape(pin), End::Shape(other), Head::Arrow, Route::Straight);
+        let arrow = d.add_link(
+            End::Shape(pin),
+            End::Shape(other),
+            Head::Arrow,
+            Route::Straight,
+        );
         d.remove(&[action]);
         assert!(d.shape(pin).is_none() && d.link(arrow).is_none());
     }
@@ -433,7 +645,12 @@ mod tests {
         let pin = d.add_shape(Form::Pin, 0., 0., PIN, PIN);
         d.shape_mut(pin).unwrap().text = "order".into();
         // Right and left: above and beside it, not on the arrow that leaves along its middle; top: above; bottom: under.
-        for ((x, y), side) in [((260., 125.), "right"), ((100., 125.), "left"), ((180., 100.), "top"), ((180., 150.), "bottom")] {
+        for ((x, y), side) in [
+            ((260., 125.), "right"),
+            ((100., 125.), "left"),
+            ((180., 100.), "top"),
+            ((180., 150.), "bottom"),
+        ] {
             let shape = d.shape_mut(pin).unwrap();
             (shape.x, shape.y) = (x - PIN / 2., y - PIN / 2.);
             d.adopt(&[pin]);
@@ -461,14 +678,26 @@ mod tests {
         assert_eq!(d.shape(a).unwrap().parent, Some(row));
         // Its name is in the header, on the left, in the middle of the height; the rest is in the body.
         let (lines, _) = d.lines(d.shape(row).unwrap());
-        assert_eq!((lines[0].centered, lines[0].x, lines[0].y + LINE / 2.), (true, ROW / 2., 60.));
+        assert_eq!(
+            (lines[0].centered, lines[0].x, lines[0].y + LINE / 2.),
+            (true, ROW / 2., 60.)
+        );
         // A name too long for the header starts at its left edge, inside the shape, whatever the text: empty, CJK, a long word.
-        for name in ["", "Département des commandes internationales", &"x".repeat(300), "日本語日本語日本語日本語", "😀"] {
+        for name in [
+            "",
+            "Département des commandes internationales",
+            &"x".repeat(300),
+            "日本語日本語日本語日本語",
+            "😀",
+        ] {
             d.shape_mut(row).unwrap().text = name.to_string();
             let shape = d.shape(row).unwrap();
             let (lines, _) = d.lines(shape);
             let line = &lines[0];
-            assert!(line.x >= shape.x && (line.centered || line.x == shape.x + 6.), "{name:?}: {line:?}");
+            assert!(
+                line.x >= shape.x && (line.centered || line.x == shape.x + 6.),
+                "{name:?}: {line:?}"
+            );
         }
         d.shape_mut(row).unwrap().text = "Customer".into();
         // It fits around what it holds, the header on the left.
@@ -495,8 +724,26 @@ mod tests {
         assert_eq!((n.x, n.y, n.w, n.h), (80., 30., 160., 140.), "{n:?}");
         // A node smaller than its depth, or of no size, still draws: the faces never leave the box.
         for (w, h) in [(0., 0.), (5., 5.), (12., 200.), (200., 12.)] {
-            let shape = Shape { id: 9, form: Form::Node, x: 10., y: 10., w, h, text: String::new(), color: 0, fill: false, dashed: false, parent: None, operand: 0 };
-            let ok = |c: &Cmd| match *c { Cmd::Move(x, y) | Cmd::Line(x, y) => x >= 9.99 && x <= 10.01 + w && y >= 9.99 && y <= 10.01 + h, _ => true };
+            let shape = Shape {
+                id: 9,
+                form: Form::Node,
+                x: 10.,
+                y: 10.,
+                w,
+                h,
+                text: String::new(),
+                color: 0,
+                fill: false,
+                dashed: false,
+                parent: None,
+                operand: 0,
+            };
+            let ok = |c: &Cmd| match *c {
+                Cmd::Move(x, y) | Cmd::Line(x, y) => {
+                    x >= 9.99 && x <= 10.01 + w && y >= 9.99 && y <= 10.01 + h
+                }
+                _ => true,
+            };
             assert!(shape.outline().iter().flatten().all(ok), "{w}x{h}");
         }
     }

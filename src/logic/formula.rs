@@ -42,16 +42,40 @@ impl Error {
     /// The reason, in the language of the interface.
     pub fn reason(&self) -> String {
         match self {
-            Error::Syntax(met) if met.is_empty() => tr("the formula stops too soon", "la formule s'arrête trop tôt").to_string(),
+            Error::Syntax(met) if met.is_empty() => {
+                tr("the formula stops too soon", "la formule s'arrête trop tôt").to_string()
+            }
             Error::Syntax(met) => format!("{} {met}", tr("not understood:", "non compris :")),
-            Error::Unknown(name) => format!("{} {name}", tr("unknown function or name:", "fonction ou nom inconnu :")),
-            Error::Arguments(f) => format!("{} {f}", tr("wrong number of arguments for", "mauvais nombre d'arguments pour")),
-            Error::OutOfTable(r) => format!("{} {r}", tr("reference out of the table:", "référence hors du tableau :")),
-            Error::Cycle => tr("the cell depends on itself", "la cellule dépend d'elle-même").to_string(),
+            Error::Unknown(name) => format!(
+                "{} {name}",
+                tr("unknown function or name:", "fonction ou nom inconnu :")
+            ),
+            Error::Arguments(f) => format!(
+                "{} {f}",
+                tr(
+                    "wrong number of arguments for",
+                    "mauvais nombre d'arguments pour"
+                )
+            ),
+            Error::OutOfTable(r) => format!(
+                "{} {r}",
+                tr("reference out of the table:", "référence hors du tableau :")
+            ),
+            Error::Cycle => tr(
+                "the cell depends on itself",
+                "la cellule dépend d'elle-même",
+            )
+            .to_string(),
             Error::DivideByZero => tr("division by zero", "division par zéro").to_string(),
             Error::NotANumber(t) => format!("{} “{t}”", tr("not a number:", "pas un nombre :")),
-            Error::NoNumbers(f) => format!("{} {f}", tr("no number to work on in", "aucun nombre dans")),
-            Error::Range => tr("a range where one value is expected", "une plage là où une valeur est attendue").to_string(),
+            Error::NoNumbers(f) => {
+                format!("{} {f}", tr("no number to work on in", "aucun nombre dans"))
+            }
+            Error::Range => tr(
+                "a range where one value is expected",
+                "une plage là où une valeur est attendue",
+            )
+            .to_string(),
         }
     }
 }
@@ -59,14 +83,24 @@ impl Error {
 /// A cell is a formula when its text starts with `=` and says something after it. `==` is never a formula:
 /// it opens a highlight (`==text==`).
 pub fn is_formula(cell: &str) -> bool {
-    cell.trim_start().strip_prefix('=').is_some_and(|body| !body.trim().is_empty() && !body.starts_with('='))
+    cell.trim_start()
+        .strip_prefix('=')
+        .is_some_and(|body| !body.trim().is_empty() && !body.starts_with('='))
 }
 
 /// The number a cell's text writes, as a person writes it: `1 234,5`, `1,234.5`, `12.50 €`, `$3`, `15%`
 /// (a hundredth). With a single separator, it is the decimal one (`1,234` is 1.234; write `1 234` or
 /// `1,234.00` for a thousand), as in the sort of a table.
 pub fn read_number(text: &str) -> Option<f64> {
-    let mut s: String = text.chars().filter(|c| !matches!(c, ' ' | '\u{a0}' | '\u{202f}' | '\u{2009}' | '€' | '$' | '£' | '¥')).collect();
+    let mut s: String = text
+        .chars()
+        .filter(|c| {
+            !matches!(
+                c,
+                ' ' | '\u{a0}' | '\u{202f}' | '\u{2009}' | '€' | '$' | '£' | '¥'
+            )
+        })
+        .collect();
     let percent = s.ends_with('%');
     if percent {
         s.pop();
@@ -76,13 +110,21 @@ pub fn read_number(text: &str) -> Option<f64> {
         '+' => (false, &s[1..]),
         _ => (false, s.as_str()),
     };
-    if !digits.chars().any(|c| c.is_ascii_digit()) || !digits.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',') {
+    if !digits.chars().any(|c| c.is_ascii_digit())
+        || !digits
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '.' || c == ',')
+    {
         return None;
     }
     let (dots, commas) = (digits.matches('.').count(), digits.matches(',').count());
     // The last separator of two kinds is the decimal one; a single one is; a repeated one groups thousands.
     let decimal = match (dots, commas) {
-        (d, c) if d > 0 && c > 0 => Some(if digits.rfind('.') > digits.rfind(',') { '.' } else { ',' }),
+        (d, c) if d > 0 && c > 0 => Some(if digits.rfind('.') > digits.rfind(',') {
+            '.'
+        } else {
+            ','
+        }),
         (1, 0) => Some('.'),
         (0, 1) => Some(','),
         _ => None,
@@ -94,7 +136,10 @@ pub fn read_number(text: &str) -> Option<f64> {
     // Groups of three digits after the first, all with the same separator.
     if let Some(group) = int.chars().find(|c| matches!(c, '.' | ',')) {
         let parts: Vec<&str> = int.split(group).collect();
-        let ok = (1..=3).contains(&parts[0].len()) && parts[1..].iter().all(|p| p.len() == 3 && p.bytes().all(|b| b.is_ascii_digit()));
+        let ok = (1..=3).contains(&parts[0].len())
+            && parts[1..]
+                .iter()
+                .all(|p| p.len() == 3 && p.bytes().all(|b| b.is_ascii_digit()));
         if !ok || parts[0].bytes().any(|b| !b.is_ascii_digit()) {
             return None;
         }
@@ -168,7 +213,10 @@ fn tokens(body: &str) -> Result<Vec<Tok>, Error> {
                 toks.push(Tok::Word(chars[start..i].iter().collect()));
             }
             '"' => {
-                let end = chars[i + 1..].iter().position(|&x| x == '"').ok_or_else(|| Error::Syntax("\"".into()))?;
+                let end = chars[i + 1..]
+                    .iter()
+                    .position(|&x| x == '"')
+                    .ok_or_else(|| Error::Syntax("\"".into()))?;
                 toks.push(Tok::Str(chars[i + 1..i + 1 + end].iter().collect()));
                 i += end + 2;
             }
@@ -238,14 +286,27 @@ enum Expr {
 /// Column `A`, `Z`, `AA`… of a word of one to three letters.
 fn column_of(word: &str) -> Option<usize> {
     (1..=3).contains(&word.len()).then_some(())?;
-    word.bytes().try_fold(0usize, |n, b| b.is_ascii_alphabetic().then(|| n * 26 + (b.to_ascii_uppercase() - b'A') as usize + 1)).map(|n| n - 1)
+    word.bytes()
+        .try_fold(0usize, |n, b| {
+            b.is_ascii_alphabetic()
+                .then(|| n * 26 + (b.to_ascii_uppercase() - b'A') as usize + 1)
+        })
+        .map(|n| n - 1)
 }
 
 /// `C2`: a column and a row number.
 fn cell_of(word: &str) -> Option<Ref> {
     let split = word.find(|c: char| c.is_ascii_digit())?;
     let (letters, digits) = word.split_at(split);
-    Some(Ref { col: column_of(letters)?, row: Some(digits.parse().ok().filter(|_| digits.bytes().all(|b| b.is_ascii_digit()))?) })
+    Some(Ref {
+        col: column_of(letters)?,
+        row: Some(
+            digits
+                .parse()
+                .ok()
+                .filter(|_| digits.bytes().all(|b| b.is_ascii_digit()))?,
+        ),
+    })
 }
 
 struct Parser {
@@ -311,14 +372,21 @@ impl Parser {
             return self.unary();
         }
         let base = self.postfix()?;
-        Ok(if self.eat('^') { Expr::Bin('^', Box::new(base), Box::new(self.unary()?)) } else { base })
+        Ok(if self.eat('^') {
+            Expr::Bin('^', Box::new(base), Box::new(self.unary()?))
+        } else {
+            base
+        })
     }
 
     /// `15%` is a hundredth; a `%` followed by an operand is the remainder (`7 % 3`).
     fn postfix(&mut self) -> Result<Expr, Error> {
         let mut expr = self.primary()?;
         while self.peek() == Some(&Tok::Op('%')) {
-            let operand = matches!(self.toks.get(self.at + 1), Some(Tok::Num(_) | Tok::Word(_) | Tok::Str(_) | Tok::Op('(' | '-' | '+')));
+            let operand = matches!(
+                self.toks.get(self.at + 1),
+                Some(Tok::Num(_) | Tok::Word(_) | Tok::Str(_) | Tok::Op('(' | '-' | '+'))
+            );
             if operand {
                 break;
             }
@@ -329,14 +397,18 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, Error> {
-        let Some(tok) = self.peek().cloned() else { return Err(Error::Syntax(self.met())) };
+        let Some(tok) = self.peek().cloned() else {
+            return Err(Error::Syntax(self.met()));
+        };
         self.at += 1;
         match tok {
             Tok::Num(n) => Ok(Expr::Num(n)),
             Tok::Str(s) => Ok(Expr::Str(s)),
             Tok::Op('(') => {
                 let inner = self.compare()?;
-                self.eat(')').then_some(inner).ok_or_else(|| Error::Syntax(self.met()))
+                self.eat(')')
+                    .then_some(inner)
+                    .ok_or_else(|| Error::Syntax(self.met()))
             }
             Tok::Word(word) => {
                 let lower = word.to_lowercase();
@@ -364,14 +436,20 @@ impl Parser {
                 if let Some(named) = named {
                     return Ok(Expr::Named(named));
                 }
-                let first = cell_of(&lower).or_else(|| column_of(&lower).map(|col| Ref { col, row: None })).ok_or(Error::Unknown(word))?;
+                let first = cell_of(&lower)
+                    .or_else(|| column_of(&lower).map(|col| Ref { col, row: None }))
+                    .ok_or(Error::Unknown(word))?;
                 if !self.eat(':') {
                     return Ok(Expr::Cell(first));
                 }
                 match self.peek().cloned() {
                     Some(Tok::Word(end)) => {
                         self.at += 1;
-                        let last = cell_of(&end.to_lowercase()).or_else(|| column_of(&end.to_lowercase()).map(|col| Ref { col, row: None })).ok_or(Error::Unknown(end))?;
+                        let last = cell_of(&end.to_lowercase())
+                            .or_else(|| {
+                                column_of(&end.to_lowercase()).map(|col| Ref { col, row: None })
+                            })
+                            .ok_or(Error::Unknown(end))?;
                         Ok(Expr::Between(first, last))
                     }
                     _ => Err(Error::Syntax(self.met())),
@@ -387,7 +465,10 @@ impl Parser {
 
 fn parse(formula: &str) -> Result<Expr, Error> {
     let body = formula.trim_start().strip_prefix('=').unwrap_or(formula);
-    let mut parser = Parser { toks: tokens(body)?, at: 0 };
+    let mut parser = Parser {
+        toks: tokens(body)?,
+        at: 0,
+    };
     let expr = parser.compare()?;
     if parser.at < parser.toks.len() {
         return Err(Error::Syntax(parser.met()));
@@ -435,7 +516,12 @@ impl Sheet<'_> {
 
     /// What cell (`r`, `c`) holds: its number, its text, or its formula's result.
     fn held(&mut self, r: usize, c: usize) -> Result<Held, Error> {
-        let text = self.rows.get(r).and_then(|row| row.get(c)).map(String::as_str).unwrap_or_default();
+        let text = self
+            .rows
+            .get(r)
+            .and_then(|row| row.get(c))
+            .map(String::as_str)
+            .unwrap_or_default();
         if is_formula(text) {
             return match self.formula(r, c)? {
                 Value::Num(n) => Ok(Held::Num(n)),
@@ -443,7 +529,12 @@ impl Sheet<'_> {
                 Value::Text(t) => Ok(Held::Text(t)),
             };
         }
-        if let Some(known) = self.plain.get(r).and_then(|row| row.get(c)).and_then(Option::as_ref) {
+        if let Some(known) = self
+            .plain
+            .get(r)
+            .and_then(|row| row.get(c))
+            .and_then(Option::as_ref)
+        {
             return Ok(known.clone());
         }
         let held = match (text.trim(), read_number(text)) {
@@ -468,12 +559,14 @@ impl Sheet<'_> {
             }
             State::Todo => {}
         }
-        let outcome = parse(&self.rows[r][c]).and_then(|expr| self.eval(&expr, (r, c))).and_then(|item| match self.one(item)? {
-            Held::Num(n) if n.is_finite() => Ok(Value::Num(n)),
-            Held::Num(_) => Err(Error::DivideByZero),
-            Held::Text(t) => Ok(Value::Text(t)),
-            Held::Empty => Ok(Value::Num(0.)),
-        });
+        let outcome = parse(&self.rows[r][c])
+            .and_then(|expr| self.eval(&expr, (r, c)))
+            .and_then(|item| match self.one(item)? {
+                Held::Num(n) if n.is_finite() => Ok(Value::Num(n)),
+                Held::Num(_) => Err(Error::DivideByZero),
+                Held::Text(t) => Ok(Value::Text(t)),
+                Held::Empty => Ok(Value::Num(0.)),
+            });
         self.state[r][c] = State::Done(outcome.clone());
         outcome
     }
@@ -481,14 +574,22 @@ impl Sheet<'_> {
     fn at(&self, reference: Ref, here: (usize, usize)) -> Result<(usize, usize), Error> {
         let (r, c) = (reference.row.unwrap_or(here.0), reference.col);
         if r >= self.rows.len() || c >= self.width() {
-            let name = format!("{}{}", crate::logic::markdown::column_letters(c), reference.row.map_or(String::new(), |n| n.to_string()));
+            let name = format!(
+                "{}{}",
+                crate::logic::markdown::column_letters(c),
+                reference.row.map_or(String::new(), |n| n.to_string())
+            );
             return Err(Error::OutOfTable(name));
         }
         Ok((r, c))
     }
 
     fn range(&mut self, cells: Vec<(usize, usize)>) -> Result<Item, Error> {
-        cells.into_iter().map(|(r, c)| self.held(r, c)).collect::<Result<Vec<_>, _>>().map(Item::Many)
+        cells
+            .into_iter()
+            .map(|(r, c)| self.held(r, c))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Item::Many)
     }
 
     fn eval(&mut self, expr: &Expr, here: (usize, usize)) -> Result<Item, Error> {
@@ -502,14 +603,19 @@ impl Sheet<'_> {
             }
             Expr::Between(a, b) => {
                 let (a, b) = (self.at(*a, here)?, self.at(*b, here)?);
-                let cells = (a.0.min(b.0)..=a.0.max(b.0)).flat_map(|r| (a.1.min(b.1)..=a.1.max(b.1)).map(move |c| (r, c))).collect();
+                let cells = (a.0.min(b.0)..=a.0.max(b.0))
+                    .flat_map(|r| (a.1.min(b.1)..=a.1.max(b.1)).map(move |c| (r, c)))
+                    .collect();
                 self.range(cells)?
             }
             Expr::Named(named) => {
                 let cells = match named {
                     Named::Above => (1..r).map(|r| (r, c)).collect(),
                     Named::Left => (0..c).map(|c| (r, c)).collect(),
-                    Named::Column => (1..self.rows.len()).filter(|&row| row != r).map(|r| (r, c)).collect(),
+                    Named::Column => (1..self.rows.len())
+                        .filter(|&row| row != r)
+                        .map(|r| (r, c))
+                        .collect(),
                 };
                 self.range(cells)?
             }
@@ -590,14 +696,24 @@ impl Sheet<'_> {
                 Item::One(Held::Num(n)) => found.push(n),
                 Item::One(Held::Empty) => {}
                 Item::One(Held::Text(t)) => return Err(Error::NotANumber(t)),
-                Item::Many(cells) => found.extend(cells.into_iter().filter_map(|h| if let Held::Num(n) = h { Some(n) } else { None })),
+                Item::Many(cells) => found.extend(
+                    cells
+                        .into_iter()
+                        .filter_map(|h| if let Held::Num(n) = h { Some(n) } else { None }),
+                ),
             }
         }
         Ok(found)
     }
 
     fn call(&mut self, name: &str, args: &[Expr], here: (usize, usize)) -> Result<Item, Error> {
-        let arity = |ok: bool| if ok { Ok(()) } else { Err(Error::Arguments(name.to_string())) };
+        let arity = |ok: bool| {
+            if ok {
+                Ok(())
+            } else {
+                Err(Error::Arguments(name.to_string()))
+            }
+        };
         let num = |n: f64| Ok(Item::One(Held::Num(n)));
         match name {
             "sum" => num(self.numbers(args, here)?.iter().sum()),
@@ -661,23 +777,46 @@ pub fn any(rows: &[Vec<String>]) -> bool {
 /// The result of each formula of a table (`rows`: the header, then the body, without the dash line),
 /// `None` for the cells that are not one.
 pub fn evaluate(rows: &[Vec<String>]) -> Vec<Vec<Option<Outcome>>> {
-    let mut sheet = Sheet { rows, state: rows.iter().map(|row| row.iter().map(|_| State::Todo).collect()).collect(), plain: rows.iter().map(|row| vec![None; row.len()]).collect() };
-    (0..rows.len()).map(|r| (0..rows[r].len()).map(|c| is_formula(&rows[r][c]).then(|| sheet.formula(r, c))).collect()).collect()
+    let mut sheet = Sheet {
+        rows,
+        state: rows
+            .iter()
+            .map(|row| row.iter().map(|_| State::Todo).collect())
+            .collect(),
+        plain: rows.iter().map(|row| vec![None; row.len()]).collect(),
+    };
+    (0..rows.len())
+        .map(|r| {
+            (0..rows[r].len())
+                .map(|c| is_formula(&rows[r][c]).then(|| sheet.formula(r, c)))
+                .collect()
+        })
+        .collect()
 }
 
 /// What each cell of a table shows, as text for a spreadsheet: a formula gives its result (`#ERR` if it has none),
 /// the others their text with `\|` written `|`. `rows`: the header, then the body, without the dash line.
 pub fn display(rows: &[Vec<String>], decimal: char) -> Vec<Vec<String>> {
-    let results = if any(rows) { evaluate(rows) } else { Vec::new() };
+    let results = if any(rows) {
+        evaluate(rows)
+    } else {
+        Vec::new()
+    };
     rows.iter()
         .enumerate()
         .map(|(r, row)| {
             row.iter()
                 .enumerate()
-                .map(|(c, text)| match results.get(r).and_then(|row| row.get(c)).and_then(Option::as_ref) {
-                    Some(Ok(value)) => show(value, decimal),
-                    Some(Err(_)) => "#ERR".to_string(),
-                    None => text.replace("\\|", "|"),
+                .map(|(c, text)| {
+                    match results
+                        .get(r)
+                        .and_then(|row| row.get(c))
+                        .and_then(Option::as_ref)
+                    {
+                        Some(Ok(value)) => show(value, decimal),
+                        Some(Err(_)) => "#ERR".to_string(),
+                        None => text.replace("\\|", "|"),
+                    }
                 })
                 .collect()
         })
@@ -689,14 +828,22 @@ mod tests {
     use super::*;
 
     fn grid(rows: &[&[&str]]) -> Vec<Vec<String>> {
-        rows.iter().map(|r| r.iter().map(|c| c.to_string()).collect()).collect()
+        rows.iter()
+            .map(|r| r.iter().map(|c| c.to_string()).collect())
+            .collect()
     }
 
     /// The result of the formula in the last cell of the last row, shown with a point.
     fn calc(rows: &[&[&str]]) -> String {
         let rows = grid(rows);
         let results = evaluate(&rows);
-        match results.last().and_then(|r| r.last()).cloned().flatten().expect("a formula") {
+        match results
+            .last()
+            .and_then(|r| r.last())
+            .cloned()
+            .flatten()
+            .expect("a formula")
+        {
             Ok(v) => show(&v, '.'),
             Err(e) => format!("#ERR {e:?}"),
         }
@@ -708,7 +855,21 @@ mod tests {
 
     #[test]
     fn a_highlight_is_not_a_formula() {
-        for text in ["==faux==", "==a== b", "== a ==", "==", "===", "==faux", " ==x==", "<mark class=\"yellow\">x</mark>", "{==commentaire==}{>>note<<}", "abc==", "a == b", "", "="] {
+        for text in [
+            "==faux==",
+            "==a== b",
+            "== a ==",
+            "==",
+            "===",
+            "==faux",
+            " ==x==",
+            "<mark class=\"yellow\">x</mark>",
+            "{==commentaire==}{>>note<<}",
+            "abc==",
+            "a == b",
+            "",
+            "=",
+        ] {
             assert!(!is_formula(text), "{text:?}");
         }
         for text in ["=A1", " =1+2", "= =1", "=sum(above)", "=1==1"] {
@@ -726,13 +887,45 @@ mod tests {
     #[test]
     fn reads_numbers_as_people_write_them() {
         for (text, want) in [
-            ("12", 12.), ("-3", -3.), ("+3", 3.), ("−3", -3.), ("2,5", 2.5), ("2.5", 2.5), ("1 234,5", 1234.5), ("1\u{a0}234,5", 1234.5), ("1,234.5", 1234.5),
-            ("1.234,5", 1234.5), ("1,234,567", 1234567.), ("1.234.567", 1234567.), ("12.50 €", 12.5), ("€12", 12.), ("$3", 3.), ("$1,234.50", 1234.5), ("15%", 0.15),
-            ("-12,5 %", -0.125), (" 7 ", 7.), (".5", 0.5), ("0", 0.),
+            ("12", 12.),
+            ("-3", -3.),
+            ("+3", 3.),
+            ("−3", -3.),
+            ("2,5", 2.5),
+            ("2.5", 2.5),
+            ("1 234,5", 1234.5),
+            ("1\u{a0}234,5", 1234.5),
+            ("1,234.5", 1234.5),
+            ("1.234,5", 1234.5),
+            ("1,234,567", 1234567.),
+            ("1.234.567", 1234567.),
+            ("12.50 €", 12.5),
+            ("€12", 12.),
+            ("$3", 3.),
+            ("$1,234.50", 1234.5),
+            ("15%", 0.15),
+            ("-12,5 %", -0.125),
+            (" 7 ", 7.),
+            (".5", 0.5),
+            ("0", 0.),
         ] {
             assert_eq!(read_number(text), Some(want), "{text:?}");
         }
-        for text in ["", " ", "abc", "12 kg", "1e5", "--1", "1.2.3,4", "€", "%", "2025-01-01", "1,2,3.4.5", "**5**", "٣"] {
+        for text in [
+            "",
+            " ",
+            "abc",
+            "12 kg",
+            "1e5",
+            "--1",
+            "1.2.3,4",
+            "€",
+            "%",
+            "2025-01-01",
+            "1,2,3.4.5",
+            "**5**",
+            "٣",
+        ] {
             assert_eq!(read_number(text), None, "{text:?}");
         }
     }
@@ -740,9 +933,23 @@ mod tests {
     #[test]
     fn computes_arithmetic() {
         for (formula, want) in [
-            ("=1+2*3", "7"), ("=(1+2)*3", "9"), ("=2^3^2", "512"), ("=-2^2", "-4"), ("=2^-1", "0.5"), ("=10/4", "2.5"), ("=7%3", "1"), ("=7 % 3", "1"),
-            ("=50%", "0.5"), ("=200*15%", "30"), ("=(1+1)%", "0.02"), ("=0.1+0.2", "0.3"), ("=1/3", "0.333333333"), ("=-(-3)", "3"), ("= 4 ", "4"),
-            ("=.5+.5", "1"), ("=1e", "#ERR Syntax(\"e\")"),
+            ("=1+2*3", "7"),
+            ("=(1+2)*3", "9"),
+            ("=2^3^2", "512"),
+            ("=-2^2", "-4"),
+            ("=2^-1", "0.5"),
+            ("=10/4", "2.5"),
+            ("=7%3", "1"),
+            ("=7 % 3", "1"),
+            ("=50%", "0.5"),
+            ("=200*15%", "30"),
+            ("=(1+1)%", "0.02"),
+            ("=0.1+0.2", "0.3"),
+            ("=1/3", "0.333333333"),
+            ("=-(-3)", "3"),
+            ("= 4 ", "4"),
+            ("=.5+.5", "1"),
+            ("=1e", "#ERR Syntax(\"e\")"),
         ] {
             assert_eq!(one(formula), want, "{formula}");
         }
@@ -753,13 +960,44 @@ mod tests {
 
     #[test]
     fn computes_with_references() {
-        let t = |f: &str| calc(&[&["Item", "Qty", "Price", "Total"], &["Coffee", "3", "2,5", "1,5"], &["Cake", "2", "4 €", f]]);
+        let t = |f: &str| {
+            calc(&[
+                &["Item", "Qty", "Price", "Total"],
+                &["Coffee", "3", "2,5", "1,5"],
+                &["Cake", "2", "4 €", f],
+            ])
+        };
         for (formula, want) in [
-            ("=B*C", "8"), ("=b*c", "8"), ("=B1*C1", "7.5"), ("=B1*C2+B2", "14"), ("=sum(B1:B2)", "5"), ("=sum(B:B)", "2"), ("=sum(C1:C2)", "6.5"),
-            ("=SUM(B1:B2; C1)", "7.5"), ("=sum(above)", "1.5"), ("=left", "#ERR Range"), ("=sum(left)", "6"), ("=count(left)", "2"), ("=sum(column)", "1.5"),
-            ("=avg(B1:B2)", "2.5"), ("=average(B1:B2)", "2.5"), ("=min(B1:C2)", "2"), ("=max(B1:C2)", "4"), ("=round(C1/3, 2)", "0.83"), ("=round(1234.5, -2)", "1200"),
-            ("=round(2.5)", "3"), ("=abs(-4)", "4"), ("=if(B>1, 10, 20)", "10"), ("=if(B>2, 10, 20)", "20"), ("=if(B>2, 10)", "0"), ("=if(A=\"cake\", 1, 2)", "1"),
-            ("=if(A<>\"Cake\", 1, 2)", "2"), ("=B1:B1", "3"), ("=C1:B1", "#ERR Range"), ("=B0", "Qty"), ("=sum(B0:B2)", "5"),
+            ("=B*C", "8"),
+            ("=b*c", "8"),
+            ("=B1*C1", "7.5"),
+            ("=B1*C2+B2", "14"),
+            ("=sum(B1:B2)", "5"),
+            ("=sum(B:B)", "2"),
+            ("=sum(C1:C2)", "6.5"),
+            ("=SUM(B1:B2; C1)", "7.5"),
+            ("=sum(above)", "1.5"),
+            ("=left", "#ERR Range"),
+            ("=sum(left)", "6"),
+            ("=count(left)", "2"),
+            ("=sum(column)", "1.5"),
+            ("=avg(B1:B2)", "2.5"),
+            ("=average(B1:B2)", "2.5"),
+            ("=min(B1:C2)", "2"),
+            ("=max(B1:C2)", "4"),
+            ("=round(C1/3, 2)", "0.83"),
+            ("=round(1234.5, -2)", "1200"),
+            ("=round(2.5)", "3"),
+            ("=abs(-4)", "4"),
+            ("=if(B>1, 10, 20)", "10"),
+            ("=if(B>2, 10, 20)", "20"),
+            ("=if(B>2, 10)", "0"),
+            ("=if(A=\"cake\", 1, 2)", "1"),
+            ("=if(A<>\"Cake\", 1, 2)", "2"),
+            ("=B1:B1", "3"),
+            ("=C1:B1", "#ERR Range"),
+            ("=B0", "Qty"),
+            ("=sum(B0:B2)", "5"),
         ] {
             assert_eq!(t(formula), want, "{formula}");
         }
@@ -769,24 +1007,59 @@ mod tests {
     fn says_what_went_wrong() {
         let t = |f: &str| calc(&[&["a", "b"], &["1", "text"], &["2", f]]);
         for (formula, want) in [
-            ("=foo(1)", "#ERR Unknown(\"foo\")"), ("=total", "#ERR Unknown(\"total\")"), ("=A9", "#ERR OutOfTable(\"A9\")"), ("=Z1", "#ERR OutOfTable(\"Z1\")"),
-            ("=A1:A9", "#ERR OutOfTable(\"A9\")"), ("=B1+1", "#ERR NotANumber(\"text\")"), ("=sum(B1)", "#ERR NotANumber(\"text\")"), ("=sum(B1:B2)", "#ERR Cycle"),
-            ("=B2", "#ERR Cycle"), ("=avg(\"\")", "#ERR NotANumber(\"\")"), ("=min(B1:B1)", "#ERR NoNumbers(\"min\")"), ("=round()", "#ERR Arguments(\"round\")"),
-            ("=1+", "#ERR Syntax(\"\")"), ("=(1", "#ERR Syntax(\"\")"), ("=1 2", "#ERR Syntax(\"2\")"), ("=1 # 2", "#ERR Syntax(\"#\")"),
-            ("=\"a", "#ERR Syntax(\"\\\"\")"), ("=sum(1 2)", "#ERR Syntax(\"2\")"), ("=if(1)", "#ERR Arguments(\"if\")"), ("=)", "#ERR Syntax(\")\")"),
+            ("=foo(1)", "#ERR Unknown(\"foo\")"),
+            ("=total", "#ERR Unknown(\"total\")"),
+            ("=A9", "#ERR OutOfTable(\"A9\")"),
+            ("=Z1", "#ERR OutOfTable(\"Z1\")"),
+            ("=A1:A9", "#ERR OutOfTable(\"A9\")"),
+            ("=B1+1", "#ERR NotANumber(\"text\")"),
+            ("=sum(B1)", "#ERR NotANumber(\"text\")"),
+            ("=sum(B1:B2)", "#ERR Cycle"),
+            ("=B2", "#ERR Cycle"),
+            ("=avg(\"\")", "#ERR NotANumber(\"\")"),
+            ("=min(B1:B1)", "#ERR NoNumbers(\"min\")"),
+            ("=round()", "#ERR Arguments(\"round\")"),
+            ("=1+", "#ERR Syntax(\"\")"),
+            ("=(1", "#ERR Syntax(\"\")"),
+            ("=1 2", "#ERR Syntax(\"2\")"),
+            ("=1 # 2", "#ERR Syntax(\"#\")"),
+            ("=\"a", "#ERR Syntax(\"\\\"\")"),
+            ("=sum(1 2)", "#ERR Syntax(\"2\")"),
+            ("=if(1)", "#ERR Arguments(\"if\")"),
+            ("=)", "#ERR Syntax(\")\")"),
         ] {
             assert_eq!(t(formula), want, "{formula}");
         }
-        for e in [Error::Cycle, Error::Range, Error::Unknown("x".into()), Error::NotANumber("t".into())] {
+        for e in [
+            Error::Cycle,
+            Error::Range,
+            Error::Unknown("x".into()),
+            Error::NotANumber("t".into()),
+        ] {
             assert!(!e.reason().is_empty());
         }
     }
 
     #[test]
     fn follows_formulas_and_stops_at_cycles() {
-        let rows = grid(&[&["a", "b", "c"], &["=B+1", "=C+1", "1"], &["=B2", "=A2", "=A3"], &["=sum(above)", "=column", "=if(1, 5, B3)"]]);
+        let rows = grid(&[
+            &["a", "b", "c"],
+            &["=B+1", "=C+1", "1"],
+            &["=B2", "=A2", "=A3"],
+            &["=sum(above)", "=column", "=if(1, 5, B3)"],
+        ]);
         let out = evaluate(&rows);
-        let show_all = |r: usize| out[r].iter().map(|o| o.as_ref().map_or("-".to_string(), |o| o.as_ref().map_or("#".to_string(), |v| show(v, '.')))).collect::<Vec<_>>().join(" ");
+        let show_all = |r: usize| {
+            out[r]
+                .iter()
+                .map(|o| {
+                    o.as_ref().map_or("-".to_string(), |o| {
+                        o.as_ref().map_or("#".to_string(), |v| show(v, '.'))
+                    })
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
         assert_eq!(show_all(0), "- - -");
         assert_eq!(show_all(1), "3 2 -");
         // A1 = B1+1, B1 = C1+1: no cycle; A2 = B2 = A2 is one, and so is C2.
@@ -809,25 +1082,76 @@ mod tests {
 
     #[test]
     fn displays_a_table_for_a_spreadsheet() {
-        let rows = grid(&[&["a", "b|c", "d"], &["x\\|y", "=A+1", "=1/0"], &["2,5", "=C*2", "=1,5"]]);
+        let rows = grid(&[
+            &["a", "b|c", "d"],
+            &["x\\|y", "=A+1", "=1/0"],
+            &["2,5", "=C*2", "=1,5"],
+        ]);
         let shown = display(&rows, ',');
         assert_eq!(shown[0], ["a", "b|c", "d"]);
         assert_eq!(shown[1], ["x|y", "#ERR", "#ERR"]);
         assert_eq!(shown[2], ["2,5", "#ERR", "#ERR"]);
-        assert_eq!(display(&grid(&[&["a"], &["=1.5+1"]]), ','), [["a"], ["2,5"]]);
+        assert_eq!(
+            display(&grid(&[&["a"], &["=1.5+1"]]), ','),
+            [["a"], ["2,5"]]
+        );
         assert_eq!(display(&grid(&[&["a", "b"]]), '.'), [["a", "b"]]);
     }
 
     #[test]
     fn shows_numbers() {
         let s = |x: f64, d: char| show(&Value::Num(x), d);
-        assert_eq!((s(7.5, '.'), s(7.5, ','), s(-0.0, '.'), s(1e-12, '.'), s(2., '.'), s(1234567.891, ','), s(0.1 + 0.2, '.')), ("7.5".into(), "7,5".into(), "0".into(), "0".into(), "2".into(), "1234567,891".into(), "0.3".into()));
-        assert_eq!((s(1e20, '.'), s(f64::NAN, '.'), s(-1e-9, '.'), s(123456789012345., '.')), ("1e20".into(), "#ERR".into(), "-0.000000001".into(), "123456789012345".into()));
+        assert_eq!(
+            (
+                s(7.5, '.'),
+                s(7.5, ','),
+                s(-0.0, '.'),
+                s(1e-12, '.'),
+                s(2., '.'),
+                s(1234567.891, ','),
+                s(0.1 + 0.2, '.')
+            ),
+            (
+                "7.5".into(),
+                "7,5".into(),
+                "0".into(),
+                "0".into(),
+                "2".into(),
+                "1234567,891".into(),
+                "0.3".into()
+            )
+        );
+        assert_eq!(
+            (
+                s(1e20, '.'),
+                s(f64::NAN, '.'),
+                s(-1e-9, '.'),
+                s(123456789012345., '.')
+            ),
+            (
+                "1e20".into(),
+                "#ERR".into(),
+                "-0.000000001".into(),
+                "123456789012345".into()
+            )
+        );
     }
 
     #[test]
     fn a_very_wide_or_long_table_does_not_panic() {
-        let big: Vec<Vec<String>> = (0..300).map(|r| (0..40).map(|c| if r > 0 && c == 0 { format!("=sum(above)+{r}") } else { (r * c).to_string() }).collect()).collect();
+        let big: Vec<Vec<String>> = (0..300)
+            .map(|r| {
+                (0..40)
+                    .map(|c| {
+                        if r > 0 && c == 0 {
+                            format!("=sum(above)+{r}")
+                        } else {
+                            (r * c).to_string()
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
         let out = evaluate(&big);
         assert!(matches!(out[299][0], Some(Ok(_))));
         assert_eq!(column_of("A"), Some(0));

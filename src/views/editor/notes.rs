@@ -32,7 +32,11 @@ impl Editor {
             return marks.clone();
         }
         let commented = self.content.contains("{>>") || self.content.contains("{==");
-        let marks: HashMap<usize, Notes> = starts.iter().filter(|_| commented).map(|&start| (start, self.table_notes(start))).collect();
+        let marks: HashMap<usize, Notes> = starts
+            .iter()
+            .filter(|_| commented)
+            .map(|&start| (start, self.table_notes(start)))
+            .collect();
         let marks = Rc::new(marks);
         self.marks = Some((key, marks.clone()));
         marks
@@ -41,7 +45,9 @@ impl Editor {
     /// The commented parts of the table starting at `start`: the cells whose whole text is a
     /// comment, and the rows, columns or table named by a comment line under it.
     pub(super) fn table_notes(&self, start: usize) -> Notes {
-        let Some((range, rows, _)) = self.table_at(start) else { return Notes::default() };
+        let Some((range, rows, _)) = self.table_at(start) else {
+            return Notes::default();
+        };
         let (names, cols) = md::scopes(&rows);
         let cursor = self.sel.start;
         let mut notes = Notes::default();
@@ -53,7 +59,10 @@ impl Editor {
         };
         for lr in self.comment_lines_after(range.end) {
             let body = self.content[lr.clone()].trim().trim_start_matches("{>>");
-            let named = |list: &[String]| list.iter().position(|name| body.starts_with(&format!("{name}: ")));
+            let named = |list: &[String]| {
+                list.iter()
+                    .position(|name| body.starts_with(&format!("{name}: ")))
+            };
             if body.starts_with("Table: ") {
                 note(Target::Table, &lr);
             } else if let Some(v) = named(&names) {
@@ -67,8 +76,13 @@ impl Editor {
             if l != 1 {
                 for (c, cell) in md::cells(line).into_iter().enumerate() {
                     let text = &line[cell.clone()];
-                    if md::comments(text).first().is_some_and(|(whole, ..)| *whole == (0..text.len()) && text.starts_with("{==")) {
-                        note(Target::Cell(l.saturating_sub(1), c), &(at + cell.start..at + cell.end));
+                    if md::comments(text).first().is_some_and(|(whole, ..)| {
+                        *whole == (0..text.len()) && text.starts_with("{==")
+                    }) {
+                        note(
+                            Target::Cell(l.saturating_sub(1), c),
+                            &(at + cell.start..at + cell.end),
+                        );
                     }
                 }
             }
@@ -81,6 +95,9 @@ impl Editor {
     #[cfg(test)]
     pub fn first_notes(&mut self) -> Notes {
         let starts: Vec<usize> = self.geos.iter().map(|g| g.start).collect();
-        self.note_marks(&starts).get(&starts[0]).cloned().unwrap_or_default()
+        self.note_marks(&starts)
+            .get(&starts[0])
+            .cloned()
+            .unwrap_or_default()
     }
 }

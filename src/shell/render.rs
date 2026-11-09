@@ -4,7 +4,11 @@ use super::*;
 
 /// The number in the comments badge: "9+" beyond nine, so that it stays round.
 pub(super) fn badge_label(count: usize) -> String {
-    if count > 9 { "9+".into() } else { count.to_string() }
+    if count > 9 {
+        "9+".into()
+    } else {
+        count.to_string()
+    }
 }
 
 /// Transparent margin around the window when the app draws its decorations.
@@ -13,6 +17,10 @@ pub(super) const SHADOW: Pixels = px(10.);
 /// `PILL_ROOM` adds its margin to the window's edge and some air: what every top row leaves free under it.
 const PILL_W: f32 = 106.;
 pub(super) const PILL_ROOM: f32 = 124.;
+/// Room the native traffic lights float over at the window's top left: what the welcome page
+/// and a pane's top strip leave free on that side when the system draws the bar, at scale 1
+/// (mirrors `PILL_ROOM` on the right under the drawn bar).
+const TRAFFIC_ROOM: f32 = 78.;
 /// Height of the top row of the window (the window buttons' row): the strip of a pane without a tab bar that moves the window.
 const STRIP: f32 = 40.;
 
@@ -28,9 +36,17 @@ impl Render for Shell {
         }
         if std::mem::take(&mut self.grab) {
             self.focus_pane(self.active, window, cx);
-        } else if let Some(pane) = self.groups.iter().map(|group| group.shown).find(|&pane| self.panes[pane].zone.contains_focused(window, cx)) {
+        } else if let Some(pane) = self
+            .groups
+            .iter()
+            .map(|group| group.shown)
+            .find(|&pane| self.panes[pane].zone.contains_focused(window, cx))
+        {
             self.active = pane;
-        } else if (0..self.panes.len()).any(|tab| !self.groups.iter().any(|group| group.shown == tab) && self.tab_has_focus(tab, window, cx)) {
+        } else if (0..self.panes.len()).any(|tab| {
+            !self.groups.iter().any(|group| group.shown == tab)
+                && self.tab_has_focus(tab, window, cx)
+        }) {
             // Input was in a tab now out of sight, where no key would reach anything: the tab shown
             // takes it.
             self.focus_pane(self.active, window, cx);
@@ -41,7 +57,8 @@ impl Render for Shell {
         #[cfg(not(test))]
         let dragging = cx.has_active_drag();
         if !dragging {
-            (self.pane_aim, self.tab_aim, self.tool_aim, self.tool_drag) = (None, None, None, false);
+            (self.pane_aim, self.tab_aim, self.tool_aim, self.tool_drag) =
+                (None, None, None, false);
             // The drag is over (dropped, or out of the window): no more label or line.
             if self.drop_aim.is_some() {
                 self.aim_drop(None, cx);
@@ -77,7 +94,13 @@ impl Render for Shell {
         window.set_client_inset(inset);
         self.nav.left = inset;
         self.nav.native_bar = !client;
-        self.nav.total = window.viewport_size().width - inset * 2. - if self.vault.is_some() { nav::GAP } else { px(0.) };
+        self.nav.total = window.viewport_size().width
+            - inset * 2.
+            - if self.vault.is_some() {
+                nav::GAP
+            } else {
+                px(0.)
+            };
 
         let pill = self.render_window_controls(window, cx);
 
@@ -95,11 +118,24 @@ impl Render for Shell {
                     continue;
                 }
                 let pane = self.groups[group].shown;
-                let (area, said) = self.in_pane(pane, |this| this.render_pane(pane, group, pane == active, client, window, cx));
+                let (area, said) = self.in_pane(pane, |this| {
+                    this.render_pane(pane, group, pane == active, client, window, cx)
+                });
                 let bar = self.render_tabs(group, client, cx);
                 // Its tab bar sits on the ground, above the sheet of the note.
                 let gap = bar.is_some();
-                areas.push(Some(div().size_full().min_w_0().min_h_0().flex().flex_col().when(gap, |d| d.gap(t.px(6.))).children(bar).child(area).into_any_element()));
+                areas.push(Some(
+                    div()
+                        .size_full()
+                        .min_w_0()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .when(gap, |d| d.gap(t.px(6.)))
+                        .children(bar)
+                        .child(area)
+                        .into_any_element(),
+                ));
                 if pane == active {
                     comments = said;
                 }
@@ -111,8 +147,15 @@ impl Render for Shell {
             let panes = self.render_layout(&tree, &mut Vec::new(), &mut areas, cx);
             // Measured while drawing: a new size that crowds the panes, or no longer does, asks for
             // one more frame (gpui forgets a notify sent while drawing).
-            let (area, me, crowded) = (self.pane_box.clone(), cx.entity(), self.crowded_in(self.pane_box.get().size));
-            let (many, rects): (_, Vec<_>) = (self.groups.len() > 1, self.layout.rects().into_iter().map(|(_, r)| r).collect());
+            let (area, me, crowded) = (
+                self.pane_box.clone(),
+                cx.entity(),
+                self.crowded_in(self.pane_box.get().size),
+            );
+            let (many, rects): (_, Vec<_>) = (
+                self.groups.len() > 1,
+                self.layout.rects().into_iter().map(|(_, r)| r).collect(),
+            );
             let note = div()
                 .flex_1()
                 .min_w_0()
@@ -140,7 +183,16 @@ impl Render for Shell {
                 self.panes_saved = state;
             }
             let toasts = self.render_toasts(cx);
-            let toasts = div().absolute().bottom(px(54.)).left_4().right_4().flex().flex_col().items_end().gap_2().children(toasts);
+            let toasts = div()
+                .absolute()
+                .bottom(px(54.))
+                .left_4()
+                .right_4()
+                .flex()
+                .flex_col()
+                .items_end()
+                .gap_2()
+                .children(toasts);
             // The left dock first: it settles which tool takes the keys.
             let docks = self.render_nav(window, cx);
             let docked = self.render_right_dock(window, cx);
@@ -150,7 +202,9 @@ impl Render for Shell {
                 .pr(nav::GAP)
                 .pb(nav::GAP)
                 .child(docks)
-                .when(self.nav.panel != Panel::Full, |d| d.child(note).children(comments).children(docked))
+                .when(self.nav.panel != Panel::Full, |d| {
+                    d.child(note).children(comments).children(docked)
+                })
                 .children(self.palette.clone())
                 .child(toasts)
         };
@@ -165,12 +219,15 @@ impl Render for Shell {
             .text_color(t.text)
             .font_family(sans())
             .when(framed, |d| {
-                d.rounded(crate::ui::theme::frame_radius()).border_1().border_color(t.border).shadow(crate::ui::theme::frame_shadow(SHADOW / 2.))
+                d.rounded(crate::ui::theme::frame_radius())
+                    .border_1()
+                    .border_color(t.border)
+                    .shadow(crate::ui::theme::frame_shadow(SHADOW / 2.))
             })
             .track_focus(&self.focus)
-            .on_action(cx.listener(|this, _: &OpenPalette, window, cx| {
-                this.open_palette("", window, cx)
-            }))
+            .on_action(
+                cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)),
+            )
             .on_action(cx.listener(|this, _: &Quit, window, cx| {
                 cx.stop_propagation();
                 if this.may_close_window(window, cx) {
@@ -178,7 +235,9 @@ impl Render for Shell {
                 }
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| this.new_note_here(window, cx)))
-            .on_action(cx.listener(|this, _: &NewFromTemplate, window, cx| this.open_templates(TemplateAct::New, window, cx)))
+            .on_action(cx.listener(|this, _: &NewFromTemplate, window, cx| {
+                this.open_templates(TemplateAct::New, window, cx)
+            }))
             .on_action(cx.listener(|this, _: &NewDiagram, window, cx| this.new_diagram(window, cx)))
             // Escape in a diagram where nothing is in progress anymore: back to the note, if its
             // tab has one under it.
@@ -194,7 +253,9 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &nav::ShowRecent, window, cx| {
                 this.show_nav(Mode::Recent, false, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &nav::NewFolder, window, cx| this.new_folder(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &nav::NewFolder, window, cx| this.new_folder(window, cx)),
+            )
             .on_action(cx.listener(|this, _: &nav::ShowGraph, window, cx| {
                 this.show_nav(Mode::Graph, false, window, cx)
             }))
@@ -207,7 +268,9 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &nav::ShowLinks, window, cx| {
                 this.show_nav(Mode::Links, false, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &nav::ToggleFull, window, cx| this.toggle_full(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &nav::ToggleFull, window, cx| this.toggle_full(window, cx)),
+            )
             // Panel separator: it follows the pointer as long as the button is held.
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, window, cx| {
                 // A border between panes, likewise.
@@ -243,20 +306,41 @@ impl Render for Shell {
                     }
                 }),
             )
-            .on_action(cx.listener(|this, _: &sheet::PickDelimiter, window, cx| this.choose_table(Pick::Delimiter, window, cx)))
-            .on_action(cx.listener(|this, _: &sheet::PickEncoding, window, cx| this.choose_table(Pick::Encoding, window, cx)))
-            .on_action(cx.listener(|this, _: &sheet::PickHeader, window, cx| this.choose_table(Pick::Header, window, cx)))
-            .on_action(cx.listener(|this, _: &sheet::PickCopyAs, window, cx| this.choose_table(Pick::CopyAs, window, cx)))
-            .on_action(cx.listener(|this, _: &sheet::PickExport, window, cx| this.choose_table(Pick::Export, window, cx)))
+            .on_action(cx.listener(|this, _: &sheet::PickDelimiter, window, cx| {
+                this.choose_table(Pick::Delimiter, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &sheet::PickEncoding, window, cx| {
+                this.choose_table(Pick::Encoding, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &sheet::PickHeader, window, cx| {
+                this.choose_table(Pick::Header, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &sheet::PickCopyAs, window, cx| {
+                this.choose_table(Pick::CopyAs, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &sheet::PickExport, window, cx| {
+                this.choose_table(Pick::Export, window, cx)
+            }))
             .on_action(cx.listener(|this, _: &OpenVault, window, cx| this.choose_vault(window, cx)))
             .on_action(cx.listener(|this, _: &CopyAll, _, cx| this.copy_all(true, cx)))
             .on_action(cx.listener(|this, _: &ExportPdf, _, cx| this.export_pdf(cx)))
-            .on_action(cx.listener(|this, _: &ShareDocument, window, cx| this.show_share(window, cx)))
-            .on_action(cx.listener(|this, _: &Outline, window, cx| this.open_outline(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &ShareDocument, window, cx| this.show_share(window, cx)),
+            )
+            .on_action(cx.listener(|this, _: &Outline, window, cx| this.toggle_outline(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &docks::ToggleFocus, window, cx| {
+                    this.toggle_focus(window, cx)
+                }),
+            )
             .on_action(cx.listener(|this, _: &Today, window, cx| this.open_today(window, cx)))
             .on_action(cx.listener(|this, _: &SyncVault, window, cx| this.git_sync(window, cx)))
-            .on_action(cx.listener(|this, _: &SplitPane, window, cx| this.split(Side::Right, window, cx)))
-            .on_action(cx.listener(|this, _: &SplitDown, window, cx| this.split(Side::Down, window, cx)))
+            .on_action(
+                cx.listener(|this, _: &SplitPane, window, cx| this.split(Side::Right, window, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &SplitDown, window, cx| this.split(Side::Down, window, cx)),
+            )
             // Ctrl+1 and Ctrl+2: the first and second panes, in reading order.
             .on_action(cx.listener(|this, _: &FocusLeft, window, cx| {
                 let first = this.layout.panes()[0];
@@ -268,14 +352,34 @@ impl Render for Shell {
                     this.focus_group(second, window, cx)
                 }
             }))
-            .on_action(cx.listener(|this, _: &PaneLeft, window, cx| this.focus_side(Side::Left, window, cx)))
-            .on_action(cx.listener(|this, _: &PaneRight, window, cx| this.focus_side(Side::Right, window, cx)))
-            .on_action(cx.listener(|this, _: &PaneUp, window, cx| this.focus_side(Side::Up, window, cx)))
-            .on_action(cx.listener(|this, _: &PaneDown, window, cx| this.focus_side(Side::Down, window, cx)))
-            .on_action(cx.listener(|this, _: &TabToLeft, window, cx| this.tab_to_side(Side::Left, window, cx)))
-            .on_action(cx.listener(|this, _: &TabToRight, window, cx| this.tab_to_side(Side::Right, window, cx)))
-            .on_action(cx.listener(|this, _: &TabToUp, window, cx| this.tab_to_side(Side::Up, window, cx)))
-            .on_action(cx.listener(|this, _: &TabToDown, window, cx| this.tab_to_side(Side::Down, window, cx)))
+            .on_action(
+                cx.listener(|this, _: &PaneLeft, window, cx| {
+                    this.focus_side(Side::Left, window, cx)
+                }),
+            )
+            .on_action(cx.listener(|this, _: &PaneRight, window, cx| {
+                this.focus_side(Side::Right, window, cx)
+            }))
+            .on_action(
+                cx.listener(|this, _: &PaneUp, window, cx| this.focus_side(Side::Up, window, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &PaneDown, window, cx| {
+                    this.focus_side(Side::Down, window, cx)
+                }),
+            )
+            .on_action(cx.listener(|this, _: &TabToLeft, window, cx| {
+                this.tab_to_side(Side::Left, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &TabToRight, window, cx| {
+                this.tab_to_side(Side::Right, window, cx)
+            }))
+            .on_action(
+                cx.listener(|this, _: &TabToUp, window, cx| this.tab_to_side(Side::Up, window, cx)),
+            )
+            .on_action(cx.listener(|this, _: &TabToDown, window, cx| {
+                this.tab_to_side(Side::Down, window, cx)
+            }))
             .on_action(cx.listener(|this, _: &MoveTool, window, cx| this.move_tool(window, cx)))
             .on_action(cx.listener(|this, _: &ToolAsTab, window, cx| this.tool_as_tab(window, cx)))
             .on_action(cx.listener(|this, _: &EvenPanes, _, cx| {
@@ -283,13 +387,25 @@ impl Render for Shell {
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &MaximizePane, _, cx| this.toggle_zoom(cx)))
-            .on_action(cx.listener(|this, _: &ClosePane, window, cx| { this.close_pane(window, cx); }))
-            .on_action(cx.listener(|this, _: &CloseOtherTabs, window, cx| this.close_other_tabs(this.active, window, cx)))
-            .on_action(cx.listener(|this, _: &CloseTabsInPane, window, cx| this.close_tabs_in_pane(this.group(), window, cx)))
-            .on_action(cx.listener(|this, _: &CloseAllFiles, window, cx| this.close_all_files(window, cx)))
+            .on_action(cx.listener(|this, _: &ClosePane, window, cx| {
+                this.close_pane(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CloseOtherTabs, window, cx| {
+                this.close_other_tabs(this.active, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &CloseTabsInPane, window, cx| {
+                this.close_tabs_in_pane(this.group(), window, cx)
+            }))
+            .on_action(
+                cx.listener(|this, _: &CloseAllFiles, window, cx| this.close_all_files(window, cx)),
+            )
             .on_action(cx.listener(|this, _: &ReopenTab, window, cx| this.reopen_tab(window, cx)))
-            .on_action(cx.listener(|this, _: &NextTab, window, cx| this.cycle_tab(true, window, cx)))
-            .on_action(cx.listener(|this, _: &PrevTab, window, cx| this.cycle_tab(false, window, cx)))
+            .on_action(
+                cx.listener(|this, _: &NextTab, window, cx| this.cycle_tab(true, window, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &PrevTab, window, cx| this.cycle_tab(false, window, cx)),
+            )
             .on_action(cx.listener(|this, _: &MoveTabLeft, _, cx| this.move_tab(false, cx)))
             .on_action(cx.listener(|this, _: &MoveTabRight, _, cx| this.move_tab(true, cx)))
             .on_action(cx.listener(|this, _: &GoBack, window, cx| this.travel(false, window, cx)))
@@ -303,35 +419,69 @@ impl Render for Shell {
                 MouseButton::Navigate(gpui::NavigationDirection::Forward),
                 cx.listener(|this, _, window, cx| this.travel(true, window, cx)),
             )
-            .on_action(cx.listener(|this, _: &SearchVault, window, cx| this.open_vault_find(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &SearchVault, window, cx| this.open_vault_find(window, cx)),
+            )
             .on_action(cx.listener(|this, _: &ChooseTheme, window, cx| {
                 this.choose_setting(Setting::Theme, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &ZoomIn, window, cx| this.resize_text(Some(1.), window, cx)))
-            .on_action(cx.listener(|this, _: &ZoomOut, window, cx| this.resize_text(Some(-1.), window, cx)))
-            .on_action(cx.listener(|this, _: &ZoomReset, window, cx| this.resize_text(None, window, cx)))
+            .on_action(
+                cx.listener(|this, _: &ZoomIn, window, cx| this.resize_text(Some(1.), window, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &ZoomOut, window, cx| {
+                    this.resize_text(Some(-1.), window, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &ZoomReset, window, cx| this.resize_text(None, window, cx)),
+            )
             .on_action(cx.listener(|this, _: &ToggleHelp, window, cx| {
                 this.set_help(!this.help.open, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &ToggleCommands, window, cx| this.open_commands(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &ToggleCommands, window, cx| this.open_commands(window, cx)),
+            )
             // Escape in the note, when it has nothing to close: the right-click menu.
+            // In focus mode, Escape leaves it too: the docks come back as they were.
             .on_action(cx.listener(|this, _: &editor::Cancel, window, cx| {
                 this.dismiss_failures();
                 this.close_icons(window, cx);
                 this.close_menu(window, cx);
+                if this.in_focus() {
+                    this.toggle_focus(window, cx);
+                }
             }))
-            .on_action(cx.listener(|this, _: &ContextMenu, window, cx| this.menu_from_keys(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &ContextMenu, window, cx| this.menu_from_keys(window, cx)),
+            )
             .on_action(|_: &FocusNext, window, _| window.focus_next())
             .on_action(|_: &FocusPrev, window, _| window.focus_prev())
             // The row menu's entries, from the palette, on the file of the active pane.
-            .on_action(cx.listener(|this, _: &nav::OpenAside, window, cx| this.file_do(nav::Do::OpenAside, window, cx)))
-            .on_action(cx.listener(|this, _: &nav::SetIcon, window, cx| this.file_do(nav::Do::Icon, window, cx)))
-            .on_action(cx.listener(|this, _: &nav::ShowFolder, window, cx| this.file_do(nav::Do::List, window, cx)))
-            .on_action(cx.listener(|this, _: &nav::CopyLink, window, cx| this.file_do(nav::Do::CopyLink, window, cx)))
-            .on_action(cx.listener(|this, _: &nav::CopyPath, window, cx| this.file_do(nav::Do::CopyPath, window, cx)))
-            .on_action(cx.listener(|this, _: &nav::CopyRelative, window, cx| this.file_do(nav::Do::CopyRelative, window, cx)))
-            .on_action(cx.listener(|this, _: &nav::Reveal, window, cx| this.file_do(nav::Do::Reveal, window, cx)))
-            .on_action(cx.listener(|this, _: &nav::MoveTo, window, cx| this.file_do(nav::Do::MoveTo, window, cx)))
+            .on_action(cx.listener(|this, _: &nav::OpenAside, window, cx| {
+                this.file_do(nav::Do::OpenAside, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &nav::SetIcon, window, cx| {
+                this.file_do(nav::Do::Icon, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &nav::ShowFolder, window, cx| {
+                this.file_do(nav::Do::List, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &nav::CopyLink, window, cx| {
+                this.file_do(nav::Do::CopyLink, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &nav::CopyPath, window, cx| {
+                this.file_do(nav::Do::CopyPath, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &nav::CopyRelative, window, cx| {
+                this.file_do(nav::Do::CopyRelative, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &nav::Reveal, window, cx| {
+                this.file_do(nav::Do::Reveal, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &nav::MoveTo, window, cx| {
+                this.file_do(nav::Do::MoveTo, window, cx)
+            }))
             .on_action(cx.listener(|this, _: &CloseHelp, window, cx| {
                 if this.help.open {
                     this.set_help(false, window, cx)
@@ -348,7 +498,9 @@ impl Render for Shell {
             .children(self.render_menu(window, cx))
             .children(self.render_icons(window, cx))
             .children(self.render_drop_chip(window.viewport_size()))
-            .when(self.help.open, |d| d.child(self.render_help(window.viewport_size().height < px(420.), cx)));
+            .when(self.help.open, |d| {
+                d.child(self.render_help(window.viewport_size().height < px(420.), cx))
+            });
 
         // The transparent margin carries the shadow and serves as resize handle.
         div()
@@ -426,8 +578,8 @@ impl Shell {
         let controls = window.window_controls();
         div()
             .absolute()
-            // On the top strip: as high as the tab bar (34), which starts one gap down, so that the buttons
-            // and the tab pills share their middle.
+            // On the top strip: as high as the tab bar (28), which starts one gap down, so that the buttons
+            // and the tab rows share their middle.
             .top(nav::GAP)
             .right_2()
             .h(t.px(tabs::TAB_BAR))
@@ -439,28 +591,38 @@ impl Shell {
             .debug_selector(|| "window-pill".into())
             .map(drag_window)
             .when(controls.minimize, |d| {
-                d.child(icon_button("minimize", "minimize.svg", t).on_click(|_, window, _| window.minimize_window()))
+                d.child(
+                    icon_button("minimize", "minimize.svg", t)
+                        .on_click(|_, window, _| window.minimize_window()),
+                )
             })
             .when(controls.maximize, |d| {
-                let icon = if window.is_maximized() { "restore.svg" } else { "maximize.svg" };
-                d.child(icon_button("maximize", icon, t).on_click(|_, window, _| window.zoom_window()))
+                let icon = if window.is_maximized() {
+                    "restore.svg"
+                } else {
+                    "maximize.svg"
+                };
+                d.child(
+                    icon_button("maximize", icon, t).on_click(|_, window, _| window.zoom_window()),
+                )
             })
             // Closing is the one button that warns: its hover is the red of the callout recipe.
             .child(
-                icon_button_over("close", "close.svg", t.danger_hover(), t)
-                    .on_click(cx.listener(|this, _, window, cx| {
+                icon_button_over("close", "close.svg", t.danger_hover(), t).on_click(cx.listener(
+                    |this, _, window, cx| {
                         if this.may_close_window(window, cx) {
                             window.remove_window();
                         }
-                    })),
+                    },
+                )),
             )
     }
 
     /// Without a vault: the welcome page, which offers a ready-made one, opens one or clones one.
     pub(super) fn render_welcome(&self, body: Div, cx: &mut Context<Self>) -> Div {
         let t = self.theme;
-            // Without a vault, a folder dropped on the welcome page becomes the vault.
-            body.drag_over::<gpui::ExternalPaths>(move |style, _, _, _| style.bg(t.selection))
+        // Without a vault, a folder dropped on the welcome page becomes the vault.
+        body.drag_over::<gpui::ExternalPaths>(move |style, _, _, _| style.bg(t.selection))
                 .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, window, cx| {
                     if let Some(dir) = paths.paths().iter().find(|p| p.is_dir()) {
                         this.set_vault(dir.clone(), window, cx);
@@ -472,6 +634,8 @@ impl Shell {
                 .justify_center()
                 .gap_3()
                 .px_4()
+                // Under the native bar the traffic lights float over the left end of the page.
+                .when(self.nav.native_bar, |d| d.pl(t.px(TRAFFIC_ROOM)))
                 .text_center()
                 .child(
                     div()
@@ -559,7 +723,12 @@ impl Shell {
     }
 
     pub(super) fn recalled(&self) -> Vec<recall::Recalled> {
-        let notes: Vec<Note> = self.notes.iter().filter(|n| !self.is_template(n)).cloned().collect();
+        let notes: Vec<Note> = self
+            .notes
+            .iter()
+            .filter(|n| !self.is_template(n))
+            .cloned()
+            .collect();
         recall::recall(&notes, today(), std::time::SystemTime::now())
     }
 
@@ -572,14 +741,26 @@ impl Shell {
         let row = |id: (&'static str, usize), fill: bool| {
             div()
                 .id(id)
-                .debug_selector(move || if id.0 == "empty-today" { id.0.to_string() } else { format!("{}-{}", id.0, id.1) })
+                .debug_selector(move || {
+                    if id.0 == "empty-today" {
+                        id.0.to_string()
+                    } else {
+                        format!("{}-{}", id.0, id.1)
+                    }
+                })
                 .flex()
                 .items_center()
                 .gap_2()
                 .rounded(t.small())
                 .cursor_pointer()
                 .text_color(t.soft)
-                .hover(|s| if fill { s.text_color(t.text).bg(t.hover) } else { s.text_color(t.text) })
+                .hover(|s| {
+                    if fill {
+                        s.text_color(t.text).bg(t.hover)
+                    } else {
+                        s.text_color(t.text)
+                    }
+                })
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         };
         // The keys in effect; an action left without a shortcut is not announced.
@@ -589,25 +770,38 @@ impl Shell {
             (Box::new(ToggleHelp), tr("shortcuts", "raccourcis")),
         ];
         // A vault that cannot be read takes no note: neither a new one nor the day's.
-        let closed = self.vault.as_ref().is_some_and(|root| self.unreadable.iter().any(|(dir, _)| dir == root));
-        let keys = actions.into_iter().enumerate().filter(|(i, _)| !(closed && *i == 1)).filter_map(|(i, (action, what))| {
-            let keys = keys::of(cx, action.as_ref());
-            let cap = keycaps(&keys, t, false);
-            (!keys.is_empty()).then(|| {
-                row(("empty-key", i), false)
-                    .gap(t.px(6.))
-                    .child(cap)
-                    .child(what)
-                    .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
-            })
-        });
+        let closed = self
+            .vault
+            .as_ref()
+            .is_some_and(|root| self.unreadable.iter().any(|(dir, _)| dir == root));
+        let keys = actions
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| !(closed && *i == 1))
+            .filter_map(|(i, (action, what))| {
+                let keys = keys::of(cx, action.as_ref());
+                let cap = keycaps(&keys, t, false);
+                (!keys.is_empty()).then(|| {
+                    row(("empty-key", i), false)
+                        .gap(t.px(6.))
+                        .child(cap)
+                        .child(what)
+                        .on_click(move |_, window, cx| {
+                            window.dispatch_action(action.boxed_clone(), cx)
+                        })
+                })
+            });
         let day = (self.vault.is_some() && !closed).then(|| {
             row(("empty-today", 0), false)
                 .child(logo(t))
                 .child(recall::long_date(today()))
                 .on_click(cx.listener(|this, _, window, cx| this.open_today(window, cx)))
         });
-        let recalled = if self.vault.is_some() { self.recalled() } else { Vec::new() };
+        let recalled = if self.vault.is_some() {
+            self.recalled()
+        } else {
+            Vec::new()
+        };
         let again = (!recalled.is_empty()).then(|| {
             let rows = recalled.into_iter().enumerate().map(|(i, note)| {
                 row(("empty-recall", i), true)
@@ -615,33 +809,61 @@ impl Shell {
                     .px(t.px(6.))
                     .py(t.px(2.))
                     .child(div().flex_1().min_w_0().truncate().child(note.name))
-                    .child(div().flex_none().text_size(t.px(12.)).child(recall::ago(note.days)))
-                    .on_click(cx.listener(move |this, _, window, cx| this.open(&note.path, window, cx)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(t.px(12.))
+                            .child(recall::ago(note.days)),
+                    )
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.open(&note.path, window, cx)),
+                    )
             });
             div()
                 .max_w(t.px(380.))
                 .flex()
                 .flex_col()
-                .child(div().mb_1().text_size(t.px(11.)).text_color(t.soft).child(tr("READ AGAIN", "À RELIRE")))
+                .child(
+                    div()
+                        .mb_1()
+                        .text_size(t.px(11.))
+                        .text_color(t.soft)
+                        .child(tr("READ AGAIN", "À RELIRE")),
+                )
                 .children(rows)
         });
         // In the text column, under its first line.
-        div().absolute().top(px(76.)).left_0().right_0().flex().justify_center().child(
-            div()
-                .w_full()
-                .max_w(self.theme.page.measure(self.theme.size) + px(48.))
-                .px(t.px(32.))
-                .flex()
-                .flex_col()
-                .gap_4()
-                .text_size(t.px(13.))
-                .children(day)
-                .child(div().flex().flex_wrap().gap_x_4().gap_y_1().children(keys))
-                .children(again),
-        )
+        div()
+            .absolute()
+            .top(px(76.))
+            .left_0()
+            .right_0()
+            .flex()
+            .justify_center()
+            .child(
+                div()
+                    .w_full()
+                    .max_w(self.theme.page.measure(self.theme.size) + px(48.))
+                    .px(t.px(32.))
+                    .flex()
+                    .flex_col()
+                    .gap_4()
+                    .text_size(t.px(13.))
+                    .children(day)
+                    .child(div().flex().flex_wrap().gap_x_4().gap_y_1().children(keys))
+                    .children(again),
+            )
     }
 
-    pub(super) fn render_pane(&mut self, pane: usize, group: usize, active: bool, client: bool, window: &mut Window, cx: &mut Context<Self>) -> (gpui::AnyElement, Option<gpui::AnyElement>) {
+    pub(super) fn render_pane(
+        &mut self,
+        pane: usize,
+        group: usize,
+        active: bool,
+        client: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (gpui::AnyElement, Option<gpui::AnyElement>) {
         let t = self.theme;
         let many = self.alone().is_none() && self.groups.len() > 1;
         let barred = self.groups[group].tabs.len() > 1;
@@ -650,23 +872,52 @@ impl Shell {
         // click leads to the comment, ready to be edited; the check mark resolves it.
         // ponytail: the note is reread on every render (a search for `{==`); keep the
         // list from one version of the text to the next if very long notes suffer from it.
-        let said: Vec<(String, String, usize, usize, usize, String)> = match self.pane().file.is_none() && self.pane().listing.is_none() && !self.board_shown(cx) {
-            true => markdown::all_comments(self.pane().editor.read(cx).text()).into_iter().map(|n| (n.noted.into(), n.said.into(), n.at, n.inside, n.end, n.scope)).collect(),
-            false => Vec::new(),
-        };
-        // Their button, left of the copy one, opens and closes the panel; the
-        // note's word counter leaves room for it.
+        let said: Vec<(String, String, usize, usize, usize, String)> =
+            match self.pane().file.is_none()
+                && self.pane().listing.is_none()
+                && !self.board_shown(cx)
+            {
+                true => markdown::all_comments(self.pane().editor.read(cx).text())
+                    .into_iter()
+                    .map(|n| {
+                        (
+                            n.noted.into(),
+                            n.said.into(),
+                            n.at,
+                            n.inside,
+                            n.end,
+                            n.scope,
+                        )
+                    })
+                    .collect(),
+                false => Vec::new(),
+            };
+        // Calm UI (ui.md §12): one quiet dot — no icon, no count. Same hit area
+        // and corner, so the toggle, the palette (`› comments`) and the corner
+        // geometry keep working.
         let talk = (!said.is_empty()).then(|| {
-            ui::widgets::button("comments-toggle", "i-chat.svg", !self.comments_shut, t)
+            div()
+                .id("comments-toggle")
                 .debug_selector(|| "comments-toggle".into())
-                .tooltip(ui::widgets::tip(tr("Comments of the note", "Commentaires de la note"), String::new(), t))
+                .tooltip(ui::widgets::tip(
+                    tr("Comments of the note", "Commentaires de la note"),
+                    badge_label(said.len()),
+                    t,
+                ))
                 .absolute()
                 .bottom_4()
-                .right(t.px(if kanban::is_board(self.pane().editor.read(cx).text()) { 84. } else { 50. }))
+                .right(
+                    t.px(if kanban::is_board(self.pane().editor.read(cx).text()) {
+                        84.
+                    } else {
+                        50.
+                    }),
+                )
                 .size(t.px(30.))
                 .rounded(t.large())
+                .cursor_pointer()
                 .occlude()
-                // A badge and their number, whether the panel is open or closed.
+                // The single dot: where the badge was, at its size, without the number.
                 .child(
                     div()
                         .debug_selector(|| "comments-badge".into())
@@ -675,16 +926,8 @@ impl Shell {
                         .right(t.px(-3.))
                         .min_w(t.px(15.))
                         .h(t.px(15.))
-                        .px(t.px(4.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
                         .rounded_full()
-                        .bg(t.accent)
-                        .text_color(t.bg)
-                        .text_size(t.px(10.))
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .child(badge_label(said.len())),
+                        .bg(t.accent),
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.comments_shut = !this.comments_shut;
@@ -712,10 +955,20 @@ impl Shell {
                 window.focus(&self.pane().editor.focus_handle(cx));
             }
         }
-        let boards = kanban::is_board(self.pane().editor.read(cx).text()) && self.pane().file.is_none() && self.pane().listing.is_none();
+        let boards = kanban::is_board(self.pane().editor.read(cx).text())
+            && self.pane().file.is_none()
+            && self.pane().listing.is_none();
         let flip = boards.then(|| {
             ui::widgets::button("board-toggle", "board.svg", board, t)
-                .tooltip(ui::widgets::tip(if board { tr("Show the text", "Voir le texte") } else { tr("Show the board", "Voir le tableau") }, String::new(), t))
+                .tooltip(ui::widgets::tip(
+                    if board {
+                        tr("Show the text", "Voir le texte")
+                    } else {
+                        tr("Show the board", "Voir le tableau")
+                    },
+                    String::new(),
+                    t,
+                ))
                 .absolute()
                 .bottom_4()
                 // Always in the same place, board or text: left of the copy button.
@@ -723,27 +976,46 @@ impl Shell {
                 .h(t.px(30.))
                 .rounded(t.large())
                 // On the board the button says what it does; over the text there is no room for it.
-                .when(board, |d| d.w_auto().px_2().gap_1().text_size(t.px(12.)).text_color(t.accent).child(tr("Text", "Texte")))
+                .when(board, |d| {
+                    d.w_auto()
+                        .px_2()
+                        .gap_1()
+                        .text_size(t.px(12.))
+                        .text_color(t.accent)
+                        .child(tr("Text", "Texte"))
+                })
                 .when(!board, |d| d.w(t.px(30.)))
                 .occlude()
                 .on_click(cx.listener(|this, _, window, cx| this.toggle_board(window, cx)))
         });
         // Without a tab bar, the top row of the pane is a handle to move the window (Linux): the note's text starts under it.
         let strip = client && !barred;
+        // Under the native bar the traffic lights float over the left end of that same row:
+        // it starts past them, with no handle under the lights, and the note steps down for it.
+        let traffic = self.nav.native_bar && !barred;
         // A tab bar puts the note below the window buttons: its text no longer steps down for them.
-        let pill = (client && !barred && group == self.corner_group()).then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
+        let pill = (client && !barred && group == self.corner_group())
+            .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
         self.pane().editor.update(cx, |e, _| {
             e.corner = 1 + talk.is_some() as usize + boards as usize;
             e.bar_here = active;
             e.pill = pill;
-            e.strip = if strip { t.px(STRIP) } else { px(0.) };
+            e.strip = if strip || traffic {
+                t.px(STRIP)
+            } else {
+                px(0.)
+            };
         });
         // The comments column takes what the panel and the note leave it, 270 px at
         // most; short of 140 px, it does not show (its button stays, a wider window brings it back).
         let column = (active && !said.is_empty() && !self.comments_shut)
             .then(|| {
                 self.nav.aside = px(270.);
-                let panel = if self.nav.panel == Panel::Split { self.split_width() + nav::DIVIDER } else { px(0.) };
+                let panel = if self.nav.panel == Panel::Split {
+                    self.split_width() + nav::DIVIDER
+                } else {
+                    px(0.)
+                };
                 (self.nav.total - t.px(nav::RAIL) - panel - nav::NOTE_MIN).min(px(270.))
             })
             .filter(|width| *width >= px(140.));
@@ -760,64 +1032,101 @@ impl Shell {
                 self.comments_scroll.scroll_to_item(i + 1);
             }
         }
-        let cards = said.iter().filter(|_| !self.comments_shut).enumerate().map(|(i, (noted, said, at, inside, _, scope))| {
-            let (at, inside) = (*at, *inside);
-            let group = format!("comment-{i}");
-            let words = |d: Div| d.text_color(if said.is_empty() { t.soft } else { t.text }).child(if said.is_empty() { tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string() } else { said.to_string() });
-            // The quoted passage only reminds where the comment is: small, on a faint tint, two lines.
-            let quote = |text: String| div().min_w_0().px_1().rounded(t.small()).bg(t.hover).text_size(t.px(12.)).text_color(t.soft).line_clamp(2).text_ellipsis().child(text);
-            div()
-                .id(("comment", i))
-                .debug_selector(|| format!("comment-{i}"))
-                .group(group.clone())
-                .px_3()
-                .py(t.px(10.))
-                .rounded(t.large())
-                // The comment under the caret is a small sheet on the ground; the others lie on it, with no line between.
-                .when(here == Some(i), |d| d.bg(t.bg).shadow(t.lifted()))
-                .flex()
-                .flex_col()
-                .gap_1()
-                .cursor_pointer()
-                // Where it is, in a table: `Cell C2`, above the commented text.
-                .when(!scope.is_empty() && !noted.is_empty(), |d| d.child(div().px_1().text_size(t.px(11.)).text_color(t.dim).child(scope.to_string())))
-                .child(
-                    div()
-                        .flex()
-                        .items_start()
-                        .gap_1()
-                        .child(match (noted.is_empty(), scope.is_empty()) {
-                            // A row, a column, the table: what it is about is the chip.
-                            (true, false) => quote(scope.to_string()).flex_1(),
-                            // A comment on its own, in the text: it takes the place.
-                            (true, true) => words(div().flex_1().min_w_0().px_1()),
-                            (false, _) => quote(noted.to_string()).flex_1(),
+        let cards = said.iter().filter(|_| !self.comments_shut).enumerate().map(
+            |(i, (noted, said, at, inside, _, scope))| {
+                let (at, inside) = (*at, *inside);
+                let group = format!("comment-{i}");
+                let words = |d: Div| {
+                    d.text_color(if said.is_empty() { t.soft } else { t.text })
+                        .child(if said.is_empty() {
+                            tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string()
+                        } else {
+                            said.to_string()
                         })
-                        // Shown under the pointer and on the keys' focus; always reachable by Tab.
-                        .child(
-                            ui::widgets::button(("resolve", i), "check.svg", false, t)
-                                .opacity(0.)
-                                .group_hover(group, |s| s.opacity(1.))
-                                .focus(|s| s.border_2().border_color(t.accent).opacity(1.))
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    cx.stop_propagation();
-                                    this.pane().editor.update(cx, |e, cx| e.resolve_comment(at, cx));
-                                    window.focus(&this.pane().editor.focus_handle(cx));
-                                })),
-                        ),
-                )
-                .when(!noted.is_empty() || !scope.is_empty(), |d| d.child(words(div().px_1())))
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    this.pane().editor.update(cx, |e, cx| e.jump(inside, false, cx));
-                    window.focus(&this.pane().editor.focus_handle(cx));
-                }))
-        });
+                };
+                // The quoted passage only reminds where the comment is: small, on a faint tint, two lines.
+                let quote = |text: String| {
+                    div()
+                        .min_w_0()
+                        .px_1()
+                        .rounded(t.small())
+                        .bg(t.hover)
+                        .text_size(t.px(12.))
+                        .text_color(t.soft)
+                        .line_clamp(2)
+                        .text_ellipsis()
+                        .child(text)
+                };
+                div()
+                    .id(("comment", i))
+                    .debug_selector(|| format!("comment-{i}"))
+                    .group(group.clone())
+                    .px_3()
+                    .py(t.px(10.))
+                    .rounded(t.large())
+                    // The comment under the caret is a small sheet on the ground; the others lie on it, with no line between.
+                    .when(here == Some(i), |d| d.bg(t.bg).shadow(t.lifted()))
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .cursor_pointer()
+                    // Where it is, in a table: `Cell C2`, above the commented text.
+                    .when(!scope.is_empty() && !noted.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .px_1()
+                                .text_size(t.px(11.))
+                                .text_color(t.dim)
+                                .child(scope.to_string()),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .items_start()
+                            .gap_1()
+                            .child(match (noted.is_empty(), scope.is_empty()) {
+                                // A row, a column, the table: what it is about is the chip.
+                                (true, false) => quote(scope.to_string()).flex_1(),
+                                // A comment on its own, in the text: it takes the place.
+                                (true, true) => words(div().flex_1().min_w_0().px_1()),
+                                (false, _) => quote(noted.to_string()).flex_1(),
+                            })
+                            // Shown under the pointer and on the keys' focus; always reachable by Tab.
+                            .child(
+                                ui::widgets::button(("resolve", i), "check.svg", false, t)
+                                    .opacity(0.)
+                                    .group_hover(group, |s| s.opacity(1.))
+                                    .focus(|s| s.border_2().border_color(t.accent).opacity(1.))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        cx.stop_propagation();
+                                        this.pane()
+                                            .editor
+                                            .update(cx, |e, cx| e.resolve_comment(at, cx));
+                                        window.focus(&this.pane().editor.focus_handle(cx));
+                                    })),
+                            ),
+                    )
+                    .when(!noted.is_empty() || !scope.is_empty(), |d| {
+                        d.child(words(div().px_1()))
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.pane()
+                            .editor
+                            .update(cx, |e, cx| e.jump(inside, false, cx));
+                        window.focus(&this.pane().editor.focus_handle(cx));
+                    }))
+            },
+        );
         let comments = column.map(|column| {
             let title = format!("{} ({})", tr("Comments", "Commentaires"), said.len());
-            let shut = ui::widgets::button("comments-shut", "close.svg", false, t).debug_selector(|| "comments-shut".into()).tooltip(ui::widgets::tip(tr("Close", "Fermer"), String::new(), t)).on_click(cx.listener(|this, _, _, cx| {
-                this.comments_shut = true;
-                cx.notify();
-            }));
+            let shut = ui::widgets::button("comments-shut", "close.svg", false, t)
+                .debug_selector(|| "comments-shut".into())
+                .tooltip(ui::widgets::tip(tr("Close", "Fermer"), String::new(), t))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.comments_shut = true;
+                    cx.notify();
+                }));
             div()
                 .id("comments")
                 .debug_selector(|| "comments".into())
@@ -834,22 +1143,46 @@ impl Shell {
                 .gap(nav::GAP)
                 .overflow_y_scroll()
                 .track_scroll(&self.comments_scroll)
-                .child(div().flex().items_center().px_3().child(div().flex_1().text_color(t.soft).child(title)).child(shut))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .px_3()
+                        .child(div().flex_1().text_color(t.soft).child(title))
+                        .child(shut),
+                )
                 .children(cards)
         });
-        let copy = ui::widgets::button("copy-all", if self.copied { "check.svg" } else { "export.svg" }, false, t)
-            .debug_selector(|| "copy-all".into())
-            .tooltip(ui::widgets::tip(tr("Share / Export", "Partager / Exporter"), keys::of(cx, &ShareDocument), t))
-            .absolute()
-            // In an exceptionally narrow note, keep the centered formatting toggle reachable.
-            .map(|d| if self.pane().file.is_none() && self.pane().editor.read(cx).crowded_footer() {
+        let copy = ui::widgets::button(
+            "copy-all",
+            if self.copied {
+                "check.svg"
+            } else {
+                "export.svg"
+            },
+            false,
+            t,
+        )
+        .debug_selector(|| "copy-all".into())
+        .tooltip(ui::widgets::tip(
+            tr("Share / Export", "Partager / Exporter"),
+            keys::of(cx, &ShareDocument),
+            t,
+        ))
+        .absolute()
+        // In an exceptionally narrow note, keep the centered formatting toggle reachable.
+        .map(|d| {
+            if self.pane().file.is_none() && self.pane().editor.read(cx).crowded_footer() {
                 d.top(t.px(52.))
-            } else { d.bottom_4() })
-            .right_4()
-            .size(t.px(30.))
-            .rounded(t.large())
-            .occlude()
-            .on_click(cx.listener(|this, _, window, cx| this.show_share(window, cx)));
+            } else {
+                d.bottom_4()
+            }
+        })
+        .right_4()
+        .size(t.px(30.))
+        .rounded(t.large())
+        .occlude()
+        .on_click(cx.listener(|this, _, window, cx| this.show_share(window, cx)));
         // The image picked in the panel; it goes away as soon as the note takes over again.
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             if !self.set_file(None, cx) {
@@ -859,19 +1192,38 @@ impl Shell {
             self.pane_mut().figure = None;
         }
         let note = div().flex_1().min_w_0().h_full().relative();
-        let listing = self.pane().listing.is_some().then(|| self.render_listing(cx));
-        let file = self.pane().file.as_ref().map(|file| (file.path.clone(), file.kind.clone()));
+        let listing = self
+            .pane()
+            .listing
+            .is_some()
+            .then(|| self.render_listing(cx));
+        let file = self
+            .pane()
+            .file
+            .as_ref()
+            .map(|file| (file.path.clone(), file.kind.clone()));
         // A tool of the panel as this tab: it holds the input itself, never the hidden note under it.
         let tool = self.pane().tool;
         if tool.is_some() && self.pane().editor.focus_handle(cx).is_focused(window) {
             window.focus(&self.pane().zone);
         }
         // The views whose top room is empty: the strip can lie over it.
-        let free_top = tool.is_none() && self.pane().figure.is_none() && (listing.is_some() || board || matches!(file, None | Some((_, FileKind::Image))));
+        let free_top = tool.is_none()
+            && self.pane().figure.is_none()
+            && (listing.is_some() || board || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
             _ if let Some(tool) = tool => note.flex().flex_col().child(match tool {
-                nav::Mode::Graph => div().flex_1().min_h_0().child(self.graph.clone()).into_any_element(),
-                _ => div().flex_1().min_h_0().pt(t.px(12.)).child(self.render_calendar(cx)).into_any_element(),
+                nav::Mode::Graph => div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(self.graph.clone())
+                    .into_any_element(),
+                _ => div()
+                    .flex_1()
+                    .min_h_0()
+                    .pt(t.px(12.))
+                    .child(self.render_calendar(cx))
+                    .into_any_element(),
             }),
             _ if listing.is_some() => note.children(listing),
             _ if let Some(figure) = self.pane().figure.clone() => {
@@ -893,7 +1245,16 @@ impl Shell {
             }
             Some((path, FileKind::Image)) => {
                 // A big picture takes a while: it says so after a moment; a file that is no picture says so too.
-                let said = move |text: &'static str| move || div().debug_selector(|| "image-said".into()).text_size(t.px(13.)).text_color(t.soft).child(text).into_any_element();
+                let said = move |text: &'static str| {
+                    move || {
+                        div()
+                            .debug_selector(|| "image-said".into())
+                            .text_size(t.px(13.))
+                            .text_color(t.soft)
+                            .child(text)
+                            .into_any_element()
+                    }
+                };
                 note.p_6().flex().items_center().justify_center().child(
                     img(path)
                         .max_w_full()
@@ -904,29 +1265,50 @@ impl Shell {
                 )
             }
             None => {
-                let empty = self.pane().editor.read(cx).text().is_empty().then(|| self.render_empty(cx));
-                note.child(self.pane().editor.clone()).children(empty).children(talk).children(flip)
+                let empty = self
+                    .pane()
+                    .editor
+                    .read(cx)
+                    .text()
+                    .is_empty()
+                    .then(|| self.render_empty(cx));
+                note.child(self.pane().editor.clone())
+                    .children(empty)
+                    .children(talk)
+                    .children(flip)
             }
         };
-        let note = note.when(!self.share_choices(pane).is_empty() && matches!(self.pane().file.as_ref().map(|f| &f.kind), None | Some(FileKind::Image)), |d| d.child(copy));
+        let note = note.when(
+            !self.share_choices(pane).is_empty()
+                && matches!(
+                    self.pane().file.as_ref().map(|f| &f.kind),
+                    None | Some(FileKind::Image)
+                ),
+            |d| d.child(copy),
+        );
         // While a tab or a file from the tree is dragged, the area that would receive it is tinted:
         // the whole pane, or the half a new pane would take.
-        let tint = self.pane_aim.filter(|(over, _)| *over == group).map(|(_, zone)| {
-            let half = gpui::relative(0.5);
-            div()
-                .absolute()
-                .debug_selector(|| "pane-tint".into())
-                .map(|d| match zone {
-                    Zone::Center => d.inset_0(),
-                    Zone::Edge(Side::Left) => d.top_0().bottom_0().left_0().w(half),
-                    Zone::Edge(Side::Right) => d.top_0().bottom_0().right_0().w(half),
-                    Zone::Edge(Side::Up) => d.left_0().right_0().top_0().h(half),
-                    Zone::Edge(Side::Down) => d.left_0().right_0().bottom_0().h(half),
-                })
-                .bg(t.accent.opacity(0.12))
-                .border_1()
-                .border_color(t.accent.opacity(0.5))
-        });
+        let tint = self
+            .pane_aim
+            .filter(|(over, _)| *over == group)
+            .map(|(_, zone)| {
+                let half = gpui::relative(0.5);
+                div()
+                    .absolute()
+                    .debug_selector(|| "pane-tint".into())
+                    .map(|d| match zone {
+                        Zone::Center => d.inset_0(),
+                        Zone::Edge(Side::Left) => d.top_0().bottom_0().left_0().w(half),
+                        Zone::Edge(Side::Right) => d.top_0().bottom_0().right_0().w(half),
+                        Zone::Edge(Side::Up) => d.left_0().right_0().top_0().h(half),
+                        Zone::Edge(Side::Down) => d.left_0().right_0().bottom_0().h(half),
+                    })
+                    .bg(t.accent.opacity(0.12))
+                    .border_1()
+                    .border_color(t.accent.opacity(0.5))
+            });
+        // From the window's edge once (see `traffic_pad`): the pane starts past the sidebar.
+        let traffic_edge = if traffic { self.traffic_pad() } else { px(0.) };
         let area = ui::widgets::sheet(t)
             .id(("pane", pane))
             .debug_selector(move || format!("pane-{group}"))
@@ -978,30 +1360,70 @@ impl Shell {
                 }
             }))
             .child(note)
-            .when(strip && free_top, |d| d.child(div().debug_selector(move || format!("drag-strip-{group}")).absolute().top_0().left_0().right_0().h(t.px(STRIP)).map(drag_window)))
+            .when((strip || traffic) && free_top, |d| {
+                // Under the native bar the strip keeps its room but takes no handle: the lights
+                // stay clickable. Its left edge is window-relative (see `traffic_pad`).
+                let edge = traffic_edge;
+                let bare = div().debug_selector(move || format!("drag-strip-{group}")).absolute().top_0().left(edge).right_0().h(t.px(STRIP));
+                d.child(if traffic { bare } else { bare.map(drag_window) })
+            })
             // The active pane of several: a 1 px ring around its sheet, the accent at 30 %. Alone, a pane needs none.
             .when(many && active, |d| d.child(div().debug_selector(|| "pane-active".into()).absolute().inset_0().rounded(t.sheet()).border_1().border_color(t.accent.opacity(0.3))))
             .children(tint);
-        (area.into_any_element(), comments.map(IntoElement::into_any_element))
+        (
+            area.into_any_element(),
+            comments.map(IntoElement::into_any_element),
+        )
     }
 
     /// The panes of `node`, each area taken from `areas` (by pane), with a border to drag between
     /// two neighbours. `path` is the node's place in the tree, as `Node::rect_of` reads it.
-    fn render_layout(&self, node: &Node, path: &mut Vec<usize>, areas: &mut [Option<gpui::AnyElement>], cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn render_layout(
+        &self,
+        node: &Node,
+        path: &mut Vec<usize>,
+        areas: &mut [Option<gpui::AnyElement>],
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let t = self.theme;
         let (axis, children) = match node {
-            Node::Pane(group) => return areas.get_mut(*group).and_then(Option::take).unwrap_or_else(|| div().into_any_element()),
+            Node::Pane(group) => {
+                return areas
+                    .get_mut(*group)
+                    .and_then(Option::take)
+                    .unwrap_or_else(|| div().into_any_element());
+            }
             Node::Split(axis, children) => (*axis, children),
         };
         let row = axis == layout::Axis::Row;
-        let mut split = div().size_full().min_w_0().min_h_0().flex().when(!row, |d| d.flex_col());
+        let mut split = div()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .flex()
+            .when(!row, |d| d.flex_col());
         for (at, (share, child)) in children.iter().enumerate() {
             if at > 0 {
                 let (here, border) = (path.clone(), at - 1);
-                let dragged = self.pane_drag.as_ref().is_some_and(|(p, b)| *p == here && *b == border);
-                let id = format!("pane-border-{}-{border}", here.iter().map(usize::to_string).collect::<Vec<_>>().join("."));
+                let dragged = self
+                    .pane_drag
+                    .as_ref()
+                    .is_some_and(|(p, b)| *p == here && *b == border);
+                let id = format!(
+                    "pane-border-{}-{border}",
+                    here.iter()
+                        .map(usize::to_string)
+                        .collect::<Vec<_>>()
+                        .join(".")
+                );
                 // The border is the gap between two sheets: a line only while the pointer is on it.
-                let line = div().bg(if dragged { t.accent } else { gpui::transparent_black() }).group_hover("pane-border", |s| s.bg(t.accent));
+                let line = div()
+                    .bg(if dragged {
+                        t.accent
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .group_hover("pane-border", |s| s.bg(t.accent));
                 split = split.child(
                     div()
                         .id(gpui::SharedString::from(id.clone()))
@@ -1011,8 +1433,17 @@ impl Shell {
                         .flex()
                         .justify_center()
                         .map(|d| match row {
-                            true => d.w(nav::GAP).h_full().cursor(CursorStyle::ResizeLeftRight).child(line.w(px(2.)).h_full()),
-                            false => d.h(nav::GAP).w_full().flex_col().cursor(CursorStyle::ResizeUpDown).child(line.h(px(2.)).w_full()),
+                            true => d
+                                .w(nav::GAP)
+                                .h_full()
+                                .cursor(CursorStyle::ResizeLeftRight)
+                                .child(line.w(px(2.)).h_full()),
+                            false => d
+                                .h(nav::GAP)
+                                .w_full()
+                                .flex_col()
+                                .cursor(CursorStyle::ResizeUpDown)
+                                .child(line.h(px(2.)).w_full()),
                         })
                         // Held, it follows the pointer; a double click shares this split evenly.
                         .on_mouse_down(
@@ -1033,7 +1464,12 @@ impl Shell {
                 );
             }
             path.push(at);
-            let mut cell = div().flex_basis(px(0.)).min_w_0().min_h_0().flex().child(self.render_layout(child, path, areas, cx));
+            let mut cell = div()
+                .flex_basis(px(0.))
+                .min_w_0()
+                .min_h_0()
+                .flex()
+                .child(self.render_layout(child, path, areas, cx));
             cell.style().flex_grow = Some(*share);
             path.pop();
             split = split.child(cell);
@@ -1045,16 +1481,31 @@ impl Shell {
     /// keeping its minimum size.
     pub(super) fn drag_border(&mut self, path: &[usize], border: usize, at: Point<Pixels>) {
         let area = self.pane_box.get();
-        let Some(Node::Split(axis, _)) = self.layout.at(path) else { return };
+        let Some(Node::Split(axis, _)) = self.layout.at(path) else {
+            return;
+        };
         let rect = self.layout.rect_of(path);
         let (from, size, min) = match axis {
-            layout::Axis::Row => (area.left() + area.size.width * rect.x, area.size.width * rect.w, MIN_PANE),
-            layout::Axis::Column => (area.top() + area.size.height * rect.y, area.size.height * rect.h, MIN_PANE_H),
+            layout::Axis::Row => (
+                area.left() + area.size.width * rect.x,
+                area.size.width * rect.w,
+                MIN_PANE,
+            ),
+            layout::Axis::Column => (
+                area.top() + area.size.height * rect.y,
+                area.size.height * rect.h,
+                MIN_PANE_H,
+            ),
         };
         if size <= px(0.) {
             return;
         }
-        let pointer = if *axis == layout::Axis::Row { at.x } else { at.y };
-        self.layout.drag(path, border, (pointer - from) / size, min / size);
+        let pointer = if *axis == layout::Axis::Row {
+            at.x
+        } else {
+            at.y
+        };
+        self.layout
+            .drag(path, border, (pointer - from) / size, min / size);
     }
 }

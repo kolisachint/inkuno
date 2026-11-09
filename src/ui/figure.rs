@@ -41,7 +41,11 @@ pub type Figure = (String, f32, f32);
 /// The SVG of the Mermaid diagram in `source`. The error is the engine's own words,
 /// or a note that it panicked: a diagram from elsewhere must not take down the app.
 pub fn mermaid(source: &str, look: &Look) -> Result<String, String> {
-    let base = if look.dark { Theme::dark() } else { Theme::modern() };
+    let base = if look.dark {
+        Theme::dark()
+    } else {
+        Theme::modern()
+    };
     let theme = Theme {
         font_family: look.font.clone(),
         background: look.bg.clone(),
@@ -58,7 +62,10 @@ pub fn mermaid(source: &str, look: &Look) -> Result<String, String> {
         sequence_actor_line: look.line.clone(),
         ..base
     };
-    let options = RenderOptions { theme, ..Default::default() };
+    let options = RenderOptions {
+        theme,
+        ..Default::default()
+    };
     match catch_unwind(AssertUnwindSafe(|| render_with_options(source, options))) {
         Ok(Ok(svg)) => Ok(svg),
         Ok(Err(e)) => Err(e.to_string()),
@@ -87,10 +94,17 @@ pub fn png(svg: &str, scale: f32, ground: u32) -> Option<Vec<u8>> {
     use resvg::tiny_skia;
     let tree = crate::ui::svg::parse(svg)?;
     let size = tree.size();
-    let mut pixmap = tiny_skia::Pixmap::new((size.width() * scale).ceil() as u32, (size.height() * scale).ceil() as u32)?;
+    let mut pixmap = tiny_skia::Pixmap::new(
+        (size.width() * scale).ceil() as u32,
+        (size.height() * scale).ceil() as u32,
+    )?;
     let [_, r, g, b] = ground.to_be_bytes();
     pixmap.fill(tiny_skia::Color::from_rgba8(r, g, b, 255));
-    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+    resvg::render(
+        &tree,
+        tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
     pixmap.encode_png().ok()
 }
 
@@ -102,7 +116,11 @@ pub fn sharpen(svg: &str) -> Option<Figure> {
     let body = &svg[svg.find("<svg")?..];
     let head = &body[..body.find('>')?];
     let dim = |name: &str| {
-        let value = head.split(&format!(" {name}=\"")).nth(1)?.split('"').next()?;
+        let value = head
+            .split(&format!(" {name}=\""))
+            .nth(1)?
+            .split('"')
+            .next()?;
         let (value, unit) = match value.strip_suffix("pt") {
             Some(points) => (points, 4. / 3.),
             None => (value.trim_end_matches("px"), 1.),

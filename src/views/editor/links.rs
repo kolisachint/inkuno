@@ -14,8 +14,12 @@ impl Editor {
     pub(super) fn linkable(&self) -> bool {
         let text = &self.content[self.sel.clone()];
         // Over several cells, a link would mean nothing: it would hold a `|`.
-        let cells = self.selected_cells().is_some() || self.pick_cells().is_some_and(|c| c.len() > 1);
-        !text.contains('\n') && !cells && !md::is_url(text.trim()) && !self.in_code(self.line_range(self.sel.start).start)
+        let cells =
+            self.selected_cells().is_some() || self.pick_cells().is_some_and(|c| c.len() > 1);
+        !text.contains('\n')
+            && !cells
+            && !md::is_url(text.trim())
+            && !self.in_code(self.line_range(self.sel.start).start)
     }
 
     /// Makes a link `[text](address)`. On an existing link, its address is selected,
@@ -25,7 +29,9 @@ impl Editor {
     pub(super) fn link(&mut self, cx: &mut Context<Self>) {
         let lr = self.line_range(self.sel.start);
         let (line, col) = (&self.content[lr.clone()], self.sel.start - lr.start);
-        let on = md::links(line).into_iter().find(|(r, _)| (r.start..=r.end).contains(&col));
+        let on = md::links(line)
+            .into_iter()
+            .find(|(r, _)| (r.start..=r.end).contains(&col));
         if let Some((r, _)) = &on
             && let Some((_, url)) = md::web_link(&line[r.start..])
         {
@@ -83,8 +89,14 @@ impl Editor {
 
     fn comment_here(&mut self, cx: &mut Context<Self>) {
         let lr = self.line_range(self.sel.start);
-        let (line, col) = (self.content[lr.clone()].to_string(), self.sel.start - lr.start);
-        if let Some((whole, noted, _)) = md::comments(&line).into_iter().find(|(whole, ..)| (whole.start..=whole.end).contains(&col)) {
+        let (line, col) = (
+            self.content[lr.clone()].to_string(),
+            self.sel.start - lr.start,
+        );
+        if let Some((whole, noted, _)) = md::comments(&line)
+            .into_iter()
+            .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
+        {
             self.push_undo(true);
             // A comment alone on its line takes the line with it.
             if noted.start == whole.start && line.trim() == &line[whole.clone()] {
@@ -102,7 +114,9 @@ impl Editor {
         // ponytail: a comment on an empty cell is refused, there is nothing to highlight. Allow it
         // (`{====}{>>…<<}`) if the corner mark of the issue gets drawn.
         if let Some(cells) = self.comment_cells(&lr) {
-            let Some(first) = cells.first().map(|c| c.start) else { return };
+            let Some(first) = cells.first().map(|c| c.start) else {
+                return;
+            };
             let len = cells[0].len();
             self.push_undo(true);
             for cell in cells.iter().rev() {
@@ -112,7 +126,11 @@ impl Editor {
             return self.move_to(first + len + 9, cx);
         }
         let marker = md::classify(&line, false).1;
-        let sel = if self.sel.is_empty() { lr.start + marker..lr.end } else { self.sel.clone() };
+        let sel = if self.sel.is_empty() {
+            lr.start + marker..lr.end
+        } else {
+            self.sel.clone()
+        };
         if sel.is_empty() || sel.end > lr.end {
             return;
         }
@@ -125,7 +143,10 @@ impl Editor {
     /// Byte `at` is in the comment of a table cell: a `|` typed there is written `\|`, or it would split the cell.
     pub(super) fn in_cell_comment(&self, at: usize) -> bool {
         let lr = self.line_range(at);
-        self.is_table_line(&lr) && md::comments(&self.content[lr.clone()]).iter().any(|(_, _, said)| (said.start..=said.end).contains(&(at - lr.start)))
+        self.is_table_line(&lr)
+            && md::comments(&self.content[lr.clone()])
+                .iter()
+                .any(|(_, _, said)| (said.start..=said.end).contains(&(at - lr.start)))
     }
 
     /// What a comment is on when the selection is in a table, in reading order: the text of the
@@ -133,24 +154,43 @@ impl Editor {
     /// is never inside a comment). `None` outside a table; empty if no cell has text.
     fn comment_cells(&self, line: &Range<usize>) -> Option<Vec<Range<usize>>> {
         if let Some(cells) = self.pick_cells() {
-            return Some(cells.into_iter().filter_map(|c| self.trimmed(c.start, c.end)).collect());
+            return Some(
+                cells
+                    .into_iter()
+                    .filter_map(|c| self.trimmed(c.start, c.end))
+                    .collect(),
+            );
         }
         if self.sel.is_empty() {
             if !self.is_table_line(line) {
                 return None;
             }
             let (cells, k) = self.table_cells(self.sel.start).unzip();
-            return Some(cells.zip(k).and_then(|(cells, k)| cells.get(k).cloned()).and_then(|c| self.trimmed(c.start, c.end)).into_iter().collect());
+            return Some(
+                cells
+                    .zip(k)
+                    .and_then(|(cells, k)| cells.get(k).cloned())
+                    .and_then(|c| self.trimmed(c.start, c.end))
+                    .into_iter()
+                    .collect(),
+            );
         }
         let parts = self.mark_parts();
-        parts.iter().any(|p| self.is_table_line(&self.line_range(p.start))).then_some(parts)
+        parts
+            .iter()
+            .any(|p| self.is_table_line(&self.line_range(p.start)))
+            .then_some(parts)
     }
 
     /// The taken row, column or table is commented on a line of its own under the table, as
     /// `{>>Row "Léa": …<<}`: named by its content, so that a sort leaves the comment where it belongs.
     fn comment_scope(&mut self, cx: &mut Context<Self>) {
-        let Some((range, rows, _)) = self.table_at(self.sel.start) else { return };
-        let Some(pick) = self.live_pick(range.start).cloned() else { return };
+        let Some((range, rows, _)) = self.table_at(self.sel.start) else {
+            return;
+        };
+        let Some(pick) = self.live_pick(range.start).cloned() else {
+            return;
+        };
         let visible = md::visible_rows(&rows);
         let (names, cols) = md::scopes(&rows);
         let name = if pick.rows.len() >= visible && pick.cols.len() >= rows[0].len() {
@@ -163,7 +203,11 @@ impl Editor {
         let head = format!("{{>>{name}: ");
         // A blank line keeps other apps from reading the comment as one more row.
         let after = &self.content[range.end..];
-        let tail = if after.is_empty() || after == "\n" || after.starts_with("\n\n") { "" } else { "\n" };
+        let tail = if after.is_empty() || after == "\n" || after.starts_with("\n\n") {
+            ""
+        } else {
+            "\n"
+        };
         self.push_undo(true);
         self.edit(range.end..range.end, &format!("\n\n{head}<<}}{tail}"), cx);
         self.move_to(range.end + 2 + head.len(), cx);
@@ -177,7 +221,12 @@ impl Editor {
 
     /// Like `remove_line`, the cursor left to follow the text; where the text closed up.
     fn drop_line(&mut self, lr: Range<usize>, cx: &mut Context<Self>) -> usize {
-        let before = self.content[..lr.start].bytes().rev().take(2).take_while(|&b| b == b'\n').count();
+        let before = self.content[..lr.start]
+            .bytes()
+            .rev()
+            .take(2)
+            .take_while(|&b| b == b'\n')
+            .count();
         let after = &self.content[lr.end..];
         let range = if lr.start == 0 {
             lr.start..lr.end + after.starts_with('\n') as usize
@@ -213,9 +262,26 @@ impl Editor {
     /// Follows the rows and columns of a table that changed in the comment lines under it, in
     /// the same undo step: each is renamed after its row or column, or goes with it
     /// (see `md::retarget`).
-    pub(super) fn retarget_comments(&mut self, lines: &[Range<usize>], moved: (&[Option<usize>], &[Option<usize>]), old: &md::Scopes, new: &md::Scopes, gone: bool, cx: &mut Context<Self>) {
-        let texts: Vec<String> = lines.iter().map(|lr| self.content[lr.clone()].to_string()).collect();
-        let edits = md::retarget(&texts.iter().map(String::as_str).collect::<Vec<_>>(), old, new, moved, gone);
+    pub(super) fn retarget_comments(
+        &mut self,
+        lines: &[Range<usize>],
+        moved: (&[Option<usize>], &[Option<usize>]),
+        old: &md::Scopes,
+        new: &md::Scopes,
+        gone: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let texts: Vec<String> = lines
+            .iter()
+            .map(|lr| self.content[lr.clone()].to_string())
+            .collect();
+        let edits = md::retarget(
+            &texts.iter().map(String::as_str).collect::<Vec<_>>(),
+            old,
+            new,
+            moved,
+            gone,
+        );
         for ((lr, text), edit) in lines.iter().zip(&texts).zip(edits).rev() {
             match edit {
                 None => {
@@ -229,13 +295,19 @@ impl Editor {
 
     /// Before the edit of `range` by `text`, the names that comments under the table could use,
     /// if it is a change inside a line of a table that has such comments.
-    pub(super) fn scopes_before(&self, range: &Range<usize>, text: &str) -> Option<(usize, md::Scopes)> {
+    pub(super) fn scopes_before(
+        &self,
+        range: &Range<usize>,
+        text: &str,
+    ) -> Option<(usize, md::Scopes)> {
         let lr = self.line_range(range.start);
         if range.end > lr.end || text.contains('\n') || !self.is_table_line(&lr) {
             return None;
         }
         // Only a first cell or a header names something: typing elsewhere costs nothing.
-        let first_cell = md::cells(&self.content[lr.clone()]).first().is_none_or(|c| range.start <= lr.start + c.end + 1);
+        let first_cell = md::cells(&self.content[lr.clone()])
+            .first()
+            .is_none_or(|c| range.start <= lr.start + c.end + 1);
         let header = lr.start == 0 || !self.is_table_line(&self.line_range(lr.start - 1));
         if !first_cell && !header {
             return None;
@@ -255,7 +327,9 @@ impl Editor {
 
     /// After an edit in a cell: a row or a column that took another name carries its comments along.
     pub(super) fn rename_scopes(&mut self, table: usize, old: md::Scopes, cx: &mut Context<Self>) {
-        let Some((range, rows, _)) = self.table_at(table) else { return };
+        let Some((range, rows, _)) = self.table_at(table) else {
+            return;
+        };
         let new = md::scopes(&rows);
         if old == new || old.0.len() != new.0.len() || old.1.len() != new.1.len() {
             return;
@@ -264,7 +338,14 @@ impl Editor {
         // Same undo step as the edit that renamed.
         let held = std::mem::replace(&mut self.held, true);
         let same = |n: usize| (0..n).map(Some).collect::<Vec<_>>();
-        self.retarget_comments(&lines, (&same(old.0.len()), &same(old.1.len())), &old, &new, false, cx);
+        self.retarget_comments(
+            &lines,
+            (&same(old.0.len()), &same(old.1.len())),
+            &old,
+            &new,
+            false,
+            cx,
+        );
         self.held = held;
     }
 }

@@ -1,7 +1,6 @@
 //! Live-styled Markdown editor: the text stays raw Markdown, only the
 //! rendering changes (sizes, weights, colors).
 
-
 mod blocks;
 mod clipboard;
 mod completion;
@@ -11,6 +10,7 @@ mod embed;
 mod find;
 mod format_bar;
 mod formulas;
+pub mod grid;
 mod input;
 mod layout;
 mod links;
@@ -20,7 +20,6 @@ mod paint;
 mod render;
 mod style;
 mod table;
-pub mod grid;
 
 use grid::TableRow;
 
@@ -51,21 +50,31 @@ use std::{
 };
 
 use gpui::{
-    App, BorderStyle, Bounds, ClipboardEntry, ClipboardItem, ContentMask, Context, Corners, CursorStyle,
-    ElementId, ElementInputHandler, Entity, EntityInputHandler, EventEmitter, FocusHandle,
-    Focusable, Font, FontStyle, FontWeight, GlobalElementId, Hitbox, HitboxBehavior, Hsla, Image,
-    ImageFormat, ImgResourceLoader, InspectorElementId, LayoutId, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, RenderImage, Resource, Rgba, ScrollWheelEvent,
-    SharedString, Size, StrikethroughStyle, Style, TextAlign, TextRun, TransformationMatrix,
-    UTF16Selection, UnderlineStyle, Window, WrappedLine, actions, div, fill, font, point,
-    prelude::*, px, quad, relative, size,
+    App, BorderStyle, Bounds, ClipboardEntry, ClipboardItem, ContentMask, Context, Corners,
+    CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, EventEmitter,
+    FocusHandle, Focusable, Font, FontStyle, FontWeight, GlobalElementId, Hitbox, HitboxBehavior,
+    Hsla, Image, ImageFormat, ImgResourceLoader, InspectorElementId, LayoutId, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, RenderImage, Resource, Rgba,
+    ScrollWheelEvent, SharedString, Size, StrikethroughStyle, Style, TextAlign, TextRun,
+    TransformationMatrix, UTF16Selection, UnderlineStyle, Window, WrappedLine, actions, div, fill,
+    font, point, prelude::*, px, quad, relative, size,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    ui::theme::Wide,
-    ui::theme::Theme, logic::block, logic::diagram::Diagram, ui::figure, views::graph, views::viewer::Source, ui::svg, ui::assets::mono, ui::assets::sans, lang::tr, platform::vault,
+    lang::tr,
+    logic::block,
+    logic::diagram::Diagram,
     logic::markdown::{self as md, Enter, Kind, Link, ListStyle},
+    platform::vault,
+    ui::assets::mono,
+    ui::assets::sans,
+    ui::figure,
+    ui::svg,
+    ui::theme::Theme,
+    ui::theme::Wide,
+    views::graph,
+    views::viewer::Source,
 };
 
 actions!(
@@ -172,13 +181,15 @@ actions!(
     ]
 );
 
-/// Band kept at the bottom of the note for the counter and the formatting bar or its button:
-/// the text scrolls behind it, and the cursor and the popups stay above it.
-pub(super) const FOOTER: Pixels = px(56.);
+/// Floor once kept at the bottom of the note for the counter and the formatting bar or its
+/// button: the bar is gone from the main UI (its module stays, reachable from the palette),
+/// so the text uses the full height and the cursor and the popups stay above nothing.
+/// Kept at zero while the shell still draws its own corner buttons over the text.
+pub(super) const FOOTER: Pixels = px(0.);
 const TOP: Pixels = px(20.);
 /// Top margin when the window buttons would cover the first line: under their bottom edge and shadow.
-const PILL_CLEAR: Pixels = px(48.);
-pub const MAX_WIDTH: Pixels = px(720.);
+const PILL_CLEAR: Pixels = px(56.);
+pub const MAX_WIDTH: Pixels = px(800.);
 /// Margin kept on each side of the page, narrow or full.
 const SIDE: Pixels = px(24.);
 
@@ -198,10 +209,21 @@ const BROKEN: Pixels = px(20.);
 // not followed; allow the link's target if someone needs it.
 /// The picture file written `path` in a note: in the note's folder, at the vault root (the last of
 /// `dirs`), then by its name anywhere in the vault (`images`); never outside the vault.
-pub fn find_picture(dirs: &[PathBuf], images: &HashMap<String, PathBuf>, path: &str) -> Option<PathBuf> {
+pub fn find_picture(
+    dirs: &[PathBuf],
+    images: &HashMap<String, PathBuf>,
+    path: &str,
+) -> Option<PathBuf> {
     let root = dirs.last();
-    let found = dirs.iter().map(|d| d.join(path)).find(|p| p.is_file() && root.is_some_and(|r| inside(r, p)));
-    found.or_else(|| images.get(&path.rsplit('/').next()?.to_lowercase()).cloned())
+    let found = dirs
+        .iter()
+        .map(|d| d.join(path))
+        .find(|p| p.is_file() && root.is_some_and(|r| inside(r, p)));
+    found.or_else(|| {
+        images
+            .get(&path.rsplit('/').next()?.to_lowercase())
+            .cloned()
+    })
 }
 
 fn inside(root: &Path, file: &Path) -> bool {
@@ -252,6 +274,10 @@ pub struct Editor {
     last_edit: Option<Instant>,
     /// Where the last change started (`usize::MAX` after a load or an undo): the ``` there is the one being typed.
     edited_at: usize,
+    /// Start of the line showing its source (its markers): the clicked line, then the edited one.
+    /// The other lines hide their inline and block markers, Typora-style. Plain cursor moves
+    /// (keyboard, search jumps) leave it alone; typing sets it to the edited line.
+    revealed: Option<usize>,
     notes: Rc<[String]>,
     /// Folders to look for images in: the note's, then the vault.
     dirs: Vec<PathBuf>,
@@ -418,6 +444,7 @@ impl Editor {
             redo: History::default(),
             last_edit: None,
             edited_at: usize::MAX,
+            revealed: None,
             notes: Rc::from([]),
             dirs: Vec::new(),
             images: HashMap::new(),
@@ -516,6 +543,8 @@ impl Editor {
         self.redo = History::default();
         self.last_edit = None;
         self.edited_at = usize::MAX;
+        // The cursor's line starts out showing its source; clicks and edits move it from there.
+        self.revealed = Some(self.line_range(self.clamp(cursor)).start);
         self.scroll_y = px(0.);
         self.table_x.clear();
         self.selecting = false;
@@ -549,7 +578,9 @@ impl Editor {
     }
 
     pub fn set_images(&mut self, images: &[PathBuf]) {
-        let named = images.iter().map(|p| (graph::image_name(p).to_lowercase(), p.clone()));
+        let named = images
+            .iter()
+            .map(|p| (graph::image_name(p).to_lowercase(), p.clone()));
         self.images = named.collect();
         self.version += 1;
         self.epoch += 1;
@@ -557,8 +588,18 @@ impl Editor {
 
     /// What the note's pictures and embeds are looked up in: its folders, the vault's pictures by
     /// name, its notes by name (see `find_picture`).
-    pub fn lookups(&self) -> (Vec<PathBuf>, HashMap<String, PathBuf>, HashMap<String, PathBuf>) {
-        (self.dirs.clone(), self.images.clone(), (*self.embeds.sources).clone())
+    pub fn lookups(
+        &self,
+    ) -> (
+        Vec<PathBuf>,
+        HashMap<String, PathBuf>,
+        HashMap<String, PathBuf>,
+    ) {
+        (
+            self.dirs.clone(),
+            self.images.clone(),
+            (*self.embeds.sources).clone(),
+        )
     }
 
     pub fn set_dirs(&mut self, dirs: Vec<PathBuf>) {
@@ -575,21 +616,34 @@ impl Editor {
     /// Center of the first "Copy" button shown.
     #[cfg(test)]
     pub fn copy_button(&self) -> Option<Point<Pixels>> {
-        Some(self.copy_bounds(self.rows.iter().find(|r| r.opens)?).center())
+        Some(
+            self.copy_bounds(self.rows.iter().find(|r| r.opens)?)
+                .center(),
+        )
     }
 
     /// Number of characters and size of the image shown on the line starting with `prefix`.
     #[cfg(test)]
     pub fn decorations(&self, prefix: &str) -> (usize, Option<(f32, f32)>) {
-        let row = self.rows.iter().find(|r| self.content[r.start..].starts_with(prefix)).unwrap();
-        let image = row.image.as_ref().map(|(_, s)| (s.width.into(), s.height.into()));
+        let row = self
+            .rows
+            .iter()
+            .find(|r| self.content[r.start..].starts_with(prefix))
+            .unwrap();
+        let image = row
+            .image
+            .as_ref()
+            .map(|(_, s)| (s.width.into(), s.height.into()));
         (row.shaped.subs.len(), image)
     }
 
     /// Center of the "full size" button of the Mermaid block starting with `prefix`.
     #[cfg(test)]
     pub fn view_button(&self, prefix: &str) -> Option<Point<Pixels>> {
-        let row = self.rows.iter().find(|r| self.views(r) && self.content[r.start..].starts_with(prefix))?;
+        let row = self
+            .rows
+            .iter()
+            .find(|r| self.views(r) && self.content[r.start..].starts_with(prefix))?;
         Some(self.view_bounds(row).center())
     }
 
@@ -598,7 +652,15 @@ impl Editor {
     #[cfg(test)]
     pub fn enlargeable(&self) -> Vec<(usize, Bounds<Pixels>, Bounds<Pixels>, bool)> {
         let rows = self.rows.iter();
-        rows.filter_map(|r| Some((r.start, self.image_bounds(r)?, self.big_bounds(r)?, self.big_hover == Some(r.start)))).collect()
+        rows.filter_map(|r| {
+            Some((
+                r.start,
+                self.image_bounds(r)?,
+                self.big_bounds(r)?,
+                self.big_hover == Some(r.start),
+            ))
+        })
+        .collect()
     }
 
     /// Kept figures, and figures being drawn.
@@ -616,16 +678,24 @@ impl Editor {
     /// Footer counter: words and characters of the note, or of the selection. Recounted only when the text or the selection change.
     pub fn counts(&mut self) -> String {
         // Without a selection, moving the cursor changes nothing in the count.
-        let key = (self.version, (!self.sel.is_empty()).then(|| self.sel.clone()));
+        let key = (
+            self.version,
+            (!self.sel.is_empty()).then(|| self.sel.clone()),
+        );
         if let Some((_, label)) = self.counted.as_ref().filter(|(known, _)| *known == key) {
             return label.clone();
         }
-        let plural = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+        let plural =
+            |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
         let both = |(words, chars): (usize, usize)| {
             format!(
                 "{} · {}",
                 plural(words, tr("word", "mot"), tr("words", "mots")),
-                plural(chars, tr("character", "caractère"), tr("characters", "caractères"))
+                plural(
+                    chars,
+                    tr("character", "caractère"),
+                    tr("characters", "caractères")
+                )
             )
         };
         let label = if self.sel.is_empty() {
@@ -634,13 +704,21 @@ impl Editor {
                 Some((_, old, was)) => md::recount(old, *was, &self.content),
                 None => md::counts(&self.content),
             };
-            if self.tally.as_ref().is_none_or(|(version, ..)| *version != self.version) {
+            if self
+                .tally
+                .as_ref()
+                .is_none_or(|(version, ..)| *version != self.version)
+            {
                 // ponytail: a copy of the text for the next recount; keep the counts in `splice` if it weighs.
                 self.tally = Some((self.version, self.content.clone(), whole));
             }
             both(whole)
         } else {
-            format!("{} {}", tr("Selection:", "Sélection :"), both(md::counts(&self.content[self.sel.clone()])))
+            format!(
+                "{} {}",
+                tr("Selection:", "Sélection :"),
+                both(md::counts(&self.content[self.sel.clone()]))
+            )
         };
         self.counted = Some((key, label.clone()));
         label
@@ -686,14 +764,25 @@ impl Editor {
     /// The lines of code blocks, callouts and quotes: `(start, head, foot, room above, room under)`.
     #[cfg(test)]
     pub fn block_lines(&self) -> Vec<(usize, bool, bool, f32, f32)> {
-        let lines = self.rows.iter().filter(|r| matches!(r.kind, Kind::Code | Kind::Fence | Kind::Quote));
-        lines.map(|r| (r.start, r.head, r.foot, f32::from(r.pad), f32::from(r.gap))).collect()
+        let lines = self
+            .rows
+            .iter()
+            .filter(|r| matches!(r.kind, Kind::Code | Kind::Fence | Kind::Quote));
+        lines
+            .map(|r| (r.start, r.head, r.foot, f32::from(r.pad), f32::from(r.gap)))
+            .collect()
     }
 
     /// The headings: `(start, level, room above, line height)`.
     #[cfg(test)]
     pub fn heading_rows(&self) -> Vec<(usize, u8, f32, f32)> {
-        let found = self.rows.iter().filter_map(|r| if let Kind::Heading(n) = r.kind { Some((r.start, n, f32::from(r.pad), f32::from(r.lh))) } else { None });
+        let found = self.rows.iter().filter_map(|r| {
+            if let Kind::Heading(n) = r.kind {
+                Some((r.start, n, f32::from(r.pad), f32::from(r.lh)))
+            } else {
+                None
+            }
+        });
         found.collect()
     }
 
@@ -714,7 +803,10 @@ impl Editor {
     }
 
     fn fences_before(&self, at: usize) -> usize {
-        self.content[..at].lines().filter(|l| md::is_fence(l)).count()
+        self.content[..at]
+            .lines()
+            .filter(|l| md::is_fence(l))
+            .count()
     }
 
     /// A ``` without a closing fence does not open a block, as in `layout`.
@@ -744,7 +836,6 @@ impl Editor {
     // ----- UTF-16 (input methods) -----
 
     // ----- Layout and rendering -----
-
 }
 
 #[cfg(test)]
@@ -792,17 +883,19 @@ mod tests {
 
     #[test]
     fn tables_get_room_by_setting() {
-        let (pane, text) = (px(1000.), px(720.));
+        let (pane, text) = (px(1000.), px(800.));
         // In the column: nothing changes. Centered: the whole window minus the margins.
         assert_eq!(table_room(Wide::Column, pane, text), text);
         assert_eq!(table_room(Wide::Centered, pane, text), px(952.));
         // Narrow window: the column already fills the space, nothing overflows.
         let narrow = px(500.);
-        assert_eq!(table_room(Wide::Centered, narrow, narrow - SIDE * 2.), narrow - SIDE * 2.);
+        assert_eq!(
+            table_room(Wide::Centered, narrow, narrow - SIDE * 2.),
+            narrow - SIDE * 2.
+        );
         // A centered table overflows by half its excess on each side; never backwards.
-        assert_eq!(table_lead(Wide::Centered, px(952.), text), px(116.));
+        assert_eq!(table_lead(Wide::Centered, px(952.), text), px(76.));
         assert_eq!(table_lead(Wide::Centered, px(300.), text), px(0.));
         assert_eq!(table_lead(Wide::Column, px(952.), text), px(0.));
     }
-
 }

@@ -24,10 +24,14 @@ impl Shell {
         }
         cx.spawn_in(window, async move |this, cx| {
             loop {
-                signal.wait(cx.background_executor().timer(Duration::from_secs(3600))).await;
+                signal
+                    .wait(cx.background_executor().timer(Duration::from_secs(3600)))
+                    .await;
                 let each: Vec<platform::link::Asked> = std::mem::take(&mut *asked.lock().unwrap());
                 for ask in each {
-                    let Ok(answer) = this.update_in(cx, |this, window, cx| this.show_asked(&ask.path, window, cx)) else {
+                    let Ok(answer) = this.update_in(cx, |this, window, cx| {
+                        this.show_asked(&ask.path, window, cx)
+                    }) else {
                         return;
                     };
                     let _ = ask.answer.send(answer);
@@ -39,7 +43,12 @@ impl Shell {
 
     /// Shows a file an agent asked for (`path` absolute), in a tab of its own, and brings the
     /// window to the front.
-    pub(super) fn show_asked(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) -> Result<(), String> {
+    pub(super) fn show_asked(
+        &mut self,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
         let Some(root) = self.vault.clone() else {
             return Err("Bref has no vault open".into());
         };
@@ -80,20 +89,27 @@ impl Shell {
                 // With a watcher, the task sleeps until the system's signal; it still wakes up
                 // every 2 s to see whether the vault changed.
                 let notified = if live {
-                    changed.wait(cx.background_executor().timer(Duration::from_secs(2))).await
+                    changed
+                        .wait(cx.background_executor().timer(Duration::from_secs(2)))
+                        .await
                 } else {
                     cx.background_executor().timer(pause).await;
                     false
                 };
-                let Ok(state) = this.update(cx, |this, _| this.vault.clone().map(|root| (root, this.save_gen)))
-                else {
+                let Ok(state) = this.update(cx, |this, _| {
+                    this.vault.clone().map(|root| (root, this.save_gen))
+                }) else {
                     return;
                 };
                 let Some((root, generation)) = state else {
                     continue;
                 };
                 if watched.as_ref().map(|(r, _)| r) != Some(&root) {
-                    let watcher = if cfg!(test) { None } else { vault::watch(&root, changed.clone()) };
+                    let watcher = if cfg!(test) {
+                        None
+                    } else {
+                        vault::watch(&root, changed.clone())
+                    };
                     watched = Some((root.clone(), watcher));
                     next_check = Instant::now();
                 }
@@ -105,7 +121,9 @@ impl Shell {
                     if notified {
                         // A save or a sync often touches several
                         // files in a row: let the burst finish.
-                        cx.background_executor().timer(Duration::from_millis(250)).await;
+                        cx.background_executor()
+                            .timer(Duration::from_millis(250))
+                            .await;
                         changed.take();
                     }
                 }
@@ -135,7 +153,10 @@ impl Shell {
                 let mut applied = false;
                 this.update(cx, |this, cx| {
                     // A keystroke or a save during the read: try again on the next round.
-                    if this.vault.as_ref() == Some(&root) && this.save_gen == generation && !this.panes.iter().any(|pane| pane.dirty) {
+                    if this.vault.as_ref() == Some(&root)
+                        && this.save_gen == generation
+                        && !this.panes.iter().any(|pane| pane.dirty)
+                    {
                         this.unreadable = unreadable;
                         this.sync(notes, dirs, images, cx);
                         last = Some((root, print));
@@ -162,8 +183,13 @@ impl Shell {
     ) {
         // Same notes, same tags, same links? Each reread note is compared with the one we had
         // under its path, without copying or sorting anything.
-        let had: std::collections::HashMap<&Path, &Note> = self.notes.iter().map(|n| (n.path.as_path(), n)).collect();
-        let same = notes.len() == had.len() && notes.iter().all(|n| had.get(n.path.as_path()).is_some_and(|o| o.tags == n.tags && o.links == n.links));
+        let had: std::collections::HashMap<&Path, &Note> =
+            self.notes.iter().map(|n| (n.path.as_path(), n)).collect();
+        let same = notes.len() == had.len()
+            && notes.iter().all(|n| {
+                had.get(n.path.as_path())
+                    .is_some_and(|o| o.tags == n.tags && o.links == n.links)
+            });
         dirs.sort();
         self.dirs.sort();
         images.sort();
@@ -188,8 +214,14 @@ impl Shell {
             // A failed canvas write still holds edits that must not be replaced by the disk.
             if !this.pane().canvas_dirty
                 && let Some(canvas) = this.pane().drawing().cloned()
-                && let Some(fresh) = this.pane().file_path().and_then(|path| fs::read_to_string(path).ok()).as_deref().and_then(Diagram::from_svg)
-                && fresh.to_svg(diagram::COLORS[0]) != canvas.read(cx).diagram().to_svg(diagram::COLORS[0])
+                && let Some(fresh) = this
+                    .pane()
+                    .file_path()
+                    .and_then(|path| fs::read_to_string(path).ok())
+                    .as_deref()
+                    .and_then(Diagram::from_svg)
+                && fresh.to_svg(diagram::COLORS[0])
+                    != canvas.read(cx).diagram().to_svg(diagram::COLORS[0])
             {
                 canvas.update(cx, |canvas, cx| canvas.replace(fresh, cx));
             }
@@ -250,12 +282,21 @@ impl Shell {
 
     /// Creates the vault folder if it does not exist, then opens it: a folder already there is
     /// opened as is, nothing is written to it.
-    pub(super) fn create_vault(&mut self, root: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn create_vault(
+        &mut self,
+        root: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match fs::create_dir_all(&root) {
             Ok(()) => self.set_vault(root, window, cx),
             Err(e) => {
                 let what = tr("Cannot create the vault", "Impossible de créer le coffre");
-                self.say(Tone::Failed, format!("{what} {} : {}", root.display(), crate::lang::io_reason(&e)), cx);
+                self.say(
+                    Tone::Failed,
+                    format!("{what} {} : {}", root.display(), crate::lang::io_reason(&e)),
+                    cx,
+                );
             }
         }
     }
@@ -286,12 +327,28 @@ impl Shell {
     pub(super) fn push_names_to(&mut self, tabs: std::ops::Range<usize>, cx: &mut Context<Self>) {
         // Aliases are offered after `[[` like names.
         let notes: Vec<&Note> = self.notes.iter().filter(|n| !self.is_template(n)).collect();
-        let names: std::rc::Rc<[String]> = notes.iter().map(|n| n.name.clone()).chain(notes.iter().flat_map(|n| n.aliases.iter().cloned())).collect();
+        let names: std::rc::Rc<[String]> = notes
+            .iter()
+            .map(|n| n.name.clone())
+            .chain(notes.iter().flat_map(|n| n.aliases.iter().cloned()))
+            .collect();
         let pictures = vault::pictures(&self.images);
         // Notes and their aliases, for the sections embedded from them.
-        let sources: std::rc::Rc<std::collections::HashMap<String, PathBuf>> =
-            notes.iter().flat_map(|n| std::iter::once(n.name.as_str()).chain(n.aliases.iter().map(String::as_str)).map(|name| (name.to_lowercase(), n.path.clone()))).collect::<std::collections::HashMap<_, _>>().into();
-        let me = |pane: &Pane| pane.path.as_deref().and_then(Path::file_stem).map(|s| s.to_string_lossy().to_string());
+        let sources: std::rc::Rc<std::collections::HashMap<String, PathBuf>> = notes
+            .iter()
+            .flat_map(|n| {
+                std::iter::once(n.name.as_str())
+                    .chain(n.aliases.iter().map(String::as_str))
+                    .map(|name| (name.to_lowercase(), n.path.clone()))
+            })
+            .collect::<std::collections::HashMap<_, _>>()
+            .into();
+        let me = |pane: &Pane| {
+            pane.path
+                .as_deref()
+                .and_then(Path::file_stem)
+                .map(|s| s.to_string_lossy().to_string())
+        };
         for pane in &self.panes[tabs] {
             let me = me(pane);
             pane.editor.update(cx, |e, _| {
@@ -304,9 +361,19 @@ impl Shell {
 
     /// Tells the editor where to look for images: next to the note, then in the vault.
     pub(super) fn push_dirs(&mut self, cx: &mut Context<Self>) {
-        let note_dir = self.pane().path.as_deref().and_then(Path::parent).map(Path::to_path_buf);
+        let note_dir = self
+            .pane()
+            .path
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
         let dirs = note_dir.into_iter().chain(self.vault.clone()).collect();
-        let me = self.pane().path.as_deref().and_then(Path::file_stem).map(|s| s.to_string_lossy().to_string());
+        let me = self
+            .pane()
+            .path
+            .as_deref()
+            .and_then(Path::file_stem)
+            .map(|s| s.to_string_lossy().to_string());
         self.pane().editor.update(cx, |e, _| {
             e.set_dirs(dirs);
             e.set_trail(me);
@@ -327,7 +394,13 @@ impl Shell {
     /// opened follow, by modification date.
     pub(super) fn by_recency(&self) -> Vec<&Note> {
         // The rank of each recent note, found in one go: no list reread for each note.
-        let rank: std::collections::HashMap<&Path, usize> = self.recent.iter().enumerate().rev().map(|(i, p)| (p.as_path(), i)).collect();
+        let rank: std::collections::HashMap<&Path, usize> = self
+            .recent
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(i, p)| (p.as_path(), i))
+            .collect();
         let mut notes: Vec<&Note> = self.notes.iter().collect();
         notes.sort_by_cached_key(|n| rank.get(n.path.as_path()).copied().unwrap_or(usize::MAX));
         notes
@@ -346,7 +419,15 @@ impl Shell {
         if let Some(root) = &self.vault
             && let Err(e) = vault::save_icons(root, &self.icons)
         {
-            self.say(Tone::Failed, format!("{} : {}", tr("Icons not saved", "Icônes non enregistrées"), crate::lang::io_reason(&e)), cx);
+            self.say(
+                Tone::Failed,
+                format!(
+                    "{} : {}",
+                    tr("Icons not saved", "Icônes non enregistrées"),
+                    crate::lang::io_reason(&e)
+                ),
+                cx,
+            );
         }
         cx.notify();
     }
@@ -357,7 +438,10 @@ impl Shell {
             return;
         };
         if !vault::open_terminal(&root) {
-            let hint = tr("No terminal found: name yours in $TERMINAL", "Aucun terminal trouvé : nommer le vôtre dans $TERMINAL");
+            let hint = tr(
+                "No terminal found: name yours in $TERMINAL",
+                "Aucun terminal trouvé : nommer le vôtre dans $TERMINAL",
+            );
             self.say(Tone::Failed, hint, cx);
         }
     }
@@ -386,13 +470,36 @@ impl Shell {
             return;
         };
         self.flush(cx);
-        self.say(Tone::Busy, tr("Backing up the vault…", "Sauvegarde du coffre…"), cx);
+        self.say(
+            Tone::Busy,
+            tr("Backing up the vault…", "Sauvegarde du coffre…"),
+            cx,
+        );
         let date = date_name(today());
         cx.spawn(async move |this, cx| {
-            let done = cx.background_executor().spawn(async move { vault::backup(&root, &dir, &date) }).await;
+            let done = cx
+                .background_executor()
+                .spawn(async move { vault::backup(&root, &dir, &date) })
+                .await;
             this.update(cx, |this, cx| match done {
-                Ok(to) => this.say(Tone::Done, format!("{} {}", tr("Backup saved:", "Sauvegarde enregistrée :"), to.display()), cx),
-                Err(e) => this.say(Tone::Failed, format!("{} : {}", tr("Backup failed", "Sauvegarde impossible"), crate::lang::io_reason(&e)), cx),
+                Ok(to) => this.say(
+                    Tone::Done,
+                    format!(
+                        "{} {}",
+                        tr("Backup saved:", "Sauvegarde enregistrée :"),
+                        to.display()
+                    ),
+                    cx,
+                ),
+                Err(e) => this.say(
+                    Tone::Failed,
+                    format!(
+                        "{} : {}",
+                        tr("Backup failed", "Sauvegarde impossible"),
+                        crate::lang::io_reason(&e)
+                    ),
+                    cx,
+                ),
             })
             .ok();
         })
@@ -407,22 +514,62 @@ impl Shell {
         };
         let found = vault::trashed(&root);
         if found.is_empty() {
-            return self.say(Tone::Info, tr("The trash is empty", "La corbeille est vide"), cx);
+            return self.say(
+                Tone::Info,
+                tr("The trash is empty", "La corbeille est vide"),
+                cx,
+            );
         }
-        let names = found.iter().map(|p| p.file_name().unwrap_or_default().to_string_lossy().into_owned()).collect();
+        let names = found
+            .iter()
+            .map(|p| {
+                p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
         let theme = self.theme;
-        let palette = cx.new(|cx| Palette::choose(tr("Restore from the trash", "Restaurer depuis la corbeille"), names, "", theme, cx));
+        let palette = cx.new(|cx| {
+            Palette::choose(
+                tr("Restore from the trash", "Restaurer depuis la corbeille"),
+                names,
+                "",
+                theme,
+                cx,
+            )
+        });
         cx.subscribe_in(&palette, window, move |this, palette, event, window, cx| {
             if matches!(event, PaletteEvent::Preview(_)) {
                 return;
             }
-            let chosen = palette.read(cx).chosen().and_then(|i| found.get(i)).filter(|_| matches!(event, PaletteEvent::Submit(_)));
+            let chosen = palette
+                .read(cx)
+                .chosen()
+                .and_then(|i| found.get(i))
+                .filter(|_| matches!(event, PaletteEvent::Submit(_)));
             match chosen.map(|path| vault::restore(&root, path)) {
                 Some(Ok(to)) => {
-                    let name = to.file_name().unwrap_or_default().to_string_lossy().into_owned();
-                    this.say(Tone::Done, format!("{} {name}", tr("Restored:", "Restauré :")), cx);
+                    let name = to
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    this.say(
+                        Tone::Done,
+                        format!("{} {name}", tr("Restored:", "Restauré :")),
+                        cx,
+                    );
                 }
-                Some(Err(e)) => this.say(Tone::Failed, format!("{} : {}", tr("Not restored", "Restauration impossible"), crate::lang::io_reason(&e)), cx),
+                Some(Err(e)) => this.say(
+                    Tone::Failed,
+                    format!(
+                        "{} : {}",
+                        tr("Not restored", "Restauration impossible"),
+                        crate::lang::io_reason(&e)
+                    ),
+                    cx,
+                ),
                 None => {}
             }
             this.palette = None;

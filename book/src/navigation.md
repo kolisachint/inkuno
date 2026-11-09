@@ -9,7 +9,7 @@ A rail of icons stays on the left of the window. It opens a panel beside the not
 | View | Key | Shows |
 |---|---|---|
 | Tree | `Ctrl + E` | the vault and its folders. The displayed file is highlighted. |
-| Recent | `Ctrl + Shift + T` | every note, from the most to the least recently opened |
+| Recent | — | every note, from the most to the least recently opened (`› recent notes`; `Ctrl + P` opens on recent) |
 | Graph | `Ctrl + G` | one dot per note, one line per `[[link]]` between two notes |
 | Tags | `Ctrl + T` | every `#tag` of the vault with its number of notes. Unfold a tag to see them. |
 | Backlinks | `Ctrl + L` | the notes that link to the open note, see [Backlinks](links.md#backlinks) |
@@ -43,7 +43,7 @@ A previewed note only counts as opened once you click or type in it. It then mov
 
 ## The tree
 
-- **Current file**: the accent tint follows the active tab and pane, for Markdown notes, diagrams, SVG, pictures and CSV/TSV tables. A separately selected row or several selected rows keep their selection tint.
+- **Current file**: the accent colour marks the name and icon of the file shown in the active tab and pane, for Markdown notes, diagrams, SVG, pictures and CSV/TSV tables — text, not a tinted background. A separately selected row or several selected rows keep their selection tint.
 - **Order**: names are sorted as in a file manager: `Note 2` before `Note 10`.
 - **Fold all**: the double-chevron button at the top of the tree folds every folder. When they are all folded, it unfolds them all.
 - **New note**: with the tree on display, `Ctrl + N` creates the note in the folder of the selected line. The button left of the folder button, at the top of the tree, creates it at the root of the vault instead.

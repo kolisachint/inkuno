@@ -29,12 +29,22 @@ impl Span {
 
 /// The text as typed, in one run, bold or not.
 pub fn plain(text: &str, bold: bool) -> Vec<Span> {
-    vec![Span { text: text.to_string(), style: Style { bold, ..Style::default() } }]
+    vec![Span {
+        text: text.to_string(),
+        style: Style {
+            bold,
+            ..Style::default()
+        },
+    }]
 }
 
 /// Length of the mark that starts `rest`.
 fn mark(rest: &str) -> Option<usize> {
-    ["**", "~~", "<u>", "</u>"].iter().find(|m| rest.starts_with(**m)).map(|m| m.len()).or_else(|| rest.starts_with(['`', '*', '_']).then_some(1))
+    ["**", "~~", "<u>", "</u>"]
+        .iter()
+        .find(|m| rest.starts_with(**m))
+        .map(|m| m.len())
+        .or_else(|| rest.starts_with(['`', '*', '_']).then_some(1))
 }
 
 /// The runs of one line of text. `bold` is the style the line already has (a class name).
@@ -54,10 +64,19 @@ pub fn spans(line: &str, bold: bool) -> Vec<Span> {
             continue;
         }
         let c = line[at..].chars().next().map_or(1, char::len_utf8);
-        let style = Style { bold: bold || f & BOLD != 0, italic: f & ITALIC != 0, under: f & UNDER != 0, strike: f & STRIKE != 0, code: f & CODE != 0 };
+        let style = Style {
+            bold: bold || f & BOLD != 0,
+            italic: f & ITALIC != 0,
+            under: f & UNDER != 0,
+            strike: f & STRIKE != 0,
+            code: f & CODE != 0,
+        };
         match out.last_mut() {
             Some(last) if last.style == style => last.text.push_str(&line[at..at + c]),
-            _ => out.push(Span { text: line[at..at + c].to_string(), style }),
+            _ => out.push(Span {
+                text: line[at..at + c].to_string(),
+                style,
+            }),
         }
         at += c;
     }
@@ -70,7 +89,11 @@ mod tests {
 
     fn runs(line: &str) -> Vec<(String, &'static str)> {
         let name = |s: Style| match s {
-            Style { bold: true, italic: true, .. } => "bold italic",
+            Style {
+                bold: true,
+                italic: true,
+                ..
+            } => "bold italic",
             Style { bold: true, .. } => "bold",
             Style { italic: true, .. } => "italic",
             Style { under: true, .. } => "under",
@@ -78,7 +101,10 @@ mod tests {
             Style { code: true, .. } => "code",
             _ => "",
         };
-        spans(line, false).into_iter().map(|s| (s.text, name(s.style))).collect()
+        spans(line, false)
+            .into_iter()
+            .map(|s| (s.text, name(s.style)))
+            .collect()
     }
 
     #[test]
@@ -91,7 +117,14 @@ mod tests {
         assert_eq!(runs("~~old~~"), one("old", "strike"));
         assert_eq!(runs("`List<T>`"), one("List<T>", "code"));
         assert_eq!(runs("***both***"), one("both", "bold italic"));
-        assert_eq!(runs("+ <u>count</u>: int"), vec![("+ ".into(), ""), ("count".into(), "under"), (": int".into(), "")]);
+        assert_eq!(
+            runs("+ <u>count</u>: int"),
+            vec![
+                ("+ ".into(), ""),
+                ("count".into(), "under"),
+                (": int".into(), "")
+            ]
+        );
         // Bold already: the class name's.
         assert!(spans("Name", true)[0].style.bold && spans("*Name*", true)[0].style.italic);
     }
@@ -99,10 +132,29 @@ mod tests {
     #[test]
     fn leaves_what_is_not_a_mark() {
         // Nothing closed, a star between spaces, a lone underscore in a word, an address, a comparison.
-        for plain in ["", "a", "**a", "a * b * c", "snake_case_name", "abc==", "a == b", "*", "**", "<u>open", "</u>", "[[Note]]", "a | b \\ c", "日本語 😀", "{==c==}"] {
+        for plain in [
+            "",
+            "a",
+            "**a",
+            "a * b * c",
+            "snake_case_name",
+            "abc==",
+            "a == b",
+            "*",
+            "**",
+            "<u>open",
+            "</u>",
+            "[[Note]]",
+            "a | b \\ c",
+            "日本語 😀",
+            "{==c==}",
+        ] {
             let got = spans(plain, false);
             let text: String = got.iter().map(|s| s.text.as_str()).collect();
-            assert!(got.iter().all(Span::is_plain) && text == plain, "{plain:?} -> {got:?}");
+            assert!(
+                got.iter().all(Span::is_plain) && text == plain,
+                "{plain:?} -> {got:?}"
+            );
         }
         // Marks of a style we do not draw (`==`) stay in the text.
         assert_eq!(runs("==a=="), vec![("==a==".to_string(), "")]);
@@ -111,10 +163,26 @@ mod tests {
     #[test]
     fn keeps_every_character_of_the_text() {
         // Whatever the marks do, the visible text is the line minus its marks, never a lost letter.
-        for line in ["**é*日*😀**", "a*b*c", "x`y`z", "<u>*a*</u>", "~~**b**~~", "* a *b*", "Ünï `cödé` **gras** _it_"] {
+        for line in [
+            "**é*日*😀**",
+            "a*b*c",
+            "x`y`z",
+            "<u>*a*</u>",
+            "~~**b**~~",
+            "* a *b*",
+            "Ünï `cödé` **gras** _it_",
+        ] {
             let text: String = spans(line, false).iter().map(|s| s.text.as_str()).collect();
-            let letters = |t: &str| t.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
-            assert_eq!(letters(&text), letters(&line.replace("<u>", "").replace("</u>", "")), "{line:?}");
+            let letters = |t: &str| {
+                t.chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .collect::<String>()
+            };
+            assert_eq!(
+                letters(&text),
+                letters(&line.replace("<u>", "").replace("</u>", "")),
+                "{line:?}"
+            );
         }
     }
 }

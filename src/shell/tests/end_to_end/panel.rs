@@ -9,10 +9,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // already open), which does not count as an opening.
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.simulate_keystrokes("secondary-e up");
-    assert_eq!(shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)), (Mode::Tree, Panel::Split));
+    assert_eq!(
+        shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)),
+        (Mode::Tree, Panel::Split)
+    );
     assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[[Test]]");
     // Courses is open in a tab already: that tab is shown, without counting as an opening.
-    assert!(shell.read_with(cx, |s, _| !s.pane().preview && s.recent[0] == root.join("Idées.md")));
+    assert!(shell.read_with(cx, |s, _| !s.pane().preview
+        && s.recent[0] == root.join("Idées.md")));
     // The folder expands with Right; Enter opens the note and hands control back to the editor.
     cx.simulate_keystrokes("up right down");
     // The collapse button collapses the whole tree, then expands it entirely.
@@ -23,8 +27,16 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(shell.update(cx, |s, _| (open(s), open(s))), (0, 1));
     assert_eq!(text(cx), "# Plan\n\n[[Courses]]\n");
     cx.simulate_keystrokes("enter");
-    assert!(shell.read_with(cx, |s, _| !s.pane().preview && s.recent[0] == root.join("Projets/Plan.md")));
-    assert!(cx.update(|window, cx| shell.read(cx).pane().editor.focus_handle(cx).is_focused(window)));
+    assert!(shell.read_with(cx, |s, _| !s.pane().preview
+        && s.recent[0] == root.join("Projets/Plan.md")));
+    assert!(cx.update(|window, cx| {
+        shell
+            .read(cx)
+            .pane()
+            .editor
+            .focus_handle(cx)
+            .is_focused(window)
+    }));
 
     // New note from the tree: filed in the selection's folder.
     cx.simulate_keystrokes("secondary-n");
@@ -45,14 +57,19 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     drag(cx, 452., 60.);
     assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), Panel::Rail);
 
-    // Recent notes, full screen (Ctrl+M), then Escape gives back the room and focus to the note.
-    cx.simulate_keystrokes("secondary-shift-t secondary-m");
-    assert_eq!(shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)), (Mode::Recent, Panel::Full));
+    // Recent notes (no chord: the palette), full screen (Ctrl+M), then Escape gives back the room and focus to the note.
+    cx.dispatch_action(nav::ShowRecent);
+    cx.simulate_keystrokes("secondary-m");
+    assert_eq!(
+        shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)),
+        (Mode::Recent, Panel::Full)
+    );
     cx.simulate_keystrokes("down escape");
     assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), Panel::Split);
     assert_eq!(text(cx), "# Sous");
     // Asking again for the shown mode: first focus, then collapsing to the rail.
-    cx.simulate_keystrokes("secondary-shift-t secondary-shift-t");
+    cx.dispatch_action(nav::ShowRecent);
+    cx.dispatch_action(nav::ShowRecent);
     assert_eq!(vault::load_layout(), "recent rail 410 0\n");
 
     // Graph: one edge per resolved wikilink. Tab walks the notes linked to the
@@ -61,7 +78,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_input("cou");
     cx.simulate_keystrokes("enter secondary-g");
     cx.run_until_parked();
-    assert_eq!(shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)), (Mode::Graph, Panel::Split));
+    assert_eq!(
+        shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)),
+        (Mode::Graph, Panel::Split)
+    );
     assert_eq!(shell.read_with(cx, |s, cx| s.graph.read(cx).size()), (5, 2));
     // A node dragged with the mouse follows the pointer.
     let spot = |cx: &mut gpui::VisualTestContext| {
@@ -83,12 +103,22 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     linked.sort();
     assert_eq!(linked, ["Plan", "Test"]);
     cx.simulate_keystrokes("enter");
-    assert!(shell.read_with(cx, |s, _| !s.pane().preview && s.recent[0] == *s.pane().path.as_ref().unwrap()));
-    assert!(cx.update(|window, cx| shell.read(cx).pane().editor.focus_handle(cx).is_focused(window)));
+    assert!(shell.read_with(cx, |s, _| !s.pane().preview
+        && s.recent[0] == *s.pane().path.as_ref().unwrap()));
+    assert!(cx.update(|window, cx| {
+        shell
+            .read(cx)
+            .pane()
+            .editor
+            .focus_handle(cx)
+            .is_focused(window)
+    }));
     // Full screen: the selection no longer moves the note; Enter gives it its place back.
     cx.simulate_keystrokes("secondary-g secondary-m tab");
     let open = shell.read_with(cx, |s, _| s.pane().path.clone());
-    assert!(shell.read_with(cx, |s, _| s.nav.panel == Panel::Full && s.nav.sel != s.pane().path));
+    assert!(shell.read_with(cx, |s, _| s.nav.panel == Panel::Full
+        && s.nav.sel != s.pane().path));
     cx.simulate_keystrokes("enter");
-    assert!(shell.read_with(cx, |s, _| s.nav.panel == Panel::Split && s.pane().path != open));
+    assert!(shell.read_with(cx, |s, _| s.nav.panel == Panel::Split
+        && s.pane().path != open));
 }
