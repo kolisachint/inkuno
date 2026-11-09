@@ -1,0 +1,30 @@
+# cargo-nextest profiles for Inkuno.
+#
+# Plain `cargo test` (and `make test`) is untouched and stays the local default:
+# this file is only read by `cargo nextest run`, which is CI's runner plus a
+# local opt-in (see CONTRIBUTING.md). Nextest runs the same test binaries, so
+# anything green under nextest is green under `cargo test` and vice versa.
+#
+# CI shards with count-based partitions across matrix runners:
+#   cargo nextest run --locked --profile ci --partition count:1/2
+# `count:` hashes whole tests across shards. The 22 end_to_end chapters run
+# inside ONE #[gpui::test] (`src/shell/tests/end_to_end/mod.rs` chains them as
+# a single stateful session), so that test lands on exactly one shard and stays
+# the long pole: sharding parallelises the ~30 shell unit-test modules around
+# it. Splitting chapters into separately runnable tests would need src changes;
+# until then, more than 2 shards mostly idles while the e2e shard runs.
+
+[profile.default]
+# Warn, don't fail, on slow tests in local runs.
+slow-timeout = "60s"
+
+[profile.ci]
+slow-timeout = "120s"
+fail-fast = false
+
+# The single serial e2e session: give it room and never retry it (a retry would
+# re-run all 22 chapters from scratch).
+[[profile.ci.overrides]]
+filter = "test(end_to_end)"
+slow-timeout = "1500s"
+retries = 0

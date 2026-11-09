@@ -25,12 +25,20 @@ jobs:
     timeout-minutes: 45
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
+      # sccache with the GitHub Actions cache backend (see the setup step).
+      # The two --target builds below hash as separate entries, so the Intel
+      # and Apple Silicon objects never poison each other.
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_CACHE_SIZE: "2G"
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
       - run: rustup toolchain install stable --profile minimal
       - run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Build one binary for Apple Silicon and Intel
         run: |
           cargo build --release --locked --target aarch64-apple-darwin
@@ -59,6 +67,11 @@ jobs:
   linux:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      # sccache with the GitHub Actions cache backend (see the setup step).
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_CACHE_SIZE: "2G"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,6 +94,8 @@ jobs:
             pkg-config \
             clang
       - run: rustup toolchain install stable --profile minimal
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
       - run: cargo build --release --locked
       - name: Package Linux archive
         run: |
