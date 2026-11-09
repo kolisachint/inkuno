@@ -92,11 +92,10 @@ fn the_trash_says_so_and_can_be_undone(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(fs::read_to_string(&note).unwrap(), "# Plan\n");
     assert!(!root.join(".trash/Plan.md").exists());
-    assert!(shell.read_with(
-        cx,
-        |s, _| s.told(Tone::Done, "Put back: « Plan.md »")
-            && !s.told(Tone::Done, "Moved to the trash")
-    ));
+    assert!(
+        shell.read_with(cx, |s, _| s.told(Tone::Done, "Put back: « Plan.md »")
+            && !s.told(Tone::Done, "Moved to the trash"))
+    );
     // Trashed, then a note takes its name: the undo refuses, nothing is overwritten, both stay.
     shell.update(cx, |s, cx| s.trash(&root, &note, cx));
     fs::write(&note, "# Autre\n").unwrap();
