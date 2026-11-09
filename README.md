@@ -34,19 +34,19 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 | System | Get it |
 |---|---|
 | Arch Linux | the prebuilt package, below |
-| macOS 11 or later | [`inkuno-macos.dmg`](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-macos.dmg) |
-| Windows 10 or 11 | [installer](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64-setup.exe) or [zip](https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-windows-x86_64.zip) |
+| macOS 11 or later | [`inkuno-macos.dmg`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-macos.dmg) |
+| Windows 10 or 11 | [installer](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64-setup.exe) or [zip](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64.zip) |
 | Ubuntu, Debian, Fedora, other Linux | build from source, below |
 
 ```bash
 # Arch Linux
-curl -LO https://github.com/alarboulletmarin/bref/releases/latest/download/inkuno-x86_64.pkg.tar.zst
+curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-x86_64.pkg.tar.zst
 sudo pacman -U ./inkuno-x86_64.pkg.tar.zst
 ```
 
 ```bash
 # Other Linux: needs Rust 1.88 or later, and the libraries listed in the install guide
-git clone https://github.com/alarboulletmarin/bref.git
+git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 make && sudo make install
 ```
