@@ -64,7 +64,7 @@ CI builds the guide and checks every link (`.github/workflows/docs.yml`); pushes
 - Subjects start with `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `build:` or `chore:`, in the imperative; the body explains why.
 - One commit per coherent step, tests passing at each commit.
 - The history stays linear: rebase on `main`, no merge commits.
-- CI builds and tests on Linux, macOS and Windows; it has to pass.
+- CI is tiered and it has to pass: every push/PR runs fmt + `cargo check` + Clippy + fast tests (everything except the end-to-end session) on Linux; the full suite (`cargo test`, unit + shell + end-to-end) runs on Linux and macOS on `main`, nightly and manual dispatch.
 
 ## Releasing (maintainer)
 

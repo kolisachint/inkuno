@@ -166,7 +166,11 @@ The first Python suite uses temporary repositories and mocked Cargo/GitHub
 tools. The second checks the publication gate, including incomplete builds,
 public releases, failed uploads and retry. Neither suite publishes or modifies
 the real repository history. **Release checks** runs all three on relevant
-pushes and pull requests. CI runs on `ubuntu-latest` and `macos-latest`.
+pushes and pull requests. Application CI is tiered: fast checks (fmt, check, Clippy,
+tests minus the end-to-end session) run on `ubuntu-latest` for every push and
+pull request, while the full suite runs on `ubuntu-latest` and `macos-latest`
+on `main`, nightly and manual dispatch, with the macOS leg running `cargo test`
+before any packaging.
 
 These tests exercise orchestration, not a real macOS/Linux build or a live
 GitHub workflow. The first hosted run remains necessary to validate runner
