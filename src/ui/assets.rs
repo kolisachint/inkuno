@@ -36,10 +36,6 @@ pub const FONT_FILES: [&[u8]; 10] = [
     include_bytes!("../../assets/fonts/IBMPlexSerif-SemiBoldItalic.ttf"),
 ];
 
-/// IBM Plex Serif, bundled in SemiBold (600) and its italic only: for titles (note headings, panel and
-/// board titles), never body text. A view asks for it with `font(SERIF)` and `FontWeight::SEMIBOLD`.
-pub const SERIF: &str = "IBM Plex Serif";
-
 pub fn sans() -> &'static str {
     FONTS.read().unwrap().0
 }

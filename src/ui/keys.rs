@@ -449,6 +449,7 @@ fn json_entries(text: &str) -> (Vec<String>, Vec<String>, Vec<String>, Vec<Value
 /// are exactly the legacy ones: each valid entry is replayed as an `action=keys` line through
 /// [`read`]. `"reset"` restores the default keys of its actions (an entry also bound above keeps
 /// its binding, with a fault).
+#[cfg(test)]
 pub fn read_json(
     text: &str,
     defaults: &[Bind],
