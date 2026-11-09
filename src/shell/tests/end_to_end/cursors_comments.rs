@@ -78,7 +78,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
-    assert!(shell.read_with(cx, |s, cx| s.palette.is_none() && !s.comments_shut));
+    assert!(shell.read_with(cx, |s, _cx| s.palette.is_none() && !s.comments_shut));
     cx.run_until_parked();
     let view = cx.update(|window, _| window.viewport_size());
     eprintln!(

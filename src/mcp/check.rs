@@ -9,7 +9,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{Outcome, Server, draw, notes, tools, vault::Vault};
+use super::{Outcome, Server, notes, tools, vault::Vault};
 
 fn scratch() -> PathBuf {
     static N: AtomicU64 = AtomicU64::new(0);

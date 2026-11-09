@@ -230,7 +230,7 @@ fn the_current_file_does_not_fall_back_after_external_changes(cx: &mut TestAppCo
         }
         shell.update(cx, |s, cx| s.rescan(&root, cx));
         frames(cx);
-        shell.read_with(cx, |s, cx| {
+        shell.read_with(cx, |s, _cx| {
             assert_eq!(s.pane().displayed_path(), Some(&root.join(from)));
             assert!(
                 !s.nav_rows()

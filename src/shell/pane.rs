@@ -992,7 +992,7 @@ impl Shell {
     }
 
     /// Shows `file` in the active pane in place of its note, or the note again (`None`).
-    pub(super) fn set_file(&mut self, file: Option<FileView>, cx: &mut Context<Self>) -> bool {
+    pub(super) fn set_file(&mut self, file: Option<FileView>, _cx: &mut Context<Self>) -> bool {
         // A file that takes the note's place takes the input too: left in the editor, `render` would
         // hand the pane back to the note (its focus means "the note is back"). A preview keeps the input.
         if file

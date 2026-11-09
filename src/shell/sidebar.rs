@@ -4,7 +4,6 @@
 use crate::{
     lang::tr,
     logic::markdown::{self},
-    logic::note::Note,
     platform::vault,
     ui::widgets::{button, tip},
     views::palette::{Palette, PaletteEvent},
@@ -1424,7 +1423,7 @@ impl Shell {
         right: bool,
         stacked: bool,
         keys_here: bool,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let t = self.theme;

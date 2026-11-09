@@ -897,7 +897,7 @@ impl Editor {
 
     /// The row can fold its code block: a paired opening fence, Mermaid excepted
     /// (its diagram has the enlarge button instead).
-    pub(super) fn folds(&self, row: &Row) -> bool {
+    fn folds(&self, row: &Row) -> bool {
         row.opens && row.kind == Kind::Fence && !self.code_is_mermaid(row.start, row.len)
     }
 

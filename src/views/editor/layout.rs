@@ -2816,7 +2816,6 @@ mod tests {
         let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
         let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
         let text = note().to_string();
-        let at = |line: usize| starts(&text)[line];
         editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
         cx.run_until_parked();
         // A real frame: the editor lays itself out while painting.

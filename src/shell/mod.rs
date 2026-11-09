@@ -23,7 +23,7 @@ use pane::*;
 use toasts::*;
 
 use crate::actions::*;
-use crate::lang::{date_name, time_name, tr};
+use crate::lang::{date_name, tr};
 use crate::logic::{
     self, commands,
     layout::{self, Node, Side, Zone},
@@ -31,11 +31,7 @@ use crate::logic::{
     prefs::Prefs,
     recall, wiki,
 };
-use crate::platform::{
-    self,
-    clock::{clock, today},
-    vault,
-};
+use crate::platform::{self, clock::today, vault};
 use crate::ui::keys::{self, MOD};
 use crate::ui::{
     self,
