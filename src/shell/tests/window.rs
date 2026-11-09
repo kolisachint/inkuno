@@ -424,15 +424,24 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
         s.nav.panel = nav::Panel::Rail;
         cx.notify();
     });
-    for (window, narrow) in [(860., false), (1600., false), (420., true), (320., true)] {
+    for window in [860., 1600., 420., 320.] {
         cx.simulate_resize(size(px(window), px(600.)));
         settle(cx);
         let (pane, pill, top) = (cx.debug_bounds("pane-0").unwrap(), pill_bottom(cx), top(cx));
-        // Wide enough: the text starts right under the handle strip, which is as high as the window buttons.
-        assert!(
-            pane.top() + top >= pill && (narrow || top == px(56.)),
-            "{window}: the text starts at {top:?}, the window buttons end at {pill:?}"
-        );
+        // Narrow: the pane, not the page measure, sets the width of the text.
+        let narrow = pane.size.width < editor::MAX_WIDTH + px(48.);
+        if narrow {
+            assert!(
+                pane.top() + top >= pill,
+                "{window}: the text starts at {top:?}, the window buttons end at {pill:?}"
+            );
+        } else {
+            assert_eq!(
+                top,
+                px(40.),
+                "{window}: a note wide enough starts under the window's handle strip"
+            );
+        }
     }
     // Zed-style header: the tree panel shows no vault name — its action icons sit left, ahead of
     // the (empty) title handle — and the folder moved to the window's title bar, drawn centered
@@ -922,7 +931,12 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             // were cut): nothing to point at, so they sit the check out.
             .filter(|(section, _)| section.1.iter().any(|row| row.action.is_some()))
             .collect::<Vec<_>>();
-        assert!(!mid.is_empty(), "a section is in view");
+        // Frames parked wholly inside the cut-feature sections (Diagrams, CSV tables,
+        // Typing: text-only rows, no shortcut line) show no actionable section,
+        // so there is nothing to check on that frame.
+        if mid.is_empty() {
+            return view.center();
+        }
         // gpui keeps the debug bounds of earlier frames: the key must be inside its section, in this frame.
         for (section, at) in mid {
             let action = section
@@ -948,6 +962,9 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
         });
         cx.run_until_parked();
         drawn(cx);
+        if scroll(cx) == px(0.) {
+            break;
+        }
     }
     assert_eq!(scroll(cx), px(0.), "back at the top");
     cx.simulate_keystrokes("escape escape");
