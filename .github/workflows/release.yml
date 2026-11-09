@@ -30,6 +30,12 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: cargo build --release --locked
 
+      - name: Run macOS tests before packaging
+        env:
+          DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: cargo test --locked
+
       - name: Package inkuno.app bundle and archives
         env:
           DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer

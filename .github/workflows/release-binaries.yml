@@ -38,8 +38,7 @@ jobs:
           lipo -create -output inkuno-universal \
             target/aarch64-apple-darwin/release/inkuno target/x86_64-apple-darwin/release/inkuno
           lipo -info inkuno-universal
-      # 0.0.1: mac `cargo test` gate dropped (8 stale-chrome asserts, run 42580863329);
-      # fix tests post-release, then consider re-adding the gate. Build steps below intact.
+      - run: cargo test --locked
       - name: Package
         run: |
           ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
