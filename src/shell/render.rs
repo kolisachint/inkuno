@@ -1117,21 +1117,33 @@ impl Shell {
                     cx.notify();
                 }
             }))
-            .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<nav::Dragged>, _, cx| this.aim_pane(group, None, e.bounds, e.event.position, cx)))
-            .on_drop(cx.listener(move |this, dragged: &nav::Dragged, window, cx| {
-                if let Some(((_, zone), path)) = this.pane_aim.take().zip(dragged.paths.first().cloned()) {
-                    this.drop_on_pane(group, zone, &path, window, cx);
-                }
-            }))
-            .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<tabs::TabDragged>, _, cx| {
-                let tab = e.drag(cx).tab;
-                this.aim_pane(group, Some(tab), e.bounds, e.event.position, cx)
-            }))
-            .on_drop(cx.listener(move |this, dragged: &tabs::TabDragged, window, cx| {
-                if let Some((_, zone)) = this.pane_aim.take() {
-                    this.drop_tab_on_pane(dragged.tab, group, zone, window, cx);
-                }
-            }))
+            .on_drag_move(
+                cx.listener(move |this, e: &gpui::DragMoveEvent<nav::Dragged>, _, cx| {
+                    this.aim_pane(group, None, e.bounds, e.event.position, cx)
+                }),
+            )
+            .on_drop(
+                cx.listener(move |this, dragged: &nav::Dragged, window, cx| {
+                    if let Some(((_, zone), path)) =
+                        this.pane_aim.take().zip(dragged.paths.first().cloned())
+                    {
+                        this.drop_on_pane(group, zone, &path, window, cx);
+                    }
+                }),
+            )
+            .on_drag_move(cx.listener(
+                move |this, e: &gpui::DragMoveEvent<tabs::TabDragged>, _, cx| {
+                    let tab = e.drag(cx).tab;
+                    this.aim_pane(group, Some(tab), e.bounds, e.event.position, cx)
+                },
+            ))
+            .on_drop(
+                cx.listener(move |this, dragged: &tabs::TabDragged, window, cx| {
+                    if let Some((_, zone)) = this.pane_aim.take() {
+                        this.drop_tab_on_pane(dragged.tab, group, zone, window, cx);
+                    }
+                }),
+            )
             .child(note)
             .when((strip || traffic) && free_top, |d| {
                 // Under the native bar the strip keeps its room but takes no handle: the lights
@@ -1154,11 +1166,31 @@ impl Shell {
                             .text_color(t.soft)
                             .child(name)
                     });
-                let bare = div().debug_selector(move || format!("drag-strip-{group}")).absolute().top_0().left(edge).right_0().h(t.px(STRIP)).flex().items_center().justify_center().children(name);
+                let bare = div()
+                    .debug_selector(move || format!("drag-strip-{group}"))
+                    .absolute()
+                    .top_0()
+                    .left(edge)
+                    .right_0()
+                    .h(t.px(STRIP))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .children(name);
                 d.child(if traffic { bare } else { bare.map(drag_window) })
             })
             // The active pane of several: a 1 px ring around its sheet, the accent at 30 %. Alone, a pane needs none.
-            .when(many && active, |d| d.child(div().debug_selector(|| "pane-active".into()).absolute().inset_0().rounded(t.sheet()).border_1().border_color(t.accent.opacity(0.3))))
+            .when(many && active, |d| {
+                d.child(
+                    div()
+                        .debug_selector(|| "pane-active".into())
+                        .absolute()
+                        .inset_0()
+                        .rounded(t.sheet())
+                        .border_1()
+                        .border_color(t.accent.opacity(0.3)),
+                )
+            })
             .children(tint);
         (
             area.into_any_element(),

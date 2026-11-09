@@ -812,9 +812,16 @@ impl Shell {
                     _ => String::new(),
                 };
                 // A folder of the tree that cannot be read says so and why, instead of looking empty.
-                let closed = self.unreadable.iter().find(|(dir, _)| tree && *dir == row.path);
+                let closed = self
+                    .unreadable
+                    .iter()
+                    .find(|(dir, _)| tree && *dir == row.path);
                 let detail = match closed {
-                    Some((_, why)) => format!("{} {}", tr("unreadable:", "illisible :"), crate::lang::io_reason(&std::io::Error::from(*why))),
+                    Some((_, why)) => format!(
+                        "{} {}",
+                        tr("unreadable:", "illisible :"),
+                        crate::lang::io_reason(&std::io::Error::from(*why))
+                    ),
                     None => detail,
                 };
                 let wide = closed.is_some();
@@ -831,20 +838,44 @@ impl Shell {
                 let shown = {
                     let used = 8. + nav::INDENT * row.depth as f32 + 8. + 8.;
                     let has_icon = tree || self.icons.contains_key(&row.path);
-                    let fixed = t.px(used + if foldable { 21. } else { 0. } + if has_icon { 21. } else { 0. }) ;
+                    let fixed = t.px(used
+                        + if foldable { 21. } else { 0. }
+                        + if has_icon { 21. } else { 0. });
                     let avail = f32::from(room - fixed);
                     let measure = |text: &str, size: f32| -> f32 {
                         if text.is_empty() {
                             return 0.;
                         }
-                        let run = gpui::TextRun { len: text.len(), font: gpui::font(crate::ui::assets::sans()), color: t.text, background_color: None, underline: None, strikethrough: None };
-                        let line = window.text_system().shape_line(gpui::SharedString::from(text.to_string()), t.px(size), &[run], None);
+                        let run = gpui::TextRun {
+                            len: text.len(),
+                            font: gpui::font(crate::ui::assets::sans()),
+                            color: t.text,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        let line = window.text_system().shape_line(
+                            gpui::SharedString::from(text.to_string()),
+                            t.px(size),
+                            &[run],
+                            None,
+                        );
                         f32::from(line.width).ceil() + 1.
                     };
                     let (name_w, detail_w) = (measure(&row.name, 13.), measure(&detail, 11.5));
-                    let (name_room, detail_room) = nav::share(avail, name_w, detail_w, f32::from(t.px(4.)), f32::from(t.px(nav::DETAIL_MIN)));
+                    let (name_room, detail_room) = nav::share(
+                        avail,
+                        name_w,
+                        detail_w,
+                        f32::from(t.px(4.)),
+                        f32::from(t.px(nav::DETAIL_MIN)),
+                    );
                     // The ellipsis goes into the name; its extension stays whole.
-                    let stem_room = if name_w <= name_room { f32::MAX } else { name_room - measure(ext, 13.) };
+                    let stem_room = if name_w <= name_room {
+                        f32::MAX
+                    } else {
+                        name_room - measure(ext, 13.)
+                    };
                     (
                         nav::ellipsize(stem, stem_room, |s| measure(s, 13.)),
                         nav::ellipsize(&detail, detail_room, |s| measure(s, 11.5)),
@@ -854,77 +885,127 @@ impl Shell {
                     .when(current, |d| d.debug_selector(|| "nav-current".into()))
                     .size_full()
                     .pr_2()
-                        .pl(px(8. + nav::INDENT * row.depth as f32))
-                        .flex()
-                        .items_center()
-                        .gap(t.px(7.))
-                        .rounded(t.large())
-                        .text_size(t.px(13.))
-                        .when(!selected, |d| d.hover(|s| s.bg(t.hover)))
-                        // The displayed file: accent text and icon, no second tint; the selection wins on the same row.
-                        .when(selected, |d| {
-                            let at = self.nav.sel_at.clone();
-                            d.bg(if focused { t.selection } else { t.selection.opacity(0.5) })
-                                .relative()
-                                .child(gpui::canvas(move |bounds, _, _| at.set(Some(bounds)), |_, _, _, _| {}).absolute().size_full())
+                    .pl(px(8. + nav::INDENT * row.depth as f32))
+                    .flex()
+                    .items_center()
+                    .gap(t.px(7.))
+                    .rounded(t.large())
+                    .text_size(t.px(13.))
+                    .when(!selected, |d| d.hover(|s| s.bg(t.hover)))
+                    // The displayed file: accent text and icon, no second tint; the selection wins on the same row.
+                    .when(selected, |d| {
+                        let at = self.nav.sel_at.clone();
+                        d.bg(if focused {
+                            t.selection
+                        } else {
+                            t.selection.opacity(0.5)
                         })
-                        .when(foldable, |d| {
-                            d.child(div().size(t.px(14.)).flex_none().when(row.dir.is_some(), |d| {
-                                d.child(svg().path(chevron).size(t.px(14.)).text_color(if selected { t.text } else { t.soft }))
-                            }))
-                        })
-                        // What the row is, in one 14 px column for every row so the names line up: the icon
-                        // the user gave it (a star is the accent's), else, in the tree, the one of its kind.
-                        .children({
-                            let given = self.icons.get(&row.path).and_then(|name| ICON_SET.iter().find(|(file, _)| file[2..file.len() - 4] == *name));
-                            let (file, tint) = match given {
-                                Some((file, _)) => (*file, if *file == "i-star.svg" || current { t.accent } else { t.text }),
-                                None => (row.icon(), if current { t.accent } else { t.soft }),
-                            };
-                            let selector = format!("nav-icon-{}", row.name);
-                            (given.is_some() || tree).then(|| svg().debug_selector(move || selector.clone()).path(file).size(t.px(14.)).flex_none().text_color(tint))
-                        })
+                        .relative()
                         .child(
+                            gpui::canvas(move |bounds, _, _| at.set(Some(bounds)), |_, _, _, _| {})
+                                .absolute()
+                                .size_full(),
+                        )
+                    })
+                    .when(foldable, |d| {
+                        d.child(
                             div()
-                                .debug_selector({
-                                    let name = format!("nav-name-{}", row.name);
-                                    move || name.clone()
-                                })
-                                .overflow_hidden()
-                                .flex()
-                                // The name goes first, in full as long as it fits; the link's line, or the
-                                // reason a folder cannot be read, takes what is left.
-                                .map(|d| match (closed.is_some(), wide) {
-                                    // The reason a folder cannot be read is said in full; its name gives way.
-                                    (true, _) => d.flex_1().min_w(t.px(40.)),
-                                    (_, true) => d.flex_none().max_w(gpui::relative(0.7)),
-                                    _ => d.flex_none().whitespace_nowrap(),
-                                })
-                                .when(current, |d| d.text_color(t.accent))
-                                .child(div().when(wide, |d| d.min_w_0().truncate()).child(if wide { stem.to_string() } else { shown.0.clone() }))
-                                .when(!ext.is_empty(), |d| {
-                                    let selector = format!("nav-ext-{}", row.name);
-                                    d.child(div().debug_selector(move || selector.clone()).flex_none().text_color(t.soft).child(ext.to_string()))
+                                .size(t.px(14.))
+                                .flex_none()
+                                .when(row.dir.is_some(), |d| {
+                                    d.child(
+                                        svg()
+                                            .path(chevron)
+                                            .size(t.px(14.))
+                                            .text_color(if selected { t.text } else { t.soft }),
+                                    )
                                 }),
                         )
-                        .when(!wide, |d| d.child(div().flex_1().min_w_0()))
-                        .child(
-                            div()
-                                .debug_selector({
-                                    let why = format!("nav-why-{}", row.name);
-                                    move || why.clone()
-                                })
-                                .map(|d| match (closed.is_some(), wide) {
-                                    // ponytail: in a panel too narrow for it, the reason is cut last, in full in the row's tooltip.
-                                    (true, _) => d.flex_initial().min_w_0().truncate(),
-                                    (_, true) => d.flex_1().min_w_0().truncate(),
-                                    // At the right, in the width the name leaves it (none: hidden).
-                                    _ => d.flex_none().whitespace_nowrap(),
-                                })
-                                .text_size(t.px(11.5))
-                                .text_color(if selected { t.text } else { t.soft })
-                                .child(if wide { detail.clone() } else { shown.1.clone() }),
-                        );
+                    })
+                    // What the row is, in one 14 px column for every row so the names line up: the icon
+                    // the user gave it (a star is the accent's), else, in the tree, the one of its kind.
+                    .children({
+                        let given = self.icons.get(&row.path).and_then(|name| {
+                            ICON_SET
+                                .iter()
+                                .find(|(file, _)| file[2..file.len() - 4] == *name)
+                        });
+                        let (file, tint) = match given {
+                            Some((file, _)) => (
+                                *file,
+                                if *file == "i-star.svg" || current {
+                                    t.accent
+                                } else {
+                                    t.text
+                                },
+                            ),
+                            None => (row.icon(), if current { t.accent } else { t.soft }),
+                        };
+                        let selector = format!("nav-icon-{}", row.name);
+                        (given.is_some() || tree).then(|| {
+                            svg()
+                                .debug_selector(move || selector.clone())
+                                .path(file)
+                                .size(t.px(14.))
+                                .flex_none()
+                                .text_color(tint)
+                        })
+                    })
+                    .child(
+                        div()
+                            .debug_selector({
+                                let name = format!("nav-name-{}", row.name);
+                                move || name.clone()
+                            })
+                            .overflow_hidden()
+                            .flex()
+                            // The name goes first, in full as long as it fits; the link's line, or the
+                            // reason a folder cannot be read, takes what is left.
+                            .map(|d| match (closed.is_some(), wide) {
+                                // The reason a folder cannot be read is said in full; its name gives way.
+                                (true, _) => d.flex_1().min_w(t.px(40.)),
+                                (_, true) => d.flex_none().max_w(gpui::relative(0.7)),
+                                _ => d.flex_none().whitespace_nowrap(),
+                            })
+                            .when(current, |d| d.text_color(t.accent))
+                            .child(div().when(wide, |d| d.min_w_0().truncate()).child(if wide {
+                                stem.to_string()
+                            } else {
+                                shown.0.clone()
+                            }))
+                            .when(!ext.is_empty(), |d| {
+                                let selector = format!("nav-ext-{}", row.name);
+                                d.child(
+                                    div()
+                                        .debug_selector(move || selector.clone())
+                                        .flex_none()
+                                        .text_color(t.soft)
+                                        .child(ext.to_string()),
+                                )
+                            }),
+                    )
+                    .when(!wide, |d| d.child(div().flex_1().min_w_0()))
+                    .child(
+                        div()
+                            .debug_selector({
+                                let why = format!("nav-why-{}", row.name);
+                                move || why.clone()
+                            })
+                            .map(|d| match (closed.is_some(), wide) {
+                                // ponytail: in a panel too narrow for it, the reason is cut last, in full in the row's tooltip.
+                                (true, _) => d.flex_initial().min_w_0().truncate(),
+                                (_, true) => d.flex_1().min_w_0().truncate(),
+                                // At the right, in the width the name leaves it (none: hidden).
+                                _ => d.flex_none().whitespace_nowrap(),
+                            })
+                            .text_size(t.px(11.5))
+                            .text_color(if selected { t.text } else { t.soft })
+                            .child(if wide {
+                                detail.clone()
+                            } else {
+                                shown.1.clone()
+                            }),
+                    );
                 let (path, name) = (row.path.clone(), row.name.clone());
                 // Dropping on a note files into that note's folder.
                 let into = match row.dir {
@@ -933,7 +1014,10 @@ impl Shell {
                 };
                 let target = path.clone();
                 let (paths, name) = match marked.contains(&path) {
-                    true => (lot.clone(), format!("{} {}", lot.len(), tr("items", "éléments"))),
+                    true => (
+                        lot.clone(),
+                        format!("{} {}", lot.len(), tr("items", "éléments")),
+                    ),
                     false => (vec![path], name),
                 };
                 let selector = format!("nav-row-{}", row.name);
@@ -945,10 +1029,16 @@ impl Shell {
                         .h(t.px(ROW))
                         .px_2()
                         .cursor_pointer()
-                        .child(match self.nav.fading(&row.path).filter(|_| tree && t.motion) {
-                            Some(seq) => crate::ui::widgets::fade_in(line, (gpui::SharedString::from(format!("row-in-{seq}")), ix), &t),
-                            None => line.into_any_element(),
-                        })
+                        .child(
+                            match self.nav.fading(&row.path).filter(|_| tree && t.motion) {
+                                Some(seq) => crate::ui::widgets::fade_in(
+                                    line,
+                                    (gpui::SharedString::from(format!("row-in-{seq}")), ix),
+                                    &t,
+                                ),
+                                None => line.into_any_element(),
+                            },
+                        )
                         .when_some(said, |d, said| d.tooltip(tip(said, String::new(), t)))
                         .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
                             let held = e.modifiers();
@@ -967,25 +1057,44 @@ impl Shell {
                                     this.nav.sel = Some(target.clone());
                                 }
                                 window.focus(&this.nav.focus);
-                                if this.vault.as_ref().is_some_and(|root| target.starts_with(root)) {
-                                    this.show_menu(Menu { at: e.position, target: Some(target.clone()), ..Default::default() }, window, cx);
+                                if this
+                                    .vault
+                                    .as_ref()
+                                    .is_some_and(|root| target.starts_with(root))
+                                {
+                                    this.show_menu(
+                                        Menu {
+                                            at: e.position,
+                                            target: Some(target.clone()),
+                                            ..Default::default()
+                                        },
+                                        window,
+                                        cx,
+                                    );
                                 }
                                 cx.stop_propagation();
                                 cx.notify();
                             }),
                         )
                         .when(tree, |d| {
-                            d.on_drag(Dragged { paths, name, theme: t }, |dragged, _, _, cx| {
-                                cx.new(|_| dragged.clone())
-                            })
+                            d.on_drag(
+                                Dragged {
+                                    paths,
+                                    name,
+                                    theme: t,
+                                },
+                                |dragged, _, _, cx| cx.new(|_| dragged.clone()),
+                            )
                             .when(row.dir.is_some(), |d| {
                                 d.drag_over::<Dragged>(move |style, _, _, _| style.bg(t.selection))
                             })
-                            .on_drop(cx.listener(move |this, dragged: &Dragged, _, cx| {
-                                if let Some(into) = &into {
-                                    this.move_all(&dragged.paths, into, cx)
-                                }
-                            }))
+                            .on_drop(cx.listener(
+                                move |this, dragged: &Dragged, _, cx| {
+                                    if let Some(into) = &into {
+                                        this.move_all(&dragged.paths, into, cx)
+                                    }
+                                },
+                            ))
                         }),
                 )
             })

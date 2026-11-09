@@ -73,7 +73,10 @@ fn help_text() -> String {
 /// nothing else, writes nothing.
 fn check_config() -> i32 {
     let mut failed = false;
-    println!("config dir: {}", vault::config_dir().join("inkuno").display());
+    println!(
+        "config dir: {}",
+        vault::config_dir().join("inkuno").display()
+    );
     // Shortcuts: JSON when present, else the legacy `keys` file, else the defaults.
     let text = vault::load_keybindings();
     if text.trim().is_empty() {

@@ -15,9 +15,7 @@
 pub const VERSION: u32 = 0;
 
 /// Ink colours of diagrams, as `0xrrggbb`.
-pub const COLORS: [u32; 6] = [
-    0x1c1c1c, 0xc0392b, 0x2980b9, 0x27ae60, 0x8e44ad, 0xe67e22,
-];
+pub const COLORS: [u32; 6] = [0x1c1c1c, 0xc0392b, 0x2980b9, 0x27ae60, 0x8e44ad, 0xe67e22];
 
 /// Shape form. Only `Rect` is needed by the remaining test.
 #[derive(Clone, Copy, PartialEq, Debug)]

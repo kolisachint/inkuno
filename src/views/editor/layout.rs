@@ -1556,80 +1556,81 @@ impl Editor {
                     last.height += TABLE_GAP;
                     y += TABLE_GAP;
                 }
-        // Typora-style code blocks (§9.1): a fenced block hides its body by default and shows its
-        // header only (language + copy + chevron); long lines never wrap (the shape above leaves
-        // them whole) and scroll inside the page instead (frames below). Mermaid blocks stay
-        // open: their figure draws under the source.
-        self.code_meta.clear();
-        {
-            let mut i = 0;
-            while i < rows.len() {
-                let open = rows[i].opens && rows[i].kind == Kind::Fence;
-                let mut j = i + 1;
-                while j < rows.len() && rows[j].kind == Kind::Code {
-                    j += 1;
+                // Typora-style code blocks (§9.1): a fenced block hides its body by default and shows its
+                // header only (language + copy + chevron); long lines never wrap (the shape above leaves
+                // them whole) and scroll inside the page instead (frames below). Mermaid blocks stay
+                // open: their figure draws under the source.
+                self.code_meta.clear();
+                {
+                    let mut i = 0;
+                    while i < rows.len() {
+                        let open = rows[i].opens && rows[i].kind == Kind::Fence;
+                        let mut j = i + 1;
+                        while j < rows.len() && rows[j].kind == Kind::Code {
+                            j += 1;
+                        }
+                        let closed =
+                            open && j < rows.len() && rows[j].kind == Kind::Fence && !rows[j].opens;
+                        if closed {
+                            let wide = rows[i..=j]
+                                .iter()
+                                .map(Row::content_width)
+                                .fold(px(0.), |a, b| a.max(b));
+                            let (first, last) = (&rows[i], &rows[j]);
+                            self.code_meta.push(CodeMeta {
+                                range: first.start..last.start + last.len,
+                                rows: i..j + 1,
+                                wide,
+                            });
+                            i = j + 1;
+                        } else {
+                            i += 1;
+                        }
+                    }
                 }
-                let closed =
-                    open && j < rows.len() && rows[j].kind == Kind::Fence && !rows[j].opens;
-                if closed {
-                    let wide = rows[i..=j]
-                        .iter()
-                        .map(Row::content_width)
-                        .fold(px(0.), |a, b| a.max(b));
-                    let (first, last) = (&rows[i], &rows[j]);
-                    self.code_meta.push(CodeMeta {
-                        range: first.start..last.start + last.len,
-                        rows: i..j + 1,
-                        wide,
-                    });
-                    i = j + 1;
-                } else {
-                    i += 1;
+                // A folded block takes no room: its body and closing fence collapse to zero height.
+                // A block holding the cursor or the revealed line stays open (clicked-line reveal).
+                for n in 0..self.code_meta.len() {
+                    let (start, line, len, body) = {
+                        let meta = &self.code_meta[n];
+                        let open = &rows[meta.rows.start];
+                        (
+                            meta.range.start,
+                            open.start,
+                            open.len,
+                            rows[meta.rows.start + 1].start..meta.range.end,
+                        )
+                    };
+                    if self.code_is_mermaid(line, len)
+                        || self.code_open.contains(&start)
+                        || body.contains(&cursor)
+                        || self.revealed.is_some_and(|r| body.contains(&r))
+                    {
+                        continue;
+                    }
+                    rows[self.code_meta[n].rows.start].foot = true;
+                    for r in &mut rows[self.code_meta[n].rows.start + 1..self.code_meta[n].rows.end]
+                    {
+                        r.pad = px(0.);
+                        r.height = px(0.);
+                        r.gap = px(0.);
+                    }
                 }
-            }
-        }
-        // A folded block takes no room: its body and closing fence collapse to zero height.
-        // A block holding the cursor or the revealed line stays open (clicked-line reveal).
-        for n in 0..self.code_meta.len() {
-            let (start, line, len, body) = {
-                let meta = &self.code_meta[n];
-                let open = &rows[meta.rows.start];
-                (
-                    meta.range.start,
-                    open.start,
-                    open.len,
-                    rows[meta.rows.start + 1].start..meta.range.end,
-                )
-            };
-            if self.code_is_mermaid(line, len)
-                || self.code_open.contains(&start)
-                || body.contains(&cursor)
-                || self.revealed.is_some_and(|r| body.contains(&r))
-            {
-                continue;
-            }
-            rows[self.code_meta[n].rows.start].foot = true;
-            for r in &mut rows[self.code_meta[n].rows.start + 1..self.code_meta[n].rows.end] {
-                r.pad = px(0.);
-                r.height = px(0.);
-                r.gap = px(0.);
-            }
-        }
-        // Folds of deleted blocks go with them.
-        let live: Vec<usize> = self.code_meta.iter().map(|m| m.range.start).collect();
-        self.code_open.retain(|s| live.contains(s));
-        // Collapsed lines take no room: heights run again from the top.
-        {
-            let mut at = px(0.);
-            for r in rows.iter_mut() {
-                r.y = at;
-                at += r.height
-                    + r.image_height()
-                    + r.embed.as_ref().map_or(px(0.), |e| e.height())
-                    + r.gap;
-            }
-            y = at;
-        }
+                // Folds of deleted blocks go with them.
+                let live: Vec<usize> = self.code_meta.iter().map(|m| m.range.start).collect();
+                self.code_open.retain(|s| live.contains(s));
+                // Collapsed lines take no room: heights run again from the top.
+                {
+                    let mut at = px(0.);
+                    for r in rows.iter_mut() {
+                        r.y = at;
+                        at += r.height
+                            + r.image_height()
+                            + r.embed.as_ref().map_or(px(0.), |e| e.height())
+                            + r.gap;
+                    }
+                    y = at;
+                }
                 // Titles: a scale of about 1.2, about one body line of room above the first two levels
                 // and two thirds of it above the others.
                 let (font_size, pad) = match kind {
@@ -2352,18 +2353,18 @@ impl Editor {
     /// The frame of each table of the layout, and the zones of its handles.
     fn frames(&mut self, reveal: bool, window: &mut Window) {
         let (cursor, width, room) = (self.cursor(), self.width, self.room);
-            self.fold_hitboxes = self
-                .opening
-                .iter()
-                .map(|&i| &self.rows[i])
-                .filter(|r| self.folds(r))
-                .map(|r| {
-                    (
-                        r.start,
-                        window.insert_hitbox(self.fold_bounds(r), HitboxBehavior::Normal),
-                    )
-                })
-                .collect();
+        self.fold_hitboxes = self
+            .opening
+            .iter()
+            .map(|&i| &self.rows[i])
+            .filter(|r| self.folds(r))
+            .map(|r| {
+                (
+                    r.start,
+                    window.insert_hitbox(self.fold_bounds(r), HitboxBehavior::Normal),
+                )
+            })
+            .collect();
         // Frame of each table: its lines, at the width of the longest without
         // going past the page; beyond that, it scrolls and follows the cursor.
         let scrolled = std::mem::take(&mut self.table_x);
@@ -2888,10 +2889,7 @@ mod tests {
         assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
         draw(cx);
         let rows = shown(cx, &lines);
-        assert_eq!(
-            rows[2],
-            ("Hello **bold** and *italic*.".to_string(), true)
-        );
+        assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
         assert_eq!(rows[12], ("our link".to_string(), false));
         // A plain keyboard move does not reveal: the cursor is on the title, still rendered.
         editor.update(cx, |e, cx| e.place_cursor(at(0) + 2, cx));

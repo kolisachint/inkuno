@@ -280,7 +280,8 @@ fn bench_scale(cx: &mut TestAppContext) {
     let ms = |d: Duration| format!("{:.1}", d.as_secs_f64() * 1000.);
     let mut rows = Vec::new();
     for notes in sizes {
-        let root = std::env::temp_dir().join(format!("inkuno-scale-{notes}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("inkuno-scale-{notes}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         synthetic_vault(&root, notes);
         let _config = isolated_config(&root);

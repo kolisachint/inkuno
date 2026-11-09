@@ -25,8 +25,7 @@ use crate::{
 };
 
 /// What the viewer asks of the window.
-pub enum ViewerEvent {
-}
+pub enum ViewerEvent {}
 
 impl gpui::EventEmitter<ViewerEvent> for Viewer {}
 

@@ -178,7 +178,10 @@ impl Server {
                 Err(message) => (None, message),
             },
             None => match files::load_config().0 {
-                None => (None, "no vault: open one in Inkuno, or pass `--vault`".into()),
+                None => (
+                    None,
+                    "no vault: open one in Inkuno, or pass `--vault`".into(),
+                ),
                 Some(path) if !path.is_dir() => (
                     None,
                     format!(

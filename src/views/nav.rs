@@ -13,13 +13,8 @@ use gpui::{
 };
 
 use crate::{
-    lang::tr,
-    logic::markdown::Link,
-    logic::note::Note,
-    platform::vault,
-    ui::theme::Theme,
-    views::editor,
-    views::field::Field,
+    lang::tr, logic::markdown::Link, logic::note::Note, platform::vault, ui::theme::Theme,
+    views::editor, views::field::Field,
 };
 
 actions!(
@@ -1008,6 +1003,5 @@ mod tests {
                 "b"
             ]
         );
-
     }
 }

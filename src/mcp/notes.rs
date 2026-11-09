@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 
 use crate::{
     lang::{date_name, time_name},
-    logic::{daily, markdown, markdown::Link, rank},
     logic::wiki::Anchor,
+    logic::{daily, markdown, markdown::Link, rank},
     platform::{clock, link, vault as files},
 };
 

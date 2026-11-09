@@ -601,7 +601,8 @@ fn an_agent_shows_a_file(cx: &mut TestAppContext) {
             .unwrap_err()
             .starts_with("no file at")
     );
-    let elsewhere = std::env::temp_dir().join(format!("inkuno-elsewhere-{}.md", std::process::id()));
+    let elsewhere =
+        std::env::temp_dir().join(format!("inkuno-elsewhere-{}.md", std::process::id()));
     fs::write(&elsewhere, "# Ailleurs\n").unwrap();
     let refused = shell
         .update_in(cx, |s, window, cx| s.show_asked(&elsewhere, window, cx))

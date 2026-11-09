@@ -857,7 +857,10 @@ mod tests {
             Some("nav::Graph")
         );
         // Two views that do not meet.
-        assert_eq!(clash(&base, &base, "palette::ConfirmAside", "secondary-d"), None);
+        assert_eq!(
+            clash(&base, &base, "palette::ConfirmAside", "secondary-d"),
+            None
+        );
         // In its own context.
         assert_eq!(
             clash(&base, &base, "editor::Find", "secondary-d"),
