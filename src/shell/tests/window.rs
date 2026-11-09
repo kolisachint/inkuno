@@ -827,10 +827,7 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
             cx.debug_bounds(name)
                 .unwrap_or_else(|| panic!("{name} at {size}"))
         });
-        assert!(
-            foot[0].right() <= foot[1].left(),
-            "at {size}: {foot:?}"
-        );
+        assert!(foot[0].right() <= foot[1].left(), "at {size}: {foot:?}");
         for (i, (got, was)) in now.iter().zip(base).enumerate() {
             assert!(
                 (got / was - scale).abs() < 0.04,
