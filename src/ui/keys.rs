@@ -755,8 +755,8 @@ mod tests {
 
     #[test]
     fn show_reads_like_a_keyboard() {
-        assert_eq!(show("secondary-shift-p"), format!("{}+Maj+P", MOD));
-        assert_eq!(show("alt-enter"), "Alt+Entrée");
+        assert_eq!(show("secondary-shift-p"), format!("{}+Shift+P", MOD));
+        assert_eq!(show("alt-enter"), "Alt+Enter");
         assert_eq!(show("f1"), "F1");
         assert_eq!(show("secondary--"), format!("{}+-", MOD));
     }

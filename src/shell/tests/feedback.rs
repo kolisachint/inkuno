@@ -56,7 +56,7 @@ fn failures_stay_and_name_the_file(cx: &mut TestAppContext) {
     let said = toasts(cx).pop().unwrap();
     assert_eq!(said.0, Tone::Failed);
     assert!(
-        said.1.contains("Fantôme.md") && said.1.ends_with("introuvable"),
+        said.1.contains("Fantôme.md") && said.1.ends_with("not found"),
         "{said:?}"
     );
     assert!(!said.1.contains("os error"), "{said:?}");
@@ -80,7 +80,7 @@ fn the_trash_says_so_and_can_be_undone(cx: &mut TestAppContext) {
     shell.update(cx, |s, cx| s.trash(&root, &note, cx));
     assert!(!note.exists() && root.join(".trash/Plan.md").is_file());
     assert!(shell.read_with(cx, |s, _| {
-        s.told(Tone::Done, "Mis à la corbeille : « Plan.md »")
+        s.told(Tone::Done, "Moved to the trash: « Plan.md »")
     }));
     // « Annuler » is on the message: a click puts the note back in its folder.
     cx.run_until_parked();
@@ -94,8 +94,8 @@ fn the_trash_says_so_and_can_be_undone(cx: &mut TestAppContext) {
     assert!(!root.join(".trash/Plan.md").exists());
     assert!(shell.read_with(
         cx,
-        |s, _| s.told(Tone::Done, "Remis en place : « Plan.md »")
-            && !s.told(Tone::Done, "Mis à la corbeille")
+        |s, _| s.told(Tone::Done, "Put back: « Plan.md »")
+            && !s.told(Tone::Done, "Moved to the trash")
     ));
     // Trashed, then a note takes its name: the undo refuses, nothing is overwritten, both stay.
     shell.update(cx, |s, cx| s.trash(&root, &note, cx));
@@ -104,7 +104,7 @@ fn the_trash_says_so_and_can_be_undone(cx: &mut TestAppContext) {
     shell.update(cx, |s, cx| s.put_back(&from, &to, cx));
     assert!(shell.read_with(cx, |s, _| s.told(
         Tone::Failed,
-        "Remise en place impossible « Plan.md » : ce nom est déjà pris"
+        "Not put back « Plan.md » : this name is already taken"
     )));
     assert_eq!(fs::read_to_string(&note).unwrap(), "# Autre\n");
     assert_eq!(fs::read_to_string(&from).unwrap(), "# Plan\n");
@@ -161,14 +161,14 @@ fn unreadable_figures_and_pictures_say_so(cx: &mut TestAppContext) {
     );
     assert_eq!(
         said(cx, "```mermaid\nceci n'est pas un diagramme\n```\n"),
-        ["Figure illisible"]
+        ["Unreadable figure"]
     );
     assert_eq!(
         said(cx, "avant\n\n```mermaid\n\n```\n\naprès"),
-        ["Figure illisible"],
+        ["Unreadable figure"],
         "an empty diagram too"
     );
-    assert_eq!(said(cx, "$$\n\\frac{1}{\n$$\n"), ["Formule illisible"]);
+    assert_eq!(said(cx, "$$\n\\frac{1}{\n$$\n"), ["Unreadable formula"]);
     assert!(said(cx, "$$\n\\frac{1}{2}\n$$\n").is_empty());
     assert!(
         said(cx, "```rust\nfn main() {}\n```\n").is_empty(),
@@ -176,11 +176,11 @@ fn unreadable_figures_and_pictures_say_so(cx: &mut TestAppContext) {
     );
     assert_eq!(
         said(cx, "![](cassée.png)\n\n![](cassé.svg)\n\n![](bonne.svg)"),
-        ["Image illisible", "Figure illisible"]
+        ["Unreadable image", "Unreadable figure"]
     );
     assert_eq!(
         said(cx, "![](vide.png)"),
-        ["Image illisible"],
+        ["Unreadable image"],
         "a file of 0 bytes"
     );
     assert!(
@@ -189,7 +189,7 @@ fn unreadable_figures_and_pictures_say_so(cx: &mut TestAppContext) {
     );
     // Two bad diagrams and a good one, in the order of the note; the cursor in the bad one waits until it leaves.
     let three = "```mermaid\nfaux\n```\n\n```mermaid\nsequenceDiagram\nA->>B: x\n```\n\n```mermaid\nfaux aussi\n```\n";
-    assert_eq!(said(cx, three), ["Figure illisible", "Figure illisible"]);
+    assert_eq!(said(cx, three), ["Unreadable figure", "Unreadable figure"]);
     let _ = fs::remove_dir_all(&root);
 }
 

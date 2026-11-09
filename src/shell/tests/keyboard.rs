@@ -40,7 +40,7 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     cx.simulate_keystrokes("shift-f10");
-    assert_eq!(menu(cx), Some((Some(0), Some("Ouvrir"))));
+    assert_eq!(menu(cx), Some((Some(0), Some("Open"))));
     assert!(focus_in_menu(cx));
     let (at, row) = shell.read_with(cx, |s, _| {
         (s.menu.as_ref().unwrap().at, s.nav.sel_at.get().unwrap())
@@ -51,15 +51,15 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     );
     // Up from the first goes round to the last; Esc closes and the tree has the keys again.
     cx.simulate_keystrokes("up");
-    assert_eq!(menu(cx), Some((Some(12), Some("Mettre à la corbeille"))));
+    assert_eq!(menu(cx), Some((Some(12), Some("Move to the trash"))));
     cx.simulate_keystrokes("home down");
-    assert_eq!(menu(cx), Some((Some(1), Some("Ouvrir à côté"))));
+    assert_eq!(menu(cx), Some((Some(1), Some("Open to the side"))));
     cx.simulate_keystrokes("escape");
     assert!(menu(cx).is_none());
     assert!(cx.update(|window, cx| shell.read(cx).nav.focus.is_focused(window)));
     // "Move to…" lists the folders, the vault first; the chosen one receives the note, as a drag would.
     cx.simulate_keystrokes("menu up up up");
-    assert_eq!(menu(cx), Some((Some(10), Some("Déplacer vers…"))));
+    assert_eq!(menu(cx), Some((Some(10), Some("Move to…"))));
     cx.simulate_keystrokes("enter");
     cx.simulate_input("doss");
     cx.simulate_keystrokes("enter");
@@ -83,7 +83,7 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
             .map(|e| e.0)
             .collect::<Vec<_>>()
     });
-    let at = entries.iter().position(|e| *e == "Déplacer vers…").unwrap();
+    let at = entries.iter().position(|e| *e == "Move to…").unwrap();
     cx.simulate_keystrokes("down ".repeat(at).trim_end());
     cx.simulate_keystrokes("enter");
     cx.simulate_input("doss");
@@ -116,9 +116,9 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     // The note: the menu of the cursor; Bold on the selected word.
     cx.simulate_keystrokes("secondary-1 secondary-end shift-home");
     cx.simulate_keystrokes("shift-f10");
-    assert_eq!(menu(cx), Some((Some(0), Some("Couper"))));
+    assert_eq!(menu(cx), Some((Some(0), Some("Cut"))));
     cx.simulate_keystrokes("down down down");
-    assert_eq!(menu(cx), Some((Some(3), Some("Gras"))));
+    assert_eq!(menu(cx), Some((Some(3), Some("Bold"))));
     cx.simulate_keystrokes("enter");
     assert!(menu(cx).is_none());
     assert_eq!(
@@ -136,21 +136,21 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     // The command palette has a second key, the usual one; the row menu's entries are there, for the open note.
     cx.simulate_keystrokes("secondary-shift-p");
     assert!(shell.read_with(cx, |s, _| s.palette.is_some()));
-    cx.simulate_input("chemin relatif");
+    cx.simulate_input("relative path");
     cx.simulate_keystrokes("enter");
     assert_eq!(
         cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
         Some("Beta.md")
     );
     cx.simulate_keystrokes("secondary-shift-p");
-    cx.simulate_input("lien de la note");
+    cx.simulate_input("note link");
     cx.simulate_keystrokes("enter");
     assert_eq!(
         cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
         Some("[[Beta]]")
     );
     cx.simulate_keystrokes("secondary-shift-p");
-    cx.simulate_input("icône de la note");
+    cx.simulate_input("note icon");
     cx.simulate_keystrokes("enter");
     assert_eq!(
         shell.read_with(cx, |s, _| s
@@ -178,7 +178,7 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     assert_eq!(icon(cx), Some(name(7)));
     assert!(shell.read_with(cx, |s, _| s.icon_pick.is_none()));
     cx.simulate_keystrokes("secondary-shift-p");
-    cx.simulate_input("icône de la note");
+    cx.simulate_input("note icon");
     cx.simulate_keystrokes("enter");
     assert_eq!(
         shell.read_with(cx, |s, _| s.icon_pick.as_ref().unwrap().chosen),
@@ -188,7 +188,7 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     assert_eq!(icon(cx), None);
     // Esc closes it and the note has the keys again.
     cx.simulate_keystrokes("secondary-shift-p");
-    cx.simulate_input("icône de la note");
+    cx.simulate_input("note icon");
     cx.simulate_keystrokes("enter escape");
     assert!(shell.read_with(cx, |s, _| s.icon_pick.is_none()));
     assert!(cx.update(|window, cx| {
@@ -200,7 +200,7 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
             .is_focused(window)
     }));
     cx.simulate_keystrokes("secondary-shift-p");
-    cx.simulate_input("afficher le dossier");
+    cx.simulate_input("show the folder");
     cx.simulate_keystrokes("enter");
     cx.run_until_parked();
     assert!(shell.read_with(cx, |s, _| s.pane().listing.is_some()));

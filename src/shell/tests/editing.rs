@@ -53,7 +53,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
     }));
     // Typing filters by what the command does; Enter runs it, on the note.
     cx.simulate_keystrokes("secondary-a f10");
-    cx.simulate_input("gras");
+    cx.simulate_input("bold");
     assert_eq!(runs(cx), ["editor::Bold"]);
     cx.simulate_keystrokes("enter");
     assert_eq!(mode(cx), None);
@@ -65,7 +65,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert_eq!(mode(cx).map(|m| m.0), Some(true));
-    cx.simulate_input("raccourcis");
+    cx.simulate_input("shortcuts");
     let at = cx
         .debug_bounds("command-app::ToggleHelp")
         .expect("the command is shown")
@@ -77,7 +77,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
     // In the notes palette, a leading ">" switches to commands, and is erased; without it, a command
     // is found too, but Enter still creates the note of that name.
     cx.simulate_keystrokes("secondary-z secondary-a secondary-p");
-    cx.simulate_input("italique");
+    cx.simulate_input("italic");
     assert_eq!(runs(cx), ["editor::Italic"]);
     cx.simulate_keystrokes("home");
     cx.simulate_input(">");
@@ -277,12 +277,12 @@ fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-home f10");
     assert!(runs(cx).contains(&"editor::SelectNext"), "{:?}", runs(cx));
     assert!(!runs(cx).contains(&"editor::AlignLeft"), "{:?}", runs(cx));
-    // Typed by what it does, in either language: `multicurs` starts both.
+    // Typed by what it does: `multicurs` starts both the catalogue line and its alias.
     cx.simulate_input("multicurs");
     assert_eq!(runs(cx), ["editor::SelectNext"]);
     cx.simulate_keystrokes("escape escape");
     // Block transforms are ›-reachable too (overrule of the /+grip-only stance): offered
-    // in a note, found by what they do, in either language.
+    // in a note, found by what they do.
     cx.simulate_keystrokes("f10");
     let blocks = [
         "editor::BlockHeading1",
@@ -303,27 +303,6 @@ fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
         );
     }
     cx.simulate_keystrokes("escape");
-    for (typed, found) in [
-        (
-            "titre",
-            vec![
-                "editor::BlockHeading1",
-                "editor::BlockHeading2",
-                "editor::BlockHeading3",
-            ],
-        ),
-        ("puces", vec!["editor::BlockBullet"]),
-        ("numerotee", vec!["editor::BlockOrdered"]),
-        ("taches", vec!["editor::BlockTask"]),
-        ("citation", vec!["editor::BlockQuote"]),
-        ("bloc de code", vec!["editor::BlockCode"]),
-        ("dupliquer", vec!["editor::BlockDuplicate"]),
-    ] {
-        cx.simulate_keystrokes("f10");
-        cx.simulate_input(typed);
-        assert_eq!(runs(cx), found, "typed {typed:?}");
-        cx.simulate_keystrokes("escape");
-    }
     crate::lang::in_english(|| {
         for (typed, found) in [
             (
@@ -591,7 +570,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
     mark(cx, "secondary-shift-b");
     assert_eq!(text(cx), "un mot ici\ndeux");
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("puces");
+    cx.simulate_input("bulleted");
     cx.simulate_keystrokes("down enter");
     cx.run_until_parked();
     assert_eq!(text(cx), "- un mot ici\n- deux");
@@ -629,12 +608,12 @@ fn formatting_journey(cx: &mut TestAppContext) {
         cx.simulate_keystrokes("down enter");
         cx.run_until_parked();
     };
-    grid(cx, "ligne en dessous");
+    grid(cx, "row below");
     assert_eq!((rows(cx), columns(cx)), (r + 1, c), "{:?}", text(cx));
-    grid(cx, "colonne à droite");
+    grid(cx, "column to the right");
     assert_eq!((rows(cx), columns(cx)), (r + 1, c + 1));
-    grid(cx, "Supprimer la ligne");
-    grid(cx, "Supprimer la colonne");
+    grid(cx, "delete the row");
+    grid(cx, "delete the column");
     assert_eq!((rows(cx), columns(cx)), (r, c));
     // A single undo gesture for each.
     cx.simulate_keystrokes("secondary-z");

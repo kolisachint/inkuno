@@ -1270,8 +1270,8 @@ mod tests {
     fn derives_titles() {
         assert_eq!(title_of("\n# Courses: lundi\nlait"), "Courses lundi");
         assert_eq!(title_of("  [[x]] / y  "), "x  y");
-        assert_eq!(title_of("\n\n"), "Sans titre");
-        assert_eq!(title_of("# .."), "Sans titre");
+        assert_eq!(title_of("\n\n"), "Untitled");
+        assert_eq!(title_of("# .."), "Untitled");
         assert_eq!(h1_of("\n# Courses: lundi\n"), Some("Courses lundi".into()));
         assert_eq!(
             (h1_of("## Sous-titre"), h1_of("texte"), h1_of("# ")),
