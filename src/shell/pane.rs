@@ -179,6 +179,7 @@ impl Pane {
         self.file.as_ref().map(|file| &file.path)
     }
 
+    #[cfg(test)]
     pub(super) fn viewer(&self) -> Option<&Entity<viewer::Viewer>> {
         match &self.file {
             Some(FileView {

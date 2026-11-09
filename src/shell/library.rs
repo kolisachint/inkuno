@@ -6,6 +6,7 @@ use std::sync::Arc;
 impl Shell {
     /// Rereads the vault right away, without waiting for the watcher: what the merge wrote
     /// shows, each note keeping its cursor and scroll (`reload`).
+    #[cfg(test)]
     pub(super) fn rescan(&mut self, root: &Path, cx: &mut Context<Self>) {
         let (notes, dirs, images, unreadable) = vault::rescan_full(root, &self.notes);
         self.unreadable = unreadable;
