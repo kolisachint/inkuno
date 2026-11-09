@@ -26,6 +26,9 @@ use completion::*;
 use cursor::*;
 use edit::*;
 use find::*;
+#[cfg(not(test))]
+use format_bar::*;
+#[cfg(test)]
 pub use format_bar::*;
 pub use layout::*;
 use mouse::*;
@@ -328,6 +331,10 @@ pub struct Editor {
     /// No editor is read-only anymore (embeds are cut, every editor edits); kept false so the
     /// layout paths stay as they were.
     readonly: bool,
+    /// Names of the vault's notes (lowercase, aliases too), to their files: what `#` and `^`
+    /// completion looks up. Nothing feeds it since the vault-search handoff was cut, so `#`
+    /// completion currently offers nothing; the field stays so the lookup keeps compiling.
+    sources: Rc<HashMap<String, PathBuf>>,
     /// The handle under the pointer: (table start, handle).
     part_hover: Option<(usize, Part)>,
     /// Where the pointer was at its last move.
@@ -485,6 +492,7 @@ impl Editor {
             geos: Vec::new(),
             marks: None,
             readonly: false,
+            sources: Rc::new(HashMap::new()),
             part_hover: None,
             pointer: Point::default(),
             hand: None,
