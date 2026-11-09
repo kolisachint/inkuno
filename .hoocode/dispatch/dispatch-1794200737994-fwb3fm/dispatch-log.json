@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T05:05:37.994Z",
+  "task_id": "dispatch-1794200737994-fwb3fm",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "low",
+  "task": "Goal: 0.0.1 release readiness — blockers only. READ-ONLY + dry-run. No edits, no commit, no push, no network writes (gh reads only).\n\nContext: Release vehicle will be agent/inkuno-0.0.1 (integration). Gate design: manual first release via scripts/release.sh 0.0.1 (DRY_RUN=1 first). Work in /Users/sachinkoli/.hoocode/worktrees/noteapp/release-gate (has scripts), READ-ONLY. Never edit anything. Never push. Never create repos/tags/releases.\n\nSteps: 1) gh auth status; gh repo view kolisachint/inkuno (exists?). 2) Read scripts/release.sh fully (manual 0.0.1 steps, what it writes/uploads, DRY_RUN behavior, secrets needed). 3) DRY_RUN=1 scripts/release.sh 0.0.1 — ONLY if script is provably non-mutating in dry-run (read first; abort if unsure). 4) List exact blocker checklist for manual release (repo existence, auth scopes, mac deps, linux builder availability — can we build linux here? check for cross/docker, else CI/native path).\n\nReport: status; repo exists? auth?; dry-run output; blocker checklist with owners (user vs crew); confirm zero writes/push. Blocker (if any): concrete.",
+  "parent_session": "01a1bb12-d9e9-7562-b49e-724bf5a1e32c"
+}

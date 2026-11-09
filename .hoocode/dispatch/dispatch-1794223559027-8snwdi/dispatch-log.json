@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T11:25:59.027Z",
+  "task_id": "dispatch-1794223559027-8snwdi",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "high",
+  "task": "Goal: Port 4 workflow/release workstreams into the main tree. One of three parallel merge crews — stay in your lane (file lists below); two sibling crews own all src/ deletions and all registries/features.\n\nWorkspace: /Users/sachinkoli/github/noteapp, branch agent/features, HEAD is the integrator's 8 commits on top of base 4104d2bb (MAIN TREE exception; never switch branches, never push, never commit — leave everything uncommitted, report diff stat).\nPort by extracting each worktree's uncommitted diff and applying the parts you own (worktree HEADs are at base, so `git -C <wt> diff` IS the workstream diff; use `git apply --3way` or content-aware edits; REPORT anything that won't apply):\n- agent/macos-ci-test (~/.hoocode/worktrees/noteapp/macos-ci-test): release-binaries.yml test gate + release.yml mac tests + RELEASING.md lines. NOTE: ci-tier/ci-cache/artifact crews already merged adjacent hunks in these files — apply around them, never revert their steps.\n- agent/update-check-inkuno: scripts/release.sh OWNER->kolisachint + RELEASING.md lines.\n- agent/ci-release-fast: release.yml zip-drop ONLY, Cargo.toml codegen-units line ONLY (content-aware single-line edit; deps lines belong to the deletions crew).\n- Verify: ruby -ryaml on touched workflows, git diff --stat review, grep that mac gate + save-before-test ordering survive.\nConstraints: ONLY the files above. Never touch src/**, book/**, docs/**, tests/**, Cargo deps. No builds (fast-lane). 20-min gate: approaching budget -> stop, report landed + exact resume checklist.\nReport: status; hunks ported per workstream; verification; conflicts/REPORT for finalizer; resume checklist if partial.",
+  "parent_session": "01a1bf7b-c3e2-76f2-bc8f-44444af5ec7b"
+}

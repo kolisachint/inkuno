@@ -1,0 +1,24 @@
+{
+  "summary": "Complete. One fix landed; everything else waits untouched.\n\n**State (5 lines):**\n1. Finished: diagnosed all 14 CI reds (12 shared + 2 Ubuntu-only); `json_check` + 6 more fixed and green locally (panel_rows, print emoji, docks, layers inversion, md_tables, blocks, outline through boards).\n2. Left: window x7 + shortcuts book regen + full-suite confirmation + CI watch; 9 files of verified-but-uncommitted fixes remain in the worktree.\n3. Landed this run: ONLY the `json_check` hunk — committed alone, all other edits left uncommitted.\n4. No src behavior change in this commit (test-only: one input chord + comment in `src/ui/keys.rs` test module).\n5. Scouts explore#1/#2 still background-running; untouched, results pending for the window work.\n\n**Fix:** `ui::keys::tests::json_check_needs_no_default_table` used `secondary-space` as the \"system may keep\" chord, but `system()` (src/ui/keys.rs:288) flags it only on macOS (`m.platform && …space`); on Linux `secondary` is the app's own Ctrl so no warning fires — a mac-centric test expectation, merge-caused (added by 1d46025). Changed test input to `cmd-space`, flagged on every platform; `system()` untouched.\n\n**Proof:** `./target/debug/deps/inkuno-cc347c0a057ac2c5 ui::keys::tests::json_check_needs_no_default_table --exact` → `1 passed; 0 failed`.\n\n**Commit + push:** `a035c27` \"tests: fix json_check\" (1 file, +3/−1), pushed `inkuno agent/inkuno-0.0.1:agent/inkuno-0.0.1` → `7ee7dad..a035c27`; no tags.",
+  "files_changed": [
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/panel_rows.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/ui/keys.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/ui/print.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/docks.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/platform/vault.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/mod.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/settings.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/md_tables.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/blocks.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/outline.rs"
+  ],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 633765,
+    "output": 81967,
+    "cacheRead": 16758749,
+    "cacheWrite": 0,
+    "cost": 0.11328739800000001
+  }
+}

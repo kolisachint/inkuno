@@ -1,0 +1,15 @@
+{
+  "summary": "**Status: complete** — branch pushed, PR open, CI triggered. Nothing else pushed anywhere; `origin` untouched.\n\n**Remote setup**\n- Worktree `/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1`, branch `agent/inkuno-0.0.1`.\n- Added remote `inkuno` → `https://github.com/kolisachint/inkuno.git`, URL verified twice via `remote get-url` + `config --get`. `origin` (noteapp) never altered.\n- One in-scope commit added before push: `8c4f99b` \"Point home URLs at kolisachint/inkuno\" — the worktree had uncommitted bref→inkuno URL updates (README, Cargo.toml, docs, `update.rs`, etc.) that belong to this branch now the target home is decided. Tree clean after commit.\n\n**Push result**\n- `git push inkuno agent/inkuno-0.0.1` — exact refspec, no tags, no `--force`: `[new branch] agent/inkuno-0.0.1 -> agent/inkuno-0.0.1`.\n- Confirmed server-side: `git ls-remote inkuno` shows `refs/heads/agent/inkuno-0.0.1 = 8c4f99b`.\n\n**PR URL:** https://github.com/kolisachint/inkuno/pull/3 — \"Inkuno 0.0.1: calm notes app (bref take)\", base `main`, head `agent/inkuno-0.0.1`. Body covers My take (Typora-minimal, keyboard-first, local-first), Credits (Bref by Andrea Larboullet Marin + `claude`/`cursoragent` crew), Changes (chrome, outline, F9 focus mode, markers, fonts Inter/JetBrains Mono, keybindings, JSON config, rename, gate, docs), test summary with pre-existing reds.\n\n**CI status at handoff**\n- PR state OPEN, mergeable. Checks all QUEUED at handoff (~05:11 UTC): `test (ubuntu-latest)`, `test (macos-latest)`, release-checks `test` + `build`.\n- CI run: https://github.com/kolisachint/inkuno/actions/runs/42565816072\n- Release checks run: https://github.com/kolisachint/inkuno/actions/runs/42565816101\n- Pre-existing reds on `main` (2026-11-08, unrelated to branch, noted in PR body): Docs `deploy` fails at `actions/deploy-pages@v4`; Release checks `test` fails at shell-syntax/publication-regressions step.\n\n**What remains:** merge only after CI green + user word (not merged); then cut `0.0.1` from `main` via `release.sh` (manual, no tags created).\n\n**Blockers:** none — auth (`kolisachint`, repo+workflow scopes), repo, and branch protection all fine.",
+  "files_changed": [
+    "/tmp/inkuno-pr-body.md"
+  ],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 51969,
+    "output": 7023,
+    "cacheRead": 327907,
+    "cacheWrite": 0,
+    "cost": 0.007257314000000001
+  }
+}

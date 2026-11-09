@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T08:59:40.744Z",
+  "task_id": "dispatch-1794214780739-xvqv1c",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "high",
+  "task": "Goal: Remove the CSV/TSV sheet grid (+ in-note table formulas) and Kanban boards subsystems. Owner-approved cut.\n\nContext:\n- Debloat scout (plan#1) findings: sheets = src/views/sheet/ (7 files), src/logic/table.rs, src/logic/formula.rs, editor grid src/views/editor/grid.rs + formulas.rs, src/shell/tables.rs, tests end_to_end/csv.rs, md_tables.rs, table_formulas.rs, table_handles.rs, table_styles.rs, sheet_header.rs, table_open.rs, book/src/csv.md + tables.md. Kanban = src/views/kanban.rs (~700 lines), src/shell/board.rs, tests end_to_end/boards.rs + shell/tests/board_header.rs, book/src/boards.md. After cut: CSV files open as text, kanban:true notes render as plain Markdown. No third-party dep removal (pure code) — do NOT touch Cargo.toml/Cargo.lock.\n- Plain GFM Markdown tables in notes STAY (only the sheet grid UI + =FORMULA() evaluation go).\n\nWorkspace: /Users/sachinkoli/.hoocode/worktrees/noteapp/trim-tables, branch agent/trim-tables, base 4104d2bb2cee2a4504bc5193a594f3562a112ce0 (already created).\nConstraints: Edit ONLY under that worktree (git -C <path>). Never switch branches, never touch parent/other worktrees, never push, never commit — leave uncommitted, report diff stat. Do NOT edit shared registries (shell/keymap.rs, actions.rs, main.rs, help/shortcut sections, book index/SUMMARY) — REPORT exact file:line removals for the integrator instead. Follow CONTRIBUTING.md/ARCHITECTURE.md layer rule.\nDone when: (1) cargo check --locked passes; (2) remaining table-related tests pass (GFM markdown tables); (3) no dangling refs to Sheet/kanban/formula symbols outside your REPORT list.\nReport: status; summary; files deleted/changed; verification output; REPORT list for integrator; behavior changes; open questions.",
+  "parent_session": "01a1bf7b-c3e2-76f2-bc8f-44444af5ec7b"
+}

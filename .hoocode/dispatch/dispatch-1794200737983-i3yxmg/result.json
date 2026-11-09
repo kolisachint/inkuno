@@ -1,0 +1,16 @@
+{
+  "summary": "complete\n\n**Report — Docs: kolisachint/inkuno sweep + consolidation**\n\n- **Status:** complete. Committed on branch `agent/inkuno-docs` in worktree `/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-docs`. **Never pushed** (branch has no upstream; no `git push` run).\n- **Commit hash:** `ddaa687` — \"Docs: kolisachint/inkuno sweep + consolidation\" (14 files, +59/−57, plus 2 binary renames at 100% similarity).\n- **Files changed (all docs-allowed):** `README.md`, `RELEASING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `book/book.toml`, `book/src/install.md`, `book/src/troubleshooting.md`, `book/src/updates.md`, `docs/index.html`, `docs/design/app-ui.md`, `docs/design/typography.md`, `docs/design/mockups/editor-current-v1.html`, plus renames `docs/screenshots/bref.png→inkuno.png`, `docs/site/bref.png→inkuno.png`. `ARCHITECTURE.md`, `CONTRIBUTING.md`, `AGENTS.md` needed no edits.\n- **Intentional bref keeps (exactly 3, one credit line per file):** `README.md:9`, `ARCHITECTURE.md:6`, `book/src/introduction.md:3` — each keeps its upstream-origin credit (\"…by Andrea Larboullet Marin…\", link still pointing at `alarboulletmarin/bref`). Everything else now points at `github.com/kolisachint/inkuno` / `kolisachint.github.io/inkuno`.\n- **Consolidation moves:** the two `bref.png` files were byte-identical duplicates (same MD5) and two live references already expected the new names — `README.md:11` → `docs/screenshots/inkuno.png` and `docs/index.html:182` → `site/inkuno.png` were both broken before. Renamed both in place (no pointer files needed; relative links now resolve). No root stray markdown existed (all root `.md` are standard project files, edited in place); `book/src` untouched structurally; `docs/site/` keeps its single image since `index.html` references it relatively.\n- **Link check:** all relative image/asset targets exist; all real markdown links in `book/src` resolve (remaining regex hits are inline-code syntax examples like `` `![](picture.png)` `` / `[text](address)`); `guide/` links in `index.html` are mdBook build output, generated at publish time (pre-existing, out of scope).\n- **Src untouched + no push:** `git status --porcelain -- src/ Cargo.toml Cargo.lock build.rs packaging/ .github/workflows/ scripts/ tests/ assets/fonts/` is empty; `LICENSE-MIT` (copyright holder), `Cargo.toml`, `inkuno.metainfo.xml`, `scripts/`, `.github/` old-name strings deliberately left for the frozen code/rename crews.\n- **Blocker:** none.",
+  "files_changed": [
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-docs/README.md",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-docs/RELEASING.md"
+  ],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 132609,
+    "output": 15551,
+    "cacheRead": 778053,
+    "cacheWrite": 0,
+    "cost": 0.017927205999999998
+  }
+}

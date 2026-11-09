@@ -1,0 +1,13 @@
+{
+  "summary": "No final text. Stop reason: stalled; turns: 0; last tool: none",
+  "files_changed": [],
+  "confidence": 0.6,
+  "status": "partial",
+  "usage": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "cost": 0
+  }
+}

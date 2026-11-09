@@ -1,0 +1,10 @@
+{
+  "task_id": "dispatch-1794222225723-mdpxlx",
+  "agent_type": "plan",
+  "budget": 150000,
+  "used": 7148,
+  "peak_context": 77921,
+  "warned": false,
+  "exceeded": false,
+  "last_updated": 1794222340939
+}

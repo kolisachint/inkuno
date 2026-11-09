@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T09:03:45.436Z",
+  "task_id": "dispatch-1794215025431-tf5cxu",
+  "agent_type": "explore",
+  "depth": 2,
+  "reason": "user_override",
+  "complexity": "high",
+  "task": "Goal: Inventory the tests covering six removed features in the Inkuno repo, so a trimming crew knows which test files to delete vs surgically trim.\n\nContext: Worktree at /Users/sachinkoli/.hoocode/worktrees/noteapp/trim-chrome, branch agent/trim-chrome, base 4104d2bb2cee2a4504bc5193a594f3562a112ce0. Owner-approved cut removes: (1) Share/Export menu (src/shell/sharing.rs, src/logic/sharing.rs, src/platform/export.rs), (2) --capture mode (src/shell/capture.rs), (3) back/forward travel (src/shell/travel.rs), (4) vault-wide find/replace (src/shell/search.rs; NOTE in-note find in views/editor/find.rs STAYS), (5) file drops (src/shell/drops.rs), (6) tool docks incl focus mode (src/shell/docks.rs).\nSibling crews own canvas, latex/pdf, csv/kanban, obsidian extras (graph/embeds/templates/nav), sync/update, Cargo.toml/Cargo.lock — do not list those as deletable.\n\nWorkspace: /Users/sachinkoli/.hoocode/worktrees/noteapp/trim-chrome (read-only task; NEVER edit, commit, switch branches, or touch other worktrees).\n\nConstraints: Read-only. Use Read and CodeSearch tools. Look at src/shell/tests/ layout (end_to_end/ chapters + journeys), tests/ dir, and unit tests inside the eight files above.\n\nDone when: every test file/chapter covering the six features is identified with its scope.\n\nReport: status (complete/partial/failed); summary; for EACH of the six features: dedicated test files safe to delete (path + one-line scope), and shared test files needing surgical trims (path:line of the relevant cases/helpers). Flag anything ambiguous. End with open questions if any.",
+  "parent_session": "01a1bf8b-d9d7-720f-bf5f-71afd24fd463"
+}

@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T05:05:37.984Z",
+  "task_id": "dispatch-1794200737983-i3yxmg",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "high",
+  "task": "Goal: Hunt bref/andrea → inkuno/kolisachint in DOCS ONLY + consolidate stray docs into docs/ + docs/design/. No src changes (release freeze), no commit? COMMIT on branch (docs commits allowed; user froze CODE not docs — commit docs only), never push.\n\nContext: Worktree /Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-docs, branch agent/inkuno-docs from 26913fd. Use git -C <worktree> only. Code freeze: NEVER touch src/, Cargo.*, build.rs, packaging/, workflows/, scripts/, tests/, assets/fonts/ binaries. Docs allowed: docs/**, book/src/** (text only), README.md, ARCHITECTURE.md, CONTRIBUTING.md, RELEASING.md, AGENTS.md, site configs? (website is a different repo — do NOT touch ~/github).\n\nSteps: 1) grep -ril 'bref|andrea' across docs-trees; update each to inkuno/kolisachint (upstream-origin credit lines stay, exactly one per file max — keep). 2) Find doc-like files outside docs/ + docs/design/ + book/src/ (root stray md? docs/site? screenshots?) and move content into docs/ (product) or docs/design/ (design), leaving a pointer only if links need it. book/src stays (mdBook source). 3) Verify: grep clean (except credits), markdown links resolve (relative paths), no code touched (git status --porcelain -- src/ Cargo.* must be empty).\n4) Commit (\"Docs: kolisachint/inkuno sweep + consolidation\"), never push.\n\nReport: status; commit hash; files changed; intentional bref keeps; consolidation moves; link check; confirm src/ untouched + no push. Blocker (if any): concrete file:line.",
+  "parent_session": "01a1bb12-d9e9-7562-b49e-724bf5a1e32c"
+}

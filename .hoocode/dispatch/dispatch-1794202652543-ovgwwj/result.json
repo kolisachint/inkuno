@@ -1,0 +1,58 @@
+{
+  "summary": "**Status: partial — stopped at turn limit. CI is NOT green yet; nothing pushed. Two commits with test-only fixes (+1 minimal freeze-exception src refactor) sit unpushed on `agent/inkuno-0.0.1` in `/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1`.**\n\n## Fail list with attribution (CI run 42566145544, from `gh run view --log-failed`)\n\n**Shared 12 (macOS + Ubuntu) — intended-behavior drift from 8ceddef \"quiet chrome\" + bref base, fixed by test updates:**\n- `window` ×7 (FOOTER 56→0, PILL_CLEAR 48→56, MAX_WIDTH 720→800, rail cut to 4 buttons, sync/back/forward/trash/help/theme moved to palette) — **not yet fixed** (scout `explore#1` pending; my own analysis done, see below)\n- `docks::tools_stacked…` — header cross removed; hide is now rail Shift+click / palette — **fixed**\n- `end_to_end` aggregate — chapters fixed one by one as they surfaced: `md_tables` line-height 30px→23px (Inter metrics) — **fixed**; `blocks` heading-marker + quote-prefix elision (Typora-style zero-width hidden markers; clicks resolve to line start/title) — **fixed**; `outline` toast choreography (outline moved palette→dock, killing the old Info toast; toast click-through now lands on dock, losing editor focus) — **fixed**; `boards` `board-toggle` unwrap — **NOT fixed** (see below)\n- `panel_rows` indent 16→12px (stale since bref base, `views/nav.rs:69`) — **fixed**\n- `print::emoji_become_boxes` — Inter keeps ❤ (2 boxes not 3) and lacks U+FFFD — **fixed**\n\n**Ubuntu-only 2 (the NEW reds):**\n- `keys::json_check_needs_no_default_table` — **NEW test bug, fixed**. Test assumed `system(\"secondary-space\")` warns everywhere; `system()` (`src/ui/keys.rs:282`) only flags it on macOS (platform key). On Linux secondary is the app's own Ctrl → correctly silent (locked behavior arguably right). Test now uses `cmd-space`, which warns on all platforms.\n- `shortcuts_page_is_current` — **NEW: stale `book/src/shortcuts.md`** (help changed, book not regen'd; Linux-only test). **Not fixed.** Regen needs Linux rendering (`defaults()`/`help_sections()` are `cfg!(macos)`-dependent); plan was temp `cfg!`-flip + `INKUNO_WRITE_DOCS=1` + revert, then verify — not executed.\n\n**Also NEW src bug (freeze exception, fixed):** `layers_only_depend_downwards` — `src/platform/vault.rs:92` (added by 1d46025) called `crate::ui::keys::legacy_lines`, breaking the platform↓ui rule. Fixed by behavior-preserving inversion: detour deleted from `vault.rs`; new `keys::user_lines()` helper (`src/ui/keys.rs`) used by `src/shell/mod.rs:366` and `settings.rs` tests. `src/main.rs` untouched (verified its `load_file(\"keys\")` use never hit the detour). No behavior change: same function, moved call site.\n\n**Pre-existing / out of scope:** Release-checks run 42566145467 fails in `scripts/test-publish-release.py` (release.yml mentions \"nightly\") — workflows/scripts, outside tests-only scope; needs a separate decision. Nothing env-specific found; all failures reproduce deterministically (bundled fonts/bytes).\n\n## Fixes per file (committed, unpushed)\n- `a035c27` — `src/ui/keys.rs` (json_check chord swap + comment)\n- `56321ad` — `docks.rs` (stack_tool toggle), `panel_rows.rs` (12px), `print.rs` (❤ kept/2 boxes, Inter-has-no-U+FFFD), `md_tables.rs` (assert one line-height via `grid::line_height`), `blocks.rs` (marker/title expectations + hidden-prefix→line-start), `outline.rs` (comments-palette Info toast, editor refocus), `settings.rs` (user_lines), `vault.rs` (−9 lines detour), `shell/mod.rs` (user_lines), `keys.rs` (+user_lines helper)\n\n## Local verification\n`cargo check --locked --tests` clean (only pre-existing warnings elsewhere); targeted runs green: `layers`, `json_check`, `emoji`, `panel_rows`, `docks`. `end_to_end` progressed chapter-by-chapter to `boards.rs:130` (`board-toggle` unwrap). Full suite **not** run green end-to-end (each `end_to_end` iteration ≈160s).\n\n## Remaining for whoever resumes\n1. `boards.rs:130`: `board-toggle` only renders when `pane.file.is_none()` (`render.rs:939`); the e2e board is filed (`Tableau.md`), so the corner toggle is absent by locked design — test must use the locked path (palette/key) or an unfiled board. Probe file removed; use a temp `zz_probe` test again for fast iteration (each probe ≈2s vs 160s e2e).\n2. `window` ×7 — my locked-behavior notes: rail = [nav-commands, nav-tree, nav-search, nav-new] only (`sidebar.rs:1174+`); `nav-sync` gone; FOOTER=0/PILL_CLEAR=56/MAX_WIDTH=800 (`views/editor/mod.rs`); top_margin 56; counts/bar are overlays. Check `explore#1`/`explore#2` results via `AgentOutput` before editing.\n3. Regen `book/src/shortcuts.md` via the cfg-flip procedure; verify on CI (can't verify on mac).\n4. Full `cargo test --locked`, commit (`tests: …`), push **only** `inkuno/agent/inkuno-0.0.1` (exact refspec, no tags), then report job links.\n5. Never merged to main, never tagged, release-checks failure left flagged.",
+  "files_changed": [
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/panel_rows.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/ui/keys.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/ui/print.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/docks.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/platform/vault.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/mod.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/settings.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/md_tables.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/blocks.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/end_to_end/outline.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/zz_probe.rs",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/src/shell/tests/mod.rs"
+  ],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 1026315,
+    "output": 92848,
+    "cacheRead": 20922583,
+    "cacheWrite": 0,
+    "cost": 0.16304626599999997
+  },
+  "task_tree": [
+    {
+      "id": 1,
+      "title": "Analyze window geometry fails",
+      "status": "done",
+      "source": "subagent",
+      "subagentMode": "explore",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": 0
+      },
+      "children": []
+    },
+    {
+      "id": 2,
+      "title": "Analyze 7 misc test fails",
+      "status": "done",
+      "source": "subagent",
+      "subagentMode": "explore",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": 0
+      },
+      "children": []
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "summary": "Complete.\n\nReport — Inkuno 0.0.1 installed, Bref uninstalled (shell only, no repo edits/commits):\n\n1. **shasum verify: PASS.** `shasum -a 256 -c SHA256SUMS` → `inkuno-macos.dmg: OK` (explicit hash `d9e3ba52…912c110` matches the SHA256SUMS line). Note: the file also lists `inkuno-linux-x86_64.tar.gz`, which was not downloaded (mac-only patterns) so it reports \"FAILED open or read\" — expected, not a mismatch. Downloaded via `gh release download v0.0.1 --repo kolisachint/inkuno` to `/tmp/inkuno-macos.dmg` (21M) + `/tmp/SHA256SUMS`.\n2. **Installed:** `/Applications/Inkuno.app`, 43M on disk (fresh copy from mounted DMG; no prior Inkuno.app existed; volume detached/ejected cleanly).\n3. **Launched + alive:** `open /Applications/Inkuno.app` → real PID **22642** (`/Applications/Inkuno.app/Contents/MacOS/inkuno`), verified alive at +10s and again at +21s elapsed via `ps -p 22642`. (Caveat: bare `pgrep -f Inkuno` also matches my own agent process since the task text contains the word; proof above uses the exact `Inkuno.app/Contents` path match.)\n4. **Bref removals:**\n   - PID 81126: already dead before I acted (`ps -p 81126` empty, no real bref process in `ps aux`); nothing to kill.\n   - `/Applications/Bref.app`: confirmed path with `ls -ld` first, then `rm -rf /Applications/Bref.app` — **trashed**, verified gone (`No such file or directory`). No other paths touched.\n5. **Leftovers intentionally left alone:** repo dev binary `/Users/sachinkoli/github/noteapp/target/debug/bref` (112M) untouched; `~/Library/Application Support/bref` and `~/Library/Application Support/inkuno` configs untouched; repo, worktrees, `/tmp` downloads (`inkuno-macos.dmg`, `SHA256SUMS`) all left in place.",
+  "files_changed": [],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 18172,
+    "output": 2380,
+    "cacheRead": 145740,
+    "cacheWrite": 0,
+    "cost": 0.00258468
+  }
+}

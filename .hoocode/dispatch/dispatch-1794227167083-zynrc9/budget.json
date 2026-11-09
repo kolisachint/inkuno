@@ -1,0 +1,10 @@
+{
+  "task_id": "dispatch-1794227167083-zynrc9",
+  "agent_type": "general-purpose",
+  "budget": 300000,
+  "used": 5298,
+  "peak_context": 26151,
+  "warned": false,
+  "exceeded": false,
+  "last_updated": 1794227239266
+}

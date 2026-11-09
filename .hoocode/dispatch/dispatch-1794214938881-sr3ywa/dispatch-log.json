@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T09:02:18.882Z",
+  "task_id": "dispatch-1794214938881-sr3ywa",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "high",
+  "task": "SCOPE CORRECTION — owner decision just landed: GitHub renders SVG images in Markdown, and v1 targets GitHub parity, so SVG image rendering STAYS. Adjust your work:\n\n- KEEP: src/views/viewer.rs image/SVG path, src/ui/svg.rs, resvg + font stack (whatever SVG needs), figure png path insofar as images/mermaid need it.\n- STILL CUT: LaTeX (latex-rust, figure latex, Source::Formula) and PDF export (ui/print.rs, platform/pdf.rs, shell/print.rs, export_pdf tests, svg2pdf/pdf-writer/ttf-parser only if nothing kept needs them — verify with cargo tree since resvg may pull ttf-parser).\n- If you already deleted SVG code, restore it (git -C <path> checkout -- <files> works since nothing is committed).\n\nEverything else in your brief stands (only-writer for Cargo.toml, report-only registries, verification). Confirm the adjusted scope in your final report.",
+  "parent_session": "01a1bf7b-c3e2-76f2-bc8f-44444af5ec7b"
+}

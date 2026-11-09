@@ -1,0 +1,22 @@
+{
+  "task_id": "dispatch-1794215470134-0tbzgd",
+  "ok": false,
+  "exit_code": 1,
+  "status": "failed",
+  "stderr_tail": "",
+  "error": "Task failed: error reading response stream: error decoding response body",
+  "budget_exceeded": false,
+  "result_data": {
+    "summary": "Task failed: error reading response stream: error decoding response body",
+    "files_changed": [],
+    "confidence": 0.5,
+    "status": "failed",
+    "usage": {
+      "input": 138442,
+      "output": 2427,
+      "cacheRead": 394798,
+      "cacheWrite": 0,
+      "cost": 0.015119196000000001
+    }
+  }
+}

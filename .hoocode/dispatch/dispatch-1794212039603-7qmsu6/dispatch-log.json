@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T08:13:59.605Z",
+  "task_id": "dispatch-1794212039603-7qmsu6",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "medium",
+  "task": "Goal: Make macOS release test step non-blocking (drop the gate), PR + merge + redispatch. Workflow-only. Never force-push, never tag.\n\nContext: kolisachint/inkuno. Run 42580863329: macos job fails at `cargo test` (8 stale-chrome asserts; user decision: drop the gate, fix tests post-release). Linux job has no such gate issue (passed). Find the macos `cargo test` step in .github/workflows/release-binaries.yml (or release-native.yml — read first), and EITHER remove it OR add `continue-on-error: true` with a comment (prefer removal with comment pointing to post-0.0.1 test polish; keep the build steps intact).\n\nWork in fresh clone /tmp/inkuno-notest (kolisachint/inkuno main). Branch agent/drop-mac-test-gate. Edit workflow file(s) ONLY. Commit, push branch (exact refspec, no tags), open PR to main (\"Release: make mac test non-blocking for 0.0.1\"), merge via gh pr merge --admin, verify main HEAD, redispatch: gh workflow run release-native.yml --ref main -f tag=v0.0.1. Poll to completion.\n\nReport: status; PR + merge commit; new run URL; publish state + assets when done (or exact failure + stop). Never touch src/, never tag.",
+  "parent_session": "01a1bb12-d9e9-7562-b49e-724bf5a1e32c"
+}

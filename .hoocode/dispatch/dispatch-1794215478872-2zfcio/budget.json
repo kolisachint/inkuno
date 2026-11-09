@@ -1,0 +1,10 @@
+{
+  "task_id": "dispatch-1794215478872-2zfcio",
+  "agent_type": "explore",
+  "budget": 150000,
+  "used": 15533,
+  "peak_context": 85618,
+  "warned": false,
+  "exceeded": false,
+  "last_updated": 1794215777591
+}

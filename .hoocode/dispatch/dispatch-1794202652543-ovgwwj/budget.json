@@ -1,0 +1,10 @@
+{
+  "task_id": "dispatch-1794202652543-ovgwwj",
+  "agent_type": "general-purpose",
+  "budget": 300000,
+  "used": 92848,
+  "peak_context": 186345,
+  "warned": false,
+  "exceeded": false,
+  "last_updated": 1794206990656
+}

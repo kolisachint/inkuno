@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T07:07:28.621Z",
+  "task_id": "dispatch-1794208048620-o3nlcy",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "low",
+  "task": "Goal: FAST — merge PR #3 + manual 0.0.1 release. Skip everything non-essential. User authorized. Never force-push.\n\nContext: github.com/kolisachint/inkuno, PR #3 (agent/inkuno-0.0.1 → main). Known reds documented. gh auth as kolisachint verified earlier.\n\nSteps (fast path, no detours):\n1. Post 2-line comment on PR #3 (merge-with-known-reds, test polish post-0.0.1), merge: gh pr merge 3 --repo kolisachint/inkuno --merge --admin. If blocked, report exact error and STOP (one attempt only).\n2. Fresh clone to /tmp/inkuno-release (depth for speed but needs tags for script? full clone if quick, else --depth 50 + fetch tags), checkout main, verify merge commit present.\n3. export INKUNO_REPO=kolisachint/inkuno; run scripts/release.sh 0.0.1 (skip DRY_RUN — time matters; script is the reviewed path). One attempt.\n4. Poll release-native run to completion (gh run watch with timeout); confirm published release + assets (mac dmg, linux tarball, SHA256SUMS).\n5. Report: merge commit, tag, asset URLs, run links. Any failure: exact output + stop.\n\nDo not fix tests, do not verify check locally, do not touch other repos. Speed over thoroughness — the release pipeline itself builds + validates.",
+  "parent_session": "01a1bb12-d9e9-7562-b49e-724bf5a1e32c"
+}

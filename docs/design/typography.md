@@ -54,7 +54,7 @@ flip. `cargo test north_star_fonts_are_bundled`
 
 Why staged, not flipped:
 
-1. **gpui 0.2 cannot embolden a variable font** (`src/ui/assets.rs:10-12`;
+P1. **gpui 0.2 cannot embolden a variable font** (`src/ui/assets.rs:10-12`;
    book `troubleshooting.md#bold-text-is-not-bold`). Flipping the default to
    variable-only Inter/JetBrains Mono would lose bold until the text engine
    learns synthetic bold or static bold cuts ship next to the variables.

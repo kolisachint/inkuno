@@ -1,7 +1,6 @@
 //! The outside world: disk, processes, network and the operating system. No gpui here.
 
 pub mod clock;
-pub mod export;
 pub mod link;
 pub mod vault;
 

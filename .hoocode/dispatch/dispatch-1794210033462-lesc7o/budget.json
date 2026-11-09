@@ -1,0 +1,10 @@
+{
+  "task_id": "dispatch-1794210033462-lesc7o",
+  "agent_type": "general-purpose",
+  "budget": 300000,
+  "used": 2944,
+  "peak_context": 21487,
+  "warned": false,
+  "exceeded": false,
+  "last_updated": 1794211760977
+}

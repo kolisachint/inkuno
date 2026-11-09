@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T09:04:20.528Z",
+  "task_id": "dispatch-1794215060527-vdexr4",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "medium",
+  "task": "SECOND SCOPE CORRECTION — owner decision: v1 targets absolute GitHub Markdown parity, so LaTeX math STAYS (GitHub renders math). Your cut is now PDF-export ONLY:\n\n- KEEP: latex-rust + figure latex + viewer Source::Formula + layout math refs; mermaid (as before); SVG/images (as before).\n- STILL CUT: PDF export (src/ui/print.rs, src/platform/pdf.rs, src/shell/print.rs export_pdf, export_pdf tests, book print page) + Cargo deps EXCLUSIVE to PDF (svg2pdf, pdf-writer — and ttf-parser ONLY if cargo tree proves nothing kept needs it; resvg/latex may pull it, so verify).\n- If you already deleted LaTeX/SVG code, restore it (git -C <path> checkout -- <files>; nothing is committed so this is safe).\n\nEverything else in your brief stands. Confirm the adjusted PDF-only scope in your final report.",
+  "parent_session": "01a1bf7b-c3e2-76f2-bc8f-44444af5ec7b"
+}

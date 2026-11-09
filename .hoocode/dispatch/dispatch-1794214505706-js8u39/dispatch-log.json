@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T08:55:05.713Z",
+  "task_id": "dispatch-1794214505706-js8u39",
+  "agent_type": "explore",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "medium",
+  "task": "Goal: Produce a file-by-file integration plan for Inkuno branding. Do NOT edit anything — read-only scout.\n\nContext:\n- Workspace: /Users/sachinkoli/github/noteapp, branch agent/features, base commit 4104d2b.\n- Brand kit: /Users/sachinkoli/Downloads/inkuno-brand-kit.zip (already inventoried: svg/ optical marks 16/24/32 simplified + 48-512 full detail, app-light/app-dark/app-blue rounded icons, wordmark, png/, windows/inkuno.ico, macos/Inkuno.iconset/). Rules from its README: keep nib+ink mark as-is, exact palette #20232B/#4263EB/#F5F5F2/#171A22, lowercase wordmark, transparent mark for toolbar, rounded app variant for launchers, optical variant per size, don't modify SVG masters, platform derivatives in separate build dir.\n- The app is one Rust crate on GPUI (see ARCHITECTURE.md, Cargo.toml). Find all current branding touchpoints.\n\nInvestigate: asset directories for icons/logos, Cargo.toml name/icons, macOS Info.plist / bundle config, Windows ICO wiring, Linux .desktop icon, in-app toolbar/sidebar/about-screen logo usage, favicon/docs logo references, GPUI icon APIs, release workflow asset packaging.\n\nWorkspace: /Users/sachinkoli/github/noteapp (read-only, stay on main tree, no worktree needed).\nConstraints: READ-ONLY. No edits, no commits, no pushes, never switch branches.\nDone when: you can list every current branding touchpoint with file:line and the exact brand-kit source file that should replace/wire it.\nReport: status (complete/partial/failed); summary; per-platform mapping table (platform/surface -> brand-kit source -> repo destination -> current code ref); gaps/blockers; files read. No code changes.",
+  "parent_session": "01a1bf7b-c3e2-76f2-bc8f-44444af5ec7b"
+}

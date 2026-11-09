@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T08:43:02.281Z",
+  "task_id": "dispatch-1794213782278-pb839s",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "low",
+  "task": "Goal: Install Inkuno 0.0.1 on this Mac from the GitHub release, launch it, uninstall Bref. Shell work only. No repo edits, no commits.\n\nContext: Release https://github.com/kolisachint/inkuno/releases/tag/v0.0.1, assets: inkuno-macos.dmg (22.4 MB), SHA256SUMS. Old app: target/debug/bref dev binary (PID 81126 possibly running) + any /Applications/Bref.app.\n\nSteps:\n1. cd /tmp; curl -LO the dmg + SHA256SUMS from the release (gh release download v0.0.1 --repo kolisachint/inkuno --pattern 'inkuno-macos.dmg' --pattern 'SHA256SUMS' --clobber). Verify: shasum -a 256 -c SHA256SUMS (or grep line). STOP if mismatch.\n2. Mount: hdiutil attach inkuno-macos.dmg -nobrowse; copy Inkuno.app to /Applications (cp -R, replacing any existing Inkuno.app; ask nothing).\n3. hdiutil detach; launch: open /Applications/Inkuno.app; verify process alive 10s (pgrep -f Inkuno).\n4. Uninstall bref: kill PID 81126 if alive (graceful kill, verify gone); if /Applications/Bref.app exists, trash it (rm -rf — confirm path first with ls; ONLY /Applications/Bref.app, never anything else). Leave ~/Library configs + repo target/ binaries alone (say so in report).\n5. Report: shasum result; installed version (Inkuno.app path + size); new PID + alive proof; bref removals (PID killed? app trashed?); leftovers noted (dev binaries, configs).\n\nDo NOT delete the repo, worktrees, downloads, or configs. Only the two removals above.",
+  "parent_session": "01a1bb12-d9e9-7562-b49e-724bf5a1e32c"
+}

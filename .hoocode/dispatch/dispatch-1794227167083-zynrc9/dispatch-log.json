@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T12:26:07.084Z",
+  "task_id": "dispatch-1794227167083-zynrc9",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "medium",
+  "task": "Goal: Unblock parsing of the integrated tree — the single gate before release. Tiny slice, no refactoring.\n\nWorkspace: /Users/sachinkoli/github/noteapp, branch agent/features (MAIN TREE; never switch branches, never push; COMMITS ALLOWED as one grouped commit for this slice, never amend/rebase).\nKnown defects (from merge reports, verify each on disk first):\n1. src/shell/sidebar.rs ~line 1773: mismatched closing delimiter (rustfmt: `error: mismatched closing delimiter: }`, possibly meant for line 1299's `-> Stateful<Div>`). Fix the delimiter balance with the minimal edit.\n2. src/views/viewer.rs ~line 557: suspected stray `});` from share-button-block removal; also remove `.children(edit)`, `key_context(\"Canvas\")`, canvas on_actions IF they are the dangling leftovers (grep-confirm each before deleting).\n3. Re-run: rustfmt --edition 2021 --check (or stdin for module files) on both files must parse clean; grep for `<<<<<<<` repo-wide must be empty.\nDo NOT touch anything else — no registries, no features, no tests. If either fix grows beyond a few lines, stop and report instead of expanding scope.\nVerify: rustfmt parse-clean on both files + git diff --stat review. No cargo (fast-lane). 20-minute gate: stop with exact remaining lines if close.\nReport: status; commit hash + stat; verification output; anything else that still fails to parse (exact file:line).",
+  "parent_session": "01a1bf7b-c3e2-76f2-bc8f-44444af5ec7b"
+}

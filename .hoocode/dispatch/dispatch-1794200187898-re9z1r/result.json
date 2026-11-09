@@ -1,0 +1,19 @@
+{
+  "summary": "complete\n\nReport — repoint upstream links to `github.com/kolisachint/inkuno`\n\n**Status:** complete. Committed on branch, never pushed. Site updated + built, left uncommitted.\n\n**Commit:** `4bc5df8` \"Repoint to kolisachint/inkuno\" on `agent/inkuno-0.0.1` (worktree `/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1`). Note: a parallel crew committed `8c4f99b` (\"Point home URLs…\", 14 files) mid-task covering the same repoint; my commit adds the 4 README install-table/clone lines it missed. Final tree verified: the only remaining `alarboulletmarin` ref is the intentional credit line.\n\n**Repoint list (old → `kolisachint/inkuno`):**\n- `Cargo.toml:8` `repository` — this also repoints the updater: `src/platform/update.rs` derives both the API URL and the trusted-download check from `CARGO_PKG_REPOSITORY`, so no logic change needed; its test negative-case now uses `http://github.com/kolisachint/inkuno/…` (scheme rejection against the real repo).\n- `README.md` badges, install table, Arch `curl`, `git clone`, website → `kolisachint.github.io/inkuno/`, guide → `…/inkuno/guide/`; credit line kept as the ONE upstream link: \"Inkuno continues Bref … its home is now github.com/kolisachint/inkuno\".\n- `ARCHITECTURE.md:6`, `book/src/introduction.md:3` reworded to plain \"Bref\" text (no old-repo link).\n- `book/book.toml` repo + edit URLs; `book/src/install.md` (4 clones + assets); `book/src/troubleshooting.md` issues link; `book/src/updates.md` API `api.github.com/repos/kolisachint/inkuno/releases/latest`.\n- `inkuno.metainfo.xml` homepage + bugtracker; `SECURITY.md`, `CODE_OF_CONDUCT.md`, `.github/ISSUE_TEMPLATE/config.yml` security-advisories URLs.\n- `docs/index.html` (15 refs: GitHub links, release assets, `api.github.com` fetch, og:image).\n- No hardcoded owner in `release.yml`/`release-native.yml`/packaging (they use `github.repository`/relative paths).\n\n**Verify:** `cargo check --locked` OK (21s, pre-existing warnings only); `cargo test --locked platform::update` — 8 passed, 0 failed.\n\n**Remote (read-only):** `github.com/kolisachint/inkuno` EXISTS (currently shows pre-rename Bref content — push + PR will replace). `gh auth status`: logged in as `kolisachint`, scopes `gist, read:org, repo, workflow`. No repo created, no push, no PR opened.\n\n**Site:** `~/github/kolisachint.github.io` — `APP_REPO` → `https://github.com/kolisachint/inkuno` in `src/pages/inkuno/index.astro` + `download.astro` (comments updated, no `noteapp` refs left in `src/`). `npm run build` ✓ 11 pages; `dist/inkuno/{index,download}/index.html` contain the new URL. Left uncommitted (also untouched pre-existing uncommitted: `src/site.ts`, `sitemap.xml.ts`, untracked `src/pages/inkuno/`).\n\n**PR checklist (remains):** 1) `git push -u origin agent/inkuno-0.0.1` (needs your go-ahead). 2) Open PR against `kolisachint/inkuno` default branch. 3) Manual 0.0.1 release after merge (tags/releases still empty upstream; download links 404 until then). 4) Optional: push site repo separately to publish new links.\n\n**Confirm:** no push performed anywhere; both repos' remotes untouched.",
+  "files_changed": [
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/README.md",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/ARCHITECTURE.md",
+    "/Users/sachinkoli/.hoocode/worktrees/noteapp/inkuno-0.0.1/book/src/introduction.md",
+    "/Users/sachinkoli/github/kolisachint.github.io/src/pages/inkuno/download.astro",
+    "/Users/sachinkoli/github/kolisachint.github.io/src/pages/inkuno/index.astro"
+  ],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 57461,
+    "output": 10075,
+    "cacheRead": 1168047,
+    "cacheWrite": 0,
+    "cost": 0.010097194
+  }
+}

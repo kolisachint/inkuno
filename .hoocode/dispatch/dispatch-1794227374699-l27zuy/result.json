@@ -1,0 +1,18 @@
+{
+  "summary": "status: complete\n\nAll six registry-wiring items verified on disk; three needed edits, three were already landed by sibling crews (verified, untouched).\n\n**What I did** (workspace `/Users/sachinkoli/github/noteapp`, branch `agent/features`, no switch/push/rebase):\n- **lang shim**: `src/lang.rs` (244 lines bilingual) → 2-line `pub use inkuno_logic::lang::*;`. All call-site imports (`tr/fold/io_reason/age/date_name/time_name/speak_english/in_english`) exist in the crate with compatible signatures. One fallout fixed: `src/shell/tests/shortcuts_page.rs:106` pinned the old French fallback (`tr(\"Notes\",\"Remarques\")==\"Remarques\"`) → now asserts `\"Notes\"`. `french_says_vous` still passes (scans non-test src, shim adds no tu-forms); French call-site cleanup stays with the later crew.\n- **graph stub**: `src/views/mod.rs` — removed the `graph::Cycle` stub; the keymap binding it kept alive is gone and nothing references `views::graph` (only a doc comment in `platform/vault.rs` remains, harmless).\n- **codehide remainder**: `mod.rs` fields (`code_x/code_open/code_gen`), `edit/mouse/paint/table` hunks and `table.rs::code_state` were all present; the one gap was the scroll-frame producer in `layout.rs::frames()` (consumers in `paint.rs:253`/`mouse.rs:940` read `self.codes`, nothing wrote it) → ported the 60-line code-frame block verbatim from `agent/feat-codehide` (adapted: `width` in scope, `self.thumbs` present).\n- **Already-clean, verified only**: keymap cut rows/bindings (only kept `ListCycle` remains), `ui/keys.rs`, `tests/mod.rs` + `end_to_end/mod.rs` (no dangling `mod`s/`run` calls; all 7 deleted chapter files confirmed gone), kanban/sheet mods + stubs + `shell/mod.rs` imports, `menu.rs` `Do::Share`, `SUMMARY.md` (every entry resolves; deleted pages' entries already removed).\n\n**Commit**: `fdf1606` — \"Registries: lang shim over inkuno-logic, drop stale graph stub, port code-frame scroll block\" — 23 files, +8036/−256 (19 = staged `crates/logic` extraction port + 4 edited files). Nothing amended; other crews' uncommitted work left untouched.\n\n**Verification**:\n- `rustfmt --edition 2024 --check` on all 4 edited files: zero `^error` each.\n- `python3 tomllib` parses `Cargo.toml` (workspace `members=[\".\", \"crates/logic\"]`, `inkuno-logic` dep) and `crates/logic/Cargo.toml`; `ruby -ryaml` loads `release.yml`.\n- Grep sweeps clean: `SearchVault|NewFromTemplate|SyncVault|ShareDocument|ExportPdf|NewDiagram|Do::Share`, `graph::Cycle|views::graph`, `mod kanban|mod sheet`, `canvas::|sheet::` in keymap, `GoBack|GoForward` in keymap/menu/commands.\n- `crates/logic/src/{commands,prefs}.rs` byte-identical to `src/logic` survivors; `history` correctly absent (cut).\n\n**CI must prove (no cargo per fast-lane)**: full `cargo build/test` incl. workspace resolution; `shortcuts.md` regen from cut keymap; French call-site removal crew; sibling crews' uncommitted hunks (brand, palette, editor) still in working tree.\n\n**Resume checklist**: none — slice fully closed, nothing partial.",
+  "files_changed": [
+    "/Users/sachinkoli/github/noteapp/src/views/editor/layout.rs",
+    "/Users/sachinkoli/github/noteapp/src/views/mod.rs",
+    "/Users/sachinkoli/github/noteapp/src/lang.rs",
+    "/Users/sachinkoli/github/noteapp/src/shell/tests/shortcuts_page.rs"
+  ],
+  "confidence": 0.9,
+  "status": "complete",
+  "usage": {
+    "input": 92828,
+    "output": 13289,
+    "cacheRead": 2090205,
+    "cacheWrite": 0,
+    "cost": 0.016121009999999998
+  }
+}

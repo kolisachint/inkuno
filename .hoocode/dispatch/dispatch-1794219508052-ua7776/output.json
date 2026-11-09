@@ -1,0 +1,28 @@
+{
+  "task_id": "dispatch-1794219508052-ua7776",
+  "ok": false,
+  "exit_code": 1,
+  "status": "failed",
+  "stderr_tail": "",
+  "error": "Task failed: 400 No function call found for function call output with call_id 'call_01a1bfbab9e477aea7f8a65331199438'",
+  "budget_exceeded": false,
+  "result_data": {
+    "summary": "Task failed: 400 No function call found for function call output with call_id 'call_01a1bfbab9e477aea7f8a65331199438'",
+    "files_changed": [
+      "/Users/sachinkoli/.hoocode/worktrees/noteapp/feat-footnotes/src/logic/markdown/mod.rs",
+      "/Users/sachinkoli/.hoocode/worktrees/noteapp/feat-footnotes/src/views/editor/layout.rs",
+      "/Users/sachinkoli/.hoocode/worktrees/noteapp/feat-footnotes/src/views/editor/mouse.rs",
+      "/Users/sachinkoli/.hoocode/worktrees/noteapp/feat-footnotes/src/logic/sharing.rs",
+      "/Users/sachinkoli/.hoocode/worktrees/noteapp/feat-footnotes/src/shell/tests/export_pdf.rs"
+    ],
+    "confidence": 0.5,
+    "status": "failed",
+    "usage": {
+      "input": 257201,
+      "output": 40886,
+      "cacheRead": 11242364,
+      "cacheWrite": 0,
+      "cost": 0.05638202800000001
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-09T10:11:57.965Z",
+  "task_id": "dispatch-1794219117965-miylic",
+  "agent_type": "general-purpose",
+  "depth": 1,
+  "reason": "user_override",
+  "complexity": "high",
+  "task": "Continue the obsidian-extras cut in /Users/sachinkoli/.hoocode/worktrees/noteapp/trim-obsidian (branch agent/trim-obsidian) from the transcript of the fresh finisher (general-purpose#17). Verify on-disk state first (git -C <path> status): src/ cut is done; remaining work is test files only.\n\nFinish exactly these: shell/tests/docks.rs, tabs.rs:515, window.rs (ShowTags), editing.rs (templates_journey), benches.rs (embed_scale), end_to_end/vault_views.rs, cursors_comments.rs:278, feedback.rs:441-442 — remove references to cut modes/methods (Mode::Graph/Tags/Links/Calendar, tool_as_tab, TemplateAct, embeds_shown, s.graph) per the established patterns (delete vs degrade to plain-note behavior). Then grep-verify zero remaining refs in tests outside your REPORT additions, and attempt cargo check --locked --tests (disk was full: if the build fails on space, report it and stop — do not delete anything outside your worktree).\n\nSame constraints: worktree-only edits, no commits/pushes, shared registries REPORT-only, sibling lanes untouched.\nReport: status; files finished; verification output; updated REPORT list; open questions.",
+  "parent_session": "01a1bf7b-c3e2-76f2-bc8f-44444af5ec7b"
+}

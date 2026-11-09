@@ -1,0 +1,10 @@
+{
+  "task_id": "dispatch-1794227271244-cjdziz",
+  "agent_type": "general-purpose",
+  "budget": 300000,
+  "used": 3744,
+  "peak_context": 17556,
+  "warned": false,
+  "exceeded": false,
+  "last_updated": 1794227335364
+}
