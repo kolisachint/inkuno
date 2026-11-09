@@ -81,49 +81,6 @@ impl Editor {
             .map(|find| (find.query.clone(), find.with.clone()))
     }
 
-    /// The bar's search, open or kept: what the vault search starts from.
-    pub fn search(&self, cx: &App) -> Option<md::Swap> {
-        let find = self.find.as_ref().or(self.found.as_ref())?;
-        let with = find.with.read(cx).line.text.clone();
-        Some(md::Swap {
-            query: find.query(cx),
-            with,
-            case: find.case,
-            word: find.word,
-            regex: find.regex,
-        })
-    }
-
-    /// A result of the vault search: the bar opens on its search, the current match the one at byte `at`, and
-    /// the note has the keys.
-    pub fn show_match(
-        &mut self,
-        swap: &md::Swap,
-        at: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let mut find = match self.find.take().or_else(|| self.found.take()) {
-            Some(find) => find,
-            None => self.new_finder(window, cx),
-        };
-        find.query
-            .update(cx, |field, cx| field.set(&swap.query, cx));
-        find.with.update(cx, |field, cx| field.set(&swap.with, cx));
-        (
-            find.case,
-            find.word,
-            find.regex,
-            find.span,
-            find.inside,
-            find.key,
-        ) = (swap.case, swap.word, swap.regex, None, false, None);
-        self.find = Some(find);
-        self.sel = at.min(self.content.len())..at.min(self.content.len());
-        self.find_changed(cx);
-        window.focus(&self.focus);
-    }
-
     fn new_finder(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Finder {
         let theme = self.theme;
         let (query, with) = (
@@ -358,23 +315,10 @@ impl Editor {
         self.show_hit(cx);
     }
 
-    /// Asks the window to replace in the whole vault: the search, the replacement and
-    /// the bar's settings.
-    pub(super) fn replace_in_vault(&mut self, cx: &mut Context<Self>) {
-        let Some(find) = self.find.as_ref().filter(|find| find.replace) else {
-            return;
-        };
-        let (query, with) = (find.query(cx), find.with.read(cx).line.text.clone());
-        if !query.is_empty() {
-            cx.emit(EditorEvent::Swap(md::Swap {
-                query,
-                with,
-                case: find.case,
-                word: find.word,
-                regex: find.regex,
-            }));
-        }
-    }
+    /// Asks the window to replace in the whole vault: nothing is left to apply it to
+    /// (it went with the panel's vault search), so this stays a no-op while the bar
+    /// keeps its keys and actions.
+    pub(super) fn replace_in_vault(&mut self, _cx: &mut Context<Self>) {}
 
     /// Replaces all matches at once (in the selected lines, when the search keeps to them): a single undo step.
     pub(super) fn replace_all(&mut self, cx: &mut Context<Self>) {

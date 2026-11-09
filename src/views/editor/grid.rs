@@ -370,20 +370,6 @@ impl TableRow {
         before.saturating_sub(1).min(self.written.saturating_sub(1))
     }
 
-    /// What each cell shows, for the tests.
-    #[cfg(test)]
-    pub fn shown(&self) -> Vec<String> {
-        self.cells
-            .iter()
-            .map(|c| {
-                c.shape
-                    .line
-                    .as_ref()
-                    .map_or(String::new(), |l| l.text.to_string())
-            })
-            .collect()
-    }
-
     /// Visual lines of the cell where byte `i` is.
     pub fn lines_at(&self, i: usize) -> i32 {
         self.cells.get(self.column(i)).map_or(0, Cell::lines)

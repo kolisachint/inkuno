@@ -197,14 +197,6 @@ impl Editor {
             .map(|(_, zone)| zone.center())
     }
 
-    /// Center of a table picker cell, if it is open.
-    #[cfg(test)]
-    pub fn grid_cell(&self, col: usize, row: usize) -> Option<Point<Pixels>> {
-        self.grid?;
-        let step = |n: usize| px(16.) + GRID_STEP * (n - 1) as f32;
-        Some(self.popup_at(Self::grid_size())? + point(step(col), step(row)))
-    }
-
     /// What a test reads of the first code block: its start, whether its source
     /// shows, and how many of its lines take room on screen.
     #[cfg(test)]

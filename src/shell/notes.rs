@@ -596,9 +596,6 @@ impl Shell {
                 _ => self.follow(link, window, cx),
             },
             EditorEvent::OpenAt(target, aside) => self.open_at(target, *aside, window, cx),
-            // Vault-wide replace went with the panel's vault search: the find bar keeps
-            // its keys, but there is nothing left to apply them to.
-            EditorEvent::Swap(_) => {}
             EditorEvent::Menu(at, link, commented, keys) => {
                 let chosen = keys.then_some(0);
                 self.show_menu(

@@ -232,8 +232,6 @@ pub enum EditorEvent {
     Open(Link),
     /// The same, with Shift: to open in the other pane.
     OpenAside(Link),
-    /// Replace across the whole vault what the search bar looks for.
-    Swap(md::Swap),
     /// Right click in the note: where, the link found there, whether it targets a comment, and whether the keys opened it.
     Menu(Point<Pixels>, Option<Link>, bool, bool),
     /// Click on a block handle: its menu, at that spot.
@@ -330,9 +328,6 @@ pub struct Editor {
     /// No editor is read-only anymore (embeds are cut, every editor edits); kept false so the
     /// layout paths stay as they were.
     readonly: bool,
-    /// Names of the vault's notes (lowercase, aliases too), to their files: what `#` and `^`
-    /// completion looks up, and what PDF export resolves notes by.
-    sources: Rc<HashMap<String, PathBuf>>,
     /// The handle under the pointer: (table start, handle).
     part_hover: Option<(usize, Part)>,
     /// Where the pointer was at its last move.
@@ -490,7 +485,6 @@ impl Editor {
             geos: Vec::new(),
             marks: None,
             readonly: false,
-            sources: Rc::new(HashMap::new()),
             part_hover: None,
             pointer: Point::default(),
             hand: None,
@@ -613,30 +607,6 @@ impl Editor {
         self.epoch += 1;
     }
 
-    /// Names of the vault's notes (lowercase, aliases too) → their files, for `#` and `^`
-    /// completion of links to a heading or a block.
-    pub fn set_sources(&mut self, sources: Rc<HashMap<String, PathBuf>>) {
-        self.sources = sources;
-        self.epoch += 1;
-        self.laid_out = None;
-    }
-
-    /// What the note's pictures are looked up in: its folders, the vault's pictures by
-    /// name, its notes by name (see `find_picture`).
-    pub fn lookups(
-        &self,
-    ) -> (
-        Vec<PathBuf>,
-        HashMap<String, PathBuf>,
-        HashMap<String, PathBuf>,
-    ) {
-        (
-            self.dirs.clone(),
-            self.images.clone(),
-            (*self.sources).clone(),
-        )
-    }
-
     pub fn set_dirs(&mut self, dirs: Vec<PathBuf>) {
         self.version += 1;
         self.epoch += 1;
@@ -702,12 +672,6 @@ impl Editor {
     #[cfg(test)]
     pub fn figure_count(&self) -> (usize, usize) {
         (self.figures.len(), self.waiting.len())
-    }
-
-    /// Center of the "+" buttons (row, column) of the first table shown.
-    #[cfg(test)]
-    pub fn plus_buttons(&self) -> Option<[Point<Pixels>; 2]> {
-        Some(plus_bars(self.tables.first()?.1).map(|bar| bar.center()))
     }
 
     /// Footer counter: words and characters of the note, or of the selection. Recounted only when the text or the selection change.

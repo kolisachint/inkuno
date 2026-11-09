@@ -415,19 +415,6 @@ impl Editor {
         self.renumber(cx);
     }
 
-    /// A filled template, in place of the selection: the cursor goes to its mark, a single undo step.
-    pub fn insert_filled(&mut self, text: &str, cursor: usize, cx: &mut Context<Self>) {
-        let at = self.sel.start;
-        self.push_undo(true);
-        self.edit(self.sel.clone(), text, cx);
-        self.move_to(at + cursor.min(text.len()), cx);
-    }
-
-    /// The number of text changes: a drop that took time to copy knows before writing whether the note moved.
-    pub fn revision(&self) -> u64 {
-        self.revision
-    }
-
     /// What another program changed in the note while it was typed in (`merge::onto`), put into
     /// the text: a single undo step, the cursors staying in the text around them.
     pub fn absorb(&mut self, edits: &[(Range<usize>, String)], cx: &mut Context<Self>) {
@@ -440,21 +427,5 @@ impl Editor {
             self.splice(range.clone(), text, cx);
         }
         self.held = held;
-    }
-
-    /// Lines put at the start of line `at` (or after the last), typed or dropped:
-    /// a single undo step, the cursor at their end.
-    pub fn insert_lines(&mut self, at: usize, lines: &[String], cx: &mut Context<Self>) {
-        let at = self.clamp(at);
-        let before = if at > 0 && !self.content[..at].ends_with('\n') {
-            "\n"
-        } else {
-            ""
-        };
-        let after = if at < self.content.len() { "\n" } else { "" };
-        let text = format!("{before}{}{after}", lines.join("\n"));
-        self.push_undo(true);
-        self.edit(at..at, &text, cx);
-        self.move_to(at + text.len() - after.len(), cx);
     }
 }

@@ -312,12 +312,6 @@ impl Palette {
         this
     }
 
-    /// Stuck to the top of its container: for a window that is only this field.
-    pub fn at_top(mut self) -> Self {
-        self.top = px(8.);
-        self
-    }
-
     /// Filterable choice list (theme, font), `current` preselected:
     /// each move emits `Preview`, Enter emits `Submit`.
     pub fn choose(
@@ -352,14 +346,6 @@ impl Palette {
     pub fn select(mut self, index: usize) -> Self {
         self.selected = index.min(self.items.len().saturating_sub(1));
         self
-    }
-
-    /// Index, in the list given to `choose`, of the selected choice.
-    /// The input's cursor is inside its frame, at the last frame drawn.
-    #[cfg(test)]
-    pub fn caret_inside(&self) -> Option<bool> {
-        let (frame, caret) = (self.scroll.bounds(), self.caret.get()?);
-        Some(caret >= frame.left() && caret <= frame.right())
     }
 
     /// Number of lines offered under the input.

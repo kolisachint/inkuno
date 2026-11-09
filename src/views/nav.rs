@@ -413,9 +413,6 @@ pub struct Nav {
     pub followed: Option<PathBuf>,
     /// Where the selected row was drawn: the menu opened from the keys opens under it.
     pub sel_at: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<Pixels>>>>,
-    /// Note whose backlinks the panel showed: kept so old sessions restore without
-    /// touching their layout file. Nothing reads it anymore (the backlinks panel is cut).
-    pub anchor: Option<PathBuf>,
     /// Expanded folders.
     pub open: HashSet<PathBuf>,
     /// Rows of the last frame, and the fingerprint of what they are drawn from.
@@ -525,7 +522,6 @@ impl Nav {
             followed: None,
             marked: HashSet::new(),
             sel_at: Default::default(),
-            anchor: None,
             open: HashSet::new(),
             rows: Vec::new(),
             rows_from: 0,

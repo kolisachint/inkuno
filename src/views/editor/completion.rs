@@ -307,22 +307,3 @@ impl Editor {
         true
     }
 }
-
-#[cfg(test)]
-impl Editor {
-    /// What completion offers, as the list shows it: label, then detail.
-    pub fn completions(&self) -> Vec<String> {
-        let Some((_, items)) = self.completion() else {
-            return Vec::new();
-        };
-        items
-            .iter()
-            .map(|choice| match choice {
-                Choice::Name(name) => name.to_string(),
-                Choice::Command((name, ..)) => format!("/{name}"),
-                Choice::Date(..) => "date".into(),
-                Choice::Anchor(text) => format!("#{text}"),
-            })
-            .collect()
-    }
-}

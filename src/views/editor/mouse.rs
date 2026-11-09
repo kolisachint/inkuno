@@ -92,63 +92,12 @@ impl Editor {
             ] {
                 self.aim_hand(at, modifiers, cx);
             }
-            self.drop_point(at);
         }
     }
 
     #[cfg(test)]
     pub fn hand(&self) -> Option<CursorStyle> {
         self.hand
-    }
-
-    /// Where to put what is dropped at pointer `at`: the start of a line, the one below when the pointer is
-    /// in the lower half of its own. Never in a table, a code block or the front matter: at the
-    /// edge of the block, downwards.
-    pub fn drop_point(&self, at: Point<Pixels>) -> usize {
-        if self.stale() {
-            return self.line_range(self.cursor()).start;
-        }
-        let y = at.y - self.origin.y;
-        let Some(row) = self
-            .rows
-            .iter()
-            .find(|r| y < r.y + r.height)
-            .or(self.rows.last())
-        else {
-            return 0;
-        };
-        let line = self.line_range(row.start);
-        let mut point = if y > row.y + row.height / 2. {
-            (line.end + 1).min(self.content.len())
-        } else {
-            line.start
-        };
-        let front = md::front_matter(&self.content);
-        if point > 0 && point < front {
-            point = front;
-        }
-        // In a table (its line and the previous one belong to it) or in a code block: further down.
-        while point > 0 && point < self.content.len() {
-            let (here, above) = (self.line_range(point), self.line_range(point - 1));
-            if (self.is_table_line(&here) && self.is_table_line(&above)) || self.in_code(point) {
-                point = (here.end + 1).min(self.content.len());
-            } else {
-                break;
-            }
-        }
-        point
-    }
-
-    pub fn set_drop_mark(&mut self, mark: Option<usize>, cx: &mut Context<Self>) {
-        if self.drop_mark != mark {
-            self.drop_mark = mark;
-            cx.notify();
-        }
-    }
-
-    /// The start of the cursor's line.
-    pub fn caret_line_start(&self) -> usize {
-        self.line_range(self.cursor()).start
     }
 
     /// The handle under the pointer: (table start, handle). Only visible ones can be grabbed.
