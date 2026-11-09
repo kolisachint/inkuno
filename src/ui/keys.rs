@@ -1012,8 +1012,10 @@ mod tests {
         assert!(errors.iter().any(|e| e.contains("one chord")));
         assert!(warns.is_empty());
         // Refused chords are errors, system ones warnings, bad shapes errors.
+        // (`secondary-space` only warns on macOS, where `secondary` is the platform key:
+        // on Linux it is the app's own Ctrl and stays silent. `cmd-space` warns everywhere.)
         let (_, errors, warns) = check_json(
-            r#"{"version": 9, "bindings": {"a::B": ["a"], "a::C": ["secondary-space"], "a::D": ["ctrl-space"]}}"#,
+            r#"{"version": 9, "bindings": {"a::B": ["a"], "a::C": ["cmd-space"], "a::D": ["ctrl-space"]}}"#,
         );
         assert!(errors.iter().any(|e| e.starts_with("version:")));
         assert!(errors.iter().any(|e| e.contains("refused")));
