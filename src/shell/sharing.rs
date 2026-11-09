@@ -21,7 +21,6 @@ impl Shell {
                 Share::PlainCopy,
                 Share::MarkdownSave,
                 Share::PlainSave,
-                Share::Pdf,
             ],
             Some(FileKind::Drawing(_)) => vec![Share::SvgCopy, Share::SvgSave, Share::Png],
             Some(FileKind::Svg(_)) => vec![Share::SvgCopy, Share::SvgSave],
@@ -94,7 +93,6 @@ impl Shell {
                 );
                 return;
             }
-            Share::Pdf => return self.export_pdf(cx),
             Share::TableCopy => return self.choose_table(Pick::CopyAs, window, cx),
             Share::TableExport => return self.choose_table(Pick::Export, window, cx),
             Share::Png => {

@@ -371,7 +371,6 @@ pub enum Share {
     TableCopy,
     TableExport,
     ImageSave,
-    Pdf,
 }
 
 impl Share {
@@ -380,7 +379,6 @@ impl Share {
             Self::MarkdownCopy => tr("Copy note as Markdown", "Copier la note en Markdown"),
             Self::PlainCopy => tr("Copy note as plain text", "Copier la note en texte brut"),
             Self::MarkdownSave => tr("Save a Markdown copy…", "Enregistrer une copie Markdown…"),
-            Self::Pdf => tr("Save the note as PDF…", "Enregistrer la note en PDF…"),
             Self::PlainSave => tr("Save a text copy…", "Enregistrer une copie texte…"),
             Self::SvgCopy => tr("Copy as SVG", "Copier en SVG"),
             Self::SvgSave => tr("Save an SVG copy…", "Enregistrer une copie SVG…"),
