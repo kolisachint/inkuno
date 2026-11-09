@@ -91,7 +91,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Ctrl+click` / `Shift+click` | Select several rows: move, duplicate, trash them together |
 | Right click | Copy the link or the path, set an icon, show a folder or a tag as a list… |
 |  | Open the note in the other pane |
-|  | Copy the [[link]] of the note |
+|  | Copy the \[\[link\]\] of the note |
 |  | Copy the path of the note |
 |  | Copy the relative path of the note |
 |  | Show in the file manager |
