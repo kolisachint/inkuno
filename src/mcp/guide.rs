@@ -38,10 +38,10 @@ const PAGES: &[(&str, &str)] = &[
     ("agents", include_str!("../../book/src/agents.md")),
 ];
 
-type PromptArg = (&str, &str, bool);
-type Prompt = (&str, &str, &str, &[PromptArg]);
+type PromptArg<'a> = (&'a str, &'a str, bool);
+type Prompt<'a> = (&'a str, &'a str, &'a str, &'a [PromptArg<'a>]);
 
-const PROMPTS: &[Prompt] = &[
+const PROMPTS: &[Prompt<'static>] = &[
     (
         "document_feature",
         "Document a feature",
