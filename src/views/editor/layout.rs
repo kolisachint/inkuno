@@ -12,6 +12,7 @@ pub(super) struct LayoutKey {
     pub(super) cursor: usize,
     pub(super) revealed: Option<usize>,
     pub(super) marked: Option<Range<usize>>,
+    pub(super) code_gen: u64,
     /// Version of the footnote definitions (see `Editor::foot_hash`): adding one restyles
     /// even distant references.
     pub(super) foot: u64,
@@ -39,6 +40,8 @@ pub(super) struct Laid {
     pub(super) dollars: usize,
     /// Length of the front matter.
     pub(super) meta: usize,
+    /// Fold generation of the last layout: a toggle redoes everything.
+    pub(super) code_gen: u64,
     /// Version of the footnote definitions the layout was made with.
     pub(super) foot: u64,
 }
@@ -657,8 +660,10 @@ pub fn text_runs(
 }
 
 /// Byte ranges of `line` hidden when it is not the live one: its block prefix (`- `, `1. `,
-/// `> `, `- [ ] `, the indent kept so that nested items keep their level) and its inline style
-/// markers (`**`, backticks…). Links, tags, images, comments and callouts stay readable; a checked
+/// `> `, `- [ ] `, the indent kept so that nested items keep their level), its inline style
+/// markers (`**`, backticks…) and the address of a `[text](url)` link (`[` and `](url)` hide,
+/// the label alone stays, Typora-style; the clicked or edited line shows its source again).
+/// Bare addresses, tags, images, comments, callouts and footnote labels stay readable; a checked
 /// task keeps its (struck) text; code stays as is. The caller only asks for the kinds it hides.
 fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
@@ -677,11 +682,22 @@ fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, u
     }
     // What stays readable: links, images, comments, callouts, footnote labels.
     // (A footnote's brackets fade like other markers; only its label is kept.)
-    let links: Vec<Range<usize>> = md::links(line)
-        .into_iter()
-        .filter(|(_, link)| !matches!(link, md::Link::Footnote(_)))
-        .map(|(r, _)| r)
-        .collect();
+    // Of a `[text](url)` link, only the label stays, its `[` and `](url)` hide (the address
+    // reads `QUIET`, so the loops below name those bytes explicitly).
+    let mut links: Vec<Range<usize>> = Vec::new();
+    let mut urls: Vec<Range<usize>> = Vec::new();
+    for (r, link) in md::links(line) {
+        if matches!(link, md::Link::Footnote(_)) {
+            continue;
+        }
+        if matches!(link, md::Link::Url(_))
+            && let Some((text, _)) = md::web_link(&line[r.clone()])
+        {
+            urls.push(r.start..r.start + text.start);
+            urls.push(r.start + text.end..r.end);
+        }
+        links.push(r);
+    }
     let feet: Vec<Range<usize>> = md::footnote_ref(line)
         .into_iter()
         .map(|(r, _)| r.start + 2..r.end - 1)
@@ -689,22 +705,26 @@ fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, u
     let image = md::image(line).map(|(r, _)| r);
     let comments: Vec<Range<usize>> = md::comments(line).into_iter().map(|(w, ..)| w).collect();
     let callout = md::callout(line);
+    let addressed = |i: usize| urls.iter().any(|r| r.contains(&i));
     let kept = |i: usize| {
-        links.iter().any(|r| r.contains(&i))
+        (links.iter().any(|r| r.contains(&i))
             || feet.iter().any(|r| r.contains(&i))
             || image.as_ref().is_some_and(|r| r.contains(&i))
             || comments.iter().any(|r| r.contains(&i))
-            || callout.as_ref().is_some_and(|r| r.contains(&i))
+            || callout.as_ref().is_some_and(|r| r.contains(&i)))
+            && !addressed(i)
+    };
+    let hidden_byte = |i: usize| {
+        flags[i] & md::DIM != 0
+            && flags[i] & md::CODE == 0
+            && (flags[i] & md::QUIET == 0 || addressed(i))
+            && !kept(i)
     };
     let mut i = marker;
     while i < line.len() {
-        if flags[i] & md::DIM != 0 && flags[i] & (md::CODE | md::QUIET) == 0 && !kept(i) {
+        if hidden_byte(i) {
             let mut j = i + 1;
-            while j < line.len()
-                && flags[j] & md::DIM != 0
-                && flags[j] & (md::CODE | md::QUIET) == 0
-                && !kept(j)
-            {
+            while j < line.len() && hidden_byte(j) {
                 j += 1;
             }
             out.push((i, j));
@@ -733,6 +753,7 @@ impl Editor {
             || laid.width != f32::from(width).to_bits()
             || laid.room != f32::from(room).to_bits()
             || laid.size != self.theme.size.to_bits()
+            || laid.code_gen != self.code_gen
             || laid.dollars > 0
             || self.marked.is_some()
             || self.loading
@@ -1005,6 +1026,7 @@ impl Editor {
             cursor: self.cursor(),
             revealed: self.revealed,
             marked: self.marked.clone(),
+            code_gen: self.code_gen,
             foot: self.foot_hash(),
         };
         if self.laid_out.as_ref() != Some(&key) {
@@ -1534,6 +1556,80 @@ impl Editor {
                     last.height += TABLE_GAP;
                     y += TABLE_GAP;
                 }
+        // Typora-style code blocks (§9.1): a fenced block hides its body by default and shows its
+        // header only (language + copy + chevron); long lines never wrap (the shape above leaves
+        // them whole) and scroll inside the page instead (frames below). Mermaid blocks stay
+        // open: their figure draws under the source.
+        self.code_meta.clear();
+        {
+            let mut i = 0;
+            while i < rows.len() {
+                let open = rows[i].opens && rows[i].kind == Kind::Fence;
+                let mut j = i + 1;
+                while j < rows.len() && rows[j].kind == Kind::Code {
+                    j += 1;
+                }
+                let closed =
+                    open && j < rows.len() && rows[j].kind == Kind::Fence && !rows[j].opens;
+                if closed {
+                    let wide = rows[i..=j]
+                        .iter()
+                        .map(Row::content_width)
+                        .fold(px(0.), |a, b| a.max(b));
+                    let (first, last) = (&rows[i], &rows[j]);
+                    self.code_meta.push(CodeMeta {
+                        range: first.start..last.start + last.len,
+                        rows: i..j + 1,
+                        wide,
+                    });
+                    i = j + 1;
+                } else {
+                    i += 1;
+                }
+            }
+        }
+        // A folded block takes no room: its body and closing fence collapse to zero height.
+        // A block holding the cursor or the revealed line stays open (clicked-line reveal).
+        for n in 0..self.code_meta.len() {
+            let (start, line, len, body) = {
+                let meta = &self.code_meta[n];
+                let open = &rows[meta.rows.start];
+                (
+                    meta.range.start,
+                    open.start,
+                    open.len,
+                    rows[meta.rows.start + 1].start..meta.range.end,
+                )
+            };
+            if self.code_is_mermaid(line, len)
+                || self.code_open.contains(&start)
+                || body.contains(&cursor)
+                || self.revealed.is_some_and(|r| body.contains(&r))
+            {
+                continue;
+            }
+            rows[self.code_meta[n].rows.start].foot = true;
+            for r in &mut rows[self.code_meta[n].rows.start + 1..self.code_meta[n].rows.end] {
+                r.pad = px(0.);
+                r.height = px(0.);
+                r.gap = px(0.);
+            }
+        }
+        // Folds of deleted blocks go with them.
+        let live: Vec<usize> = self.code_meta.iter().map(|m| m.range.start).collect();
+        self.code_open.retain(|s| live.contains(s));
+        // Collapsed lines take no room: heights run again from the top.
+        {
+            let mut at = px(0.);
+            for r in rows.iter_mut() {
+                r.y = at;
+                at += r.height
+                    + r.image_height()
+                    + r.embed.as_ref().map_or(px(0.), |e| e.height())
+                    + r.gap;
+            }
+            y = at;
+        }
                 // Titles: a scale of about 1.2, about one body line of room above the first two levels
                 // and two thirds of it above the others.
                 let (font_size, pad) = match kind {
@@ -1794,8 +1890,9 @@ impl Editor {
                                 len: cut,
                                 dy: px(0.),
                             });
-                        let wrap = (kind != Kind::Table)
-                            .then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
+                        let wrap =
+                            (kind != Kind::Table && kind != Kind::Code && kind != Kind::Fence)
+                                .then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
                         let line = shape(&shown[cut..], font_size, &runs, wrap);
                         if let Some(lead) = &mut lead {
                             // An empty title has no metrics of its own: those of a letter will do.
@@ -2056,6 +2153,7 @@ impl Editor {
             fences: fences0,
             dollars: dollars0,
             meta,
+            code_gen: self.code_gen,
             foot,
         });
         // Lines no longer in use (deleted, changed) go when they outnumber the note.
@@ -2254,6 +2352,18 @@ impl Editor {
     /// The frame of each table of the layout, and the zones of its handles.
     fn frames(&mut self, reveal: bool, window: &mut Window) {
         let (cursor, width, room) = (self.cursor(), self.width, self.room);
+            self.fold_hitboxes = self
+                .opening
+                .iter()
+                .map(|&i| &self.rows[i])
+                .filter(|r| self.folds(r))
+                .map(|r| {
+                    (
+                        r.start,
+                        window.insert_hitbox(self.fold_bounds(r), HitboxBehavior::Normal),
+                    )
+                })
+                .collect();
         // Frame of each table: its lines, at the width of the longest without
         // going past the page; beyond that, it scrolls and follows the cursor.
         let scrolled = std::mem::take(&mut self.table_x);
@@ -2486,8 +2596,14 @@ mod tests {
         assert_eq!(hidden("- [x] done"), ["- [x] "]);
         // A heading keeps its title (its `# ` goes with the lead, not here).
         assert_eq!(hidden("# Title **b**"), ["**", "**"]);
-        // Phase 3 stays readable: links, images, comments, callouts, tables.
-        assert_eq!(hidden("[t](https://example.com)"), Vec::<&str>::new());
+        // A `[text](url)` link shows its label alone off-live; the clicked or edited
+        // line shows its source again. Bare addresses, wikilinks, tags, images,
+        // comments and callouts keep their source.
+        assert_eq!(
+            hidden("[t](https://example.com)"),
+            ["[", "](https://example.com)"]
+        );
+        assert_eq!(hidden("see https://example.com here"), Vec::<&str>::new());
         assert_eq!(hidden("see [[note]] here"), Vec::<&str>::new());
         assert_eq!(hidden("a #tag b"), Vec::<&str>::new());
         assert_eq!(hidden("![a](p.png)"), Vec::<&str>::new());
@@ -2565,6 +2681,72 @@ mod tests {
     }
 
     #[gpui::test]
+    fn code_blocks_fold_until_expanded(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        let long = "x".repeat(500);
+        let text = format!("```rust\nfn short() {{}}\n{long}\n```\n\nafter\n");
+        let at = |line: usize| starts(&text)[line];
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        draw(cx);
+        // Hidden by default: the header shows, the body and closing fence take no room.
+        let state = editor.read_with(cx, |e, _| e.code_state().unwrap());
+        assert_eq!(state, (at(0), false, 1));
+        // The header keeps its copy affordance and gains a fold chevron.
+        assert!(editor.read_with(cx, |e, _| e.copy_button().is_some()));
+        assert!(editor.read_with(cx, |e, _| e.fold_button().is_some()));
+        // Clicking the header unfolds the block.
+        let header = editor.read_with(cx, |e, _| e.point_of(at(0) + 3).unwrap());
+        cx.simulate_click(header, gpui::Modifiers::none());
+        cx.run_until_parked();
+        draw(cx);
+        let state = editor.read_with(cx, |e, _| e.code_state().unwrap());
+        assert_eq!(state, (at(0), true, 4));
+        // The long line never wraps: one visual row, wider than the page.
+        let (visual, wide_over, frame_ok) = editor.read_with(cx, |e, _| {
+            let row = e.rows.iter().find(|r| r.start == at(2)).unwrap();
+            let meta = e.code_meta.first().unwrap();
+            let frame = e
+                .codes
+                .iter()
+                .find(|(range, _)| range.start == meta.range.start)
+                .map(|(_, f)| *f);
+            (
+                row.visual_rows(),
+                meta.wide > e.width,
+                frame.map_or(false, |f| f.size.width <= e.width),
+            )
+        });
+        assert_eq!(visual, 1);
+        assert!(wide_over && frame_ok, "wide code scrolls inside the page");
+        // The chevron folds it again; Enter on the header unfolds.
+        let chevron = editor.read_with(cx, |e, _| e.fold_button().unwrap());
+        cx.simulate_click(chevron, gpui::Modifiers::none());
+        cx.run_until_parked();
+        draw(cx);
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.code_state().unwrap()),
+            (at(0), false, 1)
+        );
+        editor.update(cx, |e, cx| e.newline(cx));
+        cx.run_until_parked();
+        draw(cx);
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.code_state().unwrap()),
+            (at(0), true, 4)
+        );
+        // The prose after the block lays out untouched.
+        let after = editor.read_with(cx, |e, _| displayed(e, at(5)));
+        assert_eq!(after, ("after".to_string(), false));
+    }
+
+    #[gpui::test]
     fn markers_hide_until_the_line_is_clicked_or_edited(cx: &mut gpui::TestAppContext) {
         cx.update(crate::ui::assets::init_fonts);
         let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
@@ -2579,7 +2761,8 @@ mod tests {
             cx.run_until_parked();
         };
         draw(cx);
-        // Nothing is live after a load: markers hide, fences/links/tables keep their source.
+        // Nothing is live after a load: markers and link addresses hide; fences, bare
+        // addresses and tables keep their source.
         let shown = |cx: &mut gpui::VisualTestContext, lines: &[usize]| {
             editor.read_with(cx, |e, _| {
                 (0..lines.len())
@@ -2598,10 +2781,7 @@ mod tests {
         assert_eq!(rows[6], ("task done".to_string(), false));
         assert_eq!(rows[8], ("first".to_string(), false));
         assert_eq!(rows[10], ("quote here".to_string(), false));
-        assert_eq!(
-            rows[12],
-            ("[our](https://example.com) link".to_string(), false)
-        );
+        assert_eq!(rows[12], ("our link".to_string(), false));
         assert_eq!(rows[14], ("code bit".to_string(), false));
         // Tables keep their source in their cells (phase 3): no hidden bytes, drawn as a grid.
         for l in [16, 17, 18] {
@@ -2615,8 +2795,8 @@ mod tests {
         assert_eq!(rows[23], (String::new(), false));
         assert_eq!(rows[24], ("---".to_string(), false));
         // Clicking the bold line reveals it; the others keep hiding.
-        let middle = editor.read_with(cx, |e, _| e.point_of(at(2) + 8).unwrap());
-        cx.simulate_click(middle, gpui::Modifiers::none());
+        let bold_middle = editor.read_with(cx, |e, _| e.point_of(at(2) + 8).unwrap());
+        cx.simulate_click(bold_middle, gpui::Modifiers::none());
         cx.run_until_parked();
         assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
         draw(cx);
@@ -2624,6 +2804,29 @@ mod tests {
         assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
         assert_eq!(rows[0], ("Title".to_string(), false));
         assert_eq!(rows[4], ("item one".to_string(), false));
+        // Clicking the link line reveals its address; the others keep hiding.
+        let link_middle = editor.read_with(cx, |e, _| e.point_of(at(12) + 1).unwrap());
+        cx.simulate_click(link_middle, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(12)));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(
+            rows[12],
+            ("[our](https://example.com) link".to_string(), true)
+        );
+        assert_eq!(rows[2], ("Hello bold and italic.".to_string(), false));
+        // Clicking back on the bold line hides the link address again.
+        cx.simulate_click(bold_middle, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(
+            rows[2],
+            ("Hello **bold** and *italic*.".to_string(), true)
+        );
+        assert_eq!(rows[12], ("our link".to_string(), false));
         // A plain keyboard move does not reveal: the cursor is on the title, still rendered.
         editor.update(cx, |e, cx| e.place_cursor(at(0) + 2, cx));
         draw(cx);

@@ -81,9 +81,47 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(shell.read_with(cx, |s, cx| s.palette.is_none() && !s.comments_shut));
     cx.run_until_parked();
     let view = cx.update(|window, _| window.viewport_size());
+    eprintln!(
+        "DIAG viewport={:?} comment-0={:?} comment-1={:?} pane-1={:?} dock-right={:?} nav-panel={:?} rail={:?}",
+        view,
+        cx.debug_bounds("comment-0"),
+        cx.debug_bounds("comment-1"),
+        cx.debug_bounds("pane-1"),
+        cx.debug_bounds("dock-right"),
+        cx.debug_bounds("nav-panel"),
+        cx.debug_bounds("rail"),
+    );
+    let nav = shell.read_with(cx, |s, _| {
+        (
+            format!("{:?}", s.nav.panel),
+            format!("{:?}", s.nav.right_shown),
+            s.nav.list_w,
+            s.nav.aside,
+            format!("{:?}", s.nav.mode),
+        )
+    });
+    eprintln!(
+        "DIAG nav panel={} right_shown={} list_w={:?} aside={:?} mode={}",
+        nav.0, nav.1, nav.2, nav.3, nav.4
+    );
+    // PROBE: close the right dock before clicking.
+    shell.update(cx, |s, cx| {
+        s.nav.right_shown.clear();
+        cx.notify();
+    });
+    cx.run_until_parked();
+    eprintln!(
+        "DIAG2 comment-0={:?} dock-right={:?}",
+        cx.debug_bounds("comment-0"),
+        cx.debug_bounds("dock-right"),
+    );
     cx.simulate_click(
         point(view.width - px(150.), px(125.)),
         gpui::Modifiers::none(),
+    );
+    eprintln!(
+        "DIAG after click position={}",
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position())
     );
     assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position() == 17));
     shell.update(cx, |s, cx| {

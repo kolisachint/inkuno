@@ -136,46 +136,51 @@ fn failed_close_keeps_csv_and_tsv_edits_until_the_final_write(cx: &mut TestAppCo
     let anchor = root.join("Anchor.md");
     fs::write(&anchor, "# Anchor\n").unwrap();
     open(&shell, cx, &anchor);
+    // A CSV file opens as text: closing it while the save fails keeps the tab,
+    // its text and its undo stack, like any other note.
     for (name, original) in [("data.csv", "a,b\n1,2\n"), ("data.tsv", "a\tb\n1\t2\n")] {
         let path = root.join(name);
         fs::write(&path, original).unwrap();
         open(&shell, cx, &path);
-        let sheet = shell.read_with(cx, |s, _| s.shown_sheet().unwrap());
-        let block = root.join(format!(".{name}.tmp"));
+        // Notes save through `.<stem>.tmp`, like the vault's atomic write does.
+        let block = path.with_file_name(format!(".{}.tmp", vault::stem(&path)));
         fs::create_dir(&block).unwrap();
-        // Close while a cell is still being typed: flush commits that input before saving.
+        // Close while the save cannot go through: the tab stays, still dirty, with the text.
+        cx.simulate_keystrokes("secondary-end");
         cx.simulate_input("modifié");
         cx.simulate_keystrokes("secondary-w");
         assert_eq!(fs::read_to_string(&path).unwrap(), original);
-        assert_eq!(
-            shell.read_with(cx, |s, _| s.shown_sheet()),
-            Some(sheet.clone())
-        );
-        assert!(sheet.read_with(cx, |s, _| s.is_dirty()
-            && s.table().row(0).join("|").contains("modifié")));
-        assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, name)));
-        // A background retry also fails without losing the data or the undo stack.
+        assert!(shell.read_with(cx, |s, cx| {
+            s.pane().path.as_deref() == Some(path.as_path())
+                && s.pane().dirty
+                && s.pane().editor.read(cx).text().contains("modifié")
+        }));
+        assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, &vault::stem(&path))));
+        // A background retry also fails without losing the text or the undo stack.
         cx.executor().advance_clock(Duration::from_millis(500));
         cx.run_until_parked();
-        assert!(sheet.read_with(cx, |s, _| s.is_dirty()));
+        assert!(shell.read_with(cx, |s, cx| {
+            s.pane().dirty && s.pane().editor.read(cx).text().contains("modifié")
+        }));
         cx.simulate_keystrokes("secondary-z secondary-shift-z");
-        assert!(sheet.read_with(cx, |s, _| s.table().row(0).join("|").contains("modifié")));
+        assert!(shell.read_with(cx, |s, cx| {
+            s.pane().editor.read(cx).text().contains("modifié")
+        }));
         fs::remove_dir(&block).unwrap();
         // Close with a scheduled background save still pending. The final write wins.
         cx.simulate_keystrokes("secondary-w");
         cx.executor().advance_clock(Duration::from_millis(500));
         cx.run_until_parked();
         assert!(fs::read_to_string(&path).unwrap().contains("modifié"));
-        assert!(shell.read_with(cx, |s, _| s.panes.iter().all(|p| p.sheet() != Some(&sheet))));
+        assert!(shell.read_with(cx, |s, _| {
+            s.panes
+                .iter()
+                .all(|p| p.path.as_deref() != Some(path.as_path()))
+        }));
         cx.simulate_keystrokes("secondary-shift-t");
         assert!(shell.read_with(cx, |s, cx| {
-            s.shown_sheet()
-                .unwrap()
-                .read(cx)
-                .table()
-                .row(0)
-                .join("|")
-                .contains("modifié")
+            s.pane().path.as_deref() == Some(path.as_path())
+                && s.pane().editor.read(cx).text().contains("modifié")
         }));
         cx.simulate_keystrokes("secondary-w");
     }

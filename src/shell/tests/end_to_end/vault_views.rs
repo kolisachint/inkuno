@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// Returns the note open before the vault-wide replace, where the board chapter comes back.
+/// Returns the note open before the vault-wide replace, where the later chapters come back.
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     let (shell, root) = (&j.shell, &j.root);
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);

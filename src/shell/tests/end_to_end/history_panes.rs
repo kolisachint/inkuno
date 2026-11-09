@@ -9,6 +9,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let (hist_a, hist_b, hist_csv) = (
         root.join("Hist A.md"),
         root.join("Hist B.md"),
+        // A CSV file: it opens as text, like a note.
         root.join("hist.csv"),
     );
     let long: String = (0..200).map(|i| format!("ligne {i}\n")).collect();
@@ -50,30 +51,25 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(shell.read_with(cx, |s, _| s.history.can_forward()));
     cx.simulate_keystrokes(forward);
     assert_eq!(seen(cx), on_note(&hist_b));
-    // The rail button.
-    let at = cx.debug_bounds("nav-back").unwrap().center();
-    cx.simulate_click(at, gpui::Modifiers::none());
+    // Back, as the rail button does (the rail keeps no travel buttons).
+    cx.simulate_keystrokes(back);
     assert_eq!(seen(cx), on_note(&hist_a));
-    // Opening something else after going back: "forward" has nowhere to go. A table counts.
+    // Opening something else after going back: "forward" has nowhere to go.
     shell.update_in(cx, |s, window, cx| s.open_from_nav(&hist_csv, window, cx));
-    assert_eq!(seen(cx).0, Some(hist_csv.clone()));
+    assert_eq!(seen(cx), on_note(&hist_csv));
     assert!(!shell.read_with(cx, |s, _| s.history.can_forward()));
-    cx.simulate_keystrokes("down right");
+    cx.simulate_keystrokes("secondary-end");
+    let cell = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).view());
     cx.simulate_keystrokes(forward);
-    assert_eq!(seen(cx).0, Some(hist_csv.clone()));
+    assert_eq!(seen(cx), on_note(&hist_csv));
     cx.simulate_keystrokes(back);
     assert_eq!(seen(cx), on_note(&hist_a));
     cx.simulate_keystrokes(forward);
-    assert_eq!(seen(cx).0, Some(hist_csv.clone()));
+    assert_eq!(seen(cx), on_note(&hist_csv));
     assert_eq!(
-        shell.read_with(cx, |s, cx| s
-            .shown_sheet()
-            .unwrap()
-            .read(cx)
-            .whereabouts()
-            .0),
-        (1, 1),
-        "the cell is found again"
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).view()),
+        cell,
+        "the cursor is found again"
     );
     // The mouse's back and forward buttons.
     let middle = gpui::point(px(500.), px(400.));
@@ -93,7 +89,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes(back);
     assert_eq!(seen(cx), on_note(&hist_a));
     navigate(cx, gpui::NavigationDirection::Forward);
-    assert_eq!(seen(cx).0, Some(hist_csv.clone()));
+    assert_eq!(seen(cx), on_note(&hist_csv));
     // A moved note is followed.
     shell.update_in(cx, |s, window, cx| s.open_from_nav(&hist_b, window, cx));
     let shelf = root.join("Étagère");
@@ -101,7 +97,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     shell.update(cx, |s, cx| s.move_into(&hist_b, &shelf, cx));
     let moved = shelf.join("Hist B.md");
     cx.simulate_keystrokes(back);
-    assert_eq!(seen(cx).0, Some(hist_csv.clone()));
+    assert_eq!(seen(cx), on_note(&hist_csv));
     cx.simulate_keystrokes(forward);
     assert_eq!(seen(cx), on_note(&moved));
     // A file put in the trash leaves the history; a file deleted by another

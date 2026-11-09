@@ -205,10 +205,6 @@ impl Shell {
             self.notes = notes;
         }
         self.each_pane(|this| {
-            // The shown table was rewritten elsewhere: it is reread if nothing is pending here.
-            if let Some(sheet) = this.pane().sheet() {
-                sheet.update(cx, |sheet, cx| sheet.reload_if_changed(cx));
-            }
             // The shown note was rewritten elsewhere: reread it. With no modification
             // pending here (the caller makes sure of it), nothing is lost.
             if let Some(path) = &this.pane().path

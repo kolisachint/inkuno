@@ -8,7 +8,6 @@ mod cursor;
 mod edit;
 mod find;
 mod format_bar;
-mod formulas;
 pub mod grid;
 mod input;
 mod layout;
@@ -28,7 +27,6 @@ use cursor::*;
 use edit::*;
 use find::*;
 pub use format_bar::*;
-use formulas::*;
 pub use layout::*;
 use mouse::*;
 pub use notes::*;
@@ -329,8 +327,6 @@ pub struct Editor {
     geos: Vec<Geo>,
     /// The commented parts of each table, for one version of the text and one cursor.
     marks: Option<Marks>,
-    /// Why the formula under the pointer has no result.
-    reason: Option<Rc<str>>,
     /// No editor is read-only anymore (embeds are cut, every editor edits); kept false so the
     /// layout paths stay as they were.
     readonly: bool,
@@ -479,7 +475,6 @@ impl Editor {
             table_hover: None,
             geos: Vec::new(),
             marks: None,
-            reason: None,
             readonly: false,
             sources: Rc::new(HashMap::new()),
             part_hover: None,

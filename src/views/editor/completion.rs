@@ -74,9 +74,6 @@ pub(super) enum Choice<'a> {
     Command(&'static Command),
     /// Day offered after `@`: its English and French name, its date.
     Date(&'static str, &'static str, md::Date),
-    /// In a formula: a function or a name, then a column (its letter and its header).
-    Word(&'static Word),
-    Column(&'static str, &'a str),
     /// After `#` in a link: a heading of the note, or `^id` of one of its blocks.
     Anchor(String),
 }
@@ -107,14 +104,10 @@ impl Editor {
         let c = self.cursor();
         let line = self.line_range(c).start;
         let before = &self.content[line..c];
-        // In a formula, only what a formula takes: a `/` there is a division.
-        let found = match self.formula_cell(c) {
-            Some(_) => self.formulas(c),
-            None => self
-                .names(before, c)
-                .or_else(|| self.commands(before, c, line))
-                .or_else(|| self.days(before, c, line)),
-        };
+        let found = self
+            .names(before, c)
+            .or_else(|| self.commands(before, c, line))
+            .or_else(|| self.days(before, c, line));
         let (start, items) = found?;
         (!items.is_empty() && self.ac_dismissed != Some(start)).then_some((start, items))
     }
@@ -257,14 +250,6 @@ impl Editor {
                     self.splice(end..end + 2, "", cx);
                 }
             }
-            Choice::Word(&(name, _, _, after)) => {
-                self.push_undo(true);
-                self.edit(start..c, &format!("{name}{after}"), cx);
-            }
-            Choice::Column(letter, _) => {
-                self.push_undo(true);
-                self.edit(start..c, letter, cx);
-            }
             Choice::Date(_, _, date) => {
                 self.push_undo(true);
                 self.edit(
@@ -320,5 +305,24 @@ impl Editor {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+impl Editor {
+    /// What completion offers, as the list shows it: label, then detail.
+    pub fn completions(&self) -> Vec<String> {
+        let Some((_, items)) = self.completion() else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .map(|choice| match choice {
+                Choice::Name(name) => name.to_string(),
+                Choice::Command((name, ..)) => format!("/{name}"),
+                Choice::Date(..) => "date".into(),
+                Choice::Anchor(text) => format!("#{text}"),
+            })
+            .collect()
     }
 }

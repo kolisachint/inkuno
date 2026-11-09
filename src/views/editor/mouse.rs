@@ -487,16 +487,6 @@ impl Editor {
         self.clamp(row.start + row.index_at(local))
     }
 
-    /// Why the formula under `at` has no result, if it is in a table.
-    pub(super) fn reason_at(&self, at: Point<Pixels>) -> Option<Rc<str>> {
-        if !self.tables.iter().any(|(_, frame)| frame.contains(&at)) {
-            return None;
-        }
-        let i = self.index_at(at);
-        let row = self.rows.get(self.row_at(i)?)?;
-        row.grid.as_ref()?.reason_at(i - row.start)
-    }
-
     pub(super) fn mouse_down(
         &mut self,
         e: &MouseDownEvent,
@@ -855,11 +845,6 @@ impl Editor {
         self.pointer = e.position;
         if part != self.part_hover || near != before {
             self.part_hover = part;
-            cx.notify();
-        }
-        let reason = self.reason_at(e.position);
-        if reason != self.reason {
-            self.reason = reason;
             cx.notify();
         }
         let hover = (

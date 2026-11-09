@@ -8,7 +8,6 @@ use super::*;
 fn commands_are_found(cx: &mut TestAppContext) {
     let root = std::env::temp_dir().join(format!("inkuno-commands-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
-    fs::write(root.join("data.csv"), "nom;age\nAna;31\nBob;27\n").unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
     cx.update(init_fonts);
@@ -89,89 +88,6 @@ fn commands_are_found(cx: &mut TestAppContext) {
     );
     cx.simulate_keystrokes("enter");
     assert_eq!(text(cx), "*mot*");
-
-    // On a CSV table, opened from the palette: it stays shown and takes input. Help and the menu
-    // start with its keys, the empty palette offers its gestures.
-    shell.update(cx, |s, cx| {
-        let (notes, dirs, images) = vault::scan(&root);
-        s.sync(notes, dirs, images, cx);
-    });
-    cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("data.csv");
-    cx.simulate_keystrokes("enter");
-    cx.run_until_parked();
-    assert!(shell.update_in(cx, |s, window, cx| {
-        s.shown_sheet()
-            .is_some_and(|sheet| sheet.focus_handle(cx).is_focused(window))
-    }));
-    let sheet = shell.read_with(cx, |s, _| s.shown_sheet().unwrap());
-    // The command palette starts with the table's.
-    cx.simulate_keystrokes("f10");
-    assert_eq!(mode(cx), Some((true, "Tableau CSV")));
-    let first = runs(cx)[0];
-    assert!(
-        first.starts_with("editor::Table") || first.starts_with("sheet::"),
-        "{first}"
-    );
-    cx.simulate_keystrokes("escape f1");
-    assert_eq!(
-        shell.read_with(cx, |s, cx| s.help_rows(cx)[0].0),
-        "Tableaux CSV"
-    );
-    // Closing help, or the palette without choosing anything, gives input back to the table, which stays shown.
-    cx.simulate_keystrokes("f1");
-    cx.run_until_parked();
-    let on_sheet = |cx: &mut gpui::VisualTestContext| {
-        shell.update_in(cx, |s, window, cx| {
-            s.shown_sheet()
-                .is_some_and(|sheet| sheet.focus_handle(cx).is_focused(window))
-        })
-    };
-    assert!(on_sheet(cx));
-    cx.simulate_keystrokes("secondary-p");
-    assert!(
-        runs(cx).contains(&"editor::TableRowAbove"),
-        "{:?}",
-        runs(cx)
-    );
-    cx.simulate_keystrokes("escape");
-    cx.run_until_parked();
-    assert!(on_sheet(cx));
-    // A whole column chosen: the table's bar shows its gestures, a click runs one.
-    sheet.update(cx, |sheet, cx| sheet.pick("col", 0, cx));
-    cx.run_until_parked();
-    // A pointer move makes the test window redraw.
-    cx.simulate_mouse_move(
-        gpui::point(px(400.), px(300.)),
-        None,
-        gpui::Modifiers::none(),
-    );
-    let at = cx
-        .debug_bounds("sheet-span-editor::TableColRight")
-        .expect("the gesture is in the bar")
-        .center();
-    cx.simulate_click(at, gpui::Modifiers::none());
-    assert_eq!(sheet.read_with(cx, |sheet, _| sheet.table().cols()), 3);
-    sheet.update(cx, |sheet, cx| sheet.pick("row", 1, cx));
-    cx.run_until_parked();
-    // A pointer move makes the test window redraw.
-    cx.simulate_mouse_move(
-        gpui::point(px(400.), px(300.)),
-        None,
-        gpui::Modifiers::none(),
-    );
-    let at = cx
-        .debug_bounds("sheet-span-sheet::DeleteRows")
-        .expect("a whole row has its gestures")
-        .center();
-    cx.simulate_click(at, gpui::Modifiers::none());
-    assert_eq!(
-        sheet.read_with(cx, |sheet, _| (
-            sheet.table().rows(),
-            sheet.table().cell(1, 0).to_string()
-        )),
-        (2, "Bob".to_string())
-    );
     fs::remove_dir_all(&root).unwrap();
 }
 
@@ -439,7 +355,6 @@ fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
         "editor::AlignCenter",
         "editor::AlignRight",
         "editor::TableRowAbove",
-        "editor::TableAutoSum",
     ] {
         assert!(table.contains(&action), "{action} missing from {table:?}");
     }
