@@ -38,6 +38,10 @@ pub enum Link {
     Wiki(String),
     Url(String),
     Tag(String),
+    /// A footnote reference `[^label]` (see `footnote_ref`): whether it is defined is known
+    /// document-wide only (see `footnotes`), so per-line readers style every reference as a link
+    /// and let the layout downgrade the undefined ones (see `footnote_flags`).
+    Footnote(String),
 }
 
 // Inline styles, one word of flags per byte of text.
@@ -151,6 +155,234 @@ pub fn is_url(text: &str) -> bool {
     known && !text.contains(char::is_whitespace)
 }
 
+/// A footnote label like `[^label]`: its length and its label, when `rest` starts with one and the
+/// label holds (one or more characters, no `]`, not only whitespace, no `|` so that the bars of
+/// tables keep working). Matching is case-insensitive; the label keeps its first-seen casing.
+fn footnote_label(rest: &str) -> Option<(usize, &str)> {
+    let body = rest.strip_prefix("[^")?;
+    let end = body.find(']')?;
+    let label = &body[..end];
+    (!label.is_empty() && !label.trim().is_empty() && !label.contains('|'))
+        .then_some((end + 3, label))
+}
+
+/// Spans of inline code on one line (fences are tracked document-wide, not here): a footnote
+/// inside them is code, not a reference. An unclosed backtick is literal text, like elsewhere.
+fn code_spans(line: &str) -> Vec<Range<usize>> {
+    let b = line.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'`' {
+            let n = b[i..].iter().take_while(|&&c| c == b'`').count();
+            let mark = &line[i..i + n];
+            if let Some(end) = line[i + n..].find(mark) {
+                out.push(i..i + n + end + n);
+                i += n + end + n;
+                continue;
+            }
+        }
+        i += line[i..].chars().next().map_or(1, char::len_utf8);
+    }
+    out
+}
+
+/// Footnote references `[^label]` of the line, with their label, outside inline code: `![^…]` is
+/// an image marker, and `[[^…]]` or a reference inside a `[[wikilink]]` belongs to that link,
+/// not to a footnote. A definition's own marker matches too (see `footnote_def`); readers that
+/// need references only skip it by its range.
+pub fn footnote_ref(line: &str) -> Vec<(Range<usize>, String)> {
+    if !line.contains("[^") {
+        return Vec::new();
+    }
+    let b = line.as_bytes();
+    let code = code_spans(line);
+    // Wikilink spans, found like `links` finds them: a reference inside one belongs to the link.
+    let mut wikis = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if line[i..].starts_with("[[") {
+            if let Some(end) = line[i..].find("]]") {
+                wikis.push(i..i + end + 2);
+                i += end + 2;
+                continue;
+            }
+        }
+        i += line[i..].chars().next().map_or(1, char::len_utf8);
+    }
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        let rest = &line[i..];
+        if rest.starts_with("[^")
+            && (i == 0 || (b[i - 1] != b'!' && b[i - 1] != b'['))
+            && let Some((len, label)) = footnote_label(rest)
+        {
+            let r = i..i + len;
+            if !code.iter().any(|c| c.contains(&r.start))
+                && !wikis.iter().any(|w| w.contains(&r.start))
+            {
+                out.push((r, label.to_string()));
+            }
+            i += len;
+            continue;
+        }
+        i += rest.chars().next().map_or(1, char::len_utf8);
+    }
+    out
+}
+
+/// If the line defines a footnote (`[^label]: text`, at most three spaces of indent): its label,
+/// the range of its `[^label]` marker and where its text starts. More-indented lines continue the
+/// definition; they are not definitions themselves.
+pub fn footnote_def(line: &str) -> Option<(String, Range<usize>, usize)> {
+    // At most three spaces of indent; a tab indents past them, like a code block.
+    let mut indent = 0;
+    for c in line.chars() {
+        match c {
+            ' ' => indent += 1,
+            '\t' => indent += 4,
+            _ => break,
+        }
+        if indent > 3 {
+            return None;
+        }
+    }
+    let rest = &line[indent..];
+    let (len, label) = footnote_label(rest)?;
+    let after = rest[len..].strip_prefix(':')?;
+    let gap = after.len() - after.trim_start_matches([' ', '\t']).len();
+    Some((
+        label.to_string(),
+        indent..indent + len,
+        indent + len + 1 + gap,
+    ))
+}
+
+/// A footnote of the note: its label (first-seen casing), its number (1-based, in the order its
+/// references first appear; 0 when nothing references it), the byte where its definition starts
+/// and the bytes of its references.
+#[derive(Debug, PartialEq)]
+pub struct FootDef {
+    pub label: String,
+    pub display: usize,
+    pub at: usize,
+    pub refs: Vec<usize>,
+}
+
+/// The footnotes defined in the text, outside code blocks and front matter: references without a
+/// definition stay literal (they are not listed), and of several definitions the first wins.
+/// Matching is case-insensitive. A definition spans its indented continuation lines, which carry
+/// no markers of their own; references inside a definition (its body or its continuation lines)
+/// count as references.
+pub fn footnotes(text: &str) -> Vec<FootDef> {
+    if !text.contains("[^") {
+        return Vec::new();
+    }
+    let meta = front_matter(text);
+    let fences = text[meta..].lines().filter(|line| is_fence(line)).count();
+    let (mut seen, mut in_code, mut at, mut found): (usize, bool, usize, Vec<FootDef>) =
+        (0, false, 0, Vec::new());
+    // References met before their definition, in order: the display numbers follow them.
+    let mut pending: Vec<(String, usize)> = Vec::new();
+    for line in text.split('\n') {
+        if at >= meta {
+            if is_fence(line) {
+                seen += 1;
+                in_code = !in_code && seen < fences;
+            } else if !in_code {
+                let start = at;
+                let marker = footnote_def(line).map(|(label, marker, _)| {
+                    let key = label.to_lowercase();
+                    if !found.iter().any(|d| d.label.to_lowercase() == key) {
+                        // First-seen casing: an earlier reference may have named it already.
+                        let seen = pending
+                            .iter()
+                            .find(|(l, _)| l.to_lowercase() == key)
+                            .map(|(l, _)| l.clone())
+                            .unwrap_or(label);
+                        found.push(FootDef {
+                            label: seen,
+                            display: 0,
+                            at: start,
+                            refs: Vec::new(),
+                        });
+                    }
+                    marker
+                });
+                for (r, label) in footnote_ref(line) {
+                    if marker.as_ref() != Some(&r) {
+                        pending.push((label, start + r.start));
+                    }
+                }
+            }
+        }
+        at += line.len() + 1;
+    }
+    for (label, pos) in &pending {
+        let key = label.to_lowercase();
+        if let Some(def) = found.iter_mut().find(|d| d.label.to_lowercase() == key) {
+            def.refs.push(*pos);
+        }
+        // References without a definition stay literal: they are not listed.
+    }
+    // Display numbers, 1-based, in the order references first appear.
+    let mut n = 0;
+    for (label, _) in pending {
+        let key = label.to_lowercase();
+        if let Some(def) = found
+            .iter_mut()
+            .find(|d| d.display == 0 && d.label.to_lowercase() == key)
+        {
+            n += 1;
+            def.display = n;
+        }
+    }
+    found
+}
+
+/// How many `[^` markers the text holds outside code blocks and front matter: a cheap pre-scan
+/// (inline code is not excluded, so it can only overcount); zero means `footnotes` is empty.
+pub fn count_footnotes(text: &str) -> usize {
+    if !text.contains("[^") {
+        return 0;
+    }
+    let meta = front_matter(text);
+    let fences = text[meta..].lines().filter(|line| is_fence(line)).count();
+    let (mut seen, mut in_code, mut at, mut n) = (0, false, 0, 0);
+    for line in text.split('\n') {
+        if at >= meta {
+            if is_fence(line) {
+                seen += 1;
+                in_code = !in_code && seen < fences;
+            } else if !in_code {
+                n += line.match_indices("[^").count();
+            }
+        }
+        at += line.len() + 1;
+    }
+    n
+}
+
+/// Back to literal text for the references of `line` that `defined` does not know: only defined
+/// labels keep the link style that `links_and_comments` gives every reference. Only the brackets
+/// lose `DIM` (a label keeps its emphasis, if any); the label loses `LINK`.
+pub fn footnote_flags(line: &str, flags: &mut [u16], defined: &dyn Fn(&str) -> bool) {
+    for (r, label) in footnote_ref(line) {
+        if !defined(&label) {
+            for f in &mut flags[r.start..r.start + 2] {
+                *f &= !(DIM | LINK);
+            }
+            for f in &mut flags[r.end - 1..r.end] {
+                *f &= !(DIM | LINK);
+            }
+            for f in &mut flags[r.start + 2..r.end - 1] {
+                *f &= !LINK;
+            }
+        }
+    }
+}
+
 /// If `rest` starts with a `[text](address)` link: the range of the text and that of the address.
 // ponytail: only addresses with a protocol, without `)`; a link to a vault file
 // is written `[[note]]`. Count parentheses if addresses containing them show up.
@@ -164,7 +396,8 @@ pub fn web_link(rest: &str) -> Option<(Range<usize>, Range<usize>)> {
     ok.then_some((text, url))
 }
 
-/// Wikilinks, `[text](address)` links, URLs and tags of the line, with their byte range.
+/// Wikilinks, `[text](address)` links, URLs, tags and footnote references of the line, with
+/// their byte range.
 pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
     let b = line.as_bytes();
     let mut out = Vec::new();
@@ -212,6 +445,16 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
             }
         }
         i += rest.chars().next().map_or(1, char::len_utf8);
+    }
+    // Footnote references, found separately (they skip code spans and wikilinks): merged in
+    // text order. They never overlap the ranges above (see `footnote_ref`).
+    if line.contains("[^") {
+        let mut feet: Vec<(Range<usize>, Link)> = footnote_ref(line)
+            .into_iter()
+            .map(|(r, label)| (r, Link::Footnote(label)))
+            .collect();
+        out.append(&mut feet);
+        out.sort_by_key(|(r, _)| r.start);
     }
     out
 }
@@ -384,7 +627,7 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
     }
 }
 
-/// Links, tags and comments: what notes add to the styles of the marks.
+/// Links, tags, footnote references and comments: what notes add to the styles of the marks.
 fn links_and_comments(line: &str, from: usize, flags: &mut [u16]) {
     for (r, link) in links(line) {
         if r.start < from {
@@ -411,6 +654,16 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u16]) {
                     .for_each(|f| *f |= DIM);
                 flags[r.end - 2..r.end].iter_mut().for_each(|f| *f |= DIM);
                 flags[r.start + 2..r.end - 2]
+                    .iter_mut()
+                    .for_each(|f| *f |= LINK);
+            }
+            // `[^label]`: the brackets fade, the label is the link.
+            Link::Footnote(_) => {
+                flags[r.start..r.start + 2]
+                    .iter_mut()
+                    .for_each(|f| *f |= DIM);
+                flags[r.end - 1..r.end].iter_mut().for_each(|f| *f |= DIM);
+                flags[r.start + 2..r.end - 1]
                     .iter_mut()
                     .for_each(|f| *f |= LINK);
             }
@@ -876,7 +1129,7 @@ pub fn index(text: &str) -> (Vec<String>, Vec<String>) {
                 let (list, item) = match link {
                     Link::Tag(t) => (&mut tags, t),
                     Link::Wiki(w) => (&mut wikis, w.to_lowercase()),
-                    Link::Url(_) => continue,
+                    Link::Footnote(_) | Link::Url(_) => continue,
                 };
                 if !list.contains(&item) {
                     list.push(item);
@@ -1692,6 +1945,121 @@ mod tests {
             assert_eq!(cut, Some((3..at, at + 3..at + 3 + close.len())), "{line}");
             assert_eq!(highlights(&line, false), [(at..at + 3, color)], "{line}");
         }
+    }
+
+    #[test]
+    fn finds_footnotes() {
+        // References: range and label.
+        assert_eq!(
+            footnote_ref("see [^a] here"),
+            [(4..8, "a".to_string())]
+        );
+        assert_eq!(
+            footnote_ref("[^one] and [^two]"),
+            [(0..6, "one".to_string()), (11..17, "two".to_string())]
+        );
+        // Labels hold spaces but nothing else: no `]`, no `|` (tables keep their bars),
+        // not empty, not only whitespace.
+        assert_eq!(footnote_ref("[^a b]"), [(0..6, "a b".to_string())]);
+        for line in ["[^]", "[^ ]", "[^\t]", "[^a|b]", "[^a"] {
+            assert_eq!(footnote_ref(line), [], "{line:?}");
+        }
+        // A colon or text after the marker does not stop it.
+        assert_eq!(footnote_ref("[^a:]"), [(0..5, "a:".to_string())]);
+        assert_eq!(footnote_ref("[^a]x"), [(0..4, "a".to_string())]);
+        // Not a reference: an image marker, a wikilink, a reference inside one.
+        assert_eq!(footnote_ref("![^a]"), []);
+        assert_eq!(footnote_ref("[[^a]]"), []);
+        assert_eq!(footnote_ref("[[a [^b]]]"), []);
+        assert_eq!(links("[[^a]]").len(), 1);
+        assert!(matches!(&links("[[^a]]")[0].1, Link::Wiki(_)));
+        // Outside inline code only (single backticks and longer spans); an unclosed
+        // backtick is literal text.
+        assert_eq!(footnote_ref("`[^a]`"), []);
+        assert_eq!(footnote_ref("`` `[^a]` ``"), []);
+        assert_eq!(footnote_ref("`code` [^a]"), [(7..11, "a".to_string())]);
+        assert_eq!(footnote_ref("`open [^a]"), [(6..10, "a".to_string())]);
+        // No collision with checkboxes, tasks, links or tags.
+        assert_eq!(footnote_ref("[ ] and [x] and [^a]"), [(16..20, "a".to_string())]);
+        let web = links("[t](https://a.b) [^a] #tag");
+        assert_eq!(web.len(), 3);
+        assert!(matches!(&web[1].1, Link::Footnote(l) if l == "a"));
+        // `links` carries the references, in text order; the style fades the brackets.
+        let line = "see [^a]!";
+        let f = flags(line, 0);
+        let (r, _) = footnote_ref(line)[0].clone();
+        assert_eq!(&line[r.clone()], "[^a]");
+        assert!(f[r.start] & DIM != 0 && f[r.start] & LINK == 0);
+        assert!(f[r.start + 2] & LINK != 0 && f[r.start + 2] & DIM == 0);
+        assert!(f[r.end - 1] & DIM != 0);
+        // Definitions: label, marker range, text start; at most three spaces of indent.
+        assert_eq!(
+            footnote_def("[^a]: text"),
+            Some(("a".to_string(), 0..4, 6))
+        );
+        assert_eq!(
+            footnote_def("   [^a]:  text"),
+            Some(("a".to_string(), 3..7, 10))
+        );
+        assert_eq!(footnote_def("[^a]:"), Some(("a".to_string(), 0..4, 5)));
+        for line in ["[^a] text", "[^a] : text", "    [^a]: text", "\t[^a]: text"] {
+            assert_eq!(footnote_def(line), None, "{line:?}");
+        }
+        // The document pass: definitions outside code and front matter, references
+        // attached, numbers in first-reference order.
+        let text = "See [^b] and [^a].\n\n[^a]: first\n[^b]: second\n";
+        let feet = footnotes(text);
+        assert_eq!(
+            feet.iter().map(|d| (d.label.as_str(), d.display)).collect::<Vec<_>>(),
+            [("a", 2), ("b", 1)]
+        );
+        assert!(feet[0].at < feet[1].at);
+        assert_eq!(feet[0].refs.len(), 1);
+        // First-seen casing, case-insensitive match.
+        let feet = footnotes("See [^Ab].\n\n[^aB]: text\n");
+        assert_eq!(feet.len(), 1);
+        assert_eq!(feet[0].label, "Ab");
+        assert_eq!(feet[0].display, 1);
+        assert_eq!(feet[0].refs.len(), 1);
+        // Undefined references stay literal: they are not listed.
+        assert_eq!(footnotes("See [^x].\n"), []);
+        // Of several definitions the first wins; references after it still count.
+        let dup = "See [^a].\n\n[^a]: one\n[^a]: two\n";
+        let feet = footnotes(dup);
+        assert_eq!(feet.len(), 1);
+        assert_eq!(&dup[feet[0].at..feet[0].at + 8], "[^a]: on");
+        assert_eq!(feet[0].refs.len(), 1);
+        // Several references share one number; definitions without references get none.
+        let feet = footnotes("[^a] then [^a].\n\n[^a]: one\n[^b]: alone\n");
+        assert_eq!(feet[0].display, 1);
+        assert_eq!(feet[0].refs.len(), 2);
+        assert!(feet[0].refs[0] < feet[0].refs[1]);
+        assert_eq!(feet[1].display, 0);
+        assert!(feet[1].refs.is_empty());
+        // Continuation lines belong to the definition; their references count.
+        let text = "[^a]: first\n    continued [^b]\n\n[^b]: second\n";
+        let feet = footnotes(text);
+        assert_eq!(feet.len(), 2);
+        assert!(feet[0].refs.is_empty());
+        assert_eq!(feet[1].refs.len(), 1);
+        // Fences, front matter and code hide markers; an unclosed fence does not.
+        assert_eq!(footnotes("```\n[^a]: x\n```\n"), []);
+        assert_eq!(footnotes("---\ntitle: [^a]\n---\n\n[^a]: x\n").len(), 1);
+        assert_eq!(count_footnotes("---\ntitle: [^a]\n---\n"), 0);
+        assert_eq!(count_footnotes("```\n[^a]\n```\n"), 0);
+        assert_eq!(count_footnotes("```\n[^a]\n"), 1);
+        assert_eq!(count_footnotes("no markers"), 0);
+        assert_eq!(count_footnotes("one [^a] `[^b]`"), 2);
+        assert_eq!(footnotes("one [^a] `[^b]`\n\n[^a]: x\n").len(), 1);
+        // The layout downgrades undefined references to literal text.
+        let line = "a [^x] b";
+        let mut f = flags(line, 0);
+        assert!(f[2] & LINK != 0 || f[2] & DIM != 0);
+        footnote_flags(line, &mut f, &|_| false);
+        assert!(f[2..6].iter().all(|x| x & (DIM | LINK) == 0));
+        let mut f = flags(line, 0);
+        footnote_flags(line, &mut f, &|l| l == "x");
+        assert_eq!(f, flags(line, 0));
     }
 
     #[test]

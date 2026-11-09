@@ -31,7 +31,7 @@ Some details:
 - **Mermaid**: the diagram is drawn under its block once the cursor has left it. The magnifier next to the copy button shows it full size, to zoom and move around.
 - **Formulas**: a formula is drawn under its line, not within the text. Only the first one of a line is drawn.
 - **Arrows**: the symbols are shown everywhere except on the line you are editing and inside code.
-- **Not rendered**: footnotes and pictures given as a web address are kept as you typed them.
+- **Footnotes**: `[^a]` refers to `[^a]: the note`. A reference that names a definition shows its label as a link; one without a definition stays as typed. Pictures given as a web address are kept as you typed them.
 
 ## Inline styles
 
@@ -115,6 +115,7 @@ Blank lines between blocks travel with them. The first line, the title of the no
 - `Ctrl + K` makes the selection a link, `[text](address)`. On a link, it selects the address to change it. It does not work over several cells of a table.
 - `Ctrl + V` over a selection: a pasted address makes it a link.
 - `Ctrl + click` opens a `[[link]]`, a `#tag`, a URL or a `[text](address)` link.
+- `Ctrl + click` on a footnote reference jumps to its definition; on the definition's label, it cycles through its references.
 
 Links between notes are covered in [Links, embeds and files](links.md).
 

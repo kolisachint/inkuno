@@ -8,6 +8,7 @@ mod cursors_comments;
 mod dates_lists;
 mod files;
 mod find_mouse;
+mod footnotes;
 mod history_panes;
 mod md_tables;
 mod media;
@@ -106,6 +107,7 @@ fn end_to_end(cx: &mut TestAppContext) {
     table_styles::run(&j, cx);
     table_formulas::run(&j, cx);
     find_mouse::run(&j, cx);
+    footnotes::run(&j, cx);
     csv::run(&j, cx);
     history_panes::run(&j, cx);
     fs::remove_dir_all(&j.root).unwrap();

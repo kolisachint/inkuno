@@ -274,6 +274,14 @@ pub struct Editor {
     /// The other lines hide their inline and block markers, Typora-style. Plain cursor moves
     /// (keyboard, search jumps) leave it alone; typing sets it to the edited line.
     revealed: Option<usize>,
+    /// Footnote definitions of the text (see `md::footnotes`), refreshed with the layout:
+    /// navigation and the pointer only follow defined labels.
+    feet: Vec<md::FootDef>,
+    /// Revision `feet` was computed for.
+    feet_rev: u64,
+    /// Last definition jumped to from its label, and which of its references was shown:
+    /// repeated clicks cycle through them.
+    foot_jump: Option<(usize, usize)>,
     notes: Rc<[String]>,
     /// Folders to look for images in: the note's, then the vault.
     dirs: Vec<PathBuf>,
@@ -443,6 +451,9 @@ impl Editor {
             last_edit: None,
             edited_at: usize::MAX,
             revealed: None,
+            feet: Vec::new(),
+            feet_rev: u64::MAX,
+            foot_jump: None,
             notes: Rc::from([]),
             dirs: Vec::new(),
             images: HashMap::new(),
@@ -813,6 +824,43 @@ impl Editor {
             .lines()
             .filter(|l| md::is_fence(l))
             .count()
+    }
+
+    /// Footnote definitions of the text, recomputed when it changed.
+    pub(super) fn feet(&mut self) -> &[md::FootDef] {
+        if self.feet_rev != self.revision {
+            self.feet = if md::count_footnotes(&self.content) == 0 {
+                Vec::new()
+            } else {
+                md::footnotes(&self.content)
+            };
+            self.feet_rev = self.revision;
+        }
+        &self.feet
+    }
+
+    /// Version of the footnote definitions: their labels, case-insensitively, in order.
+    /// Adding, removing or renaming a definition restyles every reference, so the layout
+    /// redoes everything when it changes (positions are left out: typing above a definition
+    /// must not reshuffle the whole note).
+    pub(super) fn foot_hash(&self) -> u64 {
+        let mut hasher = Fast::default();
+        // ponytail: linear in the definitions; notes hold a handful of them.
+        for def in &self.feet {
+            def.label.to_lowercase().hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+
+    /// Whether `label` names a footnote definition of the text (case-insensitive).
+    pub(super) fn foot_defined(&self, label: &str) -> bool {
+        let key = label.to_lowercase();
+        self.feet.iter().any(|d| d.label.to_lowercase() == key)
+    }
+
+    /// The labels with a footnote definition, lowercased, for `md::footnote_flags`.
+    pub(super) fn foot_keys(&self) -> Vec<String> {
+        self.feet.iter().map(|d| d.label.to_lowercase()).collect()
     }
 
     /// A ``` without a closing fence does not open a block, as in `layout`.
