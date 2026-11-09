@@ -102,6 +102,6 @@ fn shortcuts_page_is_in_english_with_every_section() {
         assert!(page.contains(&format!("\n{title}\n")), "{title} missing");
     }
     assert!(page.contains("| Find by name or text, create, filter by \\#tag |"));
-    // The rest of the thread is back in French.
-    assert_eq!(crate::lang::tr("Notes", "Remarques"), "Remarques");
+    // The interface is English-only now (`src/lang.rs` shims `inkuno-logic`): no French fallback.
+    assert_eq!(crate::lang::tr("Notes", "Remarques"), "Notes");
 }

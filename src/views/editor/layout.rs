@@ -2447,6 +2447,72 @@ impl Editor {
         if self.readonly {
             return;
         }
+        // Frame of each code block wider than the page: its long lines scroll inside the
+        // page instead of spilling it. Only the body scrolls: the fences stay put,
+        // so the language and the copy button are always visible.
+        let scrolled = std::mem::take(&mut self.code_x);
+        self.codes.clear();
+        for n in 0..self.code_meta.len() {
+            let (start, end, wide, at) = {
+                let meta = &self.code_meta[n];
+                (
+                    meta.range.start,
+                    meta.range.end,
+                    meta.wide,
+                    meta.rows.clone(),
+                )
+            };
+            if !self.code_open_at(start) {
+                self.rows[at.clone()].iter_mut().for_each(|r| r.dx = px(0.));
+                continue;
+            }
+            let frame_w = wide.min(width);
+            let overflow = (wide - width).max(px(0.));
+            let mut dx = scrolled
+                .get(&start)
+                .copied()
+                .unwrap_or_default()
+                .max(px(0.))
+                .min(overflow);
+            if reveal && (start..=end).contains(&cursor) {
+                let i = self
+                    .row_at(cursor)
+                    .unwrap_or(at.start)
+                    .clamp(at.start, at.end - 1);
+                let row = &self.rows[i];
+                // Where the cursor would be without scrolling.
+                let x = row.pos(cursor - row.start).x + row.dx;
+                let margin = px(24.);
+                if x - dx < margin {
+                    dx = x - margin;
+                } else if x - dx > frame_w - margin {
+                    dx = x - frame_w + margin;
+                }
+                dx = dx.max(px(0.)).min(overflow);
+            }
+            if overflow > px(0.) {
+                self.code_x.insert(start, dx);
+            }
+            self.rows[at.clone()].iter_mut().for_each(|r| {
+                r.dx = if r.kind == Kind::Code { dx } else { px(0.) };
+            });
+            let (first, last) = (&self.rows[at.start], &self.rows[at.end - 1]);
+            let top = first.y + first.pad;
+            let frame = Bounds::new(
+                self.origin + point(px(0.), top),
+                size(frame_w, last.y + last.height - last.gap - top),
+            );
+            if overflow > px(0.) {
+                let thumb = (frame_w * (frame_w / wide)).max(px(24.));
+                let at = (frame_w - thumb) * (dx / overflow);
+                let bar = Bounds::new(
+                    point(frame.left() + at, frame.bottom() - px(5.)),
+                    size(thumb, px(3.)),
+                );
+                self.thumbs.push(bar);
+            }
+            self.codes.push((start..end, frame));
+        }
         let bars = self.tables.iter().flat_map(|(_, frame)| plus_bars(*frame));
         self.table_hitboxes = bars
             .map(|bar| window.insert_hitbox(bar, HitboxBehavior::Normal))
