@@ -1557,59 +1557,6 @@ impl Shell {
             // The title is the handle: dragged, the tool goes to the other dock or another place in
             // its stack. The empty part of the header (and the title, on the whole window) moves the
             // window, as a title bar does.
-            // Zed-style tree header: the tree shows no name (it moved to the window title
-            // bar), so its action icons sit at the header left end, ahead of the title
-            // handle — which stays, empty for the tree, as the drag handle and dock-drag source.
-            .when(mode == Mode::Tree, |d| {
-                // A note at the vault root, whatever the selection.
-                d.child(
-                    button("nav-file", "file-plus.svg", false, t)
-                        .debug_selector(|| "nav-file".into())
-                        .tooltip(tip(
-                            tr("New note at the root", "Nouvelle note à la racine"),
-                            String::new(),
-                            t,
-                        ))
-                        .on_click(
-                            cx.listener(|this, _, window, cx| this.new_note_in(None, window, cx)),
-                        ),
-                )
-                .child(
-                    button("nav-folder", "folder-plus.svg", false, t)
-                        .debug_selector(|| "nav-folder".into())
-                        .tooltip(tip(
-                            tr("New folder", "Nouveau dossier"),
-                            keys(&NewFolder),
-                            t,
-                        ))
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            this.menu_do(Do::NewFolder, this.nav.sel.clone(), window, cx)
-                        })),
-                )
-                // Collapse all; if all already is, expand all.
-                .child(
-                    button(
-                        "nav-fold",
-                        if folded { "unfold.svg" } else { "fold.svg" },
-                        false,
-                        t,
-                    )
-                    .debug_selector(|| "nav-fold".into())
-                    .tooltip(tip(
-                        if folded {
-                            tr("Unfold every folder", "Déplier tous les dossiers")
-                        } else {
-                            tr("Fold every folder", "Replier tous les dossiers")
-                        },
-                        String::new(),
-                        t,
-                    ))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.fold_all();
-                        cx.notify();
-                    })),
-                )
-            })
             .child(
                 div()
                     .debug_selector(move || format!("tool-head-{}", mode.name()))

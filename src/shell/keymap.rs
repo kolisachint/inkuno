@@ -265,6 +265,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&editor::InlineCode, tr("Inline code", "Code en ligne")),
                 p(tr("formatting bar", "barre de mise en forme"), tr("Under the note, centered: bold, italic, underline, strikethrough, highlight (five colors), code, link, lists, tasks, table (in a table: add or delete a row or a column); a lit button means the selection has the style, click again to remove it; only the active pane shows it; in a narrow note it folds into a button at the bottom, in the middle, that opens it; hide it with the palette", "Sous la note, au centre : gras, italique, souligné, barré, surligné (cinq couleurs), code, lien, listes, tâches, tableau (dans un tableau : ajouter ou supprimer une ligne ou une colonne) ; un bouton allumé : la sélection a le style, un second clic le retire ; seul le pane actif la montre ; dans une note étroite, elle se replie en un bouton en bas, au centre, qui l'ouvre ; masquable par la palette")),
                 k(&editor::SelectNext, tr("Several cursors: select the word, then its next occurrence (Esc: back to one)", "Plusieurs curseurs : prendre le mot, puis son occurrence suivante (Échap : un seul)")),
+                k(&editor::Cancel, tr("Close the find bar and the menus, back to one cursor", "Fermer la barre de recherche et les menus, revenir à un seul curseur")),
                 t(&format!("Alt+{click}"), tr("Add a cursor", "Ajouter un curseur")),
                 k(&editor::InsertLink, tr("Link: [text](address) from the selection; on a link, change its address", "Lien : [texte](adresse) depuis la sélection ; sur un lien, changer son adresse")),
                 t(
@@ -506,7 +507,7 @@ pub(super) fn defaults() -> Vec<keys::Bind> {
         b("secondary-z", &Undo, e),
         b("secondary-shift-z", &Redo, e),
         b("secondary-y", &Redo, e),
-        // A gesture made on the kanban board is undone from the board.
+        b("escape", &editor::Cancel, e),
     ];
     // After the fields that use them (palette, grid): its keys take precedence over theirs.
     all.extend(line::bindings(word));
