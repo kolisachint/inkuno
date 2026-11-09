@@ -44,8 +44,9 @@ Every release notes draft has three sections:
 
 Bash, Cargo, Git and GitHub CLI with repository write access. Run from a clean
 tracked working tree on `main`, synchronized with `origin/main`, with green
-application CI. Set `INKUNO_REPO` (or edit `REPO` in the script) so `gh`
-targets the Inkuno repository; the default is the `OWNER/inkuno` placeholder.
+application CI. By default `gh` targets the Inkuno repository
+(`kolisachint/inkuno`). Set `INKUNO_REPO` (or edit `REPO` in the script) to
+aim elsewhere.
 Python 3.11 or newer runs the publication gate on the GitHub runner; the
 preparation script itself uses Bash.
 
