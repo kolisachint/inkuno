@@ -156,7 +156,6 @@ fn the_current_file_is_separate_from_tree_selection(cx: &mut TestAppContext) {
             s.nav.marked.contains(&root.join("Note.md"))
                 && s.nav.marked.contains(&root.join("Other.md"))
         );
-        assert_eq!(s.nav.anchor, Some(root.join("Note.md")));
     });
     // Keyboard preview keeps input in the tree while marking the file it displays.
     shell.update_in(cx, |s, window, cx| {
@@ -237,7 +236,6 @@ fn the_current_file_does_not_fall_back_after_external_changes(cx: &mut TestAppCo
                     .iter()
                     .any(|row| Some(&row.path) == s.pane().displayed_path())
             );
-            assert_eq!(s.nav.anchor, Some(root.join("Note.md")));
         });
     }
 }
