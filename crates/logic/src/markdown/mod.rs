@@ -201,12 +201,10 @@ pub fn footnote_ref(line: &str) -> Vec<(Range<usize>, String)> {
     let mut wikis = Vec::new();
     let mut i = 0;
     while i < b.len() {
-        if line[i..].starts_with("[[") {
-            if let Some(end) = line[i..].find("]]") {
-                wikis.push(i..i + end + 2);
-                i += end + 2;
-                continue;
-            }
+        if line[i..].starts_with("[[") && let Some(end) = line[i..].find("]]") {
+            wikis.push(i..i + end + 2);
+            i += end + 2;
+            continue;
         }
         i += line[i..].chars().next().map_or(1, char::len_utf8);
     }
