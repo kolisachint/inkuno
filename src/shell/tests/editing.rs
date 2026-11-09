@@ -331,7 +331,7 @@ fn block_handles(cx: &mut TestAppContext) {
 /// in a note, the column-align aliases only where a table is under the cursor.
 #[gpui::test]
 fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("bref-alias-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("inkuno-alias-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(

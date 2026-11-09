@@ -16,7 +16,7 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
   (`:227`/`:220`), `shown` (`:258`).
 - What the help panel shows is `help_sections()` (`src/shell/keymap.rs:8`).
 - `book/src/shortcuts.md` is GENERATED from `help_sections` — do NOT hand-edit.
-  Regenerate with `make docs` (`BREF_WRITE_DOCS=1 cargo test shortcuts_page_is_current`
+  Regenerate with `make docs` (`INKUNO_WRITE_DOCS=1 cargo test shortcuts_page_is_current`
   writes the page, then `mdbook build`). The test
   `shortcuts_page_is_current` (`src/shell/tests/shortcuts_page.rs`) fails until
   the page matches. CONTRIBUTING flow: change `help_sections`/`defaults()`,
