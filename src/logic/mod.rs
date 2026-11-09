@@ -6,7 +6,6 @@ pub mod commands;
 pub mod daily;
 pub mod diagram;
 pub mod formula;
-pub mod history;
 pub mod layout;
 pub mod markdown;
 pub mod merge;

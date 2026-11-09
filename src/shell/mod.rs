@@ -1,11 +1,8 @@
 //! The window: it owns the panes and the views, routes their events, runs the commands, and
-//! keeps the vault, the settings and the history. One `impl Shell` per subject, in the files of
+//! keeps the vault and the settings. One `impl Shell` per subject, in the files of
 //! this folder.
 
 mod board;
-mod capture;
-mod docks;
-mod drops;
 mod files;
 mod help;
 mod keymap;
@@ -16,17 +13,12 @@ mod notes;
 mod palette_open;
 mod pane;
 mod render;
-mod search;
 mod settings;
-mod sharing;
 mod sidebar;
 mod tables;
 mod tabs;
 mod toasts;
-mod travel;
 
-use capture::*;
-use drops::*;
 use help::*;
 use keymap::*;
 use pane::*;
@@ -35,7 +27,7 @@ use toasts::*;
 use crate::actions::*;
 use crate::lang::{date_name, time_name, tr};
 use crate::logic::{
-    self, commands, history,
+    self, commands,
     layout::{self, Node, Side, Zone},
     markdown,
     prefs::Prefs,
@@ -62,7 +54,6 @@ use crate::views::{canvas, editor, field, kanban, nav, palette, sheet, viewer};
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
@@ -76,7 +67,6 @@ use gpui::{
 
 use editor::{Editor, EditorEvent};
 
-use history::{History, Place, Shown};
 use logic::note::Note;
 use markdown::Link;
 use nav::{Mode, Nav, Panel};
@@ -115,18 +105,9 @@ struct Shell {
     pane_aim: Option<(usize, Zone)>,
     /// While a tab is dragged over a tab bar: that pane, and the place it would take.
     tab_aim: Option<(usize, usize)>,
-    /// While a tool's header is dragged: the dock and the place it would take, and whether a
-    /// header is being dragged at all (an empty right dock then offers a place to drop it).
-    tool_aim: Option<docks::ToolAim>,
-    tool_drag: bool,
-    /// System files hover over the window: where they would go.
-    drop_aim: Option<DropAim>,
     /// Test: the attachments the system was asked to open.
     #[cfg(test)]
     opened: Vec<PathBuf>,
-    /// Test: keep the drop label without a real drag in progress.
-    #[cfg(test)]
-    keep_aim: bool,
     /// The vault the config points to when it is no longer there: the welcome page says so, until a vault is opened.
     lost: Option<PathBuf>,
     /// Test: the window buttons are drawn by the app, as on Linux, whatever the test platform says.
@@ -156,19 +137,12 @@ struct Shell {
     /// Open notes, most recent first.
     recent: Vec<PathBuf>,
     save_gen: usize,
-    /// Last replace across the vault, to undo it: each rewritten note, its text
-    /// before and after.
-    swapped: Vec<(PathBuf, Arc<str>, String)>,
-    /// The vault search of the panel, once opened.
-    vault_find: Option<search::VaultFind>,
     /// Icons of the vault's notes, files and folders (see `vault::load_icons`).
     icons: std::collections::HashMap<PathBuf, String>,
     /// Icon picker grid, if open.
     icon_pick: Option<IconPick>,
     /// The comments panel was closed: it waits to be asked for again.
     comments_shut: bool,
-    /// Focus mode (F9) stashes the chrome it hides here; `None` when the docks are as usual.
-    focus_mode: Option<docks::FocusStash>,
     /// Scroll of the comments column, and the comment it last showed (the caret's).
     comments_scroll: gpui::ScrollHandle,
     comments_seen: Option<usize>,
@@ -176,8 +150,6 @@ struct Shell {
     toasts: Vec<Toast>,
     /// Number of the last message, to remove the right one when it expires.
     toasted: usize,
-    /// A starting point asked for from the library of a canvas, to open when the window is drawn.
-    template: Option<usize>,
     title: String,
     prefs: Prefs,
     theme: Theme,
@@ -186,8 +158,6 @@ struct Shell {
     copied: bool,
     /// The help panel, open or not.
     help: Help,
-    /// What was shown, for "back" and "forward".
-    history: History,
     /// The bindings in effect, and what the user changed in the default shortcuts.
     bound: Vec<keys::Bind>,
     changes: keys::Changes,
@@ -247,13 +217,8 @@ impl Shell {
             pane_box: Default::default(),
             pane_aim: None,
             tab_aim: None,
-            tool_aim: None,
-            tool_drag: false,
-            drop_aim: None,
             #[cfg(test)]
             opened: Vec::new(),
-            #[cfg(test)]
-            keep_aim: false,
             lost: None,
             #[cfg(test)]
             client: false,
@@ -272,26 +237,21 @@ impl Shell {
             menu: None,
             recent: Vec::new(),
             save_gen: 0,
-            swapped: Vec::new(),
-            vault_find: None,
             icons: Default::default(),
             icon_pick: None,
             // Calm UI (ui.md §12): the comments column starts collapsed to its dot;
             // the palette (`› comments`) reopens it via `open_comments`.
             comments_shut: true,
-            focus_mode: None,
             comments_scroll: gpui::ScrollHandle::new(),
             comments_seen: None,
             toasts: Vec::new(),
             toasted: 0,
-            template: None,
             title: String::new(),
             prefs,
             theme,
             edge: None,
             copied: false,
             help: Help::default(),
-            history: History::default(),
             bound: defaults(),
             changes: keys::Changes::new(),
         };
@@ -319,8 +279,7 @@ impl Shell {
             if event.keystroke.key == "escape" && cx.has_active_drag() {
                 cx.stop_active_drag(window);
                 let _ = weak.update(cx, |this, cx| {
-                    (this.pane_aim, this.tab_aim, this.tool_aim, this.tool_drag) =
-                        (None, None, None, false);
+                    (this.pane_aim, this.tab_aim) = (None, None);
                     cx.notify();
                 });
                 return cx.stop_propagation();
@@ -363,7 +322,7 @@ impl Shell {
     }
 }
 
-/// Opens the main window, or the quick-capture window with `--capture`.
+/// Opens the main window.
 pub fn run() {
     #[cfg(target_os = "linux")]
     platform::skip_absent_nvidia_driver();
@@ -376,31 +335,6 @@ pub fn run() {
         let (vault, recent) = vault::load_config();
         let lost = vault.clone().filter(|v| !v.is_dir());
         let vault = vault.filter(|v| v.is_dir());
-        // `inkuno --capture`: the input line alone, in a small undecorated window.
-        // Without a chosen vault, the app opens as usual to ask for one.
-        if let Some(root) = vault
-            .clone()
-            .filter(|_| std::env::args().any(|arg| arg == "--capture"))
-        {
-            cx.open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                        None,
-                        size(px(560.), px(96.)),
-                        cx,
-                    ))),
-                    titlebar: None,
-                    app_id: Some("com.inkuno.Inkuno".into()),
-                    window_decorations: Some(WindowDecorations::Client),
-                    window_background: WindowBackgroundAppearance::Transparent,
-                    is_resizable: false,
-                    ..Default::default()
-                },
-                |window, cx| cx.new(|cx| Capture::new(root, window, cx)),
-            )
-            .unwrap();
-            return cx.activate(true);
-        }
         let bounds = Bounds::centered(None, size(px(860.), px(720.)), cx);
         // Zed-style: the folder first, then the app — the first frame updates it with the open
         // note, if any (see `render`).
