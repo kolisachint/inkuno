@@ -6,7 +6,6 @@ mod boards;
 mod csv;
 mod cursors_comments;
 mod dates_lists;
-mod diagrams;
 mod embeds;
 mod files;
 mod find_mouse;
@@ -97,7 +96,6 @@ fn end_to_end(cx: &mut TestAppContext) {
     files::run(&j, cx);
     media::run(&j, cx);
     let here = vault_views::run(&j, cx);
-    diagrams::run(&j, cx);
     md_tables::run(&j, cx);
     blocks::headings(&j, cx);
     blocks::tags(&j, cx);

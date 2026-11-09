@@ -137,13 +137,11 @@ fn sharing_empty_drafts_and_pending_dialogs(cx: &mut TestAppContext) {
 fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "sharing-views");
     fs::write(root.join("Note.md"), "# Hidden\n").unwrap();
-    let mut diagram = Diagram::default();
-    diagram.add_shape(diagram::Form::Rect, 20., 20., 120., 60.);
-    let original = diagram.to_svg(diagram::COLORS[0]);
-    fs::write(root.join("Drawing.svg"), &original).unwrap();
+    let original = r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##;
+    fs::write(root.join("Drawing.svg"), original).unwrap();
     let foreign = r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##;
     fs::write(root.join("Foreign.svg"), foreign).unwrap();
-    let png = figure::png(foreign, 1., 0xffffff).unwrap();
+    let png = crate::ui::figure::png(foreign, 1., 0xffffff).unwrap();
     fs::write(root.join("Picture.png"), &png).unwrap();
     fs::write(root.join("Data.csv"), "Name,Count\nAlpha,1\nBeta,2\n").unwrap();
     shell.update(cx, |s, cx| {
@@ -151,7 +149,7 @@ fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
         s.open_note(&root.join("Note.md"), cx);
     });
     for (name, entries) in [
-        ("Drawing.svg", 3),
+        ("Drawing.svg", 2),
         ("Foreign.svg", 2),
         ("Picture.png", 1),
         ("Data.csv", 2),
@@ -168,32 +166,15 @@ fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
         );
         cx.simulate_keystrokes("escape");
         if name == "Drawing.svg" {
-            let canvas = shell.read_with(cx, |s, _| s.pane().drawing().unwrap().clone());
-            diagram.add_shape(diagram::Form::Ellipse, 200., 30., 80., 80.);
-            canvas.update(cx, |c, cx| {
-                assert!(c.replace(diagram.clone(), cx));
-            });
-            shell.update(cx, |s, _| s.pane_mut().canvas_dirty = true);
             choose(cx, 0);
-            let copied = cx.read_from_clipboard().unwrap().text().unwrap();
-            assert_eq!(
-                Diagram::from_svg(&copied)
-                    .unwrap()
-                    .to_svg(diagram::COLORS[0]),
-                diagram.to_svg(diagram::COLORS[0])
-            );
+            assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), original);
             choose(cx, 1);
             cx.simulate_new_path_selection(|_| Some(root.join("drawing-copy.svg")));
             settle(cx);
             assert_eq!(
                 fs::read_to_string(root.join("drawing-copy.svg")).unwrap(),
-                copied
+                original
             );
-            assert!(shell.read_with(cx, |s, _| s.pane().canvas_dirty));
-            assert_eq!(fs::read_to_string(root.join(name)).unwrap(), original);
-            choose(cx, 2);
-            settle(cx);
-            assert!(root.join("Drawing.png").exists());
         } else if name == "Foreign.svg" {
             choose(cx, 0);
             assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), foreign);

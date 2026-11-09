@@ -31,9 +31,6 @@ impl Render for Shell {
         window.set_rem_size(t.px(16.));
         // The pane holding the focus is the active one; when the code changed it without moving
         // input (a note already open in the other pane), it follows.
-        if let Some(template) = self.template.take() {
-            self.new_diagram_from(template, window, cx);
-        }
         if std::mem::take(&mut self.grab) {
             self.focus_pane(self.active, window, cx);
         } else if let Some(pane) = self
@@ -238,9 +235,8 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &NewFromTemplate, window, cx| {
                 this.open_templates(TemplateAct::New, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &NewDiagram, window, cx| this.new_diagram(window, cx)))
-            // Escape in a diagram where nothing is in progress anymore: back to the note, if its
-            // tab has one under it.
+            // Escape in the viewer: back to the note, if its tab has one under it.
+            // (`canvas::Cancel` is the action the viewer propagates; the canvas editor is gone.)
             .on_action(cx.listener(|this, _: &canvas::Cancel, window, cx| {
                 if this.has_note(cx) {
                     window.focus(&this.pane().editor.focus_handle(cx));
@@ -1233,10 +1229,6 @@ impl Shell {
             Some((_, FileKind::Sheet(sheet))) => {
                 sheet.update(cx, |sheet, _| sheet.sync(t, client));
                 note.child(sheet)
-            }
-            Some((_, FileKind::Drawing(canvas))) => {
-                canvas.update(cx, |canvas, _| canvas.sync(t, client));
-                note.child(canvas)
             }
             Some((_, FileKind::Svg(viewer))) => {
                 viewer.update(cx, |viewer, _| viewer.sync(t));

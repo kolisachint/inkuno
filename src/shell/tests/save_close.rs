@@ -183,54 +183,6 @@ fn failed_close_keeps_csv_and_tsv_edits_until_the_final_write(cx: &mut TestAppCo
 }
 
 #[gpui::test]
-fn failed_canvas_close_keeps_the_live_diagram_through_rescan(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = start(cx, "close-canvas");
-    let anchor = root.join("Anchor.md");
-    fs::write(&anchor, "# Anchor\n").unwrap();
-    open(&shell, cx, &anchor);
-    let path = root.join("Drawing.svg");
-    fs::write(&path, Diagram::blank().to_svg(diagram::COLORS[0])).unwrap();
-    open(&shell, cx, &path);
-    let canvas = shell.read_with(cx, |s, _| s.pane().drawing().cloned().unwrap());
-    let original = fs::read_to_string(&path).unwrap();
-    fs::create_dir(root.join(".Drawing.tmp")).unwrap();
-    cx.simulate_input("r");
-    let (from, to) = canvas.read_with(cx, |c, _| (c.spot(0., 0.), c.spot(120., 60.)));
-    cx.simulate_mouse_down(from, MouseButton::Left, gpui::Modifiers::none());
-    cx.simulate_mouse_move(to, MouseButton::Left, gpui::Modifiers::none());
-    cx.simulate_mouse_up(to, MouseButton::Left, gpui::Modifiers::none());
-    assert_eq!(canvas.read_with(cx, |c, _| c.diagram().shapes.len()), 1);
-    cx.simulate_keystrokes("secondary-w");
-    assert_eq!(fs::read_to_string(&path).unwrap(), original);
-    assert!(shell.read_with(cx, |s, _| s.pane().canvas_dirty
-        && s.pane().drawing() == Some(&canvas)
-        && s.told(Tone::Failed, "Drawing.svg")));
-    shell.update(cx, |s, cx| s.rescan(&root, cx));
-    assert_eq!(
-        shell.read_with(cx, |s, _| s
-            .toasts
-            .iter()
-            .filter(|t| t.tone == Tone::Failed && t.text.contains("Drawing.svg"))
-            .count()),
-        1
-    );
-    assert_eq!(canvas.read_with(cx, |c, _| c.diagram().shapes.len()), 1);
-    cx.simulate_keystrokes("secondary-z secondary-shift-z");
-    assert_eq!(canvas.read_with(cx, |c, _| c.diagram().shapes.len()), 1);
-    fs::remove_dir(root.join(".Drawing.tmp")).unwrap();
-    cx.simulate_keystrokes("secondary-w secondary-shift-t");
-    assert_eq!(
-        Diagram::from_svg(&fs::read_to_string(path).unwrap())
-            .unwrap()
-            .shapes
-            .len(),
-        1
-    );
-    assert!(!shell.read_with(cx, |s, _| s.pane().canvas_dirty));
-    let _ = fs::remove_dir_all(root);
-}
-
-#[gpui::test]
 fn failed_close_button_and_window_close_keep_the_failed_document(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "close-buttons");
     let alpha = root.join("Alpha.md");

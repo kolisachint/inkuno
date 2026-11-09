@@ -164,7 +164,7 @@ Reading: the shape of the vault, a list, a search ranked like the palette, one n
 
 Writing: create a note, replace a passage that occurs once, append, rename (links follow, unless another note still has the old name), move to the trash and bring back, the daily note, a comment on one passage.
 
-Diagrams: the agent draws on the same canvas as you, with the same UML shapes: lifelines, calls, replies, `alt`, `opt` and `loop` fragments, classes with their compartments, inheritance, composition. You can then move and edit what it drew. It can also start from a template, turn a Mermaid class, sequence or state diagram into a canvas diagram, import Excalidraw or an uncompressed draw.io file, and render a PNG of what it drew to check it. A diagram file is written by Inkuno. A flowchart stays a Mermaid block in a note.
+Diagrams: the canvas editor was removed. Mermaid diagrams stay in notes as ```mermaid blocks; `render` draws one to PNG to check it.
 
 Showing: when Inkuno is open on the same vault, the agent can open a note, a diagram or a table in a tab of its own (`show`), and the window comes to the front. When Inkuno is closed, or has another vault open, it says so; the files are written all the same.
 
@@ -172,7 +172,7 @@ Showing: when Inkuno is open on the same vault, the agent can open a note, a dia
 
 *Drawn by an agent with this server.*
 
-The user guide is a resource (`inkuno://guide/writing`, `links`, `comments`, `diagrams`, `uml`, and the other pages).
+The user guide is a resource (`inkuno://guide/writing`, `links`, `comments`, and the other pages).
 
 ## Prompts
 

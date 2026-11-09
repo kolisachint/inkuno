@@ -51,7 +51,7 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     );
     // Up from the first goes round to the last; Esc closes and the tree has the keys again.
     cx.simulate_keystrokes("up");
-    assert_eq!(menu(cx), Some((Some(13), Some("Mettre à la corbeille"))));
+    assert_eq!(menu(cx), Some((Some(12), Some("Mettre à la corbeille"))));
     cx.simulate_keystrokes("home down");
     assert_eq!(menu(cx), Some((Some(1), Some("Ouvrir à côté"))));
     cx.simulate_keystrokes("escape");
@@ -59,7 +59,7 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
     assert!(cx.update(|window, cx| shell.read(cx).nav.focus.is_focused(window)));
     // "Move to…" lists the folders, the vault first; the chosen one receives the note, as a drag would.
     cx.simulate_keystrokes("menu up up up");
-    assert_eq!(menu(cx), Some((Some(11), Some("Déplacer vers…"))));
+    assert_eq!(menu(cx), Some((Some(10), Some("Déplacer vers…"))));
     cx.simulate_keystrokes("enter");
     cx.simulate_input("doss");
     cx.simulate_keystrokes("enter");

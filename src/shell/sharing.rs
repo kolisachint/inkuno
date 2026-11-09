@@ -22,7 +22,6 @@ impl Shell {
                 Share::MarkdownSave,
                 Share::PlainSave,
             ],
-            Some(FileKind::Drawing(_)) => vec![Share::SvgCopy, Share::SvgSave, Share::Png],
             Some(FileKind::Svg(_)) => vec![Share::SvgCopy, Share::SvgSave],
             Some(FileKind::Sheet(_)) => vec![Share::TableCopy, Share::TableExport],
             Some(FileKind::Image) => vec![Share::ImageSave],
@@ -95,15 +94,6 @@ impl Shell {
             }
             Share::TableCopy => return self.choose_table(Pick::CopyAs, window, cx),
             Share::TableExport => return self.choose_table(Pick::Export, window, cx),
-            Share::Png => {
-                if let (Some(path), Some(canvas)) = (
-                    self.pane().file_path().cloned(),
-                    self.pane().drawing().cloned(),
-                ) {
-                    self.export_png(path, &canvas, cx);
-                }
-                return;
-            }
             _ => {}
         }
         let result: std::io::Result<(Vec<u8>, &str)> = match choice {
@@ -114,22 +104,12 @@ impl Shell {
                 sharing::plain_text(self.pane().editor.read(cx).text()).into_bytes(),
                 "txt",
             )),
-            Share::SvgCopy | Share::SvgSave => match self.pane().drawing() {
-                Some(canvas) => Ok((
-                    canvas
-                        .read(cx)
-                        .diagram()
-                        .to_svg(diagram::COLORS[0])
-                        .into_bytes(),
-                    "svg",
-                )),
-                None => self
-                    .pane()
-                    .file_path()
-                    .ok_or_else(|| std::io::Error::other("SVG"))
-                    .and_then(fs::read)
-                    .map(|bytes| (bytes, "svg")),
-            },
+            Share::SvgCopy | Share::SvgSave => self
+                .pane()
+                .file_path()
+                .ok_or_else(|| std::io::Error::other("SVG"))
+                .and_then(fs::read)
+                .map(|bytes| (bytes, "svg")),
             Share::ImageSave => self
                 .pane()
                 .file_path()

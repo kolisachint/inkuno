@@ -17,7 +17,6 @@ New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 | **Daily notes** | One key for today's note, a calendar, templates, and a one-line capture window. See [Daily notes, templates and capture](daily-notes.md). |
 | **Tabs and panes** | As many tabs and split panes as the window holds. See [Tabs, panes and docks](tabs-and-panes.md). |
 | **Kanban boards and list pages** | A note shown as a board, a folder shown as a table of its notes. See [Kanban boards and list pages](boards.md). |
-| **Diagrams** | Shapes, arrows and UML drawn by hand, saved as SVG. See [Diagrams](diagrams.md). |
 | **CSV and TSV** | Edited in place, in a grid, up to a million rows. See [CSV and TSV files](csv.md). |
 | **Sync** | One key commits, merges and pushes a vault kept in git. See [Syncing a vault](sync.md). |
 | **Keyboard first** | One palette for notes and commands. Every shortcut is listed in the app and can be changed. See [Keyboard shortcuts](shortcuts.md). |

@@ -140,11 +140,6 @@ impl Shell {
                 self.nav.sel = Some(dir);
                 self.open_templates(crate::views::palette::TemplateAct::New, window, cx);
             }
-            (Do::NewDiagram, _) => {
-                self.nav.open.insert(dir.clone());
-                self.nav.sel = Some(dir);
-                self.new_diagram(window, cx);
-            }
             (Do::NewFolder, _) => {
                 // The folder is created in the selection's: the field says so.
                 let label = match dir.file_name().filter(|_| dir != root) {
@@ -585,7 +580,6 @@ impl Shell {
                         Do::FromTemplate,
                     ));
                 }
-                groups[1].push((tr("New diagram here", "Nouveau schéma ici"), Do::NewDiagram));
                 groups[1].push((tr("New folder", "Nouveau dossier"), Do::NewFolder));
             }
             if !is_dir || many {

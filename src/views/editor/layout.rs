@@ -1840,8 +1840,8 @@ impl Editor {
                             .map(|(source, display)| Source::Formula(source, display))
                     });
                 // An SVG is redrawn in the theme's colors, and every time its file
-                // changes: its date is part of its key. A Inkuno diagram takes the ink of the
-                // text; an SVG from elsewhere is made readable (HTML text, `light-dark()`).
+                // changes: its date is part of its key. It is made readable
+                // (HTML text, `light-dark()`).
                 if svg
                     && let Some(file) = &file
                     && let Ok(stamp) = fs::metadata(file).and_then(|m| m.modified())
@@ -1850,15 +1850,11 @@ impl Editor {
                         key(3, &format!("{}{stamp:?}", file.display())).0,
                         key(3, &file.display().to_string()).1,
                     );
-                    let (path, ink, dark) =
-                        (file.clone(), crate::views::canvas::neutral(t), look.dark);
+                    let (path, dark) = (file.clone(), look.dark);
                     let own = cached(&mut old, &mut kept, (k, family), false, || {
                         let make = move || {
                             let text = fs::read_to_string(&path).ok()?;
-                            Some(
-                                Diagram::from_svg(&text)
-                                    .map_or_else(|| svg::readable(&text, dark), |d| d.to_svg(ink)),
-                            )
+                            Some(svg::readable(&text, dark))
                         };
                         drawn(
                             job((k, family), Arc::new(make)),

@@ -71,8 +71,6 @@ pub(super) struct Pane {
     /// The note was created in this pane: left empty, its file does not stay in the vault.
     pub(super) fresh: bool,
     pub(super) dirty: bool,
-    /// A canvas write failed: keep its live diagram until a retry succeeds.
-    pub(super) canvas_dirty: bool,
     /// The note's file as last read or written here: what another program changed since is
     /// merged into what is typed (`Shell::take_outside`), not overwritten.
     pub(super) base: String,
@@ -120,9 +118,7 @@ pub(super) struct FileView {
 pub(super) enum FileKind {
     /// A picture, drawn as is.
     Image,
-    /// A Inkuno diagram, open in its canvas.
-    Drawing(Entity<Canvas>),
-    /// An SVG from elsewhere, in the zoomable viewer.
+    /// An SVG file, in the zoomable viewer.
     Svg(Entity<viewer::Viewer>),
     /// A CSV or TSV table, in its grid.
     Sheet(Entity<Sheet>),
@@ -187,16 +183,6 @@ impl Pane {
         self.file.as_ref().map(|file| &file.path)
     }
 
-    pub(super) fn drawing(&self) -> Option<&Entity<Canvas>> {
-        match &self.file {
-            Some(FileView {
-                kind: FileKind::Drawing(canvas),
-                ..
-            }) => Some(canvas),
-            _ => None,
-        }
-    }
-
     pub(super) fn viewer(&self) -> Option<&Entity<viewer::Viewer>> {
         match &self.file {
             Some(FileView {
@@ -238,7 +224,6 @@ impl Shell {
             new_dir: None,
             fresh: false,
             dirty: false,
-            canvas_dirty: false,
             base: String::new(),
             board: kanban::Board::new(cx),
             listing: None,
@@ -268,7 +253,6 @@ impl Shell {
         ) {
             (_, Some(FileKind::Sheet(sheet))) => window.focus(&sheet.focus_handle(cx)),
             (Some(listing), _) => window.focus(&listing.filter.focus_handle(cx)),
-            (None, Some(FileKind::Drawing(canvas))) => window.focus(&canvas.focus_handle(cx)),
             (None, Some(FileKind::Svg(viewer))) => window.focus(&viewer.focus_handle(cx)),
             (None, Some(FileKind::Image)) => window.focus(&self.pane().zone),
             (None, None) => window.focus(&self.pane().editor.focus_handle(cx)),
@@ -286,7 +270,6 @@ impl Shell {
         let pane = &self.panes[tab];
         let file = match pane.file.as_ref().map(|file| &file.kind) {
             Some(FileKind::Sheet(sheet)) => sheet.focus_handle(cx).is_focused(window),
-            Some(FileKind::Drawing(canvas)) => canvas.focus_handle(cx).is_focused(window),
             Some(FileKind::Svg(viewer)) => viewer.focus_handle(cx).is_focused(window),
             _ => false,
         };
@@ -1052,9 +1035,6 @@ impl Shell {
             if !self.flush_sheet(cx) {
                 return false;
             }
-        }
-        if leaving && !self.flush_canvas(cx) {
-            return false;
         }
         // A file that takes the note's place takes the input too: left in the editor, `render` would
         // hand the pane back to the note (its focus means "the note is back"). A preview keeps the input.

@@ -295,7 +295,7 @@ fn tools() -> Vec<Tool> {
         Tool {
             name: "render",
             title: "Render a diagram",
-            description: "A PNG of a canvas diagram, an SVG of the vault, a Mermaid source, or the n-th ```mermaid block of a note (block starts at 1). theme is light or dark. width is the wanted width in pixels; a side never exceeds 8192. Use this to see what you drew. A Mermaid source needs no vault.",
+            description: "A PNG of an SVG of the vault, a Mermaid source, or the n-th ```mermaid block of a note (block starts at 1). theme is light or dark. width is the wanted width in pixels; a side never exceeds 8192. Use this to see what a Mermaid block looks like. A Mermaid source needs no vault.",
             properties: json!({
                 "path": {"type": "string"},
                 "mermaid": {"type": "string"},
@@ -313,7 +313,7 @@ fn tools() -> Vec<Tool> {
         Tool {
             name: "check_mermaid",
             title: "Check a Mermaid diagram",
-            description: "Whether a Mermaid source draws, the engine's error when it does not, its kind, and whether it can become a canvas diagram (class, sequence or state). A flowchart cannot. Needs no vault.",
+            description: "Whether a Mermaid source draws, the engine's error when it does not, and its kind. Needs no vault.",
             properties: json!({"source": {"type": "string"}}),
             required: &["source"],
             output: "readable, error, kind, canvas",
@@ -323,8 +323,8 @@ fn tools() -> Vec<Tool> {
         },
         Tool {
             name: "create_diagram",
-            title: "Create a diagram",
-            description: "A canvas diagram, written by Inkuno, never as SVG by hand. from is one of {mermaid}, {template} or {shapes, links}. template is class, use-case, package, state, sequence, activity, component or deployment. A shape is {key, form, text, in, color, fill, dashed, x, y, w, h}; a shape without x and y is laid out by layers, and its size follows its text. in names the shape that holds it. A link is {from, to, relation or heads, route, text, start_text, end_text}; to {mid: key} attaches to the middle of a link; a link between lifelines is a message. Sequence diagram: lifelines (form lifeline, text the participant) and messages in time order, top to bottom: relation sync (a call that waits; it opens the activation bar), reply (dashed, closes it), async, create (the lifeline starts there), destroy, found, lost; bars and heights are computed by Inkuno. fragments is [{key, text, operands}], outer ones first: text is the operator then one [guard] line per branch (alt\n[valid]\n[else], opt\n[cache], loop\n[each item], par…), operands lists the message keys of each branch in order (messages for one branch). A flowchart cannot become a canvas: put it in a note and render that block. A taken name is refused. embed is the line to put in a note.",
+            title: "Create a diagram (removed)",
+            description: "Removed with the canvas editor: always fails. Put the Mermaid source in a note as a ```mermaid block, then render that block.",
             properties: json!({
                 "name": {"type": "string"},
                 "folder": {"type": "string"},
@@ -338,8 +338,8 @@ fn tools() -> Vec<Tool> {
         },
         Tool {
             name: "read_diagram",
-            title: "Read a diagram",
-            description: "Shapes, links, what holds what, and bounds, with stable ids. read_only is true for a diagram written by a newer version of Inkuno: it can be read and not edited. path is a name or a vault-relative path.",
+            title: "Read a diagram (removed)",
+            description: "Removed with the canvas editor: always fails.",
             properties: json!({"path": {"type": "string"}}),
             required: &["path"],
             output: "path, read_only, shapes, links, bounds",
@@ -349,8 +349,8 @@ fn tools() -> Vec<Tool> {
         },
         Tool {
             name: "edit_diagram",
-            title: "Edit a diagram",
-            description: "Changes a canvas diagram, all or nothing, ids kept. ops are add_shape, add_link, update, remove, move, relayout, wrap ({text, operands} as in create_diagram fragments) and reorder ({id, to}: a message to another place, from 0). read_diagram gives each message its order, the fragment it is in and its operand. A new shape or link may carry a key that later ops in the same call use; new ids come back in ids, new_shapes and new_links. Refused on a newer format. The file is written by Inkuno.",
+            title: "Edit a diagram (removed)",
+            description: "Removed with the canvas editor: always fails.",
             properties: json!({
                 "path": {"type": "string"},
                 "ops": {"type": "array", "items": {"type": "object"}},
@@ -363,8 +363,8 @@ fn tools() -> Vec<Tool> {
         },
         Tool {
             name: "diagram_library",
-            title: "Diagram library",
-            description: "The forms (rect, round, lifeline, fragment, component, node…), heads, routes, UML relationships (association, composition, generalization, include, deploy…), the library's shapes and its starting points. family limits the shapes: class, use-case, state, activity, component or sequence. Needs no vault.",
+            title: "Diagram library (removed)",
+            description: "Removed with the canvas editor: empty lists. Needs no vault.",
             properties: json!({"family": {"type": "string"}}),
             required: &[],
             output: "forms, heads, routes, relations, shapes, templates",
@@ -374,8 +374,8 @@ fn tools() -> Vec<Tool> {
         },
         Tool {
             name: "import_diagram",
-            title: "Import a diagram",
-            description: "Turns Excalidraw JSON or an uncompressed draw.io file into a canvas diagram. format is excalidraw or drawio. content is the file's text. A compressed draw.io file is refused, with the way to save it again. skipped counts what Inkuno cannot draw.",
+            title: "Import a diagram (removed)",
+            description: "Removed with the canvas editor: always fails.",
             properties: json!({
                 "content": {"type": "string"},
                 "format": {"type": "string", "enum": ["excalidraw", "drawio"]},
