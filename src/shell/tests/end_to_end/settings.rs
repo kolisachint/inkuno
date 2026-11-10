@@ -214,7 +214,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     // Code font, from the palette; text size from the keyboard.
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("police du");
+    cx.simulate_input("font of");
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("systemui");
     cx.simulate_keystrokes("enter");
