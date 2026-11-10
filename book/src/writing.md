@@ -13,7 +13,6 @@ What you type is what is saved. Inkuno only changes how it looks: markers stay v
 | `[ ]` or `[x]` | a box on its own, in a sentence or in a table cell: click it, or press `Ctrl + Enter` next to it |
 | `> ` | a quote |
 | `> [!NOTE]` | a colored panel: that line and the quote lines after it |
-| `\| a \| b \|` | a table, see [Tables and formulas](tables.md) |
 | `` ``` `` then `Enter` | a code block, closed for you |
 | `---`, `***` or `___` | a divider |
 | `[[Note name]]` | a link to another note, see [Links](links.md) |

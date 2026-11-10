@@ -26,12 +26,6 @@ The time Inkuno spends between a key and the frame it hands to the graphics card
 | A letter in a table of 400 rows | 3.0 ms |
 | One notch of the mouse wheel | 1.1 ms |
 
-## Large files
-
-- A table of 1,400 rows with a running total in each row: about 25 ms per keystroke. See [Formulas](tables.md#formulas).
-- A table of 300,000 rows in a note opens in about 40 ms, and typing in it takes under 10 ms. See [Very large tables](tables.md#very-large-tables).
-- A CSV file of a million rows is parsed in under a tenth of a second, and a million rows cost about 12 MB. See [CSV and TSV files](csv.md).
-
 ## Where the figures come from
 
 The first table comes from the running app (window, memory, outside change) and from the scale benchmark (index, palette). The others come from benchmarks run without a display. To measure on your machine:

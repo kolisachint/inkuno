@@ -28,7 +28,7 @@ See [Changes from other programs](vault.md#changes-from-other-programs).
 
 ## Sync fails
 
-`git` must reach the repository without asking anything, and the vault must be in a plain state. See [Requirements](sync.md#requirements) and [What it refuses](sync.md#what-it-refuses).
+`git` must reach the repository without asking anything, and the vault must be in a plain state. See [Requirements](sync.md) and [What it refuses](sync.md).
 
 ## Inkuno crashed
 

@@ -22,7 +22,7 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 - **More than notes.** Kanban boards, list pages built from front matter, UML diagrams drawn by hand and saved as SVG, and a CSV grid that opens a million rows.
 - **Agents.** `inkuno mcp` lets an agent read, write and draw in the vault, with Inkuno's links, trash and diagrams. [Guide](book/src/agents.md)
 - **Safe tab closing.** Close a tab, the other tabs or a whole pane from a tab's right click, or every file from the palette. If saving fails, the document stays open with its edits and undo history.
-- **PDF to send.** A note saved as an A4 PDF from the palette, unsaved edits included: text you can search and copy, pictures, Mermaid diagrams and formulas drawn in. [How](book/src/writing.md#save-as-pdf)
+- **PDF to send.** A note saved as an A4 PDF from the palette, unsaved edits included: text you can search and copy, pictures, Mermaid diagrams and formulas drawn in. [How](book/src/writing.md)
 - **Local sharing.** Copy a whole note as Markdown or readable text, or save a separate copy. One Share / Export menu also offers SVG/PNG for diagrams and the existing table formats.
 - **Keyboard first.** One palette for notes and commands. Every shortcut is listed in the app (`F1`) and can be changed.
 - **Yours to dress.** 13 themes, IBM Plex built in, any installed font. Light and dark, English and French.
@@ -70,16 +70,12 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | Page | What it covers |
 |---|---|
 | [Writing notes](book/src/writing.md) | Markdown, styles, lists, slash commands, blocks, several cursors |
-| [Tables and formulas](book/src/tables.md) | tables in notes, grips, formulas, very large tables |
 | [Links, embeds and files](book/src/links.md) | links, backlinks, tags, embedded sections, pictures, dropped files |
 | [Comments](book/src/comments.md) | annotating a passage, in a format other apps read |
 | [Daily notes, templates and capture](book/src/daily-notes.md) | today's note, the calendar, templates, quick capture |
 | [The palette and the panel](book/src/navigation.md) | the tree, the graph, the trash, icons |
 | [Tabs, panes and docks](book/src/tabs-and-panes.md) | arranging the window |
 | [Search and replace](book/src/search.md) | in a note, and in the whole vault |
-| [Kanban boards and list pages](book/src/boards.md) | a note as a board, a folder as a table |
-| [Diagrams](book/src/diagrams.md), [UML diagrams](book/src/uml.md) | the canvas, Mermaid, import, every UML notation |
-| [CSV and TSV files](book/src/csv.md) | the grid |
 | [Files on disk](book/src/vault.md) | naming, front matter, backup, configuration files |
 | [Syncing a vault](book/src/sync.md) | git in one key, or a cloud folder |
 | [Settings and appearance](book/src/settings.md) | themes, fonts, page width, changing a shortcut |

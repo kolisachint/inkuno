@@ -58,7 +58,6 @@ A previewed note only counts as opened once you click or type in it. It then mov
 - show in the file manager (Finder, Explorer);
 - duplicate (`Ctrl + D`), rename, move to a folder chosen in a list (what dragging does);
 - set an icon;
-- show as a list (on a folder, see [List pages](boards.md#list-pages));
 - move to the trash.
 
 A right click below the last line acts on the vault itself. For the open note, the same entries are in the command palette: **Open in the other pane**, **Copy the [[link]] of the note**, **Copy the path of the note**, **Copy the relative path of the note**, **Move the note to a folder…**, **Icon of the note…**, **Show the note's folder as a list**.

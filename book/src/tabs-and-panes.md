@@ -65,4 +65,4 @@ Drag a tab to arrange the window:
 
 The part that would receive it is tinted while you drag. `Esc` lets go without moving anything.
 
-A file dragged from the tree does the same. Dropped on the right half of a window that has a single pane, it opens a second pane. A folder opens as its [list page](boards.md#list-pages).
+A file dragged from the tree does the same. Dropped on the right half of a window that has a single pane, it opens a second pane.
