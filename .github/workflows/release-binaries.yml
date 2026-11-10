@@ -167,6 +167,8 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: error
+          # The staging folder is dot-prefixed, which upload-artifact skips by default.
+          include-hidden-files: true
       - name: Package Linux archive
         run: |
           set -euo pipefail
