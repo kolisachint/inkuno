@@ -34,17 +34,31 @@ Proven in the session that built it (24h → 30min target). Follow this literall
 
 ## 3. Minutes 20–25: CI judges, once per wave
 
-- Batch fixes by review; push once per wave, never per fix. One CI run judges
-  them all. Background `gh run watch` on every run; heartbeat on landing.
+- Batch fixes by review; burst pushes with one CI run judging the batch, never
+  a push per fix. Background `gh run watch` on every run; heartbeat on landing.
 - Fast tier first (fmt → check → clippy → unit tests), full matrix only on green.
+- Run `scripts/prune-agents.sh` between waves (dry-run default, `--apply` when
+  free space is under the threshold) so disk never blocks the next crew.
 
-## 4. Minutes 25–30: tag and release
+## 4. Minutes 25–30: PR, then the label gate releases
 
-- Tag `vX.Y.Z`, push the tag, release workflows build artifacts. Mechanical.
+- **PR rule: when the owner says "create a PR", create it and STOP. Merging is
+  the owner's decision.** Merge only when the owner explicitly confirms. Never
+  auto-merge to keep a pipeline moving.
+- Release flow (already wired in `.github/workflows/release-gate.yml`): apply
+  exactly one of `rust:patch`, `rust:minor`, `rust:major` to the PR; merging to
+  `main` triggers the gate → bump Cargo.toml, commit `chore: release X.Y.Z`,
+  tag, draft release with author notes, then `release-native.yml` builds
+  macOS + Linux and publishes only after every download verifies. Labels must
+  exist in the repo (created 2026-11-10; recreate with `gh label create` if
+  missing). Any merge without exactly one label is a no-op. The FIRST release
+  (no previous tag) stays manual via `scripts/release.sh`.
 
 ## Standing rules
 
-- Never push unless asked. Never commit on the user's branch unasked — writers
+- Never push unless asked. Never merge a PR unless the owner explicitly says
+  so — stop at the PR and report the link.
+- Never commit on the user's branch unasked — writers
   leave diffs uncommitted; the integrator commits grouped merges.
 - Batch all independent tool calls and subagent dispatches in one turn.
 - Keep a live todo list; park small calls in `docs/BACKLOG.md` instead of
