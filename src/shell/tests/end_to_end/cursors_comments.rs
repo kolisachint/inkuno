@@ -110,12 +110,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         gpui::Modifiers::none(),
     );
     cx.run_until_parked();
-    let (pos, card_dbg) = shell.read_with(cx, |s, cx| {
-        (
-            s.pane().editor.read(cx).position(),
-            format!("{card:?}"),
-        )
-    });
+    let (pos, card_dbg) = shell.read_with(cx, |s, cx| (s.pane().editor.read(cx).position(), format!("{card:?}")));
     assert_eq!(pos, 17, "card={card_dbg}");
     shell.update(cx, |s, cx| {
         s.pane()
