@@ -72,8 +72,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.dispatch_action(nav::ShowRecent);
     assert_eq!(vault::load_layout(), "recent rail 410\n");
 
-    // Full screen: the selection no longer moves the note; Enter gives it its place back.
-    cx.simulate_keystrokes("secondary-e secondary-m tab");
+    // Full screen: the selection no longer moves the note (arrows move it, Tab only
+    // walks the header buttons); Enter gives it its place back.
+    cx.simulate_keystrokes("secondary-e secondary-m down");
     let open = shell.read_with(cx, |s, _| s.pane().path.clone());
     assert!(shell.read_with(cx, |s, _| s.nav.panel == Panel::Full
         && s.nav.sel != s.pane().path));
