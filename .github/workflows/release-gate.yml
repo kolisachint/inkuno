@@ -224,6 +224,10 @@ jobs:
   release:
     needs: gate
     if: needs.gate.outputs.tag != ''
+    # The called workflow publishes the release, so it needs write access; a
+    # reusable workflow cannot be granted more than its caller holds.
+    permissions:
+      contents: write
     uses: ./.github/workflows/release-native.yml
     with:
       tag: ${{ needs.gate.outputs.tag }}
