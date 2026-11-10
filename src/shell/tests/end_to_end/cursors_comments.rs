@@ -81,11 +81,17 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(shell.read_with(cx, |s, _cx| s.palette.is_none() && !s.comments_shut));
     cx.run_until_parked();
     // Click the first card itself, wherever the column lays it out: fixed window
-    // coordinates drift whenever the chrome around the column moves.
+    // coordinates drift whenever the chrome around the column moves. A pointer
+    // hovers first, as in production, and the click lands on the comment's words
+    // in the card's lower body, away from the resolving check at the end of the
+    // row above (invisible until hovered, but hit-testable).
     let card = cx
         .debug_bounds("comment-0")
         .expect("the comments column shows its first card");
-    cx.simulate_click(card.center(), gpui::Modifiers::none());
+    let words = point(card.left() + px(24.), card.bottom() - px(18.));
+    cx.simulate_mouse_move(words, None, gpui::Modifiers::none());
+    cx.simulate_click(words, gpui::Modifiers::none());
+    cx.run_until_parked();
     assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position() == 17));
     shell.update(cx, |s, cx| {
         s.pane()
