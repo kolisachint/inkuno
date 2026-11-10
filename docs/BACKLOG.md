@@ -28,6 +28,11 @@ Decided 2026-11-09: documented here, dropped from active work. Each item says wh
 - **Platform crate** — audit verdict: extract `clock`/`export`/`link` now, `vault.rs` stays until logic crate lands. Re-check `export` (only caller is sheet clipboard — delete-don't-extract if sheet trim stands).
 - **Screenshots/og-image regen** — needs a display runner (`scripts/record-demo.sh`).
 
+## Product gaps (from e2e walk, 2026-11-10)
+- **ReplaceInVault live UI, dead engine** — `secondary-shift-enter` binding (`keymap.rs:55,468`) and the find-bar replace-vault button (`views/editor/find.rs:519-530`) fire a documented no-op (`replace_in_vault`). Remove the affordance or re-implement on a new vault-search home.
+- **Daily note has no chord** — `open_today` reachable only from the toolbar button (`render.rs:709`); Ctrl+J/palette entry cut with the nav modes. Confirm the button is the intended sole home.
+- **`inkuno --capture` gone** — desktop capture shortcut removed; `vault::capture` platform helper + tests remain (unused by the app).
+
 ## Process (standing)
 - 20-minute permission gate on all workers; fast-lane protocol (CI compiles, small slices, shared target, heartbeats).
 - `scripts/prune-agents.sh` runs on any disk-full stall.
