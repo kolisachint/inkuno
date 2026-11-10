@@ -90,7 +90,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("jet");
     cx.simulate_keystrokes("enter");
-    assert!(shell.read_with(cx, |s, _| s.told(Tone::Done, "Put back: « Jetée.md »")));
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Done, "Restored: Jetée.md")));
     j.settle(cx);
     assert!(root.join("Jetée.md").is_file() && !root.join(".trash/Jetée.md").exists());
     assert!(
