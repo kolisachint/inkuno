@@ -27,10 +27,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         point(view.width - px(60.), view.height - px(70.)),
         gpui::Modifiers::none(),
     );
-    assert!(
-        shell.read_with(cx, |s, _| s.told(Tone::Info, "no comments")
-            && !s.told(Tone::Busy, ""))
-    );
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "no comments")
+        && !s.told(Tone::Busy, "")));
     shell.update(cx, |s, cx| s.say(Tone::Busy, "Working", cx));
     cx.executor().advance_clock(TOAST);
     cx.run_until_parked();
