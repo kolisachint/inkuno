@@ -12,6 +12,9 @@ pub(super) struct LayoutKey {
     pub(super) cursor: usize,
     pub(super) revealed: Option<usize>,
     pub(super) marked: Option<Range<usize>>,
+    /// Version of the footnote definitions (see `Editor::foot_hash`): adding one restyles
+    /// even distant references.
+    pub(super) foot: u64,
 }
 
 /// What changed in the text since the last layout: its first `prefix` bytes
@@ -36,6 +39,8 @@ pub(super) struct Laid {
     pub(super) dollars: usize,
     /// Length of the front matter.
     pub(super) meta: usize,
+    /// Version of the footnote definitions the layout was made with.
+    pub(super) foot: u64,
 }
 
 /// A zone of the text to lay out again: the lines of the old layout `old` (indices),
@@ -282,8 +287,6 @@ pub(super) struct Row {
     pub(super) dx: Pixels,
     /// Table line shown as a grid: its cells, which wrap.
     pub(super) grid: Option<Rc<TableRow>>,
-    /// The section of another note this line embeds, framed under it.
-    pub(super) embed: Option<Rc<EmbedRow>>,
     /// The figure or the picture of the line cannot be read: what is said under it, in place of the picture.
     pub(super) broken: Option<&'static str>,
 }
@@ -332,9 +335,9 @@ impl Row {
         }
     }
 
-    /// Room taken under the line by its picture or its embedded section.
+    /// Room taken under the line by its picture.
     pub(super) fn below(&self) -> Pixels {
-        self.image_height() + self.embed.as_ref().map_or(px(0.), |e| e.height())
+        self.image_height()
     }
 
     /// Top of the picture's band: at least as tall as the enlarge button, so that a tiny
@@ -654,8 +657,10 @@ pub fn text_runs(
 }
 
 /// Byte ranges of `line` hidden when it is not the live one: its block prefix (`- `, `1. `,
-/// `> `, `- [ ] `, the indent kept so that nested items keep their level) and its inline style
-/// markers (`**`, backticks…). Links, tags, images, comments and callouts stay readable; a checked
+/// `> `, `- [ ] `, the indent kept so that nested items keep their level), its inline style
+/// markers (`**`, backticks…) and the address of a `[text](url)` link (`[` and `](url)` hide,
+/// the label alone stays, Typora-style; the clicked or edited line shows its source again).
+/// Bare addresses, tags, images, comments, callouts and footnote labels stay readable; a checked
 /// task keeps its (struck) text; code stays as is. The caller only asks for the kinds it hides.
 fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
@@ -672,26 +677,51 @@ fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, u
     if matches!(kind, Kind::Task(true)) {
         return out;
     }
-    // What stays readable: links, images, comments, callouts.
-    let links: Vec<Range<usize>> = md::links(line).into_iter().map(|(r, _)| r).collect();
+    // What stays readable: links, images, comments, callouts, footnote labels.
+    // (A footnote's brackets fade like other markers; only its label is kept.)
+    // Of a `[text](url)` link, only the label stays, its `[` and `](url)` hide (the address
+    // reads `QUIET`, so the loops below name those bytes explicitly).
+    let mut links: Vec<Range<usize>> = Vec::new();
+    let mut urls: Vec<Range<usize>> = Vec::new();
+    for (r, link) in md::links(line) {
+        if matches!(link, md::Link::Footnote(_)) {
+            continue;
+        }
+        if matches!(link, md::Link::Url(_))
+            && let Some((text, _)) = md::web_link(&line[r.clone()])
+        {
+            urls.push(r.start..r.start + text.start);
+            urls.push(r.start + text.end..r.end);
+        }
+        links.push(r);
+    }
+    let feet: Vec<Range<usize>> = md::footnote_ref(line)
+        .into_iter()
+        .map(|(r, _)| r.start + 2..r.end - 1)
+        .collect();
     let image = md::image(line).map(|(r, _)| r);
     let comments: Vec<Range<usize>> = md::comments(line).into_iter().map(|(w, ..)| w).collect();
     let callout = md::callout(line);
+    let addressed = |i: usize| urls.iter().any(|r| r.contains(&i));
     let kept = |i: usize| {
-        links.iter().any(|r| r.contains(&i))
+        (links.iter().any(|r| r.contains(&i))
+            || feet.iter().any(|r| r.contains(&i))
             || image.as_ref().is_some_and(|r| r.contains(&i))
             || comments.iter().any(|r| r.contains(&i))
-            || callout.as_ref().is_some_and(|r| r.contains(&i))
+            || callout.as_ref().is_some_and(|r| r.contains(&i)))
+            && !addressed(i)
+    };
+    let hidden_byte = |i: usize| {
+        flags[i] & md::DIM != 0
+            && flags[i] & md::CODE == 0
+            && (flags[i] & md::QUIET == 0 || addressed(i))
+            && !kept(i)
     };
     let mut i = marker;
     while i < line.len() {
-        if flags[i] & md::DIM != 0 && flags[i] & (md::CODE | md::QUIET) == 0 && !kept(i) {
+        if hidden_byte(i) {
             let mut j = i + 1;
-            while j < line.len()
-                && flags[j] & md::DIM != 0
-                && flags[j] & (md::CODE | md::QUIET) == 0
-                && !kept(j)
-            {
+            while j < line.len() && hidden_byte(j) {
                 j += 1;
             }
             out.push((i, j));
@@ -733,6 +763,11 @@ impl Editor {
         // Treat it as a separate zone if long notes with front matter make you wait.
         let meta = md::front_matter(&self.content);
         if meta != laid.meta || self.dmg.is_some_and(|d| d.prefix < meta) {
+            return None;
+        }
+        // A definition added or removed restyles every reference, however far: only a full
+        // layout redoes them all (the per-line style ids carry the same version).
+        if laid.foot != self.foot_hash() {
             return None;
         }
         // Touched text, in bytes of the old layout (`p..=q`), and its shift.
@@ -978,11 +1013,8 @@ impl Editor {
     /// Each frame: the heavy layout is only redone if the text, the width, the theme
     /// or the cursor changed; otherwise, only what depends on scrolling is recomputed.
     pub(super) fn layout(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
-        // A note shown in an embed changed on disk: every line is laid out again.
-        if self.embeds.poll() {
-            self.epoch += 1;
-            self.laid_out = None;
-        }
+        // Footnote definitions first: every reference below depends on them.
+        self.feet();
         let key = LayoutKey {
             version: self.version,
             width: f32::from(bounds.size.width).to_bits(),
@@ -990,6 +1022,7 @@ impl Editor {
             cursor: self.cursor(),
             revealed: self.revealed,
             marked: self.marked.clone(),
+            foot: self.foot_hash(),
         };
         if self.laid_out.as_ref() != Some(&key) {
             self.laid_out = None;
@@ -1080,15 +1113,24 @@ impl Editor {
                     theme: &t,
                     style: 0,
                 };
-                lines.iter().all(|(_, l)| md::is_table_line(l))
-                    && grid::geometry(
+                lines.iter().all(|(_, l)| md::is_table_line(l)) && {
+                    let foot = self.foot_hash();
+                    let keys = self.foot_keys();
+                    let defined = |label: &str| {
+                        let key = label.to_lowercase();
+                        keys.iter().any(|k| k == &key)
+                    };
+                    grid::geometry(
                         &mut grid::Cache::default(),
                         &text_system,
                         &look,
                         room,
                         &lines,
+                        foot,
+                        &defined,
                     )
                     .same(geom)
+                }
             })
         });
         // A ``` without a closing fence opens no block: otherwise each ``` typed would
@@ -1175,7 +1217,6 @@ impl Editor {
         };
         let mut cells = std::mem::take(&mut self.cells);
         cells.next_frame();
-        let mut embeds = std::mem::take(&mut self.embeds);
         // Lines of a table already laid out, waiting for their turn in the loop.
         let mut pending: VecDeque<Option<Rc<TableRow>>> = VecDeque::new();
         let empty = Rc::new(Shaped {
@@ -1192,6 +1233,14 @@ impl Editor {
         let mut old = std::mem::take(&mut self.figures);
         let (mut waiting, before) = (Vec::new(), std::mem::take(&mut self.waiting));
         let mut kept = FastMap::default();
+        // Footnote definitions of the text (fresh: `layout` computed them): a definition added
+        // or removed restyles every reference, so the style ids below carry their version.
+        let foot = self.foot_hash();
+        let keys: Vec<String> = self.feet.iter().map(|d| d.label.to_lowercase()).collect();
+        let defined = |label: &str| {
+            let key = label.to_lowercase();
+            keys.iter().any(|k| k == &key)
+        };
         // Mermaid or `$$` block in progress: its start and its source.
         let mut block: Option<(usize, String)> = None;
         let marked = self.marked.clone();
@@ -1326,7 +1375,6 @@ impl Editor {
                         tint: None,
                         dx: px(0.),
                         grid: None,
-                        embed: None,
                         broken: None,
                     });
                     y += height;
@@ -1436,6 +1484,8 @@ impl Editor {
                             &look,
                             room,
                             &block[..grid::SAMPLE],
+                            foot,
+                            &defined,
                         ));
                         let (first, n, lh) = (rows.len(), block.len(), grid::line_height(&t));
                         for (k, &(at, text)) in block.iter().enumerate() {
@@ -1459,7 +1509,6 @@ impl Editor {
                                 tint: None,
                                 dx: px(0.),
                                 grid: None,
-                                embed: None,
                                 broken: None,
                             });
                             y += height;
@@ -1482,6 +1531,8 @@ impl Editor {
                         &block,
                         cursor,
                         marked.as_ref(),
+                        foot,
+                        &defined,
                     )
                     .iter()
                     .cloned()
@@ -1533,19 +1584,18 @@ impl Editor {
                         .map(|m| (m.start.wrapping_sub(offset), m.end.wrapping_sub(offset)));
                     let lang = (kind == Kind::Code).then_some(&lang);
                     let mut hasher = Fast::default();
+                    // Two halves: thirteen entries do not fit in one hashed tuple.
                     (
-                        style,
-                        line,
-                        kind,
-                        marker,
-                        math,
-                        lang,
-                        live,
-                        near,
-                        f32::from(width).to_bits(),
-                        f32::from(room).to_bits(),
-                        header,
-                        tinted,
+                        (style, line, kind, marker, math, lang),
+                        (
+                            live,
+                            near,
+                            f32::from(width).to_bits(),
+                            f32::from(room).to_bits(),
+                            header,
+                            tinted,
+                            foot,
+                        ),
                     )
                         .hash(&mut hasher);
                     hasher.finish()
@@ -1581,6 +1631,8 @@ impl Editor {
                             }
                         } else if !code && kind != Kind::Rule {
                             md::inline(line, marker, &mut flags);
+                            // Footnotes: references without a definition stay literal.
+                            md::footnote_flags(line, &mut flags, &defined);
                             // Formula on the line: its source stays readable, like code.
                             if let Some((range, source, display)) = md::math(line)
                                 && range.start >= marker
@@ -1653,9 +1705,11 @@ impl Editor {
                                     | Kind::Ordered
                                     | Kind::Task(_)
                             );
-                        let elide = hide
-                            .then(|| elided(line, marker, kind, &flags))
-                            .unwrap_or_default();
+                        let elide = if hide {
+                            elided(line, marker, kind, &flags)
+                        } else {
+                            Default::default()
+                        };
                         let mut shown = Cow::Borrowed(line);
                         let mut subs = Vec::new();
                         if !signs.is_empty() || !elide.is_empty() {
@@ -1819,7 +1873,6 @@ impl Editor {
                     .picture
                     .as_ref()
                     .and_then(|path| find_picture(&self.dirs, &self.images, path));
-                let has_file = file.is_some();
                 let svg = file
                     .as_ref()
                     .is_some_and(|f| f.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg")));
@@ -1840,8 +1893,8 @@ impl Editor {
                             .map(|(source, display)| Source::Formula(source, display))
                     });
                 // An SVG is redrawn in the theme's colors, and every time its file
-                // changes: its date is part of its key. A Inkuno diagram takes the ink of the
-                // text; an SVG from elsewhere is made readable (HTML text, `light-dark()`).
+                // changes: its date is part of its key. It is made readable
+                // (HTML text, `light-dark()`).
                 if svg
                     && let Some(file) = &file
                     && let Ok(stamp) = fs::metadata(file).and_then(|m| m.modified())
@@ -1850,15 +1903,11 @@ impl Editor {
                         key(3, &format!("{}{stamp:?}", file.display())).0,
                         key(3, &file.display().to_string()).1,
                     );
-                    let (path, ink, dark) =
-                        (file.clone(), crate::views::canvas::neutral(t), look.dark);
+                    let (path, dark) = (file.clone(), look.dark);
                     let own = cached(&mut old, &mut kept, (k, family), false, || {
                         let make = move || {
                             let text = fs::read_to_string(&path).ok()?;
-                            Some(
-                                Diagram::from_svg(&text)
-                                    .map_or_else(|| svg::readable(&text, dark), |d| d.to_svg(ink)),
-                            )
+                            Some(svg::readable(&text, dark))
                         };
                         drawn(
                             job((k, family), Arc::new(make)),
@@ -1897,15 +1946,6 @@ impl Editor {
                     Some((image, size(s.width * scale, s.height * scale)))
                 });
                 let enlarge = enlarge.filter(|_| image.is_some());
-                // `![[Note#Heading]]` alone on a line, that is no picture and no other file: the section it points at,
-                // framed under it.
-                let embed = (!code && !has_file && made.picture.is_some())
-                    .then(|| crate::logic::embed::parse(line))
-                    .flatten()
-                    .filter(|target| !vault::is_file_shown(Path::new(&target.note)))
-                    .map(|target| {
-                        Rc::new(embeds.row(&target, width, self, frame as u64, window, cx))
-                    });
 
                 let text_height = made.line.as_ref().map_or(lh, |l| l.size(lh).height);
                 // A code block and a callout have room inside their fill, above the first line and under the last.
@@ -1961,18 +2001,10 @@ impl Editor {
                     tint,
                     dx: px(0.),
                     grid: grid_row,
-                    embed: None,
                     broken,
                 };
-                let height = row.height
-                    + row.image_height()
-                    + embed.as_ref().map_or(px(0.), |e| e.height())
-                    + row.gap;
-                rows.push(Row {
-                    height,
-                    embed,
-                    ..row
-                });
+                let height = row.height + row.image_height() + row.gap;
+                rows.push(Row { height, ..row });
                 y += height;
                 offset += line.len() + 1;
             }
@@ -1985,11 +2017,8 @@ impl Editor {
             last.height += TABLE_GAP;
             y += TABLE_GAP;
         }
-        embeds.sweep(&rows, frame as u64);
         self.rows = rows;
         self.rows_revision = self.revision;
-        loading |= embeds.loading(cx);
-        self.embeds = embeds;
         // Reused very big tables: their lines are no longer the ones that were styled.
         for (geom, first) in carried {
             let end = first
@@ -2046,6 +2075,7 @@ impl Editor {
             fences: fences0,
             dollars: dollars0,
             meta,
+            foot,
         });
         // Lines no longer in use (deleted, changed) go when they outnumber the note.
         if shaped.len() > self.rows.len() * 2 + 256 {
@@ -2090,6 +2120,14 @@ impl Editor {
         if self.big.is_empty() {
             return;
         }
+        // Footnote definitions, for the cells shaped below (see `footnote_flags`).
+        self.feet();
+        let foot = self.foot_hash();
+        let keys = self.foot_keys();
+        let defined = |label: &str| {
+            let key = label.to_lowercase();
+            keys.iter().any(|k| k == &key)
+        };
         let (cursor, t) = (self.cursor(), self.theme);
         let at = self.row_at(cursor);
         let look = grid::Look {
@@ -2141,6 +2179,8 @@ impl Editor {
                         k + 1 == n,
                         (row.start, text),
                         self.marked.as_ref(),
+                        foot,
+                        &defined,
                     );
                     row.grid = Some(Rc::new(built));
                 }
@@ -2228,22 +2268,6 @@ impl Editor {
             });
         }
         self.frames(reveal, window);
-    }
-
-    /// What an embedded section shows: where it is on screen, and what is visible of it.
-    pub(super) fn place_embedded(
-        &mut self,
-        origin: Point<Pixels>,
-        clip: Bounds<Pixels>,
-        window: &mut Window,
-    ) {
-        self.origin = origin;
-        self.viewport = clip;
-        self.scroll_y = px(0.);
-        self.pointer = point(px(-1e5), px(-1e5));
-        // Everything of it is near enough: a very big table of it has all its cells.
-        self.materialize(Bounds::new(origin, size(self.width, self.total_y)), window);
-        self.frames(false, window);
     }
 
     /// The frame of each table of the layout, and the zones of its handles.
@@ -2481,8 +2505,14 @@ mod tests {
         assert_eq!(hidden("- [x] done"), ["- [x] "]);
         // A heading keeps its title (its `# ` goes with the lead, not here).
         assert_eq!(hidden("# Title **b**"), ["**", "**"]);
-        // Phase 3 stays readable: links, images, comments, callouts, tables.
-        assert_eq!(hidden("[t](https://example.com)"), Vec::<&str>::new());
+        // A `[text](url)` link shows its label alone off-live; the clicked or edited
+        // line shows its source again. Bare addresses, wikilinks, tags, images,
+        // comments and callouts keep their source.
+        assert_eq!(
+            hidden("[t](https://example.com)"),
+            ["[", "](https://example.com)"]
+        );
+        assert_eq!(hidden("see https://example.com here"), Vec::<&str>::new());
         assert_eq!(hidden("see [[note]] here"), Vec::<&str>::new());
         assert_eq!(hidden("a #tag b"), Vec::<&str>::new());
         assert_eq!(hidden("![a](p.png)"), Vec::<&str>::new());
@@ -2565,16 +2595,16 @@ mod tests {
         let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
         let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
         let text = note().to_string();
-        let at = |line: usize| starts(&text)[line];
         editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
         cx.run_until_parked();
         // A real frame: the editor lays itself out while painting.
         let draw = |cx: &mut gpui::VisualTestContext| {
-            cx.update(|window, cx| window.draw(cx));
+            let _ = cx.update(|window, cx| window.draw(cx));
             cx.run_until_parked();
         };
         draw(cx);
-        // Nothing is live after a load: markers hide, fences/links/tables keep their source.
+        // Nothing is live after a load: markers and link addresses hide; fences, bare
+        // addresses and tables keep their source.
         let shown = |cx: &mut gpui::VisualTestContext, lines: &[usize]| {
             editor.read_with(cx, |e, _| {
                 (0..lines.len())
@@ -2593,10 +2623,7 @@ mod tests {
         assert_eq!(rows[6], ("task done".to_string(), false));
         assert_eq!(rows[8], ("first".to_string(), false));
         assert_eq!(rows[10], ("quote here".to_string(), false));
-        assert_eq!(
-            rows[12],
-            ("[our](https://example.com) link".to_string(), false)
-        );
+        assert_eq!(rows[12], ("our link".to_string(), false));
         assert_eq!(rows[14], ("code bit".to_string(), false));
         // Tables keep their source in their cells (phase 3): no hidden bytes, drawn as a grid.
         for l in [16, 17, 18] {
@@ -2610,8 +2637,8 @@ mod tests {
         assert_eq!(rows[23], (String::new(), false));
         assert_eq!(rows[24], ("---".to_string(), false));
         // Clicking the bold line reveals it; the others keep hiding.
-        let middle = editor.read_with(cx, |e, _| e.point_of(at(2) + 8).unwrap());
-        cx.simulate_click(middle, gpui::Modifiers::none());
+        let bold_middle = editor.read_with(cx, |e, _| e.point_of(at(2) + 8).unwrap());
+        cx.simulate_click(bold_middle, gpui::Modifiers::none());
         cx.run_until_parked();
         assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
         draw(cx);
@@ -2619,6 +2646,26 @@ mod tests {
         assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
         assert_eq!(rows[0], ("Title".to_string(), false));
         assert_eq!(rows[4], ("item one".to_string(), false));
+        // Clicking the link line reveals its address; the others keep hiding.
+        let link_middle = editor.read_with(cx, |e, _| e.point_of(at(12) + 1).unwrap());
+        cx.simulate_click(link_middle, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(12)));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(
+            rows[12],
+            ("[our](https://example.com) link".to_string(), true)
+        );
+        assert_eq!(rows[2], ("Hello bold and italic.".to_string(), false));
+        // Clicking back on the bold line hides the link address again.
+        cx.simulate_click(bold_middle, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
+        assert_eq!(rows[12], ("our link".to_string(), false));
         // A plain keyboard move does not reveal: the cursor is on the title, still rendered.
         editor.update(cx, |e, cx| e.place_cursor(at(0) + 2, cx));
         draw(cx);
@@ -2670,5 +2717,132 @@ mod tests {
             "- item one"
         );
         assert_eq!(editor.read_with(cx, |e, _| e.text().to_string()), edited);
+    }
+
+    /// A note with footnotes, for the test below.
+    fn footed() -> &'static str {
+        "See [^a] and [^a] again.\n\
+         \n\
+         | a | b |\n\
+         |---|---|\n\
+         | [^a] | x |\n\
+         \n\
+         But [^x] stays.\n\
+         \n\
+         [^a]: the note.\n"
+    }
+
+    #[gpui::test]
+    fn footnote_markers_hide_and_ctrl_click_jumps(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        let text = footed().to_string();
+        let at = |line: usize| starts(&text)[line];
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            let _ = cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        draw(cx);
+        let shown = |cx: &mut gpui::VisualTestContext| {
+            editor.read_with(cx, |e, _| {
+                (0..9).map(|l| displayed(e, at(l))).collect::<Vec<_>>()
+            })
+        };
+        // The cursor's line starts out live: it shows its source.
+        assert_eq!(shown(cx)[0], ("See [^a] and [^a] again.".to_string(), true));
+        // Plain-clicking another line reveals it; the footnote line hides its markers.
+        let plain = editor.read_with(cx, |e, _| e.point_of(at(6) + 2).unwrap());
+        cx.simulate_click(plain, gpui::Modifiers::none());
+        cx.run_until_parked();
+        draw(cx);
+        let rows = shown(cx);
+        // Defined references hide their brackets off-live; the label stays.
+        assert_eq!(rows[0], ("See a and a again.".to_string(), false));
+        // An undefined reference stays literal, even revealed.
+        assert_eq!(rows[6], ("But [^x] stays.".to_string(), true));
+        // The definition shows its label where it is.
+        assert_eq!(rows[8], ("a: the note.".to_string(), false));
+        // Tables keep their source: no hidden bytes, drawn as a grid.
+        for l in [2, 3, 4] {
+            let (grid, subs) = editor.read_with(cx, |e, _| {
+                let r = e.rows.iter().find(|r| r.start == at(l)).unwrap();
+                (r.grid.is_some(), r.shaped.subs.len())
+            });
+            assert!(grid && subs == 0, "table line {l}");
+        }
+        // Ctrl+clicking a reference jumps to its definition, without revealing it.
+        let held = gpui::Modifiers::secondary_key();
+        let first = text.find("[^a]").unwrap();
+        let middle = editor.read_with(cx, |e, _| e.point_of(first + 2).unwrap());
+        cx.simulate_click(middle, held);
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.caret()), at(8));
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(6)));
+        // Ctrl+clicking the definition's label cycles through its references, the table
+        // cell included.
+        let second = text[first + 1..].find("[^a]").unwrap() + first + 1;
+        let third = text.find("| [^a]").unwrap() + 2;
+        for want in [first, second, third, first] {
+            draw(cx);
+            let label = editor.read_with(cx, |e, _| e.point_of(at(8) + 2).unwrap());
+            cx.simulate_click(label, held);
+            cx.run_until_parked();
+            assert_eq!(editor.read_with(cx, |e, _| e.caret()), want);
+        }
+        // Ctrl+clicking an undefined reference is a plain click: no jump.
+        let missing = text.find("[^x]").unwrap() + 2;
+        let spot = editor.read_with(cx, |e, _| e.point_of(missing).unwrap());
+        cx.simulate_click(spot, held);
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.caret()), missing);
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(6)));
+        // The pointer turns into a hand over defined footnotes only, with Ctrl held.
+        draw(cx);
+        let hand_at = |at: usize| {
+            let spot = editor.read_with(cx, |e, _| e.point_of(at).unwrap());
+            editor.read_with(cx, |e, _| e.hand_at(spot, held))
+        };
+        assert_eq!(hand_at(first + 2), Some(CursorStyle::PointingHand));
+        assert_eq!(hand_at(at(8) + 2), Some(CursorStyle::PointingHand));
+        assert_eq!(hand_at(missing), None);
+        assert_eq!(
+            editor.read_with(cx, |e, _| e
+                .hand_at(e.point_of(first + 2).unwrap(), gpui::Modifiers::none())),
+            None
+        );
+    }
+
+    #[gpui::test]
+    fn footnote_definitions_restyle_distant_references(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        let text = "See [^a] here.\n".to_string();
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            let _ = cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        draw(cx);
+        let shown = || editor.read_with(cx, |e, _| displayed(e, 0).0);
+        // Without a definition the reference stays literal.
+        assert_eq!(shown(), "See [^a] here.".to_string());
+        // Adding the definition restyles the distant reference: its brackets hide.
+        editor.update(cx, |e, cx| {
+            e.move_to(0, cx);
+            e.edit(0..0, "[^a]: the note.\n\n", cx);
+        });
+        draw(cx);
+        let edited = editor.read_with(cx, |e, _| e.text().to_string());
+        assert_eq!(edited, "[^a]: the note.\n\nSee [^a] here.\n");
+        let at = starts(&edited);
+        assert_eq!(
+            editor.read_with(cx, |e, _| displayed(e, at[2]).0),
+            "See a here.".to_string()
+        );
     }
 }

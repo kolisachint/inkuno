@@ -74,11 +74,13 @@ struct Page {
 
 impl Page {
     fn load(&self, cx: &mut gpui::VisualTestContext, text: &str) {
-        let len = text.len();
+        // Cursor at the top: `load` reveals the cursor, and from the end of a note
+        // holding a picture taller than the window the picture would scroll fully
+        // out, taking its button with it. Placement checks need it in view.
         self.shell.update(cx, |s, cx| {
             s.pane()
                 .editor
-                .update(cx, |e, cx| e.load(text.to_string(), len, cx))
+                .update(cx, |e, cx| e.load(text.to_string(), 0, cx))
         });
         self.shell.update_in(cx, |s, window, cx| {
             window.focus(&s.pane().editor.focus_handle(cx))

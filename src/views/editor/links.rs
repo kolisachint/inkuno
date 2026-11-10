@@ -63,16 +63,6 @@ impl Editor {
         self.move_to(sel.start + at, cx);
     }
 
-    /// Replaces all the text, like a keystroke: one undo step, the note needs saving.
-    pub fn rewrite(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.more.clear();
-        // A single step: `splice` would add a second one for a multi-line text.
-        self.push_undo(true);
-        self.held = true;
-        self.splice(0..self.content.len(), text, cx);
-        self.held = false;
-    }
-
     /// Resolves the comment starting at byte `at`.
     pub fn resolve_comment(&mut self, at: usize, cx: &mut Context<Self>) {
         self.move_to(self.clamp(at), cx);

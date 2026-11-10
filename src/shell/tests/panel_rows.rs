@@ -199,40 +199,6 @@ fn the_recent_name_keeps_its_room_before_its_folder(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// The vault search: the field has a line of its own, the panel's full width, so its hint is whole at 260 px
-/// (in French too, where it is longer); the chevron and the three settings are under it.
-#[gpui::test]
-fn the_vault_search_field_has_its_own_line(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = start(cx, "panel-search");
-    fs::write(root.join("Note.md"), "# N\n").unwrap();
-    shell.update(cx, |s, cx| s.rescan(&root, cx));
-    cx.simulate_resize(size(px(1000.), px(720.)));
-    cx.simulate_keystrokes("secondary-shift-f");
-    for width in [180., 260., 600.] {
-        shell.update(cx, |s, cx| {
-            s.nav.list_w = px(width);
-            cx.notify();
-        });
-        let panel = bounds(cx, "nav-panel".into()).unwrap();
-        let (field, chevron, regex) = ["vault-query", "vault-chevron", "vault-regex"]
-            .map(|id| bounds(cx, id.into()).unwrap())
-            .into();
-        // The French hint, at 13 px, is about 150 px with its padding: whole from 260 px.
-        assert!(
-            field.size.width >= panel.size.width - px(24.),
-            "{width}: {field:?} in {panel:?}"
-        );
-        assert!(
-            field.bottom() <= chevron.top() && field.bottom() <= regex.top(),
-            "{width}: the settings are under the field: {field:?} {chevron:?} {regex:?}"
-        );
-        if width >= 260. {
-            assert!(field.size.width >= px(160.), "{width}: hint cut: {field:?}");
-        }
-    }
-    let _ = fs::remove_dir_all(&root);
-}
-
 /// Other files than notes carry their extension next to the name: whole and on the name's line at every panel
 /// width and zoom, the ellipsis in the name; notes and folders have none.
 #[gpui::test]

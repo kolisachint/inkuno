@@ -2,21 +2,12 @@
 
 use super::*;
 
-const FILES: [&str; 6] = [
-    "Note.md",
-    "Drawing.svg",
-    "Foreign.svg",
-    "Picture.png",
-    "Data.csv",
-    "Data.tsv",
-];
+const FILES: [&str; 4] = ["Note.md", "Drawing.svg", "Foreign.svg", "Picture.png"];
 
 fn fixtures(root: &Path) {
     fs::write(root.join("Note.md"), "# Note\n\n![](Foreign.svg)\n").unwrap();
     fs::write(root.join("Other.md"), "# Other\n\n[[Note]]\n").unwrap();
-    let mut diagram = Diagram::default();
-    diagram.add_shape(diagram::Form::Rect, 20., 20., 120., 60.);
-    fs::write(root.join("Drawing.svg"), diagram.to_svg(diagram::COLORS[0])).unwrap();
+    fs::write(root.join("Drawing.svg"), r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##).unwrap();
     fs::write(root.join("Foreign.svg"), r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##).unwrap();
     let svg = fs::read_to_string(root.join("Foreign.svg")).unwrap();
     let png = crate::ui::figure::png(&svg, 1., 0xffffff).unwrap();
@@ -85,59 +76,7 @@ fn the_current_file_follows_mixed_views(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-tab");
     current(cx, "Note.md");
     cx.simulate_keystrokes("ctrl-shift-tab");
-    current(cx, "Data.tsv");
-}
-
-/// Graph nodes use the displayed file; tables have no node, and backlinks stay on the last note.
-#[gpui::test]
-fn the_current_file_in_the_graph_is_not_the_backlink_anchor(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = start(cx, "current-graph");
-    fixtures(&root);
-    shell.update(cx, |s, cx| s.rescan(&root, cx));
-    shell.update_in(cx, |s, window, cx| {
-        s.open_from_nav(&root.join("Note.md"), window, cx);
-        s.show_nav(Mode::Graph, false, window, cx);
-    });
-    frames(cx);
-    for file in FILES {
-        shell.update_in(cx, |s, window, cx| {
-            s.open_from_nav(&root.join(file), window, cx)
-        });
-        frames(cx);
-        // Selection is independent of the document. Do not preview the selected row here.
-        shell.update(cx, |s, cx| {
-            s.nav.sel = Some(root.join("Other.md"));
-            cx.notify();
-        });
-        frames(cx);
-        shell.read_with(cx, |s, cx| {
-            let expected =
-                (!file.ends_with(".csv") && !file.ends_with(".tsv")).then(|| root.join(file));
-            assert_eq!(
-                s.graph.read(cx).indicated(),
-                (expected.as_deref(), Some(root.join("Other.md").as_path())),
-                "{file}"
-            );
-            assert_eq!(
-                s.nav.anchor,
-                Some(root.join("Note.md")),
-                "backlinks while showing {file}"
-            );
-        });
-    }
-    shell.update_in(cx, |s, window, cx| {
-        s.show_nav(Mode::Links, false, window, cx)
-    });
-    frames(cx);
-    assert_eq!(
-        shell.read_with(cx, |s, _| s
-            .nav
-            .rows
-            .iter()
-            .map(|r| r.path.clone())
-            .collect::<Vec<_>>()),
-        vec![root.join("Other.md")]
-    );
+    current(cx, "Picture.png");
 }
 
 /// Palette and history use the same current marker as the tree, in every supported view.
@@ -157,15 +96,6 @@ fn the_current_file_follows_the_palette_and_history(cx: &mut TestAppContext) {
         cx.simulate_keystrokes("secondary-p");
         cx.simulate_input(file.trim_end_matches(".md"));
         cx.simulate_keystrokes("enter");
-        current(cx, file);
-        let (back, forward) = if cfg!(target_os = "macos") {
-            ("cmd-[", "cmd-]")
-        } else {
-            ("alt-left", "alt-right")
-        };
-        cx.simulate_keystrokes(back);
-        current(cx, "Other.md");
-        cx.simulate_keystrokes(forward);
         current(cx, file);
     }
 }
@@ -210,7 +140,6 @@ fn the_current_file_is_separate_from_tree_selection(cx: &mut TestAppContext) {
             s.nav.marked.contains(&root.join("Note.md"))
                 && s.nav.marked.contains(&root.join("Other.md"))
         );
-        assert_eq!(s.nav.anchor, Some(root.join("Note.md")));
     });
     // Keyboard preview keeps input in the tree while marking the file it displays.
     shell.update_in(cx, |s, window, cx| {
@@ -269,7 +198,7 @@ fn the_current_file_does_not_fall_back_after_external_changes(cx: &mut TestAppCo
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     shell.update_in(cx, |s, window, cx| {
         s.open_from_nav(&root.join("Note.md"), window, cx);
-        s.show_nav(Mode::Graph, false, window, cx);
+        s.show_nav(Mode::Tree, false, window, cx);
     });
     for (from, to) in [
         ("Foreign.svg", Some("Renamed.svg")),
@@ -278,30 +207,19 @@ fn the_current_file_does_not_fall_back_after_external_changes(cx: &mut TestAppCo
     ] {
         shell.update(cx, |s, cx| s.open_note(&root.join(from), cx));
         frames(cx);
-        assert_eq!(
-            shell.read_with(cx, |s, cx| s
-                .graph
-                .read(cx)
-                .indicated()
-                .0
-                .map(Path::to_path_buf)),
-            Some(root.join(from))
-        );
         match to {
             Some(to) => fs::rename(root.join(from), root.join(to)).unwrap(),
             None => fs::remove_file(root.join(from)).unwrap(),
         }
         shell.update(cx, |s, cx| s.rescan(&root, cx));
         frames(cx);
-        shell.read_with(cx, |s, cx| {
-            assert_eq!(s.graph.read(cx).indicated().0, None);
+        shell.read_with(cx, |s, _cx| {
             assert_eq!(s.pane().displayed_path(), Some(&root.join(from)));
             assert!(
                 !s.nav_rows()
                     .iter()
                     .any(|row| Some(&row.path) == s.pane().displayed_path())
             );
-            assert_eq!(s.nav.anchor, Some(root.join("Note.md")));
         });
     }
 }

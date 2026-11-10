@@ -41,7 +41,7 @@ pub(super) fn crowded(many: bool, rects: &[layout::Rect], area: Size<Pixels>) ->
 pub(super) const PANE_RATIO: std::ops::RangeInclusive<f32> = 0.2..=0.8;
 
 /// What one tab holds: a note and its editor, what is shown in its place (image, diagram,
-/// table, list page), and the note's kanban view.
+/// list page).
 pub(super) struct Pane {
     /// A tool of the side panel shown as this tab (the graph, the calendar) instead of a file.
     pub(super) tool: Option<Mode>,
@@ -71,13 +71,9 @@ pub(super) struct Pane {
     /// The note was created in this pane: left empty, its file does not stay in the vault.
     pub(super) fresh: bool,
     pub(super) dirty: bool,
-    /// A canvas write failed: keep its live diagram until a retry succeeds.
-    pub(super) canvas_dirty: bool,
     /// The note's file as last read or written here: what another program changed since is
     /// merged into what is typed (`Shell::take_outside`), not overwritten.
     pub(super) base: String,
-    /// The note shown as a kanban board, when it is one.
-    pub(super) board: kanban::Board,
     /// List page shown in place of the note.
     pub(super) listing: Option<nav::Listing>,
     /// What is shown is only a preview (arrows in the tree, graph): the history
@@ -120,12 +116,8 @@ pub(super) struct FileView {
 pub(super) enum FileKind {
     /// A picture, drawn as is.
     Image,
-    /// A Inkuno diagram, open in its canvas.
-    Drawing(Entity<Canvas>),
-    /// An SVG from elsewhere, in the zoomable viewer.
+    /// An SVG file, in the zoomable viewer.
     Svg(Entity<viewer::Viewer>),
-    /// A CSV or TSV table, in its grid.
-    Sheet(Entity<Sheet>),
 }
 
 /// The saved layout (file `panes`): the left pane's share, then each pane's tabs and the position
@@ -187,32 +179,13 @@ impl Pane {
         self.file.as_ref().map(|file| &file.path)
     }
 
-    pub(super) fn drawing(&self) -> Option<&Entity<Canvas>> {
-        match &self.file {
-            Some(FileView {
-                kind: FileKind::Drawing(canvas),
-                ..
-            }) => Some(canvas),
-            _ => None,
-        }
-    }
-
+    #[cfg(test)]
     pub(super) fn viewer(&self) -> Option<&Entity<viewer::Viewer>> {
         match &self.file {
             Some(FileView {
                 kind: FileKind::Svg(viewer),
                 ..
             }) => Some(viewer),
-            _ => None,
-        }
-    }
-
-    pub(super) fn sheet(&self) -> Option<&Entity<Sheet>> {
-        match &self.file {
-            Some(FileView {
-                kind: FileKind::Sheet(sheet),
-                ..
-            }) => Some(sheet),
             _ => None,
         }
     }
@@ -238,9 +211,7 @@ impl Shell {
             new_dir: None,
             fresh: false,
             dirty: false,
-            canvas_dirty: false,
             base: String::new(),
-            board: kanban::Board::new(cx),
             listing: None,
             peek: false,
         }
@@ -266,9 +237,7 @@ impl Shell {
             &self.pane().listing,
             self.pane().file.as_ref().map(|file| &file.kind),
         ) {
-            (_, Some(FileKind::Sheet(sheet))) => window.focus(&sheet.focus_handle(cx)),
             (Some(listing), _) => window.focus(&listing.filter.focus_handle(cx)),
-            (None, Some(FileKind::Drawing(canvas))) => window.focus(&canvas.focus_handle(cx)),
             (None, Some(FileKind::Svg(viewer))) => window.focus(&viewer.focus_handle(cx)),
             (None, Some(FileKind::Image)) => window.focus(&self.pane().zone),
             (None, None) => window.focus(&self.pane().editor.focus_handle(cx)),
@@ -285,8 +254,6 @@ impl Shell {
     pub(super) fn tab_has_focus(&self, tab: usize, window: &Window, cx: &App) -> bool {
         let pane = &self.panes[tab];
         let file = match pane.file.as_ref().map(|file| &file.kind) {
-            Some(FileKind::Sheet(sheet)) => sheet.focus_handle(cx).is_focused(window),
-            Some(FileKind::Drawing(canvas)) => canvas.focus_handle(cx).is_focused(window),
             Some(FileKind::Svg(viewer)) => viewer.focus_handle(cx).is_focused(window),
             _ => false,
         };
@@ -1025,37 +992,8 @@ impl Shell {
         }
     }
 
-    /// The table shown, if there is one.
-    pub(super) fn shown_sheet(&self) -> Option<Entity<Sheet>> {
-        self.pane().sheet().cloned()
-    }
-
-    pub(super) fn flush_sheet(&mut self, cx: &mut Context<Self>) -> bool {
-        self.pane()
-            .sheet()
-            .is_none_or(|sheet| sheet.update(cx, |sheet, cx| sheet.flush(cx)))
-    }
-
-    /// Shows `file` in the active pane in place of its note, or the note again (`None`). A table
-    /// that is left keeps its place in the history and is saved first.
-    pub(super) fn set_file(&mut self, file: Option<FileView>, cx: &mut Context<Self>) -> bool {
-        let leaving = self
-            .pane()
-            .file
-            .as_ref()
-            .is_some_and(|old| file.as_ref().is_none_or(|new| new.path != old.path));
-        if leaving && self.pane().sheet().is_some() {
-            // What `track` would have kept on the next render, while the table still existed.
-            if !self.pane().peek {
-                self.mark_place(cx);
-            }
-            if !self.flush_sheet(cx) {
-                return false;
-            }
-        }
-        if leaving && !self.flush_canvas(cx) {
-            return false;
-        }
+    /// Shows `file` in the active pane in place of its note, or the note again (`None`).
+    pub(super) fn set_file(&mut self, file: Option<FileView>, _cx: &mut Context<Self>) -> bool {
         // A file that takes the note's place takes the input too: left in the editor, `render` would
         // hand the pane back to the note (its focus means "the note is back"). A preview keeps the input.
         if file

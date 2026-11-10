@@ -1,0 +1,108 @@
+//! User preferences (`settings` file): parsed from and written to `key=value` lines.
+
+/// Appearance chosen by the user; an empty field keeps the default value.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Prefs {
+    pub theme: String,
+    pub font: String,
+    pub mono: String,
+    /// Size of the note's body text, in pixels.
+    pub size: f32,
+    /// Width of the text column and placement of wide tables (keys of `editor::Page` and
+    /// `editor::Wide`); empty: the default choice.
+    pub page: String,
+    pub wide: String,
+    /// Formatting bar at the bottom of the note: `off` hides it, anything else shows it.
+    pub bar: String,
+    /// Short fades when something opens: `off` makes everything instant, anything else keeps them.
+    pub motion: String,
+}
+
+impl Prefs {
+    pub const SIZE: f32 = 16.;
+
+    pub fn parse(text: &str) -> Self {
+        let mut prefs = Self {
+            theme: String::new(),
+            font: String::new(),
+            mono: String::new(),
+            size: Self::SIZE,
+            page: String::new(),
+            wide: String::new(),
+            bar: String::new(),
+            motion: String::new(),
+        };
+        for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
+            match key {
+                "theme" => prefs.theme = value.into(),
+                "font" => prefs.font = value.into(),
+                "mono" => prefs.mono = value.into(),
+                "size" => {
+                    prefs.size = value
+                        .parse()
+                        .ok()
+                        .filter(|s: &f32| s.is_finite())
+                        .unwrap_or(Self::SIZE)
+                }
+                "page" => prefs.page = value.into(),
+                "wide" => prefs.wide = value.into(),
+                "bar" => prefs.bar = value.into(),
+                "motion" => prefs.motion = value.into(),
+                _ => {}
+            }
+        }
+        prefs.size = prefs.size.clamp(11., 32.);
+        prefs
+    }
+
+    pub fn to_text(&self) -> String {
+        let mut text = format!(
+            "theme={}\nfont={}\nmono={}\nsize={}\n",
+            self.theme, self.font, self.mono, self.size
+        );
+        for (key, value) in [
+            ("page", &self.page),
+            ("wide", &self.wide),
+            ("bar", &self.bar),
+            ("motion", &self.motion),
+        ] {
+            if !value.is_empty() {
+                text.push_str(&format!("{key}={value}\n"));
+            }
+        }
+        text
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_settings() {
+        let prefs = Prefs::parse("theme=Dracula\nfont=Inter\nsize=99\nbogus\nmono=\n");
+        assert_eq!(
+            (
+                prefs.theme.as_str(),
+                prefs.font.as_str(),
+                prefs.mono.as_str()
+            ),
+            ("Dracula", "Inter", "")
+        );
+        // Size clamped, and unreadable value ignored.
+        assert_eq!((prefs.size, Prefs::parse("size=NaN").size), (32., 16.));
+        assert_eq!(Prefs::parse(&prefs.to_text()), prefs);
+        // Unknown keys are ignored (the removed `updates` setting reads as defaults).
+        assert_eq!(Prefs::parse("updates=off\n"), Prefs::parse(""));
+        // Page width and wide tables: absent until chosen.
+        let wide = Prefs::parse("page=wide\nwide=column\n");
+        assert_eq!((wide.page.as_str(), wide.wide.as_str()), ("wide", "column"));
+        assert_eq!(Prefs::parse(&wide.to_text()), wide);
+        // Motion: absent until chosen, anything but `off` keeps the fades.
+        let still = Prefs::parse("motion=off\n");
+        assert_eq!(still.motion, "off");
+        assert_eq!(Prefs::parse(&still.to_text()), still);
+        assert!(!prefs.to_text().contains("motion="));
+        assert!(!prefs.to_text().contains("page=") && !prefs.to_text().contains("wide="));
+    }
+}

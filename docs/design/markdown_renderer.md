@@ -127,9 +127,17 @@ What exists today:
   (good diagram draws, bad/empty diagram says so, `figure_count` asserted).
   User rule: diagram under its block once the cursor leaves; magnifier opens
   full-size (`book/src/writing.md:31`; `book/src/writing.md:23`).
-- **Footnotes**: explicitly **not rendered** — "kept as you typed them"
-  (`book/src/writing.md:34`). No footnote parsing was found in
-  `src/logic/markdown/` — **needs-eyes** before promising any footnote syntax.
+- **Footnotes**: GitHub-style — `[^label]` reference + `[^label]:` definition (see §7-Q3, decided).
+  Parsing in `src/logic/markdown/mod.rs`: references `footnote_ref` (`mod.rs:194`),
+  definitions `footnote_def` (`mod.rs:238`), document collection `footnotes` (`mod.rs:278`)
+  with `count_footnotes` pre-scan (`mod.rs:346`) and per-line defined/undefined styling
+  `footnote_flags` (`mod.rs:370`). Defined references render as links with hidden brackets
+  off the edited line (`src/views/editor/layout.rs:687`, `:1629`); undefined ones stay literal.
+  `Ctrl+click` jumps reference → definition and cycles definition → references
+  (`src/views/editor/mouse.rs:696`, hand cursor `src/views/editor/blocks.rs:184`).
+  Export: sharing passes them through literally (`src/logic/sharing.rs:286`); printing keeps
+  the label in place with no link entry (`src/ui/print.rs:279`); PDF prints them in place
+  with no collected section (`book/src/writing.md`, "Save as PDF" limits).
 
 Gaps / **needs-eyes**:
 
@@ -138,8 +146,7 @@ Gaps / **needs-eyes**:
   to silently fill.
 - Multi-formula lines (only first drawn), `$$` inside tables/cells,
   `\(...\)` syntax: **needs-eyes**.
-- Footnote syntax choice (`[^1]` vs pandoc inline `^[...]`) is undecided (§6);
-  until decided, footnotes stay literal per `book/src/writing.md:34`.
+- Footnote syntax: RESOLVED 2026-11-09 by §7-Q3 (GitHub-style `[^label]` + `[^label]:`).
 
 ## 5. Sanitized (HTML support) — status vs gaps
 
@@ -196,10 +203,11 @@ Rule for all tiers: when a threshold or pixel value changes (e.g. Normal 800,
    Which tags/attributes are contractual (`<u>`, `<mark class>`), and what
    happens to the rest on paste — escaped, stripped, or literal? (Blocks
    import/copy paths: `clipboard.rs`, `sharing.rs`.)
-3. **Footnote syntax**: `[^label]` reference + `[^label]:` definition
-   (GitHub-style) vs alternatives? Until chosen: footnotes stay literal
-   (`book/src/writing.md:34`). Choosing implies: definition collection,
-   backlink rendering, marker-hiding interaction, PDF/export rules.
+3. **Footnote syntax**: RESOLVED 2026-11-09 — GitHub-style `[^label]` reference +
+   `[^label]:` definition (at most three spaces of indent). Undefined references stay
+   literal (no definition collected); definitions print and share in place, with no
+   collected section. Marker-hiding follows the editor's reveal rule (markers hidden off
+   the edited line, source never rewritten); navigation is `Ctrl+click` both ways.
 4. **Table wrap/clip behavior** (companion to Q1): ~~needs contracting~~ RESOLVED 2026-11-09 by §9.1 (tables/code get own overflow rules; container inviolate; internal scroll/clip; alignment preserved). Was:
    (`layout.rs:1600`) while cells wrap (`layout.rs:283`); source alignment
    stops at `ALIGNED` (`tables.rs:472`). What is the canvas rule when a table

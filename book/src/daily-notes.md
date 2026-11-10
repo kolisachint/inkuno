@@ -47,21 +47,3 @@ Any other `{{word}}` stays as written.
 **Insert a template**: **insert a template** in the palette puts one at the cursor, filled with the name of the open note. One `Ctrl + Z` takes it back.
 
 **Make a template of a note**: **make a template of this note** in the palette saves the open note in the templates folder, created if there is none. Its first `#` title becomes `{{title}}`.
-
-## Quick capture
-
-An idea rarely comes while Inkuno is open. `inkuno --capture` opens a window that is one line and nothing else, as fast as the app itself.
-
-1. Type.
-2. Press `Enter`. The line is added to the note of the day as a list item (`- call Léa`). Type `- [ ] ` first to make it a task.
-
-The note is created if the day has none yet, and found wherever you keep your daily notes in the vault. `Esc`, or a click beside the line, closes the window without writing anything.
-
-**Put it under a key**: open the palette, type `capture` and choose **Set up the quick capture shortcut**.
-
-- **GNOME**: done. Inkuno adds the shortcut `Super + Shift + N` to your keyboard settings and tells you so. If those keys are taken, it adds none and says so: set your own keys in Settings › Keyboard › Custom Shortcuts, under *Inkuno: capture*. Asking again never adds a second one.
-- **Elsewhere** (KDE, macOS, Windows…): an app cannot take a system-wide shortcut by itself. Inkuno copies the command to the clipboard, ready to paste into a new shortcut of your system settings.
-
-Without any setup, on Linux, right click the icon of Inkuno in the dock or the app grid: **Quick capture** is there.
-
-If Inkuno is open on today's note, the line appears there a moment later. Without a vault chosen yet, the command opens Inkuno as usual.

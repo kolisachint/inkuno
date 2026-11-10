@@ -15,7 +15,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `F10` / `Ctrl+Shift+P` | Command palette: every command, found by what it does (also the first button of the rail, or \> in the palette) |
 | `Ctrl+F` | Find in the note |
 | `Ctrl+R` | Find and replace in the note |
-| `Ctrl+Shift+F` | Search the text of the whole vault, in the panel: matches note by note, replace |
 | `F3` | Search bar: next match (Enter too) |
 | `Shift+F3` / `Shift+Enter` | Search bar: previous match |
 | `Alt+C` | Search bar: match case |
@@ -24,20 +23,13 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Tab` | Search bar: replace field |
 | `Ctrl+Enter` | Search bar: replace all (Enter: this match) |
 | `Ctrl+Shift+Enter` | Search bar: replace in the whole vault, after showing the count |
-| `Ctrl+Shift+O` | Outline: the headings of the note, in the right dock |
 | `Ctrl+N` | New note |
-|  | New note from a template (a note of the Templates folder: {{title}} {{date}} {{time}} {{cursor}}) |
 | `Ctrl+P › template` | Insert a template at the cursor, or make a template of the open note |
-| `Ctrl+J` | Today's note: open it, or create it |
-| `Ctrl+P › capture` | Quick capture: sets up a shortcut of your desktop (Super+Shift+N on GNOME) that opens a one-line window anywhere; what you type goes to today's note |
 | `Ctrl+O` | Change vault |
 | `Ctrl+P › terminal` | Open a terminal in the vault |
-| `Ctrl+Shift+S` | Sync the vault with git: commit, receive, merge, send; a conflict keeps both versions as two notes |
 | `Ctrl+P › clone` | Clone a vault from a git address (also on the welcome screen) |
 | A cloud folder | iCloud, Dropbox, Google Drive, Syncthing: put the vault there, nothing else; never a git repository inside one |
-| `Ctrl+Alt+E` | Share / Export: copy the whole note as Markdown or plain text, save a copy; SVG/PNG for diagrams, table formats |
 | `Ctrl+Shift+C` | Copy the code block, else the note |
-|  | Save the note as PDF (A4, unsaved edits included); pictures, figures and embeds that cannot be printed are listed |
 | `Ctrl+click` | Open a \[\[link\]\], \#tag or URL |
 | `F1` / `Ctrl+/` | This help |
 | `Ctrl+Q` | Save and quit; stay open if saving fails |
@@ -46,8 +38,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 
 | Keys | Action |
 |---|---|
-| `Alt+Left` | Back: what was shown before, at the same place (also the mouse button, and the rail) |
-| `Alt+Right` | Forward: what was shown after going back |
 | `Ctrl+\` | Split the pane: a new one on its right, opened on the palette to choose what goes there |
 | `Ctrl+Alt+\` | Split the pane: a new one below it |
 | `Alt+Shift+Left` | Go to the pane on the left |
@@ -62,8 +52,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Move the tab to the pane below (split off if there is none) |
 |  | Give every pane the same room |
 | `Alt+Shift+Enter` | The pane on the whole window, and back (the others keep what they hold) |
-|  | Move the panel's view to the other dock (left or right of the panes); the rail shows or hides it where it lives |
-|  | Open the graph or the calendar as a tab; closing the tab gives it back to its dock |
 | `Shift+click on the rail, title of a view` | Shift+click stacks the view under those shown in its dock; drag its title to another place in a dock, or to the right edge to open the right dock. Escape lets go |
 | Dragging a tab | Onto a tab bar: it moves there; onto the middle of a pane: it joins it; near an edge of a pane: a new pane opens there with it. A file from the tree does the same. Escape lets go without moving anything |
 | Border between panes | Drag it to share the room; double click: even shares |
@@ -102,6 +90,14 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Delete` | Panel: move to the trash |
 | `Ctrl+click` / `Shift+click` | Select several rows: move, duplicate, trash them together |
 | Right click | Copy the link or the path, set an icon, show a folder or a tag as a list… |
+|  | Open the note in the other pane |
+|  | Copy the \[\[link\]\] of the note |
+|  | Copy the path of the note |
+|  | Copy the relative path of the note |
+|  | Show in the file manager |
+|  | Move the note to a folder… |
+|  | Icon of the note… |
+|  | Show the note's folder as a list |
 | `Tab` | From the panel: go from button to button (Shift+Tab: back); Enter or Space presses it |
 | `Shift+Tab` | Back to the previous button |
 | `Shift+F10` / `Menu` | The same menu from the keys, for the selected row or the cursor: arrows, Enter, Esc |
@@ -112,7 +108,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 
 | Keys | Action |
 |---|---|
-| `Ctrl+Shift+D` | New diagram: an SVG file in the vault |
 | Dock, bar over the selection | The dock at the bottom: select, shapes, arrows and relationships (K), text, library (S), with their names; select something and a bar floats over it: colors, fill, dashes, the relationship of an arrow, its heads, route and texts, duplicate, delete |
 | 1 … 6 | The colour of the selection, as the palette gives them; the menus (arrow keys, Enter) and the library are walked with the keys |
 | Handles, right click | Point at a shape: four handles, drag one to another shape to draw an arrow; a right click opens the menu of what is under it (write in it, turn an arrow around, route, duplicate, delete) |
@@ -127,17 +122,11 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `A` / `L` / `V` | Arrow / line, held by the shapes they join / select |
 | Enter, double click | Write in the shape or on the arrow; Esc when done |
 | While writing | Click to place the cursor, drag or Shift+click to select, double click a word; arrows, words, Home, End, select all, copy, cut and paste act on the text; a click elsewhere ends it |
-| `Shift+Up` | Diagram, while writing: select up to the line above |
-| `Shift+Down` | Diagram, while writing: select down to the line below |
-| `Tab` | Arrow: the text at its start, in its middle, at its end (a role, a multiplicity); drag one along the stroke |
 | `---` | Alone on a line of a box: a compartment (UML class) |
 | `«interface»  + static x: int  abstract f()` | In a class: a stereotype line, then members; static is underlined, abstract in italics; name : Type is an object |
 | `Shift+click` / `Ctrl+click` | Add a shape to the selection, or take it out |
 | `Alt+click` | Select what lies under the selection at that spot, then round to the top: shapes stacked, an arrow under a filled shape |
 | `Delete` | Remove the selection |
-| `Ctrl+D` | Diagram: duplicate the selection |
-| `Ctrl+Z` | Diagram: undo |
-| `Ctrl+Shift+Z` | Diagram: redo |
 | Edge of a shape | An arrow end dropped there stays there; in the middle, it follows the other end |
 | `Wheel` / `+ - 0` | Move the view / zoom in, out, fit all |
 | `![](Schéma.svg)` | Show the diagram in a note |
@@ -153,16 +142,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Arrows, Tab | Move; with Shift (or drag), select a range; click a row number or a header |
 | `Ctrl+click` | Add another selection: copy, cut, empty or remove their rows together |
 | Type, Enter, F2 | Replace the cell / validate and go down / open the cell; Esc cancels |
-| `Ctrl+C` | Table: copy as tab-separated text |
-| `Ctrl+X` | Table: cut |
-| `Ctrl+V` | Table: paste cells from a spreadsheet, Markdown or CSV |
-| `Shift+Space` | Table: select the whole rows of the selection |
-| `Ctrl+Space` | Table: select the whole columns of the selection |
-| `Ctrl+Enter` | Table: insert a row below (a column to the right when whole columns are selected) |
-| `Ctrl+Shift+Enter` | Table: insert a row above (a column to the left when whole columns are selected) |
-| `Ctrl+Delete` | Table: remove the selected rows, or the columns when whole columns are selected |
-| `Ctrl+Z` | Table: undo |
-| `Ctrl+Shift+Z` / `Ctrl+Y` | Table: redo |
 | `Ctrl+P › table` | Delimiter, encoding, header row, copy as…, export (CSV, TSV, Markdown, JSON) |
 
 ## Appearance
@@ -170,6 +149,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Keys | Action |
 |---|---|
 | `Ctrl+P › theme` | Theme, previewed as you browse |
+|  | Theme… |
 | `Ctrl+P › font` | Font of the app / of the code |
 | `Ctrl+P › page width` | Width of the text column: narrow, normal, wide, full |
 | `Ctrl+P › wide tables` | A table wider than the text: in the column, or centered and wider |
@@ -186,8 +166,8 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Insert a row above |
 |  | Insert a row below |
 |  | Duplicate the row |
-| `Alt+Up` | Move the row up |
-| `Alt+Down` | Move the row down |
+|  | Move the row up |
+|  | Move the row down |
 |  | Delete the row |
 |  | Insert a column on the left |
 |  | Insert a column on the right |
@@ -219,14 +199,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `` ```rust `` | Code block: colors, copy icon |
 | `---` | Divider |
 | `[[` | Link to a note |
-| `Ctrl+P › kanban` | New kanban board: cards you type, drag and tick; double click to rewrite |
-| Board: arrows | Go from card to card, to a column's title, to Add a card or Add a column; Space ticks the card |
-| `Enter` / `F2` | Board: write the card or the title (Enter also adds what is chosen) |
-| `Delete` | Board: remove the card, or the column with its cards (undone with the board's undo) |
-| `Alt+Up` | Board: carry the card up |
-| `Alt+Down` | Board: carry the card down |
-| `Alt+Left` | Board: carry the card to the column on the left |
-| `Alt+Right` | Board: carry the card to the column on the right |
 | `@` | Link to the note of a day: @today, @monday, @2026-10-09 |
 | `![](image.png)` | Picture, under its line |
 | `![[` | Suggests the pictures and diagrams of the vault |
@@ -261,6 +233,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Ctrl+Shift+K` | Inline code |
 | `Ctrl+P › formatting bar` | Under the note, centered: bold, italic, underline, strikethrough, highlight (five colors), code, link, lists, tasks, table (in a table: add or delete a row or a column); a lit button means the selection has the style, click again to remove it; only the active pane shows it; in a narrow note it folds into a button at the bottom, in the middle, that opens it; hide it with the palette |
 | `Ctrl+D` | Several cursors: select the word, then its next occurrence (Esc: back to one) |
+| `Esc` | Close the find bar and the menus, back to one cursor |
 | `Alt+click` | Add a cursor |
 | `Ctrl+K` | Link: \[text\](address) from the selection; on a link, change its address |
 | Embed a section | !\[\[Note\#Heading\]\] alone on a line shows that heading and what is under it, up to the next heading of the same level, in place and live: !\[\[Note\]\] the whole note (without its front matter), !\[\[Note\#^id\]\] the block that ends with ^id. Framed, with the source's name at the top right: a click on it, or a double click on the frame, opens the note there (Alt+Left comes back). Typing !\[\[Note\# offers the headings of the note, \#^ its blocks. Read-only; an embed that leads back to itself says so, and three levels are shown at most. Renaming the note or the heading rewrites the embeds and links to it |

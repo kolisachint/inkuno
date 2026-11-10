@@ -178,43 +178,6 @@ pub fn passage_tint(t: Theme, on: bool) -> gpui::Hsla {
 /// The share of the accent behind the commented passage under the caret.
 const PASSAGE_ON: f32 = 0.12;
 
-/// A title in the serif (Plex Serif SemiBold, the only weight bundled), in the text colour, `size` at scale 1:
-/// the header of a panel or a tool, the title of a board or a table, the month of the calendar.
-pub fn serif_title<E: gpui::Styled>(e: E, t: Theme, size: f32) -> E {
-    e.font_family(crate::ui::assets::SERIF)
-        .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_size(t.px(size))
-        .text_color(t.text)
-}
-
-/// The head of a page: the title in the serif, then what it holds in `soft` ("6 open · 2 done", "6 rows · 5 columns").
-/// Debug selectors `{id}-header`, `{id}-title`, `{id}-summary`. The title shrinks (the caller ellipsizes it if it must read well).
-pub fn page_head(t: Theme, id: &'static str, size: f32, title: String, summary: String) -> Div {
-    div()
-        .debug_selector(move || format!("{id}-header"))
-        .flex()
-        .items_baseline()
-        .gap_3()
-        .child(
-            serif_title(
-                div()
-                    .debug_selector(move || format!("{id}-title"))
-                    .min_w_0()
-                    .truncate(),
-                t,
-                size,
-            )
-            .child(title),
-        )
-        .child(
-            div()
-                .debug_selector(move || format!("{id}-summary"))
-                .flex_none()
-                .text_color(t.soft)
-                .child(summary),
-        )
-}
-
 /// A tinted band inside a sheet: groups what lies in it (a kanban column, a table header) without a line.
 #[allow(dead_code)] // used by the views from step 3 of #91
 pub fn band(t: Theme) -> Div {
@@ -326,55 +289,6 @@ pub fn toggle(
         .hover(|s| s.bg(t.hover))
         .tooltip(tip(name, keys, t))
         .child(label)
-}
-
-/// The header of a group of rows (a note of the vault search, later a group of a collection): a chevron that
-/// folds it, its name, how many rows it holds in `soft`.
-pub fn group_header(
-    id: impl Into<gpui::ElementId>,
-    name: impl Into<SharedString>,
-    count: usize,
-    folded: bool,
-    t: Theme,
-) -> Stateful<Div> {
-    div()
-        .id(id)
-        .w_full()
-        .h(t.px(26.))
-        .px_1()
-        .flex()
-        .items_center()
-        .gap_1()
-        .rounded(t.small())
-        .cursor_pointer()
-        .text_size(t.px(13.))
-        .hover(|s| s.bg(t.hover))
-        .child(
-            svg()
-                .path(if folded {
-                    "chevron-right.svg"
-                } else {
-                    "chevron-down.svg"
-                })
-                .size(t.px(14.))
-                .flex_none()
-                .text_color(t.soft),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_color(t.text)
-                .child(name.into()),
-        )
-        .child(
-            div()
-                .flex_none()
-                .text_size(t.px(11.5))
-                .text_color(t.soft)
-                .child(count.to_string()),
-        )
 }
 
 /// How long a fade lasts: under a key repeat, so a new gesture never waits for the last one.

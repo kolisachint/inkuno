@@ -6,7 +6,7 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
-use gpui::{App, AssetSource, SharedString, prelude::*, px, svg};
+use gpui::{App, AssetSource, Hsla, SharedString, div, prelude::*, rgb, svg};
 
 use crate::{logic::prefs::Prefs, ui::theme::Theme};
 
@@ -35,10 +35,6 @@ pub const FONT_FILES: [&[u8]; 10] = [
     include_bytes!("../../assets/fonts/IBMPlexSerif-SemiBold.ttf"),
     include_bytes!("../../assets/fonts/IBMPlexSerif-SemiBoldItalic.ttf"),
 ];
-
-/// IBM Plex Serif, bundled in SemiBold (600) and its italic only: for titles (note headings, panel and
-/// board titles), never body text. A view asks for it with `font(SERIF)` and `FontWeight::SEMIBOLD`.
-pub const SERIF: &str = "IBM Plex Serif";
 
 pub fn sans() -> &'static str {
     FONTS.read().unwrap().0
@@ -409,9 +405,17 @@ impl AssetSource for Assets {
             "theme.svg" => {
                 r#"<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5A5.5 5.5 0 0 1 8 13.5Z" fill="black"/>"#
             }
-            // The two cards of the app icon, filled; the one underneath is faded.
+            // Nib silhouette of the kit's optical 16 px mark (`svg/inkuno-mark-16.svg`:
+            // `M166 86 H346 L391 211 L256 405 L121 211 Z` on a 512 grid, ×1/32 here).
+            // The ink stroke is the `logo-ink.svg` layer below: gpui paints each SVG
+            // as an alpha mask in one color, so the two kit colors need two layers.
             "logo.svg" => {
-                r#"<rect x="1.8" y="1.8" width="6.2" height="7.6" rx="1.4" transform="rotate(-7 5 5.5)" fill="black" stroke="none"/><rect x="8.3" y="6.6" width="6.2" height="7.6" rx="1.4" transform="rotate(7 11.4 10.4)" fill="black" stroke="none" opacity=".55"/>"#
+                r##"<path fill="#20232B" d="M5.1875 2.6875H10.8125L12.21875 6.59375L8 12.65625L3.78125 6.59375Z"/>"##
+            }
+            // Cobalt ink stroke of the kit's optical 16 px mark (`M174 446 Q255 410 338 438`,
+            // width 38 on a 512 grid, ×1/32 here). Overlaid on `logo.svg` by `logo`.
+            "logo-ink.svg" => {
+                r##"<path d="M5.4375 13.9375Q7.96875 12.8125 10.5625 13.6875" fill="none" stroke="#4263EB" stroke-width="1.1875" stroke-linecap="round"/>"##
             }
             // Icons given to notes and folders.
             _ => match ICON_SET.iter().find(|(file, _)| *file == path) {
@@ -592,13 +596,31 @@ pub const ICON_SET: &[(&str, &str)] = &[
     ),
 ];
 
-/// The app logo, discreet: the two cards, in the accent color.
-pub fn logo(t: Theme) -> gpui::Svg {
-    svg()
-        .path("logo.svg")
-        .size(px(15.))
+/// The app logo: the kit's optical 16 px mark at its exact colors, the nib in
+/// charcoal over the cobalt stroke. The kit keeps the nib+ink mark as-is, so
+/// there is no accent tint: on any theme the mark is `#20232B` + `#4263EB`.
+/// VISIBLE CHANGE: the rail mark no longer follows the theme accent; on
+/// Inkuno Dark the charcoal nib sits close to the dark ground (the cobalt
+/// stroke carries it).
+///
+/// gpui paints an SVG as an alpha mask in a single color, hence the two layers.
+/// Callers: the rail commands button (`shell/sidebar.rs`), the empty today's
+/// row (`shell/render.rs`) and the About footer (`shell/help.rs`).
+pub fn logo(t: Theme) -> impl IntoElement {
+    let layer = |path: &'static str, color: u32| {
+        svg()
+            .path(path)
+            .absolute()
+            .inset_0()
+            .flex_none()
+            .text_color(Hsla::from(rgb(color)))
+    };
+    div()
+        .size(t.px(15.))
         .flex_none()
-        .text_color(t.accent.opacity(0.85))
+        .relative()
+        .child(layer("logo.svg", 0x20232b))
+        .child(layer("logo-ink.svg", 0x4263eb))
 }
 
 #[cfg(test)]

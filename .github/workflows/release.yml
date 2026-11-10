@@ -1,7 +1,7 @@
 name: release
 
 # Manual macOS + Linux artifact builder. This workflow never publishes: tagged
-# releases are published by release-native.yml, and the old push-driven nightly
+# releases are published by release-native.yml, and the old push-driven scheduled
 # release was removed. Dispatch it to inspect raw archives for any ref.
 on:
   workflow_dispatch:
@@ -16,19 +16,69 @@ concurrency:
 jobs:
   macos:
     runs-on: macos-14
+    env:
+      # sccache with the GitHub Actions cache backend (see the setup step).
+      # Keys are content-hashed per rustc invocation, so OSs and toolchains
+      # never mix; kept next to the rust-cache target-dir cache.
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_CACHE_SIZE: "2G"
     steps:
       - uses: actions/checkout@v4
+
+      # Retry fast-path: restore the binary uploaded by an earlier attempt of
+      # this run when inputs are unchanged. The artifact name keys on
+      # Cargo.lock + the pinned toolchain file + aarch64-apple-darwin (the
+      # macos-14 arm64 runner target). A miss fails only this step
+      # (continue-on-error) and the build below runs the full compile
+      # unchanged; rust-cache still speeds that compile. Test/package steps
+      # always run. (Gate crew: this step sits before build; keep
+      # build -> test -> package order.)
+      - name: Restore cached release binary (retry fast-path)
+        id: build-cache
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: inkuno-build-release-macos-aarch64-apple-darwin-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: .build-cache
 
       - name: Install toolchain from rust-toolchain.toml
         run: rustup show
 
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
+        if: steps.build-cache.outcome == 'failure'
         env:
           DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: cargo build --release --locked
+
+      - name: Place cached binary when restored (retry fast-path)
+        if: steps.build-cache.outcome == 'success'
+        run: |
+          mkdir -p target/release
+          cp .build-cache/inkuno target/release/inkuno
+          ls -la target/release/inkuno
+
+      # Saved right after build (before test/package) so a retry after a
+      # later-step failure reuses the binary instead of recompiling.
+      - name: Save release binary for retries (retry fast-path)
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkuno-build-release-macos-aarch64-apple-darwin-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: target/release/inkuno
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+      - name: Run macOS tests before packaging
+        env:
+          DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: cargo test --locked
 
       - name: Package inkuno.app bundle and archives
         env:
@@ -58,24 +108,39 @@ jobs:
           codesign --force --deep -s - "${BUNDLE}"
           codesign --verify --deep --strict "${BUNDLE}"
 
-          # Zip the bundle with ditto so macOS metadata and symlinks survive.
-          (cd dist && ditto -c -k --keepParent inkuno.app inkuno-macos-arm64.zip)
-
           ls -la dist
 
       - name: Upload macOS archives
         uses: actions/upload-artifact@v4
         with:
           name: inkuno-macos-arm64
-          path: |
-            dist/inkuno-macos-arm64.zip
-            dist/inkuno-macos-arm64.tar.gz
+          path: dist/inkuno-macos-arm64.tar.gz
           if-no-files-found: error
 
   linux:
     runs-on: ubuntu-22.04
+    env:
+      # sccache with the GitHub Actions cache backend (see the setup step).
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_CACHE_SIZE: "2G"
     steps:
       - uses: actions/checkout@v4
+
+      # Retry fast-path: restore the binary uploaded by an earlier attempt of
+      # this run when inputs are unchanged. The artifact name keys on
+      # Cargo.lock + the pinned toolchain file + x86_64-unknown-linux-gnu. A
+      # miss fails only this step (continue-on-error) and the build below
+      # runs the full compile unchanged; rust-cache still speeds that
+      # compile. Test/package steps always run. (Gate crew: this step sits
+      # before build; keep build -> test -> package order.)
+      - name: Restore cached release binary (retry fast-path)
+        id: build-cache
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: inkuno-build-release-linux-x86_64-unknown-linux-gnu-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: .build-cache
 
       - name: Install GPUI system dependencies
         run: |
@@ -95,13 +160,35 @@ jobs:
             pkg-config \
             clang
 
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
       - name: Install toolchain from rust-toolchain.toml
         run: rustup show
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
+        if: steps.build-cache.outcome == 'failure'
         run: cargo build --release --locked
+
+      - name: Place cached binary when restored (retry fast-path)
+        if: steps.build-cache.outcome == 'success'
+        run: |
+          mkdir -p target/release
+          cp .build-cache/inkuno target/release/inkuno
+          ls -la target/release/inkuno
+
+      # Saved right after build (before test/package) so a retry after a
+      # later-step failure reuses the binary instead of recompiling.
+      - name: Save release binary for retries (retry fast-path)
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkuno-build-release-linux-x86_64-unknown-linux-gnu-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: target/release/inkuno
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
 
       - name: Package Linux archive
         run: |

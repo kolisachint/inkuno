@@ -40,10 +40,13 @@ impl Shell {
     /// What a tab is called: its file, its list page, or a new note's first line.
     pub(super) fn tab_name(&self, tab: usize, cx: &App) -> String {
         let pane = &self.panes[tab];
-        match pane.tool {
-            Some(Mode::Graph) => return tr("Graph", "Graphe").to_string(),
-            Some(_) => return tr("Calendar", "Calendrier").to_string(),
-            None => {}
+        // No tool opens as a tab anymore (the graph and the calendar are cut): a tool tab from
+        // an old layout is named after its tool.
+        if pane.tool.is_some() {
+            return pane
+                .tool
+                .map(|tool| tool.name().to_string())
+                .unwrap_or_default();
         }
         if let Some(listing) = &pane.listing {
             return match nav::tag_of(&listing.of) {
@@ -232,9 +235,7 @@ impl Shell {
                     .flex()
                     .items_center()
                     .justify_center();
-                let dirty = pane.dirty
-                    || pane.canvas_dirty
-                    || pane.sheet().is_some_and(|sheet| sheet.read(cx).is_dirty());
+                let dirty = pane.dirty;
                 // The slot at the row's end: the close cross on hover only, for any tab; an
                 // accent dot for a tab not saved yet otherwise; empty space to keep the row's
                 // width steady.
@@ -353,6 +354,7 @@ impl Shell {
             div()
                 .id(("tabs", group))
                 .debug_selector(move || format!("tabs-{group}"))
+                .relative()
                 .flex_none()
                 .w_full()
                 .h(t.px(TAB_BAR))
@@ -402,7 +404,37 @@ impl Shell {
                                 .h_full()
                                 .when(client, |d| d.map(crate::ui::widgets::drag_window)),
                         ),
-                ),
+                )
+                // Zed-style: where the app draws the bar itself, the vault name sits centered in
+                // the window's top row — the corner group's bar, under the window buttons. Plain
+                // text: it takes no pointer, the tabs keep working under it; it clears the
+                // buttons on the right.
+                .when(corner && self.vault.is_some(), |d| {
+                    d.child(
+                        div()
+                            .debug_selector(|| "window-title".into())
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .left(pad)
+                            .right(t.px(render::PILL_ROOM))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .overflow_hidden()
+                            .text_size(t.px(13.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(t.soft)
+                            .child(
+                                div().min_w_0().truncate().child(
+                                    self.vault
+                                        .as_ref()
+                                        .map(|v| vault::stem(v))
+                                        .unwrap_or_default(),
+                                ),
+                            ),
+                    )
+                }),
         )
     }
 }

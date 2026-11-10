@@ -74,18 +74,46 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Shut-default (ui.md §12): the column starts closed, so its cards are absent.
     // Open it through the palette before touching the cards.
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("commentaires");
+    cx.simulate_input("comments");
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
-    assert!(shell.read_with(cx, |s, cx| s.palette.is_none() && !s.comments_shut));
-    cx.run_until_parked();
-    let view = cx.update(|window, _| window.viewport_size());
-    cx.simulate_click(
-        point(view.width - px(150.), px(125.)),
+    assert!(shell.read_with(cx, |s, _cx| s.palette.is_none() && !s.comments_shut));
+    // Settle the column before trusting its bounds: gpui keeps a vanished
+    // element's debug bounds between frames, and opening the column scrolls the
+    // caret's card on the next frame, so one parked run can read one frame behind.
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
+    // Click the first card itself, wherever the column lays it out: fixed window
+    // coordinates drift whenever the chrome around the column moves. A pointer
+    // hovers first, as in production, and the click lands on the comment's words
+    // in the card's lower body, away from the resolving check at the end of the
+    // row above (invisible until hovered, but hit-testable). The hover's frame can
+    // move the card, so the click point is re-read after it, from the frame the
+    // click hit-tests.
+    let card = cx
+        .debug_bounds("comment-0")
+        .expect("the comments column shows its first card");
+    cx.simulate_mouse_move(
+        point(card.left() + px(24.), card.bottom() - px(18.)),
+        None,
         gpui::Modifiers::none(),
     );
-    assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position() == 17));
+    cx.run_until_parked();
+    let card = cx
+        .debug_bounds("comment-0")
+        .expect("the comments column shows its first card");
+    cx.simulate_click(
+        point(card.left() + px(24.), card.bottom() - px(18.)),
+        gpui::Modifiers::none(),
+    );
+    cx.run_until_parked();
+    let (pos, card_dbg) = shell.read_with(cx, |s, cx| {
+        (s.pane().editor.read(cx).position(), format!("{card:?}"))
+    });
+    assert_eq!(pos, 17, "card={card_dbg}");
     shell.update(cx, |s, cx| {
         s.pane()
             .editor
@@ -130,7 +158,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     assert!(!closed && shell.read_with(cx, |s, _| s.comments_shut));
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("commentaires");
+    cx.simulate_input("comments");
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
@@ -274,10 +302,6 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     within(cx, "find-bar", "pane-0");
     within(cx, "counts", "pane-0");
     cx.simulate_keystrokes("escape");
-    // The calendar does not go below 170 px, and its month fits in the panel.
-    lay(cx, 420., Mode::Calendar, Panel::Split, 120.);
-    assert_eq!(cx.debug_bounds("nav-panel").unwrap().size.width, px(170.));
-    within(cx, "calendar", "nav-panel");
     cx.simulate_resize(whole);
     shell.update(cx, |s, cx| {
         s.nav.show_alone(before.0);
@@ -287,9 +311,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     j.load(cx, "rien", 0);
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("commentaires");
+    cx.simulate_input("comments");
     cx.simulate_keystrokes("down enter");
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()
-        && s.told(Tone::Info, "commentaires")));
+        && s.told(Tone::Info, "has no comments")));
     shell.update(cx, |s, _| s.toasts.clear());
 }

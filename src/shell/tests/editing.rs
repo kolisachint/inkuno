@@ -1,4 +1,4 @@
-//! Editing journeys: `/` commands, block handles, inline formatting and its bar, templates.
+//! Editing journeys: `/` commands, block handles, inline formatting and its bar.
 
 use super::*;
 
@@ -8,7 +8,6 @@ use super::*;
 fn commands_are_found(cx: &mut TestAppContext) {
     let root = std::env::temp_dir().join(format!("inkuno-commands-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
-    fs::write(root.join("data.csv"), "nom;age\nAna;31\nBob;27\n").unwrap();
     let _config = isolated_config(&root);
     cx.update(bind_keys);
     cx.update(init_fonts);
@@ -54,7 +53,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
     }));
     // Typing filters by what the command does; Enter runs it, on the note.
     cx.simulate_keystrokes("secondary-a f10");
-    cx.simulate_input("gras");
+    cx.simulate_input("bold");
     assert_eq!(runs(cx), ["editor::Bold"]);
     cx.simulate_keystrokes("enter");
     assert_eq!(mode(cx), None);
@@ -66,7 +65,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert_eq!(mode(cx).map(|m| m.0), Some(true));
-    cx.simulate_input("raccourcis");
+    cx.simulate_input("shortcuts");
     let at = cx
         .debug_bounds("command-app::ToggleHelp")
         .expect("the command is shown")
@@ -78,7 +77,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
     // In the notes palette, a leading ">" switches to commands, and is erased; without it, a command
     // is found too, but Enter still creates the note of that name.
     cx.simulate_keystrokes("secondary-z secondary-a secondary-p");
-    cx.simulate_input("italique");
+    cx.simulate_input("italic");
     assert_eq!(runs(cx), ["editor::Italic"]);
     cx.simulate_keystrokes("home");
     cx.simulate_input(">");
@@ -89,89 +88,6 @@ fn commands_are_found(cx: &mut TestAppContext) {
     );
     cx.simulate_keystrokes("enter");
     assert_eq!(text(cx), "*mot*");
-
-    // On a CSV table, opened from the palette: it stays shown and takes input. Help and the menu
-    // start with its keys, the empty palette offers its gestures.
-    shell.update(cx, |s, cx| {
-        let (notes, dirs, images) = vault::scan(&root);
-        s.sync(notes, dirs, images, cx);
-    });
-    cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("data.csv");
-    cx.simulate_keystrokes("enter");
-    cx.run_until_parked();
-    assert!(shell.update_in(cx, |s, window, cx| {
-        s.shown_sheet()
-            .is_some_and(|sheet| sheet.focus_handle(cx).is_focused(window))
-    }));
-    let sheet = shell.read_with(cx, |s, _| s.shown_sheet().unwrap());
-    // The command palette starts with the table's.
-    cx.simulate_keystrokes("f10");
-    assert_eq!(mode(cx), Some((true, "Tableau CSV")));
-    let first = runs(cx)[0];
-    assert!(
-        first.starts_with("editor::Table") || first.starts_with("sheet::"),
-        "{first}"
-    );
-    cx.simulate_keystrokes("escape f1");
-    assert_eq!(
-        shell.read_with(cx, |s, cx| s.help_rows(cx)[0].0),
-        "Tableaux CSV"
-    );
-    // Closing help, or the palette without choosing anything, gives input back to the table, which stays shown.
-    cx.simulate_keystrokes("f1");
-    cx.run_until_parked();
-    let on_sheet = |cx: &mut gpui::VisualTestContext| {
-        shell.update_in(cx, |s, window, cx| {
-            s.shown_sheet()
-                .is_some_and(|sheet| sheet.focus_handle(cx).is_focused(window))
-        })
-    };
-    assert!(on_sheet(cx));
-    cx.simulate_keystrokes("secondary-p");
-    assert!(
-        runs(cx).contains(&"editor::TableRowAbove"),
-        "{:?}",
-        runs(cx)
-    );
-    cx.simulate_keystrokes("escape");
-    cx.run_until_parked();
-    assert!(on_sheet(cx));
-    // A whole column chosen: the table's bar shows its gestures, a click runs one.
-    sheet.update(cx, |sheet, cx| sheet.pick("col", 0, cx));
-    cx.run_until_parked();
-    // A pointer move makes the test window redraw.
-    cx.simulate_mouse_move(
-        gpui::point(px(400.), px(300.)),
-        None,
-        gpui::Modifiers::none(),
-    );
-    let at = cx
-        .debug_bounds("sheet-span-editor::TableColRight")
-        .expect("the gesture is in the bar")
-        .center();
-    cx.simulate_click(at, gpui::Modifiers::none());
-    assert_eq!(sheet.read_with(cx, |sheet, _| sheet.table().cols()), 3);
-    sheet.update(cx, |sheet, cx| sheet.pick("row", 1, cx));
-    cx.run_until_parked();
-    // A pointer move makes the test window redraw.
-    cx.simulate_mouse_move(
-        gpui::point(px(400.), px(300.)),
-        None,
-        gpui::Modifiers::none(),
-    );
-    let at = cx
-        .debug_bounds("sheet-span-sheet::DeleteRows")
-        .expect("a whole row has its gestures")
-        .center();
-    cx.simulate_click(at, gpui::Modifiers::none());
-    assert_eq!(
-        sheet.read_with(cx, |sheet, _| (
-            sheet.table().rows(),
-            sheet.table().cell(1, 0).to_string()
-        )),
-        (2, "Bob".to_string())
-    );
     fs::remove_dir_all(&root).unwrap();
 }
 
@@ -361,12 +277,12 @@ fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-home f10");
     assert!(runs(cx).contains(&"editor::SelectNext"), "{:?}", runs(cx));
     assert!(!runs(cx).contains(&"editor::AlignLeft"), "{:?}", runs(cx));
-    // Typed by what it does, in either language: `multicurs` starts both.
+    // Typed by what it does: `multicurs` starts both the catalogue line and its alias.
     cx.simulate_input("multicurs");
     assert_eq!(runs(cx), ["editor::SelectNext"]);
     cx.simulate_keystrokes("escape escape");
     // Block transforms are ›-reachable too (overrule of the /+grip-only stance): offered
-    // in a note, found by what they do, in either language.
+    // in a note, found by what they do.
     cx.simulate_keystrokes("f10");
     let blocks = [
         "editor::BlockHeading1",
@@ -387,27 +303,6 @@ fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
         );
     }
     cx.simulate_keystrokes("escape");
-    for (typed, found) in [
-        (
-            "titre",
-            vec![
-                "editor::BlockHeading1",
-                "editor::BlockHeading2",
-                "editor::BlockHeading3",
-            ],
-        ),
-        ("puces", vec!["editor::BlockBullet"]),
-        ("numerotee", vec!["editor::BlockOrdered"]),
-        ("taches", vec!["editor::BlockTask"]),
-        ("citation", vec!["editor::BlockQuote"]),
-        ("bloc de code", vec!["editor::BlockCode"]),
-        ("dupliquer", vec!["editor::BlockDuplicate"]),
-    ] {
-        cx.simulate_keystrokes("f10");
-        cx.simulate_input(typed);
-        assert_eq!(runs(cx), found, "typed {typed:?}");
-        cx.simulate_keystrokes("escape");
-    }
     crate::lang::in_english(|| {
         for (typed, found) in [
             (
@@ -439,7 +334,6 @@ fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
         "editor::AlignCenter",
         "editor::AlignRight",
         "editor::TableRowAbove",
-        "editor::TableAutoSum",
     ] {
         assert!(table.contains(&action), "{action} missing from {table:?}");
     }
@@ -455,230 +349,6 @@ fn command_aliases_follow_the_view(cx: &mut TestAppContext) {
         );
     }
     cx.simulate_keystrokes("escape");
-    let _ = fs::remove_dir_all(&root);
-}
-
-/// Templates end to end, and their limits: no folder, a name taken or unreadable, a template
-/// that is not one, a link that must not target a template, the daily note, undo.
-#[gpui::test]
-fn templates_journey(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("inkuno-tpl-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    fs::write(root.join("Courses.md"), "# Courses\n\n- lait #maison\n").unwrap();
-    let _config = isolated_config(&root);
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let (shell, cx) = cx.add_window_view({
-        let root = root.clone();
-        |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
-    });
-    cx.run_until_parked();
-    let text = |cx: &mut gpui::VisualTestContext| {
-        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
-    };
-    let told = |cx: &mut gpui::VisualTestContext, tone, part: &str| {
-        shell.read_with(cx, |s, _| s.told(tone, part))
-    };
-    let palette = |cx: &mut gpui::VisualTestContext, typed: &str| {
-        cx.simulate_keystrokes("secondary-p");
-        cx.simulate_input(typed);
-        cx.simulate_keystrokes("down enter");
-    };
-    // Once the palette is proven, gestures are launched by their action: the palette's list
-    // changes with the notes that resemble what is typed.
-    let start = |cx: &mut gpui::VisualTestContext, act: TemplateAct| {
-        shell.update_in(cx, |s, window, cx| {
-            if act == TemplateAct::Save {
-                s.save_as_template(window, cx)
-            } else {
-                s.open_templates(act, window, cx)
-            }
-        });
-    };
-    let rescan = |cx: &mut gpui::VisualTestContext| {
-        shell.update(cx, |s, cx| {
-            let (notes, dirs, images) = vault::scan(&root);
-            s.sync(notes, dirs, images, cx);
-        });
-        cx.run_until_parked();
-    };
-    // Without a templates folder: the command says so, nothing is created.
-    palette(cx, "nouvelle note depuis");
-    assert!(told(cx, Tone::Info, "Aucun modèle"));
-    assert!(!root.join("Templates").exists());
-    // Two templates, one deeper in the folder; their `#tags` and `[[links]]` belong to no one.
-    fs::create_dir_all(root.join("Modèles/Sous")).unwrap();
-    fs::write(
-        root.join("Modèles/Réunion.md"),
-        "# {{title}}\n\nLe {{date}} à {{time}} #modele [[{{title}}]]\n\n## Notes\n\n{{cursor}}\n",
-    )
-    .unwrap();
-    fs::write(root.join("Modèles/Sous/Idée.md"), "idée {{inconnu}}").unwrap();
-    rescan(cx);
-    let kept = shell.read_with(cx, |s, _| {
-        s.notes
-            .iter()
-            .filter(|n| n.name == "Réunion" || n.name == "Idée")
-            .map(|n| (n.tags.len(), n.links.len()))
-            .collect::<Vec<_>>()
-    });
-    assert_eq!(kept, [(0, 0), (0, 0)]);
-    assert!(
-        shell.read_with(cx, |s, _| s.wiki_path("Réunion").is_none()
-            && s.wiki_path("modele").is_none()),
-        "a link does not target a template"
-    );
-    // A note is born from the template, with the chosen name: title, date, time, cursor at its mark.
-    palette(cx, "nouvelle note depuis");
-    cx.simulate_input("Réu");
-    cx.simulate_keystrokes("enter");
-    cx.simulate_input("Lundi 3");
-    cx.simulate_keystrokes("enter");
-    cx.run_until_parked();
-    let made = shell.read_with(cx, |s, _| s.pane().path.clone().unwrap());
-    assert_eq!(made.file_name().unwrap(), "Lundi 3.md");
-    let day = date_name(today());
-    let body = fs::read_to_string(&made).unwrap();
-    let stamp = body
-        .split(&format!("Le {day} à "))
-        .nth(1)
-        .map(|rest| rest[..5].to_string())
-        .unwrap_or_default();
-    assert!(
-        stamp.len() == 5
-            && stamp.as_bytes()[2] == b':'
-            && stamp.bytes().filter(u8::is_ascii_digit).count() == 4,
-        "time: {stamp:?} in {body}"
-    );
-    assert!(
-        body.starts_with("# Lundi 3\n\nLe ")
-            && body.contains("[[Lundi 3]]")
-            && !body.contains("{{"),
-        "{body}"
-    );
-    assert_eq!(text(cx), body);
-    assert_eq!(
-        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position()),
-        body.len() - 1,
-        "the cursor is at the {{cursor}} mark"
-    );
-    // The keyboard goes to the editor: one can type right away, at the mark.
-    cx.simulate_input("!");
-    assert!(text(cx).ends_with("## Notes\n\n!\n"), "{}", text(cx));
-    cx.simulate_keystrokes("secondary-z");
-    assert_eq!(text(cx), body);
-    // The name is taken: refused, the existing note is intact. An empty name does nothing; a name with
-    // forbidden characters is cleaned.
-    fs::write(&made, "# Lundi 3\n\nécrit à la main\n").unwrap();
-    start(cx, TemplateAct::New);
-    cx.simulate_input("Réu");
-    cx.simulate_keystrokes("enter");
-    cx.simulate_input("Lundi 3");
-    cx.simulate_keystrokes("enter");
-    assert!(told(cx, Tone::Failed, "porte déjà le nom"));
-    assert_eq!(
-        fs::read_to_string(&made).unwrap(),
-        "# Lundi 3\n\nécrit à la main\n"
-    );
-    let files = |root: &Path| fs::read_dir(root).unwrap().count();
-    let before = files(&root);
-    start(cx, TemplateAct::New);
-    cx.simulate_input("Idée");
-    cx.simulate_keystrokes("enter enter");
-    assert_eq!(files(&root), before, "an empty name creates nothing");
-    start(cx, TemplateAct::New);
-    cx.simulate_input("Idée");
-    cx.simulate_keystrokes("enter");
-    cx.simulate_input("a/b:c");
-    cx.simulate_keystrokes("enter");
-    cx.run_until_parked();
-    assert_eq!(
-        fs::read_to_string(root.join("abc.md")).unwrap(),
-        "idée {{inconnu}}"
-    );
-    // An unreadable template (bytes that are not text): a notice, nothing is born; an empty template: an empty note.
-    fs::write(root.join("Modèles/Cassé.md"), [0xff, 0xfe, 0x00]).unwrap();
-    fs::write(root.join("Modèles/Vide.md"), "").unwrap();
-    rescan(cx);
-    start(cx, TemplateAct::New);
-    cx.simulate_input("Cassé");
-    cx.simulate_keystrokes("enter");
-    cx.simulate_input("Rien");
-    cx.simulate_keystrokes("enter");
-    assert!(told(cx, Tone::Failed, "Modèle illisible") && !root.join("Rien.md").exists());
-    start(cx, TemplateAct::New);
-    cx.simulate_input("Vide");
-    cx.simulate_keystrokes("enter");
-    cx.simulate_input("Blanc");
-    cx.simulate_keystrokes("enter");
-    assert_eq!(fs::read(root.join("Blanc.md")).unwrap(), b"");
-    // Insert at the cursor: filled with the open note's name, a single undo step.
-    shell.update(cx, |s, cx| s.open_note(&made, cx));
-    let before = text(cx);
-    shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
-    });
-    cx.simulate_keystrokes("secondary-end");
-    start(cx, TemplateAct::Insert);
-    cx.simulate_input("Réu");
-    cx.simulate_keystrokes("enter");
-    assert!(
-        text(cx).starts_with(&format!("{before}# Lundi 3\n\nLe ")),
-        "{}",
-        text(cx)
-    );
-    assert_eq!(
-        text(cx).matches("[[Lundi 3]]").count(),
-        before.matches("[[Lundi 3]]").count() + 1
-    );
-    cx.simulate_keystrokes("secondary-z");
-    assert_eq!(text(cx), before);
-    // Make a template from the note: its title becomes {{title}}, the existing folder is reused.
-    start(cx, TemplateAct::Save);
-    cx.simulate_keystrokes("secondary-a");
-    cx.simulate_input("Copie");
-    cx.simulate_keystrokes("enter");
-    cx.run_until_parked();
-    assert_eq!(
-        fs::read_to_string(root.join("Modèles/Copie.md")).unwrap(),
-        markdown::templatize(&before)
-    );
-    assert!(
-        fs::read_to_string(root.join("Modèles/Copie.md"))
-            .unwrap()
-            .starts_with("# {{title}}\n")
-    );
-    assert!(!root.join("Templates").exists());
-    // The daily note is born from the `Daily` template when it exists; a second Ctrl+J reopens the same note.
-    let name = date_name(today());
-    if let Some(old) = shell.read_with(cx, |s, _| s.wiki_path(&name)) {
-        fs::remove_file(old).unwrap();
-    }
-    rescan(cx);
-    fs::write(
-        root.join("Modèles/Daily.md"),
-        "# {{title}}\n\n- [ ] {{cursor}}",
-    )
-    .unwrap();
-    rescan(cx);
-    cx.simulate_keystrokes("secondary-j");
-    cx.run_until_parked();
-    assert_eq!(
-        shell.read_with(cx, |s, _| s
-            .pane()
-            .path
-            .clone()
-            .unwrap()
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned()),
-        format!("{name}.md")
-    );
-    assert_eq!(text(cx), format!("# {name}\n\n- [ ] "));
-    cx.simulate_keystrokes("secondary-j");
-    assert_eq!(text(cx), format!("# {name}\n\n- [ ] "));
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -900,7 +570,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
     mark(cx, "secondary-shift-b");
     assert_eq!(text(cx), "un mot ici\ndeux");
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("puces");
+    cx.simulate_input("bulleted");
     cx.simulate_keystrokes("down enter");
     cx.run_until_parked();
     assert_eq!(text(cx), "- un mot ici\n- deux");
@@ -938,12 +608,12 @@ fn formatting_journey(cx: &mut TestAppContext) {
         cx.simulate_keystrokes("down enter");
         cx.run_until_parked();
     };
-    grid(cx, "ligne en dessous");
+    grid(cx, "row below");
     assert_eq!((rows(cx), columns(cx)), (r + 1, c), "{:?}", text(cx));
-    grid(cx, "colonne à droite");
+    grid(cx, "column on the right");
     assert_eq!((rows(cx), columns(cx)), (r + 1, c + 1));
-    grid(cx, "Supprimer la ligne");
-    grid(cx, "Supprimer la colonne");
+    grid(cx, "delete the row");
+    grid(cx, "delete the column");
     assert_eq!((rows(cx), columns(cx)), (r, c));
     // A single undo gesture for each.
     cx.simulate_keystrokes("secondary-z");

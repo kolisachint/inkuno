@@ -1,7 +1,6 @@
 //! Inkuno: a fast, minimal Markdown note-taking app. ARCHITECTURE.md maps the code.
 
 mod actions;
-mod config_watch;
 #[cfg(test)]
 mod dbg_test;
 mod lang;
@@ -23,7 +22,6 @@ fn help_text() -> String {
          \n\
          usage:\n\
          \u{20} inkuno                  open the app\n\
-         \u{20} inkuno --capture         open the quick-capture line\n\
          \u{20} inkuno mcp               run the Model Context Protocol server on stdio\n\
          \u{20} inkuno --check-config    validate the JSON config below, exit 0/1\n\
          \u{20} inkuno --help            show this text\n\
@@ -47,8 +45,8 @@ fn help_text() -> String {
          \n\
          themes.json:\n\
          \u{20} {{\"version\": 1, \"themes\": [{{\"name\": \"My Dark\", \"base\": \"Inkuno Dark\",\n\
-         \u{20} \u{20} \"colors\": {{\"bg\": \"#1b1a19\", \"text\": \"#e4e0da\", \"dim\": \"#77716a\",\n\
-         \u{20} \u{20} \"accent\": \"#e0926b\", \"code_bg\": \"#262423\", \"panel\": \"#242221\",\n\
+         \u{20} \u{20} \"colors\": {{\"bg\": \"#171a22\", \"text\": \"#f5f5f2\", \"dim\": \"#77716a\",\n\
+         \u{20} \u{20} \"accent\": \"#4263eb\", \"code_bg\": \"#262423\", \"panel\": \"#242221\",\n\
          \u{20} \u{20} \"border\": \"#3a3735\"}}]}}\n\
          \u{20} 7 seed tokens (`bg text dim accent code_bg panel border`); the rest is derived.\n\
          \u{20} a missing token inherits `base` (a built-in theme); low contrast is auto-fixed\n\
@@ -74,7 +72,10 @@ fn help_text() -> String {
 /// nothing else, writes nothing.
 fn check_config() -> i32 {
     let mut failed = false;
-    println!("config dir: {}", vault::config_dir().join("inkuno").display());
+    println!(
+        "config dir: {}",
+        vault::config_dir().join("inkuno").display()
+    );
     // Shortcuts: JSON when present, else the legacy `keys` file, else the defaults.
     let text = vault::load_keybindings();
     if text.trim().is_empty() {

@@ -126,7 +126,7 @@ fn tabs_open_switch_close_and_come_back(cx: &mut TestAppContext) {
     assert_eq!(tabs(&shell, cx, 0).0.len(), 4);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.tab_labels(0, cx)[3].clone()),
-        "Nouvelle note"
+        "New note"
     );
     cx.simulate_input("# Brouillon");
     assert_eq!(
@@ -512,15 +512,11 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
         open(cx, &note(name));
     }
     open(cx, &csv);
-    shell.update_in(cx, |s, window, cx| s.tool_as_tab(window, cx));
     cx.run_until_parked();
     let names = |cx: &mut gpui::VisualTestContext, group: usize| {
         shell.read_with(cx, |s, cx| s.tab_labels(group, cx))
     };
-    assert_eq!(
-        names(cx, 0),
-        vec!["Alpha", "Beta", "Gamma", "Données", "Graphe"]
-    );
+    assert_eq!(names(cx, 0), vec!["Alpha", "Beta", "Gamma", "Données"]);
     let right_click = |cx: &mut gpui::VisualTestContext, tab: usize| {
         cx.update(|window, _| window.refresh());
         cx.run_until_parked();
@@ -559,21 +555,17 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
     right_click(cx, beta);
     assert_eq!(
         menu(cx),
-        vec![
-            "Fermer",
-            "Fermer les autres onglets",
-            "Fermer tous les onglets de ce volet"
-        ]
+        vec!["Close", "Close other tabs", "Close all tabs in this pane"]
     );
     assert_eq!(shell.read_with(cx, |s, _| s.active), shown);
     cx.simulate_keystrokes("escape");
     assert!(shell.read_with(cx, |s, _| s.menu.is_none()));
-    assert_eq!(names(cx, 0).len(), 5);
+    assert_eq!(names(cx, 0).len(), 4);
 
     // "Close other tabs" keeps the clicked tab, not the shown one; it gets shown, with input.
     right_click(cx, beta);
     let at = cx
-        .debug_bounds("menu-entry-Fermer les autres onglets")
+        .debug_bounds("menu-entry-Close other tabs")
         .unwrap()
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
@@ -725,10 +717,10 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Closing in bulk over a diagram, a picture and a table whose cell is still typed, its save
-/// pending: each final write lands before its tab goes, and a diagram that cannot be written stays.
+/// Closing in bulk over a picture and a table whose cell is still typed, its save
+/// pending: each final write lands before its tab goes.
 #[gpui::test]
-fn bulk_close_writes_pending_tables_and_diagrams(cx: &mut TestAppContext) {
+fn bulk_close_writes_pending_tables(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "tabs-bulk-kinds");
     let anchor = root.join("Ancre.md");
     fs::write(&anchor, "# Ancre\n").unwrap();
@@ -737,7 +729,7 @@ fn bulk_close_writes_pending_tables_and_diagrams(cx: &mut TestAppContext) {
     let csv = root.join("Données.csv");
     fs::write(&csv, "a,b\n1,2\n").unwrap();
     let drawing = root.join("Schéma.svg");
-    fs::write(&drawing, Diagram::blank().to_svg(diagram::COLORS[0])).unwrap();
+    fs::write(&drawing, r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##).unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     let open = |cx: &mut gpui::VisualTestContext, path: &Path| {
         shell.update_in(cx, |s, window, cx| s.open(path, window, cx));
@@ -746,20 +738,8 @@ fn bulk_close_writes_pending_tables_and_diagrams(cx: &mut TestAppContext) {
     for path in [&anchor, &image] {
         open(cx, path);
     }
-    // A shape drawn in the diagram, which cannot be written (it saves as soon as it is drawn).
-    let block = root.join(".Schéma.tmp");
-    fs::create_dir(&block).unwrap();
     open(cx, &drawing);
-    let canvas = shell.read_with(cx, |s, _| s.pane().drawing().cloned().unwrap());
-    let draw = |cx: &mut gpui::VisualTestContext| {
-        cx.simulate_input("r");
-        let (from, to) = canvas.read_with(cx, |c, _| (c.spot(0., 0.), c.spot(120., 60.)));
-        cx.simulate_mouse_down(from, MouseButton::Left, gpui::Modifiers::none());
-        cx.simulate_mouse_move(to, MouseButton::Left, gpui::Modifiers::none());
-        cx.simulate_mouse_up(to, MouseButton::Left, gpui::Modifiers::none());
-    };
-    draw(cx);
-    assert!(shell.read_with(cx, |s, _| s.pane().canvas_dirty));
+    assert!(shell.read_with(cx, |s, _| s.pane().viewer().is_some()));
     // A cell still being typed: its background save is only scheduled.
     open(cx, &csv);
     cx.simulate_input("modifié");
@@ -768,28 +748,10 @@ fn bulk_close_writes_pending_tables_and_diagrams(cx: &mut TestAppContext) {
         vec!["Ancre", "Photo", "Schéma", "Données"]
     );
 
-    // The diagram stays, live, and the others close, the table saved.
+    // Everything closes, the table saved.
     cx.dispatch_action(CloseAllFiles);
     cx.run_until_parked();
     assert!(fs::read_to_string(&csv).unwrap().contains("modifié"));
-    shell.read_with(cx, |s, _| {
-        assert_eq!(s.panes.len(), 1);
-        assert_eq!(s.pane().drawing(), Some(&canvas));
-        assert!(s.pane().canvas_dirty && s.told(Tone::Failed, "Schéma.svg"));
-    });
-    assert_eq!(canvas.read_with(cx, |c, _| c.diagram().shapes.len()), 1);
-
-    // Writable again: it is saved, the window is left on an empty note, every file still there.
-    fs::remove_dir(&block).unwrap();
-    cx.dispatch_action(CloseAllFiles);
-    cx.run_until_parked();
-    assert_eq!(
-        Diagram::from_svg(&fs::read_to_string(&drawing).unwrap())
-            .unwrap()
-            .shapes
-            .len(),
-        1
-    );
     shell.read_with(cx, |s, cx| {
         assert_eq!(s.panes.len(), 1);
         assert!(
@@ -804,7 +766,7 @@ fn bulk_close_writes_pending_tables_and_diagrams(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(
         shell.read_with(cx, |s, cx| s.tab_labels(0, cx)),
-        vec!["Schéma", "Données", "Photo"]
+        vec!["Données", "Schéma", "Photo"]
     );
     assert!(shell.read_with(cx, |s, _| matches!(
         s.pane().file.as_ref().map(|f| &f.kind),

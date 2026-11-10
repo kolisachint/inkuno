@@ -3,7 +3,7 @@
 use super::*;
 use crate::ui::assets::ICON_SET;
 use crate::views::nav::*;
-use crate::{lang::tr, logic::markdown::Link, platform::vault, views::editor, views::graph};
+use crate::{lang::tr, logic::markdown::Link, platform::vault, views::editor};
 use gpui::{
     Action, Animation, AnimationExt, ClipboardItem, Context, Focusable, MouseButton,
     MouseDownEvent, Window, div, ease_out_quint, prelude::*, px,
@@ -24,7 +24,6 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         let menu = self.menu.take();
-        let share = menu.as_ref().and_then(|m| m.share);
         if let Some(back) = menu.as_ref().and_then(|menu| menu.back.as_ref()) {
             window.focus(back);
         }
@@ -38,13 +37,6 @@ impl Shell {
             .filter(|tab| *tab < self.panes.len());
         let link = menu.and_then(|menu| menu.text).flatten();
         cx.notify();
-        if let Do::Share(choice) = what {
-            if let Some(pane) = share.filter(|p| self.share_choices(*p).contains(&choice)) {
-                self.active = pane;
-                self.share_document(choice, window, cx);
-            }
-            return;
-        }
         match (what, tab) {
             (Do::CloseTab, Some(tab)) => return self.close_tab(tab, window, cx),
             (Do::CloseOtherTabs, Some(tab)) => return self.close_other_tabs(tab, window, cx),
@@ -135,16 +127,6 @@ impl Shell {
                 self.nav.sel = Some(dir);
                 self.new_note_here(window, cx);
             }
-            (Do::FromTemplate, _) => {
-                self.nav.open.insert(dir.clone());
-                self.nav.sel = Some(dir);
-                self.open_templates(crate::views::palette::TemplateAct::New, window, cx);
-            }
-            (Do::NewDiagram, _) => {
-                self.nav.open.insert(dir.clone());
-                self.nav.sel = Some(dir);
-                self.new_diagram(window, cx);
-            }
             (Do::NewFolder, _) => {
                 // The folder is created in the selection's: the field says so.
                 let label = match dir.file_name().filter(|_| dir != root) {
@@ -207,7 +189,7 @@ impl Shell {
                                 this.relocate(&path, &to, !is_dir, cx);
                                 // Links follow: by note name, or by file name for an image.
                                 let (old, new) = if image {
-                                    (graph::image_name(&path), graph::image_name(&to))
+                                    (vault::image_name(&path), vault::image_name(&to))
                                 } else {
                                     (current.clone(), name)
                                 };
@@ -229,11 +211,11 @@ impl Shell {
             (Do::CopyLink, Some(_)) => {
                 let files = all.iter().filter(|p| !self.dirs.contains(p));
                 let link = |path: &PathBuf| match (vault::is_image(path), vault::is_table(path)) {
-                    (true, _) => format!("![[{}]]", graph::image_name(path)),
+                    (true, _) => format!("![[{}]]", vault::image_name(path)),
                     // A table has no link: its file name.
-                    (_, true) => graph::image_name(path),
+                    (_, true) => vault::image_name(path),
                     // An attachment is targeted by its file name, extension included.
-                    _ if vault::is_attachment(path) => format!("[[{}]]", graph::image_name(path)),
+                    _ if vault::is_attachment(path) => format!("[[{}]]", vault::image_name(path)),
                     _ => format!("[[{}]]", vault::stem(path)),
                 };
                 copy(files.map(link).collect(), cx);
@@ -445,14 +427,6 @@ impl Shell {
         let Some(menu) = self.menu.as_ref() else {
             return Vec::new();
         };
-        if let Some(pane) = menu.share {
-            return vec![
-                self.share_choices(pane)
-                    .into_iter()
-                    .map(|choice| (choice.label(), Do::Share(choice)))
-                    .collect(),
-            ];
-        }
         let is_dir = menu.target.as_ref().is_none_or(|p| self.dirs.contains(p));
         let tree = self.nav.mode == Mode::Tree;
         let many = menu
@@ -575,17 +549,6 @@ impl Shell {
             }
             if tree && !many {
                 groups[1].push((tr("New note here", "Nouvelle note ici"), Do::NewNote));
-                if self
-                    .vault
-                    .as_ref()
-                    .is_some_and(|root| vault::template_dir(root, &self.dirs).is_some())
-                {
-                    groups[1].push((
-                        tr("New note from a template", "Nouvelle note depuis un modèle"),
-                        Do::FromTemplate,
-                    ));
-                }
-                groups[1].push((tr("New diagram here", "Nouveau schéma ici"), Do::NewDiagram));
                 groups[1].push((tr("New folder", "Nouveau dossier"), Do::NewFolder));
             }
             if !is_dir || many {

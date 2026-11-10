@@ -19,7 +19,6 @@ use crate::{
     ui::theme::Theme,
     ui::widgets::keycaps,
     views::editor::TableOp,
-    views::sheet::Pick,
 };
 
 /// Height of a row of the list.
@@ -29,69 +28,12 @@ fn vault_label() -> &'static str {
     tr("Change vault…", "Changer de coffre…")
 }
 
-fn diagram_label() -> &'static str {
-    tr("New diagram", "Nouveau schéma")
-}
-
 fn folder_label() -> &'static str {
     tr("New folder", "Nouveau dossier")
 }
 
-fn import_label() -> &'static str {
-    tr(
-        "Import a diagram (Excalidraw, draw.io)…",
-        "Importer un schéma (Excalidraw, draw.io)…",
-    )
-}
-
-fn updates_label(on: bool) -> &'static str {
-    if on {
-        tr(
-            "Stop checking for updates",
-            "Ne plus chercher les mises à jour",
-        )
-    } else {
-        tr(
-            "Check for updates every day",
-            "Chercher les mises à jour chaque jour",
-        )
-    }
-}
-
-fn check_label() -> &'static str {
-    tr(
-        "Check for updates now",
-        "Chercher une mise à jour maintenant",
-    )
-}
-
-fn install_label(version: &str) -> String {
-    format!(
-        "{} {version}",
-        tr("Update Inkuno to", "Mettre à jour Inkuno vers")
-    )
-}
-
-pub fn sync_label() -> &'static str {
-    tr("Sync the vault (git)", "Synchroniser le coffre (git)")
-}
-
-pub fn clone_label() -> &'static str {
-    tr(
-        "Clone a vault from a git address…",
-        "Cloner un coffre depuis une adresse git…",
-    )
-}
-
 fn backup_label() -> &'static str {
     tr("Back up the vault…", "Sauvegarder le coffre…")
-}
-
-fn capture_label() -> &'static str {
-    tr(
-        "Set up the quick capture shortcut",
-        "Créer le raccourci de capture rapide",
-    )
 }
 
 fn terminal_label() -> &'static str {
@@ -103,35 +45,6 @@ fn terminal_label() -> &'static str {
 
 fn trash_label() -> &'static str {
     tr("Restore from the trash…", "Restaurer depuis la corbeille…")
-}
-
-pub fn back_label() -> &'static str {
-    tr(
-        "Back: what was shown before",
-        "Précédent : ce qui était affiché avant",
-    )
-}
-
-pub fn forward_label() -> &'static str {
-    tr(
-        "Forward: what was shown after",
-        "Suivant : ce qui était affiché après",
-    )
-}
-
-fn today_label() -> &'static str {
-    tr("Today's note", "Note du jour")
-}
-
-fn board_label() -> &'static str {
-    tr("New kanban board", "Nouveau tableau kanban")
-}
-
-fn undo_swap_label() -> &'static str {
-    tr(
-        "Undo the replacement in the vault",
-        "Annuler le remplacement dans le coffre",
-    )
 }
 
 fn list_label(style: ListStyle) -> &'static str {
@@ -148,10 +61,6 @@ fn list_label(style: ListStyle) -> &'static str {
 
 fn comments_label() -> &'static str {
     tr("Comments of the note", "Commentaires de la note")
-}
-
-fn outline_label() -> &'static str {
-    tr("Outline of the note", "Plan de la note")
 }
 
 fn help_label() -> &'static str {
@@ -190,30 +99,6 @@ impl Setting {
 
 actions!(palette, [Prev, Next, Confirm, ConfirmAside, Dismiss]);
 
-/// What templates allow: a note born from one, a template inserted, the open note saved as a template.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum TemplateAct {
-    New,
-    Insert,
-    Save,
-}
-
-impl TemplateAct {
-    fn label(self) -> &'static str {
-        match self {
-            TemplateAct::New => tr(
-                "New note from a template…",
-                "Nouvelle note depuis un modèle…",
-            ),
-            TemplateAct::Insert => tr("Insert a template…", "Insérer un modèle…"),
-            TemplateAct::Save => tr(
-                "Make a template of this note…",
-                "Faire un modèle de cette note…",
-            ),
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct Entry {
     pub name: String,
@@ -233,46 +118,20 @@ pub enum PaletteEvent {
     Create(String),
     ChangeVault,
     Help,
-    NewDiagram,
     NewFolder,
-    ImportDiagram,
     Setting(Setting),
-    /// Setting or gesture of the shown table.
-    Table(Pick),
     /// The chosen lines of the note, as a list or as text.
     Restyle(ListStyle),
     /// A gesture on the table under the cursor.
     Grid(TableOp),
-    /// A note born from a template, a template inserted, or the note saved as a template.
-    Template(TemplateAct),
-    /// Turns the new-version check on or off.
-    ToggleUpdates,
-    /// Checks for a new version right now.
-    CheckUpdate,
-    /// List of the note's headings.
-    Outline,
     /// List of the note's comments.
     Comments,
-    /// Undoes the last vault-wide replacement.
-    UndoSwap,
-    /// Creates a note that opens as a kanban board.
-    NewBoard,
-    /// Opens or creates the daily note.
-    Today,
-    /// Back (`false`) or forward (`true`) in what has been shown.
-    Travel(bool),
     /// Lists the vault's trash, to restore an item from it.
     Trash,
     /// Archives the vault into a folder to choose.
     Backup,
-    Sync,
-    CloneVault,
     /// Opens the system terminal in the vault folder.
     Terminal,
-    /// Binds capture (`inkuno --capture`) to a desktop shortcut.
-    CaptureKey,
-    /// Installs the new version.
-    InstallUpdate,
     /// Text submitted in an input field, or choice submitted in a list.
     Submit(String),
     /// Choice hovered in a list: to apply as a preview.
@@ -288,30 +147,14 @@ enum Item {
     Create,
     Vault,
     Help,
-    Diagram,
     Folder,
-    Import,
-    Updates,
-    Check,
-    Install,
-    Outline,
     Comments,
-    UndoSwap,
-    Board,
-    Today,
-    Back,
-    Forward,
     Trash,
     Backup,
-    Sync,
-    CloneVault,
     Terminal,
-    CaptureKey,
     Setting(Setting),
-    Table(Pick),
     Restyle(ListStyle),
     Grid(TableOp),
-    Template(TemplateAct),
     /// An app command (`commands`), by its index.
     Command(usize),
 }
@@ -333,18 +176,11 @@ pub struct Palette {
     /// Choice list: `entries` are the options, without creation or commands.
     choices: bool,
     /// Search in the vault's text: one found line per choice, no note by name nor command.
-    /// The new-version check is on: `None` outside the main palette.
-    updates: Option<bool>,
-    /// Number of the new version the app can install by itself.
-    installable: Option<String>,
-    /// A table is shown: its settings are searched here.
     table: bool,
     /// A note is shown: its lines can become a list.
     lists: bool,
     /// The cursor is in a Markdown table: its rows and columns are managed from here.
     cells: bool,
-    /// A vault replacement can be undone.
-    undo_swap: bool,
     /// The commands the view can do, the view's own first (the first `here`): the
     /// palette finds them by what they do, and offers the `here` ones without typing anything.
     commands: Vec<crate::logic::commands::Command>,
@@ -414,12 +250,9 @@ impl Palette {
             root: PathBuf::new(),
             prompt: None,
             choices: false,
-            updates: None,
-            installable: None,
             table: false,
             lists: false,
             cells: false,
-            undo_swap: false,
             commands: Vec::new(),
             here: 0,
             commands_only: false,
@@ -433,15 +266,7 @@ impl Palette {
         this
     }
 
-    /// Offers to turn the new-version check on or off, depending on its state.
-    pub fn with_updates(mut self, on: bool, installable: Option<String>) -> Self {
-        self.updates = Some(on);
-        self.installable = installable;
-        self.refresh();
-        self
-    }
-
-    /// Offers to undo the last vault replacement, if there is one.
+    /// The command catalogue, for the `>` mode.
     pub fn with_commands(
         mut self,
         commands: Vec<crate::logic::commands::Command>,
@@ -449,12 +274,6 @@ impl Palette {
         context: &'static str,
     ) -> Self {
         (self.commands, self.here, self.context) = (commands, here, context);
-        self.refresh();
-        self
-    }
-
-    pub fn with_undo_swap(mut self, possible: bool) -> Self {
-        self.undo_swap = possible;
         self.refresh();
         self
     }
@@ -493,12 +312,6 @@ impl Palette {
         this
     }
 
-    /// Stuck to the top of its container: for a window that is only this field.
-    pub fn at_top(mut self) -> Self {
-        self.top = px(8.);
-        self
-    }
-
     /// Filterable choice list (theme, font), `current` preselected:
     /// each move emits `Preview`, Enter emits `Submit`.
     pub fn choose(
@@ -533,14 +346,6 @@ impl Palette {
     pub fn select(mut self, index: usize) -> Self {
         self.selected = index.min(self.items.len().saturating_sub(1));
         self
-    }
-
-    /// Index, in the list given to `choose`, of the selected choice.
-    /// The input's cursor is inside its frame, at the last frame drawn.
-    #[cfg(test)]
-    pub fn caret_inside(&self) -> Option<bool> {
-        let (frame, caret) = (self.scroll.bounds(), self.caret.get()?);
-        Some(caret >= frame.left() && caret <= frame.right())
     }
 
     /// Number of lines offered under the input.
@@ -692,70 +497,24 @@ impl Palette {
             }
         }
         // Like the settings: offered only when searched for.
-        for (label, item) in [
-            (diagram_label(), Item::Diagram),
-            (folder_label(), Item::Folder),
-            (import_label(), Item::Import),
-        ] {
+        for (label, item) in [(folder_label(), Item::Folder)] {
             if !q.is_empty() && command(&q, label) {
                 items.push(item);
             }
         }
         for (label, item) in [
-            (outline_label(), Item::Outline),
             (comments_label(), Item::Comments),
-            (board_label(), Item::Board),
-            (today_label(), Item::Today),
-            (back_label(), Item::Back),
-            (forward_label(), Item::Forward),
             (trash_label(), Item::Trash),
             (backup_label(), Item::Backup),
-            (sync_label(), Item::Sync),
-            (clone_label(), Item::CloneVault),
             (terminal_label(), Item::Terminal),
-            (capture_label(), Item::CaptureKey),
         ] {
             if !q.is_empty() && command(&q, label) {
                 items.push(item);
             }
         }
-        if self.undo_swap && !q.is_empty() && command(&q, undo_swap_label()) {
-            items.push(Item::UndoSwap);
-        }
-        if let Some(version) = &self.installable
-            && !q.is_empty()
-            && command(&q, &install_label(version))
-        {
-            items.push(Item::Install);
-        }
-        if let Some(on) = self.updates
-            && !q.is_empty()
-            && command(&q, updates_label(on))
-        {
-            items.push(Item::Updates);
-        }
-        if self.updates.is_some() && !q.is_empty() && command(&q, check_label()) {
-            items.push(Item::Check);
-        }
-        if self.table && !q.is_empty() {
-            items.extend(
-                Pick::ALL
-                    .into_iter()
-                    .filter(|p| command(&q, p.label()))
-                    .map(Item::Table),
-            );
-        }
         if (self.cells || self.table) && !q.is_empty() {
-            let shown = |op: &TableOp| (self.cells || op.in_sheet()) && command(&q, op.label());
+            let shown = |op: &TableOp| self.cells && command(&q, op.label());
             items.extend(TableOp::ALL.into_iter().filter(shown).map(Item::Grid));
-        }
-        if !q.is_empty() {
-            let acts = [TemplateAct::New, TemplateAct::Insert, TemplateAct::Save];
-            items.extend(
-                acts.into_iter()
-                    .filter(|a| (*a == TemplateAct::New || self.lists) && command(&q, a.label()))
-                    .map(Item::Template),
-            );
         }
         if self.lists && !q.is_empty() {
             items.extend(
@@ -775,19 +534,11 @@ impl Palette {
         if !q.is_empty() {
             let doubled = |name: &str| {
                 name.starts_with("editor::Table")
-                    || name.starts_with("sheet::Pick")
                     || matches!(
                         name,
-                        "app::Outline"
-                            | "app::Today"
-                            | "app::OpenVault"
-                            | "app::GoBack"
-                            | "app::GoForward"
-                            | "app::SyncVault"
+                        "app::OpenVault"
                             | "app::ToggleHelp"
-                            | "app::NewDiagram"
                             | "nav::NewFolder"
-                            | "app::NewFromTemplate"
                             | "app::ChooseTheme"
                             | "editor::ListBullet"
                             | "editor::ListOrdered"
@@ -842,30 +593,14 @@ impl Palette {
             Some(Item::Create) => PaletteEvent::Create(self.query.text.trim().to_string()),
             Some(Item::Vault) => PaletteEvent::ChangeVault,
             Some(Item::Help) => PaletteEvent::Help,
-            Some(Item::Diagram) => PaletteEvent::NewDiagram,
             Some(Item::Folder) => PaletteEvent::NewFolder,
-            Some(&Item::Table(pick)) => PaletteEvent::Table(pick),
             Some(&Item::Restyle(style)) => PaletteEvent::Restyle(style),
             Some(&Item::Grid(op)) => PaletteEvent::Grid(op),
             Some(&Item::Command(n)) => PaletteEvent::Run(self.commands[n].action),
-            Some(&Item::Template(act)) => PaletteEvent::Template(act),
-            Some(Item::Import) => PaletteEvent::ImportDiagram,
-            Some(Item::Updates) => PaletteEvent::ToggleUpdates,
-            Some(Item::Check) => PaletteEvent::CheckUpdate,
-            Some(Item::Outline) => PaletteEvent::Outline,
             Some(Item::Comments) => PaletteEvent::Comments,
-            Some(Item::UndoSwap) => PaletteEvent::UndoSwap,
-            Some(Item::Board) => PaletteEvent::NewBoard,
-            Some(Item::Today) => PaletteEvent::Today,
-            Some(Item::Back) => PaletteEvent::Travel(false),
-            Some(Item::Forward) => PaletteEvent::Travel(true),
             Some(Item::Trash) => PaletteEvent::Trash,
             Some(Item::Backup) => PaletteEvent::Backup,
-            Some(Item::Sync) => PaletteEvent::Sync,
-            Some(Item::CloneVault) => PaletteEvent::CloneVault,
             Some(Item::Terminal) => PaletteEvent::Terminal,
-            Some(Item::CaptureKey) => PaletteEvent::CaptureKey,
-            Some(Item::Install) => PaletteEvent::InstallUpdate,
             Some(Item::Setting(setting)) => PaletteEvent::Setting(*setting),
             None => PaletteEvent::Dismiss,
         });
@@ -1087,36 +822,20 @@ impl Render for Palette {
                 ),
                 Item::Vault => (vault_label().to_string(), crate::ui::keys::of(cx, &crate::actions::OpenVault)),
                 Item::Help => (help_label().to_string(), crate::ui::keys::of(cx, &crate::actions::ToggleHelp)),
-                Item::Diagram => (diagram_label().to_string(), crate::ui::keys::of(cx, &crate::actions::NewDiagram)),
                 Item::Folder => (folder_label().to_string(), crate::ui::keys::of(cx, &crate::views::nav::NewFolder)),
-                Item::Import => (import_label().to_string(), String::new()),
-                Item::Updates => (updates_label(self.updates.unwrap_or(true)).to_string(), String::new()),
-                Item::Check => (check_label().to_string(), String::new()),
-                Item::Outline => (outline_label().to_string(), crate::ui::keys::of(cx, &crate::actions::Outline)),
                 Item::Comments => (comments_label().to_string(), String::new()),
                 &Item::Restyle(style) => (list_label(style).to_string(), String::new()),
                 &Item::Grid(op) => (op.label().to_string(), crate::ui::keys::of(cx, op.action().as_ref())),
                 &Item::Command(n) => (self.commands[n].label.to_string(), self.commands[n].keys.clone()),
-                &Item::Template(act) => (act.label().to_string(), if act == TemplateAct::New { crate::ui::keys::of(cx, &crate::actions::NewFromTemplate) } else { String::new() }),
-                Item::UndoSwap => (undo_swap_label().to_string(), String::new()),
-                Item::Board => (board_label().to_string(), String::new()),
-                Item::Today => (today_label().to_string(), crate::ui::keys::of(cx, &crate::actions::Today)),
-                Item::Back => (back_label().to_string(), crate::ui::keys::of(cx, &crate::actions::GoBack)),
-                Item::Forward => (forward_label().to_string(), crate::ui::keys::of(cx, &crate::actions::GoForward)),
                 Item::Trash => (trash_label().to_string(), String::new()),
                 Item::Backup => (backup_label().to_string(), String::new()),
-                Item::Sync => (sync_label().to_string(), crate::ui::keys::of(cx, &crate::actions::SyncVault)),
-                Item::CloneVault => (clone_label().to_string(), String::new()),
                 Item::Terminal => (terminal_label().to_string(), String::new()),
-                Item::CaptureKey => (capture_label().to_string(), String::new()),
-                Item::Install => (install_label(self.installable.as_deref().unwrap_or_default()), String::new()),
                 Item::Setting(setting) => (setting.label().to_string(), String::new()),
-                Item::Table(pick) => (pick.label().to_string(), String::new()),
             };
             // Where the detail is a shortcut, not a description.
             let shortcut = matches!(
                 item,
-                Item::Vault | Item::Help | Item::Diagram | Item::Folder | Item::Outline | Item::Grid(_) | Item::Template(_) | Item::Today | Item::Back | Item::Forward | Item::Sync
+                Item::Vault | Item::Help | Item::Folder | Item::Grid(_)
             );
             let note = matches!(item, Item::Note(_));
             let age = match item {

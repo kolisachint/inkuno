@@ -6,10 +6,8 @@ mod clipboard;
 mod completion;
 mod cursor;
 mod edit;
-mod embed;
 mod find;
 mod format_bar;
-mod formulas;
 pub mod grid;
 mod input;
 mod layout;
@@ -27,10 +25,11 @@ pub use blocks::*;
 use completion::*;
 use cursor::*;
 use edit::*;
-use embed::*;
 use find::*;
+#[cfg(not(test))]
+use format_bar::*;
+#[cfg(test)]
 pub use format_bar::*;
-use formulas::*;
 pub use layout::*;
 use mouse::*;
 pub use notes::*;
@@ -64,7 +63,6 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     lang::tr,
     logic::block,
-    logic::diagram::Diagram,
     logic::markdown::{self as md, Enter, Kind, Link, ListStyle},
     platform::vault,
     ui::assets::mono,
@@ -73,7 +71,6 @@ use crate::{
     ui::svg,
     ui::theme::Theme,
     ui::theme::Wide,
-    views::graph,
     views::viewer::Source,
 };
 
@@ -238,16 +235,14 @@ pub enum EditorEvent {
     Open(Link),
     /// The same, with Shift: to open in the other pane.
     OpenAside(Link),
-    /// Replace across the whole vault what the search bar looks for.
-    Swap(md::Swap),
     /// Right click in the note: where, the link found there, whether it targets a comment, and whether the keys opened it.
     Menu(Point<Pixels>, Option<Link>, bool, bool),
     /// Click on a block handle: its menu, at that spot.
     BlockMenu(Point<Pixels>),
     /// A diagram, formula or picture to view large.
     View(Source),
-    /// An embedded section, or a link to a heading, to open: the note and where in it; with Shift, aside.
-    OpenAt(crate::logic::embed::Target, bool),
+    /// A link to a heading or a block of a note, to open: the note and where in it; with Shift, aside.
+    OpenAt(crate::logic::wiki::Target, bool),
 }
 
 /// What the footer counter depends on: the text version and the selection.
@@ -278,6 +273,14 @@ pub struct Editor {
     /// The other lines hide their inline and block markers, Typora-style. Plain cursor moves
     /// (keyboard, search jumps) leave it alone; typing sets it to the edited line.
     revealed: Option<usize>,
+    /// Footnote definitions of the text (see `md::footnotes`), refreshed with the layout:
+    /// navigation and the pointer only follow defined labels.
+    feet: Vec<md::FootDef>,
+    /// Revision `feet` was computed for.
+    feet_rev: u64,
+    /// Last definition jumped to from its label, and which of its references was shown:
+    /// repeated clicks cycle through them.
+    foot_jump: Option<(usize, usize)>,
     notes: Rc<[String]>,
     /// Folders to look for images in: the note's, then the vault.
     dirs: Vec<PathBuf>,
@@ -325,12 +328,13 @@ pub struct Editor {
     geos: Vec<Geo>,
     /// The commented parts of each table, for one version of the text and one cursor.
     marks: Option<Marks>,
-    /// Why the formula under the pointer has no result.
-    reason: Option<Rc<str>>,
-    /// This editor shows an embedded section: nothing in it can be edited, clicked or focused.
+    /// No editor is read-only anymore (embeds are cut, every editor edits); kept false so the
+    /// layout paths stay as they were.
     readonly: bool,
-    /// The notes embedded in this one, and what is kept of them.
-    embeds: Embeds,
+    /// Names of the vault's notes (lowercase, aliases too), to their files: what `#` and `^`
+    /// completion looks up. Nothing feeds it since the vault-search handoff was cut, so `#`
+    /// completion currently offers nothing; the field stays so the lookup keeps compiling.
+    sources: Rc<HashMap<String, PathBuf>>,
     /// The handle under the pointer: (table start, handle).
     part_hover: Option<(usize, Part)>,
     /// Where the pointer was at its last move.
@@ -445,6 +449,9 @@ impl Editor {
             last_edit: None,
             edited_at: usize::MAX,
             revealed: None,
+            feet: Vec::new(),
+            feet_rev: u64::MAX,
+            foot_jump: None,
             notes: Rc::from([]),
             dirs: Vec::new(),
             images: HashMap::new(),
@@ -470,9 +477,8 @@ impl Editor {
             table_hover: None,
             geos: Vec::new(),
             marks: None,
-            reason: None,
             readonly: false,
-            embeds: Embeds::default(),
+            sources: Rc::new(HashMap::new()),
             part_hover: None,
             pointer: Point::default(),
             hand: None,
@@ -580,26 +586,10 @@ impl Editor {
     pub fn set_images(&mut self, images: &[PathBuf]) {
         let named = images
             .iter()
-            .map(|p| (graph::image_name(p).to_lowercase(), p.clone()));
+            .map(|p| (vault::image_name(p).to_lowercase(), p.clone()));
         self.images = named.collect();
         self.version += 1;
         self.epoch += 1;
-    }
-
-    /// What the note's pictures and embeds are looked up in: its folders, the vault's pictures by
-    /// name, its notes by name (see `find_picture`).
-    pub fn lookups(
-        &self,
-    ) -> (
-        Vec<PathBuf>,
-        HashMap<String, PathBuf>,
-        HashMap<String, PathBuf>,
-    ) {
-        (
-            self.dirs.clone(),
-            self.images.clone(),
-            (*self.embeds.sources).clone(),
-        )
     }
 
     pub fn set_dirs(&mut self, dirs: Vec<PathBuf>) {
@@ -667,12 +657,6 @@ impl Editor {
     #[cfg(test)]
     pub fn figure_count(&self) -> (usize, usize) {
         (self.figures.len(), self.waiting.len())
-    }
-
-    /// Center of the "+" buttons (row, column) of the first table shown.
-    #[cfg(test)]
-    pub fn plus_buttons(&self) -> Option<[Point<Pixels>; 2]> {
-        Some(plus_bars(self.tables.first()?.1).map(|bar| bar.center()))
     }
 
     /// Footer counter: words and characters of the note, or of the selection. Recounted only when the text or the selection change.
@@ -807,6 +791,43 @@ impl Editor {
             .lines()
             .filter(|l| md::is_fence(l))
             .count()
+    }
+
+    /// Footnote definitions of the text, recomputed when it changed.
+    pub(super) fn feet(&mut self) -> &[md::FootDef] {
+        if self.feet_rev != self.revision {
+            self.feet = if md::count_footnotes(&self.content) == 0 {
+                Vec::new()
+            } else {
+                md::footnotes(&self.content)
+            };
+            self.feet_rev = self.revision;
+        }
+        &self.feet
+    }
+
+    /// Version of the footnote definitions: their labels, case-insensitively, in order.
+    /// Adding, removing or renaming a definition restyles every reference, so the layout
+    /// redoes everything when it changes (positions are left out: typing above a definition
+    /// must not reshuffle the whole note).
+    pub(super) fn foot_hash(&self) -> u64 {
+        let mut hasher = Fast::default();
+        // ponytail: linear in the definitions; notes hold a handful of them.
+        for def in &self.feet {
+            def.label.to_lowercase().hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+
+    /// Whether `label` names a footnote definition of the text (case-insensitive).
+    pub(super) fn foot_defined(&self, label: &str) -> bool {
+        let key = label.to_lowercase();
+        self.feet.iter().any(|d| d.label.to_lowercase() == key)
+    }
+
+    /// The labels with a footnote definition, lowercased, for `md::footnote_flags`.
+    pub(super) fn foot_keys(&self) -> Vec<String> {
+        self.feet.iter().map(|d| d.label.to_lowercase()).collect()
     }
 
     /// A ``` without a closing fence does not open a block, as in `layout`.

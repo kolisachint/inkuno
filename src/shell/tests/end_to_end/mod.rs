@@ -2,22 +2,17 @@
 //! as one session: each starts from the vault, panel and settings the previous one left.
 
 mod blocks;
-mod boards;
-mod csv;
 mod cursors_comments;
 mod dates_lists;
-mod diagrams;
-mod embeds;
 mod files;
 mod find_mouse;
-mod git_sync;
+mod footnotes;
 mod history_panes;
 mod md_tables;
 mod media;
 mod outline;
 mod panel;
 mod settings;
-mod table_formulas;
 mod table_handles;
 mod table_styles;
 mod vault_views;
@@ -96,23 +91,18 @@ fn end_to_end(cx: &mut TestAppContext) {
     panel::run(&j, cx);
     files::run(&j, cx);
     media::run(&j, cx);
-    let here = vault_views::run(&j, cx);
-    diagrams::run(&j, cx);
+    vault_views::run(&j, cx);
     md_tables::run(&j, cx);
     blocks::headings(&j, cx);
     blocks::tags(&j, cx);
     blocks::run(&j, cx);
     outline::run(&j, cx);
-    boards::run(&j, cx, &here);
     cursors_comments::run(&j, cx);
     dates_lists::run(&j, cx);
     table_handles::run(&j, cx);
     table_styles::run(&j, cx);
-    table_formulas::run(&j, cx);
-    embeds::run(&j, cx);
     find_mouse::run(&j, cx);
-    csv::run(&j, cx);
+    footnotes::run(&j, cx);
     history_panes::run(&j, cx);
-    git_sync::run(&j, cx);
     fs::remove_dir_all(&j.root).unwrap();
 }

@@ -96,7 +96,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     });
     assert_eq!(text(cx), "1. un\n2. deux\n3. trois\n\nfin");
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("tâches");
+    cx.simulate_input("turn into a task list");
     cx.simulate_keystrokes("down enter");
     assert_eq!(text(cx), "- [ ] un\n- [ ] deux\n- [ ] trois\n\nfin");
     // The same kind again: back to text. Undo brings back the previous list.

@@ -151,8 +151,7 @@ impl Vault {
             .or_else(|_| joined.strip_prefix(&root))
             .map_err(|_| "a path cannot leave the vault".to_string())?;
         let mut cur = root.clone();
-        let mut depth = 0;
-        for component in rel.components() {
+        for (depth, component) in rel.components().enumerate() {
             let Component::Normal(name) = component else {
                 return Err("a path cannot leave the vault".into());
             };
@@ -161,7 +160,6 @@ impl Vault {
                 return Err("hidden folders are not part of the vault".into());
             }
             cur.push(name.as_ref());
-            depth += 1;
             if cur
                 .symlink_metadata()
                 .is_ok_and(|meta| meta.file_type().is_symlink())
@@ -220,19 +218,11 @@ fn looks_like_path(note: &str) -> bool {
         || note.to_lowercase().ends_with(".svg")
 }
 
-/// A Inkuno diagram, including one this build can only open read-only.
+/// An SVG file of the vault. Inkuno no longer edits diagrams: they open
+/// in the zoomable viewer, as any SVG from elsewhere does.
 fn is_diagram(path: &Path) -> bool {
-    if path
-        .extension()
-        .is_none_or(|e| !e.eq_ignore_ascii_case("svg"))
-    {
-        return false;
-    }
-    let Ok(text) = fs::read_to_string(path) else {
-        return false;
-    };
-    crate::logic::diagram::Diagram::from_svg(&text).is_some()
-        || crate::logic::diagram::Diagram::newer(&text)
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("svg"))
 }
 
 /// The note whose name is closest to `query`, when one clearly contains the other.

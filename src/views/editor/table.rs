@@ -100,11 +100,6 @@ impl TableOp {
         }
     }
 
-    /// A CSV's sheet can do it: everything but deleting the table and swapping rows and columns.
-    pub fn in_sheet(self) -> bool {
-        !matches!(self, TableOp::DeleteTable | TableOp::Transpose)
-    }
-
     /// The action that does the same from the keyboard.
     pub fn action(self) -> Box<dyn gpui::Action> {
         match self {
@@ -189,14 +184,6 @@ impl Editor {
             .into_iter()
             .find(|(p, _)| *p == part)
             .map(|(_, zone)| zone.center())
-    }
-
-    /// Center of a table picker cell, if it is open.
-    #[cfg(test)]
-    pub fn grid_cell(&self, col: usize, row: usize) -> Option<Point<Pixels>> {
-        self.grid?;
-        let step = |n: usize| px(16.) + GRID_STEP * (n - 1) as f32;
-        Some(self.popup_at(Self::grid_size())? + point(step(col), step(row)))
     }
 
     pub(super) fn is_table_line(&self, line: &Range<usize>) -> bool {

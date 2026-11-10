@@ -31,9 +31,6 @@ impl Render for Shell {
         window.set_rem_size(t.px(16.));
         // The pane holding the focus is the active one; when the code changed it without moving
         // input (a note already open in the other pane), it follows.
-        if let Some(template) = self.template.take() {
-            self.new_diagram_from(template, window, cx);
-        }
         if std::mem::take(&mut self.grab) {
             self.focus_pane(self.active, window, cx);
         } else if let Some(pane) = self
@@ -53,24 +50,25 @@ impl Render for Shell {
         }
         self.show_active(cx);
         #[cfg(test)]
-        let dragging = cx.has_active_drag() || self.keep_aim;
+        let dragging = cx.has_active_drag();
         #[cfg(not(test))]
         let dragging = cx.has_active_drag();
         if !dragging {
-            (self.pane_aim, self.tab_aim, self.tool_aim, self.tool_drag) =
-                (None, None, None, false);
-            // The drag is over (dropped, or out of the window): no more label or line.
-            if self.drop_aim.is_some() {
-                self.aim_drop(None, cx);
-            }
+            (self.pane_aim, self.tab_aim) = (None, None);
         }
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             self.keep_preview();
         }
-        self.track(cx);
-        let title = match (self.pane().displayed_path(), &self.vault) {
-            (Some(p), _) => vault::stem(p),
-            (None, Some(_)) => tr("New note", "Nouvelle note").to_string(),
+        // Zed-style window title: the folder first, then the app — the tree header no longer
+        // shows the vault name, so the title bar carries it on every system (drawn below on
+        // Linux, native elsewhere through `set_window_title`).
+        let vault_name = self.vault.as_ref().map(|v| vault::stem(v));
+        let title = match (self.pane().displayed_path(), vault_name) {
+            (Some(p), Some(vault)) => format!("{} — {vault} — Inkuno", vault::stem(p)),
+            (Some(p), None) => format!("{} — Inkuno", vault::stem(p)),
+            (None, Some(vault)) => {
+                format!("{} — {vault} — Inkuno", tr("New note", "Nouvelle note"))
+            }
             (None, None) => "Inkuno".to_string(),
         };
         if title != self.title {
@@ -235,18 +233,6 @@ impl Render for Shell {
                 }
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| this.new_note_here(window, cx)))
-            .on_action(cx.listener(|this, _: &NewFromTemplate, window, cx| {
-                this.open_templates(TemplateAct::New, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &NewDiagram, window, cx| this.new_diagram(window, cx)))
-            // Escape in a diagram where nothing is in progress anymore: back to the note, if its
-            // tab has one under it.
-            .on_action(cx.listener(|this, _: &canvas::Cancel, window, cx| {
-                if this.has_note(cx) {
-                    window.focus(&this.pane().editor.focus_handle(cx));
-                    cx.notify();
-                }
-            }))
             .on_action(cx.listener(|this, _: &nav::ShowTree, window, cx| {
                 this.show_nav(Mode::Tree, false, window, cx)
             }))
@@ -256,18 +242,6 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &nav::NewFolder, window, cx| this.new_folder(window, cx)),
             )
-            .on_action(cx.listener(|this, _: &nav::ShowGraph, window, cx| {
-                this.show_nav(Mode::Graph, false, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &nav::ShowTags, window, cx| {
-                this.show_nav(Mode::Tags, false, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &nav::ShowCalendar, window, cx| {
-                this.show_nav(Mode::Calendar, false, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &nav::ShowLinks, window, cx| {
-                this.show_nav(Mode::Links, false, window, cx)
-            }))
             .on_action(
                 cx.listener(|this, _: &nav::ToggleFull, window, cx| this.toggle_full(window, cx)),
             )
@@ -306,35 +280,8 @@ impl Render for Shell {
                     }
                 }),
             )
-            .on_action(cx.listener(|this, _: &sheet::PickDelimiter, window, cx| {
-                this.choose_table(Pick::Delimiter, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickEncoding, window, cx| {
-                this.choose_table(Pick::Encoding, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickHeader, window, cx| {
-                this.choose_table(Pick::Header, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickCopyAs, window, cx| {
-                this.choose_table(Pick::CopyAs, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickExport, window, cx| {
-                this.choose_table(Pick::Export, window, cx)
-            }))
             .on_action(cx.listener(|this, _: &OpenVault, window, cx| this.choose_vault(window, cx)))
             .on_action(cx.listener(|this, _: &CopyAll, _, cx| this.copy_all(true, cx)))
-            .on_action(cx.listener(|this, _: &ExportPdf, _, cx| this.export_pdf(cx)))
-            .on_action(
-                cx.listener(|this, _: &ShareDocument, window, cx| this.show_share(window, cx)),
-            )
-            .on_action(cx.listener(|this, _: &Outline, window, cx| this.toggle_outline(window, cx)))
-            .on_action(
-                cx.listener(|this, _: &docks::ToggleFocus, window, cx| {
-                    this.toggle_focus(window, cx)
-                }),
-            )
-            .on_action(cx.listener(|this, _: &Today, window, cx| this.open_today(window, cx)))
-            .on_action(cx.listener(|this, _: &SyncVault, window, cx| this.git_sync(window, cx)))
             .on_action(
                 cx.listener(|this, _: &SplitPane, window, cx| this.split(Side::Right, window, cx)),
             )
@@ -380,8 +327,6 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &TabToDown, window, cx| {
                 this.tab_to_side(Side::Down, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &MoveTool, window, cx| this.move_tool(window, cx)))
-            .on_action(cx.listener(|this, _: &ToolAsTab, window, cx| this.tool_as_tab(window, cx)))
             .on_action(cx.listener(|this, _: &EvenPanes, _, cx| {
                 this.layout.even();
                 cx.notify();
@@ -408,20 +353,6 @@ impl Render for Shell {
             )
             .on_action(cx.listener(|this, _: &MoveTabLeft, _, cx| this.move_tab(false, cx)))
             .on_action(cx.listener(|this, _: &MoveTabRight, _, cx| this.move_tab(true, cx)))
-            .on_action(cx.listener(|this, _: &GoBack, window, cx| this.travel(false, window, cx)))
-            .on_action(cx.listener(|this, _: &GoForward, window, cx| this.travel(true, window, cx)))
-            // The mouse back and forward buttons.
-            .on_mouse_down(
-                MouseButton::Navigate(gpui::NavigationDirection::Back),
-                cx.listener(|this, _, window, cx| this.travel(false, window, cx)),
-            )
-            .on_mouse_down(
-                MouseButton::Navigate(gpui::NavigationDirection::Forward),
-                cx.listener(|this, _, window, cx| this.travel(true, window, cx)),
-            )
-            .on_action(
-                cx.listener(|this, _: &SearchVault, window, cx| this.open_vault_find(window, cx)),
-            )
             .on_action(cx.listener(|this, _: &ChooseTheme, window, cx| {
                 this.choose_setting(Setting::Theme, window, cx)
             }))
@@ -443,14 +374,10 @@ impl Render for Shell {
                 cx.listener(|this, _: &ToggleCommands, window, cx| this.open_commands(window, cx)),
             )
             // Escape in the note, when it has nothing to close: the right-click menu.
-            // In focus mode, Escape leaves it too: the docks come back as they were.
             .on_action(cx.listener(|this, _: &editor::Cancel, window, cx| {
                 this.dismiss_failures();
                 this.close_icons(window, cx);
                 this.close_menu(window, cx);
-                if this.in_focus() {
-                    this.toggle_focus(window, cx);
-                }
             }))
             .on_action(
                 cx.listener(|this, _: &ContextMenu, window, cx| this.menu_from_keys(window, cx)),
@@ -485,6 +412,11 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &CloseHelp, window, cx| {
                 if this.help.open {
                     this.set_help(false, window, cx)
+                } else if this.pane().figure.is_some() {
+                    // A figure over the note (magnifier): Escape closes it, back to the note.
+                    this.pane_mut().figure = None;
+                    window.focus(&this.pane().editor.focus_handle(cx));
+                    cx.notify();
                 } else if this.pane().zone.is_focused(window) && this.has_note(cx) {
                     // A pane that only shows an image: Escape goes back to its note.
                     window.focus(&this.pane().editor.focus_handle(cx));
@@ -492,12 +424,9 @@ impl Render for Shell {
             }))
             .key_context("Shell")
             .child(body)
-            // Its own row under the panes, never over the note's footer (counter, formatting bar).
-            .children(self.render_update_banner(cx))
             .when(client, |d| d.child(pill))
             .children(self.render_menu(window, cx))
             .children(self.render_icons(window, cx))
-            .children(self.render_drop_chip(window.viewport_size()))
             .when(self.help.open, |d| {
                 d.child(self.render_help(window.viewport_size().height < px(420.), cx))
             });
@@ -698,18 +627,6 @@ impl Shell {
                         .child(tr("Open another folder…", "Ouvrir un autre dossier…"))
                         .on_click(cx.listener(|this, _, window, cx| this.choose_vault(window, cx))),
                 )
-                .child(
-                    div()
-                        .id("welcome-clone")
-                        .px_3()
-                        .py_1()
-                        .rounded(t.small())
-                        .cursor_pointer()
-                        .text_color(t.accent)
-                        .hover(|s| s.bg(t.hover))
-                        .child(tr("Clone a vault from a git address…", "Cloner un coffre depuis une adresse git…"))
-                        .on_click(cx.listener(|this, _, window, cx| this.ask_clone(window, cx))),
-                )
                 .child(div().text_size(t.px(12.)).text_color(t.soft).child(format!(
                     "{} · {}",
                     keys::of(cx, &OpenVault),
@@ -723,13 +640,7 @@ impl Shell {
     }
 
     pub(super) fn recalled(&self) -> Vec<recall::Recalled> {
-        let notes: Vec<Note> = self
-            .notes
-            .iter()
-            .filter(|n| !self.is_template(n))
-            .cloned()
-            .collect();
-        recall::recall(&notes, today(), std::time::SystemTime::now())
+        recall::recall(&self.notes, today(), std::time::SystemTime::now())
     }
 
     /// The empty page, under the line where you write: the day (which opens its note), the useful
@@ -873,10 +784,7 @@ impl Shell {
         // ponytail: the note is reread on every render (a search for `{==`); keep the
         // list from one version of the text to the next if very long notes suffer from it.
         let said: Vec<(String, String, usize, usize, usize, String)> =
-            match self.pane().file.is_none()
-                && self.pane().listing.is_none()
-                && !self.board_shown(cx)
-            {
+            match self.pane().file.is_none() && self.pane().listing.is_none() {
                 true => markdown::all_comments(self.pane().editor.read(cx).text())
                     .into_iter()
                     .map(|n| {
@@ -906,13 +814,7 @@ impl Shell {
                 ))
                 .absolute()
                 .bottom_4()
-                .right(
-                    t.px(if kanban::is_board(self.pane().editor.read(cx).text()) {
-                        84.
-                    } else {
-                        50.
-                    }),
-                )
+                .right(t.px(50.))
                 .size(t.px(30.))
                 .rounded(t.large())
                 .cursor_pointer()
@@ -934,60 +836,11 @@ impl Shell {
                     cx.notify();
                 }))
         });
-        // A note that is a kanban board: its button switches from the board to the text. The
-        // board hides the note, which must no longer receive keystrokes.
-        let board = self.board_shown(cx);
-        if board && self.pane().editor.focus_handle(cx).is_focused(window) {
-            window.focus(&self.pane().board.focus);
-        }
-        if !cx.has_active_drag() {
-            self.pane_mut().board.drag = None;
-        }
         // The list page closed with input in its filter or one of its cells: nothing
         // receives it anymore, it goes back to the note.
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
-        if !board {
-            self.pane_mut().board.field = None;
-            // The board left (another note opens), input goes back to the note.
-            if self.pane().board.focus.is_focused(window) {
-                window.focus(&self.pane().editor.focus_handle(cx));
-            }
-        }
-        let boards = kanban::is_board(self.pane().editor.read(cx).text())
-            && self.pane().file.is_none()
-            && self.pane().listing.is_none();
-        let flip = boards.then(|| {
-            ui::widgets::button("board-toggle", "board.svg", board, t)
-                .tooltip(ui::widgets::tip(
-                    if board {
-                        tr("Show the text", "Voir le texte")
-                    } else {
-                        tr("Show the board", "Voir le tableau")
-                    },
-                    String::new(),
-                    t,
-                ))
-                .absolute()
-                .bottom_4()
-                // Always in the same place, board or text: left of the copy button.
-                .right(t.px(50.))
-                .h(t.px(30.))
-                .rounded(t.large())
-                // On the board the button says what it does; over the text there is no room for it.
-                .when(board, |d| {
-                    d.w_auto()
-                        .px_2()
-                        .gap_1()
-                        .text_size(t.px(12.))
-                        .text_color(t.accent)
-                        .child(tr("Text", "Texte"))
-                })
-                .when(!board, |d| d.w(t.px(30.)))
-                .occlude()
-                .on_click(cx.listener(|this, _, window, cx| this.toggle_board(window, cx)))
-        });
         // Without a tab bar, the top row of the pane is a handle to move the window (Linux): the note's text starts under it.
         let strip = client && !barred;
         // Under the native bar the traffic lights float over the left end of that same row:
@@ -997,7 +850,7 @@ impl Shell {
         let pill = (client && !barred && group == self.corner_group())
             .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
         self.pane().editor.update(cx, |e, _| {
-            e.corner = 1 + talk.is_some() as usize + boards as usize;
+            e.corner = 1 + talk.is_some() as usize;
             e.bar_here = active;
             e.pill = pill;
             e.strip = if strip || traffic {
@@ -1153,36 +1006,6 @@ impl Shell {
                 )
                 .children(cards)
         });
-        let copy = ui::widgets::button(
-            "copy-all",
-            if self.copied {
-                "check.svg"
-            } else {
-                "export.svg"
-            },
-            false,
-            t,
-        )
-        .debug_selector(|| "copy-all".into())
-        .tooltip(ui::widgets::tip(
-            tr("Share / Export", "Partager / Exporter"),
-            keys::of(cx, &ShareDocument),
-            t,
-        ))
-        .absolute()
-        // In an exceptionally narrow note, keep the centered formatting toggle reachable.
-        .map(|d| {
-            if self.pane().file.is_none() && self.pane().editor.read(cx).crowded_footer() {
-                d.top(t.px(52.))
-            } else {
-                d.bottom_4()
-            }
-        })
-        .right_4()
-        .size(t.px(30.))
-        .rounded(t.large())
-        .occlude()
-        .on_click(cx.listener(|this, _, window, cx| this.show_share(window, cx)));
         // The image picked in the panel; it goes away as soon as the note takes over again.
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             if !self.set_file(None, cx) {
@@ -1210,34 +1033,14 @@ impl Shell {
         // The views whose top room is empty: the strip can lie over it.
         let free_top = tool.is_none()
             && self.pane().figure.is_none()
-            && (listing.is_some() || board || matches!(file, None | Some((_, FileKind::Image))));
+            && (listing.is_some() || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
-            _ if let Some(tool) = tool => note.flex().flex_col().child(match tool {
-                nav::Mode::Graph => div()
-                    .flex_1()
-                    .min_h_0()
-                    .child(self.graph.clone())
-                    .into_any_element(),
-                _ => div()
-                    .flex_1()
-                    .min_h_0()
-                    .pt(t.px(12.))
-                    .child(self.render_calendar(cx))
-                    .into_any_element(),
-            }),
+            // No tool opens as a tab anymore; the match stays so a restored layout still draws.
+            _ if let Some(_tool) = tool => note,
             _ if listing.is_some() => note.children(listing),
             _ if let Some(figure) = self.pane().figure.clone() => {
                 figure.update(cx, |figure, _| figure.sync(t));
                 note.child(figure)
-            }
-            _ if board => note.child(self.render_board(cx)).children(flip),
-            Some((_, FileKind::Sheet(sheet))) => {
-                sheet.update(cx, |sheet, _| sheet.sync(t, client));
-                note.child(sheet)
-            }
-            Some((_, FileKind::Drawing(canvas))) => {
-                canvas.update(cx, |canvas, _| canvas.sync(t, client));
-                note.child(canvas)
             }
             Some((_, FileKind::Svg(viewer))) => {
                 viewer.update(cx, |viewer, _| viewer.sync(t));
@@ -1275,17 +1078,8 @@ impl Shell {
                 note.child(self.pane().editor.clone())
                     .children(empty)
                     .children(talk)
-                    .children(flip)
             }
         };
-        let note = note.when(
-            !self.share_choices(pane).is_empty()
-                && matches!(
-                    self.pane().file.as_ref().map(|f| &f.kind),
-                    None | Some(FileKind::Image)
-                ),
-            |d| d.child(copy),
-        );
         // While a tab or a file from the tree is dragged, the area that would receive it is tinted:
         // the whole pane, or the half a new pane would take.
         let tint = self
@@ -1327,48 +1121,80 @@ impl Shell {
                     cx.notify();
                 }
             }))
-            // System files over the note: a line between two lines says where they would go.
-            .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<gpui::ExternalPaths>, _, cx| {
-                let mine = matches!(&this.drop_aim, Some(DropAim { aim: Aim::Note { pane: p, .. }, .. }) if *p == pane);
-                let at = e.event.position;
-                match e.bounds.contains(&at).then(|| this.note_aim(pane, at, e.drag(cx).paths().len(), cx)).flatten() {
-                    Some(aim) => this.aim_drop(Some(aim), cx),
-                    None if mine => this.aim_drop(None, cx),
-                    None => {}
-                }
-            }))
-            .on_drop(cx.listener(move |this, paths: &gpui::ExternalPaths, _, cx| {
-                if let Some(DropAim { aim: aim @ Aim::Note { pane: p, .. }, .. }) = this.drop_aim.clone()
-                    && p == pane
-                {
-                    this.drop_paths(paths.paths().to_vec(), aim, cx);
-                }
-            }))
-            .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<nav::Dragged>, _, cx| this.aim_pane(group, None, e.bounds, e.event.position, cx)))
-            .on_drop(cx.listener(move |this, dragged: &nav::Dragged, window, cx| {
-                if let Some(((_, zone), path)) = this.pane_aim.take().zip(dragged.paths.first().cloned()) {
-                    this.drop_on_pane(group, zone, &path, window, cx);
-                }
-            }))
-            .on_drag_move(cx.listener(move |this, e: &gpui::DragMoveEvent<tabs::TabDragged>, _, cx| {
-                let tab = e.drag(cx).tab;
-                this.aim_pane(group, Some(tab), e.bounds, e.event.position, cx)
-            }))
-            .on_drop(cx.listener(move |this, dragged: &tabs::TabDragged, window, cx| {
-                if let Some((_, zone)) = this.pane_aim.take() {
-                    this.drop_tab_on_pane(dragged.tab, group, zone, window, cx);
-                }
-            }))
+            .on_drag_move(
+                cx.listener(move |this, e: &gpui::DragMoveEvent<nav::Dragged>, _, cx| {
+                    this.aim_pane(group, None, e.bounds, e.event.position, cx)
+                }),
+            )
+            .on_drop(
+                cx.listener(move |this, dragged: &nav::Dragged, window, cx| {
+                    if let Some(((_, zone), path)) =
+                        this.pane_aim.take().zip(dragged.paths.first().cloned())
+                    {
+                        this.drop_on_pane(group, zone, &path, window, cx);
+                    }
+                }),
+            )
+            .on_drag_move(cx.listener(
+                move |this, e: &gpui::DragMoveEvent<tabs::TabDragged>, _, cx| {
+                    let tab = e.drag(cx).tab;
+                    this.aim_pane(group, Some(tab), e.bounds, e.event.position, cx)
+                },
+            ))
+            .on_drop(
+                cx.listener(move |this, dragged: &tabs::TabDragged, window, cx| {
+                    if let Some((_, zone)) = this.pane_aim.take() {
+                        this.drop_tab_on_pane(dragged.tab, group, zone, window, cx);
+                    }
+                }),
+            )
             .child(note)
             .when((strip || traffic) && free_top, |d| {
                 // Under the native bar the strip keeps its room but takes no handle: the lights
                 // stay clickable. Its left edge is window-relative (see `traffic_pad`).
                 let edge = traffic_edge;
-                let bare = div().debug_selector(move || format!("drag-strip-{group}")).absolute().top_0().left(edge).right_0().h(t.px(STRIP));
+                // Zed-style: where the app draws the bar itself, the vault name sits centered in
+                // the window's top row — the corner group's, under the window buttons. Plain text:
+                // it takes no pointer, the strip stays a handle; it clears the buttons on the right.
+                let name = (strip && group == self.corner_group())
+                    .then(|| self.vault.as_ref().map(|v| vault::stem(v)))
+                    .flatten()
+                    .map(|name| {
+                        div()
+                            .debug_selector(|| "window-title".into())
+                            .min_w_0()
+                            .truncate()
+                            .mr(t.px(PILL_ROOM))
+                            .text_size(t.px(13.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(t.soft)
+                            .child(name)
+                    });
+                let bare = div()
+                    .debug_selector(move || format!("drag-strip-{group}"))
+                    .absolute()
+                    .top_0()
+                    .left(edge)
+                    .right_0()
+                    .h(t.px(STRIP))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .children(name);
                 d.child(if traffic { bare } else { bare.map(drag_window) })
             })
             // The active pane of several: a 1 px ring around its sheet, the accent at 30 %. Alone, a pane needs none.
-            .when(many && active, |d| d.child(div().debug_selector(|| "pane-active".into()).absolute().inset_0().rounded(t.sheet()).border_1().border_color(t.accent.opacity(0.3))))
+            .when(many && active, |d| {
+                d.child(
+                    div()
+                        .debug_selector(|| "pane-active".into())
+                        .absolute()
+                        .inset_0()
+                        .rounded(t.sheet())
+                        .border_1()
+                        .border_color(t.accent.opacity(0.3)),
+                )
+            })
             .children(tint);
         (
             area.into_any_element(),

@@ -1,10 +1,12 @@
 //! The vault: choosing it, scanning and watching it, icons, backup, trash, terminal.
 
 use super::*;
+use std::sync::Arc;
 
 impl Shell {
     /// Rereads the vault right away, without waiting for the watcher: what the merge wrote
     /// shows, each note keeping its cursor and scroll (`reload`).
+    #[cfg(test)]
     pub(super) fn rescan(&mut self, root: &Path, cx: &mut Context<Self>) {
         let (notes, dirs, images, unreadable) = vault::rescan_full(root, &self.notes);
         self.unreadable = unreadable;
@@ -199,32 +201,12 @@ impl Shell {
             self.dirs = dirs;
             self.images = images;
             self.push_names(cx);
-            self.graph_stale = true;
-            self.refresh_graph(cx);
             cx.notify();
         } else {
             // No name, tag or link changed, but the text may have: search follows it.
             self.notes = notes;
         }
         self.each_pane(|this| {
-            // The shown table was rewritten elsewhere: it is reread if nothing is pending here.
-            if let Some(sheet) = this.pane().sheet() {
-                sheet.update(cx, |sheet, cx| sheet.reload_if_changed(cx));
-            }
-            // A failed canvas write still holds edits that must not be replaced by the disk.
-            if !this.pane().canvas_dirty
-                && let Some(canvas) = this.pane().drawing().cloned()
-                && let Some(fresh) = this
-                    .pane()
-                    .file_path()
-                    .and_then(|path| fs::read_to_string(path).ok())
-                    .as_deref()
-                    .and_then(Diagram::from_svg)
-                && fresh.to_svg(diagram::COLORS[0])
-                    != canvas.read(cx).diagram().to_svg(diagram::COLORS[0])
-            {
-                canvas.update(cx, |canvas, cx| canvas.replace(fresh, cx));
-            }
             // The shown note was rewritten elsewhere: reread it. With no modification
             // pending here (the caller makes sure of it), nothing is lost.
             if let Some(path) = &this.pane().path
@@ -270,8 +252,6 @@ impl Shell {
                     this.dirs = dirs;
                     this.images = images;
                     this.push_names(cx);
-                    this.graph_stale = true;
-                    this.refresh_graph(cx);
                     cx.notify();
                 }
             })
@@ -326,35 +306,17 @@ impl Shell {
     /// The same, to some tabs only: a new tab gets them without the others laying out again.
     pub(super) fn push_names_to(&mut self, tabs: std::ops::Range<usize>, cx: &mut Context<Self>) {
         // Aliases are offered after `[[` like names.
-        let notes: Vec<&Note> = self.notes.iter().filter(|n| !self.is_template(n)).collect();
-        let names: std::rc::Rc<[String]> = notes
+        let names: std::rc::Rc<[String]> = self
+            .notes
             .iter()
             .map(|n| n.name.clone())
-            .chain(notes.iter().flat_map(|n| n.aliases.iter().cloned()))
+            .chain(self.notes.iter().flat_map(|n| n.aliases.iter().cloned()))
             .collect();
         let pictures = vault::pictures(&self.images);
-        // Notes and their aliases, for the sections embedded from them.
-        let sources: std::rc::Rc<std::collections::HashMap<String, PathBuf>> = notes
-            .iter()
-            .flat_map(|n| {
-                std::iter::once(n.name.as_str())
-                    .chain(n.aliases.iter().map(String::as_str))
-                    .map(|name| (name.to_lowercase(), n.path.clone()))
-            })
-            .collect::<std::collections::HashMap<_, _>>()
-            .into();
-        let me = |pane: &Pane| {
-            pane.path
-                .as_deref()
-                .and_then(Path::file_stem)
-                .map(|s| s.to_string_lossy().to_string())
-        };
         for pane in &self.panes[tabs] {
-            let me = me(pane);
             pane.editor.update(cx, |e, _| {
                 e.set_notes(names.clone());
                 e.set_images(&pictures);
-                e.set_sources(sources.clone(), me);
             });
         }
     }
@@ -368,15 +330,8 @@ impl Shell {
             .and_then(Path::parent)
             .map(Path::to_path_buf);
         let dirs = note_dir.into_iter().chain(self.vault.clone()).collect();
-        let me = self
-            .pane()
-            .path
-            .as_deref()
-            .and_then(Path::file_stem)
-            .map(|s| s.to_string_lossy().to_string());
         self.pane().editor.update(cx, |e, _| {
             e.set_dirs(dirs);
-            e.set_trail(me);
         });
     }
 

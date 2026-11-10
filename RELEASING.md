@@ -44,8 +44,9 @@ Every release notes draft has three sections:
 
 Bash, Cargo, Git and GitHub CLI with repository write access. Run from a clean
 tracked working tree on `main`, synchronized with `origin/main`, with green
-application CI. Set `INKUNO_REPO` (or edit `REPO` in the script) so `gh`
-targets the Inkuno repository; the default is the `OWNER/inkuno` placeholder.
+application CI. By default `gh` targets the Inkuno repository
+(`kolisachint/inkuno`). Set `INKUNO_REPO` (or edit `REPO` in the script) to
+aim elsewhere.
 Python 3.11 or newer runs the publication gate on the GitHub runner; the
 preparation script itself uses Bash.
 
@@ -113,7 +114,7 @@ public release is refused before local mutation. Authentication or API failure
 is an error, not evidence that a release is absent.
 
 If preparation finished and only a build or upload failed, fix the environment
-or transient issue and **Re-run failed jobs** in the same Actions run.
+or transient issue and **Re-run failed jobs** in the same Actions run. Release jobs upload the compiled binary as a `Cargo.lock`-keyed workflow artifact right after building, so a re-run whose build already succeeded restores that binary and skips recompiling while still re-running test and packaging.
 Successfully uploaded workflow artifacts are retained for seven days. Once
 they expire, rerun all jobs, or dispatch a fresh complete build:
 
@@ -140,6 +141,8 @@ gh workflow run release.yml --ref main
 Standalone packaging workflows leave their output in Actions artifacts. They
 neither attach files to a release nor publish one. `release.yml` is the manual
 raw-archive builder for macOS + Linux; it has no publish step and no nightly.
+Both packaging workflows run the macOS `cargo test` gate before bundling, so a
+red mac test blocks artifacts and, through `release-native.yml`, publication.
 
 ## Dropped from the pipeline
 
@@ -163,7 +166,11 @@ The first Python suite uses temporary repositories and mocked Cargo/GitHub
 tools. The second checks the publication gate, including incomplete builds,
 public releases, failed uploads and retry. Neither suite publishes or modifies
 the real repository history. **Release checks** runs all three on relevant
-pushes and pull requests. CI runs on `ubuntu-latest` and `macos-latest`.
+pushes and pull requests. Application CI is tiered: fast checks (fmt, check, Clippy,
+tests minus the end-to-end session) run on `ubuntu-latest` for every push and
+pull request, while the full suite runs on `ubuntu-latest` and `macos-latest`
+on `main`, nightly and manual dispatch, with the macOS leg running `cargo test`
+before any packaging.
 
 These tests exercise orchestration, not a real macOS/Linux build or a live
 GitHub workflow. The first hosted run remains necessary to validate runner

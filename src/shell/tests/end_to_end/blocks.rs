@@ -33,7 +33,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     assert_eq!(of(&l, at("> une")), (at("> une"), false, false, 0., 0.));
     assert_eq!(of(&l, at("> deux")), (at("> deux"), false, true, 0., room));
-    assert_eq!(of(&l, at("```\nx")).1, true);
+    assert!(of(&l, at("```\nx")).1);
     // Two callouts in a row are two shapes; a callout of a single line has both ends.
     assert_eq!(
         of(&l, at("> seule")),
@@ -130,7 +130,7 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
         lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) > lh(5) && lh(5) == lh(6),
         "{rows:?}"
     );
-    let pad = |n: u8| rows.iter().filter(|r| r.1 == n).last().unwrap().2;
+    let pad = |n: u8| rows.iter().rfind(|r| r.1 == n).unwrap().2;
     assert_eq!(rows[0].2, 0.);
     assert!(
         pad(1) == pad(2) && pad(2) > pad(3) && pad(3) == pad(6) && pad(6) > 0.,

@@ -248,7 +248,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     j.load(cx, grid, grid.find("Léa").unwrap());
     assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).in_table()));
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("colonne à droite");
+    cx.simulate_input("column on the right");
     cx.simulate_keystrokes("down enter");
     assert_eq!(flat(cx), "Nom||Âge/---|---|---/Léa||31/Max||7");
     // The whole table grabbed (the corner): the column comes right of the last one.
@@ -257,7 +257,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = center(cx, Part::Corner);
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("colonne à droite");
+    cx.simulate_input("column on the right");
     cx.simulate_keystrokes("down enter");
     assert_eq!(flat(cx), "Nom|Âge|/---|---|---/Léa|31|/Max|7|");
     // The note open here does not exist on disk: saving fails, and its notice clears.

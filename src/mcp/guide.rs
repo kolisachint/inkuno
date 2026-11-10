@@ -12,7 +12,6 @@ const PAGES: &[(&str, &str)] = &[
     ("install", include_str!("../../book/src/install.md")),
     ("first-steps", include_str!("../../book/src/first-steps.md")),
     ("writing", include_str!("../../book/src/writing.md")),
-    ("tables", include_str!("../../book/src/tables.md")),
     ("links", include_str!("../../book/src/links.md")),
     ("comments", include_str!("../../book/src/comments.md")),
     ("daily-notes", include_str!("../../book/src/daily-notes.md")),
@@ -22,10 +21,6 @@ const PAGES: &[(&str, &str)] = &[
         include_str!("../../book/src/tabs-and-panes.md"),
     ),
     ("search", include_str!("../../book/src/search.md")),
-    ("boards", include_str!("../../book/src/boards.md")),
-    ("diagrams", include_str!("../../book/src/diagrams.md")),
-    ("uml", include_str!("../../book/src/uml.md")),
-    ("csv", include_str!("../../book/src/csv.md")),
     ("vault", include_str!("../../book/src/vault.md")),
     ("sync", include_str!("../../book/src/sync.md")),
     ("settings", include_str!("../../book/src/settings.md")),
@@ -43,7 +38,10 @@ const PAGES: &[(&str, &str)] = &[
     ("agents", include_str!("../../book/src/agents.md")),
 ];
 
-const PROMPTS: &[(&str, &str, &str, &[(&str, &str, bool)])] = &[
+type PromptArg<'a> = (&'a str, &'a str, bool);
+type Prompt<'a> = (&'a str, &'a str, &'a str, &'a [PromptArg<'a>]);
+
+const PROMPTS: &[Prompt<'static>] = &[
     (
         "document_feature",
         "Document a feature",
@@ -114,8 +112,8 @@ pub fn list() -> Vec<Value> {
     resources.push(json!({
         "uri": "inkuno://library",
         "name": "library",
-        "title": "Diagram library",
-        "description": "Forms, heads, routes, UML relationships, library shapes and starting points.",
+        "title": "Diagram library (removed)",
+        "description": "The canvas editor was removed: empty lists.",
         "mimeType": "application/json",
     }));
     resources
@@ -133,9 +131,9 @@ pub fn templates() -> Vec<Value> {
         json!({
             "uriTemplate": "inkuno://diagram/{path}",
             "name": "diagram",
-            "title": "A diagram",
-            "description": "A canvas diagram as JSON and as SVG. path is relative to the vault.",
-            "mimeType": "application/json",
+            "title": "An SVG file",
+            "description": "An SVG file of the vault, as SVG. path is relative to the vault.",
+            "mimeType": "image/svg+xml",
         }),
     ]
 }
@@ -171,14 +169,7 @@ pub fn read(server: &mut Server, uri: &str) -> Result<Vec<Value>, String> {
         let file = vault.find_file(path)?;
         let svg = std::fs::read_to_string(&file).map_err(super::disk)?;
         let shown = format!("inkuno://diagram/{}", vault::rel(&vault.root, &file));
-        let body = draw::read_diagram(vault, &json!({"path": vault::rel(&vault.root, &file)}));
-        if body.is_error {
-            return Err(sentence(&body));
-        }
-        return Ok(vec![
-            text_content(&shown, "application/json", &body.structured.to_string()),
-            text_content(&shown, "image/svg+xml", &svg),
-        ]);
+        return Ok(vec![text_content(&shown, "image/svg+xml", &svg)]);
     }
     Err(format!("no resource `{uri}`"))
 }

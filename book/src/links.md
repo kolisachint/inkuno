@@ -38,7 +38,7 @@ A line holding only `![[Note#Heading]]` shows that heading, and what is under it
 | `![[Note#^id]]` | the block that ends with `^id` (a common Markdown convention) |
 
 - **Look**: the section is drawn in a frame, with a thin bar on its left in the accent color and the name of its note at the top right. It follows the theme and wraps to the page.
-- **Open the source**: click the name, double click the frame, or press `Alt + Enter` on its line. The note opens at that section, and `Alt + Left` comes back. `Ctrl + click` on a `[[Note#Heading]]` link does the same.
+- **Open the source**: click the name, double click the frame, or press `Alt + Enter` on its line. The note opens at that section. `Ctrl + click` on a `[[Note#Heading]]` link does the same.
 - **Suggestions**: typing `![[Note#` suggests the headings of the note, and `![[Note#^` its blocks. This works after `[[` too.
 - **Read-only**: to change the text, change it in its note.
 - **Loops**: an embed that leads back to a note already in the chain says *circular embed*. Three levels are shown at most.
@@ -52,35 +52,8 @@ The file stays plain Markdown: other apps show the line as a link.
 `![](picture.png)` or `![[picture.png]]` shows the picture under its line: PNG, JPEG, GIF, WebP, SVG, BMP, TIFF or AVIF. Inkuno looks for it next to the note, then at the top of the vault, then by its file name anywhere in the vault.
 
 - `Ctrl + V` with a picture in the clipboard saves it next to the note and inserts its `![](…)` line.
-- Typing `![[` suggests the diagrams and pictures of the vault.
-- **Enlarge**: point at a picture (PNG, JPEG, GIF, WebP…), a formula, an SVG or a Mermaid diagram, and a magnifier button appears at its corner, or beside it when it is too small to hold it. It opens a viewer: `Ctrl + wheel` zooms around the pointer, and dragging moves the picture. See [the viewer](diagrams.md#svg-files-from-elsewhere).
+- Typing `![[` suggests the pictures of the vault.
+- **Enlarge**: point at a picture (PNG, JPEG, GIF, WebP…), a formula, an SVG or a Mermaid diagram, and a magnifier button appears at its corner, or beside it when it is too small to hold it. It opens a viewer: `Ctrl + wheel` zooms around the pointer, and dragging moves the picture.
 - A click on the picture itself still places the cursor. A missing or unreadable picture has no button.
 
 Pictures are part of the vault. See [Files on disk](vault.md#pictures-csv-and-other-files).
-
-## Dropping files
-
-Drag files or folders from your file manager onto the window. The originals never move, and nothing is overwritten: a name already taken becomes `name 2`.
-
-**On a note.** A line shows between two lines of the text, never inside a table, a code block or the YAML header. A label next to the pointer says where the items will land. They are copied next to the note, like a pasted picture, and each gets a line at that place:
-
-| Dropped | Line written |
-|---|---|
-| a picture | `![[photo.png]]` |
-| a Markdown note | `[[note]]` |
-| a file the vault lists | `[[rapport.pdf]]` |
-| a folder | `[[Folder]]` |
-
-One `Ctrl + Z` takes the lines back; the copies stay.
-
-**On the tree.** The folder under the pointer is tinted (on a file, the folder that holds it), and the label names it. A drop between rows goes to the root of the vault. The new files are shown and selected, and a message says how many files were copied and how many items were left out.
-
-**On the welcome screen**, a dropped folder becomes the vault.
-
-**What is copied**: folders with everything in them, except hidden files and symbolic links, which are counted, not copied. A folder is never copied into itself. The copy runs in the background, so a large video does not freeze the window.
-
-**Files the vault lists**: pictures, CSV and TSV tables, and attachments (`pdf`, video and audio, archives, Office and OpenDocument files, `txt`, `json`…). They show in the tree and the palette. `[[name.pdf]]` opens them in the application of your system, and renaming one rewrites the links to it. Other types are copied but not listed, so no link is written for them.
-
-`[[Folder]]` opens the folder as a [list page](boards.md#list-pages) when no note has that name.
-
-**Not possible**: pasting files copied in a file manager (the toolkit only passes text and pictures), and playing video or audio inside a note.

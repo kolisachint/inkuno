@@ -28,16 +28,15 @@ A YAML front matter is a block that starts on the first line with `---` and ends
 - Two keys are read:
   - `tags` (`tags: [a, b]`, `tags: a, b`, or a dashed list) count like `#tags` in the text;
   - each name in `aliases` is another name for the note, suggested after `[[` and followed by links, backlinks and the graph.
-- Other keys and nested YAML are ignored, except by [list pages](boards.md#list-pages) and [kanban boards](boards.md#kanban-boards) (`kanban: true`).
+- Other keys and nested YAML are ignored.
 
 `/meta` inserts a front matter. See [Slash commands](writing.md#slash-commands).
 
 ## Pictures, CSV and other files
 
 - **Pictures** are part of the vault. The tree lists them under the notes of their folder, and the graph shows them as squares, linked to the notes that display them. Selecting one shows it in place of the note. It can be renamed (the notes that display it follow), moved or trashed like a note.
-- **CSV and TSV** files are listed with the notes of their folder and open in a [grid](csv.md).
 - **Pictures** shown and listed: `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`, `tif`, `tiff`, `avif`.
-- **Attachments** are listed, found in the palette, linked with `[[name.pdf]]`, and open in the application of your system: `pdf`; video and audio (`mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mp3`, `m4a`, `wav`, `ogg`, `opus`, `flac`); archives (`zip`, `7z`, `tar`, `gz`, `rar`); documents (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `odt`, `ods`, `odp`, `epub`, `rtf`); text (`txt`, `json`, `xml`, `html`, `log`). See [Dropping files](links.md#dropping-files).
+- **Attachments** are listed, found in the palette, linked with `[[name.pdf]]`, and open in the application of your system: `pdf`; video and audio (`mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mp3`, `m4a`, `wav`, `ogg`, `opus`, `flac`); archives (`zip`, `7z`, `tar`, `gz`, `rar`); documents (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `odt`, `ods`, `odp`, `epub`, `rtf`); text (`txt`, `json`, `xml`, `html`, `log`).
 - **Other files** stay in the folder, but Inkuno does not list them.
 
 ## Changes from other programs
@@ -88,9 +87,8 @@ Inkuno keeps its own state in a configuration folder, outside the vault:
 | `layout` | the navigation panel and its docks |
 | `panes` | the panes and their tabs |
 | `settings` | the [appearance and other choices](settings.md#the-settings-file) |
-| `tables` | the delimiter, encoding and header row you chose for a [CSV file](csv.md#detection) |
 | `keys` | the [shortcuts you changed](settings.md#changing-a-shortcut) |
 | `update` | the time of the last [update check](updates.md) |
 | `crash` | the last crash, with the version of Inkuno, to attach to a bug report |
 
-In the vault itself, Inkuno only writes `.inkuno-icons` (the [icons](navigation.md#icons) you gave), the `.trash` folder, and, for a vault it [connects to git](sync.md#a-vault-not-in-git-yet), a `.gitignore` that leaves the trash out.
+In the vault itself, Inkuno only writes `.inkuno-icons` (the [icons](navigation.md#icons) you gave), the `.trash` folder, and, for a vault it [connects to git](sync.md#with-git), a `.gitignore` that leaves the trash out.

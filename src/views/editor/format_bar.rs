@@ -6,6 +6,7 @@ use super::*;
 #[derive(Default)]
 pub(super) struct BarState {
     /// What the formatting bar offers, with the version and selection it was computed for.
+    #[cfg(test)]
     pub(super) tools: Option<((u64, Range<usize>), Tools)>,
     /// How the bar shows (see `bar_place`).
     pub(super) at: Option<Bar>,
@@ -21,6 +22,7 @@ pub(super) const BAR_WIDTH: f32 = 6. + 2. + 11. * 26. + 14. + 13. + 2. * 7.;
 
 /// Background of the button that collapses the bar: always opaque, it goes over text (the selection tint,
 /// translucent, would show what it covers).
+#[cfg(test)]
 pub fn bar_fill(t: &Theme, open: bool) -> Hsla {
     if open {
         crate::ui::theme::blend(t.accent, t.bg, 0.2)
@@ -40,70 +42,18 @@ pub(super) enum Bar {
 
 /// What the formatting bar offers for the selection.
 #[derive(Clone, Copy)]
+#[cfg(test)]
 pub(super) struct Tools {
     /// The inline styles applied (`md::STYLES`).
     pub(super) styles: u16,
-    /// The list kind of the cursor's line.
-    pub(super) list: Option<ListStyle>,
-    /// The cursor is in a table.
-    pub(super) table: bool,
 }
 
 impl Editor {
-    /// A narrow note gives the shell's corner button its own row: it used to meet the centered
-    /// formatting toggle at width / 2 + 15 = width - 16 - 30 (the toggle is gone from the UI,
-    /// the check stays for the button's placement); rem margins scale with the UI.
-    pub fn crowded_footer(&self) -> bool {
-        self.theme.bar
-            && self.viewport.size.width > px(0.)
-            && self.viewport.size.width < self.theme.px(122.)
-    }
-
-    /// The color badges are open.
-    #[cfg(test)]
-    pub fn swatches_open(&self) -> bool {
-        self.bar.swatches
-    }
-
-    /// Highlights the selection in color `color` (see `md::MARKS`): in the same color it already has,
-    /// the highlight goes; in another, it changes color; otherwise it is applied.
-    pub(super) fn paint_with(&mut self, color: usize, cx: &mut Context<Self>) {
-        let (open, close) = md::mark_signs(color);
-        self.aligned(cx, |this, cx| {
-            let parts = this.mark_parts();
-            if parts.is_empty() {
-                return;
-            }
-            let cuts: Vec<_> = parts
-                .iter()
-                .map(|part| this.cut(part, md::HIGHLIGHT))
-                .collect();
-            this.push_undo(true);
-            if cuts.iter().any(Option::is_none) {
-                return this.restyle_parts(&parts, &cuts, &open, close, true, cx);
-            }
-            let same = cuts
-                .iter()
-                .flatten()
-                .all(|(o, _)| this.content[o.clone()] == open);
-            for (o, c) in cuts.into_iter().flatten().rev() {
-                this.splice(c, if same { "" } else { close }, cx);
-                this.splice(o, if same { "" } else { &open }, cx);
-            }
-        });
-    }
-
     #[cfg(test)]
     /// The formatting bar's buttons are on screen: never, now — the bar is gone from the main UI
     /// (its module stays for the palette), so this stays false while placement still computes.
     pub fn bar_shown(&self) -> bool {
         false
-    }
-
-    /// The note is too narrow for the bar: it collapses into a button.
-    #[cfg(test)]
-    pub fn bar_folded(&self) -> bool {
-        self.bar.at == Some(Bar::Compact)
     }
 
     /// Where to put the bar: centred on the page (the text column is centred in the pane), further left when
@@ -131,6 +81,7 @@ impl Editor {
     /// What the bar offers for the selection, recomputed only when the text or the selection change.
     // ponytail: nothing lights up for a selection over several lines (the gesture does handle them),
     // unless handles took cells: computing it at each mouse move would weigh on a large selection.
+    #[cfg(test)]
     pub(super) fn tools(&mut self) -> Tools {
         let key = (self.version, self.sel.clone());
         if let Some((known, tools)) = &self.bar.tools
@@ -154,17 +105,7 @@ impl Editor {
                 .filter(|&flag| parts.iter().all(|part| self.cut(part, flag).is_some()))
                 .fold(0, |all, flag| all | flag)
         };
-        let list = match md::classify(&self.content[line], false).0 {
-            Kind::Bullet => Some(ListStyle::Bullet),
-            Kind::Ordered => Some(ListStyle::Ordered),
-            Kind::Task(_) => Some(ListStyle::Task),
-            _ => None,
-        };
-        let tools = Tools {
-            styles,
-            list,
-            table: self.in_table(),
-        };
+        let tools = Tools { styles };
         self.bar.tools = Some((key, tools));
         tools
     }
@@ -173,56 +114,6 @@ impl Editor {
     #[cfg(test)]
     pub fn styles(&mut self) -> u16 {
         self.tools().styles
-    }
-
-    /// The highlight color badges, above the bar; `aligned`: under the H button.
-    pub(super) fn swatches(
-        &mut self,
-        aligned: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
-        let t = self.theme;
-        let names = [
-            tr("Yellow", "Jaune"),
-            tr("Green", "Vert"),
-            tr("Blue", "Bleu"),
-            tr("Pink", "Rose"),
-            tr("Purple", "Violet"),
-        ];
-        div()
-            .debug_selector(|| "format-swatches".into())
-            .ml(t.px(if aligned { 4. + 4. * 27. } else { 0. }))
-            .flex_none()
-            .h(t.px(30.))
-            .px(t.px(7.))
-            .flex()
-            .items_center()
-            .gap(t.px(5.))
-            .rounded(t.large())
-            .border_1()
-            .border_color(t.border)
-            .bg(t.panel)
-            .occlude()
-            .children((0..md::MARKS.len()).map(|i| {
-                div()
-                    .id(("swatch", i))
-                    .debug_selector(move || format!("swatch-{i}"))
-                    .size(t.px(18.))
-                    .flex_none()
-                    .rounded_full()
-                    .cursor_pointer()
-                    .bg(crate::ui::theme::highlight_tint(i).opacity(0.8))
-                    .border_1()
-                    .border_color(t.border)
-                    .hover(|s| s.border_color(t.accent))
-                    .tooltip(crate::ui::widgets::tip(names[i], String::new(), t))
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        window.focus(&this.focus);
-                        this.bar.swatches = false;
-                        this.each(cx, |this, cx| this.paint_with(i, cx));
-                    }))
-            }))
     }
 
     /// The formatting bar, no longer drawn: its module stays (placement, tools and highlight

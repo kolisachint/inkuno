@@ -3,17 +3,10 @@
 //! modules instead.
 
 mod benches;
-mod board_header;
-mod calendar_head;
-mod canvas_nesting;
-mod canvas_text;
 mod current_file;
-mod docks;
-mod drops;
 mod editing;
 mod end_to_end;
 mod enlarge;
-mod export_pdf;
 mod feedback;
 mod find_bar;
 mod floating;
@@ -24,12 +17,8 @@ mod motion;
 mod panel_rows;
 mod panes;
 mod save_close;
-mod sharing;
-mod sheet_header;
 mod shortcuts_page;
-mod table_open;
 mod tabs;
-mod vault_find;
 mod window;
 
 use super::*;
@@ -48,6 +37,18 @@ fn layers_only_depend_downwards() {
     let rules: &[(&str, &[&str])] = &[
         (
             "src/logic",
+            &[
+                "gpui",
+                "crate::platform",
+                "crate::ui",
+                "crate::views",
+                "crate::shell",
+                server,
+            ],
+        ),
+        // The extracted logic crate answers to the same rule, from its own tree.
+        (
+            "crates/logic",
             &[
                 "gpui",
                 "crate::platform",

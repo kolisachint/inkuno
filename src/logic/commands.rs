@@ -9,7 +9,6 @@ use crate::lang::tr;
 pub enum Group {
     Block,
     Table,
-    Diagram,
     Format,
     Note,
     Create,
@@ -27,8 +26,6 @@ impl Group {
             (Group::Block, false) => tr("Block", "Bloc"),
             (Group::Table, true) => tr("This table", "Ce tableau"),
             (Group::Table, false) => tr("Table", "Tableau"),
-            (Group::Diagram, true) => tr("This diagram", "Ce schéma"),
-            (Group::Diagram, false) => tr("Diagram", "Schéma"),
             (Group::Format, _) => tr("Formatting", "Mise en forme"),
             (Group::Note, _) => "Note",
             (Group::Create, _) => tr("Create", "Créer"),
@@ -314,49 +311,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             "export.svg",
             Table,
         ),
-        (
-            "canvas::SelectAll",
-            tr("Select everything", "Tout sélectionner"),
-            "d-select.svg",
-            Diagram,
-        ),
-        (
-            "canvas::Duplicate",
-            tr("Duplicate the selection", "Dupliquer la sélection"),
-            "copy.svg",
-            Diagram,
-        ),
-        (
-            "canvas::Erase",
-            tr("Delete the selection", "Supprimer la sélection"),
-            "trash.svg",
-            Diagram,
-        ),
-        (
-            "canvas::ZoomFit",
-            tr("Fit the whole diagram", "Voir tout le schéma"),
-            "target.svg",
-            Diagram,
-        ),
-        (
-            "canvas::ZoomIn",
-            tr("Zoom in", "Zoomer"),
-            "c-zoom-in.svg",
-            Diagram,
-        ),
-        (
-            "canvas::ZoomOut",
-            tr("Zoom out", "Dézoomer"),
-            "c-zoom-out.svg",
-            Diagram,
-        ),
-        ("canvas::Undo", tr("Undo", "Annuler"), "c-undo.svg", Diagram),
-        (
-            "canvas::Redo",
-            tr("Redo", "Rétablir"),
-            "c-redo.svg",
-            Diagram,
-        ),
         ("editor::Bold", tr("Bold", "Gras"), "c-bold.svg", Format),
         (
             "editor::Italic",
@@ -414,30 +368,9 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Note,
         ),
         (
-            "app::Outline",
-            tr("Outline of the note", "Plan de la note"),
-            "c-outline.svg",
-            Note,
-        ),
-        (
-            "app::ShareDocument",
-            tr(
-                "Share / Export the current document",
-                "Partager / Exporter le document courant",
-            ),
-            "export.svg",
-            Note,
-        ),
-        (
             "app::CopyAll",
             tr("Copy the whole note", "Copier toute la note"),
             "copy.svg",
-            Note,
-        ),
-        (
-            "app::ExportPdf",
-            tr("Save the note as PDF…", "Enregistrer la note en PDF…"),
-            "export.svg",
             Note,
         ),
         (
@@ -504,43 +437,10 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Create,
         ),
         (
-            "app::NewFromTemplate",
-            tr("New note from a template", "Nouvelle note depuis un modèle"),
-            "file-plus.svg",
-            Create,
-        ),
-        (
-            "app::NewDiagram",
-            tr("New diagram", "Nouveau schéma"),
-            "d-rect.svg",
-            Create,
-        ),
-        (
             "nav::NewFolder",
             tr("New folder", "Nouveau dossier"),
             "folder-plus.svg",
             Create,
-        ),
-        (
-            "editor::OpenEmbed",
-            tr(
-                "Open the embedded note (on its line)",
-                "Ouvrir la note incorporée (sur sa ligne)",
-            ),
-            "link.svg",
-            Go,
-        ),
-        (
-            "app::Today",
-            tr("Today's note", "Note du jour"),
-            "c-calendar.svg",
-            Go,
-        ),
-        (
-            "app::SearchVault",
-            tr("Search the whole vault", "Chercher dans tout le coffre"),
-            "find-text.svg",
-            Go,
         ),
         (
             "nav::ShowTree",
@@ -552,37 +452,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             "nav::ShowRecent",
             tr("Recent notes", "Notes récentes"),
             "clock.svg",
-            Go,
-        ),
-        (
-            "nav::ShowGraph",
-            tr("Graph of the notes", "Graphe des notes"),
-            "graph.svg",
-            Go,
-        ),
-        ("nav::ShowTags", "Tags", "tag.svg", Go),
-        (
-            "nav::ShowLinks",
-            tr("Backlinks", "Rétroliens"),
-            "backlink.svg",
-            Go,
-        ),
-        (
-            "nav::ShowCalendar",
-            tr("Calendar", "Calendrier"),
-            "c-calendar.svg",
-            Go,
-        ),
-        (
-            "app::GoBack",
-            tr("Back", "Précédent"),
-            "chevron-left.svg",
-            Go,
-        ),
-        (
-            "app::GoForward",
-            tr("Forward", "Suivant"),
-            "chevron-right.svg",
             Go,
         ),
         (
@@ -667,24 +536,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
-            "app::MoveTool",
-            tr(
-                "Move the panel's view to the other dock",
-                "Déplacer la vue du panneau dans l'autre dock",
-            ),
-            "c-right.svg",
-            Go,
-        ),
-        (
-            "app::ToolAsTab",
-            tr(
-                "Open the graph or the calendar as a tab",
-                "Ouvrir le graphe ou le calendrier dans un onglet",
-            ),
-            "c-split.svg",
-            Go,
-        ),
-        (
             "app::MaximizePane",
             tr(
                 "Pane on the whole window, and back",
@@ -698,12 +549,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             tr("Panel on the whole window", "Panneau sur toute la fenêtre"),
             "expand.svg",
             Go,
-        ),
-        (
-            "app::SyncVault",
-            tr("Sync the vault", "Synchroniser le coffre"),
-            "backup.svg",
-            Vault,
         ),
         (
             "app::OpenVault",

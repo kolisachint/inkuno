@@ -77,6 +77,7 @@ impl Line {
 
     /// A text of several lines, cursor at the end: Enter and pasting keep their newlines,
     /// Home and End stop at the line's ends.
+    #[cfg(test)]
     pub fn multiline(text: impl Into<String>) -> Self {
         Self {
             multiline: true,
@@ -105,11 +106,6 @@ impl Line {
         self.marked
             .clone()
             .map(|r| self.units(r.start)..self.units(r.end))
-    }
-
-    /// The text being composed, in bytes.
-    pub fn marked(&self) -> Option<Range<usize>> {
-        self.marked.clone()
     }
 
     /// The composition ends as it stands: what was composed stays, as typed text.
@@ -221,6 +217,7 @@ impl Line {
     }
 
     /// Moves the cursor to this byte and keeps the other end of the selection where it was.
+    #[cfg(test)]
     pub fn extend(&mut self, at: usize) {
         let anchor = self.anchor;
         self.place(at);
@@ -228,6 +225,7 @@ impl Line {
     }
 
     /// Selects the word at this byte (a double click), or the blank or sign there.
+    #[cfg(test)]
     pub fn select_word(&mut self, at: usize) {
         let at = at.min(self.text.len());
         let (start, word) = self

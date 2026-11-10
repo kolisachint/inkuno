@@ -92,63 +92,12 @@ impl Editor {
             ] {
                 self.aim_hand(at, modifiers, cx);
             }
-            self.drop_point(at);
         }
     }
 
     #[cfg(test)]
     pub fn hand(&self) -> Option<CursorStyle> {
         self.hand
-    }
-
-    /// Where to put what is dropped at pointer `at`: the start of a line, the one below when the pointer is
-    /// in the lower half of its own. Never in a table, a code block or the front matter: at the
-    /// edge of the block, downwards.
-    pub fn drop_point(&self, at: Point<Pixels>) -> usize {
-        if self.stale() {
-            return self.line_range(self.cursor()).start;
-        }
-        let y = at.y - self.origin.y;
-        let Some(row) = self
-            .rows
-            .iter()
-            .find(|r| y < r.y + r.height)
-            .or(self.rows.last())
-        else {
-            return 0;
-        };
-        let line = self.line_range(row.start);
-        let mut point = if y > row.y + row.height / 2. {
-            (line.end + 1).min(self.content.len())
-        } else {
-            line.start
-        };
-        let front = md::front_matter(&self.content);
-        if point > 0 && point < front {
-            point = front;
-        }
-        // In a table (its line and the previous one belong to it) or in a code block: further down.
-        while point > 0 && point < self.content.len() {
-            let (here, above) = (self.line_range(point), self.line_range(point - 1));
-            if (self.is_table_line(&here) && self.is_table_line(&above)) || self.in_code(point) {
-                point = (here.end + 1).min(self.content.len());
-            } else {
-                break;
-            }
-        }
-        point
-    }
-
-    pub fn set_drop_mark(&mut self, mark: Option<usize>, cx: &mut Context<Self>) {
-        if self.drop_mark != mark {
-            self.drop_mark = mark;
-            cx.notify();
-        }
-    }
-
-    /// The start of the cursor's line.
-    pub fn caret_line_start(&self) -> usize {
-        self.line_range(self.cursor()).start
     }
 
     /// The handle under the pointer: (table start, handle). Only visible ones can be grabbed.
@@ -487,16 +436,6 @@ impl Editor {
         self.clamp(row.start + row.index_at(local))
     }
 
-    /// Why the formula under `at` has no result, if it is in a table.
-    pub(super) fn reason_at(&self, at: Point<Pixels>) -> Option<Rc<str>> {
-        if !self.tables.iter().any(|(_, frame)| frame.contains(&at)) {
-            return None;
-        }
-        let i = self.index_at(at);
-        let row = self.rows.get(self.row_at(i)?)?;
-        row.grid.as_ref()?.reason_at(i - row.start)
-    }
-
     pub(super) fn mouse_down(
         &mut self,
         e: &MouseDownEvent,
@@ -536,16 +475,6 @@ impl Editor {
             })
             .detach();
             return cx.notify();
-        }
-        // An embedded section: its source's name, or a double click, opens the note there; a click elsewhere in
-        // the frame puts the cursor on the line that says what it embeds.
-        if let Some((row, embed, on_label)) = self.embed_at(e.position) {
-            let (end, target) = (row.start + row.len, embed.target.clone());
-            if on_label || e.click_count >= 2 {
-                return self.open_embed(target, e.modifiers.shift, cx);
-            }
-            self.more.clear();
-            return self.move_to(end, cx);
         }
         if let Some((cols, rows)) = self.grid_at(e.position) {
             return self.insert_table(cols, rows, cx);
@@ -592,19 +521,30 @@ impl Editor {
         }
         // An ordinary click returns to a single cursor.
         self.more.clear();
+        // A footnote reference jumps to its definition, a definition's label to its
+        // references; references without one are plain text. Before the click reveals its line.
+        if e.modifiers.secondary()
+            && let Some(go) = self.footnote_target(i)
+        {
+            self.jump(go, false, cx);
+            return;
+        }
         let lr = self.line_range(i);
         let line = &self.content[lr.clone()];
         let col = i - lr.start;
         if e.modifiers.secondary()
-            && let Some((range, link)) = md::links(line).into_iter().find(|(r, _)| r.contains(&col))
+            && let Some((range, link)) = md::links(line)
+                .into_iter()
+                .filter(|(_, link)| !matches!(link, Link::Footnote(_)))
+                .find(|(r, _)| r.contains(&col))
         {
             // A link to a heading or a block of a note opens the note there.
             if let Some(target) = Some(&link)
                 .filter(|l| matches!(l, Link::Wiki(_)))
                 .and_then(|_| {
-                    crate::logic::embed::link_target(&line[range.start + 2..range.end - 2])
+                    crate::logic::wiki::link_target(&line[range.start + 2..range.end - 2])
                 })
-                .filter(|t| t.anchor != crate::logic::embed::Anchor::Whole)
+                .filter(|t| t.anchor != crate::logic::wiki::Anchor::Whole)
             {
                 return cx.emit(EditorEvent::OpenAt(target, e.modifiers.shift));
             }
@@ -678,11 +618,80 @@ impl Editor {
         self.menu_at(i, at, true, cx);
     }
 
+    /// Ctrl+click on a footnote: a reference jumps to its definition, a definition's label
+    /// jumps to its first reference and cycles through them on repeated clicks. References
+    /// without a definition are plain text (`None`: the click goes on as usual). Footnotes
+    /// navigate inside the note, so this runs before the click reveals its line.
+    pub(super) fn footnote_target(&mut self, at: usize) -> Option<usize> {
+        let lr = self.line_range(at);
+        if lr.start < md::front_matter(&self.content) || self.in_code(lr.start) {
+            return None;
+        }
+        let line = self.content[lr.clone()].to_string();
+        let col = at - lr.start;
+        if let Some((label, marker, _)) = md::footnote_def(&line)
+            && marker.contains(&col)
+        {
+            let key = label.to_lowercase();
+            let hit = self
+                .feet()
+                .iter()
+                .find(|d| d.label.to_lowercase() == key)
+                .map(|d| (d.at, d.refs.clone()));
+            let (def_at, refs) = hit?;
+            if refs.is_empty() {
+                return None;
+            }
+            let next = match self.foot_jump {
+                Some((prev, k)) if prev == def_at => (k + 1) % refs.len(),
+                _ => 0,
+            };
+            self.foot_jump = Some((def_at, next));
+            return Some(refs[next]);
+        }
+        let hit = md::footnote_ref(&line)
+            .into_iter()
+            .find(|(r, _)| r.contains(&col))
+            .and_then(|(_, label)| {
+                let key = label.to_lowercase();
+                self.feet()
+                    .iter()
+                    .find(|d| d.label.to_lowercase() == key)
+                    .map(|d| d.at)
+            });
+        if hit.is_some() {
+            self.foot_jump = None;
+        }
+        hit
+    }
+
+    /// Byte `i` is on a footnote reference or a definition's label that names a definition:
+    /// Ctrl+click jumps there.
+    pub(super) fn footnote_defined_at(&self, i: usize) -> bool {
+        let lr = self.line_range(i);
+        if lr.start < md::front_matter(&self.content) || self.in_code(lr.start) {
+            return false;
+        }
+        let line = &self.content[lr.clone()];
+        let col = i - lr.start;
+        let label = md::footnote_def(line)
+            .filter(|(_, marker, _)| marker.contains(&col))
+            .map(|(label, _, _)| label)
+            .or_else(|| {
+                md::footnote_ref(line)
+                    .into_iter()
+                    .find(|(r, _)| r.contains(&col))
+                    .map(|(_, label)| label)
+            });
+        label.is_some_and(|l| self.foot_defined(&l))
+    }
+
     /// The note's menu at `at`, for what is around byte `i`: a link, a comment; `keys`: opened from the keys.
     fn menu_at(&mut self, i: usize, at: Point<Pixels>, keys: bool, cx: &mut Context<Self>) {
         let lr = self.line_range(i);
         let link = md::links(&self.content[lr.clone()])
             .into_iter()
+            .filter(|(_, link)| !matches!(link, Link::Footnote(_)))
             .find(|(r, _)| (r.start..=r.end).contains(&(i - lr.start)));
         let col = i - lr.start;
         let commented = md::comments(&self.content[lr])
@@ -785,11 +794,6 @@ impl Editor {
         self.pointer = e.position;
         if part != self.part_hover || near != before {
             self.part_hover = part;
-            cx.notify();
-        }
-        let reason = self.reason_at(e.position);
-        if reason != self.reason {
-            self.reason = reason;
             cx.notify();
         }
         let hover = (

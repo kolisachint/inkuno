@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 
 use crate::{
     lang::{date_name, time_name},
-    logic::{daily, embed, embed::Anchor, markdown, markdown::Link, rank},
+    logic::wiki::Anchor,
+    logic::{daily, markdown, markdown::Link, rank},
     platform::{clock, link, vault as files},
 };
 
@@ -139,7 +140,7 @@ pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
                 .then_with(|| files::natural(&a.0).cmp(&files::natural(&b.0)))
         });
     } else {
-        rows.sort_by(|a, b| files::natural(&a.0).cmp(&files::natural(&b.0)));
+        rows.sort_by_key(|a| files::natural(&a.0));
     }
     let next = (cursor + limit < rows.len()).then(|| (cursor + limit).to_string());
     let notes: Vec<Value> = rows
@@ -266,7 +267,7 @@ fn section_text(text: &str, section: &str) -> Result<String, String> {
     } else {
         Anchor::Heading(section.to_string())
     };
-    embed::section(text, &anchor).ok_or_else(|| match &anchor {
+    crate::logic::wiki::section(text, &anchor).ok_or_else(|| match &anchor {
         Anchor::Block(id) => format!("no block `^{id}`"),
         _ => format!("no heading `{section}`"),
     })
@@ -312,7 +313,7 @@ fn wiki_path(vault: &Vault, name: &str) -> Option<String> {
 
 fn embeds(vault: &Vault, text: &str) -> Vec<Value> {
     text.lines()
-        .filter_map(embed::parse)
+        .filter_map(crate::logic::wiki::parse)
         .map(|target| {
             let resolved = wiki_path(vault, &target.note);
             json!({
@@ -615,8 +616,7 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(path) => path,
         Err(message) => return Outcome::err(message),
     };
-    // find_file borrows vault. Clone before mut.
-    let path = path;
+    // find_file borrows vault: `path` is owned, so the vault stays mutable below.
     let old_file = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -680,17 +680,17 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         (old_stem.clone(), new_stem.clone())
     };
     // A note whose title was its name keeps the title in step.
-    if dest.extension().is_some_and(|e| e == "md") && old_stem != new_stem {
-        if let Ok(text) = fs::read_to_string(&dest)
-            && files::h1_of(&text).as_deref() == Some(old_stem.as_str())
-        {
-            let meta = markdown::front_matter(&text);
-            let (head, body) = text.split_at(meta);
-            if let Some(first) = body.lines().find(|l| !l.trim().is_empty()) {
-                let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
-                let title = format!("{} {new_stem}", "#".repeat(hashes.max(1)));
-                let _ = files::write(&dest, &format!("{head}{}", body.replacen(first, &title, 1)));
-            }
+    if dest.extension().is_some_and(|e| e == "md")
+        && old_stem != new_stem
+        && let Ok(text) = fs::read_to_string(&dest)
+        && files::h1_of(&text).as_deref() == Some(old_stem.as_str())
+    {
+        let meta = markdown::front_matter(&text);
+        let (head, body) = text.split_at(meta);
+        if let Some(first) = body.lines().find(|l| !l.trim().is_empty()) {
+            let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
+            let title = format!("{} {new_stem}", "#".repeat(hashes.max(1)));
+            let _ = files::write(&dest, format!("{head}{}", body.replacen(first, &title, 1)));
         }
     }
     let rewritten = if old_link != new_link {

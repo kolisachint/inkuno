@@ -202,7 +202,7 @@ fn panes_split_move_resize_and_come_back(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-alt-\\");
     cx.run_until_parked();
     assert_eq!(state(&shell, cx).0, before);
-    assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "Pas de place")));
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "No room")));
     cx.simulate_keystrokes("escape");
     cx.simulate_keystrokes("secondary-\\");
     cx.run_until_parked();
@@ -408,66 +408,28 @@ fn an_outside_write_keeps_the_place(cx: &mut TestAppContext) {
     assert_eq!(at, "# Long\n\nCourt é\n".len());
 }
 
-/// A diagram rewritten outside the app (an agent through `inkuno mcp`) is redrawn in its open canvas, without
-/// closing it: the view stays where it was, and one step of undo goes back to what was shown.
+/// An SVG rewritten outside the app is still shown in its viewer after a rescan.
 #[gpui::test]
-fn an_outside_write_redraws_the_open_diagram(cx: &mut TestAppContext) {
-    use crate::logic::diagram::{self, Diagram, Form};
-    let (root, shell, cx, _config) = start(cx, "outside-diagram");
+fn an_outside_write_keeps_the_open_svg(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "outside-svg");
     let path = root.join("Schéma.svg");
-    let mut first = Diagram::default();
-    first.add_shape(Form::Rect, 0., 0., 120., 60.);
-    fs::write(&path, first.to_svg(diagram::COLORS[0])).unwrap();
+    fs::write(&path, r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##).unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     cx.simulate_resize(size(px(900.), px(700.)));
     shell.update_in(cx, |s, window, cx| s.open_from_nav(&path, window, cx));
     cx.run_until_parked();
-    let canvas = shell
-        .read_with(cx, |s, _| s.pane().drawing().cloned())
-        .expect("the diagram opens in its canvas");
-    let view = canvas.read_with(cx, |c, _| c.spot(0., 0.));
-
-    let mut second = first.clone();
-    second.add_shape(Form::Ellipse, 300., 0., 120., 80.);
-    fs::write(&path, second.to_svg(diagram::COLORS[0])).unwrap();
-    shell.update(cx, |s, cx| s.rescan(&root, cx));
-    cx.run_until_parked();
-    assert_eq!(
-        canvas.read_with(cx, |c, _| c.diagram().shapes.len()),
-        2,
-        "the canvas shows the diagram as it is now"
-    );
-    assert_eq!(
-        canvas.read_with(cx, |c, _| c.spot(0., 0.)),
-        view,
-        "the view moved"
-    );
     assert!(
-        shell.read_with(cx, |s, _| s.pane().drawing() == Some(&canvas)),
-        "the same canvas, not a new one"
+        shell.read_with(cx, |s, _| s.pane().viewer().is_some()),
+        "the SVG opens in its viewer"
     );
-
-    // Undo goes back to what was shown, and that is written.
-    shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().drawing().unwrap().focus_handle(cx))
-    });
-    cx.simulate_keystrokes("secondary-z");
-    cx.run_until_parked();
-    assert_eq!(canvas.read_with(cx, |c, _| c.diagram().shapes.len()), 1);
-    assert_eq!(
-        Diagram::from_svg(&fs::read_to_string(&path).unwrap())
-            .unwrap()
-            .shapes
-            .len(),
-        1
-    );
-
-    // The same text again, or a file that is no diagram any more: nothing changes.
-    shell.update(cx, |s, cx| s.rescan(&root, cx));
-    fs::write(&path, "<svg xmlns=\"http://www.w3.org/2000/svg\"/>").unwrap();
+    fs::write(&path, r##"<svg xmlns="http://www.w3.org/2000/svg" width="120" height="240"><rect width="120" height="240" fill="#c93875"/></svg>"##).unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     cx.run_until_parked();
-    assert_eq!(canvas.read_with(cx, |c, _| c.diagram().shapes.len()), 1);
+    assert!(
+        shell.read_with(cx, |s, _| s.pane().viewer().is_some()
+            && s.pane().file_path() == Some(&path)),
+        "the same viewer, not a new one"
+    );
 }
 
 /// A note written by another program while it is typed in (an agent through `inkuno mcp`): both
@@ -639,7 +601,8 @@ fn an_agent_shows_a_file(cx: &mut TestAppContext) {
             .unwrap_err()
             .starts_with("no file at")
     );
-    let elsewhere = std::env::temp_dir().join(format!("inkuno-elsewhere-{}.md", std::process::id()));
+    let elsewhere =
+        std::env::temp_dir().join(format!("inkuno-elsewhere-{}.md", std::process::id()));
     fs::write(&elsewhere, "# Ailleurs\n").unwrap();
     let refused = shell
         .update_in(cx, |s, window, cx| s.show_asked(&elsewhere, window, cx))
@@ -655,14 +618,12 @@ fn an_agent_shows_a_file(cx: &mut TestAppContext) {
         "a refusal changes nothing"
     );
 
-    // A diagram written by the agent opens in its canvas.
+    // An SVG written by the agent opens in its viewer.
     let diagram = root.join("Schéma.svg");
-    let mut d = Diagram::default();
-    d.add_shape(diagram::Form::Rect, 0., 0., 120., 60.);
-    fs::write(&diagram, d.to_svg(diagram::COLORS[0])).unwrap();
+    fs::write(&diagram, r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##).unwrap();
     assert_eq!(
         shell.update_in(cx, |s, window, cx| s.show_asked(&diagram, window, cx)),
         Ok(())
     );
-    assert!(shell.read_with(cx, |s, _| s.pane().drawing().is_some()));
+    assert!(shell.read_with(cx, |s, _| s.pane().viewer().is_some()));
 }

@@ -56,7 +56,7 @@ fn failures_stay_and_name_the_file(cx: &mut TestAppContext) {
     let said = toasts(cx).pop().unwrap();
     assert_eq!(said.0, Tone::Failed);
     assert!(
-        said.1.contains("Fantôme.md") && said.1.ends_with("introuvable"),
+        said.1.contains("Fantôme.md") && said.1.ends_with("not found"),
         "{said:?}"
     );
     assert!(!said.1.contains("os error"), "{said:?}");
@@ -80,7 +80,7 @@ fn the_trash_says_so_and_can_be_undone(cx: &mut TestAppContext) {
     shell.update(cx, |s, cx| s.trash(&root, &note, cx));
     assert!(!note.exists() && root.join(".trash/Plan.md").is_file());
     assert!(shell.read_with(cx, |s, _| {
-        s.told(Tone::Done, "Mis à la corbeille : « Plan.md »")
+        s.told(Tone::Done, "Moved to the trash: « Plan.md »")
     }));
     // « Annuler » is on the message: a click puts the note back in its folder.
     cx.run_until_parked();
@@ -92,11 +92,10 @@ fn the_trash_says_so_and_can_be_undone(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(fs::read_to_string(&note).unwrap(), "# Plan\n");
     assert!(!root.join(".trash/Plan.md").exists());
-    assert!(shell.read_with(
-        cx,
-        |s, _| s.told(Tone::Done, "Remis en place : « Plan.md »")
-            && !s.told(Tone::Done, "Mis à la corbeille")
-    ));
+    assert!(
+        shell.read_with(cx, |s, _| s.told(Tone::Done, "Put back: « Plan.md »")
+            && !s.told(Tone::Done, "Moved to the trash"))
+    );
     // Trashed, then a note takes its name: the undo refuses, nothing is overwritten, both stay.
     shell.update(cx, |s, cx| s.trash(&root, &note, cx));
     fs::write(&note, "# Autre\n").unwrap();
@@ -104,7 +103,7 @@ fn the_trash_says_so_and_can_be_undone(cx: &mut TestAppContext) {
     shell.update(cx, |s, cx| s.put_back(&from, &to, cx));
     assert!(shell.read_with(cx, |s, _| s.told(
         Tone::Failed,
-        "Remise en place impossible « Plan.md » : ce nom est déjà pris"
+        "Not put back « Plan.md » : this name is already taken"
     )));
     assert_eq!(fs::read_to_string(&note).unwrap(), "# Autre\n");
     assert_eq!(fs::read_to_string(&from).unwrap(), "# Plan\n");
@@ -161,14 +160,14 @@ fn unreadable_figures_and_pictures_say_so(cx: &mut TestAppContext) {
     );
     assert_eq!(
         said(cx, "```mermaid\nceci n'est pas un diagramme\n```\n"),
-        ["Figure illisible"]
+        ["Unreadable figure"]
     );
     assert_eq!(
         said(cx, "avant\n\n```mermaid\n\n```\n\naprès"),
-        ["Figure illisible"],
+        ["Unreadable figure"],
         "an empty diagram too"
     );
-    assert_eq!(said(cx, "$$\n\\frac{1}{\n$$\n"), ["Formule illisible"]);
+    assert_eq!(said(cx, "$$\n\\frac{1}{\n$$\n"), ["Unreadable formula"]);
     assert!(said(cx, "$$\n\\frac{1}{2}\n$$\n").is_empty());
     assert!(
         said(cx, "```rust\nfn main() {}\n```\n").is_empty(),
@@ -176,11 +175,11 @@ fn unreadable_figures_and_pictures_say_so(cx: &mut TestAppContext) {
     );
     assert_eq!(
         said(cx, "![](cassée.png)\n\n![](cassé.svg)\n\n![](bonne.svg)"),
-        ["Image illisible", "Figure illisible"]
+        ["Unreadable image", "Unreadable figure"]
     );
     assert_eq!(
         said(cx, "![](vide.png)"),
-        ["Image illisible"],
+        ["Unreadable image"],
         "a file of 0 bytes"
     );
     assert!(
@@ -189,7 +188,7 @@ fn unreadable_figures_and_pictures_say_so(cx: &mut TestAppContext) {
     );
     // Two bad diagrams and a good one, in the order of the note; the cursor in the bad one waits until it leaves.
     let three = "```mermaid\nfaux\n```\n\n```mermaid\nsequenceDiagram\nA->>B: x\n```\n\n```mermaid\nfaux aussi\n```\n";
-    assert_eq!(said(cx, three), ["Figure illisible", "Figure illisible"]);
+    assert_eq!(said(cx, three), ["Unreadable figure", "Unreadable figure"]);
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -278,75 +277,6 @@ fn a_missing_vault_is_said_on_the_welcome_page(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// An import says how many items it could not draw, in the singular and the plural, and nothing when all came.
-#[gpui::test]
-fn an_import_counts_what_it_leaves_out(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = start(cx, "import");
-    let import = |cx: &mut gpui::VisualTestContext, name: &str, json: &str| {
-        let file = root.join(".config").join(name);
-        fs::write(&file, json).unwrap();
-        shell.update_in(cx, |s, window, cx| {
-            s.toasts.clear();
-            s.import_file(&file, window, cx);
-        });
-        cx.run_until_parked();
-        shell.read_with(cx, |s, _| {
-            s.toasts
-                .iter()
-                .map(|t| (t.tone, t.text.clone()))
-                .collect::<Vec<_>>()
-        })
-    };
-    let ellipse = r#"{"id":"a","type":"ellipse","x":0,"y":0,"width":80,"height":60}"#;
-    let stroke = |n: usize| {
-        (0..n)
-            .map(|i| format!(r#"{{"id":"s{i}","type":"freedraw"}}"#))
-            .collect::<Vec<_>>()
-            .join(",")
-    };
-    assert!(
-        import(
-            cx,
-            "tout.excalidraw",
-            &format!(r#"{{"elements":[{ellipse}]}}"#)
-        )
-        .is_empty(),
-        "nothing to say when everything came"
-    );
-    assert_eq!(
-        import(
-            cx,
-            "un.excalidraw",
-            &format!(r#"{{"elements":[{ellipse},{}]}}"#, stroke(1))
-        ),
-        [(Tone::Info, "1 élément non importé".to_string())]
-    );
-    assert_eq!(
-        import(
-            cx,
-            "trois.excalidraw",
-            &format!(r#"{{"elements":[{ellipse},{}]}}"#, stroke(3))
-        ),
-        [(Tone::Info, "3 éléments non importés".to_string())]
-    );
-    // Only what cannot be drawn: an empty diagram, and the count says why it is empty.
-    assert_eq!(
-        import(
-            cx,
-            "traits.excalidraw",
-            &format!(r#"{{"elements":[{}]}}"#, stroke(12))
-        ),
-        [(Tone::Info, "12 éléments non importés".to_string())]
-    );
-    let broken = import(cx, "cassé.excalidraw", "pas du json");
-    assert!(
-        matches!(broken.as_slice(), [(Tone::Failed, said)] if said.starts_with("Import impossible")),
-        "{broken:?}"
-    );
-    let _ = fs::remove_dir_all(&root);
-}
-
-/// Frames until the layout settles.
 fn settle(cx: &mut gpui::VisualTestContext) {
     for _ in 0..4 {
         cx.executor().advance_clock(Duration::from_millis(500));
@@ -435,12 +365,8 @@ fn an_empty_panel_says_so(cx: &mut TestAppContext) {
     });
     for width in [420., 860., 1600.] {
         cx.simulate_resize(size(px(width), px(640.)));
-        for mode in [
-            nav::Mode::Tree,
-            nav::Mode::Recent,
-            nav::Mode::Tags,
-            nav::Mode::Links,
-        ] {
+        // The cut views (tags, backlinks) are gone: only the tree and the recent notes say so.
+        for mode in [nav::Mode::Tree, nav::Mode::Recent] {
             shell.update(cx, |s, cx| {
                 s.nav.show_alone(mode);
                 cx.notify();
@@ -538,38 +464,6 @@ fn an_empty_list_page_says_so(cx: &mut TestAppContext) {
     assert!(
         cx.debug_bounds("list-empty").is_some(),
         "a folder with no note"
-    );
-    let _ = fs::remove_dir_all(&root);
-}
-
-/// A board with no column says so and offers the way to add one, instead of a lone « + ».
-#[gpui::test]
-fn an_empty_board_says_so(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = start(cx, "empty-board");
-    let board = root.join("Kanban vide.md");
-    fs::write(&board, "---\nkanban: true\n---\n# Kanban vide").unwrap();
-    shell.update(cx, |s, cx| {
-        s.open_note(&board, cx);
-    });
-    settle(cx);
-    let said = cx
-        .debug_bounds("board-empty")
-        .expect("the empty board says so");
-    let pane = cx.debug_bounds("pane-0").unwrap();
-    assert!(
-        said.left() >= pane.left() && said.right() <= pane.right(),
-        "{said:?} in {pane:?}"
-    );
-    // Its button opens the field for the first column.
-    assert!(shell.read_with(cx, |s, _| s.pane().board.field.is_none()));
-    cx.simulate_click(
-        gpui::point(said.center().x, said.center().y + px(14.)),
-        gpui::Modifiers::none(),
-    );
-    settle(cx);
-    assert!(
-        shell.read_with(cx, |s, _| s.pane().board.field.is_some()),
-        "a click on « Add a column » asks for its name"
     );
     let _ = fs::remove_dir_all(&root);
 }

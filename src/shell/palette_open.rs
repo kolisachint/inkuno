@@ -1,37 +1,8 @@
-//! The command palette as the shell opens it: notes, commands, outline, comments, places, questions.
+//! The command palette as the shell opens it: notes, commands, comments, places, questions.
 
 use super::*;
 
 impl Shell {
-    /// Asks for a line of free text (a URL) in the palette, then passes it to `then`.
-    pub(super) fn ask_text(
-        &mut self,
-        label: &'static str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-        then: fn(&mut Self, String, &mut Window, &mut Context<Self>),
-    ) {
-        let theme = self.theme;
-        let palette = cx.new(|cx| Palette::prompt(label, "", theme, cx));
-        cx.subscribe_in(&palette, window, move |this, _, event, window, cx| {
-            this.palette = None;
-            match this.vault {
-                Some(_) => window.focus(&this.pane().editor.focus_handle(cx)),
-                None => window.focus(&this.focus),
-            }
-            if let PaletteEvent::Submit(text) = event
-                && !text.trim().is_empty()
-            {
-                then(this, text.trim().to_string(), window, cx);
-            }
-            cx.notify();
-        })
-        .detach();
-        window.focus(&palette.focus_handle(cx));
-        self.palette = Some(palette);
-        cx.notify();
-    }
-
     /// The note's comments, in the same list as its outline: the commented text, then
     /// what is said about it.
     pub(super) fn open_comments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -156,27 +127,18 @@ impl Shell {
             .collect();
         let root = self.vault.clone().unwrap_or_default();
         let theme = self.theme;
-        let updates = self.prefs.updates;
-        let installable = self
-            .update
-            .as_ref()
-            .filter(|r| r.asset.is_some())
-            .map(|r| r.version.clone());
-        let table = self.shown_sheet().is_some();
-        let lists =
-            self.pane().file.is_none() && self.pane().listing.is_none() && !self.board_shown(cx);
+        // No sheets: the palette never offers sheet gestures from a shown sheet.
+        let table = false;
+        let lists = self.pane().file.is_none() && self.pane().listing.is_none();
         let cells = lists && self.pane().editor.read(cx).in_table();
-        let swap = !self.swapped.is_empty();
         let (commands, here) = self.palette_commands(window, cx);
         let context = self.here_group(cx).1;
         let palette = cx.new(|cx| {
             Palette::new(entries, query, theme, cx)
                 .with_root(root)
-                .with_updates(updates, installable)
                 .with_table(table)
                 .with_lists(lists)
                 .with_cells(cells)
-                .with_undo_swap(swap)
                 .with_commands(commands, here, context)
         });
         // A command chosen in the palette goes to what had input before it.
@@ -191,23 +153,11 @@ impl Shell {
                 PaletteEvent::Create(name) => this.open_wiki(name, window, cx),
                 PaletteEvent::ChangeVault => this.choose_vault(window, cx),
                 PaletteEvent::Help => this.set_help(true, window, cx),
-                PaletteEvent::NewDiagram => this.new_diagram(window, cx),
                 PaletteEvent::NewFolder => this.new_folder(window, cx),
-                PaletteEvent::Table(pick) => this.choose_table(*pick, window, cx),
-                PaletteEvent::ImportDiagram => this.import_diagram(window, cx),
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
-                PaletteEvent::ToggleUpdates => this.toggle_updates(cx),
-                PaletteEvent::CheckUpdate => this.check_now(cx),
-                PaletteEvent::Outline => this.toggle_outline(window, cx),
                 PaletteEvent::Comments => this.open_comments(window, cx),
-                PaletteEvent::Template(TemplateAct::Save) => this.save_as_template(window, cx),
-                PaletteEvent::Template(act) => this.open_templates(*act, window, cx),
                 PaletteEvent::Grid(op) => {
-                    // The gesture goes to what is shown: a CSV's sheet, or the note.
-                    match this.shown_sheet() {
-                        Some(sheet) => window.focus(&sheet.focus_handle(cx)),
-                        None => window.focus(&this.pane().editor.focus_handle(cx)),
-                    }
+                    window.focus(&this.pane().editor.focus_handle(cx));
                     window.dispatch_action(op.action(), cx);
                 }
                 PaletteEvent::Run(name) => {
@@ -223,20 +173,9 @@ impl Shell {
                     window.focus(&this.pane().editor.focus_handle(cx));
                     this.pane().editor.update(cx, |e, cx| e.restyle(*style, cx));
                 }
-                PaletteEvent::UndoSwap => this.undo_swap(cx),
-                PaletteEvent::NewBoard => {
-                    this.fresh_tab(window, cx);
-                    this.new_note(kanban::new_board(), cx);
-                }
-                PaletteEvent::Today => this.open_today(window, cx),
-                PaletteEvent::Travel(forward) => this.travel(*forward, window, cx),
                 PaletteEvent::Trash => this.open_trash(window, cx),
                 PaletteEvent::Backup => this.choose_backup(window, cx),
-                PaletteEvent::Sync => this.git_sync(window, cx),
-                PaletteEvent::CloneVault => this.ask_clone(window, cx),
                 PaletteEvent::Terminal => this.open_terminal(cx),
-                PaletteEvent::CaptureKey => this.capture_shortcut(cx),
-                PaletteEvent::InstallUpdate => this.install_update(cx),
                 // Closed without a choice: we get back what the pane showed, table or diagram included.
                 PaletteEvent::Dismiss => this.focus_pane(this.active, window, cx),
                 PaletteEvent::Submit(_) | PaletteEvent::Preview(_) => {}
@@ -268,8 +207,7 @@ impl Shell {
             .filter(|(action, ..)| available.contains(action))
             // Gestures of a block, a table or a diagram only count there: elsewhere, they would do nothing.
             .filter(|&(_, _, _, group)| {
-                !matches!(group, Group::Block | Group::Table | Group::Diagram)
-                    || Some(group) == here
+                !matches!(group, Group::Block | Group::Table) || Some(group) == here
             })
             .filter_map(|(action, label, icon, group)| {
                 let keys = keys::of(cx, cx.build_action(action, None).ok()?.as_ref());
@@ -399,8 +337,7 @@ impl Shell {
                 .filter(|(action, ..)| !seen.contains(action))
                 .filter(|(action, ..)| available.contains(action))
                 .filter(|&(_, _, _, group)| {
-                    !matches!(group, Group::Block | Group::Table | Group::Diagram)
-                        || Some(group) == here
+                    !matches!(group, Group::Block | Group::Table) || Some(group) == here
                 })
                 .filter_map(|(action, label, icon, group)| {
                     let keys = keys::of(cx, cx.build_action(action, None).ok()?.as_ref());

@@ -71,7 +71,6 @@ impl Shell {
         reload: bool,
         cx: &mut Context<Self>,
     ) {
-        self.history.rename(from, to);
         let shift = |p: &PathBuf| match p.strip_prefix(from) {
             Ok(rest) if rest.as_os_str().is_empty() => to.to_path_buf(),
             Ok(rest) => to.join(rest),
@@ -97,10 +96,6 @@ impl Shell {
         self.each_pane(|this| {
             if let Some(file) = &mut this.pane_mut().file {
                 file.path = shift(&file.path);
-                if let super::FileKind::Sheet(sheet) = &file.kind {
-                    let moved = file.path.clone();
-                    sheet.update(cx, |sheet, _| sheet.moved(moved));
-                }
             }
             this.pane_mut().new_dir = this.pane_mut().new_dir.as_ref().map(shift);
             this.pane_mut().path = this.pane_mut().path.as_ref().map(shift);
@@ -140,7 +135,6 @@ impl Shell {
             Some((trashed, path.to_path_buf())),
             cx,
         );
-        self.history.remove(path);
         let gone = |p: &PathBuf| p.starts_with(path);
         self.notes.retain(|n| !gone(&n.path));
         self.dirs.retain(|d| !gone(d));
@@ -187,8 +181,6 @@ impl Shell {
         }
         self.calm();
         self.push_names(cx);
-        self.graph_stale = true;
-        self.refresh_graph(cx);
         cx.notify();
     }
 }

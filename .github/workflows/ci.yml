@@ -1,22 +1,79 @@
-# Builds and tests on the supported platforms.
+# CI tiers: fast checks on every push/PR, full suite on main/nightly/manual.
+#
+# - fast (ubuntu-only): fmt + check + clippy + targeted tests (skips the
+#   22-chapter end_to_end session). Runs on every push, PR, schedule and dispatch.
+# - test (ubuntu + macos): full `cargo test --locked` (unit + shell + end_to_end
+#   + integration). Runs on main pushes, the nightly schedule and manual dispatch.
+#
+# No CI job runs `cargo build --release`: the packaging workflows build the
+# release profile themselves, so a release build here would compile the crate
+# twice (release + dev profiles). The macOS gate stays: the test matrix keeps
+# its macos leg running `cargo test`, and packaging still runs build -> test ->
+# package (see release-binaries.yml, release.yml).
 name: CI
 on:
   push:
     branches: [main, develop]
   pull_request:
+  # Nightly full-suite run: catches breakage no PR exercised.
+  schedule:
+    - cron: "17 3 * * *"
   # By hand on any branch: `gh workflow run CI --ref <branch>`.
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
+  fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libfontconfig-dev libfreetype-dev \
+            libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Check
+        run: cargo check --locked --all-targets
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Fast tests (skips the end-to-end session)
+        run: cargo test --locked -- --skip end_to_end
   test:
+    needs: fast
+    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        # Count-based nextest partitions: each shard runs 1/N of the test list.
+        # N=2: the single serial `end_to_end` test (all 22 chapters in one
+        # session, so it lands whole on one shard) stays the long pole, while
+        # the other shard soaks up the ~30 shell unit-test modules with a
+        # whole runner of CPUs to itself. More shards would idle waiting for
+        # the e2e shard, so 2 is the sweet spot until chapters split.
+        shard: ["1/2", "2/2"]
     runs-on: ${{ matrix.os }}
     # A hosted runner that loses contact hangs for hours: fail fast, the job can be re-run.
     timeout-minutes: 40
+    env:
+      # sccache with the GitHub Actions cache backend (see the setup step).
+      # Entries are content-hashed on the preprocessed source plus the full
+      # rustc invocation, so keys are per-OS (target triple) and per-toolchain
+      # (rustc version) by construction: the mac universal aarch64/x86_64
+      # objects in release-binaries.yml never poison each other. The cap keeps
+      # sccache a good citizen of the 10 GB repo cache next to rust-cache.
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_CACHE_SIZE: "2G"
     steps:
       - uses: actions/checkout@v4
       - name: Linux build dependencies
@@ -25,7 +82,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libfontconfig-dev libfreetype-dev \
             libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
-      - run: rustup toolchain install stable --profile minimal
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked
-      - run: cargo test --locked
+        with:
+          # Shards on one OS compile the same tree: share one target-dir cache
+          # (default keys already include the rustc version, so toolchains and
+          # OSs never mix; per-target subdirs keep universal objects apart).
+          shared-key: ${{ matrix.os }}
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.151
+      - name: Test (nextest shard ${{ matrix.shard }})
+        run: cargo nextest run --locked --profile ci --partition count:${{ matrix.shard }}

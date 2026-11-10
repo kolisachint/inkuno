@@ -23,6 +23,14 @@ The system packages needed on each platform are listed in the [install guide](bo
 
 Ignored benchmarks measure vaults of thousands of notes, CSV files of 300,000 rows and notes with a table of 300,000 rows. Run them with `cargo test --release --locked -- --ignored --nocapture`; each reads its parameters from environment variables named in its doc comment. Their results are in the guide's [Performance](book/src/performance.md) page.
 
+**CI caching and sharding:** CI compiles through [sccache](https://github.com/mozilla/sccache) (GitHub Actions cache backend, alongside the `target/` cache) and runs the tests with [cargo-nextest](https://nexte.st) in the `ci` profile from `.config/nextest.toml`, sharded over two runners (`--partition count:1/2`). The end-to-end suite is one serial test (22 chapters in a single session), so it always runs whole on one shard. Local opt-ins; plain `cargo test --locked` stays the default and is unaffected:
+
+```bash
+RUSTC_WRAPPER=sccache cargo build --locked   # needs `sccache` installed
+cargo install cargo-nextest --locked         # once
+cargo nextest run --locked                   # same tests, faster feedback
+```
+
 ## Rules of the code base
 
 - **Read [ARCHITECTURE.md](ARCHITECTURE.md) first**: the layers (`logic`, `platform`, `ui`, `views`, `shell`), which way they depend, and where each feature lives. A file that passes 1,500 lines gets split by subject.
@@ -64,7 +72,7 @@ CI builds the guide and checks every link (`.github/workflows/docs.yml`); pushes
 - Subjects start with `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `build:` or `chore:`, in the imperative; the body explains why.
 - One commit per coherent step, tests passing at each commit.
 - The history stays linear: rebase on `main`, no merge commits.
-- CI builds and tests on Linux, macOS and Windows; it has to pass.
+- CI is tiered and it has to pass: every push/PR runs fmt + `cargo check` + Clippy + fast tests (everything except the end-to-end session) on Linux; the full suite (`cargo test`, unit + shell + end-to-end) runs on Linux and macOS on `main`, nightly and manual dispatch.
 
 ## Releasing (maintainer)
 

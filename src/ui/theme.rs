@@ -139,13 +139,13 @@ pub const THEMES: &[(&str, [u32; 7])] = &[
     (
         "Inkuno Dark",
         [
-            0x1b1a19, 0xe4e0da, 0x77716a, 0xe0926b, 0x262423, 0x242221, 0x3a3735,
+            0x171a22, 0xf5f5f2, 0x77716a, 0x4263eb, 0x262423, 0x242221, 0x3a3735,
         ],
     ),
     (
         "Inkuno Light",
         [
-            0xfbfaf8, 0x26231f, 0xa8a29a, 0x5f48b0, 0xf1eeea, 0xffffff, 0xe2ddd6,
+            0xf5f5f2, 0x20232b, 0xa8a29a, 0x4263eb, 0xf1eeea, 0xffffff, 0xe2ddd6,
         ],
     ),
     (
@@ -844,9 +844,6 @@ mod tests {
             }
             for h in HUES {
                 pairs.push(("hue/panel", t.hue(h, t.panel), t.panel, 4.5));
-            }
-            for c in crate::logic::diagram::COLORS {
-                pairs.push(("diagram/bg", legible(rgb(c).into(), t.bg), t.bg, 4.5));
             }
             for (what, fg, bg, min) in pairs {
                 let got = contrast(fg, bg);

@@ -154,10 +154,6 @@ impl Editor {
         if !self.viewport.contains(&at) {
             return None;
         }
-        // The source's name on an embed's frame opens it.
-        if self.embed_at(at).is_some_and(|(.., on_label)| on_label) {
-            return Some(CursorStyle::PointingHand);
-        }
         if let Some((_, part)) = self.part_at(at) {
             return Some(match part {
                 Part::JoinCol(_) | Part::JoinRow(_) => CursorStyle::PointingHand,
@@ -173,7 +169,15 @@ impl Editor {
         let i = self.index_at(at);
         let lr = self.line_range(i);
         let (line, col) = (&self.content[lr.clone()], i - lr.start);
-        if held.secondary() && md::links(line).into_iter().any(|(r, _)| r.contains(&col)) {
+        if held.secondary()
+            && md::links(line)
+                .into_iter()
+                .any(|(r, link)| r.contains(&col) && !matches!(link, Link::Footnote(_)))
+        {
+            return Some(CursorStyle::PointingHand);
+        }
+        // A defined footnote reference or definition label: Ctrl+click jumps there.
+        if held.secondary() && self.footnote_defined_at(i) {
             return Some(CursorStyle::PointingHand);
         }
         let (kind, marker) = md::classify(line, self.in_code(lr.start));
