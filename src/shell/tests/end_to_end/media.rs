@@ -314,9 +314,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         "{:?}",
         viewer(cx)
     );
-    cx.simulate_keystrokes("secondary-=");
+    cx.simulate_keystrokes("=");
     assert!((viewer(cx).unwrap().2 - fit * 1.25).abs() < 1e-4);
-    cx.simulate_keystrokes("secondary-0");
+    cx.simulate_keystrokes("0");
     settle(cx);
     assert_eq!(viewer(cx).unwrap().2, fit);
     cx.simulate_keystrokes("secondary-w");
