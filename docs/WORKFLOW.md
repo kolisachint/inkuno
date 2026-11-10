@@ -36,6 +36,11 @@ Proven in the session that built it (24h → 30min target). Follow this literall
 
 - Batch fixes by review; burst pushes with one CI run judging the batch, never
   a push per fix. Background `gh run watch` on every run; heartbeat on landing.
+- **Format gate is `cargo fmt --all -- --check; echo $?` (exit code).** It parses
+  only, no compile/metal — run it locally before every push. Do NOT grep
+  `rustfmt --check` output for `error`: format diffs print as `-`/`+` lines, so a
+  grep-for-error check silently passes while CI fails. This exact mistake cost
+  two CI round-trips.
 - Fast tier first (fmt → check → clippy → unit tests), full matrix only on green.
 - Run `scripts/prune-agents.sh` between waves (dry-run default, `--apply` when
   free space is under the threshold) so disk never blocks the next crew.
