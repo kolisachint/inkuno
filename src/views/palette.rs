@@ -266,7 +266,7 @@ impl Palette {
         this
     }
 
-    /// Offers to undo the last vault replacement, if there is one.
+    /// The command catalogue, for the `>` mode.
     pub fn with_commands(
         mut self,
         commands: Vec<crate::logic::commands::Command>,

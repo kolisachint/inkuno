@@ -1,4 +1,4 @@
-//! Front matter, trash, list pages, backup, search, daily note.
+//! Front matter, trash, list pages, backup.
 
 use super::*;
 
@@ -6,8 +6,8 @@ use super::*;
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     let (shell, root) = (&j.shell, &j.root);
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
-    // The tags and backlinks views are cut: only the tree, the recent notes, the
-    // search, the outline and the lists stay in the panel.
+    // The tags, backlinks, vault search and daily note are cut; what is left of the
+    // panel is the tree, the recent notes, the outline and the list pages.
     let was = shell.read_with(cx, |s, _| s.pane().path.clone()).unwrap();
     // Front matter: its lines are neither a heading nor a rule, the file
     // name follows the title placed after it, and neither typing, saving,
@@ -226,73 +226,5 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     shell.update(cx, |s, _| s.toasts.clear());
     fs::remove_dir_all(&out).unwrap();
 
-    // Search in the vault: Ctrl+Shift+F lists in the panel each match of the typed text, note by
-    // note, ignoring case; Enter on a match opens its note, the passage selected.
-    fs::write(
-        root.join("Recette.md"),
-        "# Recette\n\nfarine\n\ndu Quinoa rouge, quinoa\n",
-    )
-    .unwrap();
-    fs::write(root.join("Liste.md"), "# Liste\n- quinoa\n").unwrap();
-    j.settle(cx);
-    cx.simulate_keystrokes("secondary-shift-f");
-    cx.simulate_input("QUINOA");
-    cx.run_until_parked();
-    cx.simulate_keystrokes("down enter");
-    j.settle(cx);
-    let found = shell.read_with(cx, |s, cx| {
-        (
-            s.pane().path.clone().unwrap(),
-            s.pane().editor.read(cx).selected().to_lowercase(),
-        )
-    });
-    assert!(
-        found.0 == root.join("Recette.md") || found.0 == root.join("Liste.md"),
-        "{found:?}"
-    );
-    assert_eq!(found.1, "quinoa");
-    cx.simulate_keystrokes("secondary-shift-f");
-    cx.simulate_input("quinoa r");
-    cx.run_until_parked();
-    cx.simulate_keystrokes("down enter");
-    j.settle(cx);
-    assert_eq!(
-        shell.read_with(cx, |s, cx| (
-            s.pane().path.clone().unwrap(),
-            s.pane().editor.read(cx).selected().to_string()
-        )),
-        (root.join("Recette.md"), "Quinoa r".to_string())
-    );
-    shell.update(cx, |s, cx| s.open_note(&was, cx));
-    for name in ["Recette.md", "Liste.md"] {
-        fs::remove_file(root.join(name)).unwrap();
-    }
-    j.settle(cx);
-
-    // Daily note: Ctrl+J creates it, named and titled with the local date; the second time
-    // (here from the palette) the same note opens. `/date` writes the date.
-    let day = date_name(today());
-    cx.simulate_keystrokes("secondary-j");
-    j.settle(cx);
-    assert_eq!(
-        fs::read_to_string(root.join(format!("{day}.md"))).unwrap(),
-        format!("# {day}\n\n")
-    );
-    cx.simulate_input("vu le /date");
-    cx.simulate_keystrokes("enter");
-    assert_eq!(text(cx), format!("# {day}\n\nvu le {day}"));
-    j.settle(cx);
-    shell.update(cx, |s, cx| s.open_note(&was, cx));
-    cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("note du jour");
-    cx.simulate_keystrokes("down enter");
-    j.settle(cx);
-    assert_eq!(text(cx), format!("# {day}\n\nvu le {day}"));
-    assert!(!root.join(format!("{day} 2.md")).exists());
-    shell.update(cx, |s, cx| s.open_note(&was, cx));
-    fs::remove_file(root.join(format!("{day}.md"))).unwrap();
-    j.settle(cx);
-    shell.update(cx, |s, cx| s.open_note(&was, cx));
-    j.settle(cx);
     here
 }
