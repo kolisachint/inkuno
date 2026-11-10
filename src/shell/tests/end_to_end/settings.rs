@@ -34,8 +34,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         "{found:?}"
     );
     cx.simulate_keystrokes("secondary-a");
-    cx.simulate_input("maj+f");
-    assert!(rows(cx).iter().any(|row| row.keys.ends_with("Maj+F")));
+    cx.simulate_input("shift+f");
+    assert!(rows(cx).iter().any(|row| row.keys.ends_with("Shift+F")));
     cx.simulate_keystrokes("secondary-a");
     cx.simulate_input("zzz");
     assert!(rows(cx).is_empty());
