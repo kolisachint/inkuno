@@ -42,12 +42,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
 
     // Links: an address pasted on a selection makes it a link; Ctrl+K on a link
     // selects its address, to retype; Ctrl+K on a selection waits for the address.
-    j.load(cx, "see the doc here", 5);
+    j.load(cx, "see the doc here", 4);
     shell.update_in(cx, |s, window, cx| {
         window.focus(&s.pane().editor.focus_handle(cx))
     });
     cx.simulate_keystrokes(
-        "shift-right shift-right shift-right shift-right shift-right shift-right",
+        "shift-right shift-right shift-right shift-right shift-right shift-right shift-right",
     );
     cx.write_to_clipboard(ClipboardItem::new_string("https://a.b/c\n".into()));
     cx.simulate_keystrokes("secondary-v");
@@ -59,7 +59,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(text(cx), "see the doc here");
     j.load(cx, "word", 0);
     cx.write_to_clipboard(ClipboardItem::new_string("none".into()));
-    cx.simulate_keystrokes("shift-right shift-right shift-right secondary-k");
+    cx.simulate_keystrokes("shift-right shift-right shift-right shift-right secondary-k");
     cx.simulate_input("https://z.fr");
     assert_eq!(text(cx), "[word](https://z.fr)");
 }
