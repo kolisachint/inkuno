@@ -67,12 +67,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
                 .map(|edit| (edit.action, edit.issue.clone()))
         })
     };
-    let graph = format!("{MOD}+G");
+    let before = format!("{MOD}+R");
     cx.simulate_keystrokes("f1");
-    cx.simulate_input("graphe des notes");
-    assert_eq!(keys_of(cx, "nav::ShowGraph"), (graph.clone(), false));
+    cx.simulate_input("find and replace in the note");
+    assert_eq!(keys_of(cx, "editor::FindReplace"), (before.clone(), false));
     cx.simulate_keystrokes("down enter");
-    assert_eq!(editing(cx), Some(("nav::ShowGraph", None)));
+    assert_eq!(editing(cx), Some(("editor::FindReplace", None)));
     // Refused, with the reason: a single key that types, a key reserved for text.
     cx.simulate_keystrokes("a");
     assert!(matches!(editing(cx), Some((_, Some(KeyIssue::Refused(_))))));
@@ -86,7 +86,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             .line
             .text
             .clone()),
-        "graphe des notes",
+        "find and replace in the note",
         "the key is not typed"
     );
     cx.simulate_keystrokes("enter");
@@ -94,71 +94,89 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("secondary-shift-y");
     assert_eq!(editing(cx), None);
     assert_eq!(
-        keys_of(cx, "nav::ShowGraph"),
-        (format!("{MOD}+Maj+Y"), true)
+        keys_of(cx, "editor::FindReplace"),
+        (format!("{MOD}+Shift+Y"), true)
     );
     assert_eq!(
         crate::ui::keys::user_lines(),
-        "nav::ShowGraph=secondary-shift-y\n"
+        "editor::FindReplace=secondary-shift-y\n"
     );
     cx.simulate_keystrokes("escape escape");
     assert!(!shell.read_with(cx, |s, _| s.help.open));
     // Without restarting: the old keys do nothing anymore, the new ones act.
-    cx.simulate_keystrokes("secondary-e");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
-    cx.simulate_keystrokes("secondary-g");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
+    let finding = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| {
+            s.pane()
+                .editor
+                .read(cx)
+                .finding(cx)
+                .map(|(query, at, n)| (query.to_string(), at, n))
+        })
+    };
+    cx.simulate_keystrokes("secondary-r");
+    assert_eq!(finding(cx), None);
     cx.simulate_keystrokes("secondary-shift-y");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
-    // Keys already taken: the line says by what, and nothing is taken without « remplacer ».
+    assert!(finding(cx).is_some());
+    cx.simulate_keystrokes("escape");
+    assert_eq!(finding(cx), None);
+    // Keys already taken: the line says by what, and nothing is taken without replacing.
     cx.simulate_keystrokes("f1");
-    cx.simulate_input("graphe des notes");
+    cx.simulate_input("find and replace in the note");
     cx.simulate_keystrokes("down enter secondary-p");
     assert_eq!(
         editing(cx),
         Some((
-            "nav::ShowGraph",
+            "editor::FindReplace",
             Some(KeyIssue::Taken(vec!["app::OpenPalette"]))
         ))
     );
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
-    assert_eq!(keys_of(cx, "nav::ShowGraph").0, format!("{MOD}+Maj+Y"));
+    assert_eq!(
+        keys_of(cx, "editor::FindReplace").0,
+        format!("{MOD}+Shift+Y")
+    );
     // Enter replaces: the other action loses its shortcut, and the list shows it.
     cx.simulate_keystrokes("enter");
     assert_eq!(editing(cx), None);
-    assert_eq!(keys_of(cx, "nav::ShowGraph"), (format!("{MOD}+P"), true));
+    assert_eq!(
+        keys_of(cx, "editor::FindReplace"),
+        (format!("{MOD}+P"), true)
+    );
     cx.simulate_keystrokes("secondary-a");
-    cx.simulate_input("filtrer par #tag");
+    cx.simulate_input("filter by #tag");
     assert_eq!(keys_of(cx, "app::OpenPalette"), (String::new(), true));
     cx.simulate_keystrokes("escape escape secondary-e secondary-p");
     assert_eq!(
         shell.read_with(cx, |s, _| (s.nav.mode, s.palette.is_none())),
         (nav::Mode::Tree, true)
     );
+    // secondary-p now opens the find bar instead of the palette: close it.
+    cx.simulate_keystrokes("escape");
+    assert_eq!(finding(cx), None);
     // Backspace: no shortcut. Escape during capture cancels only it.
     cx.simulate_keystrokes("f1");
-    cx.simulate_input("graphe des notes");
+    cx.simulate_input("find and replace in the note");
     cx.simulate_keystrokes("down enter backspace");
-    assert_eq!(keys_of(cx, "nav::ShowGraph"), (String::new(), true));
+    assert_eq!(keys_of(cx, "editor::FindReplace"), (String::new(), true));
     cx.simulate_keystrokes("enter escape");
     assert_eq!(
         (editing(cx), shell.read_with(cx, |s, _| s.help.open)),
         (None, true)
     );
     assert_eq!(rows(cx).len(), 1, "the search did not move");
-    // A click on the keys waits too; « défaut » restores the original ones.
-    let at = cx.debug_bounds("key-nav::ShowGraph").unwrap().center();
+    // A click on the keys waits too; "default" restores the original ones.
+    let at = cx.debug_bounds("key-editor::FindReplace").unwrap().center();
     cx.simulate_click(at, gpui::Modifiers::none());
-    assert_eq!(editing(cx), Some(("nav::ShowGraph", None)));
+    assert_eq!(editing(cx), Some(("editor::FindReplace", None)));
     cx.simulate_keystrokes("escape");
     let at = cx
-        .debug_bounds("key-reset-nav::ShowGraph")
+        .debug_bounds("key-reset-editor::FindReplace")
         .unwrap()
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
-    assert_eq!(keys_of(cx, "nav::ShowGraph"), (graph, false));
+    assert_eq!(keys_of(cx, "editor::FindReplace"), (before, false));
     assert_eq!(crate::ui::keys::user_lines(), "app::OpenPalette=\n");
-    // « Tout rétablir »: nothing changed anymore.
+    // "Reset all": nothing changed anymore.
     let at = cx.debug_bounds("keys-reset").unwrap().center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert!(shell.read_with(cx, |s, _| s.changes.is_empty()));
