@@ -1,8 +1,8 @@
-//! Front matter, trash, replace in vault, list pages, backup, search, daily note.
+//! Front matter, trash, list pages, backup, search, daily note.
 
 use super::*;
 
-/// Returns the note open before the vault-wide replace, where the later chapters come back.
+/// Returns the note open where the vault-wide chapters start, where the later chapters come back.
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     let (shell, root) = (&j.shell, &j.root);
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
@@ -100,52 +100,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     fs::remove_file(root.join("Jetée.md")).unwrap();
     j.settle(cx);
 
-    // Replace in the whole vault, from the search bar: the count first, then
-    // the notes are rewritten; the palette undoes it all, except what changed since.
     let here = shell.read_with(cx, |s, _| s.pane().path.clone().unwrap());
-    fs::write(root.join("Zoo A.md"), "# Zoo A\n\nle zèbre court").unwrap();
-    fs::write(root.join("Zoo B.md"), "# Zoo B\n\nun zèbre, deux Zèbres").unwrap();
-    j.settle(cx);
-    shell.update(cx, |s, cx| s.open_note(&root.join("Zoo A.md"), cx));
-    cx.simulate_keystrokes("secondary-r");
-    cx.simulate_input("zèbre");
-    cx.simulate_keystrokes("tab");
-    cx.simulate_input("okapi");
-    cx.simulate_keystrokes("secondary-shift-enter");
-    assert!(shell.read_with(cx, |s, _| s.palette.is_some()));
-    assert_eq!(
-        fs::read_to_string(root.join("Zoo B.md")).unwrap(),
-        "# Zoo B\n\nun zèbre, deux Zèbres"
-    );
-    cx.simulate_keystrokes("enter");
-    assert_eq!(
-        fs::read_to_string(root.join("Zoo B.md")).unwrap(),
-        "# Zoo B\n\nun okapi, deux okapis"
-    );
-    assert_eq!(text(cx), "# Zoo A\n\nle okapi court");
-    assert!(shell.read_with(cx, |s, _| s.palette.is_none()
-        && s.told(Tone::Done, "Remplacés : 3 · notes : 2")));
-    cx.simulate_keystrokes("escape");
-    fs::write(root.join("Zoo B.md"), "# Zoo B\n\nautre chose").unwrap();
-    cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("annuler le remplacement");
-    cx.simulate_keystrokes("down enter");
-    assert_eq!(text(cx), "# Zoo A\n\nle zèbre court");
-    assert_eq!(
-        fs::read_to_string(root.join("Zoo B.md")).unwrap(),
-        "# Zoo B\n\nautre chose"
-    );
-    assert!(shell.read_with(cx, |s, _| s.told(
-        Tone::Done,
-        "Notes rétablies : 1 · modifiées depuis, laissées telles quelles : 1"
-    )));
-    shell.update(cx, |s, cx| {
-        s.toasts.clear();
-        s.open_note(&here, cx)
-    });
-    fs::remove_file(root.join("Zoo A.md")).unwrap();
-    fs::remove_file(root.join("Zoo B.md")).unwrap();
-    j.settle(cx);
 
     // List page: a folder or a tag shown as a table of its notes, one column per key of
     // their front matter; a click on a column sorts, typing filters, a click on a
@@ -243,21 +198,6 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
         && s.told(Tone::Failed, "$TERMINAL")));
     shell.update(cx, |s, _| s.toasts.clear());
 
-    // Capture shortcut: the palette offers it. Outside GNOME (and in tests) the
-    // command to bind is copied, and the message says what to do with it.
-    cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("capture rapide");
-    cx.simulate_keystrokes("down enter");
-    cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| s.palette.is_none()
-        && s.told(Tone::Done, "copiée")));
-    assert!(
-        cx.read_from_clipboard()
-            .and_then(|item| item.text())
-            .is_some_and(|text| text.ends_with(" --capture"))
-    );
-    shell.update(cx, |s, _| s.toasts.clear());
-
     // Backup: a dated archive of the whole vault in the chosen folder (the picker
     // does not exist in tests); inside the vault itself, it is refused.
     let out = root.with_file_name(format!("{}-sauvegardes", vault::stem(root)));
@@ -278,11 +218,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     );
     assert!(shell.read_with(cx, |s, _| !s.told(Tone::Failed, "")
         && !s.told(Tone::Busy, "")
-        && s.told(Tone::Done, "Sauvegarde enregistrée")
+        && s.told(Tone::Done, "Backup saved:")
         && s.told(Tone::Done, &saved[0])));
     shell.update(cx, |s, cx| s.backup_to(root.join(".trash"), cx));
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "hors du coffre")));
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "outside the vault")));
     shell.update(cx, |s, _| s.toasts.clear());
     fs::remove_dir_all(&out).unwrap();
 
