@@ -14,6 +14,7 @@ What you type is what is saved. Inkuno only changes how it looks: markers stay v
 | `> ` | a quote |
 | `> [!NOTE]` | a colored panel: that line and the quote lines after it |
 | `` ``` `` then `Enter` | a code block, closed for you |
+| `\| a \| b \|` | a table |
 | `---`, `***` or `___` | a divider |
 | `[[Note name]]` | a link to another note, see [Links](links.md) |
 | `#tag` | a tag, usable as a filter in the palette |

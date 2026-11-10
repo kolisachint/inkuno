@@ -1,7 +1,7 @@
 name: release
 
 # Manual macOS + Linux artifact builder. This workflow never publishes: tagged
-# releases are published by release-native.yml, and the old push-driven nightly
+# releases are published by release-native.yml, and the old push-driven scheduled
 # release was removed. Dispatch it to inspect raw archives for any ref.
 on:
   workflow_dispatch:
