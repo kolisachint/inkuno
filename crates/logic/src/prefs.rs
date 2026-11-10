@@ -92,8 +92,8 @@ mod tests {
         // Size clamped, and unreadable value ignored.
         assert_eq!((prefs.size, Prefs::parse("size=NaN").size), (32., 16.));
         assert_eq!(Prefs::parse(&prefs.to_text()), prefs);
-        // Unknown keys are ignored (the removed `updates` check reads back as one).
-        assert_eq!(Prefs::parse("updates=off\n").to_text(), "");
+        // Unknown keys are ignored (the removed `updates` setting reads as defaults).
+        assert_eq!(Prefs::parse("updates=off\n"), Prefs::parse(""));
         // Page width and wide tables: absent until chosen.
         let wide = Prefs::parse("page=wide\nwide=column\n");
         assert_eq!((wide.page.as_str(), wide.wide.as_str()), ("wide", "column"));

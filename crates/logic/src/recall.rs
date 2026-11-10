@@ -197,25 +197,25 @@ mod tests {
         assert_eq!(
             said,
             [
-                "aujourd'hui",
-                "hier",
-                "il y a 3 jours",
-                "il y a une semaine",
-                "il y a 2 semaines",
-                "il y a un mois",
-                "il y a un mois",
-                "il y a 2 mois",
-                "il y a 12 mois",
-                "il y a un an",
-                "il y a 2 ans"
+                "today",
+                "yesterday",
+                "3 days ago",
+                "a week ago",
+                "2 weeks ago",
+                "a month ago",
+                "a month ago",
+                "2 months ago",
+                "12 months ago",
+                "a year ago",
+                "2 years ago"
             ]
         );
     }
 
     #[test]
     fn long_date_spells_the_day() {
-        assert_eq!(long_date((2026, 10, 10)), "samedi 10 octobre");
-        assert_eq!(long_date((2026, 10, 1)), "jeudi 1er octobre");
-        assert_eq!(long_date((1970, 1, 1)), "jeudi 1er janvier");
+        assert_eq!(long_date((2026, 10, 10)), "Saturday, October 10");
+        assert_eq!(long_date((2026, 10, 1)), "Thursday, October 1");
+        assert_eq!(long_date((1970, 1, 1)), "Thursday, January 1");
     }
 }

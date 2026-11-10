@@ -55,6 +55,11 @@ pub fn is_dashes(row: &[String]) -> bool {
 /// Lines of a table (header, dashes, then the rest), all of the same
 /// length; and whether the dash line, missing, had to be added.
 pub fn table(block: &str) -> (Vec<Vec<String>>, bool) {
+    if block.trim().is_empty() {
+        // No rows at all: a dash row stands in for the missing table
+        // instead of indexing past the end below.
+        return (vec![vec!["---".to_string()]], true);
+    }
     let mut rows: Vec<Vec<String>> = block
         .lines()
         .map(|l| cells(l).into_iter().map(|r| l[r].to_string()).collect())
@@ -525,4 +530,15 @@ pub fn format_table(rows: &[Vec<String>], indent: &str) -> String {
         }
     }
     text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_block_yields_dash_row_instead_of_panicking() {
+        assert_eq!(table(""), (vec![vec!["---".to_string()]], true));
+        assert_eq!(table("   \n  "), (vec![vec!["---".to_string()]], true));
+    }
 }
