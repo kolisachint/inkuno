@@ -412,6 +412,11 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &CloseHelp, window, cx| {
                 if this.help.open {
                     this.set_help(false, window, cx)
+                } else if this.pane().figure.is_some() {
+                    // A figure over the note (magnifier): Escape closes it, back to the note.
+                    this.pane_mut().figure = None;
+                    window.focus(&this.pane().editor.focus_handle(cx));
+                    cx.notify();
                 } else if this.pane().zone.is_focused(window) && this.has_note(cx) {
                     // A pane that only shows an image: Escape goes back to its note.
                     window.focus(&this.pane().editor.focus_handle(cx));
