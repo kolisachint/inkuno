@@ -53,7 +53,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         cx.simulate_mouse_up(at(to), MouseButton::Left, gpui::Modifiers::none());
     };
     drag(cx, 302., 450.);
-    assert_eq!(vault::load_layout(), "tree split 410 0\n");
+    assert_eq!(vault::load_layout(), "tree split 410\n");
     drag(cx, 452., 60.);
     assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), Panel::Rail);
 
@@ -70,7 +70,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Asking again for the shown mode: first focus, then collapsing to the rail.
     cx.dispatch_action(nav::ShowRecent);
     cx.dispatch_action(nav::ShowRecent);
-    assert_eq!(vault::load_layout(), "recent rail 410 0\n");
+    assert_eq!(vault::load_layout(), "recent rail 410\n");
 
     // Full screen: the selection no longer moves the note; Enter gives it its place back.
     cx.simulate_keystrokes("secondary-e secondary-m tab");
