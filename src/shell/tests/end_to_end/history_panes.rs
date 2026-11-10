@@ -15,7 +15,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(keys(cx, nav::Do::Rename), "F2");
     assert_eq!(keys(cx, nav::Do::Duplicate), format!("{MOD}+D"));
     assert_eq!(keys(cx, nav::Do::Bold), format!("{MOD}+B"));
-    assert_eq!(keys(cx, nav::Do::OpenLink), format!("{MOD}+clic"));
+    assert_eq!(keys(cx, nav::Do::OpenLink), format!("{MOD}+click"));
     assert_eq!(keys(cx, nav::Do::Icon), "");
     shell.update(cx, |s, cx| s.key_set("nav::Rename", "f6".into(), &[], cx));
     assert_eq!(keys(cx, nav::Do::Rename), "F6");
@@ -48,12 +48,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let pane_text = |cx: &mut gpui::VisualTestContext, pane: usize| {
         shell.read_with(cx, |s, cx| s.panes[pane].editor.read(cx).text().to_string())
     };
-    // The tabs opened by the chapters before go: the panes start from a single tab.
-    shell.update_in(cx, |s, window, cx| {
-        while s.panes.len() > 1 {
-            s.close_tab(0, window, cx);
-        }
-    });
+    // Start this chapter with one empty tab, regardless of the tabs the earlier chapters left.
+    shell.update_in(cx, |s, window, cx| s.close_all_files(window, cx));
     shell.update_in(cx, |s, window, cx| s.open_from_nav(&pane("A"), window, cx));
     assert_eq!(open(cx), (0, vec![Some(pane("A"))]));
     // From the keyboard: the second pane opens on the palette, to choose what goes there.

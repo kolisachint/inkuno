@@ -240,7 +240,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Ctrl+P: « Nouveau dossier » opens the name input field, the folder is created in the vault.
     shell.update(cx, |s, _| s.nav.sel = None);
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("nouveau dossier");
+    cx.simulate_input("new folder");
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("Archives");
     cx.simulate_keystrokes("enter");
