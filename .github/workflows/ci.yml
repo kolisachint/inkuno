@@ -36,8 +36,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libfontconfig-dev libfreetype-dev \
             libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
-      - run: rustup toolchain install stable --profile minimal
-      - run: rustup component add rustfmt clippy
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
       - name: Formatting
         run: cargo fmt --all -- --check
@@ -82,7 +82,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libfontconfig-dev libfreetype-dev \
             libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
-      - run: rustup toolchain install stable --profile minimal
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain
       - name: Enable sccache
         uses: mozilla-actions/sccache-action@v0.0.11
       - uses: Swatinem/rust-cache@v2
