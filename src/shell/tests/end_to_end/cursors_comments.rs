@@ -79,18 +79,36 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, _cx| s.palette.is_none() && !s.comments_shut));
-    cx.run_until_parked();
+    // Settle the column before trusting its bounds: gpui keeps a vanished
+    // element's debug bounds between frames, and opening the column scrolls the
+    // caret's card on the next frame, so one parked run can read one frame behind.
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
     // Click the first card itself, wherever the column lays it out: fixed window
     // coordinates drift whenever the chrome around the column moves. A pointer
     // hovers first, as in production, and the click lands on the comment's words
     // in the card's lower body, away from the resolving check at the end of the
-    // row above (invisible until hovered, but hit-testable).
+    // row above (invisible until hovered, but hit-testable). The hover's frame can
+    // move the card, so the click point is re-read after it, from the frame the
+    // click hit-tests.
     let card = cx
         .debug_bounds("comment-0")
         .expect("the comments column shows its first card");
-    let words = point(card.left() + px(24.), card.bottom() - px(18.));
-    cx.simulate_mouse_move(words, None, gpui::Modifiers::none());
-    cx.simulate_click(words, gpui::Modifiers::none());
+    cx.simulate_mouse_move(
+        point(card.left() + px(24.), card.bottom() - px(18.)),
+        None,
+        gpui::Modifiers::none(),
+    );
+    cx.run_until_parked();
+    let card = cx
+        .debug_bounds("comment-0")
+        .expect("the comments column shows its first card");
+    cx.simulate_click(
+        point(card.left() + px(24.), card.bottom() - px(18.)),
+        gpui::Modifiers::none(),
+    );
     cx.run_until_parked();
     assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position() == 17));
     shell.update(cx, |s, cx| {
