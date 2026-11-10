@@ -130,15 +130,6 @@ impl Editor {
             }
         };
         self.sel = map(self.sel.start)..map(self.sel.end);
-        // Folded blocks and their scroll follow the text, like the other cursors.
-        self.code_open = std::mem::take(&mut self.code_open)
-            .into_iter()
-            .map(&map)
-            .collect();
-        self.code_x = std::mem::take(&mut self.code_x)
-            .into_iter()
-            .map(|(at, dx)| (map(at), dx))
-            .collect();
         self.follow(map);
         self.changed(cx);
         if let Some((table, old)) = scopes {
@@ -324,18 +315,6 @@ impl Editor {
         let lr = self.line_range(c);
         let line = self.content[lr.clone()].to_string();
         let in_code = self.in_code(lr.start);
-        // Enter on the header of a folded code block unfolds it, instead of splitting the fence.
-        if md::is_fence(&line)
-            && !in_code
-            && self.code_meta.iter().any(|m| m.range.start == lr.start)
-            && !self.code_open_at(lr.start)
-            && !self.code_is_mermaid(lr.start, line.len())
-        {
-            self.code_open.insert(lr.start);
-            self.code_gen += 1;
-            cx.notify();
-            return;
-        }
         // Opening a code block: also put the closing fence.
         if md::is_fence(&line)
             && !in_code
