@@ -86,7 +86,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     j.settle(cx);
     assert!(shell.read_with(cx, |s, _| s.notes.iter().all(|n| n.name != "Jetée")));
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("corbeille");
+    cx.simulate_input("restore from the trash");
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("jet");
     cx.simulate_keystrokes("enter");
