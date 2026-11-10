@@ -74,7 +74,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Shut-default (ui.md §12): the column starts closed, so its cards are absent.
     // Open it through the palette before touching the cards.
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("commentaires");
+    cx.simulate_input("comments");
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
@@ -158,7 +158,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     assert!(!closed && shell.read_with(cx, |s, _| s.comments_shut));
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("commentaires");
+    cx.simulate_input("comments");
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
@@ -311,9 +311,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     j.load(cx, "rien", 0);
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("commentaires");
+    cx.simulate_input("comments");
     cx.simulate_keystrokes("down enter");
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()
-        && s.told(Tone::Info, "commentaires")));
+        && s.told(Tone::Info, "has no comments")));
     shell.update(cx, |s, _| s.toasts.clear());
 }
