@@ -121,8 +121,6 @@ A diagram saved by a newer Inkuno than yours opens in the viewer, read-only, wit
 
 ![Opening an SVG: without Inkuno's source it opens in the viewer; written by a newer Inkuno, read-only; otherwise on the canvas, saved with the lowest version that can say what it holds](img/opening-a-diagram-file.svg)
 
-**Share / Export**, in the existing controls at the top left, offers PNG export beside the diagram (dark on white), **Copy as SVG** and **Save an SVG copy…**. SVG copies use the current canvas, including unsaved changes, and keep the source metadata for editing. Saving a copy leaves the original path and unsaved state unchanged. An occupied destination is refused. A message reports completion or failure.
-
 ## From Mermaid to the canvas
 
 When a `classDiagram`, `sequenceDiagram` or `stateDiagram` is enlarged (the magnifier of its block), a pencil button at the top left makes a canvas diagram of it. It is written next to the note, which is not touched, and opened to carry on by hand.
@@ -140,8 +138,6 @@ The shapes are placed by layers, parents above their children. What Inkuno canno
 Shapes, texts, arrows and what they hold on to are kept. Freehand strokes and pictures are not, and arrows are routed again by Inkuno. The message counts what could not be drawn (« 3 items not imported »).
 
 ## SVG files from elsewhere
-
-**Share / Export** in the SVG viewer copies or saves the original SVG. In an image view, it saves an image copy. It acts on the displayed file, even when a note is loaded underneath.
 
 An SVG from draw.io, Mermaid.js, Inkscape or a browser opens in a viewer, fitted to its width. Pictures, formulas and Mermaid diagrams enlarged from a note open in the same viewer.
 

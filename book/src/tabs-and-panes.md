@@ -21,7 +21,7 @@ A right click on a tab opens its menu, which the arrows, `Enter` and `Escape` al
 - **Close other tabs**: every tab of its pane but the one clicked, even if it was not the one shown. It stays, shown, with the focus.
 - **Close all tabs in this pane**: the pane goes, the other panes keep their tabs.
 
-**Close all files**, in the palette, closes every tab of every pane, the graph and the calendar included (they go back to their dock). The window is left with one pane on a new empty note, and comes back that way at the next start. These three also have a line in the palette and can be given a shortcut. Closing never deletes a file: each tab is saved first, a new note with text is kept as a note, and only a new note left empty leaves nothing behind. A tab that cannot be saved stays open with its edits while the others close; the first one gets the focus. `Ctrl + Shift + T` reopens the closed files one by one, the last first.
+**Close all files**, in the palette, closes every tab of every pane, the graph and the calendar included. The window is left with one pane on a new empty note, and comes back that way at the next start. These three also have a line in the palette and can be given a shortcut. Closing never deletes a file: each tab is saved first, a new note with text is kept as a note, and only a new note left empty leaves nothing behind. A tab that cannot be saved stays open with its edits while the others close; the first one gets the focus. `Ctrl + Shift + T` reopens the closed files one by one, the last first.
 
 A tab can be dragged along the bar, into another pane, or to an edge to split one. See [Drag a tab](#drag-a-tab).
 
@@ -31,16 +31,6 @@ A tab can be dragged along the bar, into another pane, or to an edge to split on
 - **Closing the window**, using **Quit**, or switching vaults also keeps the current documents open if one cannot be saved.
 
 Tabs come back at the next start. A tab out of sight keeps its text, cursor and undo, but lets go of what it drew, so a hundred tabs cost little memory.
-
-## Back and forward
-
-`Alt + Left` and `Alt + Right` (`Cmd + [` and `Cmd + ]` on macOS) walk through what you opened: notes, pictures, diagrams, tables and list pages alike. So do the back and forward buttons of the mouse, the two arrows at the top of the rail, and **Back** and **Forward** in the palette.
-
-- You land where you were: same line, same scroll.
-- Back and forward go from tab to tab, and bring a closed file back in a tab.
-- It works like a browser: opening something after going back drops what was ahead.
-- A note only previewed (arrows in the tree, a click in the graph) does not count. A renamed file is followed, a deleted one is skipped.
-- The history is not kept between two launches. The recent notes are.
 
 ## Panes
 
@@ -76,15 +66,3 @@ Drag a tab to arrange the window:
 The part that would receive it is tinted while you drag. `Esc` lets go without moving anything.
 
 A file dragged from the tree does the same. Dropped on the right half of a window that has a single pane, it opens a second pane. A folder opens as its [list page](boards.md#list-pages).
-
-## Docks
-
-Each view of the panel can live on either side of the notes. So the tree and the backlinks, or the graph and the calendar, can stay in sight together.
-
-- **Move a view**: the arrow in its header, or **Move the panel's view to the other dock** in the palette, sends it to the dock on the right, and back.
-- **Show or hide**: the rail shows or hides a view where it lives.
-- **Stack**: `Shift + click` on its icon stacks a view under the views already shown in its dock. Each has a header that folds it (the chevron) or hides it (the cross).
-- **Drag** a view by its title to put it elsewhere. A line shows where it lands in a dock. While it is dragged, a strip on the right edge of the window opens the right dock. `Esc` lets go without moving anything.
-- **As a tab**: the graph and the calendar also open as a tab of a pane, to get room: the button next to the arrow, or **Open the graph or the calendar as a tab**. Closing the tab gives the view back to its dock.
-
-The right dock hides when the window leaves the notes too little room. Where everything is comes back at the next launch.
