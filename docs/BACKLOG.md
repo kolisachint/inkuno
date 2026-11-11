@@ -84,3 +84,29 @@ Stash/state leftovers:
 - `scripts/prune-agents.sh` existence on main vs `ops-prune` untracked copy — dedupe.
 - `feat-codehide` references in this backlog postdate the Nov-10 revert — re-point or close.
 - 29 worktrees on Nov-09 base: prune dead ones per keep/kill before reviving anything (rebase required).
+
+## WIP carry branches (pushed 2026-11-11 — cloud pickup guide)
+
+All slices from the survey above are now committed as WIP commits on their `agent/*` branches and pushed to origin. Nothing remains uncommitted-only. To resume anywhere (cloud included): `git worktree add ~/.hoocode/worktrees/noteapp/<name> <branch>`.
+
+- `agent/trim-canvas` `cca4969` — canvas/diagram cut, keep mermaid.
+- `agent/trim-tables` `6056bef` — sheets/boards/CSV/kanban cut. Resume needs user permission.
+- `agent/trim-obsidian` `c8793db` — embeds/graph/templates/calendar cut.
+- `agent/trim-chrome` `abaccd5` — docks/capture/search/travel cut.
+- `agent/trim-sync` `19e75a1` — git sync + auto-update cut.
+- `agent/trim-deps` `a471ca9` — PDF-only dep cut.
+- `agent/feat-codehide` `75cf22a` — forward code-fold edits (feature reverted on main; drop or re-do).
+- `agent/feat-footnotes` `a33cb1e` — footnotes wave two.
+- `agent/feat-linkhide` `648cc08` — wikilink/URL hiding.
+- `agent/feat-logic-crate` `51a6036` — logic/ extraction, mid-surgery.
+- `agent/ui-tree-header` `21d3b58` — Zed-style header slice.
+- `agent/brand-icons` `123ee3f` — iconset/.icns/SVGs/Windows packaging.
+- `agent/brand-theme` `2151982` — theme/assets/help/settings.
+- `agent/ci-tier` `a52cc08`, `agent/ci-cache` `f44891b`, `agent/ci-artifacts` `0e3c894`, `agent/ci-release-fast` `0138728`, `agent/macos-ci-test` `0bf2b09` — pipeline speed slices, unproven.
+- `agent/update-check-inkuno` `29bce5c` — update-check repoint.
+- `agent/ops-prune` `3bc74bd` — `scripts/prune-agents.sh` (dedupe vs main).
+- `agent/inkuno-0.0.1` `23c8cde` — one aligned boards test on top of merged work.
+- `agent/ci-fix` `c63451a` — already in main; nothing unique.
+- `agent/inkuno-docs`, `agent/inkuno-rename`, `agent/json-config`, `agent/macos-build`, `agent/release-gate` — pushed as branch pointers at their merged commits; no unique content (`macos-build` `dist/` build output left on disk only, excluded).
+- `trim-tables-basecheck` (detached, clean) — nothing to carry.
+- Excluded from all WIP commits: `.hoocode/` session state, `dist/`, `target/` (all regenerable or junk).
