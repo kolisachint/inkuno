@@ -471,14 +471,9 @@ impl Shell {
         if self.nav.panel == Panel::Full {
             self.nav.panel = Panel::Split;
         }
-        // A table takes focus so one can write in it; an image shows in place
-        // of the note, and the panel keeps control.
-        match self.shown_sheet() {
-            Some(sheet) => window.focus(&sheet.focus_handle(cx)),
-            None if self.pane().file.is_none() => {
-                window.focus(&self.pane().editor.focus_handle(cx))
-            }
-            None => {}
+        // An image shows in place of the note, and the panel keeps control.
+        if self.pane().file.is_none() {
+            window.focus(&self.pane().editor.focus_handle(cx))
         }
         self.settle_nav(window, cx);
     }

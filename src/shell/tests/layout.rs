@@ -41,7 +41,7 @@ fn layout_reuse_matches_full_layout(cx: &mut TestAppContext) {
         format!("# Gros\n\navant\n\n{}\naprès\n\n> citation\n\n- fin\n", table(grid::BIG + 40)),
         "# Code\n\n```rust\nfn main() {}\n```\n\ntexte\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n".to_string(),
         "texte seul\n\n---\n\n## deux\n\n- [ ] tâche\n- [x] faite\n".to_string(),
-        // Formulas: their results depend on the cells around and on where the cursor is.
+        // Cells that look like formulas stay plain text: what is laid out is what is written.
         "# Formules\n\navant\n\n| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | =A+B |\n| 3 | 4 | =sum(above) |\n| x | =C1*2 | =B9 |\n\naprès\n".to_string(),
     ];
     let pieces = [

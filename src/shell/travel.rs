@@ -31,17 +31,7 @@ impl Shell {
                     scroll: (0., scroll),
                 }
             }
-            Shown::File(path) => match self
-                .pane()
-                .sheet()
-                .filter(|_| self.pane().file_path() == Some(path))
-            {
-                Some(sheet) => {
-                    let (at, scroll) = sheet.read(cx).whereabouts();
-                    Place { at, scroll }
-                }
-                None => return,
-            },
+            Shown::File(_) => return,
             _ => return,
         };
         self.history.mark(&shown, place);
@@ -131,13 +121,6 @@ impl Shell {
             }
             Shown::File(path) => {
                 self.load_note(&path, cx);
-                // A table takes back its cell and input; an image has nothing to take back.
-                if let Some(sheet) = self.shown_sheet() {
-                    sheet.update(cx, |sheet, cx| {
-                        sheet.set_view(entry.place.at, entry.place.scroll, cx)
-                    });
-                    window.focus(&sheet.focus_handle(cx));
-                }
             }
         }
     }

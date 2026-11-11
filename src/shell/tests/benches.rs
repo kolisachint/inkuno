@@ -2,27 +2,14 @@
 
 use super::*;
 
-/// Opens each file of the `INKUNO_CSV_DIR` folder in the table (copied, nothing of the user's
-/// is changed), times the opening, then chains random gestures: a crash shows here.
-/// `INKUNO_CSV_DIR=<folder> cargo test --release --locked sheet_fuzz -- --ignored --nocapture`.
+/// Paste the TSV of a big table into a fresh note: time of the paste and of the next
+/// keystrokes. Outside the regular suite: `cargo test --release --locked paste_scale -- --ignored --nocapture`.
 #[gpui::test]
 #[ignore]
-fn sheet_fuzz(cx: &mut TestAppContext) {
-    let Ok(from) = std::env::var("INKUNO_CSV_DIR") else {
-        return;
-    };
-    let root = std::env::temp_dir().join(format!("inkuno-fuzz-{}", std::process::id()));
+fn paste_scale(cx: &mut TestAppContext) {
+    let root = std::env::temp_dir().join(format!("inkuno-paste-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let _config = isolated_config(&root);
-    let mut files = Vec::new();
-    for entry in fs::read_dir(&from).unwrap().flatten() {
-        let to = root.join(entry.file_name());
-        fs::copy(entry.path(), &to).unwrap();
-        if vault::is_table(&to) {
-            files.push(to);
-        }
-    }
-    files.sort();
     cx.update(bind_keys);
     cx.update(init_fonts);
     let (shell, cx) = cx.add_window_view({
@@ -30,166 +17,6 @@ fn sheet_fuzz(cx: &mut TestAppContext) {
         |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
     });
     cx.run_until_parked();
-    let mut seed = 0x2545F4914F6CDD1Du64;
-    let mut next = move |n: usize| {
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        (seed % n as u64) as usize
-    };
-    let keys = "left right up down shift-left shift-right shift-up shift-down pageup pagedown home end secondary-home secondary-end secondary-up secondary-down tab shift-tab enter f2 escape backspace delete secondary-c secondary-x secondary-v secondary-a secondary-z secondary-shift-z secondary-enter secondary-shift-enter secondary-delete".split(' ').collect::<Vec<_>>();
-    let texts = ["a", "é", "x y", "€", "☃", "😀e\u{301}", ",", "\"", "12"];
-    for file in files {
-        let start = Instant::now();
-        shell.update_in(cx, |s, window, cx| {
-            s.open_note(&file, cx);
-            if let Some(sheet) = s.shown_sheet() {
-                window.focus(&sheet.focus_handle(cx));
-            }
-        });
-        cx.run_until_parked();
-        println!(
-            "{:?}: opening + display {:?}",
-            file.file_name().unwrap(),
-            start.elapsed()
-        );
-        let sheet = shell.read_with(cx, |s, _| s.shown_sheet().expect("table shown"));
-        let mut worst = Duration::ZERO;
-        for step in 0..600 {
-            let begin = Instant::now();
-            match next(10) {
-                0..=4 => cx.simulate_keystrokes(keys[next(keys.len())]),
-                5 | 6 => cx.simulate_input(texts[next(texts.len())]),
-                7 => {
-                    let at = point(px(330. + next(520) as f32), px(60. + next(640) as f32));
-                    let mods = if next(2) == 0 {
-                        gpui::Modifiers::none()
-                    } else {
-                        gpui::Modifiers::shift()
-                    };
-                    cx.simulate_mouse_down(at, gpui::MouseButton::Left, mods);
-                    let to = point(px(330. + next(520) as f32), px(60. + next(640) as f32));
-                    cx.simulate_mouse_move(to, gpui::MouseButton::Left, mods);
-                    cx.simulate_mouse_up(to, gpui::MouseButton::Left, mods);
-                }
-                8 => cx.simulate_event(gpui::ScrollWheelEvent {
-                    position: point(px(700.), px(300.)),
-                    delta: gpui::ScrollDelta::Pixels(point(
-                        px(next(200) as f32 - 100.),
-                        px(next(4000) as f32 - 2000.),
-                    )),
-                    ..Default::default()
-                }),
-                _ => match next(5) {
-                    0 => sheet.update(cx, |s, cx| s.toggle_header(cx)),
-                    1 => sheet.update(cx, |s, cx| s.copy_as(table::Style::Json, cx)),
-                    2 => sheet.update(cx, |s, cx| {
-                        s.reformat(
-                            Some(table::Format {
-                                delimiter: table::DELIMITERS[next(6)],
-                                ..s.format()
-                            }),
-                            cx,
-                        )
-                    }),
-                    3 => sheet.update(cx, |s, cx| s.export(table::Style::Markdown, cx)),
-                    _ => sheet.update(cx, |s, cx| {
-                        s.reformat(
-                            Some(table::Format {
-                                encoding: table::Encoding::ALL[next(6)],
-                                ..s.format()
-                            }),
-                            cx,
-                        )
-                    }),
-                },
-            }
-            cx.run_until_parked();
-            worst = worst.max(begin.elapsed());
-            assert!(step < 10_000);
-        }
-        println!("   slowest gesture: {worst:?}");
-    }
-    fs::remove_dir_all(&root).unwrap();
-}
-
-/// A big CSV transformed: copy and export in each format, opening of the resulting Markdown note,
-/// pasting the text into a note. `INKUNO_CSV=<file> cargo test --release --locked sheet_convert -- --ignored --nocapture`.
-#[gpui::test]
-#[ignore]
-fn sheet_convert(cx: &mut TestAppContext) {
-    let Ok(from) = std::env::var("INKUNO_CSV") else {
-        return;
-    };
-    let root = std::env::temp_dir().join(format!("inkuno-convert-{}", std::process::id()));
-    fs::create_dir_all(&root).unwrap();
-    let _config = isolated_config(&root);
-    let file = root.join("gros.csv");
-    fs::copy(&from, &file).unwrap();
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let (shell, cx) = cx.add_window_view({
-        let root = root.clone();
-        |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
-    });
-    cx.run_until_parked();
-    let start = Instant::now();
-    shell.update_in(cx, |s, window, cx| {
-        s.open_note(&file, cx);
-        window.focus(&s.shown_sheet().unwrap().focus_handle(cx));
-    });
-    cx.run_until_parked();
-    println!("opening {from}: {:?}", start.elapsed());
-    let sheet = shell.read_with(cx, |s, _| s.shown_sheet().unwrap());
-    cx.simulate_keystrokes("secondary-a");
-    for (name, style) in [
-        ("TSV", table::Style::Tsv),
-        ("CSV", table::Style::Csv(b',')),
-        ("Markdown", table::Style::Markdown),
-        ("JSON", table::Style::Json),
-    ] {
-        let start = Instant::now();
-        sheet.update(cx, |s, cx| s.copy_as(style, cx));
-        let copied = start.elapsed();
-        let len = cx
-            .read_from_clipboard()
-            .and_then(|c| c.text())
-            .map_or(0, |t| t.len());
-        let start = Instant::now();
-        sheet.update(cx, |s, cx| s.export(style, cx));
-        cx.run_until_parked();
-        println!(
-            "{name:9} copy {copied:?} ({} MB) · export {:?}",
-            len >> 20,
-            start.elapsed()
-        );
-    }
-    let exported = root.join(format!("gros{}.md", tr(" (selection)", " (sélection)")));
-    println!(
-        "exported note: {} MB",
-        fs::metadata(&exported).map_or(0, |m| m.len()) >> 20
-    );
-    let start = Instant::now();
-    shell.update(cx, |s, cx| {
-        let (notes, dirs, images) = vault::scan(&root);
-        s.sync(notes, dirs, images, cx);
-    });
-    println!("rescan of the vault with this note: {:?}", start.elapsed());
-    let start = Instant::now();
-    shell.update_in(cx, |s, window, cx| {
-        s.open_note(&exported, cx);
-        window.focus(&s.pane().editor.focus_handle(cx));
-    });
-    cx.run_until_parked();
-    println!("opening the Markdown note: {:?}", start.elapsed());
-    let start = Instant::now();
-    cx.simulate_input("a");
-    cx.run_until_parked();
-    println!("one keystroke inside: {:?}", start.elapsed());
-    let start = Instant::now();
-    cx.simulate_keystrokes("down");
-    cx.run_until_parked();
-    println!("down arrow inside: {:?}", start.elapsed());
     // Paste the TSV of a big table into a fresh note.
     let tsv: String = (0..300_000)
         .map(|i| format!("{i}\tProduit {}\t{}\n", i % 977, i % 99))
@@ -847,45 +674,6 @@ fn motion_cost(cx: &mut TestAppContext) {
         );
     }
     fs::remove_dir_all(&root).unwrap();
-}
-
-/// A board of 1,000 cards in one column: time of a frame (a forced refresh) and of the opening.
-/// `cargo test --release --locked board_frame -- --ignored --nocapture`.
-#[gpui::test]
-#[ignore]
-fn board_frame(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("inkuno-board-frame-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    let _config = isolated_config(&root);
-    let note = root.join("Mille.md");
-    let cards: String = (0..1000)
-        .map(|i| format!("- [{}] Carte {i}\n", if i % 3 == 0 { 'x' } else { ' ' }))
-        .collect();
-    fs::write(
-        &note,
-        format!("---\nkanban: true\n---\n# Mille\n\n## Tout\n\n{cards}\n## Rien\n"),
-    )
-    .unwrap();
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let (shell, cx) =
-        cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
-    cx.run_until_parked();
-    let start = Instant::now();
-    shell.update(cx, |s, cx| s.open_note(&note, cx));
-    cx.run_until_parked();
-    println!("opening + first frame: {:?}", start.elapsed());
-    let mut frames = Vec::new();
-    for _ in 0..20 {
-        let begin = Instant::now();
-        cx.update(|window, _| window.refresh());
-        cx.run_until_parked();
-        frames.push(begin.elapsed());
-    }
-    frames.sort();
-    println!("frame: median {:?}, worst {:?}", frames[10], frames[19]);
-    fs::remove_dir_all(&root).ok();
 }
 
 /// A note with 100 comments, caret moving from one to the next: time of a frame.

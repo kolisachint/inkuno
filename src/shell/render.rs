@@ -306,21 +306,6 @@ impl Render for Shell {
                     }
                 }),
             )
-            .on_action(cx.listener(|this, _: &sheet::PickDelimiter, window, cx| {
-                this.choose_table(Pick::Delimiter, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickEncoding, window, cx| {
-                this.choose_table(Pick::Encoding, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickHeader, window, cx| {
-                this.choose_table(Pick::Header, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickCopyAs, window, cx| {
-                this.choose_table(Pick::CopyAs, window, cx)
-            }))
-            .on_action(cx.listener(|this, _: &sheet::PickExport, window, cx| {
-                this.choose_table(Pick::Export, window, cx)
-            }))
             .on_action(cx.listener(|this, _: &OpenVault, window, cx| this.choose_vault(window, cx)))
             .on_action(cx.listener(|this, _: &CopyAll, _, cx| this.copy_all(true, cx)))
             .on_action(cx.listener(|this, _: &ExportPdf, _, cx| this.export_pdf(cx)))
@@ -873,10 +858,7 @@ impl Shell {
         // ponytail: the note is reread on every render (a search for `{==`); keep the
         // list from one version of the text to the next if very long notes suffer from it.
         let said: Vec<(String, String, usize, usize, usize, String)> =
-            match self.pane().file.is_none()
-                && self.pane().listing.is_none()
-                && !self.board_shown(cx)
-            {
+            match self.pane().file.is_none() && self.pane().listing.is_none() {
                 true => markdown::all_comments(self.pane().editor.read(cx).text())
                     .into_iter()
                     .map(|n| {
@@ -906,13 +888,7 @@ impl Shell {
                 ))
                 .absolute()
                 .bottom_4()
-                .right(
-                    t.px(if kanban::is_board(self.pane().editor.read(cx).text()) {
-                        84.
-                    } else {
-                        50.
-                    }),
-                )
+                .right(t.px(50.))
                 .size(t.px(30.))
                 .rounded(t.large())
                 .cursor_pointer()
@@ -934,60 +910,11 @@ impl Shell {
                     cx.notify();
                 }))
         });
-        // A note that is a kanban board: its button switches from the board to the text. The
-        // board hides the note, which must no longer receive keystrokes.
-        let board = self.board_shown(cx);
-        if board && self.pane().editor.focus_handle(cx).is_focused(window) {
-            window.focus(&self.pane().board.focus);
-        }
-        if !cx.has_active_drag() {
-            self.pane_mut().board.drag = None;
-        }
         // The list page closed with input in its filter or one of its cells: nothing
         // receives it anymore, it goes back to the note.
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
-        if !board {
-            self.pane_mut().board.field = None;
-            // The board left (another note opens), input goes back to the note.
-            if self.pane().board.focus.is_focused(window) {
-                window.focus(&self.pane().editor.focus_handle(cx));
-            }
-        }
-        let boards = kanban::is_board(self.pane().editor.read(cx).text())
-            && self.pane().file.is_none()
-            && self.pane().listing.is_none();
-        let flip = boards.then(|| {
-            ui::widgets::button("board-toggle", "board.svg", board, t)
-                .tooltip(ui::widgets::tip(
-                    if board {
-                        tr("Show the text", "Voir le texte")
-                    } else {
-                        tr("Show the board", "Voir le tableau")
-                    },
-                    String::new(),
-                    t,
-                ))
-                .absolute()
-                .bottom_4()
-                // Always in the same place, board or text: left of the copy button.
-                .right(t.px(50.))
-                .h(t.px(30.))
-                .rounded(t.large())
-                // On the board the button says what it does; over the text there is no room for it.
-                .when(board, |d| {
-                    d.w_auto()
-                        .px_2()
-                        .gap_1()
-                        .text_size(t.px(12.))
-                        .text_color(t.accent)
-                        .child(tr("Text", "Texte"))
-                })
-                .when(!board, |d| d.w(t.px(30.)))
-                .occlude()
-                .on_click(cx.listener(|this, _, window, cx| this.toggle_board(window, cx)))
-        });
         // Without a tab bar, the top row of the pane is a handle to move the window (Linux): the note's text starts under it.
         let strip = client && !barred;
         // Under the native bar the traffic lights float over the left end of that same row:
@@ -997,7 +924,7 @@ impl Shell {
         let pill = (client && !barred && group == self.corner_group())
             .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
         self.pane().editor.update(cx, |e, _| {
-            e.corner = 1 + talk.is_some() as usize + boards as usize;
+            e.corner = 1 + talk.is_some() as usize;
             e.bar_here = active;
             e.pill = pill;
             e.strip = if strip || traffic {
@@ -1210,7 +1137,7 @@ impl Shell {
         // The views whose top room is empty: the strip can lie over it.
         let free_top = tool.is_none()
             && self.pane().figure.is_none()
-            && (listing.is_some() || board || matches!(file, None | Some((_, FileKind::Image))));
+            && (listing.is_some() || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
             _ if let Some(tool) = tool => note.flex().flex_col().child(match tool {
                 nav::Mode::Graph => div()
@@ -1229,11 +1156,6 @@ impl Shell {
             _ if let Some(figure) = self.pane().figure.clone() => {
                 figure.update(cx, |figure, _| figure.sync(t));
                 note.child(figure)
-            }
-            _ if board => note.child(self.render_board(cx)).children(flip),
-            Some((_, FileKind::Sheet(sheet))) => {
-                sheet.update(cx, |sheet, _| sheet.sync(t, client));
-                note.child(sheet)
             }
             Some((_, FileKind::Drawing(canvas))) => {
                 canvas.update(cx, |canvas, _| canvas.sync(t, client));
@@ -1275,7 +1197,6 @@ impl Shell {
                 note.child(self.pane().editor.clone())
                     .children(empty)
                     .children(talk)
-                    .children(flip)
             }
         };
         let note = note.when(

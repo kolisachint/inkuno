@@ -368,8 +368,6 @@ pub enum Share {
     SvgCopy,
     SvgSave,
     Png,
-    TableCopy,
-    TableExport,
     ImageSave,
     Pdf,
 }
@@ -385,14 +383,6 @@ impl Share {
             Self::SvgCopy => tr("Copy as SVG", "Copier en SVG"),
             Self::SvgSave => tr("Save an SVG copy…", "Enregistrer une copie SVG…"),
             Self::Png => tr("Export as PNG", "Exporter en PNG"),
-            Self::TableCopy => tr(
-                "Copy as… (table/selection)",
-                "Copier en… (tableau/sélection)",
-            ),
-            Self::TableExport => tr(
-                "Export as… (table/selection)",
-                "Exporter en… (tableau/sélection)",
-            ),
             Self::ImageSave => tr("Save an image copy…", "Enregistrer une copie de l’image…"),
         }
     }

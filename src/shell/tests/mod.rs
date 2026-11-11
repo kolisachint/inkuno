@@ -3,7 +3,6 @@
 //! modules instead.
 
 mod benches;
-mod board_header;
 mod calendar_head;
 mod canvas_nesting;
 mod canvas_text;
@@ -25,9 +24,7 @@ mod panel_rows;
 mod panes;
 mod save_close;
 mod sharing;
-mod sheet_header;
 mod shortcuts_page;
-mod table_open;
 mod tabs;
 mod vault_find;
 mod window;

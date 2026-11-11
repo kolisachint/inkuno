@@ -25,7 +25,6 @@ impl Shell {
             ],
             Some(FileKind::Drawing(_)) => vec![Share::SvgCopy, Share::SvgSave, Share::Png],
             Some(FileKind::Svg(_)) => vec![Share::SvgCopy, Share::SvgSave],
-            Some(FileKind::Sheet(_)) => vec![Share::TableCopy, Share::TableExport],
             Some(FileKind::Image) => vec![Share::ImageSave],
         }
     }
@@ -71,7 +70,7 @@ impl Shell {
     pub(super) fn share_document(
         &mut self,
         choice: Share,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match choice {
@@ -95,8 +94,6 @@ impl Shell {
                 return;
             }
             Share::Pdf => return self.export_pdf(cx),
-            Share::TableCopy => return self.choose_table(Pick::CopyAs, window, cx),
-            Share::TableExport => return self.choose_table(Pick::Export, window, cx),
             Share::Png => {
                 if let (Some(path), Some(canvas)) = (
                     self.pane().file_path().cloned(),

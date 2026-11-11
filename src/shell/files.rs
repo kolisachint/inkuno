@@ -97,10 +97,6 @@ impl Shell {
         self.each_pane(|this| {
             if let Some(file) = &mut this.pane_mut().file {
                 file.path = shift(&file.path);
-                if let super::FileKind::Sheet(sheet) = &file.kind {
-                    let moved = file.path.clone();
-                    sheet.update(cx, |sheet, _| sheet.moved(moved));
-                }
             }
             this.pane_mut().new_dir = this.pane_mut().new_dir.as_ref().map(shift);
             this.pane_mut().path = this.pane_mut().path.as_ref().map(shift);

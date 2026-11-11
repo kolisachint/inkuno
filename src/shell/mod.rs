@@ -2,7 +2,6 @@
 //! keeps the vault, the settings and the history. One `impl Shell` per subject, in the files of
 //! this folder.
 
-mod board;
 mod capture;
 mod diagrams;
 mod docks;
@@ -23,7 +22,6 @@ mod settings;
 mod sharing;
 mod sidebar;
 mod sync;
-mod tables;
 mod tabs;
 mod templates;
 mod toasts;
@@ -44,7 +42,7 @@ use crate::logic::{
     layout::{self, Node, Side, Zone},
     markdown,
     prefs::Prefs,
-    recall, table,
+    recall,
 };
 use crate::platform::{
     self,
@@ -85,8 +83,6 @@ use logic::note::Note;
 use markdown::Link;
 use nav::{Mode, Nav, Panel};
 use palette::{Entry, Palette, PaletteEvent, Setting, TemplateAct};
-use sheet::{Pick, Sheet, SheetEvent};
-use table::{Encoding, Format, Style};
 
 /// The icon grid: where it opens, for which item, the cell the keys are on (0: no icon), and what
 /// had the focus before it.

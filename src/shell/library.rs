@@ -207,10 +207,6 @@ impl Shell {
             self.notes = notes;
         }
         self.each_pane(|this| {
-            // The shown table was rewritten elsewhere: it is reread if nothing is pending here.
-            if let Some(sheet) = this.pane().sheet() {
-                sheet.update(cx, |sheet, cx| sheet.reload_if_changed(cx));
-            }
             // A failed canvas write still holds edits that must not be replaced by the disk.
             if !this.pane().canvas_dirty
                 && let Some(canvas) = this.pane().drawing().cloned()

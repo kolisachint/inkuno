@@ -19,7 +19,6 @@ use crate::{
     ui::theme::Theme,
     ui::widgets::keycaps,
     views::editor::TableOp,
-    views::sheet::Pick,
 };
 
 /// Height of a row of the list.
@@ -121,10 +120,6 @@ pub fn forward_label() -> &'static str {
 
 fn today_label() -> &'static str {
     tr("Today's note", "Note du jour")
-}
-
-fn board_label() -> &'static str {
-    tr("New kanban board", "Nouveau tableau kanban")
 }
 
 fn undo_swap_label() -> &'static str {
@@ -237,8 +232,6 @@ pub enum PaletteEvent {
     NewFolder,
     ImportDiagram,
     Setting(Setting),
-    /// Setting or gesture of the shown table.
-    Table(Pick),
     /// The chosen lines of the note, as a list or as text.
     Restyle(ListStyle),
     /// A gesture on the table under the cursor.
@@ -255,8 +248,6 @@ pub enum PaletteEvent {
     Comments,
     /// Undoes the last vault-wide replacement.
     UndoSwap,
-    /// Creates a note that opens as a kanban board.
-    NewBoard,
     /// Opens or creates the daily note.
     Today,
     /// Back (`false`) or forward (`true`) in what has been shown.
@@ -297,7 +288,6 @@ enum Item {
     Outline,
     Comments,
     UndoSwap,
-    Board,
     Today,
     Back,
     Forward,
@@ -308,7 +298,6 @@ enum Item {
     Terminal,
     CaptureKey,
     Setting(Setting),
-    Table(Pick),
     Restyle(ListStyle),
     Grid(TableOp),
     Template(TemplateAct),
@@ -337,8 +326,6 @@ pub struct Palette {
     updates: Option<bool>,
     /// Number of the new version the app can install by itself.
     installable: Option<String>,
-    /// A table is shown: its settings are searched here.
-    table: bool,
     /// A note is shown: its lines can become a list.
     lists: bool,
     /// The cursor is in a Markdown table: its rows and columns are managed from here.
@@ -416,7 +403,6 @@ impl Palette {
             choices: false,
             updates: None,
             installable: None,
-            table: false,
             lists: false,
             cells: false,
             undo_swap: false,
@@ -471,11 +457,6 @@ impl Palette {
         self
     }
 
-    pub fn with_table(mut self, shown: bool) -> Self {
-        self.table = shown;
-        self.refresh();
-        self
-    }
 
     /// Input field prefilled with `text`; Enter emits `Submit`.
     pub fn prompt(
@@ -704,7 +685,6 @@ impl Palette {
         for (label, item) in [
             (outline_label(), Item::Outline),
             (comments_label(), Item::Comments),
-            (board_label(), Item::Board),
             (today_label(), Item::Today),
             (back_label(), Item::Back),
             (forward_label(), Item::Forward),
@@ -737,17 +717,13 @@ impl Palette {
         if self.updates.is_some() && !q.is_empty() && command(&q, check_label()) {
             items.push(Item::Check);
         }
-        if self.table && !q.is_empty() {
+        if self.cells && !q.is_empty() {
             items.extend(
-                Pick::ALL
+                TableOp::ALL
                     .into_iter()
-                    .filter(|p| command(&q, p.label()))
-                    .map(Item::Table),
+                    .filter(|op| command(&q, op.label()))
+                    .map(Item::Grid),
             );
-        }
-        if (self.cells || self.table) && !q.is_empty() {
-            let shown = |op: &TableOp| (self.cells || op.in_sheet()) && command(&q, op.label());
-            items.extend(TableOp::ALL.into_iter().filter(shown).map(Item::Grid));
         }
         if !q.is_empty() {
             let acts = [TemplateAct::New, TemplateAct::Insert, TemplateAct::Save];
@@ -844,7 +820,6 @@ impl Palette {
             Some(Item::Help) => PaletteEvent::Help,
             Some(Item::Diagram) => PaletteEvent::NewDiagram,
             Some(Item::Folder) => PaletteEvent::NewFolder,
-            Some(&Item::Table(pick)) => PaletteEvent::Table(pick),
             Some(&Item::Restyle(style)) => PaletteEvent::Restyle(style),
             Some(&Item::Grid(op)) => PaletteEvent::Grid(op),
             Some(&Item::Command(n)) => PaletteEvent::Run(self.commands[n].action),
@@ -855,7 +830,6 @@ impl Palette {
             Some(Item::Outline) => PaletteEvent::Outline,
             Some(Item::Comments) => PaletteEvent::Comments,
             Some(Item::UndoSwap) => PaletteEvent::UndoSwap,
-            Some(Item::Board) => PaletteEvent::NewBoard,
             Some(Item::Today) => PaletteEvent::Today,
             Some(Item::Back) => PaletteEvent::Travel(false),
             Some(Item::Forward) => PaletteEvent::Travel(true),
@@ -1099,7 +1073,6 @@ impl Render for Palette {
                 &Item::Command(n) => (self.commands[n].label.to_string(), self.commands[n].keys.clone()),
                 &Item::Template(act) => (act.label().to_string(), if act == TemplateAct::New { crate::ui::keys::of(cx, &crate::actions::NewFromTemplate) } else { String::new() }),
                 Item::UndoSwap => (undo_swap_label().to_string(), String::new()),
-                Item::Board => (board_label().to_string(), String::new()),
                 Item::Today => (today_label().to_string(), crate::ui::keys::of(cx, &crate::actions::Today)),
                 Item::Back => (back_label().to_string(), crate::ui::keys::of(cx, &crate::actions::GoBack)),
                 Item::Forward => (forward_label().to_string(), crate::ui::keys::of(cx, &crate::actions::GoForward)),
@@ -1111,7 +1084,6 @@ impl Render for Palette {
                 Item::CaptureKey => (capture_label().to_string(), String::new()),
                 Item::Install => (install_label(self.installable.as_deref().unwrap_or_default()), String::new()),
                 Item::Setting(setting) => (setting.label().to_string(), String::new()),
-                Item::Table(pick) => (pick.label().to_string(), String::new()),
             };
             // Where the detail is a shortcut, not a description.
             let shortcut = matches!(

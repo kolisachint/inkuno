@@ -14,7 +14,7 @@ use gpui::{
 };
 
 use crate::{
-    logic::{formula, markdown as md},
+    logic::markdown as md,
     ui::theme::Theme,
     views::editor::{Fast, FastMap, RunStyle, text_runs},
 };
@@ -229,8 +229,6 @@ pub struct Cell {
     width: Pixels,
     /// The text does not wrap (very big table): what overflows is cut.
     clip: bool,
-    /// A formula without a result: why.
-    pub reason: Option<Rc<str>>,
 }
 
 impl Cell {
@@ -370,11 +368,6 @@ impl TableRow {
     fn column(&self, i: usize) -> usize {
         let before = self.bars.iter().filter(|&&bar| bar < i).count();
         before.saturating_sub(1).min(self.written.saturating_sub(1))
-    }
-
-    /// Why the formula in the cell where byte `i` is has no result.
-    pub fn reason_at(&self, i: usize) -> Option<Rc<str>> {
-        self.cells.get(self.column(i))?.reason.clone()
     }
 
     /// What each cell shows, for the tests.
@@ -551,28 +544,6 @@ fn shape(
     shape_flags(text_system, text, flags, wrap, bold, marked, look)
 }
 
-/// The result of a formula, shown in place of its text (`written` bytes): plain, in the style `flags`.
-fn shape_computed(
-    text_system: &WindowTextSystem,
-    shown: &Shown,
-    wrap: Option<Pixels>,
-    bold: bool,
-    look: &Look,
-) -> Shape {
-    if shown.text.is_empty() {
-        return Shape {
-            line: None,
-            narrow: px(0.),
-            subs: Vec::new(),
-        };
-    }
-    let flags = vec![shown.flags | if bold { md::BOLD } else { 0 }; shown.text.len()];
-    let mut shape = shape_flags(text_system, &shown.text, flags, wrap, false, &None, look);
-    // The whole cell is one sign: a click in it lands after the formula.
-    shape.subs = vec![(0, shown.written, shown.text.len())];
-    shape
-}
-
 fn shape_flags(
     text_system: &WindowTextSystem,
     text: &str,
@@ -648,91 +619,6 @@ fn align_of(dashes: &str) -> TextAlign {
     }
 }
 
-/// A formula's result as its cell shows it, in place of the formula.
-struct Shown {
-    text: String,
-    /// Length of the formula it replaces.
-    written: usize,
-    flags: u16,
-    right: bool,
-    reason: Option<Rc<str>>,
-}
-
-/// The cell of a formula the cursor is in, as (line, cell): it shows its formula, to edit it.
-fn editing(lines: &[(usize, &str)], cursor: usize) -> Option<(usize, usize)> {
-    if !lines.iter().any(|(_, l)| l.contains('=')) {
-        return None;
-    }
-    let r = lines
-        .iter()
-        .position(|&(at, l)| (at..=at + l.len()).contains(&cursor))?;
-    let (at, line) = lines[r];
-    let cells = md::cells(line);
-    let c = cells
-        .iter()
-        .position(|cell| (at + cell.start..=at + cell.end).contains(&cursor))?;
-    formula::is_formula(&line[cells[c].clone()]).then_some((r, c))
-}
-
-/// The result of every formula of the table, by line and cell; `None` if it has none.
-fn results(
-    lines: &[(usize, &str)],
-    parsed: &[(Vec<Range<usize>>, Vec<usize>)],
-    dash: Option<usize>,
-) -> Option<Vec<Vec<Option<formula::Outcome>>>> {
-    if !lines.iter().any(|(_, l)| l.contains('=')) {
-        return None;
-    }
-    let seen: Vec<usize> = (0..lines.len()).filter(|&r| Some(r) != dash).collect();
-    let grid: Vec<Vec<String>> = seen
-        .iter()
-        .map(|&r| {
-            parsed[r]
-                .0
-                .iter()
-                .map(|c| lines[r].1[c.clone()].to_string())
-                .collect()
-        })
-        .collect();
-    if !formula::any(&grid) {
-        return None;
-    }
-    let mut out = vec![Vec::new(); lines.len()];
-    for (k, row) in formula::evaluate(&grid).into_iter().enumerate() {
-        out[seen[k]] = row;
-    }
-    Some(out)
-}
-
-impl Shown {
-    fn of(outcome: &formula::Outcome, written: usize) -> Shown {
-        let decimal = crate::lang::tr(".", ",").chars().next().unwrap_or('.');
-        match outcome {
-            Ok(value @ formula::Value::Num(_)) => Shown {
-                text: formula::show(value, decimal),
-                written,
-                flags: md::NUMBER,
-                right: true,
-                reason: None,
-            },
-            Ok(value) => Shown {
-                text: formula::show(value, decimal),
-                written,
-                flags: 0,
-                right: false,
-                reason: None,
-            },
-            Err(e) => Shown {
-                text: "#ERR".into(),
-                written,
-                flags: md::TAG | md::BOLD,
-                right: true,
-                reason: Some(e.reason().into()),
-            },
-        }
-    }
-}
-
 /// Layout of a table, line by line. `lines`: (start, text) of each line
 /// of the table. `None`: the dash line, when the cursor is on it; it then shows
 /// as text. Otherwise it is hidden.
@@ -759,7 +645,6 @@ pub fn build(
         touched,
         composing.map(|m| (m.start - first.min(m.start), m.end)),
         lines.len(),
-        editing(lines, cursor),
     )
         .hash(&mut hasher);
     lines
@@ -827,24 +712,6 @@ fn rows(
         })
         .collect();
     let shown_rows: Vec<usize> = (0..lines.len()).filter(|&r| Some(r) != dash).collect();
-    // Formulas show their result, except in the cell being edited. Only a table that has some is evaluated.
-    let calc = results(lines, &parsed, dash);
-    let edit = calc.as_ref().and_then(|_| editing(lines, cursor));
-    let computed = |r: usize, c: usize| -> Option<Shown> {
-        let outcome = calc
-            .as_ref()?
-            .get(r)?
-            .get(c)?
-            .as_ref()
-            .filter(|_| edit != Some((r, c)))?;
-        Some(Shown::of(outcome, text(r, c).len()))
-    };
-    let computed_key = |shown: &Shown| {
-        format!(
-            "\u{1}{}\u{1}{}\u{1}{}",
-            shown.flags, shown.written, shown.text
-        )
-    };
 
     // Widths: all the text on one line, and the longest word, of each column.
     let mut wide = vec![MIN_WIDE; cols];
@@ -853,15 +720,9 @@ fn rows(
     for &r in &shown_rows {
         for c in 0..cols {
             let (text, bold) = (text(r, c), r == 0);
-            let one = match computed(r, c) {
-                Some(shown) => cache
-                    .shape(key(&computed_key(&shown), None, bold, &None, look), || {
-                        shape_computed(text_system, &shown, None, bold, look)
-                    }),
-                None => cache.shape(key(text, None, bold, &None, look), || {
-                    shape(text_system, text, None, bold, &None, look)
-                }),
-            };
+            let one = cache.shape(key(text, None, bold, &None, look), || {
+                shape(text_system, text, None, bold, &None, look)
+            });
             if let Some(line) = &one.line {
                 alone[r][c] = line.unwrapped_layout.width;
                 wide[c] = wide[c].max(f32::from(alone[r][c]));
@@ -914,25 +775,6 @@ fn rows(
                     // A text that fits on its line is not cut: GPUI's measure and wrapping
                     // differ by a few fractions of a pixel.
                     let wrap = (alone[r][c] > widths[c]).then_some(widths[c]);
-                    if let Some(shown) = computed(r, c) {
-                        let shape = cache
-                            .shape(key(&computed_key(&shown), wrap, bold, &None, look), || {
-                                shape_computed(text_system, &shown, wrap, bold, look)
-                            });
-                        let align = if shown.right {
-                            TextAlign::Right
-                        } else {
-                            aligns[c]
-                        };
-                        return Cell {
-                            range,
-                            shape,
-                            align,
-                            width: widths[c],
-                            clip: false,
-                            reason: shown.reason,
-                        };
-                    }
                     let shape = cache.shape(key(text, wrap, bold, &here, look), || {
                         shape(text_system, text, wrap, bold, &here, look)
                     });
@@ -942,7 +784,6 @@ fn rows(
                         align: aligns[c],
                         width: widths[c],
                         clip: false,
-                        reason: None,
                     }
                 })
                 .collect();
@@ -1128,7 +969,6 @@ pub fn big_row(
                 align: geom.aligns[c],
                 width: geom.widths[c],
                 clip,
-                reason: None,
             }
         })
         .collect();

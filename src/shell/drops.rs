@@ -207,9 +207,7 @@ impl Shell {
     ) -> Option<DropAim> {
         let shown = self.panes.get(pane)?;
         let editor = shown.editor.read(cx);
-        let board = kanban::is_board(editor.text()) && !shown.board.text;
-        let writes =
-            shown.file.is_none() && shown.listing.is_none() && !board && self.vault.is_some();
+        let writes = shown.file.is_none() && shown.listing.is_none() && self.vault.is_some();
         writes.then(|| DropAim {
             aim: Aim::Note {
                 pane,

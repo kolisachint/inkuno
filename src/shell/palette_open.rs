@@ -162,9 +162,7 @@ impl Shell {
             .as_ref()
             .filter(|r| r.asset.is_some())
             .map(|r| r.version.clone());
-        let table = self.shown_sheet().is_some();
-        let lists =
-            self.pane().file.is_none() && self.pane().listing.is_none() && !self.board_shown(cx);
+        let lists = self.pane().file.is_none() && self.pane().listing.is_none();
         let cells = lists && self.pane().editor.read(cx).in_table();
         let swap = !self.swapped.is_empty();
         let (commands, here) = self.palette_commands(window, cx);
@@ -173,7 +171,6 @@ impl Shell {
             Palette::new(entries, query, theme, cx)
                 .with_root(root)
                 .with_updates(updates, installable)
-                .with_table(table)
                 .with_lists(lists)
                 .with_cells(cells)
                 .with_undo_swap(swap)
@@ -193,7 +190,6 @@ impl Shell {
                 PaletteEvent::Help => this.set_help(true, window, cx),
                 PaletteEvent::NewDiagram => this.new_diagram(window, cx),
                 PaletteEvent::NewFolder => this.new_folder(window, cx),
-                PaletteEvent::Table(pick) => this.choose_table(*pick, window, cx),
                 PaletteEvent::ImportDiagram => this.import_diagram(window, cx),
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
                 PaletteEvent::ToggleUpdates => this.toggle_updates(cx),
@@ -203,11 +199,7 @@ impl Shell {
                 PaletteEvent::Template(TemplateAct::Save) => this.save_as_template(window, cx),
                 PaletteEvent::Template(act) => this.open_templates(*act, window, cx),
                 PaletteEvent::Grid(op) => {
-                    // The gesture goes to what is shown: a CSV's sheet, or the note.
-                    match this.shown_sheet() {
-                        Some(sheet) => window.focus(&sheet.focus_handle(cx)),
-                        None => window.focus(&this.pane().editor.focus_handle(cx)),
-                    }
+                    window.focus(&this.pane().editor.focus_handle(cx));
                     window.dispatch_action(op.action(), cx);
                 }
                 PaletteEvent::Run(name) => {
@@ -224,10 +216,6 @@ impl Shell {
                     this.pane().editor.update(cx, |e, cx| e.restyle(*style, cx));
                 }
                 PaletteEvent::UndoSwap => this.undo_swap(cx),
-                PaletteEvent::NewBoard => {
-                    this.fresh_tab(window, cx);
-                    this.new_note(kanban::new_board(), cx);
-                }
                 PaletteEvent::Today => this.open_today(window, cx),
                 PaletteEvent::Travel(forward) => this.travel(*forward, window, cx),
                 PaletteEvent::Trash => this.open_trash(window, cx),

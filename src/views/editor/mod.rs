@@ -9,7 +9,6 @@ mod edit;
 mod embed;
 mod find;
 mod format_bar;
-mod formulas;
 pub mod grid;
 mod input;
 mod layout;
@@ -30,7 +29,6 @@ use edit::*;
 use embed::*;
 use find::*;
 pub use format_bar::*;
-use formulas::*;
 pub use layout::*;
 use mouse::*;
 pub use notes::*;
@@ -325,8 +323,6 @@ pub struct Editor {
     geos: Vec<Geo>,
     /// The commented parts of each table, for one version of the text and one cursor.
     marks: Option<Marks>,
-    /// Why the formula under the pointer has no result.
-    reason: Option<Rc<str>>,
     /// This editor shows an embedded section: nothing in it can be edited, clicked or focused.
     readonly: bool,
     /// The notes embedded in this one, and what is kept of them.
@@ -470,7 +466,6 @@ impl Editor {
             table_hover: None,
             geos: Vec::new(),
             marks: None,
-            reason: None,
             readonly: false,
             embeds: Embeds::default(),
             part_hover: None,

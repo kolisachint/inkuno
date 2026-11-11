@@ -146,7 +146,7 @@ fn sharing_empty_drafts_and_pending_dialogs(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
+fn sharing_follows_diagrams_and_images(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "sharing-views");
     fs::write(root.join("Note.md"), "# Hidden\n").unwrap();
     let mut diagram = Diagram::default();
@@ -157,7 +157,6 @@ fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
     fs::write(root.join("Foreign.svg"), foreign).unwrap();
     let png = figure::png(foreign, 1., 0xffffff).unwrap();
     fs::write(root.join("Picture.png"), &png).unwrap();
-    fs::write(root.join("Data.csv"), "Name,Count\nAlpha,1\nBeta,2\n").unwrap();
     shell.update(cx, |s, cx| {
         s.rescan(&root, cx);
         s.open_note(&root.join("Note.md"), cx);
@@ -166,7 +165,6 @@ fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
         ("Drawing.svg", 3),
         ("Foreign.svg", 2),
         ("Picture.png", 1),
-        ("Data.csv", 2),
     ] {
         shell.update(cx, |s, cx| {
             s.open_note(&root.join(name), cx);
@@ -221,56 +219,6 @@ fn sharing_follows_diagrams_images_and_tables(cx: &mut TestAppContext) {
             cx.simulate_new_path_selection(|_| Some(root.join("picture-copy.png")));
             settle(cx);
             assert_eq!(fs::read(root.join("picture-copy.png")).unwrap(), png);
-        } else {
-            // Type an edit, then copy every existing format from the menu, before autosave.
-            let sheet = shell.read_with(cx, |s, _| s.shown_sheet().unwrap());
-            shell.update_in(cx, |s, window, cx| s.focus_pane(s.active, window, cx));
-            sheet.update(cx, |s, cx| {
-                s.set_view((1, 0), (0., 0.), cx);
-            });
-            cx.simulate_input("Updated");
-            cx.simulate_keystrokes("enter");
-            let undo = sheet.read_with(cx, |s, _| s.undo_len());
-            let disk = fs::read(root.join(name)).unwrap();
-            for format in 0..4 {
-                choose(cx, 0);
-                cx.simulate_keystrokes("home");
-                for _ in 0..format {
-                    cx.simulate_keystrokes("down");
-                }
-                cx.simulate_keystrokes("enter");
-                let copied = cx.read_from_clipboard().unwrap().text().unwrap();
-                assert!(
-                    copied.contains("Updated") && copied.contains("Beta"),
-                    "{format}: {copied}"
-                );
-                let before: std::collections::HashSet<_> = fs::read_dir(&root)
-                    .unwrap()
-                    .map(|e| e.unwrap().path())
-                    .collect();
-                choose(cx, 1);
-                cx.simulate_keystrokes("home");
-                for _ in 0..format {
-                    cx.simulate_keystrokes("down");
-                }
-                cx.simulate_keystrokes("enter");
-                settle(cx);
-                let added: Vec<_> = fs::read_dir(&root)
-                    .unwrap()
-                    .map(|e| e.unwrap().path())
-                    .filter(|p| !before.contains(p))
-                    .collect();
-                assert_eq!(added.len(), 1, "format {format}");
-                assert_eq!(fs::read_to_string(&added[0]).unwrap(), copied);
-                assert_eq!(fs::read(root.join(name)).unwrap(), disk);
-                assert_eq!(sheet.read_with(cx, |s, _| s.undo_len()), undo);
-            }
-            // A multi-cell selection retains the sheet's existing scope.
-            sheet.update(cx, |s, cx| s.pick("row", 1, cx));
-            choose(cx, 0);
-            cx.simulate_keystrokes("home enter");
-            let copied = cx.read_from_clipboard().unwrap().text().unwrap();
-            assert!(copied.contains("Updated") && !copied.contains("Beta"));
         }
         assert_eq!(state(&shell, cx), hidden);
     }
