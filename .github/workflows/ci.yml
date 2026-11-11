@@ -1,15 +1,55 @@
-# Builds and tests on the supported platforms.
+# CI tiers: fast checks on every push/PR, full suite on main/nightly/manual.
+#
+# - fast (ubuntu-only): fmt + check + clippy + targeted tests (skips the
+#   22-chapter end_to_end session). Runs on every push, PR, schedule and dispatch.
+# - test (ubuntu + macos): full `cargo test --locked` (unit + shell + end_to_end
+#   + integration). Runs on main pushes, the nightly schedule and manual dispatch.
+#
+# No CI job runs `cargo build --release`: the packaging workflows build the
+# release profile themselves, so a release build here would compile the crate
+# twice (release + dev profiles). The macOS gate stays: the test matrix keeps
+# its macos leg running `cargo test`, and packaging still runs build -> test ->
+# package (see release-binaries.yml, release.yml).
 name: CI
 on:
   push:
     branches: [main, develop]
   pull_request:
+  # Nightly full-suite run: catches breakage no PR exercised.
+  schedule:
+    - cron: "17 3 * * *"
   # By hand on any branch: `gh workflow run CI --ref <branch>`.
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
+  fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libfontconfig-dev libfreetype-dev \
+            libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Check
+        run: cargo check --locked --all-targets
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Fast tests (skips the end-to-end session)
+        run: cargo test --locked -- --skip end_to_end
   test:
+    needs: fast
+    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -27,5 +67,5 @@ jobs:
             libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
       - run: rustup toolchain install stable --profile minimal
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked
-      - run: cargo test --locked
+      - name: Full test suite
+        run: cargo test --locked
