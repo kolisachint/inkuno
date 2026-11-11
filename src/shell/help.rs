@@ -614,7 +614,7 @@ impl Shell {
             .items_center()
             .gap_2()
             .child(logo(t))
-            .child(format!("Inkuno {}", env!("CARGO_PKG_VERSION")))
+            .child(format!("inkuno {}", env!("CARGO_PKG_VERSION")))
             .child(div().flex_1().min_w(t.px(200.)).text_color(t.soft).child(tr(
                 "Fast, minimal Markdown notes, in plain files you own.",
                 "Des notes Markdown rapides et minimales, dans de simples fichiers qui vous appartiennent.",

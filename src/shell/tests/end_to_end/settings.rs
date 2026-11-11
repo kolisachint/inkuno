@@ -192,7 +192,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("down down enter");
     assert_eq!(
         look(cx),
-        ("Inkuno Light".to_string(), Hsla::from(gpui::rgb(0xfbfaf8)))
+        ("Inkuno Light".to_string(), Hsla::from(gpui::rgb(0xf5f5f2)))
     );
     // Code font, from the palette; text size from the keyboard.
     cx.simulate_keystrokes("secondary-p");
