@@ -57,6 +57,18 @@ fn layers_only_depend_downwards() {
                 server,
             ],
         ),
+        // The extracted logic crate answers to the same rule, from its own tree.
+        (
+            "crates/logic",
+            &[
+                "gpui",
+                "crate::platform",
+                "crate::ui",
+                "crate::views",
+                "crate::shell",
+                server,
+            ],
+        ),
         (
             "src/platform",
             &["gpui", "crate::ui", "crate::views", "crate::shell", server],

@@ -6,7 +6,7 @@
 //! of the spaces around it, and gives it back where it lands: paragraphs separated by a blank line
 //! stay so, list items stay tight. Pure functions.
 
-use crate::logic::markdown::{self as md, Kind};
+use crate::markdown::{self as md, Kind};
 use std::ops::Range;
 
 /// What a block can become.

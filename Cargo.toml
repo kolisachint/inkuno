@@ -13,6 +13,8 @@ base64 = "0.22.1"
 # Déjà tirée par gpui, à la même version : l'archive de la sauvegarde.
 flate2 = "1.1.4"
 gpui = "0.2.2"
+# The pure logic (Markdown, notes, vault lists): no gpui, no disk, no window.
+inkuno-logic = { version = "0.0.1", path = "crates/logic" }
 latex-rust = "2.1.0"
 mermaid-rs-renderer = { version = "0.3.1", default-features = false }
 # Le système signale les changements du coffre (inotify, FSEvents…). La 7 et non la 8 : celle-ci
@@ -41,6 +43,9 @@ libc = "0.2.177"
 
 [dev-dependencies]
 gpui = { version = "0.2.2", features = ["test-support"] }
+
+[workspace]
+members = [".", "crates/logic"]
 
 [profile.release]
 lto = "thin"

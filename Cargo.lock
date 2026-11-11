@@ -2676,6 +2676,7 @@ dependencies = [
  "base64",
  "flate2",
  "gpui",
+ "inkuno-logic",
  "latex-rust",
  "libc",
  "mermaid-rs-renderer",
@@ -2688,6 +2689,15 @@ dependencies = [
  "sha2",
  "svg2pdf",
  "ttf-parser 0.25.1",
+ "unicode-segmentation",
+ "unicode-width",
+]
+
+[[package]]
+name = "inkuno-logic"
+version = "0.0.1"
+dependencies = [
+ "regex",
  "unicode-segmentation",
  "unicode-width",
 ]

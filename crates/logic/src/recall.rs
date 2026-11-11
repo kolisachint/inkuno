@@ -4,8 +4,8 @@ use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-use crate::logic::markdown::{self, Date};
-use crate::logic::note::Note;
+use crate::markdown::{self, Date};
+use crate::note::Note;
 use crate::{lang::date_name, lang::tr};
 
 /// A note untouched for this long to be offered for rereading.
@@ -66,7 +66,7 @@ pub fn recall(notes: &[Note], today: Date, now: SystemTime) -> Vec<Recalled> {
     found
 }
 
-/// « il y a 3 mois » ("3 months ago"): an age in days, told in the largest unit that fits.
+/// "3 months ago": an age in days, told in the largest unit that fits.
 pub fn ago(days: i64) -> String {
     let said =
         |n: i64, one: (&'static str, &'static str), many: (&'static str, &'static str)| match n {
@@ -98,7 +98,7 @@ pub fn ago(days: i64) -> String {
     }
 }
 
-/// « vendredi 10 octobre » ("Friday 10 October"): the date in words, without the year.
+/// "Friday, October 10": the date in words, without the year.
 pub fn long_date(date: Date) -> String {
     let (_, month, day) = date;
     // 1 January 1970 was a Thursday: Monday is 0.
@@ -197,25 +197,25 @@ mod tests {
         assert_eq!(
             said,
             [
-                "aujourd'hui",
-                "hier",
-                "il y a 3 jours",
-                "il y a une semaine",
-                "il y a 2 semaines",
-                "il y a un mois",
-                "il y a un mois",
-                "il y a 2 mois",
-                "il y a 12 mois",
-                "il y a un an",
-                "il y a 2 ans"
+                "today",
+                "yesterday",
+                "3 days ago",
+                "a week ago",
+                "2 weeks ago",
+                "a month ago",
+                "a month ago",
+                "2 months ago",
+                "12 months ago",
+                "a year ago",
+                "2 years ago"
             ]
         );
     }
 
     #[test]
     fn long_date_spells_the_day() {
-        assert_eq!(long_date((2026, 10, 10)), "samedi 10 octobre");
-        assert_eq!(long_date((2026, 10, 1)), "jeudi 1er octobre");
-        assert_eq!(long_date((1970, 1, 1)), "jeudi 1er janvier");
+        assert_eq!(long_date((2026, 10, 10)), "Saturday, October 10");
+        assert_eq!(long_date((2026, 10, 1)), "Thursday, October 1");
+        assert_eq!(long_date((1970, 1, 1)), "Thursday, January 1");
     }
 }

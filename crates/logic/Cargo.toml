@@ -1,0 +1,13 @@
+[package]
+name = "inkuno-logic"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.88"
+description = "Pure logic of Inkuno: Markdown, notes, vault lists (no window, no disk)"
+license = "MIT"
+
+[dependencies]
+# Same versions as the app's Cargo.lock: never re-resolve, keep --locked/--offline green.
+regex = "=1.12.2"
+unicode-segmentation = "=1.13.3"
+unicode-width = "=0.2.2"

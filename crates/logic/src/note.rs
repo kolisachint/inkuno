@@ -2,7 +2,7 @@
 
 use std::{path::PathBuf, sync::Arc, time::SystemTime};
 
-use crate::logic::markdown;
+use crate::markdown;
 
 #[derive(Clone)]
 pub struct Note {
