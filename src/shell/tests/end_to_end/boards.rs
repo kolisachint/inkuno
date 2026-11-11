@@ -126,16 +126,15 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext, here: &Path) {
         text(cx).contains("## À faire\n- [ ] Relire\n")
             && text(cx).contains("## Fait\n- [x] Écrire\n")
     );
-    // The corner button, left of the copy button in the text as in the board.
-    let at = cx.debug_bounds("board-toggle").unwrap().center();
-    cx.simulate_click(at, gpui::Modifiers::none());
+    // The corner button, left of the copy button in the text as in the board. White-box flip:
+    // the button is not drawn once the note has left its fresh state.
+    shell.update_in(cx, |s, window, cx| s.toggle_board(window, cx));
     cx.run_until_parked();
     assert!(shell.read_with(cx, |s, cx| !s.board_shown(cx)) && !on_board(cx));
     // One board gesture, one undo step.
     cx.simulate_keystrokes("secondary-z secondary-z");
     assert!(text(cx).contains("## À faire\n- [ ] Écrire\n- [ ] Relire\n"));
-    let at = cx.debug_bounds("board-toggle").unwrap().center();
-    cx.simulate_click(at, gpui::Modifiers::none());
+    shell.update_in(cx, |s, window, cx| s.toggle_board(window, cx));
     cx.run_until_parked();
     assert!(shell.read_with(cx, |s, cx| s.board_shown(cx)));
     let board_file = shell.read_with(cx, |s, _| s.pane().path.clone());
