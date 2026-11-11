@@ -654,8 +654,10 @@ pub fn text_runs(
 }
 
 /// Byte ranges of `line` hidden when it is not the live one: its block prefix (`- `, `1. `,
-/// `> `, `- [ ] `, the indent kept so that nested items keep their level) and its inline style
-/// markers (`**`, backticks…). Links, tags, images, comments and callouts stay readable; a checked
+/// `> `, `- [ ] `, the indent kept so that nested items keep their level), its inline style
+/// markers (`**`, backticks…) and the address of a `[text](url)` link (`[` and `](url)` hide,
+/// the label alone stays, Typora-style; the clicked or edited line shows its source again).
+/// Bare addresses, tags, images, comments and callouts stay readable; a checked
 /// task keeps its (struck) text; code stays as is. The caller only asks for the kinds it hides.
 fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
@@ -672,26 +674,42 @@ fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, u
     if matches!(kind, Kind::Task(true)) {
         return out;
     }
-    // What stays readable: links, images, comments, callouts.
-    let links: Vec<Range<usize>> = md::links(line).into_iter().map(|(r, _)| r).collect();
+    // What stays readable: links, images, comments, callouts; of a `[text](url)` link,
+    // only the label stays, its `[` and `](url)` hide (the address reads `QUIET`, so the
+    // loops below name those bytes explicitly).
+    let mut links: Vec<Range<usize>> = Vec::new();
+    let mut urls: Vec<Range<usize>> = Vec::new();
+    for (r, link) in md::links(line) {
+        if matches!(link, md::Link::Url(_))
+            && let Some((text, _)) = md::web_link(&line[r.clone()])
+        {
+            urls.push(r.start..r.start + text.start);
+            urls.push(r.start + text.end..r.end);
+        }
+        links.push(r);
+    }
     let image = md::image(line).map(|(r, _)| r);
     let comments: Vec<Range<usize>> = md::comments(line).into_iter().map(|(w, ..)| w).collect();
     let callout = md::callout(line);
+    let addressed = |i: usize| urls.iter().any(|r| r.contains(&i));
     let kept = |i: usize| {
-        links.iter().any(|r| r.contains(&i))
+        (links.iter().any(|r| r.contains(&i))
             || image.as_ref().is_some_and(|r| r.contains(&i))
             || comments.iter().any(|r| r.contains(&i))
-            || callout.as_ref().is_some_and(|r| r.contains(&i))
+            || callout.as_ref().is_some_and(|r| r.contains(&i)))
+            && !addressed(i)
+    };
+    let hidden_byte = |i: usize| {
+        flags[i] & md::DIM != 0
+            && flags[i] & md::CODE == 0
+            && (flags[i] & md::QUIET == 0 || addressed(i))
+            && !kept(i)
     };
     let mut i = marker;
     while i < line.len() {
-        if flags[i] & md::DIM != 0 && flags[i] & (md::CODE | md::QUIET) == 0 && !kept(i) {
+        if hidden_byte(i) {
             let mut j = i + 1;
-            while j < line.len()
-                && flags[j] & md::DIM != 0
-                && flags[j] & (md::CODE | md::QUIET) == 0
-                && !kept(j)
-            {
+            while j < line.len() && hidden_byte(j) {
                 j += 1;
             }
             out.push((i, j));
@@ -2481,8 +2499,14 @@ mod tests {
         assert_eq!(hidden("- [x] done"), ["- [x] "]);
         // A heading keeps its title (its `# ` goes with the lead, not here).
         assert_eq!(hidden("# Title **b**"), ["**", "**"]);
-        // Phase 3 stays readable: links, images, comments, callouts, tables.
-        assert_eq!(hidden("[t](https://example.com)"), Vec::<&str>::new());
+        // A `[text](url)` link shows its label alone off-live; the clicked or edited
+        // line shows its source again. Bare addresses, wikilinks, tags, images,
+        // comments and callouts keep their source.
+        assert_eq!(
+            hidden("[t](https://example.com)"),
+            ["[", "](https://example.com)"]
+        );
+        assert_eq!(hidden("see https://example.com here"), Vec::<&str>::new());
         assert_eq!(hidden("see [[note]] here"), Vec::<&str>::new());
         assert_eq!(hidden("a #tag b"), Vec::<&str>::new());
         assert_eq!(hidden("![a](p.png)"), Vec::<&str>::new());
@@ -2574,7 +2598,8 @@ mod tests {
             cx.run_until_parked();
         };
         draw(cx);
-        // Nothing is live after a load: markers hide, fences/links/tables keep their source.
+        // Nothing is live after a load: markers and link addresses hide; fences, bare
+        // addresses and tables keep their source.
         let shown = |cx: &mut gpui::VisualTestContext, lines: &[usize]| {
             editor.read_with(cx, |e, _| {
                 (0..lines.len())
@@ -2593,10 +2618,7 @@ mod tests {
         assert_eq!(rows[6], ("task done".to_string(), false));
         assert_eq!(rows[8], ("first".to_string(), false));
         assert_eq!(rows[10], ("quote here".to_string(), false));
-        assert_eq!(
-            rows[12],
-            ("[our](https://example.com) link".to_string(), false)
-        );
+        assert_eq!(rows[12], ("our link".to_string(), false));
         assert_eq!(rows[14], ("code bit".to_string(), false));
         // Tables keep their source in their cells (phase 3): no hidden bytes, drawn as a grid.
         for l in [16, 17, 18] {
@@ -2610,8 +2632,8 @@ mod tests {
         assert_eq!(rows[23], (String::new(), false));
         assert_eq!(rows[24], ("---".to_string(), false));
         // Clicking the bold line reveals it; the others keep hiding.
-        let middle = editor.read_with(cx, |e, _| e.point_of(at(2) + 8).unwrap());
-        cx.simulate_click(middle, gpui::Modifiers::none());
+        let bold_middle = editor.read_with(cx, |e, _| e.point_of(at(2) + 8).unwrap());
+        cx.simulate_click(bold_middle, gpui::Modifiers::none());
         cx.run_until_parked();
         assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
         draw(cx);
@@ -2619,6 +2641,29 @@ mod tests {
         assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
         assert_eq!(rows[0], ("Title".to_string(), false));
         assert_eq!(rows[4], ("item one".to_string(), false));
+        // Clicking the link line reveals its address; the others keep hiding.
+        let link_middle = editor.read_with(cx, |e, _| e.point_of(at(12) + 1).unwrap());
+        cx.simulate_click(link_middle, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(12)));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(
+            rows[12],
+            ("[our](https://example.com) link".to_string(), true)
+        );
+        assert_eq!(rows[2], ("Hello bold and italic.".to_string(), false));
+        // Clicking back on the bold line hides the link address again.
+        cx.simulate_click(bold_middle, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.revealed), Some(at(2)));
+        draw(cx);
+        let rows = shown(cx, &lines);
+        assert_eq!(
+            rows[2],
+            ("Hello **bold** and *italic*.".to_string(), true)
+        );
+        assert_eq!(rows[12], ("our link".to_string(), false));
         // A plain keyboard move does not reveal: the cursor is on the title, still rendered.
         editor.update(cx, |e, cx| e.place_cursor(at(0) + 2, cx));
         draw(cx);
