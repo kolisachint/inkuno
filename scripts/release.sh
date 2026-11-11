@@ -8,15 +8,15 @@
 # main. The label gate (release-gate.yml) only bumps versions that already
 # have a previous tag; it never creates 0.0.1.
 #
-# Inkuno naming: TITLE/REPO below are placeholders for the Inkuno home. APP
-# follows Cargo.toml so the rename needs no edit here. Remaining `bref` asset
+# Inkuno naming: APP follows Cargo.toml and REPO defaults to the Inkuno home
+# below, so no edit is needed here. Remaining `bref` asset
 # strings elsewhere are the rename crew's lane (see RELEASING.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
 TITLE=Inkuno
-REPO="${INKUNO_REPO:-OWNER/inkuno}"
+REPO="${INKUNO_REPO:-kolisachint/inkuno}"
 managed=(Cargo.toml Cargo.lock)
 die() { echo "release: $*" >&2; exit 1; }
 ver=${1:?usage: scripts/release.sh X.Y.Z [notes-file]}
