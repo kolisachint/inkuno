@@ -2,10 +2,8 @@
 
 pub mod clock;
 pub mod export;
-pub mod git;
 pub mod link;
 pub mod pdf;
-pub mod update;
 pub mod vault;
 
 use std::{ffi::OsStr, fs, process::Command};

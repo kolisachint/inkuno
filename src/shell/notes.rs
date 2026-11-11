@@ -453,7 +453,7 @@ impl Shell {
                 Some(edits) => self.pane().editor.update(cx, |e, cx| e.absorb(&edits, cx)),
                 None => {
                     let date = date_name(today());
-                    let copy = git::free_conflict_path(path, &date, "");
+                    let copy = free_conflict_path(path, &date);
                     if let Err(e) = vault::write(&copy, &disk) {
                         let what = tr(
                             "Changed here and elsewhere, and the other version could not be kept:",
@@ -781,4 +781,35 @@ impl Shell {
             }
         }
     }
+}
+
+/// Where to write the other side's version of a conflicting note: next to it, as Dropbox
+/// and Syncthing do (plain-folder sync keeps both versions, no markers in the note).
+fn conflict_path(path: &Path, date: &str) -> PathBuf {
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let name = match path.extension() {
+        Some(extension) => format!("{stem} (conflict {date}).{}", extension.to_string_lossy()),
+        None => format!("{stem} (conflict {date})"),
+    };
+    path.with_file_name(name)
+}
+
+/// `conflict_path`, numbered when that name is taken: nothing is overwritten.
+fn free_conflict_path(path: &Path, date: &str) -> PathBuf {
+    let named = conflict_path(path, date);
+    let mut other = named.clone();
+    let mut n = 1;
+    while other.exists() {
+        n += 1;
+        let stem = named
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        other = named.with_file_name(match named.extension() {
+            Some(extension) => format!("{stem} {n}.{}", extension.to_string_lossy()),
+            None => format!("{stem} {n}"),
+        });
+    }
+    other
 }

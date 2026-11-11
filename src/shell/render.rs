@@ -334,7 +334,6 @@ impl Render for Shell {
                 }),
             )
             .on_action(cx.listener(|this, _: &Today, window, cx| this.open_today(window, cx)))
-            .on_action(cx.listener(|this, _: &SyncVault, window, cx| this.git_sync(window, cx)))
             .on_action(
                 cx.listener(|this, _: &SplitPane, window, cx| this.split(Side::Right, window, cx)),
             )
@@ -492,8 +491,6 @@ impl Render for Shell {
             }))
             .key_context("Shell")
             .child(body)
-            // Its own row under the panes, never over the note's footer (counter, formatting bar).
-            .children(self.render_update_banner(cx))
             .when(client, |d| d.child(pill))
             .children(self.render_menu(window, cx))
             .children(self.render_icons(window, cx))
@@ -697,18 +694,6 @@ impl Shell {
                         .hover(|s| s.bg(t.hover))
                         .child(tr("Open another folder…", "Ouvrir un autre dossier…"))
                         .on_click(cx.listener(|this, _, window, cx| this.choose_vault(window, cx))),
-                )
-                .child(
-                    div()
-                        .id("welcome-clone")
-                        .px_3()
-                        .py_1()
-                        .rounded(t.small())
-                        .cursor_pointer()
-                        .text_color(t.accent)
-                        .hover(|s| s.bg(t.hover))
-                        .child(tr("Clone a vault from a git address…", "Cloner un coffre depuis une adresse git…"))
-                        .on_click(cx.listener(|this, _, window, cx| this.ask_clone(window, cx))),
                 )
                 .child(div().text_size(t.px(12.)).text_color(t.soft).child(format!(
                     "{} · {}",
