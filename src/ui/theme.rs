@@ -845,9 +845,6 @@ mod tests {
             for h in HUES {
                 pairs.push(("hue/panel", t.hue(h, t.panel), t.panel, 4.5));
             }
-            for c in crate::logic::diagram::COLORS {
-                pairs.push(("diagram/bg", legible(rgb(c).into(), t.bg), t.bg, 4.5));
-            }
             for (what, fg, bg, min) in pairs {
                 let got = contrast(fg, bg);
                 if got < min {

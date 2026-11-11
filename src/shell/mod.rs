@@ -4,7 +4,6 @@
 
 mod board;
 mod capture;
-mod diagrams;
 mod docks;
 mod drops;
 mod files;
@@ -40,7 +39,7 @@ use toasts::*;
 use crate::actions::*;
 use crate::lang::{date_name, time_name, tr};
 use crate::logic::{
-    self, commands, diagram, embed, history, import,
+    self, commands, embed, history,
     layout::{self, Node, Side, Zone},
     markdown,
     prefs::Prefs,
@@ -55,10 +54,13 @@ use crate::ui::keys::{self, MOD};
 use crate::ui::{
     self,
     assets::{Assets, FAMILIES, apply_fonts, init_fonts, logo, mono, sans},
-    figure, line,
+    line,
     theme::{Page, THEMES, Theme, Wide},
     widgets::{drag_window, icon_button, icon_button_over, keycaps},
 };
+// `canvas` stays only for `keymap`'s `canvas::` actions (owned by another crew);
+// the stub module defines no view. The integrator removes both.
+#[allow(unused_imports)]
 use crate::views::{canvas, editor, field, graph, kanban, nav, palette, sheet, viewer};
 
 use std::{
@@ -76,8 +78,6 @@ use gpui::{
     WindowOptions, div, ease_out_quint, img, percentage, point, prelude::*, px, size, svg,
 };
 
-use canvas::{Canvas, CanvasEvent};
-use diagram::Diagram;
 use editor::{Editor, EditorEvent};
 use graph::{Graph, GraphEvent};
 use history::{History, Place, Shown};
@@ -187,8 +187,6 @@ struct Shell {
     toasts: Vec<Toast>,
     /// Number of the last message, to remove the right one when it expires.
     toasted: usize,
-    /// A starting point asked for from the library of a canvas, to open when the window is drawn.
-    template: Option<usize>,
     /// Newer version than the running one, found on GitHub.
     update: Option<update::Release>,
     /// Its install is in progress.
@@ -310,7 +308,6 @@ impl Shell {
             comments_seen: None,
             toasts: Vec::new(),
             toasted: 0,
-            template: None,
             update: None,
             updating: false,
             title: String::new(),

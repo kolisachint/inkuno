@@ -64,7 +64,6 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     lang::tr,
     logic::block,
-    logic::diagram::Diagram,
     logic::markdown::{self as md, Enter, Kind, Link, ListStyle},
     platform::vault,
     ui::assets::mono,

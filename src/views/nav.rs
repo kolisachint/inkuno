@@ -312,7 +312,6 @@ pub enum Do {
     Open,
     OpenAside,
     NewNote,
-    NewDiagram,
     NewFolder,
     /// A note born from a template, in the targeted folder.
     FromTemplate,
@@ -367,7 +366,6 @@ pub enum Share {
     PlainSave,
     SvgCopy,
     SvgSave,
-    Png,
     TableCopy,
     TableExport,
     ImageSave,
@@ -384,7 +382,6 @@ impl Share {
             Self::PlainSave => tr("Save a text copy…", "Enregistrer une copie texte…"),
             Self::SvgCopy => tr("Copy as SVG", "Copier en SVG"),
             Self::SvgSave => tr("Save an SVG copy…", "Enregistrer une copie SVG…"),
-            Self::Png => tr("Export as PNG", "Exporter en PNG"),
             Self::TableCopy => tr(
                 "Copy as… (table/selection)",
                 "Copier en… (tableau/sélection)",
@@ -406,7 +403,6 @@ impl Do {
         match self {
             Do::Open => of(cx, &Open),
             Do::NewNote => of(cx, &crate::actions::NewNote),
-            Do::NewDiagram => of(cx, &crate::actions::NewDiagram),
             Do::NewFolder => of(cx, &NewFolder),
             Do::FromTemplate => of(cx, &crate::actions::NewFromTemplate),
             Do::Rename => of(cx, &Rename),

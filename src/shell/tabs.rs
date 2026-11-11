@@ -233,7 +233,6 @@ impl Shell {
                     .items_center()
                     .justify_center();
                 let dirty = pane.dirty
-                    || pane.canvas_dirty
                     || pane.sheet().is_some_and(|sheet| sheet.read(cx).is_dirty());
                 // The slot at the row's end: the close cross on hover only, for any tab; an
                 // accent dot for a tab not saved yet otherwise; empty space to keep the row's

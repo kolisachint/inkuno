@@ -191,10 +191,8 @@ impl Shell {
                 PaletteEvent::Create(name) => this.open_wiki(name, window, cx),
                 PaletteEvent::ChangeVault => this.choose_vault(window, cx),
                 PaletteEvent::Help => this.set_help(true, window, cx),
-                PaletteEvent::NewDiagram => this.new_diagram(window, cx),
                 PaletteEvent::NewFolder => this.new_folder(window, cx),
                 PaletteEvent::Table(pick) => this.choose_table(*pick, window, cx),
-                PaletteEvent::ImportDiagram => this.import_diagram(window, cx),
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
                 PaletteEvent::ToggleUpdates => this.toggle_updates(cx),
                 PaletteEvent::CheckUpdate => this.check_now(cx),
@@ -268,7 +266,7 @@ impl Shell {
             .filter(|(action, ..)| available.contains(action))
             // Gestures of a block, a table or a diagram only count there: elsewhere, they would do nothing.
             .filter(|&(_, _, _, group)| {
-                !matches!(group, Group::Block | Group::Table | Group::Diagram)
+                !matches!(group, Group::Block | Group::Table)
                     || Some(group) == here
             })
             .filter_map(|(action, label, icon, group)| {
@@ -399,7 +397,7 @@ impl Shell {
                 .filter(|(action, ..)| !seen.contains(action))
                 .filter(|(action, ..)| available.contains(action))
                 .filter(|&(_, _, _, group)| {
-                    !matches!(group, Group::Block | Group::Table | Group::Diagram)
+                    !matches!(group, Group::Block | Group::Table)
                         || Some(group) == here
                 })
                 .filter_map(|(action, label, icon, group)| {

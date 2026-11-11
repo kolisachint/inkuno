@@ -266,13 +266,11 @@ impl Shell {
         sections
     }
 
-    /// The help section about what is shown: a CSV table, a diagram, a table
+    /// The help section about what is shown: a CSV table, a table
     /// of the note under the cursor; none for an ordinary note, the help starts with notes.
     pub(super) fn here(&self, cx: &App) -> Option<&'static str> {
         if self.shown_sheet().is_some() {
             Some(tr("CSV tables", "Tableaux CSV"))
-        } else if self.pane().drawing().is_some() {
-            Some(tr("Diagrams", "Schémas"))
         } else if self.pane().file.is_none()
             && self.pane().listing.is_none()
             && self.pane().editor.read(cx).in_table()
@@ -284,13 +282,11 @@ impl Shell {
     }
 
     /// The group of commands for what is being looked at, and its name for the palette field: a CSV
-    /// table, a diagram, a table of the note under the cursor, otherwise the cursor's block.
+    /// table, a table of the note under the cursor, otherwise the cursor's block.
     pub(super) fn here_group(&self, cx: &App) -> (Option<commands::Group>, &'static str) {
         use commands::Group;
         if self.shown_sheet().is_some() {
             (Some(Group::Table), tr("CSV table", "Tableau CSV"))
-        } else if self.pane().drawing().is_some() {
-            (Some(Group::Diagram), tr("Diagram", "Schéma"))
         } else if self.pane().file.is_some()
             || self.pane().listing.is_some()
             || self.board_shown(cx)

@@ -14,9 +14,7 @@ const FILES: [&str; 6] = [
 fn fixtures(root: &Path) {
     fs::write(root.join("Note.md"), "# Note\n\n![](Foreign.svg)\n").unwrap();
     fs::write(root.join("Other.md"), "# Other\n\n[[Note]]\n").unwrap();
-    let mut diagram = Diagram::default();
-    diagram.add_shape(diagram::Form::Rect, 20., 20., 120., 60.);
-    fs::write(root.join("Drawing.svg"), diagram.to_svg(diagram::COLORS[0])).unwrap();
+    fs::write(root.join("Drawing.svg"), r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##).unwrap();
     fs::write(root.join("Foreign.svg"), r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#3875c9"/></svg>"##).unwrap();
     let svg = fs::read_to_string(root.join("Foreign.svg")).unwrap();
     let png = crate::ui::figure::png(&svg, 1., 0xffffff).unwrap();

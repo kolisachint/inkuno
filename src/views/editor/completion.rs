@@ -64,7 +64,7 @@ pub(super) const COMMANDS: &[Command] = &[
     ("math", "Formula", "Formule", "$$\n", "\n$$"),
     ("rule", "Divider", "Séparateur", "---\n", ""),
     ("link", "Link to a note", "Lien vers une note", "[[", ""),
-    ("image", "Picture or diagram", "Image ou schéma", "![[", ""),
+    ("image", "Picture", "Image", "![[", ""),
 ];
 
 /// What completion offers: a name to put after `[[`, or a command.
@@ -119,7 +119,7 @@ impl Editor {
         (!items.is_empty() && self.ac_dismissed != Some(start)).then_some((start, items))
     }
 
-    /// After `[[`: the vault's notes; after `![[`: its images and diagrams.
+    /// After `[[`: the vault's notes; after `![[`: its images.
     pub(super) fn names(&self, before: &str, c: usize) -> Option<(usize, Vec<Choice<'_>>)> {
         let open = before.rfind("[[")?;
         let query = &before[open + 2..];
@@ -132,7 +132,7 @@ impl Editor {
         }
         let start = c - query.len();
         let query = query.to_lowercase();
-        // `![[` displays a file: the vault's images and diagrams are
+        // `![[` displays a file: the vault's images are
         // offered, by file name; `[[` offers notes.
         let embed = before[..open].ends_with('!');
         let mut items: Vec<&str> = match embed {

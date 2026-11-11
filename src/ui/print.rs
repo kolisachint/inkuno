@@ -13,7 +13,6 @@ use ttf_parser::Face;
 use unicode_width::UnicodeWidthChar;
 
 use crate::lang::tr;
-use crate::logic::diagram::Diagram;
 use crate::logic::markdown::{self as md, Kind, Link};
 use crate::ui::{figure, svg, theme};
 
@@ -651,10 +650,7 @@ impl Rows {
                 ),
             },
             Found::Svg(text) => {
-                let drawn = Diagram::from_svg(&text).map_or_else(
-                    || svg::readable(&text, false),
-                    |d| d.to_svg(u32::from_be_bytes([0, ink.rgb[0], ink.rgb[1], ink.rgb[2]])),
-                );
+                let drawn = svg::readable(&text, false);
                 self.figure(&drawn, path, 0., ink);
             }
             // ponytail: the embedded rows are moved 12 points right after being laid out at full width,

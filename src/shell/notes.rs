@@ -3,6 +3,29 @@
 use super::*;
 
 impl Shell {
+    /// Shows a Mermaid figure or a picture of the note large, in its place.
+    /// The canvas is gone: `ViewerEvent::ToCanvas` ("edit on the canvas")
+    /// closes the figure again instead of making a canvas diagram.
+    pub(super) fn show_figure(
+        &mut self,
+        source: viewer::Source,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let theme = self.theme;
+        let figure = cx.new(|cx| viewer::Viewer::new(source, theme, cx));
+        cx.subscribe_in(&figure, window, |this, _, event, window, cx| match event {
+            viewer::ViewerEvent::ToCanvas(_) => {
+                this.pane_mut().figure = None;
+                this.focus_pane(this.active, window, cx);
+            }
+        })
+        .detach();
+        window.focus(&figure.focus_handle(cx));
+        self.pane_mut().figure = Some(figure);
+        cx.notify();
+    }
+
     /// Copies the whole note to the clipboard.
     /// Copies the note; with `block`, only the code block the cursor is in,
     /// if there is one.
@@ -66,6 +89,7 @@ impl Shell {
             return self.open_table(path, cx);
         }
         // A picture takes the note's place; the note stays loaded underneath.
+        // An SVG file opens in the viewer: zoom in, move around.
         if vault::is_image(path) {
             let svg = path
                 .extension()
@@ -79,33 +103,10 @@ impl Shell {
             let theme = self.theme;
             let kind = match open {
                 _ if !svg => FileKind::Image,
-                // A diagram opens in its canvas, ready to be edited again.
-                Some(FileKind::Drawing(canvas)) => FileKind::Drawing(canvas),
-                open => {
-                    let text = fs::read_to_string(path).ok();
-                    match text.as_deref().and_then(Diagram::from_svg) {
-                        Some(diagram) => {
-                            let canvas = cx.new(|cx| Canvas::new(diagram, theme, cx));
-                            cx.subscribe(&canvas, Self::on_canvas_event).detach();
-                            FileKind::Drawing(canvas)
-                        }
-                        // An SVG from elsewhere opens in the viewer: zoom in, move around. So does a
-                        // diagram of a newer Inkuno, which this one could only damage by saving it.
-                        None => match open {
-                            Some(FileKind::Svg(viewer)) => FileKind::Svg(viewer),
-                            _ => {
-                                if text.as_deref().is_some_and(Diagram::newer) {
-                                    let notice = tr(
-                                        "Made by a newer Inkuno: shown read-only",
-                                        "Fait par un Inkuno plus récent : en lecture seule",
-                                    );
-                                    self.say(Tone::Info, notice, cx);
-                                }
-                                let source = viewer::Source::File(path.to_path_buf(), None);
-                                FileKind::Svg(cx.new(|cx| viewer::Viewer::new(source, theme, cx)))
-                            }
-                        },
-                    }
+                Some(FileKind::Svg(viewer)) => FileKind::Svg(viewer),
+                _ => {
+                    let source = viewer::Source::File(path.to_path_buf(), None);
+                    FileKind::Svg(cx.new(|cx| viewer::Viewer::new(source, theme, cx)))
                 }
             };
             self.set_file(
@@ -486,7 +487,7 @@ impl Shell {
     // ponytail: synchronous write on the UI thread (a few KB, < 1 ms);
     // move to a background task if notes get very large.
     pub(super) fn flush_one(&mut self, cx: &mut Context<Self>) -> bool {
-        if !self.flush_sheet(cx) || !self.flush_canvas(cx) {
+        if !self.flush_sheet(cx) {
             return false;
         }
         let Some(root) = self.vault.clone() else {

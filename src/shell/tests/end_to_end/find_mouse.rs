@@ -225,41 +225,6 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(selected(cx), "alpha beta gamma delta\nsecond\ntroisième");
     cx.simulate_mouse_up(third, gpui::MouseButton::Left, gpui::Modifiers::none());
 
-    // Import: an Excalidraw file becomes a diagram of the vault, under its name.
-    // Its PNG image is saved next to it.
-    let outside = root.join(".config/croquis.excalidraw");
-    fs::write(
-        &outside,
-        r#"{"elements":[{"id":"a","type":"ellipse","x":0,"y":0,"width":80,"height":60}]}"#,
-    )
-    .unwrap();
-    shell.update_in(cx, |s, window, cx| s.import_file(&outside, window, cx));
-    cx.run_until_parked();
-    let (file, canvas) = shell.read_with(cx, |s, _| {
-        (
-            s.pane().file_path().cloned().unwrap(),
-            s.pane().drawing().cloned().unwrap(),
-        )
-    });
-    assert_eq!(
-        (
-            file.file_name().unwrap().to_str(),
-            canvas.read_with(cx, |c, _| c.diagram().shapes.len())
-        ),
-        (Some("croquis.svg"), 1)
-    );
-    shell.update(cx, |s, cx| s.export_png(file.clone(), &canvas, cx));
-    cx.run_until_parked();
-    assert!(
-        fs::read(file.with_extension("png"))
-            .unwrap()
-            .starts_with(b"\x89PNG")
-    );
-    assert!(
-        shell.read_with(cx, |s, _| s.images.contains(&file.with_extension("png"))
-            && !s.told(Tone::Failed, ""))
-    );
-
     // The tree's « nouvelle note » button saves at the vault root, even with a folder selected.
     shell.update_in(cx, |s, _, cx| {
         s.nav.panel = Panel::Split;

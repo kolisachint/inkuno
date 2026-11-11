@@ -29,19 +29,8 @@ fn vault_label() -> &'static str {
     tr("Change vault…", "Changer de coffre…")
 }
 
-fn diagram_label() -> &'static str {
-    tr("New diagram", "Nouveau schéma")
-}
-
 fn folder_label() -> &'static str {
     tr("New folder", "Nouveau dossier")
-}
-
-fn import_label() -> &'static str {
-    tr(
-        "Import a diagram (Excalidraw, draw.io)…",
-        "Importer un schéma (Excalidraw, draw.io)…",
-    )
 }
 
 fn updates_label(on: bool) -> &'static str {
@@ -233,9 +222,7 @@ pub enum PaletteEvent {
     Create(String),
     ChangeVault,
     Help,
-    NewDiagram,
     NewFolder,
-    ImportDiagram,
     Setting(Setting),
     /// Setting or gesture of the shown table.
     Table(Pick),
@@ -288,9 +275,7 @@ enum Item {
     Create,
     Vault,
     Help,
-    Diagram,
     Folder,
-    Import,
     Updates,
     Check,
     Install,
@@ -692,11 +677,7 @@ impl Palette {
             }
         }
         // Like the settings: offered only when searched for.
-        for (label, item) in [
-            (diagram_label(), Item::Diagram),
-            (folder_label(), Item::Folder),
-            (import_label(), Item::Import),
-        ] {
+        for (label, item) in [(folder_label(), Item::Folder)] {
             if !q.is_empty() && command(&q, label) {
                 items.push(item);
             }
@@ -785,7 +766,6 @@ impl Palette {
                             | "app::GoForward"
                             | "app::SyncVault"
                             | "app::ToggleHelp"
-                            | "app::NewDiagram"
                             | "nav::NewFolder"
                             | "app::NewFromTemplate"
                             | "app::ChooseTheme"
@@ -842,14 +822,12 @@ impl Palette {
             Some(Item::Create) => PaletteEvent::Create(self.query.text.trim().to_string()),
             Some(Item::Vault) => PaletteEvent::ChangeVault,
             Some(Item::Help) => PaletteEvent::Help,
-            Some(Item::Diagram) => PaletteEvent::NewDiagram,
             Some(Item::Folder) => PaletteEvent::NewFolder,
             Some(&Item::Table(pick)) => PaletteEvent::Table(pick),
             Some(&Item::Restyle(style)) => PaletteEvent::Restyle(style),
             Some(&Item::Grid(op)) => PaletteEvent::Grid(op),
             Some(&Item::Command(n)) => PaletteEvent::Run(self.commands[n].action),
             Some(&Item::Template(act)) => PaletteEvent::Template(act),
-            Some(Item::Import) => PaletteEvent::ImportDiagram,
             Some(Item::Updates) => PaletteEvent::ToggleUpdates,
             Some(Item::Check) => PaletteEvent::CheckUpdate,
             Some(Item::Outline) => PaletteEvent::Outline,
@@ -1087,9 +1065,7 @@ impl Render for Palette {
                 ),
                 Item::Vault => (vault_label().to_string(), crate::ui::keys::of(cx, &crate::actions::OpenVault)),
                 Item::Help => (help_label().to_string(), crate::ui::keys::of(cx, &crate::actions::ToggleHelp)),
-                Item::Diagram => (diagram_label().to_string(), crate::ui::keys::of(cx, &crate::actions::NewDiagram)),
                 Item::Folder => (folder_label().to_string(), crate::ui::keys::of(cx, &crate::views::nav::NewFolder)),
-                Item::Import => (import_label().to_string(), String::new()),
                 Item::Updates => (updates_label(self.updates.unwrap_or(true)).to_string(), String::new()),
                 Item::Check => (check_label().to_string(), String::new()),
                 Item::Outline => (outline_label().to_string(), crate::ui::keys::of(cx, &crate::actions::Outline)),
@@ -1116,7 +1092,7 @@ impl Render for Palette {
             // Where the detail is a shortcut, not a description.
             let shortcut = matches!(
                 item,
-                Item::Vault | Item::Help | Item::Diagram | Item::Folder | Item::Outline | Item::Grid(_) | Item::Template(_) | Item::Today | Item::Back | Item::Forward | Item::Sync
+                Item::Vault | Item::Help | Item::Folder | Item::Outline | Item::Grid(_) | Item::Template(_) | Item::Today | Item::Back | Item::Forward | Item::Sync
             );
             let note = matches!(item, Item::Note(_));
             let age = match item {

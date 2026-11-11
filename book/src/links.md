@@ -52,8 +52,8 @@ The file stays plain Markdown: other apps show the line as a link.
 `![](picture.png)` or `![[picture.png]]` shows the picture under its line: PNG, JPEG, GIF, WebP, SVG, BMP, TIFF or AVIF. Inkuno looks for it next to the note, then at the top of the vault, then by its file name anywhere in the vault.
 
 - `Ctrl + V` with a picture in the clipboard saves it next to the note and inserts its `![](…)` line.
-- Typing `![[` suggests the diagrams and pictures of the vault.
-- **Enlarge**: point at a picture (PNG, JPEG, GIF, WebP…), a formula, an SVG or a Mermaid diagram, and a magnifier button appears at its corner, or beside it when it is too small to hold it. It opens a viewer: `Ctrl + wheel` zooms around the pointer, and dragging moves the picture. See [the viewer](diagrams.md#svg-files-from-elsewhere).
+- Typing `![[` suggests the pictures of the vault.
+- **Enlarge**: point at a picture (PNG, JPEG, GIF, WebP…), a formula, an SVG or a Mermaid diagram, and a magnifier button appears at its corner, or beside it when it is too small to hold it. It opens a viewer: `Ctrl + wheel` zooms around the pointer, and dragging moves the picture.
 - A click on the picture itself still places the cursor. A missing or unreadable picture has no button.
 
 Pictures are part of the vault. See [Files on disk](vault.md#pictures-csv-and-other-files).
