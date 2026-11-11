@@ -12,6 +12,7 @@ pub(super) struct LayoutKey {
     pub(super) cursor: usize,
     pub(super) revealed: Option<usize>,
     pub(super) marked: Option<Range<usize>>,
+    pub(super) code_gen: u64,
 }
 
 /// What changed in the text since the last layout: its first `prefix` bytes
@@ -36,6 +37,8 @@ pub(super) struct Laid {
     pub(super) dollars: usize,
     /// Length of the front matter.
     pub(super) meta: usize,
+    /// Fold generation of the last layout: a toggle redoes everything.
+    pub(super) code_gen: u64,
 }
 
 /// A zone of the text to lay out again: the lines of the old layout `old` (indices),
@@ -720,6 +723,7 @@ impl Editor {
             || laid.width != f32::from(width).to_bits()
             || laid.room != f32::from(room).to_bits()
             || laid.size != self.theme.size.to_bits()
+            || laid.code_gen != self.code_gen
             || laid.dollars > 0
             || self.marked.is_some()
             || self.loading
@@ -990,6 +994,7 @@ impl Editor {
             cursor: self.cursor(),
             revealed: self.revealed,
             marked: self.marked.clone(),
+            code_gen: self.code_gen,
         };
         if self.laid_out.as_ref() != Some(&key) {
             self.laid_out = None;
@@ -1759,8 +1764,9 @@ impl Editor {
                                 len: cut,
                                 dy: px(0.),
                             });
-                        let wrap = (kind != Kind::Table)
-                            .then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
+                        let wrap =
+                            (kind != Kind::Table && kind != Kind::Code && kind != Kind::Fence)
+                                .then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
                         let line = shape(&shown[cut..], font_size, &runs, wrap);
                         if let Some(lead) = &mut lead {
                             // An empty title has no metrics of its own: those of a letter will do.
@@ -1985,6 +1991,80 @@ impl Editor {
             last.height += TABLE_GAP;
             y += TABLE_GAP;
         }
+        // Typora-style code blocks (§9.1): a fenced block hides its body by default and shows its
+        // header only (language + copy + chevron); long lines never wrap (the shape above leaves
+        // them whole) and scroll inside the page instead (frames below). Mermaid blocks stay
+        // open: their figure draws under the source.
+        self.code_meta.clear();
+        {
+            let mut i = 0;
+            while i < rows.len() {
+                let open = rows[i].opens && rows[i].kind == Kind::Fence;
+                let mut j = i + 1;
+                while j < rows.len() && rows[j].kind == Kind::Code {
+                    j += 1;
+                }
+                let closed =
+                    open && j < rows.len() && rows[j].kind == Kind::Fence && !rows[j].opens;
+                if closed {
+                    let wide = rows[i..=j]
+                        .iter()
+                        .map(Row::content_width)
+                        .fold(px(0.), |a, b| a.max(b));
+                    let (first, last) = (&rows[i], &rows[j]);
+                    self.code_meta.push(CodeMeta {
+                        range: first.start..last.start + last.len,
+                        rows: i..j + 1,
+                        wide,
+                    });
+                    i = j + 1;
+                } else {
+                    i += 1;
+                }
+            }
+        }
+        // A folded block takes no room: its body and closing fence collapse to zero height.
+        // A block holding the cursor or the revealed line stays open (clicked-line reveal).
+        for n in 0..self.code_meta.len() {
+            let (start, line, len, body) = {
+                let meta = &self.code_meta[n];
+                let open = &rows[meta.rows.start];
+                (
+                    meta.range.start,
+                    open.start,
+                    open.len,
+                    rows[meta.rows.start + 1].start..meta.range.end,
+                )
+            };
+            if self.code_is_mermaid(line, len)
+                || self.code_open.contains(&start)
+                || body.contains(&cursor)
+                || self.revealed.is_some_and(|r| body.contains(&r))
+            {
+                continue;
+            }
+            rows[self.code_meta[n].rows.start].foot = true;
+            for r in &mut rows[self.code_meta[n].rows.start + 1..self.code_meta[n].rows.end] {
+                r.pad = px(0.);
+                r.height = px(0.);
+                r.gap = px(0.);
+            }
+        }
+        // Folds of deleted blocks go with them.
+        let live: Vec<usize> = self.code_meta.iter().map(|m| m.range.start).collect();
+        self.code_open.retain(|s| live.contains(s));
+        // Collapsed lines take no room: heights run again from the top.
+        {
+            let mut at = px(0.);
+            for r in rows.iter_mut() {
+                r.y = at;
+                at += r.height
+                    + r.image_height()
+                    + r.embed.as_ref().map_or(px(0.), |e| e.height())
+                    + r.gap;
+            }
+            y = at;
+        }
         embeds.sweep(&rows, frame as u64);
         self.rows = rows;
         self.rows_revision = self.revision;
@@ -2046,6 +2126,7 @@ impl Editor {
             fences: fences0,
             dollars: dollars0,
             meta,
+            code_gen: self.code_gen,
         });
         // Lines no longer in use (deleted, changed) go when they outnumber the note.
         if shaped.len() > self.rows.len() * 2 + 256 {
@@ -2212,6 +2293,18 @@ impl Editor {
                     )
                 })
                 .collect();
+            self.fold_hitboxes = self
+                .opening
+                .iter()
+                .map(|&i| &self.rows[i])
+                .filter(|r| self.folds(r))
+                .map(|r| {
+                    (
+                        r.start,
+                        window.insert_hitbox(self.fold_bounds(r), HitboxBehavior::Normal),
+                    )
+                })
+                .collect();
             self.big_hitboxes = self
                 .rows
                 .iter()
@@ -2331,6 +2424,72 @@ impl Editor {
         }
         if self.readonly {
             return;
+        }
+        // Frame of each code block wider than the page: its long lines scroll inside the
+        // page instead of spilling it (§9.1). Only the body scrolls: the fences stay put,
+        // so the language and the copy button are always visible.
+        let scrolled = std::mem::take(&mut self.code_x);
+        self.codes.clear();
+        for n in 0..self.code_meta.len() {
+            let (start, end, wide, at) = {
+                let meta = &self.code_meta[n];
+                (
+                    meta.range.start,
+                    meta.range.end,
+                    meta.wide,
+                    meta.rows.clone(),
+                )
+            };
+            if !self.code_open_at(start) {
+                self.rows[at.clone()].iter_mut().for_each(|r| r.dx = px(0.));
+                continue;
+            }
+            let frame_w = wide.min(width);
+            let overflow = (wide - width).max(px(0.));
+            let mut dx = scrolled
+                .get(&start)
+                .copied()
+                .unwrap_or_default()
+                .max(px(0.))
+                .min(overflow);
+            if reveal && (start..=end).contains(&cursor) {
+                let i = self
+                    .row_at(cursor)
+                    .unwrap_or(at.start)
+                    .clamp(at.start, at.end - 1);
+                let row = &self.rows[i];
+                // Where the cursor would be without scrolling.
+                let x = row.pos(cursor - row.start).x + row.dx;
+                let margin = px(24.);
+                if x - dx < margin {
+                    dx = x - margin;
+                } else if x - dx > frame_w - margin {
+                    dx = x - frame_w + margin;
+                }
+                dx = dx.max(px(0.)).min(overflow);
+            }
+            if overflow > px(0.) {
+                self.code_x.insert(start, dx);
+            }
+            self.rows[at.clone()].iter_mut().for_each(|r| {
+                r.dx = if r.kind == Kind::Code { dx } else { px(0.) };
+            });
+            let (first, last) = (&self.rows[at.start], &self.rows[at.end - 1]);
+            let top = first.y + first.pad;
+            let frame = Bounds::new(
+                self.origin + point(px(0.), top),
+                size(frame_w, last.y + last.height - last.gap - top),
+            );
+            if overflow > px(0.) {
+                let thumb = (frame_w * (frame_w / wide)).max(px(24.));
+                let at = (frame_w - thumb) * (dx / overflow);
+                let bar = Bounds::new(
+                    point(frame.left() + at, frame.bottom() - px(5.)),
+                    size(thumb, px(3.)),
+                );
+                self.thumbs.push(bar);
+            }
+            self.codes.push((start..end, frame));
         }
         let bars = self.tables.iter().flat_map(|(_, frame)| plus_bars(*frame));
         self.table_hitboxes = bars
@@ -2557,6 +2716,72 @@ mod tests {
             }
         }
         out
+    }
+
+    #[gpui::test]
+    fn code_blocks_fold_until_expanded(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        let long = "x".repeat(500);
+        let text = format!("```rust\nfn short() {{}}\n{long}\n```\n\nafter\n");
+        let at = |line: usize| starts(&text)[line];
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        draw(cx);
+        // Hidden by default: the header shows, the body and closing fence take no room.
+        let state = editor.read_with(cx, |e, _| e.code_state().unwrap());
+        assert_eq!(state, (at(0), false, 1));
+        // The header keeps its copy affordance and gains a fold chevron.
+        assert!(editor.read_with(cx, |e, _| e.copy_button().is_some()));
+        assert!(editor.read_with(cx, |e, _| e.fold_button().is_some()));
+        // Clicking the header unfolds the block.
+        let header = editor.read_with(cx, |e, _| e.point_of(at(0) + 3).unwrap());
+        cx.simulate_click(header, gpui::Modifiers::none());
+        cx.run_until_parked();
+        draw(cx);
+        let state = editor.read_with(cx, |e, _| e.code_state().unwrap());
+        assert_eq!(state, (at(0), true, 4));
+        // The long line never wraps: one visual row, wider than the page.
+        let (visual, wide_over, frame_ok) = editor.read_with(cx, |e, _| {
+            let row = e.rows.iter().find(|r| r.start == at(2)).unwrap();
+            let meta = e.code_meta.first().unwrap();
+            let frame = e
+                .codes
+                .iter()
+                .find(|(range, _)| range.start == meta.range.start)
+                .map(|(_, f)| *f);
+            (
+                row.visual_rows(),
+                meta.wide > e.width,
+                frame.map_or(false, |f| f.size.width <= e.width),
+            )
+        });
+        assert_eq!(visual, 1);
+        assert!(wide_over && frame_ok, "wide code scrolls inside the page");
+        // The chevron folds it again; Enter on the header unfolds.
+        let chevron = editor.read_with(cx, |e, _| e.fold_button().unwrap());
+        cx.simulate_click(chevron, gpui::Modifiers::none());
+        cx.run_until_parked();
+        draw(cx);
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.code_state().unwrap()),
+            (at(0), false, 1)
+        );
+        editor.update(cx, |e, cx| e.newline(cx));
+        cx.run_until_parked();
+        draw(cx);
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.code_state().unwrap()),
+            (at(0), true, 4)
+        );
+        // The prose after the block lays out untouched.
+        let after = editor.read_with(cx, |e, _| displayed(e, at(5)));
+        assert_eq!(after, ("after".to_string(), false));
     }
 
     #[gpui::test]

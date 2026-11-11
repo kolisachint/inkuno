@@ -167,6 +167,17 @@ pub(super) struct TableMeta {
     pub(super) wide: Pixels,
 }
 
+/// A fenced code block of the note: its extent, its rows and its width.
+/// The header (opening fence) always shows; the body hides while folded.
+pub(super) struct CodeMeta {
+    /// Bytes, from the opening fence to the end of the closing one.
+    pub(super) range: Range<usize>,
+    /// Indices of its lines, header first.
+    pub(super) rows: Range<usize>,
+    /// Width of its widest line, unwrapped.
+    pub(super) wide: Pixels,
+}
+
 impl Editor {
     /// First table: how far it scrolled, largest number of visual lines of one
     /// of its rows, its frame, the text width and the view.
@@ -197,6 +208,25 @@ impl Editor {
         self.grid?;
         let step = |n: usize| px(16.) + GRID_STEP * (n - 1) as f32;
         Some(self.popup_at(Self::grid_size())? + point(step(col), step(row)))
+    }
+
+    /// What a test reads of the first code block: its start, whether its source
+    /// shows, and how many of its lines take room on screen.
+    #[cfg(test)]
+    pub fn code_state(&self) -> Option<(usize, bool, usize)> {
+        let meta = self.code_meta.first()?;
+        let shown = self.rows[meta.rows.clone()]
+            .iter()
+            .filter(|r| r.height > px(0.))
+            .count();
+        Some((meta.range.start, self.code_open_at(meta.range.start), shown))
+    }
+
+    /// Center of the fold chevron of the first code block, if it has one.
+    #[cfg(test)]
+    pub fn fold_button(&self) -> Option<Point<Pixels>> {
+        let row = self.rows.iter().find(|r| self.folds(r))?;
+        Some(self.fold_bounds(row).center())
     }
 
     pub(super) fn is_table_line(&self, line: &Range<usize>) -> bool {

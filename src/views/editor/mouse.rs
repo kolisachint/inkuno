@@ -387,6 +387,22 @@ impl Editor {
         Some(row.start)
     }
 
+    /// The fold chevron of a code block: left of the copy button, as the
+    /// Mermaid enlarge button is.
+    pub(super) fn fold_bounds(&self, row: &Row) -> Bounds<Pixels> {
+        let copy = self.copy_bounds(row);
+        Bounds::new(copy.origin - point(COPY_SIZE + px(4.), px(0.)), copy.size)
+    }
+
+    /// Start of the code block whose fold chevron is under the pointer.
+    pub(super) fn fold_at(&self, at: Point<Pixels>) -> Option<usize> {
+        let row = self
+            .rows
+            .iter()
+            .find(|r| self.folds(r) && self.fold_bounds(r).contains(&at))?;
+        Some(row.start)
+    }
+
     /// The line opens a Mermaid block: it also carries the button that shows the diagram enlarged,
     /// left of the copy one.
     pub(super) fn views(&self, row: &Row) -> bool {
@@ -518,6 +534,11 @@ impl Editor {
                 self.content[block].to_string(),
             )));
         }
+        // Fold chevron, left of a code block's copy button.
+        if let Some(start) = self.fold_at(e.position) {
+            self.toggle_code(start, cx);
+            return;
+        }
         // Copy button, right of a code block's opening.
         if let Some(start) = self.copy_at(e.position)
             && let Some(block) = md::code_block(&self.content, self.line_range(start).end + 1)
@@ -625,6 +646,14 @@ impl Editor {
             return self.toggle_task(cx);
         }
         // Typora-style: the clicked line shows its source; a plain cursor move does not.
+        // A folded code block unfolds when its header is clicked.
+        if self.code_meta.iter().any(|m| m.range.start == lr.start)
+            && !self.code_open_at(lr.start)
+            && !self.code_is_mermaid(lr.start, line.len())
+        {
+            self.code_open.insert(lr.start);
+            self.code_gen += 1;
+        }
         self.revealed = Some(lr.start);
         match e.click_count {
             n @ (2 | 3) => {
@@ -796,9 +825,10 @@ impl Editor {
             self.copy_at(e.position),
             self.view_at(e.position),
             self.big_at(e.position),
+            self.fold_at(e.position),
         );
-        if hover != (self.hover, self.view_hover, self.big_hover) {
-            (self.hover, self.view_hover, self.big_hover) = hover;
+        if hover != (self.hover, self.view_hover, self.big_hover, self.fold_hover) {
+            (self.hover, self.view_hover, self.big_hover, self.fold_hover) = hover;
             cx.notify();
         }
         if let Some(cell) = self.grid_at(e.position)
@@ -849,6 +879,14 @@ impl Editor {
             .find(|(_, frame)| frame.contains(&e.position))
         {
             *self.table_x.entry(range.start).or_default() -= dx;
+        }
+        // Shift + wheel, or horizontal gesture, over a wide code block scrolls it.
+        if let Some((range, _)) = self
+            .codes
+            .iter()
+            .find(|(_, frame)| frame.contains(&e.position))
+        {
+            *self.code_x.entry(range.start).or_default() -= dx;
         }
         self.scroll_y -= dy;
         cx.notify();
