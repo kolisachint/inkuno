@@ -88,58 +88,6 @@ fn the_current_file_follows_mixed_views(cx: &mut TestAppContext) {
     current(cx, "Data.tsv");
 }
 
-/// Graph nodes use the displayed file; tables have no node, and backlinks stay on the last note.
-#[gpui::test]
-fn the_current_file_in_the_graph_is_not_the_backlink_anchor(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = start(cx, "current-graph");
-    fixtures(&root);
-    shell.update(cx, |s, cx| s.rescan(&root, cx));
-    shell.update_in(cx, |s, window, cx| {
-        s.open_from_nav(&root.join("Note.md"), window, cx);
-        s.show_nav(Mode::Graph, false, window, cx);
-    });
-    frames(cx);
-    for file in FILES {
-        shell.update_in(cx, |s, window, cx| {
-            s.open_from_nav(&root.join(file), window, cx)
-        });
-        frames(cx);
-        // Selection is independent of the document. Do not preview the selected row here.
-        shell.update(cx, |s, cx| {
-            s.nav.sel = Some(root.join("Other.md"));
-            cx.notify();
-        });
-        frames(cx);
-        shell.read_with(cx, |s, cx| {
-            let expected =
-                (!file.ends_with(".csv") && !file.ends_with(".tsv")).then(|| root.join(file));
-            assert_eq!(
-                s.graph.read(cx).indicated(),
-                (expected.as_deref(), Some(root.join("Other.md").as_path())),
-                "{file}"
-            );
-            assert_eq!(
-                s.nav.anchor,
-                Some(root.join("Note.md")),
-                "backlinks while showing {file}"
-            );
-        });
-    }
-    shell.update_in(cx, |s, window, cx| {
-        s.show_nav(Mode::Links, false, window, cx)
-    });
-    frames(cx);
-    assert_eq!(
-        shell.read_with(cx, |s, _| s
-            .nav
-            .rows
-            .iter()
-            .map(|r| r.path.clone())
-            .collect::<Vec<_>>()),
-        vec![root.join("Other.md")]
-    );
-}
-
 /// Palette and history use the same current marker as the tree, in every supported view.
 #[gpui::test]
 fn the_current_file_follows_the_palette_and_history(cx: &mut TestAppContext) {
@@ -269,7 +217,7 @@ fn the_current_file_does_not_fall_back_after_external_changes(cx: &mut TestAppCo
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     shell.update_in(cx, |s, window, cx| {
         s.open_from_nav(&root.join("Note.md"), window, cx);
-        s.show_nav(Mode::Graph, false, window, cx);
+        s.show_nav(Mode::Tree, false, window, cx);
     });
     for (from, to) in [
         ("Foreign.svg", Some("Renamed.svg")),
@@ -278,15 +226,6 @@ fn the_current_file_does_not_fall_back_after_external_changes(cx: &mut TestAppCo
     ] {
         shell.update(cx, |s, cx| s.open_note(&root.join(from), cx));
         frames(cx);
-        assert_eq!(
-            shell.read_with(cx, |s, cx| s
-                .graph
-                .read(cx)
-                .indicated()
-                .0
-                .map(Path::to_path_buf)),
-            Some(root.join(from))
-        );
         match to {
             Some(to) => fs::rename(root.join(from), root.join(to)).unwrap(),
             None => fs::remove_file(root.join(from)).unwrap(),
@@ -294,7 +233,6 @@ fn the_current_file_does_not_fall_back_after_external_changes(cx: &mut TestAppCo
         shell.update(cx, |s, cx| s.rescan(&root, cx));
         frames(cx);
         shell.read_with(cx, |s, cx| {
-            assert_eq!(s.graph.read(cx).indicated().0, None);
             assert_eq!(s.pane().displayed_path(), Some(&root.join(from)));
             assert!(
                 !s.nav_rows()

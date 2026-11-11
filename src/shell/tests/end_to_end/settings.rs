@@ -109,7 +109,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("secondary-g");
     assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
     cx.simulate_keystrokes("secondary-shift-y");
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Graph);
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), nav::Mode::Tree);
     // Keys already taken: the line says by what, and nothing is taken without « remplacer ».
     cx.simulate_keystrokes("f1");
     cx.simulate_input("graphe des notes");
@@ -133,7 +133,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("escape escape secondary-e secondary-p");
     assert_eq!(
         shell.read_with(cx, |s, _| (s.nav.mode, s.palette.is_none())),
-        (nav::Mode::Graph, true)
+        (nav::Mode::Tree, true)
     );
     // Backspace: no shortcut. Escape during capture cancels only it.
     cx.simulate_keystrokes("f1");

@@ -103,8 +103,6 @@ impl Shell {
                         );
                         this.images.push(path);
                         this.push_names(cx);
-                        this.graph_stale = true;
-                        this.refresh_graph(cx);
                         canvas.update(cx, |canvas, cx| canvas.exported(cx)).ok();
                     }
                     Err(e) => this.say(
@@ -296,8 +294,6 @@ impl Shell {
         }
         self.images.push(path.clone());
         self.push_names(cx);
-        self.graph_stale = true;
-        self.refresh_graph(cx);
         self.nav.reveal(&path);
         self.load_note(&path, cx);
         if self.nav.panel == Panel::Full {

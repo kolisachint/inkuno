@@ -484,9 +484,6 @@ impl Editor {
                     .paint(point(o.x, o.y + row.image_top()), BROKEN, window, cx)
                     .ok();
             }
-            if let Some(embed) = &row.embed {
-                self.paint_embed(row, embed, window, cx);
-            }
             // "Enlarge" button, on the picture, formula or figure the pointer is over.
             if self.big_hover == Some(row.start)
                 && let Some(bounds) = self.big_bounds(row)

@@ -220,6 +220,15 @@ pub fn stem(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// Name of an image in links: its file name, extension included. (Moved here when the
+/// graph view was cut; it was `graph::image_name`.)
+pub fn image_name(path: &Path) -> String {
+    path.file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// The names of the templates folder, at the vault root (ignoring case and accents).
 const TEMPLATE_DIRS: [&str; 2] = ["templates", "modeles"];
 

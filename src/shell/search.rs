@@ -523,10 +523,8 @@ impl Shell {
         );
     }
 
-    /// After notes are rewritten: the open one is reread, the graph follows.
+    /// After notes are rewritten: the open one is reread.
     pub(super) fn after_swap(&mut self, cx: &mut Context<Self>) {
-        self.graph_stale = true;
-        self.refresh_graph(cx);
         self.each_pane(|this| this.reload(cx));
         cx.notify();
     }

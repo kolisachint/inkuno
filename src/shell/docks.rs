@@ -1,5 +1,5 @@
 //! The side panel's tools placed: stacked in the left dock (the panel as it always was), stacked
-//! in the right dock, or as a tab of a pane (the graph, the calendar).
+//! in the right dock.
 
 use super::*;
 use crate::views::nav::{DIVIDER, RAIL, outline_visible};
@@ -206,7 +206,6 @@ impl Shell {
                 self.nav.activate(mode);
                 self.nav.reveal = true;
                 window.focus(&self.nav.focus);
-                self.refresh_graph(cx);
                 self.settle_nav(window, cx);
             }
         }
@@ -337,7 +336,6 @@ impl Shell {
         self.nav.activate(mode);
         self.nav.reveal = true;
         window.focus(&self.nav.focus);
-        self.refresh_graph(cx);
         self.settle_nav(window, cx);
     }
 
@@ -347,22 +345,5 @@ impl Shell {
             self.tool_aim = aim;
             cx.notify();
         }
-    }
-
-    /// The tool of the active dock (the graph, the calendar) opens as a tab of the active pane;
-    /// closing the tab gives it back to its dock.
-    pub(super) fn tool_as_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // From the palette, with a list in the dock: the graph.
-        let mode = Some(self.nav.mode)
-            .filter(|m| m.tabs())
-            .unwrap_or(Mode::Graph);
-        if self.tool_tab(mode).is_none() {
-            self.fresh_tab(window, cx);
-            self.pane_mut().tool = Some(mode);
-            self.refresh_graph(cx);
-        }
-        let tab = self.tool_tab(mode).unwrap_or(self.active);
-        self.focus_pane(tab, window, cx);
-        self.settle_nav(window, cx);
     }
 }

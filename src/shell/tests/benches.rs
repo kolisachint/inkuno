@@ -662,64 +662,6 @@ fn bench(cx: &mut TestAppContext) {
     fs::remove_dir_all(&root).unwrap();
 }
 
-/// Notes that embed sections of another: opening, and a keystroke next to them (`INKUNO_EMBEDS` = how many).
-/// `cargo test --release --locked embed_scale -- --ignored --nocapture`.
-#[gpui::test]
-#[ignore]
-fn embed_scale(cx: &mut TestAppContext) {
-    unsafe { std::env::set_var("INKUNO_NO_COMPARE", "1") };
-    let root = std::env::temp_dir().join(format!("inkuno-embed-{}", std::process::id()));
-    fs::create_dir_all(&root).unwrap();
-    let _config = isolated_config(&root);
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let (shell, cx) = cx.add_window_view({
-        let root = root.clone();
-        |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
-    });
-    cx.run_until_parked();
-    let source: String = (0..40).map(|i| format!("## Section {i}\n\nUn paragraphe assez long pour passer à la ligne dans la page, avec du *style* et du `code`.\n\n- un\n- deux\n\n| a | b |\n| - | - |\n| {i} | x |\n\n")).collect();
-    fs::write(root.join("Source.md"), format!("# Source\n\n{source}")).unwrap();
-    for n in std::env::var("INKUNO_EMBEDS")
-        .ok()
-        .map_or(vec![1usize, 5, 20, 50], |v| {
-            v.split(',').filter_map(|n| n.parse().ok()).collect()
-        })
-    {
-        let body: String = (0..n)
-            .map(|i| format!("texte {i}\n\n![[Source#Section {}]]\n\n", i % 40))
-            .collect();
-        let file = root.join(format!("Hote{n}.md"));
-        fs::write(&file, format!("# Hote\n\n{body}fin\n")).unwrap();
-        shell.update(cx, |s, cx| s.rescan(&root.clone(), cx));
-        cx.run_until_parked();
-        let start = Instant::now();
-        shell.update_in(cx, |s, window, cx| {
-            s.open_note(&file, cx);
-            window.focus(&s.pane().editor.focus_handle(cx));
-        });
-        cx.run_until_parked();
-        let opened = start.elapsed();
-        let at = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().len() - 2);
-        shell.update(cx, |s, cx| {
-            s.pane().editor.update(cx, |e, cx| e.place_cursor(at, cx))
-        });
-        cx.run_until_parked();
-        let start = Instant::now();
-        for _ in 0..20 {
-            cx.simulate_input("a");
-            cx.run_until_parked();
-        }
-        let shown = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).embeds_shown());
-        let found = shown.iter().filter(|(_, why, _)| why.is_none()).count();
-        println!(
-            "{n:3} embeds ({found} shown): opening {opened:?} · a keystroke {:?}",
-            start.elapsed() / 20
-        );
-    }
-    fs::remove_dir_all(&root).unwrap();
-}
-
 /// A hundred tabs of 20 KB notes, each shown once: time to open, to switch, a keystroke, and the
 /// memory they hold (resident set, Linux only).
 /// `cargo test --release --locked hundred_tabs -- --ignored --nocapture`.
@@ -954,7 +896,7 @@ fn graph_frame(cx: &mut TestAppContext) {
         .unwrap();
     }
     let _config = isolated_config(&root);
-    vault::save_layout("graph split 260 0");
+    vault::save_layout("tree split 260 0");
     cx.update(bind_keys);
     cx.update(init_fonts);
     let start = Instant::now();
@@ -963,8 +905,8 @@ fn graph_frame(cx: &mut TestAppContext) {
     cx.run_until_parked();
     println!("startup + arrangement + first frame: {:?}", start.elapsed());
     println!(
-        "graph (nodes, edges): {:?}",
-        shell.read_with(cx, |s, cx| s.graph.read(cx).size())
+        "vault (images, notes): {:?}",
+        shell.read_with(cx, |s, _| (s.images.len(), s.notes.len()))
     );
     let mut frames = Vec::new();
     for i in 0..21 {

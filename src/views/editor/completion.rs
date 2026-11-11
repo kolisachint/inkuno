@@ -154,14 +154,13 @@ impl Editor {
     /// The headings of `note` that contain `query`, or its block ids if `query` starts with `^`.
     fn anchors(&self, note: &str, query: &str) -> Vec<Choice<'_>> {
         let text = self
-            .embeds
             .sources
             .get(&note.trim().to_lowercase())
             .and_then(|path| fs::read_to_string(path).ok())
             .unwrap_or_default();
         let wanted = query.to_lowercase();
         let mut found: Vec<String> = match wanted.strip_prefix('^') {
-            Some(id) => crate::logic::embed::block_ids(&text)
+            Some(id) => crate::logic::wiki::block_ids(&text)
                 .into_iter()
                 .filter(|b| b.to_lowercase().contains(id))
                 .map(|b| format!("^{b}"))

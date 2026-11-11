@@ -1,10 +1,10 @@
-//! The side panel as the shell drives it: rail, tree, recent notes, tags, graph, calendar, list pages, context menu and file operations.
+//! The side panel as the shell drives it: rail, tree, recent notes, outline, search and list
+//! pages, context menu and file operations. (Graph, tags, backlinks and calendar views are cut.)
 
 use crate::{
     lang::tr,
-    logic::markdown::{self, Date},
+    logic::markdown::{self},
     logic::note::Note,
-    logic::wiki,
     platform::vault,
     ui::widgets::{button, tip},
     views::palette::{Palette, PaletteEvent},
@@ -49,38 +49,7 @@ impl Shell {
         self.put_tool(mode);
         self.nav.reveal = true;
         window.focus(&self.nav.focus);
-        self.refresh_graph(cx);
         self.settle_nav(window, cx);
-    }
-
-    /// Updates the graph if it is shown and the notes or their links changed.
-    pub(super) fn refresh_graph(&mut self, cx: &mut Context<Self>) {
-        if self.graph_stale && self.tool_shown(Mode::Graph) {
-            self.graph_stale = false;
-            let notes: Vec<Note> = self
-                .notes
-                .iter()
-                .filter(|n| !self.is_template(n))
-                .cloned()
-                .collect();
-            self.graph.update(cx, |graph, cx| {
-                graph.set_notes(&notes, &vault::pictures(&self.images), cx)
-            });
-        }
-    }
-
-    /// A graph node is selected: preview of the note if it has room.
-    pub(super) fn select_from_graph(
-        &mut self,
-        path: &Path,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.nav.panel == Panel::Split {
-            self.preview_note(path, window, cx);
-        }
-        self.nav.sel = Some(path.to_path_buf());
-        cx.notify();
     }
 
     pub(super) fn toggle_full(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -109,18 +78,8 @@ impl Shell {
     /// (`NOTE_MIN`) and what is reserved to its right keep their room.
     pub(super) fn split_width(&self) -> Pixels {
         let room = self.nav.total - self.theme.px(RAIL) - DIVIDER - self.nav.aside;
-        // The month can no longer be read below 170 px: its days touch.
-        let mode = self.nav.width_mode();
-        let floor = px(if self.dock_tools(false).contains(&Mode::Calendar) {
-            170.
-        } else {
-            120.
-        });
-        match if mode == Mode::Graph {
-            self.nav.graph_w
-        } else {
-            self.nav.list_w
-        } {
+        let floor = px(120.);
+        match self.nav.list_w {
             w if w == px(0.) => room / 2.,
             w => w.min(room - NOTE_MIN).max(floor),
         }
@@ -135,7 +94,7 @@ impl Shell {
         } else if x > room - px(140.) {
             Panel::Full
         } else {
-            *self.nav.width() = x;
+            self.nav.list_w = x;
             Panel::Split
         };
         cx.notify();
@@ -160,20 +119,11 @@ impl Shell {
             open,
         )
             .hash(&mut hasher);
-        if self.nav.mode == Mode::Links {
-            self.nav.anchor.hash(&mut hasher);
-        }
         if self.nav.mode == Mode::Recent {
             self.recent.hash(&mut hasher);
         }
         for note in &self.notes {
             (&note.path, &note.name).hash(&mut hasher);
-            if self.nav.mode == Mode::Tags {
-                note.tags.hash(&mut hasher);
-            }
-            if self.nav.mode == Mode::Links {
-                (&note.links, &note.aliases).hash(&mut hasher);
-            }
         }
         hasher.finish()
     }
@@ -184,17 +134,7 @@ impl Shell {
         };
         match self.nav.mode {
             Mode::Tree => tree_rows(root, &self.notes, &self.dirs, &self.images, &self.nav.open),
-            Mode::Graph | Mode::Calendar | Mode::Search | Mode::Outline => Vec::new(),
-            Mode::Tags => tag_rows(&self.notes, &self.nav.open),
-            Mode::Links => (self.nav.anchor.iter())
-                .flat_map(|target| wiki::backlinks(&self.notes, target))
-                .map(|n| Row {
-                    path: n.path.clone(),
-                    name: n.name.clone(),
-                    depth: 0,
-                    dir: None,
-                })
-                .collect(),
+            Mode::Search | Mode::Outline => Vec::new(),
             Mode::Recent => self
                 .by_recency()
                 .into_iter()
@@ -291,147 +231,7 @@ impl Shell {
         .collect()
     }
 
-    /// Calendar: moves the chosen day by `days` days, or by `months` months.
-    pub(super) fn day_step(&mut self, days: i64, months: i32, cx: &mut Context<Self>) {
-        let moved = markdown::day_of(markdown::day_number(self.nav.day) + days);
-        self.nav.day = markdown::add_months(moved, months);
-        cx.notify();
-    }
-
-    /// Opens the daily note for `day`, or creates it: the one `@` and Ctrl+J point to.
-    pub(super) fn open_day(&mut self, day: Date, window: &mut Window, cx: &mut Context<Self>) {
-        self.nav.day = day;
-        self.open_wiki(&crate::lang::date_name(day), window, cx);
-        cx.notify();
-    }
-
-    /// The month of the chosen day: one cell per day, marked if it has its note. The keyboard
-    /// arrows change day, Page Up and Down change month, Enter opens the note.
-    pub(super) fn render_calendar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let t = self.theme;
-        let (year, month, chosen) = self.nav.day;
-        // The week starts on Monday in French, on Sunday in English.
-        let monday = tr("sunday", "monday") == "monday";
-        let (lead, days) = markdown::month(year, month, monday);
-        let names: HashSet<&str> = self.notes.iter().map(|n| n.name.as_str()).collect();
-        let (today, open) = (
-            crate::platform::clock::today(),
-            self.pane().path.as_deref().map(vault::stem),
-        );
-        let (en, fr) = markdown::MONTHS[month as usize - 1];
-        let step = |id: &'static str, icon: &'static str, by: i32, cx: &mut Context<Self>| {
-            button(id, icon, false, t)
-                .on_click(cx.listener(move |this, _, _, cx| this.day_step(0, by, cx)))
-        };
-        let head = div()
-            .flex()
-            .items_center()
-            .child(
-                div()
-                    .debug_selector(|| "month-title".into())
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .pl_1()
-                    .map(|d| crate::ui::widgets::serif_title(d, t, 15.))
-                    .child(format!("{} {year}", tr(en, fr))),
-            )
-            .child(step("month-prev", "chevron-left.svg", -1, cx))
-            .child(step("month-next", "chevron-right.svg", 1, cx));
-        // Seven equal columns, which shrink with the panel instead of going under the note.
-        let cell = || {
-            div()
-                .h(t.px(32.))
-                .relative()
-                .flex()
-                .items_center()
-                .justify_center()
-        };
-        let initials = if monday {
-            tr("MTWTFSS", "LMMJVSD")
-        } else {
-            tr("SMTWTFS", "DLMMJVS")
-        };
-        let week = initials.chars().map(|c| {
-            cell()
-                .h(t.px(30.))
-                .text_color(t.soft)
-                .text_size(t.px(11.))
-                .child(c.to_string())
-        });
-        // Whole weeks: the last days of the previous month and the first of the next fill the grid.
-        let first = markdown::day_number((year, month, 1));
-        let trail = (7 - (lead + days) % 7) % 7;
-        let cells = (-(lead as i64)..i64::from(days + trail)).map(|offset| {
-            let date = markdown::day_of(first + offset);
-            let inside = date.1 == month;
-            let name = crate::lang::date_name(date);
-            let has = names.contains(name.as_str());
-            let (is_today, is_open) = (date == today, open.as_deref() == Some(name.as_str()));
-            // The digit sits in a round box (the board's 22 px circle: a pill would be wider than a
-            // two-digit day), filled in `accent` for today; the dot under it says "a note".
-            let digit = div()
-                .size(t.px(22.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_full()
-                .when(is_today, |d| d.bg(t.accent))
-                .child(date.2.to_string());
-            cell()
-                .id(("day", (first + offset + 800_000) as usize))
-                .debug_selector(|| format!("day-{}-{}-{}", date.0, date.1, date.2))
-                .rounded(t.small())
-                .cursor_pointer()
-                .text_color(match (is_today, is_open, inside) {
-                    (true, ..) => t.bg,
-                    (_, true, _) => t.accent,
-                    (_, _, true) if has || date.2 == chosen => t.text,
-                    (_, _, true) => t.soft,
-                    _ => t.dim,
-                })
-                .when(has, |d| d.font_weight(gpui::FontWeight::BOLD))
-                .when(inside && date.2 == chosen, |d| d.bg(t.selection))
-                .hover(|s| s.bg(t.hover))
-                .child(digit)
-                .when(has, |d| {
-                    d.child(
-                        div()
-                            .absolute()
-                            .bottom(t.px(2.))
-                            .size(t.px(3.))
-                            .rounded_full()
-                            .bg(if is_today { t.accent } else { t.soft }),
-                    )
-                })
-                .on_click(cx.listener(move |this, _, window, cx| this.open_day(date, window, cx)))
-                .into_any_element()
-        });
-        div()
-            .flex_1()
-            .min_h_0()
-            .px_2()
-            .text_size(t.px(13.))
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(head)
-            .child(
-                div()
-                    .debug_selector(|| "calendar".into())
-                    .w_full()
-                    .max_w(t.px(224.))
-                    .grid()
-                    .grid_cols(7)
-                    .children(week)
-                    .children(cells),
-            )
-    }
-
     pub(super) fn nav_step(&mut self, down: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if self.nav.mode == Mode::Calendar {
-            return self.day_step(if down { 7 } else { -7 }, 0, cx);
-        }
         let last = self.nav.rows.len().saturating_sub(1);
         let ix = match self.selected_row() {
             Some(ix) if down => (ix + 1).min(last),
@@ -485,9 +285,6 @@ impl Shell {
 
     /// Left/right in the tree: collapse or expand, otherwise go up or down.
     pub(super) fn nav_fold(&mut self, unfold: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if self.nav.mode == Mode::Calendar {
-            return self.day_step(if unfold { 1 } else { -1 }, 0, cx);
-        }
         let Some(ix) = self.selected_row() else {
             return self.nav_step(true, window, cx);
         };
@@ -866,38 +663,15 @@ impl Shell {
                         .unwrap_or_default(),
                     _ => String::new(),
                 };
-                // Under a tag, the number of notes that carry it.
-                let detail = match row.dir {
-                    Some(_) if !tree => {
-                        let tag = &row.name[1..];
-                        self.notes.iter().filter(|n| n.tags.iter().any(|t| t == tag)).count().to_string()
-                    }
-                    _ => detail,
-                };
-                // Under backlinks, the line of the note that carries the link.
-                let links = self.nav.mode == Mode::Links;
-                let detail = match self.nav.anchor.as_ref().filter(|_| links) {
-                    Some(target) => {
-                        let note = |path: &Path| self.notes.iter().find(|n| n.path == path);
-                        let line = note(target).zip(note(&row.path)).and_then(|(aimed, from)| wiki::link_line(&from.body, aimed));
-                        // An embedded section is said to be one.
-                        line.map(|line| match embed::parse(line) {
-                            Some(_) => format!("{} · {}", tr("embedded", "incorporé"), line.trim()),
-                            None => line.trim().to_string(),
-                        })
-                        .unwrap_or_default()
-                    }
-                    None => detail,
-                };
                 // A folder of the tree that cannot be read says so and why, instead of looking empty.
                 let closed = self.unreadable.iter().find(|(dir, _)| tree && *dir == row.path);
                 let detail = match closed {
                     Some((_, why)) => format!("{} {}", tr("unreadable:", "illisible :"), crate::lang::io_reason(&std::io::Error::from(*why))),
                     None => detail,
                 };
-                let wide = links || closed.is_some();
+                let wide = closed.is_some();
                 let said = closed.map(|_| detail.clone());
-                let foldable = !matches!(self.nav.mode, Mode::Recent | Mode::Links);
+                let foldable = self.nav.mode != Mode::Recent;
                 let chevron = match row.dir {
                     Some(true) => "chevron-down.svg",
                     Some(false) => "chevron-right.svg",
@@ -1044,9 +818,8 @@ impl Shell {
                                     this.nav.marked.clear();
                                     this.nav.sel = Some(target.clone());
                                 }
-                                // A tag has only one entry: the list of its notes.
                                 window.focus(&this.nav.focus);
-                                if this.vault.as_ref().is_some_and(|root| target.starts_with(root)) || tag_of(&target).is_some() {
+                                if this.vault.as_ref().is_some_and(|root| target.starts_with(root)) {
                                     this.show_menu(Menu { at: e.position, target: Some(target.clone()), ..Default::default() }, window, cx);
                                 }
                                 cx.stop_propagation();
@@ -1099,6 +872,13 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let t = self.theme;
+        let current = self.pane().displayed_path().cloned();
+        if current != self.nav.followed {
+            if let Some(path) = &current {
+                self.nav.reveal(path);
+            }
+            self.nav.followed = current.clone();
+        }
         // The keys stay with a tool in sight: the active one hidden, the first one shown takes them.
         if !self.docked_now(self.nav.mode)
             && let Some(first) = self
@@ -1116,21 +896,6 @@ impl Shell {
         }
         let panel = self.nav.panel;
         let unfolded = self.left_open();
-        // A tool or file view is no note: the backlinks stay on the last one.
-        if !self.pane().preview && self.pane().tool.is_none() && self.pane().file.is_none() {
-            self.nav.anchor = self.pane().path.clone();
-        }
-        let current = self.pane().displayed_path().cloned();
-        if current != self.nav.followed {
-            if let Some(path) = &current {
-                self.nav.reveal(path);
-            }
-            self.nav.followed = current.clone();
-        }
-        let selected = self.nav.sel.clone();
-        self.graph.update(cx, |graph, _| {
-            graph.sync(t, current.as_deref(), selected.as_deref())
-        });
 
         // The view in sight is a small sheet laid on the rail, its icon in the accent.
         let on_sheet = |b: Stateful<Div>, on: bool| {
@@ -1206,10 +971,9 @@ impl Shell {
                     .flex_col()
                     .items_center()
                     .gap_1()
-                    // Calm default: the rail shows the vault tree only. Recent, graph, tags,
-                    // backlinks, calendar and vault search stay as modes (Mode::ALL) and reopen
-                    // on demand through the palette, their chords, or the dock tool gate
-                    // (put_tool/stack_tool/place_tool/tool_as_tab) — none of that code moves.
+                    // Calm default: the rail shows the vault tree only. Recent notes and vault
+                    // search stay as modes (Mode::ALL) and reopen on demand through the palette
+                    // or the dock tool gate (put_tool/stack_tool/place_tool).
                     .child(mode_button(
                         "nav-tree",
                         "tree.svg",
@@ -1317,11 +1081,7 @@ impl Shell {
                 MouseButton::Left,
                 cx.listener(|this, e: &MouseDownEvent, window, cx| {
                     if e.click_count >= 2 {
-                        *this.nav.width() = if this.nav.width_mode() == Mode::Graph {
-                            px(0.)
-                        } else {
-                            LIST_W
-                        };
+                        this.nav.list_w = LIST_W;
                         this.nav.panel = Panel::Split;
                         this.settle_nav(window, cx);
                     } else {
@@ -1562,20 +1322,8 @@ impl Shell {
         let folded = self.all_folded();
         let title = match (mode, &self.vault) {
             (Mode::Tree, Some(root)) => vault::stem(root),
-            (Mode::Graph, _) => tr("Graph", "Graphe").to_string(),
-            (Mode::Tags, _) => "Tags".to_string(),
-            (Mode::Calendar, _) => tr("Calendar", "Calendrier").to_string(),
             (Mode::Search, _) => tr("Search", "Recherche").to_string(),
             (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
-            (Mode::Links, _) => {
-                let name = self
-                    .nav
-                    .anchor
-                    .as_deref()
-                    .map(vault::stem)
-                    .unwrap_or_default();
-                format!("{} {name}", tr("Links to", "Liens vers"))
-            }
             _ => tr("Recent", "Récents").to_string(),
         };
         let header = div()
@@ -1670,19 +1418,6 @@ impl Shell {
                             .child(title.clone()),
                     ),
             )
-            .when(mode == Mode::Graph, |d| {
-                d.child(
-                    button("nav-center", "target.svg", false, t)
-                        .tooltip(tip(
-                            tr("Show the whole graph", "Voir tout le graphe"),
-                            String::new(),
-                            t,
-                        ))
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.graph.update(cx, |graph, cx| graph.recenter(cx))
-                        })),
-                )
-            })
             .when(mode == Mode::Tree, |d| {
                 // A note at the vault root, whatever the selection.
                 d.child(
@@ -1733,34 +1468,8 @@ impl Shell {
                     })),
                 )
             })
-            // The tool elsewhere: as a tab (the graph, the calendar), in the other dock. Not from the
-            // panel on the whole window, where neither is in sight.
-            .when(mode.tabs() && !full, |d| {
-                d.child(
-                    button(
-                        if right { "dock-tab-right" } else { "dock-tab" },
-                        "c-split.svg",
-                        false,
-                        t,
-                    )
-                    .debug_selector(move || {
-                        if right {
-                            "dock-tab-right".into()
-                        } else {
-                            "dock-tab".into()
-                        }
-                    })
-                    .tooltip(tip(
-                        tr("Open as a tab", "Ouvrir dans un onglet"),
-                        keys(&crate::actions::ToolAsTab),
-                        t,
-                    ))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.nav.activate(mode);
-                        this.tool_as_tab(window, cx)
-                    })),
-                )
-            })
+            // The tool elsewhere: in the other dock. Not from the
+            // panel on the whole window, where it is not in sight.
             .when(!full, |d| {
                 d.child(
                     button(
@@ -1883,21 +1592,6 @@ impl Shell {
                         tr("New note:", "Nouvelle note :")
                     ),
                 },
-                Mode::Tags => tr(
-                    "No tag yet: write #tag in a note",
-                    "Aucun tag pour l'instant : écrivez #tag dans une note",
-                )
-                .to_string(),
-                Mode::Links if self.nav.anchor.is_none() => tr(
-                    "Open a note to see what links to it",
-                    "Ouvrez une note pour voir ce qui renvoie vers elle",
-                )
-                .to_string(),
-                Mode::Links => tr(
-                    "No note links here yet",
-                    "Aucune note ne renvoie ici pour l'instant",
-                )
-                .to_string(),
                 _ => tr("No recent note", "Aucune note récente").to_string(),
             };
             div()
@@ -2009,26 +1703,19 @@ impl Shell {
             .on_action(cx.listener(|this, _: &Next, window, cx| this.nav_step(true, window, cx)))
             .on_action(cx.listener(|this, _: &Fold, window, cx| this.nav_fold(false, window, cx)))
             .on_action(cx.listener(|this, _: &Unfold, window, cx| this.nav_fold(true, window, cx)))
-            .on_action(cx.listener(|this, _: &PrevMonth, _, cx| this.day_step(0, -1, cx)))
-            .on_action(cx.listener(|this, _: &NextMonth, _, cx| this.day_step(0, 1, cx)))
             .on_action(cx.listener(|this, _: &Open, window, cx| {
-                if this.nav.mode == Mode::Calendar {
-                    return this.open_day(this.nav.day, window, cx);
-                }
                 if let Some(ix) = this.selected_row() {
                     this.nav_activate(ix, window, cx)
                 }
             }))
-            .when(!matches!(mode, Mode::Graph | Mode::Calendar), |d| {
-                d.on_action(cx.listener(|this, _: &Rename, window, cx| {
-                    this.menu_do(Do::Rename, this.nav.sel.clone(), window, cx)
-                }))
-                .on_action(cx.listener(|this, _: &Duplicate, window, cx| {
-                    this.menu_do(Do::Duplicate, this.nav.sel.clone(), window, cx)
-                }))
-                .on_action(cx.listener(|this, _: &Trash, window, cx| {
-                    this.menu_do(Do::Trash, this.nav.sel.clone(), window, cx)
-                }))
+            .on_action(cx.listener(|this, _: &Rename, window, cx| {
+                this.menu_do(Do::Rename, this.nav.sel.clone(), window, cx)
+            })
+            .on_action(cx.listener(|this, _: &Duplicate, window, cx| {
+                this.menu_do(Do::Duplicate, this.nav.sel.clone(), window, cx)
+            })
+            .on_action(cx.listener(|this, _: &Trash, window, cx| {
+                this.menu_do(Do::Trash, this.nav.sel.clone(), window, cx)
             })
             .on_action(cx.listener(|this, _: &Close, window, cx| {
                 if this.menu.is_some() {
@@ -2046,8 +1733,6 @@ impl Shell {
             .child(header)
             .map(|d| match mode {
                 _ if shut => d,
-                Mode::Graph => d.child(div().flex_1().min_h_0().child(self.graph.clone())),
-                Mode::Calendar => d.child(self.render_calendar(cx)),
                 Mode::Search => d.child(self.render_vault_find(window, cx)),
                 Mode::Outline => d.child(self.render_outline(cx)),
                 _ => d.child(

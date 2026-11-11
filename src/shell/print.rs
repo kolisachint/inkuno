@@ -136,7 +136,7 @@ fn save(
                 .filter(|b| drawn(b))
                 .map_or(Found::Missing, Found::Picture);
         }
-        embed::link_target(written)
+        wiki::link_target(written)
             .filter(|t| !vault::is_file_shown(Path::new(&t.note)))
             .and_then(|t| {
                 Some((
@@ -144,7 +144,7 @@ fn save(
                     t,
                 ))
             })
-            .and_then(|(text, t)| embed::section(&text, &t.anchor))
+            .and_then(|(text, t)| wiki::section(&text, &t.anchor))
             .map_or(Found::Missing, Found::Section)
     };
     let printed = print::print(text, &find);

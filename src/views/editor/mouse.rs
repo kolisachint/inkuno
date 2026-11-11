@@ -537,16 +537,6 @@ impl Editor {
             .detach();
             return cx.notify();
         }
-        // An embedded section: its source's name, or a double click, opens the note there; a click elsewhere in
-        // the frame puts the cursor on the line that says what it embeds.
-        if let Some((row, embed, on_label)) = self.embed_at(e.position) {
-            let (end, target) = (row.start + row.len, embed.target.clone());
-            if on_label || e.click_count >= 2 {
-                return self.open_embed(target, e.modifiers.shift, cx);
-            }
-            self.more.clear();
-            return self.move_to(end, cx);
-        }
         if let Some((cols, rows)) = self.grid_at(e.position) {
             return self.insert_table(cols, rows, cx);
         }
@@ -602,9 +592,9 @@ impl Editor {
             if let Some(target) = Some(&link)
                 .filter(|l| matches!(l, Link::Wiki(_)))
                 .and_then(|_| {
-                    crate::logic::embed::link_target(&line[range.start + 2..range.end - 2])
+                    crate::logic::wiki::link_target(&line[range.start + 2..range.end - 2])
                 })
-                .filter(|t| t.anchor != crate::logic::embed::Anchor::Whole)
+                .filter(|t| t.anchor != crate::logic::wiki::Anchor::Whole)
             {
                 return cx.emit(EditorEvent::OpenAt(target, e.modifiers.shift));
             }

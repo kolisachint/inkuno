@@ -2,7 +2,7 @@
 //! tree, recent notes, graph or tags) that shares the window with the note.
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     hash::Hash,
     path::{Path, PathBuf},
 };
@@ -14,13 +14,12 @@ use gpui::{
 
 use crate::{
     lang::tr,
-    logic::markdown::{Date, Link},
+    logic::markdown::Link,
     logic::note::Note,
     platform::vault,
     ui::theme::Theme,
     views::editor,
     views::field::Field,
-    views::graph,
 };
 
 actions!(
@@ -75,17 +74,15 @@ pub const GAP: Pixels = px(8.);
 /// Handle between the panel and the note: the gap itself, so that dragging it needs no thin line.
 pub const DIVIDER: Pixels = GAP;
 
+// The graph, backlinks, tags and calendar views were cut: plain Markdown editing only.
+// Their actions above stay defined so the shared keymap registry keeps compiling until the
+// integrator deregisters them; dispatching one is a no-op. Old `layout` files naming them
+// fall back to the tree (`named` returns `None`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Mode {
     #[default]
     Tree,
     Recent,
-    Graph,
-    Tags,
-    /// Backlinks: the notes that lead to the open note.
-    Links,
-    /// Calendar: a month, showing the days that have their note.
-    Calendar,
     /// The vault search: the matches of a search, note by note.
     Search,
     /// Outline: the headings of the open note, in the right dock.
@@ -93,26 +90,13 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub const ALL: [Mode; 8] = [
-        Mode::Tree,
-        Mode::Recent,
-        Mode::Graph,
-        Mode::Tags,
-        Mode::Links,
-        Mode::Calendar,
-        Mode::Search,
-        Mode::Outline,
-    ];
+    pub const ALL: [Mode; 4] = [Mode::Tree, Mode::Recent, Mode::Search, Mode::Outline];
 
     /// As written in the `layout` file.
     pub fn name(self) -> &'static str {
         match self {
             Mode::Tree => "tree",
             Mode::Recent => "recent",
-            Mode::Graph => "graph",
-            Mode::Tags => "tags",
-            Mode::Links => "links",
-            Mode::Calendar => "calendar",
             Mode::Search => "search",
             Mode::Outline => "outline",
         }
@@ -122,9 +106,11 @@ impl Mode {
         Mode::ALL.into_iter().find(|m| m.name() == name)
     }
 
-    /// Only the graph and the calendar open as a tab: they need room, the lists do not.
+    /// No tool opens as a tab anymore: the graph and the calendar, the only ones that did,
+    /// are cut and their tabs with them.
     pub fn tabs(self) -> bool {
-        matches!(self, Mode::Graph | Mode::Calendar)
+        let _ = self;
+        false
     }
 }
 
@@ -314,8 +300,6 @@ pub enum Do {
     NewNote,
     NewDiagram,
     NewFolder,
-    /// A note born from a template, in the targeted folder.
-    FromTemplate,
     Rename,
     /// Into a folder chosen in a list: what dragging does, from the keys.
     MoveTo,
@@ -408,7 +392,6 @@ impl Do {
             Do::NewNote => of(cx, &crate::actions::NewNote),
             Do::NewDiagram => of(cx, &crate::actions::NewDiagram),
             Do::NewFolder => of(cx, &NewFolder),
-            Do::FromTemplate => of(cx, &crate::actions::NewFromTemplate),
             Do::Rename => of(cx, &Rename),
             Do::Duplicate => of(cx, &Duplicate),
             Do::Trash => of(cx, &Trash),
@@ -469,8 +452,6 @@ pub struct Nav {
     pub mode: Mode,
     pub panel: Panel,
     pub list_w: Pixels,
-    /// Width of the graph; zero: half the window.
-    pub graph_w: Pixels,
     pub dragging: bool,
     /// Selected row (note or folder).
     pub sel: Option<PathBuf>,
@@ -482,11 +463,9 @@ pub struct Nav {
     pub followed: Option<PathBuf>,
     /// Where the selected row was drawn: the menu opened from the keys opens under it.
     pub sel_at: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<Pixels>>>>,
-    /// Note whose backlinks the panel shows: the last opened one, not the one being
-    /// browsed in preview, otherwise the list would change under the selection.
+    /// Note whose backlinks the panel showed: kept so old sessions restore without
+    /// touching their layout file. Nothing reads it anymore (the backlinks panel is cut).
     pub anchor: Option<PathBuf>,
-    /// Day chosen in the calendar, which shows its month.
-    pub day: Date,
     /// Expanded folders.
     pub open: HashSet<PathBuf>,
     /// Rows of the last frame, and the fingerprint of what they are drawn from.
@@ -585,15 +564,18 @@ impl Nav {
                 Some("full") => Panel::Full,
                 _ => Panel::Rail,
             },
-            list_w: words.next().and_then(|w| w.parse().ok()).map_or(LIST_W, px),
-            graph_w: words.next().and_then(|w| w.parse().ok()).map_or(px(0.), px),
+            list_w: {
+                let list = words.next().and_then(|w| w.parse().ok()).map_or(LIST_W, px);
+                // A leftover width of the cut graph view, if an old file names one: skipped.
+                let _ = words.next();
+                list
+            },
             dragging: false,
             sel: None,
             followed: None,
             marked: HashSet::new(),
             sel_at: Default::default(),
             anchor: None,
-            day: crate::platform::clock::today(),
             open: HashSet::new(),
             rows: Vec::new(),
             rows_from: 0,
@@ -613,11 +595,11 @@ impl Nav {
             Panel::Split => "split",
             Panel::Full => "full",
         };
-        let (list, graph) = (f32::from(self.list_w), f32::from(self.graph_w));
+        let list = f32::from(self.list_w);
         let names = |tools: &mut dyn Iterator<Item = &Mode>| {
             tools.map(|m| m.name()).collect::<Vec<_>>().join(",")
         };
-        let mut line = format!("{} {panel} {list} {graph}", self.left_mode().name());
+        let mut line = format!("{} {panel} {list}", self.left_mode().name());
         if self.left_shown.len() > 1 {
             line += &format!(" left={}", names(&mut self.left_shown.iter()));
         }
@@ -671,28 +653,12 @@ impl Nav {
         self.left_shown.first().copied().unwrap_or(self.mode)
     }
 
-    /// The tool that sets the left dock's width: the graph alone takes its own.
-    pub fn width_mode(&self) -> Mode {
-        match self.left_shown.as_slice() {
-            [only] => *only,
-            _ => Mode::Tree,
-        }
-    }
-
     /// Selects the note and expands the folders leading to it.
     pub fn reveal(&mut self, path: &Path) {
         self.sel = Some(path.to_path_buf());
         self.open
             .extend(path.ancestors().skip(1).map(Path::to_path_buf));
         self.reveal = true;
-    }
-
-    /// Width of the panel next to the note, in the shown mode.
-    pub fn width(&mut self) -> &mut Pixels {
-        match self.width_mode() {
-            Mode::Graph => &mut self.graph_w,
-            _ => &mut self.list_w,
-        }
     }
 
     /// Folder where to create a note from the tree: the selection's.
@@ -744,7 +710,7 @@ pub fn tree_rows(
     // Per folder: its notes then its pictures, each with the shown name.
     let mut files: HashMap<&Path, Vec<(&Path, String)>> = HashMap::new();
     let named = notes.iter().map(|n| (n.path.as_path(), n.name.clone()));
-    let pictures = images.iter().map(|p| (p.as_path(), graph::image_name(p)));
+    let pictures = images.iter().map(|p| (p.as_path(), vault::image_name(p)));
     for (path, name) in named.chain(pictures) {
         let parents = path
             .ancestors()
@@ -815,12 +781,8 @@ pub fn tree_rows(
     rows
 }
 
-/// Row of a tag in the panel: a fake path, that no file bears.
-fn tag_path(tag: &str) -> PathBuf {
-    PathBuf::from(format!("#{tag}"))
-}
-
 /// The tag this path points to (`#tag`), if it is one.
+/// (The tags panel is cut and no new tag list page opens; old sessions may still name one.)
 pub fn tag_of(path: &Path) -> Option<&str> {
     path.to_str()?.strip_prefix('#')
 }
@@ -843,37 +805,6 @@ pub struct Listing {
 /// The vault's tags in alphabetical order; under an expanded tag, its notes.
 // ponytail: a note with several expanded tags appears under each, and the
 // selection, held by its path, marks them all; give each row its own identity
-// if that gets in the way.
-pub fn tag_rows(notes: &[Note], open: &HashSet<PathBuf>) -> Vec<Row> {
-    let mut tagged: BTreeMap<&str, Vec<&Note>> = BTreeMap::new();
-    for note in notes {
-        for tag in note.tags.iter() {
-            tagged.entry(tag).or_default().push(note);
-        }
-    }
-    let mut rows = Vec::new();
-    for (tag, mut notes) in tagged {
-        let path = tag_path(tag);
-        let unfolded = open.contains(&path);
-        rows.push(Row {
-            path,
-            name: format!("#{tag}"),
-            depth: 0,
-            dir: Some(unfolded),
-        });
-        if unfolded {
-            notes.sort_by_cached_key(|n| vault::natural(&n.name));
-            rows.extend(notes.iter().map(|n| Row {
-                path: n.path.clone(),
-                name: n.name.clone(),
-                depth: 1,
-                dir: None,
-            }));
-        }
-    }
-    rows
-}
-
 pub use crate::logic::commands::reveal_label;
 
 #[cfg(test)]
@@ -1123,24 +1054,5 @@ mod tests {
             ]
         );
 
-        // Tags: in alphabetical order; an expanded tag shows its notes.
-        let tagged = |rel: &str, tags: &[&str]| Note {
-            tags: tags.iter().map(|t| t.to_string()).collect(),
-            ..note(rel)
-        };
-        let notes = [
-            tagged("b.md", &["zoo", "ami"]),
-            tagged("A.md", &["zoo"]),
-            note("sans.md"),
-        ];
-        let shown = |open: &[&str]| -> Vec<String> {
-            let open = open.iter().map(|t| tag_path(t)).collect();
-            tag_rows(&notes, &open)
-                .iter()
-                .map(|r| format!("{}{}", "  ".repeat(r.depth), r.name))
-                .collect()
-        };
-        assert_eq!(shown(&[]), ["#ami", "#zoo"]);
-        assert_eq!(shown(&["zoo"]), ["#ami", "#zoo", "  A", "  b"]);
     }
 }

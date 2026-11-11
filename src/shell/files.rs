@@ -187,8 +187,6 @@ impl Shell {
         }
         self.calm();
         self.push_names(cx);
-        self.graph_stale = true;
-        self.refresh_graph(cx);
         cx.notify();
     }
 }

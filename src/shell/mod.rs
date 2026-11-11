@@ -25,7 +25,6 @@ mod sidebar;
 mod sync;
 mod tables;
 mod tabs;
-mod templates;
 mod toasts;
 mod travel;
 mod updates;
@@ -40,11 +39,11 @@ use toasts::*;
 use crate::actions::*;
 use crate::lang::{date_name, time_name, tr};
 use crate::logic::{
-    self, commands, diagram, embed, history, import,
+    self, commands, diagram, history, import,
     layout::{self, Node, Side, Zone},
     markdown,
     prefs::Prefs,
-    recall, table,
+    recall, table, wiki,
 };
 use crate::platform::{
     self,
@@ -59,7 +58,7 @@ use crate::ui::{
     theme::{Page, THEMES, Theme, Wide},
     widgets::{drag_window, icon_button, icon_button_over, keycaps},
 };
-use crate::views::{canvas, editor, field, graph, kanban, nav, palette, sheet, viewer};
+use crate::views::{canvas, editor, field, kanban, nav, palette, sheet, viewer};
 
 use std::{
     fs,
@@ -79,12 +78,12 @@ use gpui::{
 use canvas::{Canvas, CanvasEvent};
 use diagram::Diagram;
 use editor::{Editor, EditorEvent};
-use graph::{Graph, GraphEvent};
+
 use history::{History, Place, Shown};
 use logic::note::Note;
 use markdown::Link;
 use nav::{Mode, Nav, Panel};
-use palette::{Entry, Palette, PaletteEvent, Setting, TemplateAct};
+use palette::{Entry, Palette, PaletteEvent, Setting};
 use sheet::{Pick, Sheet, SheetEvent};
 use table::{Encoding, Format, Style};
 
@@ -147,9 +146,6 @@ struct Shell {
     panes_saved: String,
     focus: FocusHandle,
     nav: Nav,
-    graph: Entity<Graph>,
-    /// Notes or their links changed since the graph was last computed.
-    graph_stale: bool,
     palette: Option<Entity<Palette>>,
     vault: Option<PathBuf>,
     notes: Vec<Note>,
@@ -249,13 +245,6 @@ impl Shell {
         .detach();
 
         let nav = Nav::new(cx.focus_handle());
-        // The graph shares the panel's focus: the same keys navigate it.
-        let graph = cx.new(|_| Graph::new(nav.focus.clone(), theme));
-        cx.subscribe_in(&graph, window, |this, _, event, window, cx| match event {
-            GraphEvent::Select(path) => this.select_from_graph(path, window, cx),
-            GraphEvent::Open(path) => this.open_from_nav(path, window, cx),
-        })
-        .detach();
 
         let mut this = Self {
             panes: vec![pane],
@@ -287,8 +276,6 @@ impl Shell {
             focus: cx.focus_handle(),
             menu_focus: cx.focus_handle(),
             nav,
-            graph,
-            graph_stale: true,
             palette: None,
             vault: None,
             notes: Vec::new(),

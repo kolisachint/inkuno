@@ -40,10 +40,10 @@ impl Shell {
     /// What a tab is called: its file, its list page, or a new note's first line.
     pub(super) fn tab_name(&self, tab: usize, cx: &App) -> String {
         let pane = &self.panes[tab];
-        match pane.tool {
-            Some(Mode::Graph) => return tr("Graph", "Graphe").to_string(),
-            Some(_) => return tr("Calendar", "Calendrier").to_string(),
-            None => {}
+        // No tool opens as a tab anymore (the graph and the calendar are cut): a tool tab from
+        // an old layout is named after its tool.
+        if pane.tool.is_some() {
+            return pane.tool.map(|tool| tool.name().to_string()).unwrap_or_default();
         }
         if let Some(listing) = &pane.listing {
             return match nav::tag_of(&listing.of) {

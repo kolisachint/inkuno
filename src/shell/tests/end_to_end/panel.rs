@@ -1,4 +1,4 @@
-//! The side panel: tree, new note in a folder, divider, recent notes, graph.
+//! The side panel: tree, new note in a folder, divider, recent notes.
 
 use super::*;
 
@@ -72,49 +72,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.dispatch_action(nav::ShowRecent);
     assert_eq!(vault::load_layout(), "recent rail 410 0\n");
 
-    // Graph: one edge per resolved wikilink. Tab walks the notes linked to the
-    // open note, as a preview; Enter opens the selected one.
-    cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("cou");
-    cx.simulate_keystrokes("enter secondary-g");
-    cx.run_until_parked();
-    assert_eq!(
-        shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)),
-        (Mode::Graph, Panel::Split)
-    );
-    assert_eq!(shell.read_with(cx, |s, cx| s.graph.read(cx).size()), (5, 2));
-    // A node dragged with the mouse follows the pointer.
-    let spot = |cx: &mut gpui::VisualTestContext| {
-        shell.read_with(cx, |s, cx| s.graph.read(cx).spot(&root.join("Courses.md")))
-    };
-    let from = spot(cx);
-    let to = from + point(px(40.), px(30.));
-    cx.simulate_mouse_down(from, MouseButton::Left, gpui::Modifiers::none());
-    cx.simulate_mouse_move(to, MouseButton::Left, gpui::Modifiers::none());
-    cx.simulate_mouse_up(to, MouseButton::Left, gpui::Modifiers::none());
-    assert!((spot(cx).x - to.x).abs() < px(1.) && (spot(cx).y - to.y).abs() < px(1.));
-    let mut linked = Vec::new();
-    for _ in 0..2 {
-        cx.simulate_keystrokes("tab");
-        linked.push(shell.read_with(cx, |s, _| vault::stem(s.pane().path.as_ref().unwrap())));
-        // A preview, or the tab of a note already open: neither counts as an opening.
-        assert!(shell.read_with(cx, |s, _| s.recent[0] == root.join("Courses.md")));
-    }
-    linked.sort();
-    assert_eq!(linked, ["Plan", "Test"]);
-    cx.simulate_keystrokes("enter");
-    assert!(shell.read_with(cx, |s, _| !s.pane().preview
-        && s.recent[0] == *s.pane().path.as_ref().unwrap()));
-    assert!(cx.update(|window, cx| {
-        shell
-            .read(cx)
-            .pane()
-            .editor
-            .focus_handle(cx)
-            .is_focused(window)
-    }));
     // Full screen: the selection no longer moves the note; Enter gives it its place back.
-    cx.simulate_keystrokes("secondary-g secondary-m tab");
+    cx.simulate_keystrokes("secondary-e secondary-m tab");
     let open = shell.read_with(cx, |s, _| s.pane().path.clone());
     assert!(shell.read_with(cx, |s, _| s.nav.panel == Panel::Full
         && s.nav.sel != s.pane().path));
