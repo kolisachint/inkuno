@@ -431,11 +431,17 @@ pub fn run() {
             return cx.activate(true);
         }
         let bounds = Bounds::centered(None, size(px(860.), px(720.)), cx);
+        // Zed-style: the folder first, then the app — the first frame updates it with the open
+        // note, if any (see `render`).
+        let title = match vault.as_ref().map(|v| vault::stem(v)) {
+            Some(name) => format!("{name} — Inkuno"),
+            None => "Inkuno".into(),
+        };
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
-                    title: Some("Inkuno".into()),
+                    title: Some(title.into()),
                     ..Default::default()
                 }),
                 // Must match the .desktop file name for the desktop to associate the icon.

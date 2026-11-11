@@ -353,6 +353,7 @@ impl Shell {
             div()
                 .id(("tabs", group))
                 .debug_selector(move || format!("tabs-{group}"))
+                .relative()
                 .flex_none()
                 .w_full()
                 .h(t.px(TAB_BAR))
@@ -402,7 +403,37 @@ impl Shell {
                                 .h_full()
                                 .when(client, |d| d.map(crate::ui::widgets::drag_window)),
                         ),
-                ),
+                )
+                // Zed-style: where the app draws the bar itself, the vault name sits centered in
+                // the window's top row — the corner group's bar, under the window buttons. Plain
+                // text: it takes no pointer, the tabs keep working under it; it clears the
+                // buttons on the right.
+                .when(corner && self.vault.is_some(), |d| {
+                    d.child(
+                        div()
+                            .debug_selector(|| "window-title".into())
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .left(pad)
+                            .right(t.px(render::PILL_ROOM))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .overflow_hidden()
+                            .text_size(t.px(13.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(t.soft)
+                            .child(
+                                div().min_w_0().truncate().child(
+                                    self.vault
+                                        .as_ref()
+                                        .map(|v| vault::stem(v))
+                                        .unwrap_or_default(),
+                                ),
+                            ),
+                    )
+                }),
         )
     }
 }

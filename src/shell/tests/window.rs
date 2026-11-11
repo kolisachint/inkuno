@@ -720,6 +720,37 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
             "{window}: the text starts at {top:?}, the window buttons end at {pill:?}"
         );
     }
+    // Zed-style header: the tree panel shows no vault name — its action icons sit left, ahead of
+    // the (empty) title handle — and the folder moved to the window's title bar, drawn centered
+    // in the top row where the app draws the bar itself.
+    shell.update(cx, |s, cx| {
+        s.nav.panel = nav::Panel::Split;
+        s.nav.show_alone(nav::Mode::Tree);
+        cx.notify();
+    });
+    settle(cx);
+    let (head, title, file) = (
+        cx.debug_bounds("tool-head-tree").unwrap(),
+        cx.debug_bounds("tool-title-tree").unwrap(),
+        cx.debug_bounds("nav-file").unwrap(),
+    );
+    assert!(
+        file.right() <= title.left() + px(1.),
+        "the tree icons sit left of the title handle: {file:?} {title:?}"
+    );
+    assert!(
+        file.left() - head.left() < px(40.),
+        "the tree icons sit at the header's left end: {file:?} {head:?}"
+    );
+    assert!(
+        cx.debug_bounds("window-title").is_some(),
+        "the vault name is drawn in the top row"
+    );
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.title.clone()),
+        format!("Titre — {} — Inkuno", vault::stem(&root)),
+        "the folder moved to the window's title"
+    );
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -784,6 +815,14 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             );
             seen += 1;
         }
+        // Zed-style: the vault name sits centered in the top row, clear of the window buttons.
+        let name = cx
+            .debug_bounds("window-title")
+            .expect("the vault name is drawn in the tab bar");
+        assert!(
+            name.right() <= pill.left(),
+            "{width}: the vault name {name:?} runs under the window buttons {pill:?}"
+        );
     }
     assert!(seen > 0, "the comments column was never open");
     let _ = fs::remove_dir_all(&root);

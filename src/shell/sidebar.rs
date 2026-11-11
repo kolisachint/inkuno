@@ -1628,61 +1628,10 @@ impl Shell {
                     .on_click(cx.listener(move |this, _, _, cx| this.fold_tool(mode, cx))),
                 )
             })
-            // The title is the handle: dragged, the tool goes to the other dock or another place in
-            // its stack. The empty part of the header (and the title, on the whole window) moves the
-            // window, as a title bar does.
-            .child(
-                div()
-                    .debug_selector(move || format!("tool-head-{}", mode.name()))
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .flex()
-                    .items_center()
-                    .when(!self.nav.native_bar, |d| {
-                        d.map(crate::ui::widgets::drag_window)
-                    })
-                    .child(
-                        div()
-                            .id(("tool-title", mode as usize))
-                            .debug_selector(move || format!("tool-title-{}", mode.name()))
-                            .min_w_0()
-                            .h_full()
-                            .flex()
-                            .items_center()
-                            .truncate()
-                            .when(!full, |d| {
-                                d.cursor_grab().on_drag(
-                                    docks::ToolDragged {
-                                        mode,
-                                        name: title.clone(),
-                                        theme: t,
-                                    },
-                                    |dragged, _, _, cx| cx.new(|_| dragged.clone()),
-                                )
-                            })
-                            // Quiet sans-semibold title (13 px) for a 32 px header: no serif at this size.
-                            .map(|d| {
-                                d.font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_size(t.px(13.))
-                                    .text_color(t.text)
-                            })
-                            .child(title.clone()),
-                    ),
-            )
-            .when(mode == Mode::Graph, |d| {
-                d.child(
-                    button("nav-center", "target.svg", false, t)
-                        .tooltip(tip(
-                            tr("Show the whole graph", "Voir tout le graphe"),
-                            String::new(),
-                            t,
-                        ))
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.graph.update(cx, |graph, cx| graph.recenter(cx))
-                        })),
-                )
-            })
+            // Zed-style tree header: the panel shows no vault name (it moved to the window's
+            // title bar), so the tree's action icons sit at the header's left end, ahead of the
+            // title handle — which stays, empty for the tree, as the drag handle and the
+            // dock-drag source.
             .when(mode == Mode::Tree, |d| {
                 // A note at the vault root, whatever the selection.
                 d.child(
@@ -1725,12 +1674,71 @@ impl Shell {
                             tr("Fold every folder", "Replier tous les dossiers")
                         },
                         String::new(),
-                        t,
                     ))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.fold_all();
                         cx.notify();
                     })),
+                )
+            })
+            // The title is the handle: dragged, the tool goes to the other dock or another place in
+            // its stack. The empty part of the header (and the title, on the whole window) moves the
+            // window, as a title bar does.
+            .child(
+                div()
+                    .debug_selector(move || format!("tool-head-{}", mode.name()))
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .flex()
+                    .items_center()
+                    .when(!self.nav.native_bar, |d| {
+                        d.map(crate::ui::widgets::drag_window)
+                    })
+                    .child(
+                        div()
+                            .id(("tool-title", mode as usize))
+                            .debug_selector(move || format!("tool-title-{}", mode.name()))
+                            .min_w_0()
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .truncate()
+                            // The tree shows no name, so its title handle takes the header's free
+                            // space: it stays a dock-drag source (and a window handle through its
+                            // parent) even with nothing written in it.
+                            .when(mode == Mode::Tree, |d| d.flex_1())
+                            .when(!full, |d| {
+                                d.cursor_grab().on_drag(
+                                    docks::ToolDragged {
+                                        mode,
+                                        name: title.clone(),
+                                        theme: t,
+                                    },
+                                    |dragged, _, _, cx| cx.new(|_| dragged.clone()),
+                                )
+                            })
+                            // Quiet sans-semibold title (13 px) for a 32 px header: no serif at this size.
+                            // The tree shows none: its vault name moved to the window's title bar.
+                            .when(mode != Mode::Tree, |d| {
+                                d.font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_size(t.px(13.))
+                                    .text_color(t.text)
+                                    .child(title.clone())
+                            }),
+                    ),
+            )
+            .when(mode == Mode::Graph, |d| {
+                d.child(
+                    button("nav-center", "target.svg", false, t)
+                        .tooltip(tip(
+                            tr("Show the whole graph", "Voir tout le graphe"),
+                            String::new(),
+                            t,
+                        ))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.graph.update(cx, |graph, cx| graph.recenter(cx))
+                        })),
                 )
             })
             // The tool elsewhere: as a tab (the graph, the calendar), in the other dock. Not from the
