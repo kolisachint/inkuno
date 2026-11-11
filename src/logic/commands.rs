@@ -435,12 +435,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Note,
         ),
         (
-            "app::ExportPdf",
-            tr("Save the note as PDF…", "Enregistrer la note en PDF…"),
-            "export.svg",
-            Note,
-        ),
-        (
             "nav::OpenAside",
             tr("Open in the other pane", "Ouvrir dans l'autre volet"),
             "c-split.svg",

@@ -323,7 +323,6 @@ impl Render for Shell {
             }))
             .on_action(cx.listener(|this, _: &OpenVault, window, cx| this.choose_vault(window, cx)))
             .on_action(cx.listener(|this, _: &CopyAll, _, cx| this.copy_all(true, cx)))
-            .on_action(cx.listener(|this, _: &ExportPdf, _, cx| this.export_pdf(cx)))
             .on_action(
                 cx.listener(|this, _: &ShareDocument, window, cx| this.show_share(window, cx)),
             )

@@ -49,7 +49,7 @@ fn sharing_notes_uses_the_whole_live_document(cx: &mut TestAppContext) {
     settle(cx);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.menu_groups(cx).concat().len()),
-        5
+        4
     );
     cx.simulate_keystrokes("enter");
     assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), before.2);
@@ -69,18 +69,6 @@ fn sharing_notes_uses_the_whole_live_document(cx: &mut TestAppContext) {
         assert_eq!(state(&shell, cx), before);
         assert_eq!(fs::read_to_string(&source).unwrap(), disk);
     }
-    // The existing PDF exporter joins the same document-aware menu.
-    choose(cx, 4);
-    assert!(cx.did_prompt_for_new_path());
-    cx.simulate_new_path_selection(|_| Some(root.join("copie.pdf")));
-    settle(cx);
-    assert!(
-        fs::read(root.join("copie.pdf"))
-            .unwrap()
-            .starts_with(b"%PDF-")
-    );
-    assert_eq!(state(&shell, cx), before);
-    assert_eq!(fs::read_to_string(&source).unwrap(), disk);
     // Cancel, an occupied file, a directory and a missing parent leave source and destinations intact.
     choose(cx, 2);
     cx.simulate_new_path_selection(|_| None);

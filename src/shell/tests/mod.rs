@@ -13,7 +13,6 @@ mod drops;
 mod editing;
 mod end_to_end;
 mod enlarge;
-mod export_pdf;
 mod feedback;
 mod find_bar;
 mod floating;
