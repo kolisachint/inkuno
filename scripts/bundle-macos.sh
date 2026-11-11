@@ -16,6 +16,9 @@ trap 'rm -rf "$stage"' EXIT
 app="$stage/Inkuno.app/Contents"
 mkdir -p "$app/MacOS" "$app/Resources"
 install -m755 "$bin" "$app/MacOS/inkuno"
+# App icon source is packaging/macos/Inkuno.iconset (from the brand kit, macos/Inkuno.iconset).
+# Regenerate Inkuno.icns on macOS after touching the iconset:
+#   iconutil -c icns packaging/macos/Inkuno.iconset -o packaging/macos/Inkuno.icns
 cp packaging/macos/Inkuno.icns "$app/Resources/Inkuno.icns"
 sed "s/@VERSION@/$ver/g" packaging/macos/Info.plist >"$app/Info.plist"
 plutil -lint "$app/Info.plist" >/dev/null
