@@ -283,6 +283,12 @@ mod tests {
                 "[relative](../a.md)\r\nplain\r\n",
                 "relative (../a.md)\nplain\n",
             ),
+            // Footnotes pass through literally: references and definitions alike.
+            (
+                "See [^a] here.\n\n[^a]: the note.\n",
+                "See [^a] here.\n\n[^a]: the note.\n",
+            ),
+            ("But [^x] stays.\n", "But [^x] stays.\n"),
         ] {
             assert_eq!(plain_text(source), expected, "{source:?}");
         }

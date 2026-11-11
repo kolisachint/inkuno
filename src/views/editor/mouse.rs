@@ -592,11 +592,22 @@ impl Editor {
         }
         // An ordinary click returns to a single cursor.
         self.more.clear();
+        // A footnote reference jumps to its definition, a definition's label to its
+        // references; references without one are plain text. Before the click reveals its line.
+        if e.modifiers.secondary()
+            && let Some(go) = self.footnote_target(i)
+        {
+            self.jump(go, false, cx);
+            return;
+        }
         let lr = self.line_range(i);
         let line = &self.content[lr.clone()];
         let col = i - lr.start;
         if e.modifiers.secondary()
-            && let Some((range, link)) = md::links(line).into_iter().find(|(r, _)| r.contains(&col))
+            && let Some((range, link)) = md::links(line)
+                .into_iter()
+                .filter(|(_, link)| !matches!(link, Link::Footnote(_)))
+                .find(|(r, _)| r.contains(&col))
         {
             // A link to a heading or a block of a note opens the note there.
             if let Some(target) = Some(&link)
@@ -678,11 +689,80 @@ impl Editor {
         self.menu_at(i, at, true, cx);
     }
 
+    /// Ctrl+click on a footnote: a reference jumps to its definition, a definition's label
+    /// jumps to its first reference and cycles through them on repeated clicks. References
+    /// without a definition are plain text (`None`: the click goes on as usual). Footnotes
+    /// navigate inside the note, so this runs before the click reveals its line.
+    pub(super) fn footnote_target(&mut self, at: usize) -> Option<usize> {
+        let lr = self.line_range(at);
+        if lr.start < md::front_matter(&self.content) || self.in_code(lr.start) {
+            return None;
+        }
+        let line = self.content[lr.clone()].to_string();
+        let col = at - lr.start;
+        if let Some((label, marker, _)) = md::footnote_def(&line) {
+            if marker.contains(&col) {
+                let key = label.to_lowercase();
+                let hit = self
+                    .feet()
+                    .iter()
+                    .find(|d| d.label.to_lowercase() == key)
+                    .map(|d| (d.at, d.refs.clone()));
+                let (def_at, refs) = hit?;
+                if refs.is_empty() {
+                    return None;
+                }
+                let next = match self.foot_jump {
+                    Some((prev, k)) if prev == def_at => (k + 1) % refs.len(),
+                    _ => 0,
+                };
+                self.foot_jump = Some((def_at, next));
+                return Some(refs[next]);
+            }
+        }
+        let hit = md::footnote_ref(&line)
+            .into_iter()
+            .find(|(r, _)| r.contains(&col))
+            .and_then(|(_, label)| {
+                let key = label.to_lowercase();
+                self.feet()
+                    .iter()
+                    .find(|d| d.label.to_lowercase() == key)
+                    .map(|d| d.at)
+            });
+        if hit.is_some() {
+            self.foot_jump = None;
+        }
+        hit
+    }
+
+    /// Byte `i` is on a footnote reference or a definition's label that names a definition:
+    /// Ctrl+click jumps there.
+    pub(super) fn footnote_defined_at(&self, i: usize) -> bool {
+        let lr = self.line_range(i);
+        if lr.start < md::front_matter(&self.content) || self.in_code(lr.start) {
+            return false;
+        }
+        let line = &self.content[lr.clone()];
+        let col = i - lr.start;
+        let label = md::footnote_def(line)
+            .filter(|(_, marker, _)| marker.contains(&col))
+            .map(|(label, _, _)| label)
+            .or_else(|| {
+                md::footnote_ref(line)
+                    .into_iter()
+                    .find(|(r, _)| r.contains(&col))
+                    .map(|(_, label)| label)
+            });
+        label.is_some_and(|l| self.foot_defined(&l))
+    }
+
     /// The note's menu at `at`, for what is around byte `i`: a link, a comment; `keys`: opened from the keys.
     fn menu_at(&mut self, i: usize, at: Point<Pixels>, keys: bool, cx: &mut Context<Self>) {
         let lr = self.line_range(i);
         let link = md::links(&self.content[lr.clone()])
             .into_iter()
+            .filter(|(_, link)| !matches!(link, Link::Footnote(_)))
             .find(|(r, _)| (r.start..=r.end).contains(&(i - lr.start)));
         let col = i - lr.start;
         let commented = md::comments(&self.content[lr])

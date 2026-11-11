@@ -275,7 +275,8 @@ fn inline(line: &str, from: usize, font: Font) -> Inline {
                 link[r].fill(Some(out.urls.len()));
                 out.urls.push(url);
             }
-            Link::Tag(_) => {}
+            // `[^label]` prints its label (brackets hidden, like on screen); no link entry.
+            Link::Footnote(_) | Link::Tag(_) => {}
         }
     }
     let mut mark = vec![0u8; line.len()];
@@ -1264,6 +1265,30 @@ mod tests {
         assert!(text.contains('→'), "{text}");
         assert_eq!(printed.pages[0].links.len(), 1);
         assert_eq!(printed.pages[0].links[0].1, "https://ex.fr");
+    }
+
+    #[test]
+    fn footnotes_print_their_label_in_place() {
+        let font = Font {
+            serif: false,
+            size: BODY,
+        };
+        // A reference prints its label, brackets hidden as on screen; no link entry.
+        let out = inline("See [^a] here.", 0, font);
+        let shown: String = out.glyphs.iter().map(|g| g.c).collect();
+        assert!(
+            !shown.contains('[') && !shown.contains(']'),
+            "{shown}"
+        );
+        assert!(shown.contains("See a here."), "{shown}");
+        let label = out.glyphs.iter().find(|g| g.c == 'a').unwrap();
+        assert!(label.style & md::LINK != 0, "{shown}");
+        assert!(out.urls.is_empty());
+        // A definition prints where it is written, with its text.
+        let def = inline("[^a]: the note.", 0, font);
+        let text: String = def.glyphs.iter().map(|g| g.c).collect();
+        assert!(!text.contains('[') && text.contains("the note"), "{text}");
+        assert!(def.urls.is_empty());
     }
 
     #[test]

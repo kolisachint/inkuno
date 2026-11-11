@@ -509,13 +509,15 @@ impl TableRow {
     }
 }
 
-/// A piece of text to lay out.
+/// A piece of text to lay out. `foot` versions the footnote definitions: adding one restyles
+/// every reference, so the cache must not outlive them.
 fn key(
     text: &str,
     wrap: Option<Pixels>,
     bold: bool,
     marked: &Option<Range<usize>>,
     look: &Look,
+    foot: u64,
 ) -> u64 {
     let mut hasher = Fast::default();
     (
@@ -525,12 +527,14 @@ fn key(
         marked,
         look.style,
         f32::from(font_size(look.theme)).to_bits(),
+        foot,
     )
         .hash(&mut hasher);
     hasher.finish()
 }
 
-/// Lays out a cell's text, on one line or at width `wrap`.
+/// Lays out a cell's text, on one line or at width `wrap`. Footnotes keep their source:
+/// a defined reference reads as a link, without hiding its brackets (see `footnote_flags`).
 fn shape(
     text_system: &WindowTextSystem,
     text: &str,
@@ -538,6 +542,7 @@ fn shape(
     bold: bool,
     marked: &Option<Range<usize>>,
     look: &Look,
+    defined: &dyn Fn(&str) -> bool,
 ) -> Shape {
     if text.is_empty() {
         return Shape {
@@ -548,6 +553,7 @@ fn shape(
     }
     let mut flags = vec![0u16; text.len()];
     md::inline(text, 0, &mut flags);
+    md::footnote_flags(text, &mut flags, defined);
     shape_flags(text_system, text, flags, wrap, bold, marked, look)
 }
 
@@ -736,6 +742,9 @@ impl Shown {
 /// Layout of a table, line by line. `lines`: (start, text) of each line
 /// of the table. `None`: the dash line, when the cursor is on it; it then shows
 /// as text. Otherwise it is hidden.
+/// Lays out a table, its lines wrapped. `foot` versions the footnote definitions in the shape
+/// cache; `defined` tells which reference labels have one (see `md::footnote_flags`).
+#[allow(clippy::too_many_arguments)]
 pub fn build(
     cache: &mut Cache,
     text_system: &WindowTextSystem,
@@ -744,6 +753,8 @@ pub fn build(
     lines: &[(usize, &str)],
     cursor: usize,
     marked: Option<&Range<usize>>,
+    foot: u64,
+    defined: &dyn Fn(&str) -> bool,
 ) -> Tables {
     // What the layout depends on: the text, the width, the theme, the dash line
     // when the cursor is on it, and the text being composed when it touches the table.
@@ -765,6 +776,8 @@ pub fn build(
     lines
         .iter()
         .for_each(|(at, line)| (composing.is_some().then_some(at - first), line).hash(&mut hasher));
+    // Footnote definitions restyle every reference: a changed set must not reuse the table.
+    foot.hash(&mut hasher);
     let key = hasher.finish();
     if let Some(rows) = cache
         .tables_old
@@ -775,7 +788,7 @@ pub fn build(
         return rows;
     }
     let rows: Tables = Rc::new(
-        rows(cache, text_system, look, width, lines, cursor, marked)
+        rows(cache, text_system, look, width, lines, cursor, marked, foot, defined)
             .into_iter()
             .map(|r| r.map(Rc::new))
             .collect(),
@@ -792,6 +805,8 @@ fn rows(
     lines: &[(usize, &str)],
     cursor: usize,
     marked: Option<&Range<usize>>,
+    foot: u64,
+    defined: &dyn Fn(&str) -> bool,
 ) -> Vec<Option<TableRow>> {
     let parsed: Vec<(Vec<Range<usize>>, Vec<usize>)> = lines
         .iter()
@@ -855,11 +870,11 @@ fn rows(
             let (text, bold) = (text(r, c), r == 0);
             let one = match computed(r, c) {
                 Some(shown) => cache
-                    .shape(key(&computed_key(&shown), None, bold, &None, look), || {
+                    .shape(key(&computed_key(&shown), None, bold, &None, look, foot), || {
                         shape_computed(text_system, &shown, None, bold, look)
                     }),
-                None => cache.shape(key(text, None, bold, &None, look), || {
-                    shape(text_system, text, None, bold, &None, look)
+                None => cache.shape(key(text, None, bold, &None, look, foot), || {
+                    shape(text_system, text, None, bold, &None, look, defined)
                 }),
             };
             if let Some(line) = &one.line {
@@ -916,7 +931,7 @@ fn rows(
                     let wrap = (alone[r][c] > widths[c]).then_some(widths[c]);
                     if let Some(shown) = computed(r, c) {
                         let shape = cache
-                            .shape(key(&computed_key(&shown), wrap, bold, &None, look), || {
+                            .shape(key(&computed_key(&shown), wrap, bold, &None, look, foot), || {
                                 shape_computed(text_system, &shown, wrap, bold, look)
                             });
                         let align = if shown.right {
@@ -933,8 +948,8 @@ fn rows(
                             reason: shown.reason,
                         };
                     }
-                    let shape = cache.shape(key(text, wrap, bold, &here, look), || {
-                        shape(text_system, text, wrap, bold, &here, look)
+                    let shape = cache.shape(key(text, wrap, bold, &here, look, foot), || {
+                        shape(text_system, text, wrap, bold, &here, look, defined)
                     });
                     Cell {
                         range,
@@ -1022,13 +1037,16 @@ impl Geometry {
     }
 }
 
-/// Sets the columns of a very big table from its first lines.
+/// Sets the columns of a very big table from its first lines. `foot` versions the footnote
+/// definitions in the shape cache (measurements do not depend on it).
 pub fn geometry(
     cache: &mut Cache,
     text_system: &WindowTextSystem,
     look: &Look,
     width: Pixels,
     lines: &[(usize, &str)],
+    foot: u64,
+    defined: &dyn Fn(&str) -> bool,
 ) -> Geometry {
     let parsed: Vec<Vec<Range<usize>>> = lines.iter().map(|(_, l)| md::cells(l)).collect();
     let cols = parsed.iter().map(Vec::len).max().unwrap_or(0).max(1);
@@ -1055,8 +1073,8 @@ pub fn geometry(
     for r in (0..lines.len()).filter(|&r| Some(r) != dash) {
         for (c, w) in wide.iter_mut().enumerate() {
             let (text, bold) = (text(r, c), r == 0);
-            let one = cache.shape(key(text, None, bold, &None, look), || {
-                shape(text_system, text, None, bold, &None, look)
+            let one = cache.shape(key(text, None, bold, &None, look, foot), || {
+                shape(text_system, text, None, bold, &None, look, defined)
             });
             if let Some(line) = &one.line {
                 *w = w.max(f32::from(line.unwrapped_layout.width));
@@ -1081,7 +1099,7 @@ pub fn geometry(
     }
 }
 
-/// Line `r` of a very big table, its cells on a single line.
+/// Line `r` of a very big table, its cells on a single line. `foot` and `defined`: as in `build`.
 #[allow(clippy::too_many_arguments)]
 pub fn big_row(
     cache: &mut Cache,
@@ -1092,6 +1110,8 @@ pub fn big_row(
     last: bool,
     (at, line): (usize, &str),
     marked: Option<&Range<usize>>,
+    foot: u64,
+    defined: &dyn Fn(&str) -> bool,
 ) -> TableRow {
     let (ranges, bars) = (md::cells(line), md::bars(line));
     if Some(r) == geom.dash {
@@ -1115,8 +1135,8 @@ pub fn big_row(
                 .map(|m| {
                     m.start.saturating_sub(at + range.start)..m.end.saturating_sub(at + range.start)
                 });
-            let shape = cache.shape(key(text, None, bold, &here, look), || {
-                shape(text_system, text, None, bold, &here, look)
+            let shape = cache.shape(key(text, None, bold, &here, look, foot), || {
+                shape(text_system, text, None, bold, &here, look, defined)
             });
             let clip = shape
                 .line

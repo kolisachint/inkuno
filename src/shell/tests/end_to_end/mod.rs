@@ -10,6 +10,7 @@ mod diagrams;
 mod embeds;
 mod files;
 mod find_mouse;
+mod footnotes;
 mod git_sync;
 mod history_panes;
 mod md_tables;
@@ -111,6 +112,7 @@ fn end_to_end(cx: &mut TestAppContext) {
     table_formulas::run(&j, cx);
     embeds::run(&j, cx);
     find_mouse::run(&j, cx);
+    footnotes::run(&j, cx);
     csv::run(&j, cx);
     history_panes::run(&j, cx);
     git_sync::run(&j, cx);

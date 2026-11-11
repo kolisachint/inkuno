@@ -278,6 +278,7 @@ impl Editor {
     /// Lays out this embedded section at `width` and says how tall it is.
     pub(super) fn fit(&mut self, width: Pixels, window: &mut Window, cx: &mut App) -> Pixels {
         let bounds = Bounds::new(point(px(0.), px(0.)), size(width + SIDE * 2., px(10_000.)));
+        self.feet();
         let key = LayoutKey {
             version: self.version,
             width: f32::from(bounds.size.width).to_bits(),
@@ -285,6 +286,7 @@ impl Editor {
             cursor: 0,
             revealed: None,
             marked: None,
+            foot: self.foot_hash(),
         };
         if self.laid_out.as_ref() != Some(&key) {
             self.laid_out = None;

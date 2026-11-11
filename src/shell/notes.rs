@@ -680,8 +680,10 @@ impl Shell {
     }
 
     /// Follows a link in the note: the address in the browser, the tag in the palette, the note.
+    /// Footnotes navigate inside the note (see `Editor::footnote_target`) and never reach this.
     pub(super) fn follow(&mut self, link: &Link, window: &mut Window, cx: &mut Context<Self>) {
         match link {
+            Link::Footnote(_) => {}
             Link::Url(url) => cx.open_url(url),
             Link::Tag(tag) => self.open_palette(&format!("#{tag}"), window, cx),
             // A folder reads as a list page, when no note bears its name.

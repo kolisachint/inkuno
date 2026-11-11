@@ -85,3 +85,53 @@ fn a_note_is_saved_as_pdf(cx: &mut TestAppContext) {
         said(cx)
     );
 }
+
+/// A note with footnotes is saved as PDF: the stream is Flate-compressed, so the test
+/// only checks the file is a PDF and nothing was reported missing. What footnotes print
+/// (their label where they are, definitions in place) is covered by `ui::print` unit tests.
+#[gpui::test]
+fn footnotes_print_in_place(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "export-pdf-footnotes");
+    let note = root.join("Notes.md");
+    fs::write(
+        &note,
+        "# Notes\n\nSee [^a] here, and [^x] alone.\n\n[^a]: the details.\n",
+    )
+    .unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&note, window, cx)
+    });
+    cx.simulate_keystrokes("f10");
+    cx.simulate_input("pdf");
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert!(cx.did_prompt_for_new_path());
+    cx.simulate_new_path_selection(|dir| {
+        assert_eq!(dir, root);
+        Some(root.join("Notes.pdf"))
+    });
+    cx.run_until_parked();
+    let pdf = fs::read(root.join("Notes.pdf")).unwrap_or_else(|e| {
+        panic!(
+            "{e} {:?}",
+            shell.read_with(cx, |s, _| s
+                .toasts
+                .iter()
+                .map(|t| t.text.clone())
+                .collect::<Vec<_>>())
+        )
+    });
+    assert!(pdf.starts_with(b"%PDF-"));
+    // Nothing is reported missing: footnotes need no pictures, no collected section.
+    assert!(
+        shell
+            .read_with(cx, |s, _| s
+                .toasts
+                .iter()
+                .map(|t| t.text.clone())
+                .collect::<Vec<_>>())
+            .iter()
+            .all(|t| !t.contains("Not printed"))
+    );
+}
