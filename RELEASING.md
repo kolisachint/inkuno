@@ -140,6 +140,8 @@ gh workflow run release.yml --ref main
 Standalone packaging workflows leave their output in Actions artifacts. They
 neither attach files to a release nor publish one. `release.yml` is the manual
 raw-archive builder for macOS + Linux; it has no publish step and no nightly.
+Both packaging workflows run the macOS `cargo test` gate before bundling, so a
+red mac test blocks artifacts and, through `release-native.yml`, publication.
 
 ## Dropped from the pipeline
 
