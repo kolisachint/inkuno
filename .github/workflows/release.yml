@@ -19,16 +19,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Retry fast-path: restore the binary uploaded by an earlier attempt of
+      # this run when inputs are unchanged. The artifact name keys on
+      # Cargo.lock + the pinned toolchain file + aarch64-apple-darwin (the
+      # macos-14 arm64 runner target). A miss fails only this step
+      # (continue-on-error) and the build below runs the full compile
+      # unchanged; rust-cache still speeds that compile. Test/package steps
+      # always run. (Gate crew: this step sits before build; keep
+      # build -> test -> package order.)
+      - name: Restore cached release binary (retry fast-path)
+        id: build-cache
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: inkuno-build-release-macos-aarch64-apple-darwin-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: .build-cache
+
       - name: Install toolchain from rust-toolchain.toml
         run: rustup show
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
+        if: steps.build-cache.outcome == 'failure'
         env:
           DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: cargo build --release --locked
+
+      - name: Place cached binary when restored (retry fast-path)
+        if: steps.build-cache.outcome == 'success'
+        run: |
+          mkdir -p target/release
+          cp .build-cache/inkuno target/release/inkuno
+          ls -la target/release/inkuno
+
+      # Saved right after build (before test/package) so a retry after a
+      # later-step failure reuses the binary instead of recompiling.
+      - name: Save release binary for retries (retry fast-path)
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkuno-build-release-macos-aarch64-apple-darwin-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: target/release/inkuno
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
 
       - name: Package inkuno.app bundle and archives
         env:
@@ -77,6 +112,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Retry fast-path: restore the binary uploaded by an earlier attempt of
+      # this run when inputs are unchanged. The artifact name keys on
+      # Cargo.lock + the pinned toolchain file + x86_64-unknown-linux-gnu. A
+      # miss fails only this step (continue-on-error) and the build below
+      # runs the full compile unchanged; rust-cache still speeds that
+      # compile. Test/package steps always run. (Gate crew: this step sits
+      # before build; keep build -> test -> package order.)
+      - name: Restore cached release binary (retry fast-path)
+        id: build-cache
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: inkuno-build-release-linux-x86_64-unknown-linux-gnu-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: .build-cache
+
       - name: Install GPUI system dependencies
         run: |
           sudo apt-get update
@@ -101,7 +151,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
+        if: steps.build-cache.outcome == 'failure'
         run: cargo build --release --locked
+
+      - name: Place cached binary when restored (retry fast-path)
+        if: steps.build-cache.outcome == 'success'
+        run: |
+          mkdir -p target/release
+          cp .build-cache/inkuno target/release/inkuno
+          ls -la target/release/inkuno
+
+      # Saved right after build (before test/package) so a retry after a
+      # later-step failure reuses the binary instead of recompiling.
+      - name: Save release binary for retries (retry fast-path)
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkuno-build-release-linux-x86_64-unknown-linux-gnu-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('rust-toolchain.toml') }}
+          path: target/release/inkuno
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
 
       - name: Package Linux archive
         run: |

@@ -113,7 +113,7 @@ public release is refused before local mutation. Authentication or API failure
 is an error, not evidence that a release is absent.
 
 If preparation finished and only a build or upload failed, fix the environment
-or transient issue and **Re-run failed jobs** in the same Actions run.
+or transient issue and **Re-run failed jobs** in the same Actions run. Release jobs upload the compiled binary as a `Cargo.lock`-keyed workflow artifact right after building, so a re-run whose build already succeeded restores that binary and skips recompiling while still re-running test and packaging.
 Successfully uploaded workflow artifacts are retained for seven days. Once
 they expire, rerun all jobs, or dispatch a fresh complete build:
 
