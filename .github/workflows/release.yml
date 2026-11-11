@@ -58,18 +58,13 @@ jobs:
           codesign --force --deep -s - "${BUNDLE}"
           codesign --verify --deep --strict "${BUNDLE}"
 
-          # Zip the bundle with ditto so macOS metadata and symlinks survive.
-          (cd dist && ditto -c -k --keepParent inkuno.app inkuno-macos-arm64.zip)
-
           ls -la dist
 
       - name: Upload macOS archives
         uses: actions/upload-artifact@v4
         with:
           name: inkuno-macos-arm64
-          path: |
-            dist/inkuno-macos-arm64.zip
-            dist/inkuno-macos-arm64.tar.gz
+          path: dist/inkuno-macos-arm64.tar.gz
           if-no-files-found: error
 
   linux:

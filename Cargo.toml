@@ -44,5 +44,5 @@ gpui = { version = "0.2.2", features = ["test-support"] }
 
 [profile.release]
 lto = "thin"
-codegen-units = 1
+codegen-units = 16
 strip = true
