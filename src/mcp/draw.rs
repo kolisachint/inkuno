@@ -23,12 +23,8 @@ pub fn check_mermaid(args: &Value) -> Outcome {
     };
     let kind = mermaid_kind(source);
     match figure::mermaid(source, &look(false)) {
-        Ok(_) => {
-            Outcome::ok(json!({"readable": true, "error": null, "kind": kind, "canvas": false}))
-        }
-        Err(error) => {
-            Outcome::ok(json!({"readable": false, "error": error, "kind": kind, "canvas": false}))
-        }
+        Ok(_) => Outcome::ok(json!({"readable": true, "error": null, "kind": kind})),
+        Err(error) => Outcome::ok(json!({"readable": false, "error": error, "kind": kind})),
     }
 }
 

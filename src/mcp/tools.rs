@@ -309,7 +309,7 @@ fn tools() -> Vec<Tool> {
             description: "Whether a Mermaid source draws, the engine's error when it does not, and its kind. Needs no vault.",
             properties: json!({"source": {"type": "string"}}),
             required: &["source"],
-            output: "readable, error, kind, canvas",
+            output: "readable, error, kind",
             read_only: true,
             destructive: false,
             idempotent: true,
