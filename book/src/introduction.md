@@ -11,9 +11,9 @@ New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 | **Fast** | The window opens in about 75 ms. A keystroke costs about a millisecond, even in a note of 5,000 lines. See [Performance](performance.md). |
 | **Plain files** | One `.md` file per note, in a folder called the *vault*. An existing folder of Markdown notes works as is, front matter included. See [Files on disk](vault.md). |
 | **Styled as you type** | Headings grow, bold and italics render, markers stay visible but dimmed. The file stays plain Markdown. See [Writing notes](writing.md). |
-| **Linked notes** | `[[links]]`, backlinks, tags, embedded sections and a graph. See [Links, embeds and files](links.md). |
+| **Linked notes** | `[[links]]` and tags. See [Links, embeds and files](links.md). |
 | **Comments** | Annotate a passage without changing it, in a format other apps can read. See [Comments](comments.md). |
-| **Daily notes** | Today's note from the blank page, and a calendar. See [Daily notes](daily-notes.md). |
+| **Daily notes** | Today's note from the blank page. See [Daily notes](daily-notes.md). |
 | **Tabs and panes** | As many tabs and split panes as the window holds. See [Tabs, panes and docks](tabs-and-panes.md). |
 | **Sync** | The vault is a folder of plain files: sync it with git or a cloud folder. See [Syncing a vault](sync.md). |
 | **Keyboard first** | One palette for notes and commands. Every shortcut is listed in the app and can be changed. See [Keyboard shortcuts](shortcuts.md). |

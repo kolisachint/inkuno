@@ -10,10 +10,6 @@ A rail of icons stays on the left of the window. It opens a panel beside the not
 |---|---|---|
 | Tree | `Ctrl + E` | the vault and its folders. The displayed file is highlighted. |
 | Recent | — | every note, from the most to the least recently opened (`› recent notes`; `Ctrl + P` opens on recent) |
-| Graph | `Ctrl + G` | one dot per note, one line per `[[link]]` between two notes |
-| Tags | `Ctrl + T` | every `#tag` of the vault with its number of notes. Unfold a tag to see them. |
-| Backlinks | `Ctrl + L` | the notes that link to the open note, see [Backlinks](links.md#backlinks) |
-| Calendar | `Ctrl + Shift + J` | one month of daily notes, see [The calendar](daily-notes.md#the-calendar) |
 
 The rail also holds, at the top: the command palette, the vault tree, search and new note. Everything else left the rail for the palette: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
 
@@ -24,16 +20,15 @@ The rail also holds, at the top: the command palette, the vault tree, search and
 
 ## Keys in the panel
 
-The same keys work in every view. The calendar has its own arrows.
+The same keys work in every view.
 
 | Key | Action |
 |---|---|
-| `↑` `↓` | select a note and preview it beside the panel, in a single tab in italics (in the graph, a click too) |
+| `↑` `↓` | select a note and preview it beside the panel, in a single tab in italics |
 | `Enter`, or a click | open the note in its tab and start typing |
-| `←` `→` | tree and tags: fold or unfold a folder or a tag. Graph: move to the nearest note on that side. |
-| `Tab` | graph: walk through the notes linked to the selected one |
-| `Tab`, `Shift + Tab` | tree, recent and tags: go along the buttons of the panel and of the rail. A ring shows which one has the keys; `Enter` or `Space` presses it. |
-| `F2`, `Delete` | tree, recent and tags: rename the selected note or folder, move it to the trash |
+| `←` `→` | tree: fold or unfold a folder |
+| `Tab`, `Shift + Tab` | tree and recent: go along the buttons of the panel and of the rail. A ring shows which one has the keys; `Enter` or `Space` presses it. |
+| `F2`, `Delete` | tree and recent: rename the selected note or folder, move it to the trash |
 | `Ctrl + Shift + N` | new folder, next to the selected line of the tree |
 | `Esc` | back to the note |
 
@@ -70,21 +65,6 @@ Right click a note, a file or a folder in the tree, then **Icon…**. Pick one o
 - A file that is not a note shows its extension next to its name, lighter (`contacts.csv`). A long name is cut before its extension.
 - The icon you give replaces the default one, before the name. It follows a rename or a move.
 - Icons are kept in `.inkuno-icons` at the root of the vault, so they travel with it.
-
-## The graph
-
-One dot per note, bigger with its links.
-
-- The displayed file is in the accent colour when it has a node (a note, diagram, SVG or picture). CSV/TSV tables have no node. Its neighbours and their lines are darker.
-- Notes without links sit on a ring around the rest. A rounded square is an attachment, such as a picture.
-- Names show for the open note, its neighbours and the most linked notes. Pointing at any dot shows its name, and lights up the notes it is linked to.
-- Drag the background to move around. Scroll to zoom. The target button glides back to the whole graph.
-- Drag a note to move it: the notes linked to it follow, the closest ones the most.
-- With the graph on the whole window, a click only selects. `Enter` or a double click brings the note back.
-
-Links to notes that do not exist yet are left out.
-
-Backlinks stay on the last note while a diagram, picture or table is displayed. Choosing a file in the tree or graph does not turn it into a backlink target.
 
 ## The trash
 

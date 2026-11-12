@@ -69,16 +69,12 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Ctrl+Shift+click` | Open a \[\[link\]\] in the other pane |
 | Drag from the tree | Onto a pane: open the file there; onto the right half of a single pane: open a second one |
 | `Ctrl+E` | Vault tree |
-| Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate. The graph marks it when it has a node. Backlinks stay on the last note |
+| Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate |
 |  | Recent notes |
-| `Ctrl+G` | Graph of the notes |
-| `Ctrl+T` | Tags |
-| `Ctrl+L` | Backlinks: the notes that link to this one |
-| `Ctrl+Shift+J` | Calendar: arrows, Page Up/Down for the month, Enter opens the day (a dot marks the days with a note) |
-| A picture | Shown in place of the note; a square in the graph |
-| A .csv or .tsv | A grid in place of the note; not in the graph |
+| A picture | Shown in place of the note |
+| A .csv or .tsv | A grid in place of the note |
 | `Ctrl+M` | Panel on the whole window |
-| `Arrows` / `Tab` | Select and preview / linked notes (graph) |
+| `Arrows` | Select and preview |
 | `Enter` / `Esc` | Open the note / back to the note |
 | `Ctrl+Shift+N` | New folder (also in the palette) |
 | Point at an icon | Its name and its shortcut |
@@ -100,7 +96,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Shift+Tab` | Back to the previous button |
 | `Shift+F10` / `Menu` | The same menu from the keys, for the selected row or the cursor: arrows, Enter, Esc |
 | In a list | Type to filter (key:text for one column), click a cell to rewrite it |
-| Drag a node | Move it in the graph, linked notes follow |
 
 ## Diagrams
 

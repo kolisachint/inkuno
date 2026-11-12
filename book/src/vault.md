@@ -27,14 +27,14 @@ A YAML front matter is a block that starts on the first line with `---` and ends
 - The title of the note is the first line after it.
 - Two keys are read:
   - `tags` (`tags: [a, b]`, `tags: a, b`, or a dashed list) count like `#tags` in the text;
-  - each name in `aliases` is another name for the note, suggested after `[[` and followed by links, backlinks and the graph.
+  - each name in `aliases` is another name for the note, suggested after `[[` and followed by links.
 - Other keys and nested YAML are ignored.
 
 `/meta` inserts a front matter. See [Slash commands](writing.md#slash-commands).
 
 ## Pictures, CSV and other files
 
-- **Pictures** are part of the vault. The tree lists them under the notes of their folder, and the graph shows them as squares, linked to the notes that display them. Selecting one shows it in place of the note. It can be renamed (the notes that display it follow), moved or trashed like a note.
+- **Pictures** are part of the vault. The tree lists them under the notes of their folder. Selecting one shows it in place of the note. It can be renamed (the notes that display it follow), moved or trashed like a note.
 - **Pictures** shown and listed: `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`, `tif`, `tiff`, `avif`.
 - **Attachments** are listed, found in the palette, linked with `[[name.pdf]]`, and open in the application of your system: `pdf`; video and audio (`mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mp3`, `m4a`, `wav`, `ogg`, `opus`, `flac`); archives (`zip`, `7z`, `tar`, `gz`, `rar`); documents (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `odt`, `ods`, `odp`, `epub`, `rtf`); text (`txt`, `json`, `xml`, `html`, `log`).
 - **Other files** stay in the folder, but Inkuno does not list them.
@@ -43,7 +43,7 @@ A YAML front matter is a block that starts on the first line with `---` and ends
 
 What other programs change in the vault (a sync tool, a script, another editor) is picked up in about half a second, without restarting. Inkuno asks the system to report changes (inotify, FSEvents, ReadDirectoryChangesW).
 
-- Notes and folders added, renamed or removed elsewhere show up in the tree, the palette and the graph.
+- Notes and folders added, renamed or removed elsewhere show up in the tree and the palette.
 - The note on display is read again when its file changes. If you were typing in that note at that moment, your version is kept and written back.
 - Inkuno also looks at the vault every 30 seconds, in case an event got lost. When the system cannot watch the folder, it looks every two seconds. See [Troubleshooting](troubleshooting.md#changes-made-elsewhere-show-up-late).
 
@@ -69,7 +69,7 @@ Inkuno has no terminal of its own.
 - **Failures** stay twelve seconds, until you click them or press `Esc`. They name the file and say why in words (`permission denied`, `not found`, `the disk is full`), never the raw system error.
 - **Unreadable things say so**: a Mermaid diagram or a `$$` formula that cannot be drawn, and a picture that cannot be read (a corrupt file, one of 0 bytes), show « Unreadable figure », « Unreadable formula » or « Unreadable image » under their source. A picture opened alone says « Loading… » while a big one is read.
 - **A missing or unreadable vault**: a vault that is no longer where the config left it is reported on the welcome page. A vault that cannot be read (no permission) says so in the panel, with the reason and the folder, instead of looking empty, and offers another vault. A folder inside it that cannot be read is marked « unreadable: » with the reason; the rest of the vault opens.
-- **Empty lists say so**: an empty tree, tag list or recent list, a note nothing links to, a palette search with no result (or with one letter, too little for the text search), a list page with no row, and a board with no column each show one soft line instead of a blank page.
+- **Empty lists say so**: an empty tree or recent list, a note nothing links to, a palette search with no result (or with one letter, too little for the text search), and a list page with no row each show one soft line instead of a blank page.
 
 ## Configuration files
 
