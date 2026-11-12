@@ -25,7 +25,6 @@ A right click on a tab opens its menu, which the arrows, `Enter` and `Escape` al
 
 A tab can be dragged along the bar, into another pane, or to an edge to split one. See [Drag a tab](#drag-a-tab).
 
-- **Saving before closing** includes a cell still being edited in a CSV or TSV grid.
 - **If saving fails**, the tab stays open and comes to the front with its text and undo history. The message names the file and explains the error.
 - **Retry**: restore the destination's writability, then close again.
 - **Closing the window**, using **Quit**, or switching vaults also keeps the current documents open if one cannot be saved.

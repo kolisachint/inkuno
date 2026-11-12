@@ -41,21 +41,20 @@ A click opens any of them. The first key you type clears the page.
 - `#` lists the notes carrying a tag.
 - `>` switches to the command palette: `>bold`, `>delete row`.
 
-With nothing typed, on a CSV table or in a table of a note, the palette offers their gestures under the recent notes.
+With nothing typed, in a table of a note, the palette offers its gestures under the recent notes.
 
 ## Every command: the command palette
 
-`F10` (or `Ctrl + Shift + P`, or the first button of the rail) opens the command palette. It lists every command the current view can do, with an icon, a short name and its keys. Commands are grouped, and those of what you are on (a block, a table, a diagram) come first.
+`F10` (or `Ctrl + Shift + P`, or the first button of the rail) opens the command palette. It lists every command the current view can do, with an icon, a short name and its keys. Commands are grouped, and those of what you are on (a block or a table) come first.
 
 Type to find a command by what it does, then `Enter` runs it where you were. Any word of its name works, accents ignored:
 
 - `folder` offers **New folder**;
-- `table` offers the settings of the CSV table on display (delimiter, encoding, header row, copy as, export);
-- `diagram`, `theme`, `font` and `update` offer theirs too.
+- `theme`, `font` and `update` offer theirs too.
 
 ## Every shortcut: the help panel
 
-`F1` (or `Ctrl + /`) opens the list of shortcuts, on the keys of what is on display: a CSV table, a diagram, a table of the note.
+`F1` (or `Ctrl + /`) opens the list of shortcuts, on the keys of what is on display: a table of the note.
 
 - A link per section sits at the top.
 - Type to search, by key or by effect (`ctrl+p`, `theme`). `Esc` empties the search, then closes.

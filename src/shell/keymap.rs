@@ -102,7 +102,6 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t(tr("Current file", "Fichier affiché"), tr("The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate", "L'arbre marque le fichier du volet et de l'onglet actifs, y compris les schémas, images et tableaux ; la sélection reste distincte")),
                 k(&nav::ShowRecent, tr("Recent notes", "Notes récentes")),
                 t(tr("A picture", "Une image"), tr("Shown in place of the note", "Affichée à la place de la note")),
-                t(tr("A .csv or .tsv", "Un .csv ou .tsv"), tr("A grid in place of the note", "Une grille à la place de la note")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
                 t(tr("Arrows", "Flèches"), tr("Select and preview", "Sélectionner en aperçu")),
                 t(tr("Enter / Esc", "Entrée / Échap"), tr("Open the note / back to the note", "Ouvrir la note / revenir à la note")),
@@ -134,16 +133,6 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t("![](Schéma.svg)", tr("Show the diagram in a note", "Afficher le schéma dans une note")),
                 t(".svg", tr("An SVG from elsewhere (draw.io, Mermaid.js…) opens in a viewer: drag or wheel to move, + - 0 to zoom", "Un SVG d'ailleurs (draw.io, Mermaid.js…) s'ouvre dans une visionneuse : glisser ou molette pour se déplacer, + - 0 pour zoomer")),
                 t(tr("Picture, formula, diagram", "Image, formule, schéma"), tr("Point at one in a note: a button at its corner shows it full size, to zoom and move around (Esc goes back)", "Pointer l'un d'eux dans une note : un bouton à son coin l'affiche en grand, pour zoomer et se déplacer (Échap revient)")),
-            ],
-        ),
-        (
-            tr("CSV tables", "Tableaux CSV"),
-            vec![
-                t(".csv .tsv", tr("Opens in a grid; encoding and delimiter are detected, written straight into the file", "S'ouvre dans une grille ; encodage et délimiteur sont devinés, écrit directement dans le fichier")),
-                t(tr("Arrows, Tab", "Flèches, Tab"), tr("Move; with Shift (or drag), select a range; click a row number or a header", "Se déplacer ; avec Maj (ou en glissant), sélectionner une plage ; clic sur un numéro ou un en-tête")),
-                t(&format!("{MOD}+{click}"), tr("Add another selection: copy, cut, empty or remove their rows together", "Ajouter une autre sélection : les copier, couper, vider ou retirer leurs lignes ensemble")),
-                t(tr("Type, Enter, F2", "Taper, Entrée, F2"), tr("Replace the cell / validate and go down / open the cell; Esc cancels", "Remplacer la cellule / valider et descendre / ouvrir la cellule ; Échap annule")),
-                p("table", tr("Delimiter, encoding, header row, copy as…, export (CSV, TSV, Markdown, JSON)", "Délimiteur, encodage, en-tête, copier en…, exporter (CSV, TSV, Markdown, JSON)")),
             ],
         ),
         (
@@ -230,14 +219,6 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&editor::Cancel, tr("Close the find bar and the menus, back to one cursor", "Fermer la barre de recherche et les menus, revenir à un seul curseur")),
                 t(&format!("Alt+{click}"), tr("Add a cursor", "Ajouter un curseur")),
                 k(&editor::InsertLink, tr("Link: [text](address) from the selection; on a link, change its address", "Lien : [texte](adresse) depuis la sélection ; sur un lien, changer son adresse")),
-                t(
-                    tr("Embed a section", "Incorporer une section"),
-                    tr(
-                        "![[Note#Heading]] alone on a line shows that heading and what is under it, up to the next heading of the same level, in place and live: ![[Note]] the whole note (without its front matter), ![[Note#^id]] the block that ends with ^id. Framed, with the source's name at the top right: a click on it, or a double click on the frame, opens the note there (Alt+Left comes back). Typing ![[Note# offers the headings of the note, #^ its blocks. Read-only; an embed that leads back to itself says so, and three levels are shown at most. Renaming the note or the heading rewrites the embeds and links to it",
-                        "![[Note#Titre]] seul sur une ligne montre ce titre et ce qu'il y a dessous, jusqu'au titre suivant de même niveau, sur place et en direct : ![[Note]] toute la note (sans son en-tête), ![[Note#^id]] le bloc qui finit par ^id. Dans un cadre, avec le nom de la source en haut à droite : un clic dessus, ou un double clic sur le cadre, ouvre la note à cet endroit (Alt+Gauche revient). Taper ![[Note# propose les titres de la note, #^ ses blocs. Lecture seule ; une incorporation qui revient sur elle-même le dit, et trois niveaux s'affichent au plus. Renommer la note ou le titre réécrit les incorporations et les liens qui y mènent",
-                    ),
-                ),
-                k(&editor::OpenEmbed, tr("On the line of an embed: open its note, at the section", "Sur la ligne d'une incorporation : ouvrir sa note, à la section")),
                 k(&editor::Comment, tr("Comment the selection or the line (in a table: the cell, or the taken row, column or table); on a comment, resolve it", "Commenter la sélection ou la ligne (dans un tableau : la cellule, ou la ligne, la colonne, le tableau pris) ; sur un commentaire, le résoudre")),
                 p(tr("comments", "commentaires"), tr("Comments: show their panel, jump to one (a badge on the speech bubble counts them)", "Commentaires : montrer leur panneau, aller à l'un d'eux (une pastille sur la bulle les compte)")),
                 t(tr("Right click", "Clic droit"), tr("Menu of the note: link, comment, cut, copy, paste, bold, italic", "Menu de la note : lien, commentaire, couper, copier, coller, gras, italique")),
@@ -441,7 +422,6 @@ pub(super) fn defaults() -> Vec<keys::Bind> {
         b("alt-up", &BlockUp, e),
         b("alt-down", &BlockDown, e),
         b("secondary-shift-backspace", &TableDeleteSpan, e),
-        b("alt-enter", &OpenEmbed, e),
         b("secondary-shift-l", &AlignLeft, e),
         b("secondary-shift-e", &AlignCenter, e),
         b("secondary-shift-r", &AlignRight, e),

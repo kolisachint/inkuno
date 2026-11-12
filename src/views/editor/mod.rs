@@ -133,7 +133,6 @@ actions!(
         TableSortAsc,
         TableSortDesc,
         TableTranspose,
-        OpenEmbed,
         BlockText,
         BlockHeading1,
         BlockHeading2,

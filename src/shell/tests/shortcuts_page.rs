@@ -93,7 +93,6 @@ fn shortcuts_page_is_in_english_with_every_section() {
         "## Notes",
         "## Navigation",
         "## Diagrams",
-        "## CSV tables",
         "## Appearance",
         "## Typing",
         "## Editing",

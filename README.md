@@ -18,7 +18,7 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 - **Plain files.** One `.md` file per note, in an ordinary folder. Sync it with git, Syncthing or a cloud folder. An existing folder of Markdown notes works as is.
 - **Styled as you type.** Headings grow, bold and italics render, markers stay visible but dimmed. The file on disk stays plain Markdown.
 - **Tables.** Cells wrap, `Tab` moves between them, and pasting from a spreadsheet works.
-- **Linked notes.** `[[Links]]`, tags, embedded sections and daily notes. The tree follows the active file, including diagrams, pictures and tables.
+- **Linked notes.** `[[Links]]`, tags and daily notes. The tree follows the active file, including diagrams, pictures and tables.
 - **More than notes.** List pages, and diagrams saved as SVG.
 - **Agents.** `inkuno mcp` lets an agent read, write and draw in the vault, with Inkuno's links, trash and diagrams. [Guide](book/src/agents.md)
 - **Safe tab closing.** Close a tab, the other tabs or a whole pane from a tab's right click, or every file from the palette. If saving fails, the document stays open with its edits and undo history.
@@ -67,7 +67,7 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | Page | What it covers |
 |---|---|
 | [Writing notes](book/src/writing.md) | Markdown, styles, lists, slash commands, blocks, several cursors |
-| [Links, embeds and files](book/src/links.md) | links, backlinks, tags, embedded sections, pictures, dropped files |
+| [Links, embeds and files](book/src/links.md) | links, tags, pictures, dropped files |
 | [Comments](book/src/comments.md) | annotating a passage, in a format other apps read |
 | [Daily notes](book/src/daily-notes.md) | today's note |
 | [The palette and the panel](book/src/navigation.md) | the tree, the trash, icons |
