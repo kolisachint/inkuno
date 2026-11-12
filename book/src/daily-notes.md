@@ -1,4 +1,4 @@
-# Daily notes, templates and capture
+# Daily notes and templates
 
 ## Today's note
 
