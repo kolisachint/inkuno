@@ -170,7 +170,7 @@ mod tests {
 
 /// What `![[…]]` points at in its note: the note's name and what of it. Moved here from the
 /// removed `logic/embed.rs`: the editor no longer renders embedded sections (a `![[Note]]` line
-/// reads as plain link text), but renaming a heading, the PDF export and the MCP server still
+/// reads as plain link text), but renaming a heading and the MCP server still
 /// resolve them.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Anchor {

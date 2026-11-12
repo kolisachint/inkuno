@@ -1,4 +1,4 @@
-//! Input line: the text of a one-line field (kanban card, grid cell,
+//! Input line: the text of a one-line field (grid cell,
 //! palette), its cursor and its selection. The same keys everywhere: arrows, word by word, start
 //! and end, selection, erasing, clipboard. The field using it adds "Line" to its
 //! key context and wires the gestures through `keys`.

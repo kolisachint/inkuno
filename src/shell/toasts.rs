@@ -96,7 +96,7 @@ impl Shell {
     }
 }
 
-/// Background of a status message or of the update banner.
+/// Background of a status message.
 pub(super) fn status_card(t: Theme) -> Div {
     crate::ui::widgets::floating(t)
         .pl_3()

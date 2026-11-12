@@ -136,7 +136,7 @@ pub fn sheet(t: Theme) -> Div {
         .overflow_hidden()
 }
 
-/// What floats over the page: the palette, the menus, the help, the toasts, the banner, a dragged tab. `bg`, the
+/// What floats over the page: the palette, the menus, the help, the toasts, a dragged tab. `bg`, the
 /// sheet radius, a hairline ring of `border` and the `floating` shadow. The caller sets its size and place.
 pub fn floating(t: Theme) -> Div {
     div()
@@ -178,7 +178,7 @@ pub fn passage_tint(t: Theme, on: bool) -> gpui::Hsla {
 /// The share of the accent behind the commented passage under the caret.
 const PASSAGE_ON: f32 = 0.12;
 
-/// A tinted band inside a sheet: groups what lies in it (a kanban column, a table header) without a line.
+/// A tinted band inside a sheet: groups what lies in it (a table header) without a line.
 #[allow(dead_code)] // used by the views from step 3 of #91
 pub fn band(t: Theme) -> Div {
     div().bg(t.code_bg).rounded(t.band())

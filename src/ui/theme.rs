@@ -519,13 +519,13 @@ impl Theme {
         self.px(12.)
     }
 
-    /// The radius of a tinted band inside a sheet (`code_bg`): kanban columns, table headers.
+    /// The radius of a tinted band inside a sheet (`code_bg`): table headers.
     #[allow(dead_code)] // used by the views from step 3 of #91
     pub fn band(&self) -> Pixels {
         self.px(10.)
     }
 
-    /// What sits on the page: tooltips, the dragged card, the bars over a canvas.
+    /// What sits on the page: a sheet, tooltips, a dragged tab.
     pub fn lifted(&self) -> Vec<BoxShadow> {
         vec![BoxShadow {
             color: hsla(0., 0., 0., 0.18),
@@ -747,14 +747,14 @@ mod tests {
         }
     }
 
-    /// A kanban column (`code_bg`) stands out from the page, and a card (`bg`) from its column, in every theme.
+    /// A band (`code_bg`) stands out from the page, and what sits on it (`bg`) from the band, in every theme.
     #[test]
-    fn board_columns_stand_out() {
+    fn bands_stand_out() {
         let mut fails = Vec::new();
         for (name, _) in THEMES {
             for look in [WindowAppearance::Light, WindowAppearance::Dark] {
                 let t = Theme::of(&Prefs::parse(&format!("theme={name}\n")), look);
-                // A card is a `bg` sheet on the column: its edge is the column's own contrast. The check
+                // What sits on a band is a `bg` sheet on it: its edge is the band's own contrast. The check
                 // box's mark (drawn in `bg`) reads on its `accent` fill.
                 let (page, mark) = (contrast(t.code_bg, t.bg), contrast(t.bg, t.accent));
                 if page < 1.05 || mark < 2.5 {
