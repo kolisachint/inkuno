@@ -130,13 +130,13 @@ sudo make install       # PREFIX=/usr/local by default, PREFIX=/usr for a system
 
 ## Upgrading
 
-On Arch (prebuilt package), macOS and Windows (installer), Inkuno [updates itself](updates.md): click **Update** in the banner. Otherwise:
+Inkuno [never checks for updates](updates.md): fetch the new release yourself, the same way you installed the app.
 
 | Installed with | Upgrade |
 |---|---|
-| Arch, prebuilt package | the **Update** button of the banner, or run the two commands of [Arch Linux](#arch-linux) again |
-| macOS, `.dmg` | the **Update** button of the banner, or download the new `.dmg` and drop Inkuno on Applications again |
-| Windows, installer | the **Update** button of the banner, or run the new installer: it upgrades in place |
+| Arch, prebuilt package | run the two commands of [Arch Linux](#arch-linux) again |
+| macOS, `.dmg` | download the new `.dmg` and drop Inkuno on Applications again |
+| Windows, installer | run the new installer: it upgrades in place |
 | Windows, `.zip` | unzip the new version over the old one |
 | Arch, `inkuno-git` | `git pull`, then `makepkg -si` in `aur/inkuno-git` |
 | `make install` | `git pull`, then `make` and `sudo make install` |

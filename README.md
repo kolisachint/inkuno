@@ -50,9 +50,7 @@ cd inkuno
 make && sudo make install
 ```
 
-The macOS and Windows downloads are not signed. The first launch needs one extra click: see [the install guide](book/src/install.md), which also covers the packages of each distribution, building on macOS and Windows, and upgrading.
-
-Inkuno tells you when a new version is out. On Arch, macOS and Windows (installer), one click updates it.
+The macOS and Windows downloads are not signed. The first launch needs one extra click: see [the install guide](book/src/install.md), which also covers the packages of each distribution, building on macOS and Windows, and upgrading. Inkuno never checks for updates: fetch a new release yourself when you want one.
 
 ## Getting started
 
@@ -78,7 +76,7 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | [Files on disk](book/src/vault.md) | naming, front matter, backup, configuration files |
 | [Syncing a vault](book/src/sync.md) | git or a cloud folder |
 | [Settings and appearance](book/src/settings.md) | themes, fonts, page width, changing a shortcut |
-| [Updates](book/src/updates.md) | how Inkuno updates itself, and what it sends |
+| [Updates](book/src/updates.md) | no automatic updates; how to upgrade |
 | [Keyboard shortcuts](book/src/shortcuts.md) | every shortcut, as the help panel lists them |
 | [Agents (MCP)](book/src/agents.md) | `inkuno mcp`: an agent reads, writes and draws in the vault |
 | [Compatibility](book/src/compatibility.md), [Troubleshooting](book/src/troubleshooting.md), [Performance](book/src/performance.md) | systems, known problems, measurements |
