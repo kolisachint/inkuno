@@ -16,7 +16,7 @@ src/
                crates/logic and are re-exported here, so every `crate::logic::…` path keeps working
   platform/    the outside world: disk, processes, network, OS (no gpui)
   ui/          the look shared by every view: theme, fonts and icons, widgets, figures
-  views/       gpui entities: editor, side panel, palette, viewer, one-line field
+  views/       gpui entities: editor, side panel, palette, viewer, one-line field (its text: `ui/line.rs`)
   shell/       the window: owns the panes and the views, routes events, runs the commands
     tests/     the whole app driven by simulated keystrokes
   mcp/         `inkuno mcp`: JSON-RPC over stdio for an agent. Uses logic, platform and the pure
@@ -51,7 +51,7 @@ each, all `impl Shell`:
 | `notes.rs` | opening, previewing, creating, saving notes; links and wikilinks; a rename rewrites the links to it |
 | `library.rs` | the vault: choosing, scanning, watching, icons, backup, trash; the window's door for `inkuno mcp` (`listen`) |
 | `sidebar.rs`, `files.rs`, `menu.rs`, `listing.rs` | the side panel, file operations, the context menu, list pages |
-| `palette_open.rs` | every way the palette opens: notes, commands, comments, places, questions |
+| `palette_open.rs` | every way the palette opens: notes, commands, comments, places |
 | `help.rs`, `keymap.rs` | the help panel; the default shortcuts and their sections |
 | `settings.rs`, `toasts.rs` | settings, status messages |
 | `render.rs` | drawing the window |
@@ -64,15 +64,15 @@ only. What the user opens goes through `Shell::open`: the tab that already shows
 otherwise a new tab (a preview or an empty tab is used in place); `open_note` loads into the
 active tab and is for code that has already chosen it (restoring, reopening).
 `Pane::displayed_path` identifies its current document, preferring `FileView` over the note kept
-underneath. The tree uses it; `Pane::path` stays the note's identity for editing and saving.
-A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`).
+underneath. The tree uses it; the `path` field stays the note's identity for editing and saving.
+A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`, `FieldEvent`).
 
 ## Where to look
 
 | To change… | Go to |
 |---|---|
 | how Markdown is read (headings, links, tags, styles) | `logic/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
-| Markdown tables (cells, paste, formulas) | `logic/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
+| Markdown tables (cells, paste, rows and columns, sort, format) | `logic/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
 | the window's door for `inkuno mcp` (`show`) | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `logic/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
@@ -80,12 +80,12 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | icons and fonts | `ui/assets.rs` |
 | the text editor | `views/editor/`: `edit.rs` (changes, undo), `cursor.rs`, `style.rs`, `table.rs` and `grid.rs` (Markdown tables), `blocks.rs`, `find.rs`, `completion.rs`, `links.rs`, `notes.rs` (which cells of a table carry a comment), `format_bar.rs`, `mouse.rs`, `clipboard.rs`, `input.rs` (IME) |
 | what a keystroke costs | `views/editor/layout.rs` (`reuse` redoes only the damaged lines) then `paint.rs`; the test `layout_reuse_matches_full_layout` checks every reuse against a full layout |
-| the tree, recent notes | `views/nav.rs` (state), `shell/sidebar.rs` (drawing) |
+| the tree, recent notes, vault search, outline | `views/nav.rs` (state), `shell/sidebar.rs` (drawing) |
 | the command palette | `views/palette.rs`, `shell/palette_open.rs` |
 | a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `ui/keys.rs` (how keys are read and shown) |
 | the test of a feature | `shell/tests/` (`end_to_end/` is one session, one file per chapter) |
 | the user guide | `book/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
-| the MCP server (`inkuno mcp`) | `src/mcp/` (`mod.rs` the protocol; `notes.rs` reading and writing; `draw.rs` figures to PNG; `guide.rs` resources and prompts; `tools.rs` the tool list; `vault.rs` the agent's vault); `main` routes `mcp` before the window. Checked by `src/mcp/check.rs` |
+| the MCP server (`inkuno mcp`) | `src/mcp/` (`mod.rs` the protocol; `notes.rs` reading and writing; `draw.rs` figures to PNG (`logic/mermaid.rs` `kind()` names the diagram kind); `guide.rs` resources and prompts; `tools.rs` the tool list; `vault.rs` the agent's vault); `main` routes `mcp` before the window. Checked by `src/mcp/check.rs` |
 
 ## How the main parts work
 
@@ -95,7 +95,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   light, with cells shaped only near the screen. A test compares every reused layout with a full
   one on thousands of random edits.
 - **Typing rules** (`logic/markdown/lists.rs`): pure functions (`on_enter`, `renumber`) decide
-  what Enter and Tab do on a list line and renumber the list around the cursor.
+  what Enter does on a list line and renumber the list around the cursor.
 - **Vault** (`platform/vault.rs`): the note list, its tags and its text are indexed off the UI
   thread when the vault opens, then kept up to date on each save. Changes made elsewhere are
   reported by the `notify` crate; the vault is also rechecked on a slow timer, which becomes the
@@ -122,7 +122,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 
 - **Nothing is destroyed or overwritten on disk**: atomic writes, a `.trash`
   folder, and a taken name is refused.
-- **Interface text** always goes through `tr("English", "Français")`. Tests run in French.
+- **Interface text** always goes through `tr("English", "Français")`: the app is English-only for now and the French forms are being removed.
 - **Pure first**: logic that can be a pure function lives in `logic/` and is unit-tested there;
   every user journey is tested end to end with simulated keystrokes (GPUI's test platform).
 - **No new dependency** without asking: `Cargo.lock` comes from GPUI 0.2.2's and is fragile.
