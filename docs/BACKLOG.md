@@ -1,112 +1,37 @@
-# Backlog — parked, out of session scope
+# Backlog
 
-Decided 2026-11-09: documented here, dropped from active work. Each item says where it came from and what unblocks it.
+Lean follow-ups only. Done work is listed once below, then dropped.
 
-## Product calls
-- **Root `inkuno.ico` orphan** — zero references repo-wide (verified by brand-theme crew). Safe to delete. One-line removal.
-- **Dark-theme nib contrast** — charcoal nib `#20232B` on `#171A22` ≈ 1:1; only the cobalt stroke shows on Inkuno Dark. Kit-compliant as shipped; needs human eyes to confirm acceptable.
-- **Linux icon default** — no action needed: `Theme::of` already follows system appearance. Closed.
-- **Collapsed code header line count** — Typora shows one; ours doesn't. One-line paint addition in `feat-codehide` follow-up.
-- **Chevron glyph vs SVG icon** — code-fold chevron is a text glyph (▸/▾); find-bar has SVG chevron assets if HiDPI/CJK fallback looks wrong.
-- **Folded blocks hide the closing fence** — shipped header-only; confirm desired vs showing trailing ` ``` `.
-- **Mermaid exemption from folding** — code-hide crew's call so figure slots stay intact; confirm with editor use.
-- **Wikilink bracket hiding** (`[[note]]`) — left readable; easy follow-up in the link-hide `urls` mechanism.
-- **Mermaid kind coverage** — display engine already renders flowcharts/ER; only the canvas converter is limited to class/sequence/state. Sketch filed by link-hide crew: extend converter incrementally, flowchart first (LARGE slice, own workstream). Renderer swap explicitly not recommended.
-- **`↩` backlink glyph for footnotes** — v1 uses clickable-label cycling; glyph insertion needs untested `subs` path. Follow-up.
-- **Multi-ref footnote cycling, def-without-ref no-op** — shipped per spec; confirm feel in use.
+## Done in the November cleanup
 
-## Code cleanups (integrator or later call)
-- `Editor::lookups` (`views/editor/mod.rs:591`) — dead after PDF-trim; remove or keep.
-- `logic/history.rs` — consumer-less after travel-trim; delete or keep for old-layout tolerance.
-- `pane.tool` machinery (`tool_of`, `panes_state` `@tool`) — unreachable after obsidian-trim; remove or keep.
-- `Pane::viewer()` — no non-test callers after canvas-trim; remove or keep.
-- `logic/prefs.rs` `updates` field — silently ignored after sync-trim; migrate or drop.
-- `shortcuts.md` regen via `make docs` — needs a real build; CI must do it (repo fmt baseline also predates toolchain — normalize decision needed).
-- `book/src/img/git-sync.svg` orphaned asset; `README.md:25` save-as-pdf anchor dangling.
+- The November trim slices (canvas, tables, obsidian, chrome, sync, deps) are all merged into main.
+- Root `inkuno.ico`, `book/src/img/git-sync.svg` and the README save-as-PDF anchor are gone.
+- `ReplaceInVault`, `--capture`/`vault::capture` and the `pane.tool` machinery are cut.
+- The daily note opens from the blank-page button only (`src/shell/render.rs:709`); no chord, no palette entry.
+- `logic/history.rs`, prefs `updates` and `Editor::lookups` are gone.
+- `shortcuts.md` is generated and checked on Linux CI only.
 
-## Structural follow-ups (spec'd, not started)
-- **Platform crate** — audit verdict: extract `clock`/`export`/`link` now, `vault.rs` stays until logic crate lands. Re-check `export` (only caller is sheet clipboard — delete-don't-extract if sheet trim stands).
-- **Screenshots/og-image regen** — needs a display runner (`scripts/record-demo.sh`).
+## Kept ideas (not built)
 
-## Product gaps (from e2e walk, 2026-11-10)
-- **ReplaceInVault live UI, dead engine** — `secondary-shift-enter` binding (`keymap.rs:55,468`) and the find-bar replace-vault button (`views/editor/find.rs:519-530`) fire a documented no-op (`replace_in_vault`). Remove the affordance or re-implement on a new vault-search home.
-- **Daily note has no chord** — `open_today` reachable only from the toolbar button (`render.rs:709`); Ctrl+J/palette entry cut with the nav modes. Confirm the button is the intended sole home.
-- **`inkuno --capture` gone** — desktop capture shortcut removed; `vault::capture` platform helper + tests remain (unused by the app).
+- Code folding in the editor.
+- Wikilink and URL bracket hiding.
+- Footnote backlink glyph.
+- Mermaid converter coverage (flowcharts next).
+- Tree header restyle.
+- Brand icons and theme.
+- Platform crate extraction.
+- Screenshots regeneration.
 
-## Process (standing)
-- 20-minute permission gate on all workers; fast-lane protocol (CI compiles, small slices, shared target, heartbeats).
-- `scripts/prune-agents.sh` runs on any disk-full stall.
+## Follow-ups
 
-## Uncommitted worktree slices (surveyed 2026-11-11, carry into next session)
-
-Verified: every agent branch is fully merged into `origin/main` — zero commits ahead anywhere. Everything below is UNCOMMITTED working-tree state: crews stopped mid-task and never committed. All worktrees sit on Nov-09 base `4104d2b` (two days stale); anything revived needs a rebase first, and some may already be superseded by 0.0.2.
-
-Trim crews (debloat order):
-- `trim-canvas` (~66 files) — cut canvas/diagram editor, keep mermaid engine. Deletions staged-but-uncommitted across `logic/diagram/*`, `views/canvas/*`, shell registries + tests. Largest open slice. Resume-or-drop call.
-- `trim-tables` (~70 files) — cut sheets/boards/CSV/kanban/tables. `logic/table.rs`, `formula.rs`, `views/sheet/*`, `views/kanban.rs` deleted uncommitted; stubs re-created (`views/sheet.rs`, `views/kanban.rs` untracked). DEFERRED by user over runtime — needs explicit permission to resume.
-- `trim-obsidian` (49 files) — cut embeds/graph/templates/calendar, keep markdown. Partial per crew reports, uncommitted; overlaps canvas/chrome territory — reconcile before resuming.
-- `trim-chrome` (23 files) — cut docks/capture/search/travel chrome. Shell modules deleted uncommitted.
-- `trim-sync` (15 files) — cut git sync + auto-update (`platform/git.rs`, `platform/update.rs`, `shell/sync.rs`, `shell/updates.rs` deleted uncommitted).
-- `trim-deps` (16 files) — drop PDF-only deps (`platform/pdf.rs`, `shell/print.rs`, `ui/print.rs` deleted uncommitted).
-- `trim-tables-basecheck` — clean detached-HEAD reference checkout. Nothing pending; deletable with its worktree.
-
-Feature crews (GitHub-parity / Typora-feel orders):
-- `feat-codehide` (6 files) — Typora-style code folding, then REVERTED late Nov-10; worktree still holds uncommitted *forward* edits. Decide: drop worktree or re-do. (Makes the `feat-codehide` follow-up bullets under Product calls above stale — re-point or close them.)
-- `feat-footnotes` (15 files + new `shell/tests/end_to_end/footnotes.rs`) — second-wave footnotes work, uncommitted; "shipped per spec" above may only cover wave one.
-- `feat-linkhide` (1 file) — wikilink/URL hiding, single `views/editor/layout.rs` edit uncommitted.
-- `feat-logic-crate` (23 entries) — extract `logic/` into `crates/`; old `src/logic/*` deleted, new `crates/` untracked. Mid-surgery, uncommitted; `vault.rs`/platform-crate verdict waits on this.
-- `ui-tree-header` (5 files) — Zed-style header (drop folder name, left-align icons); small uncommitted slice in `shell/render.rs`, `sidebar.rs`, `tabs.rs`, `mod.rs` + `tests/window.rs`.
-- `macos-build` — committed work merged; only untracked `dist/` build output remains. Deletable.
-
-Brand/design crews (deferred to design session):
-- `brand-icons` — new `Inkuno.iconset/`, rebuilt `.icns`, both SVGs, bundle-script fix, new `packaging/windows/`. All uncommitted.
-- `brand-theme` — `ui/theme.rs`, `ui/assets.rs`, `main.rs`, help + settings e2e. All uncommitted.
-
-CI/release-speed crews (30-minute pipeline plan, never proven end-to-end):
-- `ci-tier`, `ci-cache`, `ci-artifacts`, `ci-release-fast`, `macos-ci-test` (2–5 files each) — tiered CI, sccache/nextest, artifact reuse, release-profile cuts. Small uncommitted workflow diffs.
-- `update-check-inkuno` (2 files) — update-check repointed at Inkuno (`RELEASING.md`, `scripts/release.sh`), uncommitted.
-- `ops-prune` — untracked `scripts/prune-agents.sh` only; verify against main (may already exist) before treating as new.
-
-Fully merged, nothing to carry: `json-config`, `release-gate`, `inkuno-docs`, `inkuno-rename`, `inkuno-0.0.1`, `ci-fix` (`c63451a` already in main history).
-
-Stash/state leftovers:
-- Main tree: clean except untracked 3-line scratch `Sachin.md` (`# Sachin / ## koli`). Delete or ignore.
-- `stash@{0}` (`agent/features` WIP): mostly `.hoocode/dispatch/` run-logs (junk) + `ARCHITECTURE.md`, `docs/design/markdown_renderer.md`, `book/src/img/architecture-layers.svg` — check the docs for salvageable decisions, drop the rest.
-- `stash@{1}` (old `main` WIP, bref-swap era): keymap/sidebar/tabs/render/nav edits + `docs/design/ui.md`. Pre-rename vintage, likely superseded; `ui.md` may predate current design docs — skim before dropping.
-
-## Deferred by explicit user decision
-- **Design session** — brand-icons + brand-theme slices above, plus dark-theme nib-contrast human check and tree-header/folder-naming restyle. Not this session.
-- **Finish tables** — deferred over 1hr+ runtime; resumes only with explicit permission.
-- **Parked small calls** — the Product calls / Code cleanups / Product gaps sections above stand as parked.
-
-## Stale-or-unverified (confirm before next session builds on it)
-- 30-minute pipeline shape approved but never run end-to-end; `ci-*` slices unproven.
-- `scripts/prune-agents.sh` existence on main vs `ops-prune` untracked copy — dedupe.
-- `feat-codehide` references in this backlog postdate the Nov-10 revert — re-point or close.
-- 29 worktrees on Nov-09 base: prune dead ones per keep/kill before reviving anything (rebase required).
-
-## WIP carry branches (pushed 2026-11-11 — cloud pickup guide)
-
-All slices from the survey above are now committed as WIP commits on their `agent/*` branches and pushed to origin. Nothing remains uncommitted-only. To resume anywhere (cloud included): `git worktree add ~/.hoocode/worktrees/noteapp/<name> <branch>`.
-
-- `agent/trim-canvas` `cca4969` — canvas/diagram cut, keep mermaid.
-- `agent/trim-tables` `6056bef` — sheets/boards/CSV/kanban cut. Resume needs user permission.
-- `agent/trim-obsidian` `c8793db` — embeds/graph/templates/calendar cut.
-- `agent/trim-chrome` `abaccd5` — docks/capture/search/travel cut.
-- `agent/trim-sync` `19e75a1` — git sync + auto-update cut.
-- `agent/trim-deps` `a471ca9` — PDF-only dep cut.
-- `agent/feat-codehide` `75cf22a` — forward code-fold edits (feature reverted on main; drop or re-do).
-- `agent/feat-footnotes` `a33cb1e` — footnotes wave two.
-- `agent/feat-linkhide` `648cc08` — wikilink/URL hiding.
-- `agent/feat-logic-crate` `51a6036` — logic/ extraction, mid-surgery.
-- `agent/ui-tree-header` `21d3b58` — Zed-style header slice.
-- `agent/brand-icons` `123ee3f` — iconset/.icns/SVGs/Windows packaging.
-- `agent/brand-theme` `2151982` — theme/assets/help/settings.
-- `agent/ci-tier` `a52cc08`, `agent/ci-cache` `f44891b`, `agent/ci-artifacts` `0e3c894`, `agent/ci-release-fast` `0138728`, `agent/macos-ci-test` `0bf2b09` — pipeline speed slices, unproven.
-- `agent/update-check-inkuno` `29bce5c` — update-check repoint.
-- `agent/ops-prune` `3bc74bd` — `scripts/prune-agents.sh` (dedupe vs main).
-- `agent/inkuno-0.0.1` `23c8cde` — one aligned boards test on top of merged work.
-- `agent/ci-fix` `c63451a` — already in main; nothing unique.
-- `agent/inkuno-docs`, `agent/inkuno-rename`, `agent/json-config`, `agent/macos-build`, `agent/release-gate` — pushed as branch pointers at their merged commits; no unique content (`macos-build` `dist/` build output left on disk only, excluded).
-- `trim-tables-basecheck` (detached, clean) — nothing to carry.
-- Excluded from all WIP commits: `.hoocode/` session state, `dist/`, `target/` (all regenerable or junk).
+- GitHub Pages must be set to deploy from GitHub Actions, else the Docs deploy job fails (`.github/workflows/docs.yml:3`).
+- `shortcuts_page_is_current` is compiled out on macOS; the page cannot be regenerated on a Mac (`src/shell/tests/shortcuts_page.rs:66`).
+- Two macOS-only clippy warnings fail `-D warnings` locally (`src/platform/mod.rs:7`, `src/shell/tests/shortcuts_page.rs:7`).
+- Template machinery is reachable only through MCP; decide app UI or keep MCP-only (`src/platform/vault.rs:254`, `crates/logic/src/daily.rs:15`).
+- `packaging/windows/` remains though Windows is not built (`packaging/windows/`).
+- `docs/design/*.md` still describes cut actions; listed for the owner, not rewritten.
+- `tr()` second (French) args are still at call sites; removal is in progress (`crates/logic/src/lang.rs:6`).
+- `Pane::viewer()` has no non-test callers; remove or keep (`src/shell/pane.rs:179`).
+- The `is_table` doc comment still says CSV/TSV opens in a grid; it opens as plain text (`src/platform/vault.rs:294`).
+- The tabs page names docks but has no docks section; navigation lists Tree/Recent only while Search/Outline exist (`book/src/tabs-and-panes.md:1`, `src/views/nav.rs:57`).
+- Install docs say Rust 1.88 but `rust-version` is 1.98 (`Cargo.toml:5`, `book/src/install.md:13`).
