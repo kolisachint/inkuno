@@ -53,7 +53,6 @@ pub fn vault_info(vault: &Vault) -> Outcome {
         "tags": tags.into_iter().map(|(tag, count)| json!({"tag": tag, "count": count})).collect::<Vec<_>>(),
         "daily": date_name(clock::today()),
         "version": env!("CARGO_PKG_VERSION"),
-        "diagram_version": crate::logic::diagram::VERSION,
         "unreadable": vault.unreadable.iter().map(|(path, kind)| json!({
             "path": vault::rel(&vault.root, path),
             "error": disk(std::io::Error::new(*kind, "")),

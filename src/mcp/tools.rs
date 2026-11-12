@@ -93,7 +93,7 @@ fn tools() -> Vec<Tool> {
             description: "The vault folder, how many notes, templates, diagrams, tables, pictures and attachments it holds, its folders, its most used tags, today's daily note name, and Inkuno's version. Unreadable folders are listed and the rest still counts.",
             properties: json!({}),
             required: &[],
-            output: "folder, notes, templates, diagrams, tables, pictures, attachments, folders, tags, daily, version, diagram_version, unreadable",
+            output: "folder, notes, templates, diagrams, tables, pictures, attachments, folders, tags, daily, version, unreadable",
             read_only: true,
             destructive: false,
             idempotent: true,
