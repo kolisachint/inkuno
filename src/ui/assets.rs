@@ -94,9 +94,6 @@ impl AssetSource for Assets {
                 r#"<rect x="6" y="6" width="7.5" height="7.5" rx="1.5"/><path d="M10 4A1.5 1.5 0 0 0 8.5 2.5H4A1.5 1.5 0 0 0 2.5 4V8.5A1.5 1.5 0 0 0 4 10"/>"#
             }
             "check.svg" => r#"<path d="M4 8.5L7 11L12 5"/>"#,
-            "board.svg" => {
-                r#"<rect x="2.5" y="3" width="3" height="10" rx="0.8"/><rect x="6.5" y="3" width="3" height="7" rx="0.8"/><rect x="10.5" y="3" width="3" height="4.5" rx="0.8"/>"#
-            }
             // Icons of the palette commands and of a table's bar.
             "c-bold.svg" => {
                 r#"<path d="M5 3.5H9A2.2 2.2 0 0 1 9 8H5ZM5 8H9.6A2.25 2.25 0 0 1 9.6 12.5H5Z"/>"#
@@ -208,9 +205,6 @@ impl AssetSource for Assets {
             "chevron-right.svg" => r#"<path d="M6.5 4.5L10 8L6.5 11.5"/>"#,
             "chevron-left.svg" => r#"<path d="M9.5 4.5L6 8L9.5 11.5"/>"#,
             "chevron-down.svg" => r#"<path d="M4.5 6.5L8 10L11.5 6.5"/>"#,
-            "graph.svg" => {
-                r#"<circle cx="4" cy="11.5" r="1.7"/><circle cx="11.5" cy="4.5" r="1.7"/><circle cx="12" cy="12" r="1.3"/><path d="M5.3 10.3L10.2 5.7M11.6 6.2L11.9 10.7"/>"#
-            }
             "tag.svg" => r#"<path d="M6.5 3L5 13M11 3L9.5 13M3.5 6H13M3 10H12.5"/>"#,
             "trash.svg" => {
                 r#"<path d="M3 4.5H13M6.5 4.5V3H9.5V4.5M4.5 4.5L5 13H11L11.5 4.5M6.8 7V10.5M9.2 7V10.5"/>"#
@@ -255,123 +249,9 @@ impl AssetSource for Assets {
             "heart.svg" => {
                 r#"<path d="M8 13C3.5 9.8 2.5 7.6 2.5 5.9A2.6 2.6 0 0 1 8 4.9A2.6 2.6 0 0 1 13.5 5.9C13.5 7.6 12.5 9.8 8 13Z"/>"#
             }
-            "d-select.svg" => r#"<path d="M4 3V12L6.5 9.8L8.2 13.2L9.6 12.5L7.9 9.2L11 9Z"/>"#,
-            "d-rect.svg" => r#"<rect x="2.5" y="4" width="11" height="8" rx="0.5"/>"#,
-            "d-round.svg" => r#"<rect x="2.5" y="4" width="11" height="8" rx="3"/>"#,
-            "d-ellipse.svg" => r#"<ellipse cx="8" cy="8" rx="5.5" ry="4"/>"#,
-            "d-diamond.svg" => r#"<path d="M8 2.5L13.5 8L8 13.5L2.5 8Z"/>"#,
-            "d-cylinder.svg" => {
-                r#"<ellipse cx="8" cy="4.5" rx="4.5" ry="1.8"/><path d="M3.5 4.5V11.5A4.5 1.8 0 0 0 12.5 11.5V4.5"/>"#
-            }
-            "d-actor.svg" => {
-                r#"<circle cx="8" cy="4" r="1.7"/><path d="M8 5.7V10M5 7.5H11M5.5 13.5L8 10L10.5 13.5"/>"#
-            }
-            "d-note.svg" => r#"<path d="M3.5 3H10L12.5 5.5V13H3.5ZM10 3V5.5H12.5"/>"#,
-            "d-text.svg" => r#"<path d="M4 4.5V3.5H12V4.5M8 3.5V12.5M6.5 12.5H9.5"/>"#,
-            "d-arrow.svg" => r#"<path d="M3 13L13 3M7.5 3H13V8.5"/>"#,
-            "d-line.svg" => r#"<path d="M3 13L13 3"/>"#,
-            "d-route.svg" => r#"<path d="M2.5 12.5H8V3.5H13.5"/>"#,
-            "d-route-curve.svg" => r#"<path d="M2.5 12.5C8.5 12.5 7.5 3.5 13.5 3.5"/>"#,
-            "d-reverse.svg" => {
-                r#"<path d="M2.5 5.5H13M10 3L13 5.5L10 8M13.5 10.5H3M6 8L3 10.5L6 13"/>"#
-            }
-            "d-label-start.svg" => r#"<path d="M2.5 11.5H13.5M3 3.5H7M5 3.5V8"/>"#,
-            "d-label-end.svg" => r#"<path d="M2.5 11.5H13.5M9 3.5H13M11 3.5V8"/>"#,
-            "d-rel-menu.svg" => {
-                r#"<path d="M2.5 11.5H8M8 11.5L11 8.5L14 11.5L11 14.5ZM3 4.5H6.5M9.5 4.5H13M13 4.5L10.5 2.5M13 4.5L10.5 6.5"/>"#
-            }
-            "d-rel-association.svg" => r#"<path d="M2.5 8H13.5"/>"#,
-            "d-rel-navigable.svg" => r#"<path d="M2.5 8H13.5M10 4.8L13.5 8L10 11.2"/>"#,
-            "d-rel-nonnavigable.svg" => {
-                r#"<path d="M2.5 8H13.5M8.5 5.5L11.5 10.5M11.5 5.5L8.5 10.5"/>"#
-            }
-            "d-rel-aggregation.svg" => r#"<path d="M2.5 8L5.5 5.5L8.5 8L5.5 10.5ZM8.5 8H13.5"/>"#,
-            "d-rel-composition.svg" => {
-                r#"<path d="M2.5 8L5.5 5.5L8.5 8L5.5 10.5ZM8.5 8H13.5" fill="black"/>"#
-            }
-            "d-rel-generalization.svg" => r#"<path d="M2.5 8H8M14 8L8 4.8V11.2Z"/>"#,
-            "d-rel-realization.svg" => r#"<path d="M2.5 8H4M5.8 8H7.4M14 8L8 4.8V11.2Z"/>"#,
-            "d-rel-dependency.svg" => {
-                r#"<path d="M2.5 8H4.5M6.5 8H8.5M10.5 8H13.5M10 4.8L13.5 8L10 11.2"/>"#
-            }
-            "d-rel-assocclass.svg" => {
-                r#"<path d="M2.5 4.5H13.5M8 5V7M8 8.6V10.2M8 11.8V13"/><circle cx="8" cy="4.5" r="0.6" fill="black"/>"#
-            }
-            "d-rel-ball.svg" => r#"<path d="M2.5 8H7.5"/><circle cx="10.2" cy="8" r="2.7"/>"#,
-            "d-rel-socket.svg" => r#"<path d="M2.5 8H7M11.5 4.5A4 4 0 0 0 11.5 11.5"/>"#,
-            "d-rel-nary.svg" => r#"<path d="M8 3L13 8L8 13L3 8ZM8 3V1.5M3 8H1.5M13 8H14.5"/>"#,
-            "d-package.svg" => r#"<path d="M2.5 3.5H7V5.5H13.5V12.5H2.5Z"/>"#,
-            "d-frame.svg" => {
-                r#"<rect x="2.5" y="3" width="11" height="10" rx="0.5"/><path d="M5 5.5H8.5"/>"#
-            }
-            "d-lane.svg" => {
-                r#"<rect x="3.5" y="2.5" width="9" height="11" rx="0.5"/><path d="M3.5 5.5H12.5"/>"#
-            }
-            "d-fit.svg" => {
-                r#"<path d="M3 6V3H6M10 3H13V6M13 10V13H10M6 13H3V10M6.5 6.5H9.5V9.5H6.5Z"/>"#
-            }
-            "d-library.svg" => {
-                r#"<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="0.8"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="3"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="3"/><path d="M9 11.25H13.5M11.25 9V13.5"/>"#
-            }
-            "d-st-composite.svg" => {
-                r#"<rect x="2.5" y="3" width="11" height="10" rx="3"/><path d="M2.5 6.5H13.5"/>"#
-            }
-            "d-st-dot.svg" => r#"<circle cx="8" cy="8" r="3.2" fill="black"/>"#,
-            "d-st-final.svg" => {
-                r#"<circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="2.4" fill="black"/>"#
-            }
-            "d-st-bar.svg" => r#"<rect x="2.5" y="6.5" width="11" height="3" fill="black"/>"#,
-            "d-st-terminate.svg" => r#"<path d="M4 4L12 12M12 4L4 12"/>"#,
-            "d-st-exit.svg" => {
-                r#"<circle cx="8" cy="8" r="5"/><path d="M5.8 5.8L10.2 10.2M10.2 5.8L5.8 10.2"/>"#
-            }
-            "d-st-loop.svg" => {
-                r#"<rect x="2.5" y="7" width="8" height="6.5" rx="2"/><path d="M8 7V4.5A2 2 0 0 1 10 2.5H11.5A2 2 0 0 1 13.5 4.5V6.5M11.5 5L13.5 7L15 5"/>"#
-            }
-            "d-rel-sync.svg" => r#"<path d="M2.5 8H9M14 8L9 5V11Z" fill="black"/>"#,
-            "d-rel-found.svg" => {
-                r#"<circle cx="3.5" cy="8" r="1.4" fill="black"/><path d="M5 8H9M14 8L9 5V11Z" fill="black"/>"#
-            }
-            "d-rel-lost.svg" => {
-                r#"<path d="M2.5 8H10"/><circle cx="12" cy="8" r="1.6" fill="black"/>"#
-            }
-            "d-seq-number.svg" => {
-                r#"<path d="M3.5 5L4.8 4V8.5M2.5 12.5H6.5M9 5.5H13.5M9 8H13.5M9 10.5H12"/>"#
-            }
-            "d-seq-life.svg" => {
-                r#"<rect x="3.5" y="2.5" width="9" height="4" rx="0.8"/><path d="M8 6.5V8M8 9.5V11M8 12.5V13.5"/>"#
-            }
-            "d-seq-frag.svg" => {
-                r#"<rect x="2.5" y="3" width="11" height="10" rx="0.8"/><path d="M2.5 6H6.5L8 4.5V3"/><path d="M2.5 10H13.5" stroke-dasharray="2 1.6"/>"#
-            }
-            "d-act-call.svg" => {
-                r#"<rect x="2.5" y="3.5" width="11" height="9" rx="3"/><path d="M10 7V9.5M8.5 9.5H11.5M8.5 9.5V11.5M10 9.5V11.5M11.5 9.5V11.5"/>"#
-            }
-            "d-act-pin.svg" => {
-                r#"<rect x="3.5" y="4.5" width="9" height="7" rx="0.5"/><rect x="1.5" y="6.5" width="3" height="3" fill="white"/>"#
-            }
-            "d-act-row.svg" => {
-                r#"<rect x="2.5" y="3.5" width="11" height="9" rx="0.5"/><path d="M6 3.5V12.5"/>"#
-            }
-            "d-act-region.svg" => {
-                r#"<rect x="2.5" y="3.5" width="11" height="9" rx="3" stroke-dasharray="2 1.6"/><path d="M6.5 5.5L8.8 8H7.2L9.5 10.5"/>"#
-            }
-            "d-comp-component.svg" => {
-                r#"<rect x="2.5" y="3.5" width="11" height="9" rx="0.5"/><rect x="8" y="5.2" width="4.5" height="5.6" /><path d="M6 6.5H8M6 9.5H8"/>"#
-            }
-            "d-comp-node.svg" => {
-                r#"<path d="M2.5 6H11V13.5H2.5ZM2.5 6L5 3.5H13.5L11 6M13.5 3.5V11L11 13.5"/>"#
-            }
-            "d-comp-artifact.svg" => r#"<path d="M4.5 2.5H9.5L12 5V13.5H4.5ZM9.5 2.5V5H12"/>"#,
             "pencil.svg" => {
                 r#"<path d="M3 13L3.6 10L10.8 2.8L13.2 5.2L6 12.4ZM9.4 4.2L11.8 6.6"/>"#
             }
-            "d-fill.svg" => {
-                r#"<rect x="3" y="3" width="10" height="10" rx="1.5" fill="black" fill-opacity="0.35"/>"#
-            }
-            "d-dash.svg" => r#"<path d="M2.5 8H5M7 8H9M11 8H13.5"/>"#,
-            "d-head-start.svg" => r#"<path d="M13.5 8H3M6.5 4.5L3 8L6.5 11.5"/>"#,
-            "d-head-end.svg" => r#"<path d="M2.5 8H13M9.5 4.5L13 8L9.5 11.5"/>"#,
             "export.svg" => r#"<path d="M8 2.5V10M5 7L8 10L11 7M3 13H13"/>"#,
             "target.svg" => {
                 r#"<circle cx="8" cy="8" r="2"/><path d="M8 2.5V5M8 11V13.5M2.5 8H5M11 8H13.5"/>"#
@@ -398,9 +278,6 @@ impl AssetSource for Assets {
             }
             "in-selection.svg" => {
                 r#"<path d="M5 3H3.5V13H5M11 3H12.5V13H11"/><path d="M6 6.5H10M6 9.5H9"/>"#
-            }
-            "sync.svg" => {
-                r#"<path d="M12.6 6.5A4.8 4.8 0 0 0 3.9 5.4M3.5 2.8V5.6H6.3M3.4 9.5A4.8 4.8 0 0 0 12.1 10.6M12.5 13.2V10.4H9.7"/>"#
             }
             "theme.svg" => {
                 r#"<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5A5.5 5.5 0 0 1 8 13.5Z" fill="black"/>"#
