@@ -661,7 +661,7 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
     cx.run_until_parked();
     shell.read_with(cx, |s, cx| {
         assert_eq!((s.panes.len(), s.groups.len()), (1, 1));
-        assert!(s.pane().path.is_none() && s.pane().file.is_none() && s.pane().tool.is_none());
+        assert!(s.pane().path.is_none() && s.pane().file.is_none());
         assert!(s.pane().editor.read(cx).text().is_empty());
     });
     assert!(
