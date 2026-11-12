@@ -17,5 +17,4 @@ pub use inkuno_logic::rank;
 pub use inkuno_logic::recall;
 pub use inkuno_logic::wiki;
 
-pub mod diagram;
 pub mod mermaid;
