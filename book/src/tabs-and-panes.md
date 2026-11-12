@@ -65,3 +65,8 @@ Drag a tab to arrange the window:
 The part that would receive it is tinted while you drag. `Esc` lets go without moving anything.
 
 A file dragged from the tree does the same. Dropped on the right half of a window that has a single pane, it opens a second pane.
+
+## Docks
+
+The panel's tools live in a left dock beside the note. Drag a tool's title to another place in its dock, or to the right edge: a right dock opens and takes it.
+A stacked tool folds to its header with its chevron button. The header has no hide button: asking again for the shown tool hides it, first giving it the keys; the last one folds the panel back to its rail.
