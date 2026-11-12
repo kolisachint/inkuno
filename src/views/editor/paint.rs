@@ -958,7 +958,6 @@ impl Editor {
                     Choice::Name(name) => write(name, ""),
                     Choice::Command((name, en, fr, ..)) => write(tr(en, fr), &format!("/{name}")),
                     Choice::Date(en, fr, date) => write(tr(en, fr), &crate::lang::date_name(*date)),
-                    Choice::Anchor(text) => write(text, ""),
                 }
             }
         }
