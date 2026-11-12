@@ -44,7 +44,7 @@ sudo install inkuno /usr/local/bin/
 ```
 
 ```bash
-# Other Linux: needs Rust 1.88 or later, and the libraries listed in the install guide
+# Other Linux: needs Rust 1.98 or later, and the libraries listed in the install guide
 git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
 make && sudo make install
