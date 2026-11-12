@@ -12,7 +12,7 @@ By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). For a sec
 
 ## Building and testing
 
-```code
+```bash
 cargo run                 # debug build
 cargo run --release       # what gets installed
 cargo test --locked       # or: make test
@@ -23,7 +23,7 @@ The system packages needed on each platform are listed in the [install guide](bo
 
 Ignored benchmarks measure vaults of thousands of notes, pasting 300,000 TSV lines into a note, and notes with Markdown tables of up to tens of thousands of rows. Run them with `cargo test --release --locked -- --ignored --nocapture`; each reads its parameters from environment variables named in its doc comment. Their results are in the guide's [Performance](book/src/performance.md) page.
 
-**CI caching and sharding:** CI compiles through [sccache](https://github.com/mozilla/sccache) (GitHub Actions cache backend, alongside the `target/` cache) and runs the tests with [cargo-nextest](https://nexte.st) in the `ci` profile from `.config/nextest.toml`, sharded over two runners (`--partition count:1/2`). The end-to-end suite is one serial test (22 chapters in a single session), so it always runs whole on one shard. Local opt-ins; plain `cargo test --locked` stays the default and is unaffected:
+**CI caching and sharding:** CI compiles through [sccache](https://github.com/mozilla/sccache) (GitHub Actions cache backend, alongside the `target/` cache) and runs the tests with [cargo-nextest](https://nexte.st) in the `ci` profile from `.config/nextest.toml`, sharded over two runners (`--partition count:1/2`). The end-to-end suite is one serial test (15 chapters in a single session), so it always runs whole on one shard. Local opt-ins; plain `cargo test --locked` stays the default and is unaffected:
 
 ```bash
 RUSTC_WRAPPER=sccache cargo build --locked   # needs `sccache` installed
@@ -37,7 +37,7 @@ cargo nextest run --locked                   # same tests, faster feedback
 - **GPUI is pinned to 0.2.2** and its API moves. Check a signature in the source of that version, not in the documentation of `main`.
 - **`Cargo.lock` is fragile**: it started as the one GPUI 0.2.2 was published with. No global `cargo update`; one dependency at a time. No new dependency without an agreement in the issue.
 - **Code, comments**, commit messages, the README and issues are in English.
-- **Interface texts** always go through `tr("English", "Français")`. The tests run in French.
+- **Interface texts** always go through `tr("English", "Français")`: the app is English-only for now and the French forms are being removed.
 - **Nothing is destroyed or overwritten on disk**: atomic writes (`vault::write`), the `.trash` folder, and a refusal when a name is taken.
 - **A deliberate shortcut** carries a `// ponytail:` comment that names its limit and what would come next.
 

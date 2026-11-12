@@ -1,7 +1,7 @@
 # CI tiers: fast checks on every push/PR, full suite on main/nightly/manual.
 #
 # - fast (ubuntu-only): fmt + check + clippy + targeted tests (skips the
-#   22-chapter end_to_end session). Runs on every push, PR, schedule and dispatch.
+#   15-chapter end_to_end session). Runs on every push, PR, schedule and dispatch.
 # - test (ubuntu + macos): full `cargo test --locked` (unit + shell + end_to_end
 #   + integration). Runs on main pushes, the nightly schedule and manual dispatch.
 #
@@ -55,7 +55,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         # Count-based nextest partitions: each shard runs 1/N of the test list.
-        # N=2: the single serial `end_to_end` test (all 22 chapters in one
+        # N=2: the single serial `end_to_end` test (all 15 chapters in one
         # session, so it lands whole on one shard) stays the long pole, while
         # the other shard soaks up the ~30 shell unit-test modules with a
         # whole runner of CPUs to itself. More shards would idle waiting for
