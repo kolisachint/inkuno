@@ -1189,7 +1189,7 @@ impl Shell {
                     .gap_1()
                     // Calm default: the rail shows the vault tree only. Recent notes and vault
                     // search stay as modes (Mode::ALL) and reopen on demand through the palette
-                    // or the dock tool gate (put_tool/stack_tool/place_tool).
+                    // or the dock tool gate (put_tool/stack_tool).
                     .child(mode_button(
                         "nav-tree",
                         "tree.svg",
