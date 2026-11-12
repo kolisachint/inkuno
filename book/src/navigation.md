@@ -15,7 +15,7 @@ A rail of icons stays on the left of the window. It opens a panel beside the not
 | Backlinks | `Ctrl + L` | the notes that link to the open note, see [Backlinks](links.md#backlinks) |
 | Calendar | `Ctrl + Shift + J` | one month of daily notes, see [The calendar](daily-notes.md#the-calendar) |
 
-The rail also holds, at the top: the command palette, the views, search and new note. At the bottom: the trash, the sync of a vault kept in git (it turns while it runs, and a red dot says the last one failed), backup, theme and help.
+The rail also holds, at the top: the command palette, the vault tree, search and new note. Everything else left the rail for the palette: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
 
 - **Fold**: press the key of the view on display, or click its icon. The panel folds back to the rail.
 - **Resize**: drag the line between the panel and the note. Dragged all the way left, the panel folds to its rail. All the way right, it takes the whole window. Double-click the line for the default width.
@@ -53,7 +53,7 @@ A previewed note only counts as opened once you click or type in it. It then mov
 **The menu.** Right click a line, or press `Shift + F10` (the `Menu` key) on the selected line:
 
 - open, or open to the side;
-- new note here, new note from a template, new diagram here, new folder;
+- new note here, new folder;
 - copy the `[[link]]`, the path, or the path relative to the vault;
 - show in the file manager (Finder, Explorer);
 - duplicate (`Ctrl + D`), rename, move to a folder chosen in a list (what dragging does);
