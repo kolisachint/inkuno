@@ -21,7 +21,7 @@ make docs                 # rewrite the shortcuts page, build the user guide (ne
 
 The system packages needed on each platform are listed in the [install guide](book/src/install.md). The tests need no display: they run on GPUI's test platform. They include an end-to-end run driven by simulated keystrokes.
 
-Ignored benchmarks measure vaults of thousands of notes, CSV files of 300,000 rows and notes with a table of 300,000 rows. Run them with `cargo test --release --locked -- --ignored --nocapture`; each reads its parameters from environment variables named in its doc comment. Their results are in the guide's [Performance](book/src/performance.md) page.
+Ignored benchmarks measure vaults of thousands of notes, pasting 300,000 TSV lines into a note, and notes with Markdown tables of up to tens of thousands of rows. Run them with `cargo test --release --locked -- --ignored --nocapture`; each reads its parameters from environment variables named in its doc comment. Their results are in the guide's [Performance](book/src/performance.md) page.
 
 **CI caching and sharding:** CI compiles through [sccache](https://github.com/mozilla/sccache) (GitHub Actions cache backend, alongside the `target/` cache) and runs the tests with [cargo-nextest](https://nexte.st) in the `ci` profile from `.config/nextest.toml`, sharded over two runners (`--partition count:1/2`). The end-to-end suite is one serial test (22 chapters in a single session), so it always runs whole on one shard. Local opt-ins; plain `cargo test --locked` stays the default and is unaffected:
 
