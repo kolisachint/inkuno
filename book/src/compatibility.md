@@ -22,4 +22,4 @@ IBM Plex Sans, Plex Mono and Plex Serif (page titles) are built into the app. Id
 - Every view can be reached from the keys.
 - Every color pair stays readable in the 13 themes.
 - A screen reader cannot read the window yet: the toolkit Inkuno is drawn with exposes no accessibility tree.
-- Composing text with an input method (Chinese, Japanese, Korean, dead keys) works in notes. In a table cell or a diagram shape, the text is inserted as it is typed.
+- Composing text with an input method (Chinese, Japanese, Korean, dead keys) works in notes. In a table cell, the text is inserted as it is typed.

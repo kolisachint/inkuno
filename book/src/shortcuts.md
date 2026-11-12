@@ -101,31 +101,9 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 
 | Keys | Action |
 |---|---|
-| Dock, bar over the selection | The dock at the bottom: select, shapes, arrows and relationships (K), text, library (S), with their names; select something and a bar floats over it: colors, fill, dashes, the relationship of an arrow, its heads, route and texts, duplicate, delete |
-| 1 … 6 | The colour of the selection, as the palette gives them; the menus (arrow keys, Enter) and the library are walked with the keys |
-| Handles, right click | Point at a shape: four handles, drag one to another shape to draw an arrow; a right click opens the menu of what is under it (write in it, turn an arrow around, route, duplicate, delete) |
-| R U O D C P N T | Rectangle, rounded, ellipse, diamond, cylinder, person, note, text |
-| Selected shape, loop button | A transition from a state to itself, its label written at once; \`trigger \[guard\] / effect\`, the guard is in italics |
-| Sequence: arrows between lifelines | A message's height follows its order: drag it up or down to reorder; a call that waits opens a bar until its answer; the bar of the bar numbers them; a fragment (S: alt, opt, loop, par…) picked with messages selected wraps them, the first line of its text is the operator, each line after it an operand |
-| Activity (S): actions, decisions, bars, pins | A pin dropped on the border of a shape sits on it, follows it and is removed with it; swimlanes (G F W) are columns or rows; the guard of a flow is its text |
-| Components (S): components, ports, nodes | A port sits on the border of a component and goes with it; a node, a device and an execution environment hold the artifacts and nodes dropped on them; the ball and the socket (K B, K Q) are its interfaces |
-| G F W | Package, frame, swimlane: they hold the shapes dropped on them or drawn around, and move, copy and remove them together |
-| `S` | Shape library: classes, use cases… with their text; type to search, Enter picks, drag a row onto the canvas; starting points open a new diagram |
-| `K` | Relationships: a letter picks one (A N X G C H Z D, U I S L E M for a dependency with its stereotype, R association class, B ball, Q socket, J V «deploy» «manifest», F O W P T the messages of a sequence diagram, Y n-ary association); on selected arrows it changes them |
-| `A` / `L` / `V` | Arrow / line, held by the shapes they join / select |
-| Enter, double click | Write in the shape or on the arrow; Esc when done |
-| While writing | Click to place the cursor, drag or Shift+click to select, double click a word; arrows, words, Home, End, select all, copy, cut and paste act on the text; a click elsewhere ends it |
-| `---` | Alone on a line of a box: a compartment (UML class) |
-| `«interface»  + static x: int  abstract f()` | In a class: a stereotype line, then members; static is underlined, abstract in italics; name : Type is an object |
-| `Shift+click` / `Ctrl+click` | Add a shape to the selection, or take it out |
-| `Alt+click` | Select what lies under the selection at that spot, then round to the top: shapes stacked, an arrow under a filled shape |
-| `Delete` | Remove the selection |
-| Edge of a shape | An arrow end dropped there stays there; in the middle, it follows the other end |
-| `Wheel` / `+ - 0` | Move the view / zoom in, out, fit all |
 | `![](Schéma.svg)` | Show the diagram in a note |
 | `.svg` | An SVG from elsewhere (draw.io, Mermaid.js…) opens in a viewer: drag or wheel to move, + - 0 to zoom |
 | Picture, formula, diagram | Point at one in a note: a button at its corner shows it full size, to zoom and move around (Esc goes back) |
-| `Ctrl+P › import` | Bring in an Excalidraw or draw.io file |
 
 ## CSV tables
 
