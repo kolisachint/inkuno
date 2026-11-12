@@ -291,7 +291,7 @@ pub fn is_file_shown(path: &Path) -> bool {
     is_image(path) || is_table(path) || is_attachment(path)
 }
 
-/// The file is a table (CSV or TSV) the app opens in a grid.
+/// The file is a table (CSV or TSV): listed with the notes, opened as plain text.
 pub fn is_table(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
