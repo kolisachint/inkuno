@@ -1,4 +1,4 @@
-# Daily notes and templates
+# Daily notes
 
 ## Today's note
 
@@ -16,33 +16,3 @@ The **Calendar** view of the panel (`Ctrl + Shift + J`) shows one month.
 - Arrows change the day. `Page Up` and `Page Down` change the month.
 - `Enter` or a click opens the note of the day, or creates it.
 - The week starts on Monday in French, on Sunday in English.
-
-## Templates
-
-Put notes in a folder named `Templates` (or `Modèles`) at the root of the vault: each one is a template.
-
-- Case and accents of the folder name do not matter, and templates may sit in sub-folders.
-- Templates are left out of the graph, the tags, the links and the notes to read again. A `[[link]]` never points at one.
-
-**New note from a template**: **new note from a template** in the palette, or in the right-click menu of a folder of the tree.
-
-1. Choose the template.
-2. Type the name of the note.
-3. The note is written in the folder selected in the tree (the root of the vault otherwise) and opened, with the cursor where the template says.
-
-A name already taken is refused; nothing is overwritten.
-
-**Placeholders**
-
-| Placeholder | Becomes |
-|---|---|
-| `{{title}}` | the name you typed |
-| `{{date}}` | `2026-10-09` |
-| `{{time}}` | `09:05` |
-| `{{cursor}}` | where the cursor goes (the placeholder disappears) |
-
-Any other `{{word}}` stays as written.
-
-**Insert a template**: **insert a template** in the palette puts one at the cursor, filled with the name of the open note. One `Ctrl + Z` takes it back.
-
-**Make a template of a note**: **make a template of this note** in the palette saves the open note in the templates folder, created if there is none. Its first `#` title becomes `{{title}}`.

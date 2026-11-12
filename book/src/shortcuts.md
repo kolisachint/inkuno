@@ -23,7 +23,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Tab` | Search bar: replace field |
 | `Ctrl+Enter` | Search bar: replace all (Enter: this match) |
 | `Ctrl+N` | New note |
-| `Ctrl+P › template` | Insert a template at the cursor, or make a template of the open note |
 | `Ctrl+O` | Change vault |
 | `Ctrl+P › terminal` | Open a terminal in the vault |
 | `Ctrl+P › clone` | Clone a vault from a git address (also on the welcome screen) |

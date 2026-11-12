@@ -53,7 +53,6 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t("Tab", tr("Search bar: replace field", "Barre de recherche : champ de remplacement")),
                 k(&editor::ReplaceAll, tr("Search bar: replace all (Enter: this match)", "Barre de recherche : tout remplacer (Entrée : ce passage)")),
                 k(&NewNote, tr("New note", "Nouvelle note")),
-                p(tr("template", "modèle"), tr("Insert a template at the cursor, or make a template of the open note", "Insérer un modèle au curseur, ou faire un modèle de la note ouverte")),
                 k(&OpenVault, tr("Change vault", "Changer de coffre")),
                 p("terminal", tr("Open a terminal in the vault", "Ouvrir un terminal dans le coffre")),
                 p("clone", tr("Clone a vault from a git address (also on the welcome screen)", "Cloner un coffre depuis une adresse git (aussi sur l'écran d'accueil)")),
