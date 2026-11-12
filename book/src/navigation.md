@@ -1,6 +1,6 @@
 # The palette and the panel
 
-The [palette](first-steps.md#find-anything-the-palette) (`Ctrl + P`) finds and creates notes. The panel shows the vault in several views.
+The [palette](first-steps.md#find-anything-the-palette) (`Ctrl + P`) finds and creates notes. The panel shows the vault in four views: the tree, recent notes, vault search, and the outline.
 
 ## The rail and its views
 
@@ -10,6 +10,8 @@ A rail of icons stays on the left of the window. It opens a panel beside the not
 |---|---|---|
 | Tree | `Ctrl + E` | the vault and its folders. The displayed file is highlighted. |
 | Recent | — | every note, from the most to the least recently opened (`› recent notes`; `Ctrl + P` opens on recent) |
+| Search | — | the matches of a vault search, note by note |
+| Outline | — | the headings of the open note, in the right dock |
 
 The rail also holds, at the top: the command palette, the vault tree, search and new note. Everything else left the rail for the palette: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
 
