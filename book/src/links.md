@@ -27,4 +27,4 @@ A `#tag` in the text, or a `tags` key in the front matter, tags a note.
 - **Enlarge**: point at a picture (PNG, JPEG, GIF, WebP…), a formula, an SVG or a Mermaid diagram, and a magnifier button appears at its corner, or beside it when it is too small to hold it. It opens a viewer: `Ctrl + wheel` zooms around the pointer, and dragging moves the picture.
 - A click on the picture itself still places the cursor. A missing or unreadable picture has no button.
 
-Pictures are part of the vault. See [Files on disk](vault.md#pictures-csv-and-other-files).
+Pictures are part of the vault. See [Files on disk](vault.md#pictures-and-other-files).
