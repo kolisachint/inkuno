@@ -46,7 +46,7 @@ each, all `impl Shell`:
 
 | File | Subject |
 |---|---|
-| `pane.rs` | the panes and their tabs, which one is active, the file a tab shows (`FileView`); splitting, moving a tab between panes, the saved layout. The panes are placed by the tree `logic/layout.rs` (`Node`, leaves = groups), drawn by `render_layout` |
+| `pane.rs` | the panes and their tabs, which one is active, the file a tab shows (`FileView`); splitting, moving a tab between panes, the saved layout. The panes are placed by the tree `crates/logic/src/layout.rs` (`Node`, leaves = groups), drawn by `render_layout` |
 | `tabs.rs` | the tab bar of a pane |
 | `notes.rs` | opening, previewing, creating, saving notes; links and wikilinks; a rename rewrites the links to it |
 | `library.rs` | the vault: choosing, scanning, watching, icons, backup, trash; the window's door for `inkuno mcp` (`listen`) |
@@ -71,11 +71,11 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 
 | To change… | Go to |
 |---|---|
-| how Markdown is read (headings, links, tags, styles) | `logic/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
-| Markdown tables (cells, paste, rows and columns, sort, format) | `logic/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
+| how Markdown is read (headings, links, tags, styles) | `crates/logic/src/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
+| Markdown tables (cells, paste, rows and columns, sort, format) | `crates/logic/src/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
 | the window's door for `inkuno mcp` (`show`) | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
-| a note written elsewhere while typed in | `logic/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
+| a note written elsewhere while typed in | `crates/logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `ui/theme.rs` |
 | icons and fonts | `ui/assets.rs` |
 | the text editor | `views/editor/`: `edit.rs` (changes, undo), `cursor.rs`, `style.rs`, `table.rs` and `grid.rs` (Markdown tables), `blocks.rs`, `find.rs`, `completion.rs`, `links.rs`, `notes.rs` (which cells of a table carry a comment), `format_bar.rs`, `mouse.rs`, `clipboard.rs`, `input.rs` (IME) |
@@ -94,7 +94,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   edit touched (the others are kept and shifted). A table of more than 1,500 lines is laid out
   light, with cells shaped only near the screen. A test compares every reused layout with a full
   one on thousands of random edits.
-- **Typing rules** (`logic/markdown/lists.rs`): pure functions (`on_enter`, `renumber`) decide
+- **Typing rules** (`crates/logic/src/markdown/lists.rs`): pure functions (`on_enter`, `renumber`) decide
   what Enter does on a list line and renumber the list around the cursor.
 - **Vault** (`platform/vault.rs`): the note list, its tags and its text are indexed off the UI
   thread when the vault opens, then kept up to date on each save. Changes made elsewhere are
@@ -123,6 +123,6 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 - **Nothing is destroyed or overwritten on disk**: atomic writes, a `.trash`
   folder, and a taken name is refused.
 - **Interface text** always goes through `tr("English", "Français")`: the app is English-only for now and the French forms are being removed.
-- **Pure first**: logic that can be a pure function lives in `logic/` and is unit-tested there;
+- **Pure first**: logic that can be a pure function lives in `crates/logic/src/` (re-exported through `src/logic/`) and is unit-tested there;
   every user journey is tested end to end with simulated keystrokes (GPUI's test platform).
 - **No new dependency** without asking: `Cargo.lock` comes from GPUI 0.2.2's and is fragile.
