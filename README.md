@@ -72,7 +72,7 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | [Writing notes](book/src/writing.md) | Markdown, styles, lists, slash commands, blocks, several cursors |
 | [Links, embeds and files](book/src/links.md) | links, backlinks, tags, embedded sections, pictures, dropped files |
 | [Comments](book/src/comments.md) | annotating a passage, in a format other apps read |
-| [Daily notes, templates and capture](book/src/daily-notes.md) | today's note, the calendar, templates, quick capture |
+| [Daily notes and templates](book/src/daily-notes.md) | today's note, the calendar, templates |
 | [The palette and the panel](book/src/navigation.md) | the tree, the graph, the trash, icons |
 | [Tabs, panes and docks](book/src/tabs-and-panes.md) | arranging the window |
 | [Search and replace](book/src/search.md) | in a note |
