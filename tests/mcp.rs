@@ -138,15 +138,24 @@ fn a_session_over_pipes() {
             .unwrap()
             .contains("changed since")
     );
-    // The canvas editor is gone: the diagram tools fail with a sentence, and the
-    // library is empty. Mermaid sources still render without a vault.
-    let diagram = client.ask("tools/call", json!({"name": "create_diagram", "arguments": {"name": "Boxes", "from": {"shapes": [{"key": "a", "form": "rect", "text": "One", "x": 0, "y": 0}], "links": []}}}));
+    // The canvas editor is gone: its tools are gone too. Mermaid sources still render without a vault.
+    let diagram = client.ask(
+        "tools/call",
+        json!({"name": "create_diagram", "arguments": {"name": "Boxes"}}),
+    );
     assert_eq!(diagram["result"]["isError"], true);
     assert!(
         diagram["result"]["content"][0]["text"]
             .as_str()
             .unwrap()
-            .contains("removed")
+            .contains("unknown tool")
+    );
+    assert!(
+        tools["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tool| tool["name"] != "diagram_library")
     );
     let rendered = client.ask(
         "tools/call",
@@ -154,17 +163,6 @@ fn a_session_over_pipes() {
     );
     assert_eq!(rendered["result"]["isError"], false);
     assert_eq!(rendered["result"]["content"][1]["mimeType"], "image/png");
-    let library = client.ask(
-        "tools/call",
-        json!({"name": "diagram_library", "arguments": {"family": "class"}}),
-    );
-    assert_eq!(library["result"]["isError"], false);
-    assert!(
-        library["result"]["structuredContent"]["shapes"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
     let guide = client.ask("resources/read", json!({"uri": "inkuno://guide/links"}));
     assert!(
         guide["result"]["contents"][0]["text"]
