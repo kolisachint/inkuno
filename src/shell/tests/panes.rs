@@ -627,3 +627,47 @@ fn an_agent_shows_a_file(cx: &mut TestAppContext) {
     );
     assert!(shell.read_with(cx, |s, _| s.pane().viewer().is_some()));
 }
+
+/// An old layout whose shown tab is a tool token (`@graph`): the real files come back in
+/// order, the token is dropped, and the shown tab falls back to a real one — no empty pane.
+#[gpui::test]
+fn an_old_tool_tab_restores_the_files_around_it(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "tool-restore");
+    for name in ["Note", "Other"] {
+        fs::write(root.join(format!("{name}.md")), format!("# {name}\n")).unwrap();
+    }
+    shell.update_in(cx, |s, window, cx| {
+        s.restore_panes(
+            None,
+            vec![(
+                vec![
+                    root.join("Note.md"),
+                    PathBuf::from("@graph"),
+                    root.join("Other.md"),
+                ],
+                1,
+            )],
+            false,
+            &root,
+            window,
+            cx,
+        );
+    });
+    shell.read_with(cx, |s, _| {
+        assert_eq!(s.groups.len(), 1);
+        assert_eq!(s.groups[0].tabs.len(), 2);
+        let shown = s.groups[0].shown;
+        assert!(s.groups[0].tabs.contains(&shown));
+        assert_eq!(s.active, shown);
+        let paths: Vec<PathBuf> = s.groups[0]
+            .tabs
+            .iter()
+            .map(|&tab| s.panes[tab].path.clone().expect("no empty pane"))
+            .collect();
+        assert_eq!(paths, vec![root.join("Note.md"), root.join("Other.md")]);
+        assert_eq!(
+            s.panes[shown].path.as_deref(),
+            Some(root.join("Note.md").as_path())
+        );
+    });
+}
