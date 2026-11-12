@@ -32,11 +32,8 @@ pub fn call(server: &mut Server, name: &str, args: &Value) -> Outcome {
     if server.read_only && !tool.read_only {
         return Outcome::err("this server is read-only");
     }
-    if matches!(name, "check_mermaid" | "diagram_library") {
-        return match name {
-            "check_mermaid" => draw::check_mermaid(args),
-            _ => draw::library(args),
-        };
+    if name == "check_mermaid" {
+        return draw::check_mermaid(args);
     }
     if name == "render" {
         return draw::render(server, args);
@@ -61,10 +58,6 @@ pub fn call(server: &mut Server, name: &str, args: &Value) -> Outcome {
         "restore_note" => notes::restore_note(vault, args),
         "daily_note" => notes::daily_note(vault, args),
         "add_comment" => notes::add_comment(vault, args),
-        "create_diagram" => draw::create_diagram(vault, args),
-        "read_diagram" => draw::read_diagram(vault, args),
-        "edit_diagram" => draw::edit_diagram(vault, args),
-        "import_diagram" => draw::import_diagram(vault, args),
         _ => Outcome::err(format!("unknown tool `{name}`")),
     }
 }
@@ -320,73 +313,6 @@ fn tools() -> Vec<Tool> {
             read_only: true,
             destructive: false,
             idempotent: true,
-        },
-        Tool {
-            name: "create_diagram",
-            title: "Create a diagram (removed)",
-            description: "Removed with the canvas editor: always fails. Put the Mermaid source in a note as a ```mermaid block, then render that block.",
-            properties: json!({
-                "name": {"type": "string"},
-                "folder": {"type": "string"},
-                "from": {"type": "object", "description": "{mermaid} or {template} or {shapes, links, fragments}"},
-            }),
-            required: &["name", "from"],
-            output: "path, embed, skipped",
-            read_only: false,
-            destructive: false,
-            idempotent: false,
-        },
-        Tool {
-            name: "read_diagram",
-            title: "Read a diagram (removed)",
-            description: "Removed with the canvas editor: always fails.",
-            properties: json!({"path": {"type": "string"}}),
-            required: &["path"],
-            output: "path, read_only, shapes, links, bounds",
-            read_only: true,
-            destructive: false,
-            idempotent: true,
-        },
-        Tool {
-            name: "edit_diagram",
-            title: "Edit a diagram (removed)",
-            description: "Removed with the canvas editor: always fails.",
-            properties: json!({
-                "path": {"type": "string"},
-                "ops": {"type": "array", "items": {"type": "object"}},
-            }),
-            required: &["path", "ops"],
-            output: "path, read_only, shapes, links, bounds, ids, new_shapes, new_links",
-            read_only: false,
-            destructive: false,
-            idempotent: false,
-        },
-        Tool {
-            name: "diagram_library",
-            title: "Diagram library (removed)",
-            description: "Removed with the canvas editor: empty lists. Needs no vault.",
-            properties: json!({"family": {"type": "string"}}),
-            required: &[],
-            output: "forms, heads, routes, relations, shapes, templates",
-            read_only: true,
-            destructive: false,
-            idempotent: true,
-        },
-        Tool {
-            name: "import_diagram",
-            title: "Import a diagram (removed)",
-            description: "Removed with the canvas editor: always fails.",
-            properties: json!({
-                "content": {"type": "string"},
-                "format": {"type": "string", "enum": ["excalidraw", "drawio"]},
-                "name": {"type": "string"},
-                "folder": {"type": "string"},
-            }),
-            required: &["content", "format", "name"],
-            output: "path, embed, skipped",
-            read_only: false,
-            destructive: false,
-            idempotent: false,
         },
     ]
 }

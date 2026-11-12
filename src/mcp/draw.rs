@@ -1,12 +1,6 @@
 //! Figures over MCP: Mermaid sources and SVG files, rendered to PNG.
-//! The canvas diagram tools were removed with the canvas editor
-//! (owner-approved cut): `create_diagram`, `read_diagram`, `edit_diagram`,
-//! `import_diagram` and `diagram_library` stay as stubs that say so, so the
-//! protocol keeps compiling and old clients get a sentence, not a crash.
-//!
-//! Behavior change: `check_mermaid` still says whether a source draws and
-//! its kind, but `canvas` is always false; `render` draws a Mermaid source,
-//! an SVG file, or a ```mermaid block of a note — never a canvas diagram.
+//! `check_mermaid` says whether a source draws and its kind; `render`
+//! draws a Mermaid source, an SVG file, or a ```mermaid block of a note.
 
 use std::fs;
 
@@ -21,8 +15,6 @@ use super::{
     Outcome, Server, arg_opt, arg_str, disk,
     vault::{self, Vault},
 };
-
-const GONE: &str = "diagram editing was removed with the canvas editor. Put the Mermaid source in a note as a ```mermaid block, then render that block.";
 
 pub fn check_mermaid(args: &Value) -> Outcome {
     let source = match arg_str(args, "source") {
@@ -83,42 +75,6 @@ pub fn render(server: &mut Server, args: &Value) -> Outcome {
         ),
         Err(message) => Outcome::err(message),
     }
-}
-
-pub fn create_diagram(_vault: &mut Vault, _args: &Value) -> Outcome {
-    Outcome::err(GONE)
-}
-
-pub fn read_diagram(_vault: &Vault, _args: &Value) -> Outcome {
-    Outcome::err(GONE)
-}
-
-pub fn edit_diagram(_vault: &mut Vault, _args: &Value) -> Outcome {
-    Outcome::err(GONE)
-}
-
-pub fn library(_args: &Value) -> Outcome {
-    match library_value(None) {
-        Ok(value) => Outcome::ok(value),
-        Err(message) => Outcome::err(message),
-    }
-}
-
-pub fn import_diagram(_vault: &mut Vault, _args: &Value) -> Outcome {
-    Outcome::err(GONE)
-}
-
-/// What `diagram_library` returns, also served at `inkuno://library`.
-/// The canvas is gone: empty lists, same shape of answer.
-pub fn library_value(_family: Option<&str>) -> Result<Value, String> {
-    Ok(json!({
-        "forms": [],
-        "heads": [],
-        "routes": [],
-        "relations": [],
-        "shapes": [],
-        "templates": [],
-    }))
 }
 
 fn mermaid_kind(source: &str) -> &'static str {
