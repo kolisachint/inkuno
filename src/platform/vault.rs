@@ -1046,52 +1046,6 @@ pub fn save_image(dir: &Path, extension: &str, bytes: &[u8]) -> io::Result<Strin
     Ok(name)
 }
 
-/// Appends the line `text` at the bottom of the note named `name` (the daily note), wherever it is
-/// stored in the vault; failing that creates it at the root, titled with its name. Returns its file.
-/// A capture reads only file names, never notes: it stays instant
-/// in a big vault.
-#[cfg(test)]
-pub fn capture(root: &Path, name: &str, text: &str) -> io::Result<PathBuf> {
-    let file = format!("{name}.md");
-    let mut visited = HashSet::new();
-    first_visit(&mut visited, root);
-    let mut dirs = vec![root.to_path_buf()];
-    let mut found = None;
-    while let (None, Some(dir)) = (&found, dirs.pop()) {
-        for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
-            let path = entry.path();
-            if entry.file_name().to_string_lossy().starts_with('.') {
-                continue;
-            }
-            if is_dir(&entry) {
-                if first_visit(&mut visited, &path) {
-                    dirs.push(path);
-                }
-            } else if entry.file_name().to_string_lossy() == file {
-                found = Some(path);
-            }
-        }
-    }
-    let path = found.unwrap_or_else(|| root.join(&file));
-    let mut body = match fs::read_to_string(&path) {
-        Ok(body) => body,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => format!("# {name}\n\n"),
-        Err(e) => return Err(e),
-    };
-    if !body.ends_with('\n') {
-        body.push('\n');
-    }
-    // A list line, unless it is already written that way (`- [ ] …`).
-    let text = text.trim();
-    body.push_str(&if text.starts_with("- ") {
-        format!("{text}\n")
-    } else {
-        format!("- {text}\n")
-    });
-    write(&path, &body)?;
-    Ok(path)
-}
-
 /// Atomic write: a crash never leaves a truncated note.
 pub fn write(path: &Path, content: impl AsRef<[u8]>) -> io::Result<()> {
     let tmp = path.with_file_name(format!(".{}.tmp", stem(path)));
@@ -1168,41 +1122,6 @@ mod tests {
                 "Notes"
             ]
         );
-    }
-
-    #[test]
-    fn capture_appends_a_line_to_the_note_of_the_day() {
-        let root = std::env::temp_dir().join(format!("inkuno-capture-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("Journal")).unwrap();
-        fs::create_dir_all(root.join(".trash")).unwrap();
-        // No daily note: it is created at the root, titled with its name.
-        let made = capture(&root, "2026-10-10", "appeler Léa").unwrap();
-        assert_eq!(made, root.join("2026-10-10.md"));
-        assert_eq!(
-            fs::read_to_string(&made).unwrap(),
-            "# 2026-10-10\n\n- appeler Léa\n"
-        );
-        // The next one goes below; a line already written as a list stays as is.
-        capture(&root, "2026-10-10", "- [ ] acheter du pain").unwrap();
-        assert_eq!(
-            fs::read_to_string(&made).unwrap(),
-            "# 2026-10-10\n\n- appeler Léa\n- [ ] acheter du pain\n"
-        );
-        // The daily note stored in a folder is found; the one in the trash is not.
-        let filed = root.join("Journal/2026-10-11.md");
-        fs::write(&filed, "# 2026-10-11\n\nsans fin de ligne").unwrap();
-        fs::write(root.join(".trash/2026-10-11.md"), "jetée").unwrap();
-        assert_eq!(capture(&root, "2026-10-11", "une idée").unwrap(), filed);
-        assert_eq!(
-            fs::read_to_string(&filed).unwrap(),
-            "# 2026-10-11\n\nsans fin de ligne\n- une idée\n"
-        );
-        assert_eq!(
-            fs::read_to_string(root.join(".trash/2026-10-11.md")).unwrap(),
-            "jetée"
-        );
-        let _ = fs::remove_dir_all(&root);
     }
 
     /// Runs a future on the current thread, which sleeps between wakeups.
