@@ -147,19 +147,6 @@ pub fn floating(t: Theme) -> Div {
         .shadow(t.floating())
 }
 
-/// A pill, for a tab, a tag or a choice: text in `soft`, or, `on`, tinted with the accent (10 %). The caller
-/// adds the label, the size and the click.
-#[allow(dead_code)] // used by the views from step 3 of #91
-pub fn pill(t: Theme, on: bool) -> Div {
-    div()
-        .flex()
-        .items_center()
-        .px(t.px(10.))
-        .rounded(t.small())
-        .text_color(if on { t.accent } else { t.soft })
-        .when(on, |d| d.bg(pill_tint(t)))
-}
-
 /// The tint of what is open (a pill, the open row of the panel): the accent at 10 %, quieter than the selection.
 pub fn pill_tint(t: Theme) -> gpui::Hsla {
     t.accent.opacity(0.1)
@@ -177,12 +164,6 @@ pub fn passage_tint(t: Theme, on: bool) -> gpui::Hsla {
 
 /// The share of the accent behind the commented passage under the caret.
 const PASSAGE_ON: f32 = 0.12;
-
-/// A tinted band inside a sheet: groups what lies in it (a table header) without a line.
-#[allow(dead_code)] // used by the views from step 3 of #91
-pub fn band(t: Theme) -> Div {
-    div().bg(t.code_bg).rounded(t.band())
-}
 
 /// Round icon button: window controls, note copy; 24 px, the smallest target a finger or a shaky hand hits.
 pub fn icon_button(id: &'static str, icon: &'static str, t: Theme) -> gpui::Stateful<gpui::Div> {
