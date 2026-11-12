@@ -151,9 +151,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Swap rows and columns |
 |  | Delete the table |
 | `Ctrl+Shift+Backspace` | Remove the row, or the columns taken by their grip |
-| `Formulas` | A cell that starts with = computes: =B\*C, =sum(above), =avg(B1:B9), =round(B/C, 2), =if(B\>10, 1, 0). Columns are letters, rows are numbers from the first row under the header (C2, B1:B10); B alone is column B of this row; above, left and column are ranges. Functions: sum avg min max count round abs if. The cell shows its result (right-aligned, a different color); the formula shows when the cursor is in it, and the file keeps it. A cell with no result shows \#ERR: point at it for the reason. Completion offers functions, ranges and columns after = |
-| `Alt+=` | Write a total in the cell: the sum of the cells above, or on its left |
-| `Ctrl+Alt+C` | Copy the cells (the taken ones, or the table) with the results of their formulas, for a spreadsheet |
 
 ## Typing
 

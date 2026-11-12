@@ -219,24 +219,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Table,
         ),
         (
-            "editor::TableAutoSum",
-            tr(
-                "Write a total (sum of the cells above)",
-                "Écrire un total (somme des cellules au-dessus)",
-            ),
-            "table.svg",
-            Table,
-        ),
-        (
-            "editor::TableCopyResults",
-            tr(
-                "Copy the cells with their results, for a spreadsheet",
-                "Copier les cellules avec leurs résultats, pour un tableur",
-            ),
-            "copy.svg",
-            Table,
-        ),
-        (
             "editor::TableDeleteRow",
             tr("Delete the row", "Supprimer la ligne"),
             "row-del.svg",
