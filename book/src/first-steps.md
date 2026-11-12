@@ -16,7 +16,7 @@ On Linux, you can put Inkuno one key away: bind the command `inkuno` in your des
 
 Start typing. The first line is the title of the note, and the name of its file. There is no save button: notes are written to disk as you type. See [Files on disk](vault.md) for how files are named and saved.
 
-`Ctrl + N` creates a new note. `Ctrl + J` opens today's note, or creates it.
+`Ctrl + N` creates a new note.
 
 The bottom right of the note counts its words and characters, or those of the selection. Characters are counted as written, Markdown markers included, line ends excluded.
 
