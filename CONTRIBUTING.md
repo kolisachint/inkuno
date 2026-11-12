@@ -12,7 +12,7 @@ By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). For a sec
 
 ## Building and testing
 
-```bash
+```code
 cargo run                 # debug build
 cargo run --release       # what gets installed
 cargo test --locked       # or: make test

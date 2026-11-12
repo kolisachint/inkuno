@@ -166,3 +166,19 @@ A view talks to the shell only through its events (`EditorEvent`, `SheetEvent`, 
   diagram that uses nothing new still opens in the builds before. What changes how an existing text
   reads (styled text, `rich`) is a line of its own that a diagram made before does not have: its
   texts keep their stars until the user asks.
+
+
+|     |     |     |
+| --- | --- | --- |
+|     |     |     |
+2026-11-11
+> gjhgjhgjghj
+> 
+> 
+> 
+> 
+>
+
+fdgfghfg
+
+/
