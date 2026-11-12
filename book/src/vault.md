@@ -32,11 +32,12 @@ A YAML front matter is a block that starts on the first line with `---` and ends
 
 `/meta` inserts a front matter. See [Slash commands](writing.md#slash-commands).
 
-## Pictures, CSV and other files
+## Pictures and other files
 
 - **Pictures** are part of the vault. The tree lists them under the notes of their folder. Selecting one shows it in place of the note. It can be renamed (the notes that display it follow), moved or trashed like a note.
 - **Pictures** shown and listed: `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`, `tif`, `tiff`, `avif`.
 - **Attachments** are listed, found in the palette, linked with `[[name.pdf]]`, and open in the application of your system: `pdf`; video and audio (`mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mp3`, `m4a`, `wav`, `ogg`, `opus`, `flac`); archives (`zip`, `7z`, `tar`, `gz`, `rar`); documents (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `odt`, `ods`, `odp`, `epub`, `rtf`); text (`txt`, `json`, `xml`, `html`, `log`).
+- **Tables** (`csv`, `tsv`) are listed and open as plain text.
 - **Other files** stay in the folder, but Inkuno does not list them.
 
 ## Changes from other programs
@@ -69,7 +70,7 @@ Inkuno has no terminal of its own.
 - **Failures** stay twelve seconds, until you click them or press `Esc`. They name the file and say why in words (`permission denied`, `not found`, `the disk is full`), never the raw system error.
 - **Unreadable things say so**: a Mermaid diagram or a `$$` formula that cannot be drawn, and a picture that cannot be read (a corrupt file, one of 0 bytes), show « Unreadable figure », « Unreadable formula » or « Unreadable image » under their source. A picture opened alone says « Loading… » while a big one is read.
 - **A missing or unreadable vault**: a vault that is no longer where the config left it is reported on the welcome page. A vault that cannot be read (no permission) says so in the panel, with the reason and the folder, instead of looking empty, and offers another vault. A folder inside it that cannot be read is marked « unreadable: » with the reason; the rest of the vault opens.
-- **Empty lists say so**: an empty tree or recent list, a note nothing links to, a palette search with no result (or with one letter, too little for the text search), and a list page with no row each show one soft line instead of a blank page.
+- **Empty lists say so**: an empty tree or recent list, a palette search with no result (or with one letter, too little for the text search), and a list page with no row each show one soft line instead of a blank page.
 
 ## Configuration files
 
@@ -88,7 +89,6 @@ Inkuno keeps its own state in a configuration folder, outside the vault:
 | `panes` | the panes and their tabs |
 | `settings` | the [appearance and other choices](settings.md#the-settings-file) |
 | `keys` | the [shortcuts you changed](settings.md#changing-a-shortcut) |
-| `update` | the time of the last [update check](updates.md) |
 | `crash` | the last crash, with the version of Inkuno, to attach to a bug report |
 
 In the vault itself, Inkuno only writes `.inkuno-icons` (the [icons](navigation.md#icons) you gave), the `.trash` folder, and, for a vault it [connects to git](sync.md#with-git), a `.gitignore` that leaves the trash out.
