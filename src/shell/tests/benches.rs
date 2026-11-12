@@ -661,13 +661,13 @@ fn comments_frame(cx: &mut TestAppContext) {
     fs::remove_dir_all(&root).ok();
 }
 
-/// The graph on 5,000 notes with about 15,000 links: the window opens on it, the background
-/// arrangement is awaited, then time of the first frame and of 20 frames (a forced refresh).
-/// `cargo test --release --locked graph_frame -- --ignored --nocapture`.
+/// The window on a vault of 5,000 notes with about 15,000 links: time of startup with indexing,
+/// the first frame and of 20 frames (a forced refresh).
+/// `cargo test --release --locked links_frame -- --ignored --nocapture`.
 #[gpui::test]
 #[ignore]
-fn graph_frame(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("inkuno-graph-frame-{}", std::process::id()));
+fn links_frame(cx: &mut TestAppContext) {
+    let root = std::env::temp_dir().join(format!("inkuno-links-frame-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let notes = 5000;
     for i in 0..notes {
@@ -692,7 +692,7 @@ fn graph_frame(cx: &mut TestAppContext) {
     let (shell, cx) =
         cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
     cx.run_until_parked();
-    println!("startup + arrangement + first frame: {:?}", start.elapsed());
+    println!("startup + indexing + first frame: {:?}", start.elapsed());
     println!(
         "vault (images, notes): {:?}",
         shell.read_with(cx, |s, _| (s.images.len(), s.notes.len()))
@@ -710,7 +710,7 @@ fn graph_frame(cx: &mut TestAppContext) {
     }
     frames.sort();
     println!(
-        "graph frame: median {:?}, worst {:?}",
+        "links frame: median {:?}, worst {:?}",
         frames[10], frames[19]
     );
     fs::remove_dir_all(&root).ok();
