@@ -15,7 +15,7 @@ New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 | **Comments** | Annotate a passage without changing it, in a format other apps can read. See [Comments](comments.md). |
 | **Daily notes** | Today's note from the blank page, and a calendar. See [Daily notes](daily-notes.md). |
 | **Tabs and panes** | As many tabs and split panes as the window holds. See [Tabs, panes and docks](tabs-and-panes.md). |
-| **Sync** | One key commits, merges and pushes a vault kept in git. See [Syncing a vault](sync.md). |
+| **Sync** | The vault is a folder of plain files: sync it with git or a cloud folder. See [Syncing a vault](sync.md). |
 | **Keyboard first** | One palette for notes and commands. Every shortcut is listed in the app and can be changed. See [Keyboard shortcuts](shortcuts.md). |
 | **Yours to dress** | A dozen themes, IBM Plex built in, any installed font, light and dark. See [Settings and appearance](settings.md). |
 
