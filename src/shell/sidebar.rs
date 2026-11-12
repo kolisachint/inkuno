@@ -1,5 +1,5 @@
 //! The side panel as the shell drives it: rail, tree, recent notes, outline, search and list
-//! pages, context menu and file operations. (Graph, tags, backlinks and calendar views are cut.)
+//! pages, context menu and file operations.
 
 use crate::{
     lang::tr,

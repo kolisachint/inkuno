@@ -1,4 +1,4 @@
-//! The one-line input field shared by the views: a card of the board, the help's search, a cell
+//! The one-line input field shared by the views: the help's search, a cell
 //! and the filter of a list page, the find bar and the vault search. Its text is a `ui::line::Line`
 //! (cursor, selection, word moves, clipboard), and an input method composes in it as in the note.
 

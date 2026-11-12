@@ -255,7 +255,7 @@ impl Shell {
             .map(|find| find.read(cx).line.text.clone())
             .unwrap_or_default();
         let mut sections = keys::filter(help_sections(&self.bound, &self.changes), &query);
-        // Opened on a table or a diagram, the panel starts with its keys.
+        // Opened on a table, the panel starts with its keys.
         if let Some(at) = self
             .here(cx)
             .and_then(|here| sections.iter().position(|(title, _)| *title == here))

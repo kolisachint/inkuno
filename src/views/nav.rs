@@ -20,19 +20,8 @@ use crate::{
 actions!(
     nav,
     [
-        ShowTree,
-        ShowRecent,
-        ToggleFull,
-        Prev,
-        Next,
-        Fold,
-        Unfold,
-        Open,
-        Close,
-        NewFolder,
-        Rename,
-        Duplicate,
-        Trash
+        ShowTree, ShowRecent, ToggleFull, Prev, Next, Fold, Unfold, Open, Close, NewFolder, Rename,
+        Duplicate, Trash
     ]
 );
 // The entries of a row's menu that have no other way, for the open file, from the palette.
