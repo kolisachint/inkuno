@@ -229,7 +229,6 @@ fn the_bar_holds_its_place(cx: &mut TestAppContext) {
             "find-with",
             "replace-one",
             "replace-all",
-            "replace-vault",
         ]
         .map(|id| (id, cx.debug_bounds(id).unwrap()));
         for (i, (id, part)) in parts.iter().enumerate() {

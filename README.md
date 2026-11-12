@@ -75,7 +75,7 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | [Daily notes, templates and capture](book/src/daily-notes.md) | today's note, the calendar, templates, quick capture |
 | [The palette and the panel](book/src/navigation.md) | the tree, the graph, the trash, icons |
 | [Tabs, panes and docks](book/src/tabs-and-panes.md) | arranging the window |
-| [Search and replace](book/src/search.md) | in a note, and in the whole vault |
+| [Search and replace](book/src/search.md) | in a note |
 | [Files on disk](book/src/vault.md) | naming, front matter, backup, configuration files |
 | [Syncing a vault](book/src/sync.md) | git in one key, or a cloud folder |
 | [Settings and appearance](book/src/settings.md) | themes, fonts, page width, changing a shortcut |

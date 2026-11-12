@@ -52,7 +52,6 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&editor::FindRegex, tr("Search bar: regular expression ($1 in the replacement)", "Barre de recherche : expression régulière ($1 dans le remplacement)")),
                 t("Tab", tr("Search bar: replace field", "Barre de recherche : champ de remplacement")),
                 k(&editor::ReplaceAll, tr("Search bar: replace all (Enter: this match)", "Barre de recherche : tout remplacer (Entrée : ce passage)")),
-                k(&editor::ReplaceInVault, tr("Search bar: replace in the whole vault, after showing the count", "Barre de recherche : remplacer dans tout le coffre, après en avoir montré le compte")),
                 k(&NewNote, tr("New note", "Nouvelle note")),
                 p(tr("template", "modèle"), tr("Insert a template at the cursor, or make a template of the open note", "Insérer un modèle au curseur, ou faire un modèle de la note ouverte")),
                 k(&OpenVault, tr("Change vault", "Changer de coffre")),
@@ -465,7 +464,6 @@ pub(super) fn defaults() -> Vec<keys::Bind> {
         b("enter", &FindEnter, f),
         b("shift-enter", &FindPrev, f),
         b("secondary-enter", &ReplaceAll, f),
-        b("secondary-shift-enter", &ReplaceInVault, f),
         b("tab", &FindSwitch, f),
         b("shift-tab", &FindSwitch, f),
         // Also when the bar is open but input has gone back to the note.

@@ -173,7 +173,6 @@ actions!(
         FindCase,
         FindWord,
         FindRegex,
-        ReplaceInVault,
         ReplaceAll,
     ]
 );
