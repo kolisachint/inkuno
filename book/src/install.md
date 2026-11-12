@@ -2,39 +2,25 @@
 
 | Your system | How |
 |---|---|
-| Arch Linux | [Prebuilt package](#arch-linux) |
+| Linux, x86_64 | [Ready-made binary](#linux) |
 | macOS 11 or later | [Disk image](#macos) |
-| Windows 10 or 11, 64-bit | [Installer or zip](#windows) |
 | Ubuntu, Linux Mint, Debian | [Build from source](#ubuntu-linux-mint-debian) |
 | Fedora | [Build from source](#fedora) |
 | Another Linux distribution | [Build from source](#other-linux-distributions) |
 
-Arch, macOS and Windows have a ready-made download. Everywhere else, Inkuno is compiled on your machine. The first build takes a few minutes.
+macOS and Linux have a ready-made download. Everywhere else, Inkuno is compiled on your machine. The first build takes a few minutes.
 
 Compiling needs a recent stable Rust. If `rustc --version` shows less than 1.88, install Rust with [rustup](https://rustup.rs).
 
-## Arch Linux
+## Linux
 
-Every release ships a ready-to-install package. No compiler is needed, and pacman tracks it as `inkuno`.
-
-```bash
-curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-x86_64.pkg.tar.zst
-sudo pacman -U ./inkuno-x86_64.pkg.tar.zst
-```
-
-Download the file first, as above. The package is not signed: given a URL, pacman looks for a `.sig` file and warns when there is none.
-
-**To follow `main`**, build the development package from a checkout. It needs `cargo` and `git`, and conflicts with `inkuno`.
+Every release ships a ready-made `inkuno` binary for x86_64. Unpack it somewhere on your `PATH`:
 
 ```bash
-git clone https://github.com/kolisachint/inkuno.git
-cd inkuno/aur/inkuno-git
-makepkg -si
+curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-linux-x86_64.tar.gz
+tar -xzf inkuno-linux-x86_64.tar.gz
+sudo install inkuno /usr/local/bin/
 ```
-
-**To build the latest tagged release yourself**, run `makepkg -si` from the root of the repository.
-
-Inkuno is not on the AUR yet.
 
 ## macOS
 
@@ -60,24 +46,6 @@ cargo install --path . --locked
 ```
 
 This installs the `inkuno` command in `~/.cargo/bin`, without the `.app` bundle. Start it from a terminal.
-
-## Windows
-
-Download [`inkuno-windows-x86_64-setup.exe`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64-setup.exe) and run it. It installs for your user only, with no administrator rights, and adds a Start menu entry and an uninstaller.
-
-To install nothing, take [`inkuno-windows-x86_64.zip`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64.zip) instead. Unzip it anywhere and run `inkuno.exe`.
-
-The files are not signed, because a code-signing certificate costs a few hundred euros a year. SmartScreen may show "Windows protected your PC": click **More info**, then **Run anyway**.
-
-**To compile it yourself**, you need the Visual Studio C++ build tools with the Windows SDK, and Rust with the MSVC toolchain:
-
-```powershell
-git clone https://github.com/kolisachint/inkuno.git
-cd inkuno
-cargo install --path . --locked
-```
-
-This installs `inkuno.exe` in `%USERPROFILE%\.cargo\bin`.
 
 ## Ubuntu, Linux Mint, Debian
 
@@ -134,11 +102,8 @@ Inkuno [never checks for updates](updates.md): fetch the new release yourself, t
 
 | Installed with | Upgrade |
 |---|---|
-| Arch, prebuilt package | run the two commands of [Arch Linux](#arch-linux) again |
+| Linux, ready-made binary | download the new archive and put the binary on your `PATH` again |
 | macOS, `.dmg` | download the new `.dmg` and drop Inkuno on Applications again |
-| Windows, installer | run the new installer: it upgrades in place |
-| Windows, `.zip` | unzip the new version over the old one |
-| Arch, `inkuno-git` | `git pull`, then `makepkg -si` in `aur/inkuno-git` |
 | `make install` | `git pull`, then `make` and `sudo make install` |
 | `cargo install` | `git pull`, then `cargo install --path . --locked` |
 
@@ -148,6 +113,5 @@ Inkuno was called *encre* until version 0.1.4. Your notes are untouched. Setting
 
 | Installed encre with | Before upgrading |
 |---|---|
-| Arch, either package | nothing: the `inkuno` packages replace `encre` and `encre-git` |
 | `make install` | `sudo make uninstall` in the old checkout, before `git pull` |
 | `cargo install` | `cargo uninstall encre` |

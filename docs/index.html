@@ -176,7 +176,7 @@ footer a:hover { color: var(--text); }
     <div class="cta">
       <a class="btn primary" id="dl" href="#install">Download Inkuno</a>
       <a class="btn" href="https://github.com/kolisachint/inkuno">View on GitHub</a>
-      <span class="os">Free and open source · Linux, macOS, Windows</span>
+      <span class="os">Free and open source · Linux, macOS</span>
     </div>
 
     <div class="shot"><img src="site/inkuno.png" width="1720" height="720" alt="Inkuno showing the same note in the light and dark themes"></div>
@@ -220,16 +220,8 @@ footer a:hover { color: var(--text); }
       </div>
 
       <div class="tabs" role="tablist" id="os-tabs">
-        <button class="tab" role="tab" data-os="windows" aria-selected="false">Windows</button>
         <button class="tab" role="tab" data-os="macos" aria-selected="false">macOS</button>
         <button class="tab" role="tab" data-os="linux" aria-selected="true">Linux</button>
-      </div>
-
-      <div class="panel" data-panel="windows" hidden>
-        <p>Windows 10 or 11, 64-bit. Installs for your user only, no administrator rights needed.</p>
-        <p><a class="btn primary" href="https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64-setup.exe">Download the installer</a>
-           &nbsp;<a href="https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64.zip">or the .zip</a>, to install nothing</p>
-        <p class="fine">The files are not signed. If SmartScreen shows “Windows protected your PC”, click <b>More info</b>, then <b>Run anyway</b>.</p>
       </div>
 
       <div class="panel" data-panel="macos" hidden>
@@ -240,16 +232,17 @@ footer a:hover { color: var(--text); }
 
       <div class="panel" data-panel="linux">
         <div class="sub-tabs" role="tablist" id="distro-tabs">
-          <button class="sub-tab" role="tab" data-distro="arch" aria-selected="true">Arch</button>
+          <button class="sub-tab" role="tab" data-distro="ready" aria-selected="true">Ready-made</button>
           <button class="sub-tab" role="tab" data-distro="debian" aria-selected="false">Ubuntu, Mint, Debian</button>
           <button class="sub-tab" role="tab" data-distro="fedora" aria-selected="false">Fedora</button>
           <button class="sub-tab" role="tab" data-distro="other" aria-selected="false">Other</button>
         </div>
 
-        <div data-distro-panel="arch">
-          <p>A prebuilt package ships with every release, no compiler needed. pacman then tracks it as <code>inkuno</code>.</p>
-          <div class="code"><pre><code>curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-x86_64.pkg.tar.zst
-sudo pacman -U ./inkuno-x86_64.pkg.tar.zst</code></pre></div>
+        <div data-distro-panel="ready">
+          <p>A ready-made binary ships with every release, for x86_64. Unpack it somewhere on your <code>PATH</code>.</p>
+          <div class="code"><pre><code>curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-linux-x86_64.tar.gz
+tar -xzf inkuno-linux-x86_64.tar.gz
+sudo install inkuno /usr/local/bin/</code></pre></div>
         </div>
 
         <div data-distro-panel="debian" hidden>
@@ -335,11 +328,10 @@ distroTabs.forEach(t => t.onclick = () => pick(distroTabs, "distro", distroPanel
 (() => {
   const ua = navigator.userAgent;
   const rel = "https://github.com/kolisachint/inkuno/releases/latest/download/";
-  const os = /Windows/i.test(ua) ? "windows" : /Mac/i.test(ua) && !/iPhone|iPad/i.test(ua) ? "macos" : /Linux/i.test(ua) && !/Android/i.test(ua) ? "linux" : null;
+  const os = /Mac/i.test(ua) && !/iPhone|iPad/i.test(ua) ? "macos" : /Linux/i.test(ua) && !/Android/i.test(ua) ? "linux" : null;
   if (!os) return;
   pick(osTabs, "os", osPanels, "data-panel", os);
   const dl = document.getElementById("dl");
-  if (os === "windows") { dl.href = rel + "inkuno-windows-x86_64-setup.exe"; dl.textContent = "Download for Windows"; }
   if (os === "macos") { dl.href = rel + "inkuno-macos.dmg"; dl.textContent = "Download for macOS"; }
   if (os === "linux") dl.textContent = "Install on Linux";
 })();
