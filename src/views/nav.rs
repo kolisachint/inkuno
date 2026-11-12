@@ -100,13 +100,6 @@ impl Mode {
     pub fn named(name: &str) -> Option<Mode> {
         Mode::ALL.into_iter().find(|m| m.name() == name)
     }
-
-    /// No tool opens as a tab anymore: the graph and the calendar, the only ones that did,
-    /// are cut and their tabs with them.
-    pub fn tabs(self) -> bool {
-        let _ = self;
-        false
-    }
 }
 
 /// Where a tool's list stands. The active tool's view lives in `Nav` itself, where every gesture

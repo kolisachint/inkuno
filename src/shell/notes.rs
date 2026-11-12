@@ -23,7 +23,6 @@ impl Shell {
     /// if there is one.
     pub(super) fn copy_all(&mut self, block: bool, cx: &mut Context<Self>) {
         if self.pane().file.is_some()
-            || self.pane().tool.is_some()
             || self.pane().listing.is_some()
             || self.pane().figure.is_some()
         {

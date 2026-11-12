@@ -13,12 +13,10 @@ pub(super) const MIN_PANE: Pixels = px(300.);
 /// No pane is made lower: room for its tab bar and five lines of text.
 pub(super) const MIN_PANE_H: Pixels = px(200.);
 
-/// The tool a saved tab names (`@graph`), if it is one that opens as a tab.
-fn tool_of(path: &Path) -> Option<Mode> {
-    path.to_str()?
-        .strip_prefix('@')
-        .and_then(Mode::named)
-        .filter(|m| m.tabs())
+/// A saved tab that comes back: a file still in the vault. A token an older version
+/// wrote for a tool tab (`@graph`, `@calendar`) is no file and is ignored.
+fn restorable(path: &Path, root: &Path) -> bool {
+    path.is_file() && path.starts_with(root)
 }
 
 /// Where a tab goes: at a place in the bar of a pane, or into a new pane split off a side of one.
@@ -43,8 +41,6 @@ pub(super) const PANE_RATIO: std::ops::RangeInclusive<f32> = 0.2..=0.8;
 /// What one tab holds: a note and its editor, what is shown in its place (image, diagram,
 /// list page).
 pub(super) struct Pane {
-    /// A tool of the side panel shown as this tab (the graph, the calendar) instead of a file.
-    pub(super) tool: Option<Mode>,
     /// Holds the focus as soon as one of the pane's views has it: that is what makes it active. It
     /// holds it itself when the pane only shows an image.
     pub(super) zone: FocusHandle,
@@ -207,7 +203,6 @@ impl Shell {
             h1: None,
             origin: None,
             preview: false,
-            tool: None,
             new_dir: None,
             fresh: false,
             dirty: false,
@@ -604,12 +599,11 @@ impl Shell {
     /// what opens next takes its place instead of a tab of its own, and an emptied note's file goes.
     pub(super) fn spare_tab(&self, cx: &App) -> bool {
         let pane = self.pane();
-        pane.tool.is_none()
-            && (pane.preview
-                || (pane.path.is_none() || pane.fresh)
-                    && pane.file.is_none()
-                    && pane.listing.is_none()
-                    && pane.editor.read(cx).text().is_empty())
+        pane.preview
+            || (pane.path.is_none() || pane.fresh)
+                && pane.file.is_none()
+                && pane.listing.is_none()
+                && pane.editor.read(cx).text().is_empty()
     }
 
     /// A tab for what is about to open: the active one if it is spare, otherwise a new one.
@@ -890,10 +884,7 @@ impl Shell {
                 // A file open twice (edited by hand) keeps its first tab: a note is open once.
                 let tabs: Vec<PathBuf> = tabs
                     .into_iter()
-                    .filter(|p| {
-                        (p.is_file() && p.starts_with(root) || tool_of(p).is_some())
-                            && seen.insert(p.clone())
-                    })
+                    .filter(|p| restorable(p, root) && seen.insert(p.clone()))
                     .collect();
                 let shown = want
                     .and_then(|want| tabs.iter().position(|p| *p == want))
@@ -933,10 +924,7 @@ impl Shell {
                 if i > 0 {
                     self.add_tab(window, cx);
                 }
-                match tool_of(path) {
-                    Some(tool) => self.pane_mut().tool = Some(tool),
-                    None => self.open_note(path, cx),
-                }
+                self.open_note(path, cx);
                 opened.push(self.active);
             }
             if let Some(&tab) = opened.get(shown) {
@@ -959,11 +947,7 @@ impl Shell {
                 .iter()
                 .filter_map(|&tab| {
                     let pane = &self.panes[tab];
-                    // A tool's tab is written `@graph`, `@calendar`.
-                    let path = match pane.tool {
-                        Some(tool) => format!("@{}", tool.name()),
-                        None => pane.displayed_path()?.display().to_string(),
-                    };
+                    let path = pane.displayed_path()?.display().to_string();
                     Some(format!(
                         "{}{path}",
                         if tab == group.shown { "*" } else { "" }
@@ -1011,6 +995,24 @@ impl Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn old_tool_tokens_read_but_do_not_restore() {
+        // A layout of an older version with a tool tab (`@graph`): it still reads, and
+        // restoring ignores the token (only files come back).
+        let (_, groups) = read_panes("v3 0\n@graph\n");
+        assert_eq!(groups, vec![(vec![PathBuf::from("@graph")], 0)]);
+        let root = std::env::temp_dir().join(format!("inkuno-panes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let note = root.join("Note.md");
+        std::fs::write(&note, "# Note\n").unwrap();
+        assert!(restorable(&note, &root));
+        assert!(!restorable(&root.join("@graph"), &root));
+        assert!(!restorable(Path::new("@calendar"), &root));
+        assert!(!restorable(&root.join("Missing.md"), &root));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn saved_panes_read_in_every_format() {

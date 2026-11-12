@@ -1025,18 +1025,10 @@ impl Shell {
             .file
             .as_ref()
             .map(|file| (file.path.clone(), file.kind.clone()));
-        // A tool of the panel as this tab: it holds the input itself, never the hidden note under it.
-        let tool = self.pane().tool;
-        if tool.is_some() && self.pane().editor.focus_handle(cx).is_focused(window) {
-            window.focus(&self.pane().zone);
-        }
         // The views whose top room is empty: the strip can lie over it.
-        let free_top = tool.is_none()
-            && self.pane().figure.is_none()
+        let free_top = self.pane().figure.is_none()
             && (listing.is_some() || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
-            // No tool opens as a tab anymore; the match stays so a restored layout still draws.
-            _ if let Some(_tool) = tool => note,
             _ if listing.is_some() => note.children(listing),
             _ if let Some(figure) = self.pane().figure.clone() => {
                 figure.update(cx, |figure, _| figure.sync(t));

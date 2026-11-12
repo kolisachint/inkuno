@@ -28,8 +28,8 @@ use crate::views::nav::*;
 const TRAFFIC_ROOM: f32 = 78.;
 
 impl Shell {
-    /// Shows the tool where it lives (its dock, alone unless it is stacked there already, or its
-    /// tab) and gives it the keys. Asking again for a tool in sight hides it (from the keyboard:
+    /// Shows the tool where it lives (its dock, alone unless it is stacked there already)
+    /// and gives it the keys. Asking again for a tool in sight hides it (from the keyboard:
     /// only if it already has the keys); the last one of the left dock folds the panel.
     pub(super) fn show_nav(
         &mut self,
@@ -38,11 +38,8 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(tab) = self.tool_tab(mode) {
-            return self.focus_pane(tab, window, cx);
-        }
         let keys = self.nav.focus.contains_focused(window, cx) && self.nav.mode == mode;
-        if self.tool_shown(mode) && (toggle || keys) {
+        if self.docked(mode) && (toggle || keys) {
             return self.hide_tool(mode, window, cx);
         }
         self.put_tool(mode);
@@ -51,13 +48,8 @@ impl Shell {
         self.settle_nav(window, cx);
     }
 
-    /// The tab that shows the tool, if it is open as one.
-    pub(super) fn tool_tab(&self, mode: Mode) -> Option<usize> {
-        self.panes.iter().position(|pane| pane.tool == Some(mode))
-    }
-
     /// The tools drawn in the left dock (or the right one), top to bottom: those shown there that
-    /// live there and are not open as a tab.
+    /// live there.
     pub(super) fn dock_tools(&self, right: bool) -> Vec<Mode> {
         let shown = if right {
             &self.nav.right_shown
@@ -67,7 +59,7 @@ impl Shell {
         shown
             .iter()
             .copied()
-            .filter(|m| self.nav.right.contains(m) == right && self.tool_tab(*m).is_none())
+            .filter(|m| self.nav.right.contains(m) == right)
             .collect()
     }
 
@@ -83,11 +75,6 @@ impl Shell {
     fn docked(&self, mode: Mode) -> bool {
         self.left_open() && self.dock_tools(false).contains(&mode)
             || self.right_open() && self.dock_tools(true).contains(&mode)
-    }
-
-    /// The tool is in sight: in its dock, or as a tab.
-    pub(super) fn tool_shown(&self, mode: Mode) -> bool {
-        self.tool_tab(mode).is_some() || self.docked(mode)
     }
 
     /// The tool's view comes into `Nav` and its dock opens on it: alone, as the panel always did,
@@ -110,9 +97,6 @@ impl Shell {
     /// Shift+click on the rail: the tool joins the others of its dock, at the bottom, or leaves
     /// them if it is shown. (The graph refresh went with the graph.)
     pub(super) fn stack_tool(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
-        if self.tool_tab(mode).is_some() {
-            return self.show_nav(mode, false, window, cx);
-        }
         let right = self.nav.right.contains(&mode);
         match self.docked(mode) {
             true => self.hide_tool(mode, window, cx),
@@ -1137,10 +1121,7 @@ impl Shell {
             b.rounded(t.large())
                 .when(on, |d| d.bg(t.bg).shadow(t.lifted()))
         };
-        let shown: Vec<Mode> = Mode::ALL
-            .into_iter()
-            .filter(|m| self.tool_shown(*m))
-            .collect();
+        let shown: Vec<Mode> = Mode::ALL.into_iter().filter(|m| self.docked(*m)).collect();
         let mode_button = |id: &'static str, icon, m: Mode, label: &'static str, keys: String| {
             on_sheet(button(id, icon, shown.contains(&m), t), shown.contains(&m))
                 .debug_selector(move || id.to_string())
