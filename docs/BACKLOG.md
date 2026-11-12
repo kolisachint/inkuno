@@ -34,4 +34,3 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - `Pane::viewer()` has no non-test callers; remove or keep (`src/shell/pane.rs:179`).
 - The `is_table` doc comment still says CSV/TSV opens in a grid; it opens as plain text (`src/platform/vault.rs:294`).
 - The tabs page names docks but has no docks section; navigation lists Tree/Recent only while Search/Outline exist (`book/src/tabs-and-panes.md:1`, `src/views/nav.rs:57`).
-- Install docs say Rust 1.88 but `rust-version` is 1.98 (`Cargo.toml:5`, `book/src/install.md:13`).

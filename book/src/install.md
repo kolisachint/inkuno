@@ -10,7 +10,7 @@
 
 macOS and Linux have a ready-made download. Everywhere else, Inkuno is compiled on your machine. The first build takes a few minutes.
 
-Compiling needs a recent stable Rust. If `rustc --version` shows less than 1.88, install Rust with [rustup](https://rustup.rs).
+Compiling needs a recent stable Rust. If `rustc --version` shows less than 1.98, install Rust with [rustup](https://rustup.rs).
 
 ## Linux
 
