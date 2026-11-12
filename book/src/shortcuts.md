@@ -22,7 +22,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Alt+R` | Search bar: regular expression ($1 in the replacement) |
 | `Tab` | Search bar: replace field |
 | `Ctrl+Enter` | Search bar: replace all (Enter: this match) |
-| `Ctrl+Shift+Enter` | Search bar: replace in the whole vault, after showing the count |
 | `Ctrl+N` | New note |
 | `Ctrl+P › template` | Insert a template at the cursor, or make a template of the open note |
 | `Ctrl+O` | Change vault |

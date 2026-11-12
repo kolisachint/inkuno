@@ -1,4 +1,4 @@
-//! Find and replace in the note (Ctrl+F, Ctrl+R), and the vault-wide replace it can start.
+//! Find and replace in the note (Ctrl+F, Ctrl+R).
 
 use super::*;
 use crate::views::field::{Field, FieldEvent};
@@ -315,11 +315,6 @@ impl Editor {
         self.show_hit(cx);
     }
 
-    /// Asks the window to replace in the whole vault: nothing is left to apply it to
-    /// (it went with the panel's vault search), so this stays a no-op while the bar
-    /// keeps its keys and actions.
-    pub(super) fn replace_in_vault(&mut self, _cx: &mut Context<Self>) {}
-
     /// Replaces all matches at once (in the selected lines, when the search keeps to them): a single undo step.
     pub(super) fn replace_all(&mut self, cx: &mut Context<Self>) {
         self.refresh_find(cx);
@@ -516,19 +511,6 @@ impl Editor {
                     )
                     .on_click(cx.listener(|this, _, _, cx| this.replace_all(cx))),
                 )
-                .child(
-                    toggle(
-                        "replace-vault",
-                        tr("Vault…", "Coffre…"),
-                        false,
-                        tr(
-                            "Replace in the whole vault, after showing the count",
-                            "Remplacer dans tout le coffre, après en avoir montré le compte",
-                        ),
-                        keys(&ReplaceInVault),
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| this.replace_in_vault(cx))),
-                )
         });
         let bar = div()
             .id("find-bar")
@@ -585,7 +567,6 @@ impl Editor {
             .on_action(cx.listener(|this, _: &FindWord, _, cx| this.find_flip(1, cx)))
             .on_action(cx.listener(|this, _: &FindRegex, _, cx| this.find_flip(2, cx)))
             .on_action(cx.listener(|this, _: &ReplaceAll, _, cx| this.replace_all(cx)))
-            .on_action(cx.listener(|this, _: &ReplaceInVault, _, cx| this.replace_in_vault(cx)))
             .child(first)
             .children(second);
         // Pinned to the right, within the note's margins: a narrow note shrinks it instead of letting it overflow.
