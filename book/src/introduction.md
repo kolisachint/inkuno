@@ -13,7 +13,7 @@ New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 | **Styled as you type** | Headings grow, bold and italics render, markers stay visible but dimmed. The file stays plain Markdown. See [Writing notes](writing.md). |
 | **Linked notes** | `[[links]]`, backlinks, tags, embedded sections and a graph. See [Links, embeds and files](links.md). |
 | **Comments** | Annotate a passage without changing it, in a format other apps can read. See [Comments](comments.md). |
-| **Daily notes** | Today's note from the blank page, a calendar and templates. See [Daily notes and templates](daily-notes.md). |
+| **Daily notes** | Today's note from the blank page, and a calendar. See [Daily notes](daily-notes.md). |
 | **Tabs and panes** | As many tabs and split panes as the window holds. See [Tabs, panes and docks](tabs-and-panes.md). |
 | **Sync** | One key commits, merges and pushes a vault kept in git. See [Syncing a vault](sync.md). |
 | **Keyboard first** | One palette for notes and commands. Every shortcut is listed in the app and can be changed. See [Keyboard shortcuts](shortcuts.md). |
