@@ -471,13 +471,6 @@ fn read_only_hides_writing_and_the_guide_is_a_resource() {
             .unwrap()
             .contains("Writing notes")
     );
-    let library = server.answer(r#"{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"inkuno://library"}}"#).unwrap();
-    assert!(
-        library["result"]["contents"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("forms")
-    );
     let note = server.answer(r#"{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"inkuno://note/Note.md"}}"#).unwrap();
     assert!(
         note["result"]["contents"][0]["text"]
@@ -496,7 +489,7 @@ fn read_only_hides_writing_and_the_guide_is_a_resource() {
     let prompts = server
         .answer(r#"{"jsonrpc":"2.0","id":7,"method":"prompts/list"}"#)
         .unwrap();
-    assert_eq!(prompts["result"]["prompts"].as_array().unwrap().len(), 7);
+    assert_eq!(prompts["result"]["prompts"].as_array().unwrap().len(), 6);
     let text = |server: &mut Server, request: &str| {
         server.answer(request).unwrap()["result"]["messages"][0]["content"]["text"]
             .as_str()

@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 
-use super::{Outcome, Server, arg_opt, draw, vault};
+use super::{Outcome, Server, arg_opt, vault};
 
 const PAGES: &[(&str, &str)] = &[
     (
@@ -58,19 +58,6 @@ const PROMPTS: &[Prompt<'static>] = &[
         &[("project", "What the overview is about", true)],
     ),
     (
-        "uml_from_code",
-        "UML diagram from code",
-        "One UML diagram of the given kind, drawn from the code in scope and checked with render.",
-        &[
-            ("scope", "The code the diagram describes", true),
-            (
-                "kind",
-                "class, sequence, state, component, package, activity, use-case or deployment",
-                true,
-            ),
-        ],
-    ),
-    (
         "review_note",
         "Review a note",
         "Read a note and leave comments on the passages that need them, with add_comment.",
@@ -105,17 +92,10 @@ const PROMPTS: &[Prompt<'static>] = &[
 ];
 
 pub fn list() -> Vec<Value> {
-    let mut resources: Vec<Value> = PAGES
+    let resources: Vec<Value> = PAGES
         .iter()
         .map(|(page, text)| page_resource(page, text))
         .collect();
-    resources.push(json!({
-        "uri": "inkuno://library",
-        "name": "library",
-        "title": "Diagram library (removed)",
-        "description": "The canvas editor was removed: empty lists.",
-        "mimeType": "application/json",
-    }));
     resources
 }
 
@@ -145,14 +125,6 @@ pub fn read(server: &mut Server, uri: &str) -> Result<Vec<Value>, String> {
             return Err(format!("no guide page `{page}`"));
         };
         return Ok(vec![text_content(&uri, "text/markdown", text)]);
-    }
-    if uri == "inkuno://library" {
-        let value = draw::library_value(None)?;
-        return Ok(vec![text_content(
-            &uri,
-            "application/json",
-            &value.to_string(),
-        )]);
     }
     if let Some(path) = uri.strip_prefix("inkuno://note/") {
         let vault = server.need().map_err(|outcome| sentence(&outcome))?;
@@ -198,7 +170,6 @@ pub fn prompt(name: &str, args: &Value) -> Result<Value, String> {
     let text = match name {
         "document_feature" => document_feature(&values),
         "architecture_overview" => architecture(&values),
-        "uml_from_code" => uml(&values),
         "review_note" => review(&values),
         "weekly_review" => weekly(&values),
         "link_orphans" => orphans(&values),
@@ -264,29 +235,19 @@ fn value<'a>(values: &'a [(&str, String)], key: &str) -> &'a str {
         .unwrap_or("")
 }
 
-/// How a UML diagram is drawn on Inkuno's canvas, so that it stays a diagram the user can edit and
-/// that follows UML: shared by the prompts that draw.
+/// How a UML diagram is drawn in a ```mermaid block, so that it stays readable:
+/// shared by the prompts that draw.
 const UML: &str = "\
-Draw on the canvas with create_diagram from shapes, links and fragments, not from Mermaid: the user moves and edits \
-these shapes in Inkuno. Call diagram_library first for the forms and relations. \
-Sequence diagram: one scenario per diagram. Lifelines (form lifeline) left to right in the order they first take part, \
-the one that starts first; name each by its role or component, at most about seven. Messages in time order: sync for a call \
-that waits, with its reply (dashed) carrying what comes back; async for an event or a call that does not wait; create and \
-destroy for lifelines that begin or end; a message to the same lifeline for a call to itself. Write a message as \
-operation(arguments), a reply as the value returned. Conditions and repetition are fragments: alt with one [guard] per \
-branch and [else], opt, loop [condition], par; outer fragments first. Leave out logging, getters and other noise. \
-Class diagram: a class is a rect whose text is the name, ---, the attributes (+ name: Type), ---, the operations \
-(+ name(arg: Type): Type); generalization and realization for inheritance, composition and aggregation for ownership \
-with multiplicities in start_text and end_text (1, 0..1, *), dependency for a use. \
-Then render the diagram, look at it, and fix what overlaps or reads badly with edit_diagram (move, wrap, reorder, update) \
-until it is clean. Embed it with the [[Name.svg]] line create_diagram returns.";
+Put the drawing in a ```mermaid block in the note: a class diagram shows the main types, \
+a sequence diagram the main scenario. Leave out logging, getters and other noise. \
+Then render the block and look at it, and fix what overlaps or reads badly until it is clean.";
 
 fn document_feature(values: &[(&str, String)]) -> String {
     let feature = value(values, "feature");
     let code = value(values, "code");
     format!(
         "Document the feature \"{feature}\" in this Inkuno vault. \
-Read inkuno://guide/writing, inkuno://guide/links, inkuno://guide/diagrams and inkuno://guide/uml first. \
+Read inkuno://guide/writing and inkuno://guide/links first. \
 Search the vault for notes that already mention it, and follow their links. \
 Create one note: the context, the decisions, and how it works. Link the notes it touches by name with [[Note]]. \
 Add a technical part: the parts involved and how they talk. Draw a class diagram of the main types and a sequence diagram \
@@ -300,20 +261,9 @@ fn architecture(values: &[(&str, String)]) -> String {
     let project = value(values, "project");
     format!(
         "Write an architecture overview of \"{project}\" in this Inkuno vault. \
-Read inkuno://guide/diagrams and inkuno://guide/uml. \
 Create a hub note that links to one note per part. \
-Draw a component diagram and a package diagram with create_diagram, embed them, and render them. \
-Use diagram_library for the forms and relationships. Do not delete a file."
-    )
-}
-
-fn uml(values: &[(&str, String)]) -> String {
-    let scope = value(values, "scope");
-    let kind = value(values, "kind");
-    format!(
-        "Draw one {kind} diagram of this code, as a Inkuno canvas diagram. \
-Read inkuno://guide/uml. {UML} \
-Put it in a short note that says what it shows. Do not delete a file.\n\n{scope}"
+Draw a component diagram and a package diagram as ```mermaid blocks in the hub note, and render them to look at them. \
+Do not delete a file."
     )
 }
 
