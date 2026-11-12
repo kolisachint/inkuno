@@ -1,6 +1,6 @@
 # Agents (MCP)
 
-`inkuno mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server in the same program as Inkuno. An agent (Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, VS Code) can read the vault, write notes and draw diagrams, and Inkuno shows the files. The agent does not get a generic folder: it gets Inkuno's links, its trash, and its diagrams.
+`inkuno mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server in the same program as Inkuno. An agent (Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, VS Code) can read the vault, write notes and add Mermaid diagrams to them, and Inkuno shows the files. The agent does not get a generic folder: it gets Inkuno's links, its trash, and its diagrams.
 
 The server speaks JSON-RPC over the standard input and output of the process. It does not open a window and it does not use the network: `show` reaches the open Inkuno window through 127.0.0.1, on this computer only.
 
@@ -12,14 +12,11 @@ The client starts Inkuno itself, often without the `PATH` of your terminal (Clau
 
 | Installed with | Path |
 |---|---|
-| The Arch package (`pacman -U` or `makepkg -si`) | `/usr/bin/inkuno` |
 | `sudo make install` | `/usr/local/bin/inkuno`, or `/usr/bin/inkuno` with `PREFIX=/usr` |
-| `cargo install` | `~/.cargo/bin/inkuno`; on Windows `%USERPROFILE%\.cargo\bin\inkuno.exe` |
+| `cargo install` | `~/.cargo/bin/inkuno` |
 | The macOS disk image | `/Applications/Inkuno.app/Contents/MacOS/inkuno` |
-| The Windows installer | `%LOCALAPPDATA%\Programs\Inkuno\inkuno.exe`; `C:\Program Files\Inkuno\inkuno.exe` if you chose to install for all users |
-| The Windows zip | `inkuno.exe` in the folder you unzipped it to |
 
-The examples below use `/usr/bin/inkuno`: put yours. A configuration file does not expand `%LOCALAPPDATA%` or `~`: write the whole path, such as `C:\Users\you\AppData\Local\Programs\Inkuno\inkuno.exe`.
+The examples below use `/usr/bin/inkuno`: put yours. A configuration file does not expand `~`: write the whole path.
 
 ### 2. The arguments
 
@@ -37,12 +34,6 @@ claude mcp add --scope user inkuno -- /usr/bin/inkuno mcp
 ```
 
 Everything after `--` is the command and its arguments. `--scope user` makes Inkuno available in every project; without it, only in the current one. `--scope project` writes it in `.mcp.json` at the root of the project, to share with the people who work on it.
-
-On Windows, in PowerShell:
-
-```powershell
-claude mcp add --scope user inkuno -- "$env:LOCALAPPDATA\Programs\Inkuno\inkuno.exe" mcp
-```
 
 To check: `claude mcp list` shows `inkuno` with `✔ Connected`, and `/mcp` lists it in a session.
 
@@ -69,19 +60,6 @@ Add `inkuno` to `mcpServers`, next to the servers already there:
 }
 ```
 
-On Windows, every `\` of the path is written `\\` in JSON:
-
-```json
-{
-  "mcpServers": {
-    "inkuno": {
-      "command": "C:\\Users\\you\\AppData\\Local\\Programs\\Inkuno\\inkuno.exe",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
 Quit Claude Desktop completely and start it again. Inkuno is then in the list of connectors of the message box. If it is not, the file `mcp-server-inkuno.log` in the logs folder says why: `~/Library/Logs/Claude` on macOS, `%APPDATA%\Claude\logs` on Windows, `~/.config/Claude/logs` on Linux.
 
 #### Codex CLI
@@ -98,7 +76,7 @@ command = "/usr/bin/inkuno"
 args = ["mcp"]
 ```
 
-On Windows, write the path between single quotes, where `\` stays as is: `command = 'C:\Users\you\AppData\Local\Programs\Inkuno\inkuno.exe'`. To check: `codex mcp list`, or `/mcp` in a session.
+To check: `codex mcp list`, or `/mcp` in a session.
 
 #### Gemini CLI
 
@@ -164,11 +142,11 @@ Reading: the shape of the vault, a list, a search ranked like the palette, one n
 
 Writing: create a note, replace a passage that occurs once, append, rename (links follow, unless another note still has the old name), move to the trash and bring back, the daily note, a comment on one passage.
 
-Diagrams: the canvas editor was removed. Mermaid diagrams stay in notes as ```mermaid blocks; `render` draws one to PNG to check it.
+Diagrams: Mermaid diagrams live in notes as ```mermaid blocks; `render` draws one to PNG to check it, and `check_mermaid` checks a source with no vault.
 
 Showing: when Inkuno is open on the same vault, the agent can open a note, a diagram or a table in a tab of its own (`show`), and the window comes to the front. When Inkuno is closed, or has another vault open, it says so; the files are written all the same.
 
-![An agent creates a diagram through inkuno mcp, which writes the SVG, renders it until it is clean, then asks the open window to show it](img/agent-draws-and-shows.svg)
+![An agent adds a diagram through inkuno mcp, which writes the note, renders the Mermaid block until it is clean, then asks the open window to show it](img/agent-draws-and-shows.svg)
 
 *Drawn by an agent with this server.*
 
@@ -176,13 +154,12 @@ The user guide is a resource (`inkuno://guide/writing`, `links`, `comments`, and
 
 ## Prompts
 
-A prompt is a request written in advance that you start yourself: the agent cannot run one. Your client fills it with your arguments and sends it as if you had typed it. Inkuno offers seven:
+A prompt is a request written in advance that you start yourself: the agent cannot run one. Your client fills it with your arguments and sends it as if you had typed it. Inkuno offers six:
 
 | Prompt | Arguments, in order | What the agent does |
 |---|---|---|
 | `document_feature` | `feature`, then `code` (optional) | reads the guide, looks for notes that already mention the feature, writes a note with a class diagram and a sequence diagram, then shows it in Inkuno |
 | `architecture_overview` | `project` | a hub note, a component diagram, a package diagram, and one note per part |
-| `uml_from_code` | `scope`, `kind` | one UML diagram (`class`, `sequence`, `state`, `component`, `package`, `activity`, `use-case` or `deployment`) of the code in scope, rendered and checked |
 | `review_note` | `note` | comments on the passages that need them, and no other change to the note |
 | `weekly_review` | `date` (optional, `YYYY-MM-DD`, default today) | reads the daily notes of that week, Monday to Sunday, and writes one note that sums it up, with links to the days and the notes they mention; a day without a note stays without one |
 | `link_orphans` | `folder` (optional, default the whole vault) | finds the notes with no link in or out and proposes, for each, the note and the sentence where a link to it would go; it changes nothing until you choose |
@@ -191,7 +168,6 @@ A prompt is a request written in advance that you start yourself: the agent cann
 In Claude Code, type `/` to see them as `/inkuno:document_feature (MCP)`, or type the full name followed by the arguments:
 
 ```text
-/mcp__inkuno__uml_from_code src/mcp/guide.rs class
 /mcp__inkuno__review_note Roadmap
 /mcp__inkuno__weekly_review 2026-10-28
 /mcp__inkuno__tidy_tags
@@ -203,9 +179,9 @@ Arguments are split on spaces, so each one is a single word: write `issue-93`, n
 
 Give the agent the work and say where it goes, for example:
 
-> Implement issue 93. Then document it in my Inkuno notes with the `inkuno` server: a note on what changed and why, a technical part, a class diagram of the main types and a UML sequence diagram of the main scenario, drawn on the canvas. Render each diagram and fix it until it is clean.
+> Implement issue 93. Then document it in my Inkuno notes with the `inkuno` server: a note on what changed and why, a technical part, a class diagram of the main types and a sequence diagram of the main scenario, as Mermaid blocks. Render each diagram and fix it until it is clean.
 
-Clients that show prompts offer the same as **document_feature**: it reminds the agent of the rules of a clean UML diagram (one scenario per diagram, lifelines in the order they take part, a reply for each call that waits, `alt` with a guard per branch). Ask for one diagram per question the reader has. A diagram that reads badly can be named in a second message: "the sequence diagram has too many lifelines, split the error path into its own".
+Clients that show prompts offer the same as **document_feature**: a class diagram of the main types and a sequence diagram of the main scenario, each in a ```mermaid block in the note, rendered and fixed until clean. Ask for one diagram per question the reader has. A diagram that reads badly can be named in a second message: "the sequence diagram has too many lifelines, split the error path into its own".
 
 ## What it will not do
 
