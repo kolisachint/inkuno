@@ -19,7 +19,7 @@
 <path d="M254 233L262 233L262 236L254 236Z" stroke="#7d8590"/>
 <text x="160" y="252" text-anchor="middle" fill="#7d8590" stroke="none">«component»</text>
 <text x="160" y="270" text-anchor="middle" fill="#7d8590" stroke="none">views</text>
-<text x="160" y="288" text-anchor="middle" fill="#7d8590" stroke="none">editor, canvas, grid, graph</text>
+<text x="160" y="288" text-anchor="middle" fill="#7d8590" stroke="none">editor, nav, palette, viewer</text>
 <path d="M42 400L278 400C279.1 400 280 400.9 280 402L280 488C280 489.1 279.1 490 278 490L42 490C40.9 490 40 489.1 40 488L40 402C40 400.9 40.9 400 42 400Z" stroke="#7d8590"/>
 <path d="M258 406L270 406L270 418L258 418Z" stroke="#7d8590"/>
 <path d="M254 408L262 408L262 411L254 411Z" stroke="#7d8590"/>
@@ -33,7 +33,7 @@
 <path d="M854 413L862 413L862 416L854 416Z" stroke="#7d8590"/>
 <text x="760" y="432" text-anchor="middle" fill="#7d8590" stroke="none">«component»</text>
 <text x="760" y="450" text-anchor="middle" fill="#7d8590" stroke="none">platform</text>
-<text x="760" y="468" text-anchor="middle" fill="#7d8590" stroke="none">disk, git, network, OS</text>
+<text x="760" y="468" text-anchor="middle" fill="#7d8590" stroke="none">disk, processes, network, OS</text>
 <path d="M342 580L578 580C579.1 580 580 580.9 580 582L580 668C580 669.1 579.1 670 578 670L342 670C340.9 670 340 669.1 340 668L340 582C340 580.9 340.9 580 342 580Z" stroke="#d98e2b"/>
 <path d="M558 586L570 586L570 598L558 598Z" stroke="#d98e2b"/>
 <path d="M554 588L562 588L562 591L554 591Z" stroke="#d98e2b"/>
@@ -64,9 +64,9 @@ version 10
 rich 1
 shape 1 component 40 40 240 90 0 0 0 «component»\nshell\nwindow, panes, commands
 shape 2 component 640 40 240 90 3 0 0 «component»\nmcp\ninkuno mcp, JSON-RPC on stdio
-shape 3 component 40 220 240 90 0 0 0 «component»\nviews\neditor, canvas, grid, graph
+shape 3 component 40 220 240 90 0 0 0 «component»\nviews\neditor, nav, palette, viewer
 shape 4 component 40 400 240 90 0 0 0 «component»\nui\ntheme, fonts, icons, widgets
-shape 5 component 640 400 240 90 0 0 0 «component»\nplatform\ndisk, git, network, OS
+shape 5 component 640 400 240 90 0 0 0 «component»\nplatform\ndisk, processes, network, OS
 shape 6 component 340 580 240 90 2 0 0 «component»\nlogic\npure functions
 link 7 s1 s3 none arrow straight 0 1 
 link 8 s1 s5 none arrow straight 0 1 
