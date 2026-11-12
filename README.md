@@ -18,7 +18,7 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 - **Plain files.** One `.md` file per note, in an ordinary folder. Sync it with git, Syncthing or a cloud folder. An existing folder of Markdown notes works as is.
 - **Styled as you type.** Headings grow, bold and italics render, markers stay visible but dimmed. The file on disk stays plain Markdown.
 - **Tables that compute.** Cells wrap, `Tab` moves between them, pasting from a spreadsheet works, and `=sum(above)` adds up a column.
-- **Linked notes.** `[[Links]]`, backlinks, tags, embedded sections, a graph, and a calendar of daily notes. The tree follows the active file, including diagrams, pictures and tables.
+- **Linked notes.** `[[Links]]`, tags, embedded sections and daily notes. The tree follows the active file, including diagrams, pictures and tables.
 - **More than notes.** List pages built from front matter, UML diagrams drawn by hand and saved as SVG, and a CSV grid that opens a million rows.
 - **Agents.** `inkuno mcp` lets an agent read, write and draw in the vault, with Inkuno's links, trash and diagrams. [Guide](book/src/agents.md)
 - **Safe tab closing.** Close a tab, the other tabs or a whole pane from a tab's right click, or every file from the palette. If saving fails, the document stays open with its edits and undo history.
@@ -69,8 +69,8 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | [Writing notes](book/src/writing.md) | Markdown, styles, lists, slash commands, blocks, several cursors |
 | [Links, embeds and files](book/src/links.md) | links, backlinks, tags, embedded sections, pictures, dropped files |
 | [Comments](book/src/comments.md) | annotating a passage, in a format other apps read |
-| [Daily notes](book/src/daily-notes.md) | today's note and the calendar |
-| [The palette and the panel](book/src/navigation.md) | the tree, the graph, the trash, icons |
+| [Daily notes](book/src/daily-notes.md) | today's note |
+| [The palette and the panel](book/src/navigation.md) | the tree, the trash, icons |
 | [Tabs, panes and docks](book/src/tabs-and-panes.md) | arranging the window |
 | [Search and replace](book/src/search.md) | in a note |
 | [Files on disk](book/src/vault.md) | naming, front matter, backup, configuration files |

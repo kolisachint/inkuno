@@ -20,14 +20,8 @@ use crate::{
 actions!(
     nav,
     [
-        ShowCalendar,
-        PrevMonth,
-        NextMonth,
         ShowTree,
         ShowRecent,
-        ShowGraph,
-        ShowTags,
-        ShowLinks,
         ToggleFull,
         Prev,
         Next,
@@ -69,10 +63,7 @@ pub const GAP: Pixels = px(8.);
 /// Handle between the panel and the note: the gap itself, so that dragging it needs no thin line.
 pub const DIVIDER: Pixels = GAP;
 
-// The graph, backlinks, tags and calendar views were cut: plain Markdown editing only.
-// Their actions above stay defined so the shared keymap registry keeps compiling until the
-// integrator deregisters them; dispatching one is a no-op. Old `layout` files naming them
-// fall back to the tree (`named` returns `None`).
+// Old `layout` files naming a removed view fall back to the tree (`named` returns `None`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Mode {
     #[default]
@@ -721,7 +712,6 @@ pub fn tree_rows(
 }
 
 /// The tag this path points to (`#tag`), if it is one.
-/// (The tags panel is cut and no new tag list page opens; old sessions may still name one.)
 pub fn tag_of(path: &Path) -> Option<&str> {
     path.to_str()?.strip_prefix('#')
 }
