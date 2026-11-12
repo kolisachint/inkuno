@@ -8,9 +8,9 @@ Another Vulkan driver is slow to load. Inkuno already skips the NVIDIA one when 
 
 There is no usable Vulkan driver. Install the one for your GPU: `vulkan-intel`, `vulkan-radeon`, `nvidia-utils`… on Arch; `mesa-vulkan-drivers` on Ubuntu.
 
-## macOS or Windows refuses to open Inkuno
+## macOS refuses to open Inkuno
 
-The downloads are not notarized or signed. See [macOS](install.md#macos) and [Windows](install.md#windows) for the one-time step.
+The download is not notarized. See [macOS](install.md#macos) for the one-time step.
 
 ## Bold text is not bold
 

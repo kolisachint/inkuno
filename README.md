@@ -32,15 +32,15 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 
 | System | Get it |
 |---|---|
-| Arch Linux | the prebuilt package, below |
+| Linux, x86_64 | the ready-made binary, below |
 | macOS 11 or later | [`inkuno-macos.dmg`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-macos.dmg) |
-| Windows 10 or 11 | [installer](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64-setup.exe) or [zip](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-windows-x86_64.zip) |
 | Ubuntu, Debian, Fedora, other Linux | build from source, below |
 
 ```bash
-# Arch Linux
-curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-x86_64.pkg.tar.zst
-sudo pacman -U ./inkuno-x86_64.pkg.tar.zst
+# Linux, x86_64: the ready-made binary
+curl -LO https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-linux-x86_64.tar.gz
+tar -xzf inkuno-linux-x86_64.tar.gz
+sudo install inkuno /usr/local/bin/
 ```
 
 ```bash
@@ -50,7 +50,7 @@ cd inkuno
 make && sudo make install
 ```
 
-The macOS and Windows downloads are not signed. The first launch needs one extra click: see [the install guide](book/src/install.md), which also covers the packages of each distribution, building on macOS and Windows, and upgrading. Inkuno never checks for updates: fetch a new release yourself when you want one.
+The macOS download is not signed. The first launch needs one extra click: see [the install guide](book/src/install.md), which also covers the packages of each distribution, building on macOS and Linux, and upgrading. Inkuno never checks for updates: fetch a new release yourself when you want one.
 
 ## Getting started
 

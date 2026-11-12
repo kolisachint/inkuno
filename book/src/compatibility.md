@@ -4,7 +4,8 @@
 |---|---|
 | Linux, GNOME on Wayland | first-class: this is what Inkuno is built and used on (Arch Linux) |
 | Linux, other desktops, Wayland or X11 | should work, with the same built-in title bar. Not tested. |
-| macOS 11 or later, Windows 10 or 11 | built and tested by CI on every commit, and the downloads are built there too. Not used day to day by the author. |
+| macOS 11 or later | built and tested by CI on every commit, and the download is built there too. Not used day to day by the author. |
+| Windows | not built: CI runs on Linux and macOS only, and no download ships. |
 
 ## Linux
 
