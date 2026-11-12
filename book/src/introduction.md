@@ -19,7 +19,7 @@ New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 | **Keyboard first** | One palette for notes and commands. Every shortcut is listed in the app and can be changed. See [Keyboard shortcuts](shortcuts.md). |
 | **Yours to dress** | A dozen themes, IBM Plex built in, any installed font, light and dark. See [Settings and appearance](settings.md). |
 
-Inkuno speaks English and French, following the language of your system.
+Inkuno's interface is in English.
 
 ## Conventions in this guide
 

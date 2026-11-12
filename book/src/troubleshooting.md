@@ -26,10 +26,6 @@ Inkuno is told by the system when the vault changes, and also looks at it every 
 
 See [Changes from other programs](vault.md#changes-from-other-programs).
 
-## Sync fails
-
-`git` must reach the repository without asking anything, and the vault must be in a plain state. See [Requirements](sync.md) and [What it refuses](sync.md).
-
 ## Inkuno crashed
 
 The last crash is written to the file `crash` of the [configuration folder](vault.md#configuration-files), with the version of Inkuno. Attach it to a [bug report](https://github.com/kolisachint/inkuno/issues): on Windows, the window has no console to show it.

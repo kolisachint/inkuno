@@ -50,7 +50,7 @@ With nothing typed, in a table of a note, the palette offers its gestures under 
 Type to find a command by what it does, then `Enter` runs it where you were. Any word of its name works, accents ignored:
 
 - `folder` offers **New folder**;
-- `theme`, `font` and `update` offer theirs too.
+- `theme` and `font` offer theirs too.
 
 ## Every shortcut: the help panel
 

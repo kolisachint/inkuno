@@ -20,9 +20,6 @@
 - [Tabs, panes and docks](tabs-and-panes.md)
 - [Search and replace](search.md)
 
-# More than notes
-
-
 # Your vault
 
 - [Files on disk](vault.md)
