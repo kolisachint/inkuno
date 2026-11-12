@@ -205,7 +205,7 @@ impl Shell {
         let mut list: Vec<commands::Command> = commands::catalog()
             .into_iter()
             .filter(|(action, ..)| available.contains(action))
-            // Gestures of a block, a table or a diagram only count there: elsewhere, they would do nothing.
+            // Gestures of a block or a table only count there: elsewhere, they would do nothing.
             .filter(|&(_, _, _, group)| {
                 !matches!(group, Group::Block | Group::Table) || Some(group) == here
             })
