@@ -76,7 +76,7 @@ The [user guide](book/src/introduction.md) covers everything. It is also publish
 | [Tabs, panes and docks](book/src/tabs-and-panes.md) | arranging the window |
 | [Search and replace](book/src/search.md) | in a note |
 | [Files on disk](book/src/vault.md) | naming, front matter, backup, configuration files |
-| [Syncing a vault](book/src/sync.md) | git in one key, or a cloud folder |
+| [Syncing a vault](book/src/sync.md) | git or a cloud folder |
 | [Settings and appearance](book/src/settings.md) | themes, fonts, page width, changing a shortcut |
 | [Updates](book/src/updates.md) | how Inkuno updates itself, and what it sends |
 | [Keyboard shortcuts](book/src/shortcuts.md) | every shortcut, as the help panel lists them |
