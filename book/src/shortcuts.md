@@ -72,7 +72,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate |
 |  | Recent notes |
 | A picture | Shown in place of the note |
-| A .csv or .tsv | A grid in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Arrows` | Select and preview |
 | `Enter` / `Esc` | Open the note / back to the note |
@@ -104,16 +103,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `![](Schéma.svg)` | Show the diagram in a note |
 | `.svg` | An SVG from elsewhere (draw.io, Mermaid.js…) opens in a viewer: drag or wheel to move, + - 0 to zoom |
 | Picture, formula, diagram | Point at one in a note: a button at its corner shows it full size, to zoom and move around (Esc goes back) |
-
-## CSV tables
-
-| Keys | Action |
-|---|---|
-| .csv .tsv | Opens in a grid; encoding and delimiter are detected, written straight into the file |
-| Arrows, Tab | Move; with Shift (or drag), select a range; click a row number or a header |
-| `Ctrl+click` | Add another selection: copy, cut, empty or remove their rows together |
-| Type, Enter, F2 | Replace the cell / validate and go down / open the cell; Esc cancels |
-| `Ctrl+P › table` | Delimiter, encoding, header row, copy as…, export (CSV, TSV, Markdown, JSON) |
 
 ## Appearance
 
@@ -204,8 +193,6 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Esc` | Close the find bar and the menus, back to one cursor |
 | `Alt+click` | Add a cursor |
 | `Ctrl+K` | Link: \[text\](address) from the selection; on a link, change its address |
-| Embed a section | !\[\[Note\#Heading\]\] alone on a line shows that heading and what is under it, up to the next heading of the same level, in place and live: !\[\[Note\]\] the whole note (without its front matter), !\[\[Note\#^id\]\] the block that ends with ^id. Framed, with the source's name at the top right: a click on it, or a double click on the frame, opens the note there (Alt+Left comes back). Typing !\[\[Note\# offers the headings of the note, \#^ its blocks. Read-only; an embed that leads back to itself says so, and three levels are shown at most. Renaming the note or the heading rewrites the embeds and links to it |
-| `Alt+Enter` | On the line of an embed: open its note, at the section |
 | `Ctrl+Shift+M` | Comment the selection or the line (in a table: the cell, or the taken row, column or table); on a comment, resolve it |
 | `Ctrl+P › comments` | Comments: show their panel, jump to one (a badge on the speech bubble counts them) |
 | Right click | Menu of the note: link, comment, cut, copy, paste, bold, italic |

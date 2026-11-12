@@ -18,26 +18,6 @@ A `#tag` in the text, or a `tags` key in the front matter, tags a note.
 - `#` in the palette lists the notes carrying a tag.
 - `Ctrl + click` opens a tag of the text.
 
-## Embedded sections
-
-A line holding only `![[Note#Heading]]` shows that heading, and what is under it up to the next heading of the same level, in place and live.
-
-| Write | Shows |
-|---|---|
-| `![[Note#Heading]]` | the section under that heading |
-| `![[Note]]` | the whole note, without its front matter |
-| `![[Note#^id]]` | the block that ends with `^id` (a common Markdown convention) |
-
-- **Look**: the section is drawn in a frame, with a thin bar on its left in the accent color and the name of its note at the top right. It follows the theme and wraps to the page.
-- **Open the source**: click the name, double click the frame, or press `Alt + Enter` on its line. The note opens at that section. `Ctrl + click` on a `[[Note#Heading]]` link does the same.
-- **Suggestions**: typing `![[Note#` suggests the headings of the note, and `![[Note#^` its blocks. This works after `[[` too.
-- **Read-only**: to change the text, change it in its note.
-- **Loops**: an embed that leads back to a note already in the chain says *circular embed*. Three levels are shown at most.
-- **Renames**: renaming the note rewrites the embeds and links to it. Renaming the heading (the same headings but one, saved) rewrites `#Heading` in the other notes.
-- **Only alone on its line**: inside a sentence, a list item or a code block, it is a plain link. `![[picture.png]]` is still a picture.
-
-The file stays plain Markdown: other apps show the line as a link.
-
 ## Pictures
 
 `![](picture.png)` or `![[picture.png]]` shows the picture under its line: PNG, JPEG, GIF, WebP, SVG, BMP, TIFF or AVIF. Inkuno looks for it next to the note, then at the top of the vault, then by its file name anywhere in the vault.

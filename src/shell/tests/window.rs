@@ -927,12 +927,12 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             .iter()
             .zip(&boxes)
             .filter(|(_, b)| b.top() < view.bottom() && b.bottom() > view.top())
-            // Diagrams, CSV tables and Typing have no shortcut line left (their features
-            // were cut): nothing to point at, so they sit the check out.
+            // Diagrams and Typing have no shortcut line left (text-only rows):
+            // nothing to point at, so they sit the check out.
             .filter(|(section, _)| section.1.iter().any(|row| row.action.is_some()))
             .collect::<Vec<_>>();
-        // Frames parked wholly inside the cut-feature sections (Diagrams, CSV tables,
-        // Typing: text-only rows, no shortcut line) show no actionable section,
+        // Frames parked wholly inside a text-only section (Diagrams, Typing:
+        // no shortcut line) show no actionable section,
         // so there is nothing to check on that frame.
         if mid.is_empty() {
             return view.center();
