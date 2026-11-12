@@ -50,7 +50,7 @@ A small table keeps its own size, and nothing goes past the window.
 
 ## Language
 
-French if the system language is French, English otherwise. Inkuno asks the system (Windows, macOS), or reads `LC_ALL`, `LC_MESSAGES` and `LANG` (Linux, or any system when started from a terminal).
+The interface is in English.
 
 ## The settings file
 
@@ -65,7 +65,6 @@ These choices are kept in a file named `settings`, in the [configuration folder]
 | `wide` | `column`, `center` | `wide tables` |
 | `bar` | `on`, `off` | `formatting bar` |
 | `motion` | `on`, `off` | `animations` |
-| `updates` | `off` to stop the daily check | `updates`, see [Updates](updates.md) |
 
 ## Changing a shortcut
 
