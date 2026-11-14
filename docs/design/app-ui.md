@@ -668,5 +668,6 @@ Normal 800 is the default (§10.4 lock released for this change).
   note moves under its title, into the tree's folder or the vault root; its tab stays, as a note of the vault;
   only offered with a vault), **Discard** (last; deletes the file), `Esc` cancels the close. Closing several
   tabs at once (`Close other tabs`, `Close all files`) keeps scratch notes without asking.
-- Quitting or closing the window never asks: scratch notes are on disk already.
+- Quitting or closing the window never asks: scratch notes are on disk already, and the scratch tabs open
+  at quit come back with the other tabs, with or without a vault (`restore_panes`, the `panes` file).
 - Decisions and tests: `keybindings.md` §8 (2026-11-14), `shell/tests/scratch.rs`.

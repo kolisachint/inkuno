@@ -187,3 +187,55 @@ fn quitting_or_closing_the_window_never_asks(cx: &mut TestAppContext) {
     assert_eq!(fs::read_to_string(&files[0]).unwrap(), "à l'instant");
     let _ = fs::remove_dir_all(root);
 }
+
+#[gpui::test]
+fn scratch_tabs_come_back_after_a_restart(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-restart");
+    let anchor = root.join("Ancre.md");
+    fs::write(&anchor, "# Ancre\n").unwrap();
+    shell.update_in(cx, |s, window, cx| s.open_from_nav(&anchor, window, cx));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_input("# Reprise\n\nencore");
+    settle(cx);
+    // The layout is saved as the window draws.
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    let file = platform::scratch::list().remove(0);
+    drop(shell);
+    // A restart: a new window on the same vault and the same config folder.
+    let (restarted, cx) =
+        cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
+    cx.run_until_parked();
+    assert_eq!(text_of(&restarted, cx), "# Reprise\n\nencore");
+    assert!(restarted.read_with(cx, |s, _| {
+        s.pane().scratch && s.pane().path.as_deref() == Some(file.as_path()) && s.panes.len() == 2
+    }));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn scratch_tabs_come_back_without_a_vault(cx: &mut TestAppContext) {
+    let root = std::env::temp_dir().join(format!(
+        "inkuno-scratch-restart-novault-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _config = isolated_config(&root);
+    cx.update(bind_keys);
+    cx.update(init_fonts);
+    let (shell, cx) = cx.add_window_view(|window, cx| Shell::new(None, Vec::new(), window, cx));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_input("sans coffre");
+    settle(cx);
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    drop(shell);
+    let (restarted, cx) = cx.add_window_view(|window, cx| Shell::new(None, Vec::new(), window, cx));
+    cx.run_until_parked();
+    assert_eq!(text_of(&restarted, cx), "sans coffre");
+    assert!(restarted.read_with(cx, |s, _| s.pane().scratch));
+    let _ = fs::remove_dir_all(root);
+}
