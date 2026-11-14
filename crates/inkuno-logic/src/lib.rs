@@ -6,6 +6,7 @@
 //!
 //! `history` (back/forward travel) is cut with its feature: not carried over.
 
+pub mod assistant;
 pub mod block;
 pub mod commands;
 pub mod daily;

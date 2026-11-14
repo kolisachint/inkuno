@@ -5,6 +5,8 @@
 //! so every `crate::logic::…` path keeps working.
 
 // Moved to `inkuno-logic` (English-only, no gpui): shims, do not add code here.
+#[allow(unused_imports)] // until the panel is wired to it
+pub use inkuno_logic::assistant;
 pub use inkuno_logic::block;
 pub use inkuno_logic::commands;
 pub use inkuno_logic::daily;

@@ -1,5 +1,6 @@
 //! The outside world: disk, processes, network and the operating system. No gpui here.
 
+pub mod assistant;
 pub mod clock;
 pub mod link;
 pub mod mac_chrome;
