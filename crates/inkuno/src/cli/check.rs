@@ -14,7 +14,7 @@ use super::{draw, guide, ops as notes, outcome::Outcome, store::Vault};
 fn scratch() -> PathBuf {
     static N: AtomicU64 = AtomicU64::new(0);
     let root = std::env::temp_dir().join(format!(
-        "inkuno-mcp-{}-{}",
+        "inkuno-cli-{}-{}",
         std::process::id(),
         N.fetch_add(1, Ordering::Relaxed)
     ));
@@ -23,14 +23,15 @@ fn scratch() -> PathBuf {
     // Reached through a link, as macOS's temp folder (`/var` → `/private/var`) and Windows'
     // canonical paths (`\\?\C:`) are: a path given by an agent must still find the index's note.
     #[cfg(unix)]
-    {
+    let shown = {
         let link = root.with_extension("via");
         let _ = fs::remove_file(&link);
         std::os::unix::fs::symlink(&root, &link).unwrap();
-        return link;
-    }
-    #[allow(unreachable_code)]
-    root
+        link
+    };
+    #[cfg(not(unix))]
+    let shown = root;
+    shown
 }
 
 fn touch(path: &std::path::Path, secs: u64) {
@@ -550,4 +551,97 @@ fn five_thousand_notes_stay_searchable() {
     assert_eq!(listed["notes"].as_array().unwrap().len(), 100);
     assert!(listed["next"].is_string());
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_empty_token_and_a_malformed_edit_are_refused_and_change_nothing() {
+    let root = scratch();
+    write(&root, "Plan.md", "# Plan\n\nBody.\n");
+    let mut vault = open(&root);
+    let no_token = err(notes::edit_note(
+        &mut vault,
+        &json!({"note": "Plan", "token": "", "edits": [{"old": "Body", "new": "X"}]}),
+    ));
+    assert!(no_token.contains("`token` is empty"), "{no_token}");
+    let no_new = err(notes::edit_note(
+        &mut vault,
+        &json!({"note": "Plan", "edits": [{"old": "Body"}]}),
+    ));
+    assert_eq!(no_new, "edit 1 needs a text `old` and a text `new`");
+    assert_eq!(
+        fs::read_to_string(root.join("Plan.md")).unwrap(),
+        "# Plan\n\nBody.\n"
+    );
+}
+
+#[test]
+fn a_refused_move_creates_no_folder_and_a_case_only_rename_is_free() {
+    let root = scratch();
+    write(&root, "Zz.md", "# Zz\n");
+    write(&root, "Ref.md", "[[Zz]]\n");
+    let mut vault = open(&root);
+    let bad = err(notes::rename_note(
+        &mut vault,
+        &json!({"note": "Zz", "folder": "brandnew", "name": "."}),
+    ));
+    assert_eq!(bad, "invalid name");
+    assert!(!root.join("brandnew").exists());
+    let renamed = ok(notes::rename_note(
+        &mut vault,
+        &json!({"note": "Zz", "name": "zz"}),
+    ));
+    assert_eq!(renamed["path"], "zz.md");
+    assert_eq!(renamed["links_left"], false);
+    assert!(root.join("zz.md").is_file());
+}
+
+#[test]
+fn the_folder_of_a_listing_is_read_like_a_move() {
+    let root = scratch();
+    write(&root, "ideas/Idea.md", "# Idea\n");
+    let vault = open(&root);
+    for folder in [".", "./", "ideas/", "./ideas"] {
+        let scope = ok(notes::list_notes(&vault, &json!({"folder": folder})));
+        let names: Vec<&str> = scope["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["ideas/Idea.md"], "{folder}");
+    }
+    assert_eq!(
+        err(notes::list_notes(&vault, &json!({"folder": "nowhere"}))),
+        "no folder `nowhere`"
+    );
+    assert_eq!(
+        err(notes::search_notes(
+            &vault,
+            &json!({"query": "idea", "folder": "../.."})
+        )),
+        "a path cannot leave the vault"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_into_a_hidden_folder_is_refused_but_the_trash_is_not() {
+    let root = scratch();
+    write(&root, ".inkuno/x.md", "secret\n");
+    write(&root, ".trash/Old.md", "# Old\n");
+    std::os::unix::fs::symlink(root.join(".inkuno"), root.join("linkh")).unwrap();
+    let vault = open(&root);
+    assert!(vault.inside("linkh/x.md", false).is_err());
+    assert!(vault.inside("linkh/x.md", true).is_err());
+    assert!(vault.inside(".trash/Old.md", true).is_ok());
+    assert!(vault.inside(".trash/Old.md", false).is_err());
+}
+
+#[test]
+fn the_links_of_an_unreadable_note_are_an_error() {
+    let root = scratch();
+    fs::write(root.join("Bad.md"), b"# Bad\n\xff\n").unwrap();
+    let vault = open(&root);
+    let message = err(notes::note_links(&vault, &json!({"note": "Bad"})));
+    assert!(message.contains("UTF-8"), "{message}");
 }

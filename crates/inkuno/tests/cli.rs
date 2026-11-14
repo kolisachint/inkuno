@@ -614,7 +614,7 @@ fn new_takes_its_body_from_standard_input_and_read_gives_the_token() {
     let made = inkuno_in(
         &home,
         &vault,
-        &["new", "Meeting", "notes", "--folder", "work"],
+        &["new", "Meeting", "notes", "--folder", "work", "--text", "-"],
         "First line.\n",
     );
     assert_eq!(
@@ -629,12 +629,19 @@ fn new_takes_its_body_from_standard_input_and_read_gives_the_token() {
     let read: Value = serde_json::from_str(&read.out).unwrap();
     assert_eq!(read["text"], "# Meeting notes\n\nFirst line.\n");
     assert_eq!(read["token"].as_str().unwrap().len(), 64);
-    // An empty standard input is no body at all.
-    let bare = inkuno_in(&home, &vault, &["new", "Bare"], "");
+    // Without --text, standard input is not read: the note has no body, whatever is piped in.
+    let bare = inkuno_in(&home, &vault, &["new", "Bare"], "not read\n");
     assert_eq!(bare.code, 0, "{}", bare.err);
     assert_eq!(
         fs::read_to_string(vault.join("Bare.md")).unwrap(),
         "# Bare\n\n"
+    );
+    // An empty standard input under --text - is no body at all.
+    let empty = inkuno_in(&home, &vault, &["new", "Empty", "--text", "-"], "");
+    assert_eq!(empty.code, 0, "{}", empty.err);
+    assert_eq!(
+        fs::read_to_string(vault.join("Empty.md")).unwrap(),
+        "# Empty\n\n"
     );
     let _ = fs::remove_dir_all(home);
 }
@@ -723,7 +730,7 @@ fn append_goes_under_a_heading() {
     let run = inkuno_in(
         &home,
         &vault,
-        &["append", "plan.md", "--under", "Next"],
+        &["append", "plan.md", "--under", "Next", "--text", "-"],
         "- two\n",
     );
     assert_eq!(
@@ -735,8 +742,12 @@ fn append_goes_under_a_heading() {
     let text = fs::read_to_string(vault.join("plan.md")).unwrap();
     assert!(text.contains("- one\n\n- two\n\n## Later"), "{text}");
     // An empty text is refused, and nothing is written.
-    let empty = inkuno_in(&home, &vault, &["append", "plan.md"], "");
+    let empty = inkuno_in(&home, &vault, &["append", "plan.md", "--text", "-"], "");
     assert_eq!(empty.code, 1);
+    assert_eq!(fs::read_to_string(vault.join("plan.md")).unwrap(), text);
+    // Without --text there is no text to add: a usage error, and standard input is not read.
+    let none = inkuno_in(&home, &vault, &["append", "plan.md"], "not read\n");
+    assert_eq!(none.code, 2, "{}", none.err);
     assert_eq!(fs::read_to_string(vault.join("plan.md")).unwrap(), text);
     let _ = fs::remove_dir_all(home);
 }
@@ -977,7 +988,7 @@ fn comment_wraps_one_passage_and_daily_writes_its_day() {
     let note = fs::read_to_string(vault.join("2026-03-14.md")).unwrap();
     assert!(note.contains("Shipped."), "{note}");
     let bad = inkuno(&home, &vault, &["daily", "--date", "2026-02-30"]);
-    assert_eq!(bad.code, 1);
+    assert_eq!(bad.code, 2);
     assert!(bad.err.contains("YYYY-MM-DD"), "{}", bad.err);
     let _ = fs::remove_dir_all(home);
 }
@@ -1032,12 +1043,22 @@ fn render_checks_a_mermaid_source_and_draws_a_png() {
 
     // A source that does not draw exits 1, with the reason on standard error and no text on standard output.
     let source = "flowchart LR\n  A -->\n  ]]]\n";
-    let bad = inkuno_in(&home, &vault, &["render", "--check"], source);
+    let bad = inkuno_in(
+        &home,
+        &vault,
+        &["render", "--check", "--mermaid", "-"],
+        source,
+    );
     assert_eq!(bad.code, 1, "{}", bad.out);
     assert!(bad.out.is_empty(), "{}", bad.out);
     assert!(bad.err.starts_with("inkuno: "), "{}", bad.err);
     // With --json the result is still printed on standard output, and the status is 1.
-    let bad = inkuno_in(&home, &vault, &["render", "--check", "--json"], source);
+    let bad = inkuno_in(
+        &home,
+        &vault,
+        &["render", "--check", "--json", "--mermaid", "-"],
+        source,
+    );
     assert_eq!(bad.code, 1, "{}", bad.err);
     let bad: Value = serde_json::from_str(&bad.out).unwrap();
     assert_eq!(bad["readable"], false);
@@ -1077,6 +1098,14 @@ fn render_checks_a_mermaid_source_and_draws_a_png() {
     );
     let meta: Value = serde_json::from_str(&meta.out).unwrap();
     assert_eq!(meta["kind"], "mermaid");
+    // A check without a source is a usage error: standard input is read only with --mermaid -.
+    let unsourced = inkuno_in(
+        &home,
+        &vault,
+        &["render", "--check"],
+        "flowchart LR\n  A --> B\n",
+    );
+    assert_eq!(unsourced.code, 2, "{}", unsourced.err);
     // A picture without --out has nowhere to go: a usage error.
     let nowhere = inkuno(
         &home,
@@ -1170,4 +1199,218 @@ fn no_vault_and_a_missing_vault_say_so() {
     assert!(shown.err.contains("not open"), "{}", shown.err);
     let _ = fs::remove_dir_all(home);
     let _ = fs::remove_dir_all(shown_home);
+}
+
+#[test]
+fn options_may_come_before_the_command_word_and_never_open_the_window() {
+    let (home, vault) = sandbox("lead");
+    write(&vault.join("Plan.md"), "# Plan\n");
+    let dir = vault.to_str().unwrap();
+    let listed = inkuno(&home, &home, &["--vault", dir, "list"]);
+    assert_eq!(
+        (listed.code, listed.out.as_str()),
+        (0, "Plan.md\n"),
+        "{}",
+        listed.err
+    );
+    let json = inkuno(&home, &home, &["--json", &format!("--vault={dir}"), "list"]);
+    assert_eq!(json.code, 0, "{}", json.err);
+    let value: Value = serde_json::from_str(&json.out).unwrap();
+    assert_eq!(value["notes"][0]["path"], "Plan.md");
+    // An option that is no option of ours is a wrong command line, not the app.
+    let unknown = inkuno(&home, &home, &["--bogus", "list"]);
+    assert_eq!(unknown.code, 2, "{}", unknown.err);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_bare_dash_dash_makes_the_rest_words() {
+    let (home, vault) = sandbox("dashes");
+    let made = inkuno(&home, &vault, &["new", "--", "-x"]);
+    assert_eq!(
+        (made.code, made.out.as_str()),
+        (0, "-x.md\n"),
+        "{}",
+        made.err
+    );
+    assert!(vault.join("-x.md").is_file());
+    let found = inkuno(&home, &vault, &["search", "--", "-x"]);
+    assert_eq!(found.code, 0, "{}", found.err);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn an_empty_or_dot_folder_is_the_vault_root_and_a_listing_folder_is_checked() {
+    let (home, vault) = sandbox("root");
+    write(&vault.join("sub/Note.md"), "# Note\n");
+    write(&vault.join("ideas/Idea.md"), "# Idea\n");
+    let moved = inkuno(&home, &vault, &["move", "sub/Note", "--folder", ""]);
+    assert_eq!(moved.code, 0, "{}", moved.err);
+    assert!(vault.join("Note.md").is_file());
+    assert!(!vault.join("sub/Note.md").exists());
+    let everything = inkuno(&home, &vault, &["list", "--folder", ""]);
+    assert_eq!(everything.out.lines().count(), 2, "{}", everything.out);
+    let dot = inkuno(&home, &vault, &["list", "--folder", "."]);
+    assert_eq!(dot.out.lines().count(), 2, "{}", dot.out);
+    for folder in ["./ideas", "ideas/"] {
+        let listed = inkuno(&home, &vault, &["list", "--folder", folder]);
+        assert_eq!(
+            (listed.code, listed.out.as_str()),
+            (0, "ideas/Idea.md\n"),
+            "{folder}"
+        );
+        let found = inkuno(&home, &vault, &["search", "idea", "--folder", folder]);
+        assert_eq!(found.code, 0, "{}", found.err);
+        assert!(found.out.contains("ideas/Idea.md"), "{}", found.out);
+    }
+    let missing = inkuno(&home, &vault, &["list", "--folder", "nowhere"]);
+    assert_eq!(missing.code, 1);
+    assert!(
+        missing.err.contains("no folder `nowhere`"),
+        "{}",
+        missing.err
+    );
+    let outside = inkuno(&home, &vault, &["search", "idea", "--folder", "../.."]);
+    assert_eq!(outside.code, 1);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_refused_move_or_note_leaves_no_folder_behind() {
+    let (home, vault) = sandbox("refused");
+    write(&vault.join("Zz.md"), "# Zz\n");
+    let bad_name = inkuno(
+        &home,
+        &vault,
+        &["move", "Zz", "--folder", "brandnew", "--name", "."],
+    );
+    assert_eq!(bad_name.code, 1, "{}", bad_name.out);
+    let template = inkuno(
+        &home,
+        &vault,
+        &["new", "Idea", "--folder", "made", "--template", "nowhere"],
+    );
+    assert_eq!(template.code, 1, "{}", template.out);
+    for dir in ["brandnew", "made"] {
+        assert!(!vault.join(dir).exists(), "{dir} was made");
+    }
+    assert!(vault.join("Zz.md").is_file());
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_case_only_rename_is_not_reported_as_a_clash() {
+    let (home, vault) = sandbox("case");
+    write(&vault.join("Zz.md"), "# Zz\n");
+    let renamed = inkuno(&home, &vault, &["move", "Zz", "--name", "zz", "--json"]);
+    assert_eq!(renamed.code, 0, "{}", renamed.err);
+    let value: Value = serde_json::from_str(&renamed.out).unwrap();
+    assert_eq!(value["path"], "zz.md");
+    assert_eq!(value["links_left"], false);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_cannot_reach_a_hidden_folder() {
+    let (home, vault) = sandbox("hidden");
+    write(&vault.join(".inkuno/x.md"), "secret\n");
+    std::os::unix::fs::symlink(vault.join(".inkuno"), vault.join("linkh")).unwrap();
+    let read = inkuno(&home, &vault, &["read", "linkh/x.md"]);
+    assert_eq!(read.code, 1);
+    assert!(read.err.contains("hidden folders"), "{}", read.err);
+    let moved = inkuno(&home, &vault, &["move", "linkh/x.md", "--name", "y"]);
+    assert_eq!(moved.code, 1);
+    assert!(vault.join(".inkuno/x.md").is_file());
+    assert!(!vault.join(".inkuno/y.md").exists());
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_value_outside_its_range_is_a_usage_error_before_any_work() {
+    let (home, vault) = sandbox("values");
+    write(&vault.join("Plan.md"), "# Plan\n");
+    let mermaid = "flowchart LR\n  A --> B";
+    let cases: &[&[&str]] = &[
+        &["list", "--kind", "bogus"],
+        &["list", "--sort", "bogus"],
+        &["list", "--limit", "0"],
+        &["list", "--limit", "201"],
+        &["search", "plan", "--limit", "51"],
+        &["daily", "--date", "2026-02-30"],
+        &[
+            "render",
+            "--mermaid",
+            mermaid,
+            "--out",
+            "x.png",
+            "--block",
+            "0",
+        ],
+        &[
+            "render",
+            "--mermaid",
+            mermaid,
+            "--out",
+            "x.png",
+            "--theme",
+            "bogus",
+        ],
+        &[
+            "render",
+            "--mermaid",
+            mermaid,
+            "--out",
+            "x.png",
+            "--width",
+            "nan",
+        ],
+        &[
+            "render",
+            "--mermaid",
+            mermaid,
+            "--out",
+            "x.png",
+            "--width",
+            "inf",
+        ],
+        &[
+            "render",
+            "--mermaid",
+            mermaid,
+            "--out",
+            "x.png",
+            "--width",
+            "-5",
+        ],
+        &["edit", "Plan", "--edits", "[{\"old\": \"Plan\"}]"],
+        &[
+            "edit",
+            "Plan",
+            "--edits",
+            "[{\"old\": \"Plan\", \"new\": 3}]",
+        ],
+        &["edit", "Plan", "--old", "Plan", "--new", "X", "--token="],
+        &["append", "Plan", "--token=", "--text", "x"],
+    ];
+    for args in cases {
+        let run = inkuno(&home, &vault, args);
+        assert_eq!(run.code, 2, "{args:?}: {}", run.err);
+    }
+    assert!(!vault.join("x.png").exists());
+    assert_eq!(
+        fs::read_to_string(vault.join("Plan.md")).unwrap(),
+        "# Plan\n"
+    );
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn links_of_an_unreadable_note_is_an_error_not_an_empty_answer() {
+    let (home, vault) = sandbox("unreadable");
+    fs::write(vault.join("Bad.md"), b"# Bad\n\xff\n").unwrap();
+    let links = inkuno(&home, &vault, &["links", "Bad"]);
+    assert_eq!(links.code, 1, "{}", links.out);
+    assert!(links.err.contains("UTF-8"), "{}", links.err);
+    let _ = fs::remove_dir_all(home);
 }

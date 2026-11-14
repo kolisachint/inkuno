@@ -38,7 +38,7 @@ reading
   inkuno tags                        every tag, with how many notes carry it
   inkuno show <note>                 open a note in the Inkuno window
 writing
-  inkuno new <title…>                a new note; its body is --text, or standard input
+  inkuno new <title…>                a new note; its body is --text, or --text - for standard input
   inkuno edit <note>                 exact replacements, refused when the note has changed
   inkuno append <note>               add text at the end, or at the end of a section
   inkuno move <note>                 rename or move a note; the [[links]] to it follow
@@ -60,14 +60,58 @@ help
 
 Notes are named by their title, an alias, or their path in the vault. Link a note with [[Name]].
 Nothing is deleted: trash moves a file to .trash. Pass the token from `inkuno read --json` to
-`edit` or `append`, and a note changed since is refused. Every command takes --vault DIR; without
-it, the vault is the folder above the current one that holds an .inkuno folder, else the vault the
-app has open. Commands print text; --json prints the result as JSON. `inkuno <command> --help`
-gives the options and an example.
+`edit` or `append`, and a note changed since is refused. The commands that work on a vault take
+--vault DIR; without it, the vault is the folder above the current one that holds an .inkuno
+folder, else the vault the app has open. `rev` finds the vault from the note's path, and `keys`
+needs none. --vault DIR and --json may also come before the command word. Commands print text;
+--json prints the result as JSON. `inkuno <command> --help` gives the options and an example.
 ";
 
-/// Runs a command. `args` starts with the command word; the result is the exit status.
+/// Runs a command line: the command word, its arguments, and the exit status as the result. The
+/// options `--vault DIR` and `--json` may come before the command word; they count as if given
+/// after it.
 pub fn run(args: &[String]) -> i32 {
+    let mut lead = Vec::new();
+    let mut at = 0;
+    while let Some(arg) = args.get(at) {
+        match arg.as_str() {
+            "--json" => {
+                lead.push(arg.clone());
+                at += 1;
+            }
+            "--vault" => {
+                let Some(dir) = args.get(at + 1) else {
+                    return usage("--vault needs a folder");
+                };
+                lead.push(arg.clone());
+                lead.push(dir.clone());
+                at += 2;
+            }
+            other if other.starts_with("--vault=") => {
+                lead.push(arg.clone());
+                at += 1;
+            }
+            _ => break,
+        }
+    }
+    match args.get(at).map(String::as_str) {
+        None => usage("a command is needed: try `inkuno help`"),
+        Some("--help" | "-h") => {
+            print!("{TOP}");
+            0
+        }
+        Some(option) if option.starts_with('-') => usage(&format!("unknown option {option}")),
+        Some(word) => {
+            let mut full = vec![word.to_string()];
+            full.extend(args[at + 1..].iter().cloned());
+            full.extend(lead);
+            dispatch(&full)
+        }
+    }
+}
+
+/// Runs the command of `args`, whose first word is the command word.
+fn dispatch(args: &[String]) -> i32 {
     let rest = args.get(1..).unwrap_or(&[]);
     match args.first().map(String::as_str) {
         Some("rev") => rev::run(rest),
@@ -160,21 +204,27 @@ pub struct Opts {
 
 /// Reads a command line: `value_options` take the next word or `=value`, `switches` stand alone.
 /// `--json` and `--help` are always switches. An unknown option is a usage error. A lone `-` is
-/// a word: standard input, by convention.
+/// a word: standard input, by convention. A bare `--` ends the options: what follows is a word,
+/// even when it starts with `-`.
 pub fn options(args: &[String], value_options: &[&str], switches: &[&str]) -> Result<Opts, String> {
     let mut opts = Opts::default();
     let mut words = args.iter();
+    let mut words_only = false;
     while let Some(arg) = words.next() {
+        if words_only || !arg.starts_with('-') || arg == "-" {
+            opts.words.push(arg.clone());
+            continue;
+        }
+        if arg == "--" {
+            words_only = true;
+            continue;
+        }
         if arg == "--help" || arg == "-h" {
             opts.help = true;
             continue;
         }
         if arg == "--json" {
             opts.json = true;
-            continue;
-        }
-        if !arg.starts_with('-') || arg == "-" {
-            opts.words.push(arg.clone());
             continue;
         }
         let (name, inline) = match arg.split_once('=') {
@@ -264,6 +314,13 @@ mod tests {
         assert!(opts.switches.contains("--check"));
         assert_eq!(opts.words, ["-"]);
         assert!(options(&args(&["--check=yes"]), &[], &["--check"]).is_err());
+    }
+
+    #[test]
+    fn a_bare_dash_dash_ends_the_options() {
+        let opts = options(&args(&["--", "-x", "--json", "-h"]), &[], &[]).unwrap();
+        assert_eq!(opts.words, ["-x", "--json", "-h"]);
+        assert!(!opts.json && !opts.help);
     }
 
     #[test]

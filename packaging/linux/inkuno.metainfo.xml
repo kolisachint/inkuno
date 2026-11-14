@@ -8,7 +8,8 @@
     <p>
       Inkuno is a fast, minimal note-taking app. Notes are plain Markdown files
       in a folder you choose, styled as you type, with links, tags, a graph, tables,
-      boards and diagrams, and an agent interface over the Model Context Protocol.
+      boards and diagrams, and a command line that agents can use to read and write
+      the notes of a vault without a window.
     </p>
   </description>
   <launchable type="desktop-id">com.inkuno.Inkuno.desktop</launchable>

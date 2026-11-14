@@ -139,7 +139,7 @@ impl Vault {
                 return Err("a path cannot leave the vault".into());
             };
             let name = name.to_string_lossy();
-            if name.starts_with('.') && !(trash && depth == 0 && name == ".trash") {
+            if hidden(&name, depth, trash) {
                 return Err("hidden folders are not part of the vault".into());
             }
             cur.push(name.as_ref());
@@ -152,6 +152,18 @@ impl Vault {
                     return Err("a path cannot leave the vault".into());
                 }
                 cur = target;
+            }
+        }
+        // A link may lead into a hidden folder of the vault (`linkh -> .inkuno`): the rule holds
+        // for the place the path really reaches, under the resolved root.
+        let reached = cur
+            .strip_prefix(&root)
+            .map_err(|_| "a path cannot leave the vault".to_string())?;
+        for (depth, component) in reached.components().enumerate() {
+            if let Component::Normal(name) = component
+                && hidden(&name.to_string_lossy(), depth, trash)
+            {
+                return Err("hidden folders are not part of the vault".into());
             }
         }
         Ok(self.root.join(rel))
@@ -196,6 +208,11 @@ impl Vault {
     pub fn is_template(&self, note: &Note) -> bool {
         vault::in_templates(&self.root, &note.path)
     }
+}
+
+/// A name of the vault that is hidden: a dot-name, except `.trash` at the root when `trash` allows it.
+fn hidden(name: &str, depth: usize, trash: bool) -> bool {
+    name.starts_with('.') && !(trash && depth == 0 && name == ".trash")
 }
 
 fn looks_like_path(note: &str) -> bool {
