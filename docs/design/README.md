@@ -13,6 +13,9 @@ reverse (`CONTRIBUTING.md`).
   palette-alias convention, changelog (T-fix: `Ctrl+Shift+T` = reopen tab,
   Recent unbound), reserved keys (`F9` focus/zen candidate). Implements
   `app-ui.md` §11; if it disagrees with `defaults()`, code wins.
+- **`revisions.md` — saved versions.** The revision file format, where the
+  history lives (`.inkuno/revisions/`), the diffs, and the dated decisions of
+  idea refinement (2026-11-14).
 - **Steering log:** `app-ui.md` §15 (2026-11-08 session — 7 user-agreed decisions;
   done: rebuild-trigger armed, Rail kept; queued: split-hide, F9, GPUI
   upgrade, docs sweep, Linux CI-confirm). Pointer only — crews land the work

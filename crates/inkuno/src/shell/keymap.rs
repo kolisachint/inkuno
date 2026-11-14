@@ -253,7 +253,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
 }
 
 /// The actions whose shortcut can be changed: those that have their line in the help.
-pub(super) fn editable() -> std::collections::HashSet<&'static str> {
+pub(crate) fn editable() -> std::collections::HashSet<&'static str> {
     help_sections(&[], &keys::Changes::new())
         .into_iter()
         .flat_map(|(_, rows)| rows)
@@ -263,7 +263,7 @@ pub(super) fn editable() -> std::collections::HashSet<&'static str> {
 
 /// The default shortcut table. Its order matters: for the same context, the last binding
 /// wins.
-pub(super) fn defaults() -> Vec<keys::Bind> {
+pub(crate) fn defaults() -> Vec<keys::Bind> {
     use editor::*;
     use keys::bind as b;
     use palette::{Confirm, Dismiss, Next, Prev};

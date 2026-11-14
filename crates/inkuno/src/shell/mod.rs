@@ -4,7 +4,7 @@
 
 mod files;
 mod help;
-mod keymap;
+pub(crate) mod keymap;
 mod library;
 mod listing;
 mod menu;

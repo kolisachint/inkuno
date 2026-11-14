@@ -69,6 +69,8 @@ fn layers_only_depend_downwards() {
         ),
         ("src/views", &["crate::shell", "impl Shell", server]),
         ("src/shell", &[server]),
+        // The command line reads the shortcut table of shell::keymap and nothing that draws.
+        ("src/cli", &["gpui", "crate::views", "impl Shell", server]),
         // The server uses logic, platform and the pure parts of ui. It never sees a window.
         (
             "src/mcp",
