@@ -195,37 +195,48 @@ pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()
     }
 }
 
-/// A trashed note or folder: its history goes to the home's trash under the same name the trashed
-/// item got there (numbered when taken), so nothing is lost and the pair can be found.
+/// A trashed note or folder: its history goes to the home's bin under the name the item got in the
+/// trash (`trashed`), so the pair is found by that name alone. The bin slot of that name is always
+/// cleared first: an entry there is stale (the trash picked a free name, so no live item of that
+/// name is in the trash) and it is moved aside under a free name, never deleted. Without this, undo
+/// of a note that had no history could bring back another note's history.
 pub fn trash_along(vault: Option<&Path>, path: &Path, trashed: &Path) -> io::Result<()> {
     let Some(home) = home_of(path, vault) else {
         return Ok(());
     };
+    let Some(name) = trashed.file_name() else {
+        return Ok(());
+    };
+    let bin = home.bin();
+    let slot = bin.join(name);
+    if fs::symlink_metadata(&slot).is_ok() {
+        let aside = free_in(&bin, &name.to_string_lossy());
+        fs::rename(&slot, &aside)?;
+    }
     let Some(src) = home.folder(path) else {
         return Ok(());
     };
     if !src.exists() {
         return Ok(());
     }
-    let bin = home.bin();
     fs::create_dir_all(&bin)?;
-    let name = trashed
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-    let free = (1..)
+    fs::rename(&src, &slot)
+}
+
+/// The first free name `dir/name`, `dir/2 name`, `dir/3 name`… (the one the bins use).
+fn free_in(dir: &Path, name: &str) -> PathBuf {
+    (1..)
         .map(|n| match n {
-            1 => bin.join(&name),
-            n => bin.join(format!("{n} {name}")),
+            1 => dir.join(name),
+            n => dir.join(format!("{n} {name}")),
         })
-        .find(|p| !p.exists())
-        .unwrap();
-    fs::rename(&src, &free)
+        .find(|p| fs::symlink_metadata(p).is_err())
+        .unwrap()
 }
 
 /// Undo of a trash, or a restore from it: the history that went to the bin with `trashed` goes back
-/// to `to`. Nothing is done when there is no such history; nothing is overwritten.
+/// to `to`. Only the bin entry of that exact name is used, the one `trash_along` filled for that
+/// item. Nothing is done when there is no such history; nothing is overwritten.
 pub fn restore_along(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Result<()> {
     let Some(home) = home_of(to, vault) else {
         return Ok(());
@@ -363,6 +374,94 @@ mod tests {
                 .count(),
             1
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// A revision file left in `dir` by some other, older note: `dir` is a bin slot.
+    fn stale_history(dir: &Path, text: &str) {
+        fs::create_dir_all(dir).unwrap();
+        let rev = Revision {
+            number: 1,
+            parent: None,
+            author: "old".into(),
+            date: "2020-01-01T00:00:00Z".into(),
+            kind: revision::Kind::Checkpoint,
+            note: None,
+            text: text.into(),
+        };
+        fs::write(dir.join("0001.md"), revision::render(&rev)).unwrap();
+    }
+
+    #[test]
+    fn a_stale_bin_entry_never_comes_back_with_another_note() {
+        let root = temp("stale");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Idea.md");
+        let bin = root.join(".inkuno/trash");
+        // The new note has its own history; the bin already holds an old one under the same name,
+        // whose note is no longer in the trash (the trash picks a free name, so `.trash/Idea.md` is
+        // free and the new note gets it).
+        fs::write(&note, "new note\n").unwrap();
+        save(&home, &note, "ana", None, "new note\n", 0).unwrap();
+        stale_history(&bin.join("Idea.md"), "old note\n");
+        let trashed = vault::trash(&root, &note).unwrap();
+        assert_eq!(trashed, root.join(".trash/Idea.md"));
+        trash_along(Some(&root), &note, &trashed).unwrap();
+        // The new note's history sits under the trashed name; the stale one is kept, moved aside.
+        assert_eq!(
+            read(&bin.join("Idea.md/0001.md")).unwrap().text,
+            "new note\n"
+        );
+        assert_eq!(
+            read(&bin.join("2 Idea.md/0001.md")).unwrap().text,
+            "old note\n"
+        );
+        // Undo brings back the new note's history, and only that.
+        restore_along(Some(&root), &trashed, &note).unwrap();
+        let back = all(&home, &note).unwrap();
+        assert_eq!(
+            back.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(),
+            ["new note\n"]
+        );
+        // A note without history, trashed while a stale entry sits under its name: undo brings
+        // nothing back, the stale entry stays in the bin.
+        fs::remove_file(&trashed).unwrap();
+        fs::remove_dir_all(root.join(".inkuno/revisions/Idea.md")).unwrap();
+        fs::write(&note, "plain\n").unwrap();
+        stale_history(&bin.join("Idea.md"), "stale again\n");
+        let plain = vault::trash(&root, &note).unwrap();
+        assert_eq!(plain, root.join(".trash/Idea.md"));
+        trash_along(Some(&root), &note, &plain).unwrap();
+        restore_along(Some(&root), &plain, &note).unwrap();
+        assert!(all(&home, &note).unwrap().is_empty());
+        assert_eq!(
+            read(&bin.join("3 Idea.md/0001.md")).unwrap().text,
+            "stale again\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_stale_scratch_bin_entry_never_comes_back_with_another_note() {
+        let root = temp("stale-scratch");
+        scratch::isolate(root.clone());
+        let home = Home::Scratch(root.clone());
+        let note = root.join("2026-11-14-103200.md");
+        fs::write(&note, "idée\n").unwrap();
+        save(&home, &note, "ana", None, "idée\n", 0).unwrap();
+        let bin = root.join(".revisions/.trash");
+        stale_history(&bin.join("2026-11-14-103200.md"), "old idea\n");
+        let trashed = scratch::trash(&note).unwrap();
+        trash_along(None, &note, &trashed).unwrap();
+        assert_eq!(
+            read(&bin.join("2026-11-14-103200.md/0001.md"))
+                .unwrap()
+                .text,
+            "idée\n"
+        );
+        restore_along(None, &trashed, &note).unwrap();
+        assert_eq!(all(&home, &note).unwrap()[0].text, "idée\n");
+        assert_eq!(all(&home, &note).unwrap().len(), 1);
         let _ = fs::remove_dir_all(root);
     }
 
