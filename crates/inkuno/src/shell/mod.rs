@@ -145,6 +145,9 @@ struct Shell {
     /// Hovered window edge (resizing without system decorations).
     edge: Option<ResizeEdge>,
     copied: bool,
+    /// Focus mode (F9): the note alone, edge to edge. Not saved. Nothing of the chrome is changed
+    /// to hide it, so leaving the mode shows exactly what was there.
+    focus_mode: bool,
     /// The help panel, open or not.
     help: Help,
     /// The bindings in effect, and what the user changed in the default shortcuts.
@@ -240,6 +243,7 @@ impl Shell {
             theme,
             edge: None,
             copied: false,
+            focus_mode: false,
             help: Help::default(),
             bound: defaults(),
             changes: keys::Changes::new(),

@@ -186,7 +186,7 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 | `Ctrl+\` / `Ctrl+Alt+\` | `app::SplitPane/SplitDown` | — | `› split the pane…` |
 | `Alt+Shift+arrows` | `app::PaneLeft/Right/Up/Down` | — | — |
 | `Alt+Shift+Enter` | `app::MaximizePane` | — | `› pane on the whole window` |
-| `F9` | `app::ToggleFocus` (note alone; `Esc` exits too) | — | `› focus mode` |
+| `F9` | `app::ToggleFocus` (focus mode: the note alone, edge to edge; `F9` or `Esc` in the note goes back) | — | `› focus mode` |
 | `Ctrl+1` / `Ctrl+2` | `app::FocusLeft/FocusRight` | — | — |
 | `Ctrl+Enter` | `palette::ConfirmAside` | Palette | — |
 | — | `app::TabToLeft/Right/Up/Down`, `EvenPanes`, `MoveTool`, `ToolAsTab` | — | `› move the tab…/even out/move the panel…/open as tab` |
@@ -311,6 +311,15 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   the key changes nothing on screen there: gpui 0.2.2 sets the native bar at window creation only.
   `Ctrl+Shift+S` was free: the sync chord (`app::SyncVault`) left with the November trim, and its row
   is replaced. Tests: `window.rs` (`the_title_bar_hides_and_comes_back_from_the_rail`).
+
+- **2026-11-14 — focus mode on `F9` (built; supersedes the 2026-11-08 focus proposal where they differ):**
+  `app::ToggleFocus` hides the rail, the panel, the right dock, the tab bar and the title bar, and the note
+  takes the window edge to edge. Owner brief 2026-11-14: the rail and the title bar go too (the 2026-11-08
+  line kept the rail). It is a view flag (`Shell::focus_mode`, not saved): nothing of the chrome is changed
+  to hide it, so `F9` again, or `Esc` in the note (`editor::Cancel` propagates when nothing is open), shows
+  the same layout as before. Edge to edge only in this mode: in normal mode the 8 px gaps stay (§10 item 4,
+  `window.rs` sheets test). Palette line moved from `palette_open.rs` to the catalogue (`commands.rs`).
+  Tests: `window.rs` (`focus_mode_gives_the_note_the_window_and_restores_the_chrome`).
 
 ## 9. Reserved / gaps log
 

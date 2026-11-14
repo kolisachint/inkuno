@@ -24,6 +24,7 @@ actions!(
         ClosePane,
         ToggleSidebar,
         ToggleTitleBar,
+        ToggleFocus,
         CloseOtherTabs,
         CloseTabsInPane,
         CloseAllFiles,

@@ -320,15 +320,6 @@ impl Shell {
                 "copy.svg",
                 Group::Block,
             ),
-            (
-                "app::ToggleFocus",
-                tr(
-                    "Focus mode: hide the sidebars, the note alone",
-                    "Mode focus : masquer les panneaux, la note seule",
-                ),
-                "expand.svg",
-                Group::Look,
-            ),
         ];
         let seen: std::collections::HashSet<&str> = list.iter().map(|c| c.action).collect();
         list.extend(

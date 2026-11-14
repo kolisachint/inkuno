@@ -74,6 +74,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Ctrl+B` | Sidebar: show or hide the side panel (the rail stays) |
+| `F9` | Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back |
 | `Ctrl+Shift+S` | Title bar: show or hide the bar the app draws (its buttons come back with it) |
 | `Arrows` | Select and preview |
 | `Enter` / `Esc` | Open the note / back to the note |

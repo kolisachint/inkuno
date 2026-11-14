@@ -1098,3 +1098,100 @@ fn the_title_bar_hides_and_comes_back_from_the_rail(cx: &mut TestAppContext) {
     );
     let _ = fs::remove_dir_all(&root);
 }
+
+/// F9 gives the note the window alone, edge to edge: no rail, no docks, no tab bar, no bar drawn
+/// by the app, no frame inset. F9 again, or Esc in the note, puts back exactly the chrome there was.
+#[gpui::test]
+fn focus_mode_gives_the_note_the_window_and_restores_the_chrome(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "focus-mode");
+    fs::write(root.join("A.md"), "# A\n\nun\n").unwrap();
+    fs::write(root.join("B.md"), "# B\n\ndeux\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    for name in ["A", "B"] {
+        shell.update_in(cx, |s, window, cx| {
+            s.open_from_nav(&root.join(format!("{name}.md")), window, cx)
+        });
+    }
+    shell.update(cx, |s, _| {
+        s.client = true;
+        s.nav.panel = nav::Panel::Split;
+        s.nav.right_shown = vec![nav::Mode::Outline];
+    });
+    cx.run_until_parked();
+    let settle = |cx: &mut gpui::VisualTestContext| {
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+    };
+    let chrome = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, _| {
+            (
+                s.nav.panel,
+                s.nav.left_shown.clone(),
+                s.nav.right_shown.clone(),
+                s.nav.title_bar,
+                s.groups[0].tabs.len(),
+            )
+        })
+    };
+    let in_note = |cx: &mut gpui::VisualTestContext| {
+        cx.update(|window, cx| {
+            shell
+                .read(cx)
+                .pane()
+                .editor
+                .focus_handle(cx)
+                .is_focused(window)
+        })
+    };
+    settle(cx);
+    assert_eq!(chrome(cx).4, 2, "two tabs: a tab bar");
+    let before = chrome(cx);
+    let normal = cx.debug_bounds("pane-0").expect("the note is drawn");
+    assert!(
+        normal.origin.x > px(0.) && normal.origin.y > px(0.),
+        "with the chrome, the note starts inside the window: {normal:?}"
+    );
+
+    cx.simulate_keystrokes("f9");
+    settle(cx);
+    let note = cx.debug_bounds("pane-0").expect("the note is drawn");
+    let window_size = cx.update(|window, _| window.viewport_size());
+    assert_eq!(note.origin, point(px(0.), px(0.)), "edge to edge: {note:?}");
+    assert_eq!(note.size, window_size, "the note fills the window");
+    assert_eq!(
+        cx.update(|window, _| window.client_inset()),
+        Some(px(0.)),
+        "no shadow margin around the window in focus mode"
+    );
+    assert_eq!(chrome(cx), before, "the chrome is not changed to hide it");
+
+    cx.simulate_keystrokes("f9");
+    settle(cx);
+    assert_eq!(chrome(cx), before);
+    assert_eq!(
+        cx.debug_bounds("pane-0").expect("the note is drawn"),
+        normal,
+        "F9 again: the note is where it was"
+    );
+
+    // From the tree, F9 gives the keys back to the note; Esc in the note leaves the mode.
+    cx.update(|window, cx| {
+        let tree = shell.read(cx).nav.focus.clone();
+        window.focus(&tree);
+    });
+    cx.simulate_keystrokes("f9");
+    assert!(
+        in_note(cx),
+        "the keys leave the dock that is no longer drawn"
+    );
+    assert!(shell.read_with(cx, |s, _| s.focus_mode));
+    cx.simulate_keystrokes("escape");
+    assert!(
+        !shell.read_with(cx, |s, _| s.focus_mode),
+        "Esc in the note exits"
+    );
+    settle(cx);
+    assert_eq!(chrome(cx), before);
+}

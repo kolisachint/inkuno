@@ -78,3 +78,23 @@ The help panel (`F1`) lists every shortcut, and lets you give any of them other 
 - Rows without a button are not key bindings (a click, a palette command, something you type). The search finds them, but they cannot be changed.
 
 **The `keys` file.** Only what you changed is kept, one `action=keys` line each, in the `keys` file of the configuration folder, next to `settings`. `secondary` stands for `Cmd` on macOS and `Ctrl` elsewhere. A line that cannot be used (unknown action, unreadable keys, keys already taken) is ignored and reported at launch; the default stays.
+
+## Changing shortcuts from a file
+
+The help panel is the easy way. A JSON file does the same, for every action, and can be edited with any text editor.
+
+- **Where**: `keybindings.json` in the [configuration folder](vault.md#configuration-files): `~/.config/inkuno/` on Linux, `~/Library/Application Support/inkuno/` on macOS.
+- **Which file wins**: when `keybindings.json` is there and not empty, it is the one read, and it is read at launch: restart Inkuno to apply an edit. The older `keys` file is only read while it is absent. The help panel saves its changes to `keys`, so once `keybindings.json` exists, edit that file to change shortcuts.
+- **Shape**:
+
+```json
+{
+  "version": 1,
+  "bindings": { "app::ToggleFocus": ["f8"], "nav::ShowTree": [] },
+  "reset": ["app::ToggleTitleBar"]
+}
+```
+
+- **Action names**: `group::Name`, as the code names them: `app::` for the window (`app::OpenPalette`, `app::ToggleFocus`), `editor::` for the note (`editor::Bold`), `nav::` for the panel (`nav::ShowTree`). Only an action that has a line in the help panel can be changed. The code keeps the list (`help_sections` in `crates/inkuno/src/shell/keymap.rs`).
+- **Chords**: one chord per action, in the form `secondary-shift-p`, `alt-left`, `ctrl-tab` or `f9`. `secondary` is `Cmd` on macOS and `Ctrl` elsewhere. `""` or `[]` leaves the action with no shortcut. `reset` restores the default keys of the actions it names.
+- **Faults**: an entry that cannot be used is ignored on its own, and the default stays. `inkuno --check-config` reports an unreadable chord, or a chord given to two actions, and exits with `1`. An unknown action name is not caught there: the app reports it when it starts.
