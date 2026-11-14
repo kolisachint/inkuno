@@ -264,7 +264,7 @@ pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()
     if !src.exists() {
         return Ok(());
     }
-    if dst.exists() {
+    if dst.exists() && !super::vault::same_file(&src, &dst) {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
             "the history of the new name already exists",
