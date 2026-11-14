@@ -53,6 +53,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t("Tab", tr("Search bar: replace field", "Barre de recherche : champ de remplacement")),
                 k(&editor::ReplaceAll, tr("Search bar: replace all (Enter: this match)", "Barre de recherche : tout remplacer (Entrée : ce passage)")),
                 k(&KeepInVault, tr("Scratch note: keep it in the vault, under its first line (the tab stays open)", "Brouillon : le garder dans le coffre, sous sa première ligne (l'onglet reste ouvert)")),
+                k(&SaveRevision, tr("Save a version: the note as it is now, kept as a numbered revision with its author and an optional line on what changed (the files are readable by agents)", "Enregistrer une version : la note telle qu'elle est, gardée en révision numérotée avec son auteur et une ligne facultative sur ce qui a changé (les fichiers sont lisibles par les agents)")),
                 k(&NewScratch, tr("New scratch note: a quick thought in a tab, kept in the app's own folder, outside the vault, until you file it", "Nouveau brouillon : une idée rapide dans un onglet, gardée dans le dossier de l'app, hors du coffre, jusqu'à ce que vous la rangiez")),
                 k(&NewNote, tr("New note in the folder selected in the tree (in the vault)", "Nouvelle note dans le dossier choisi dans l'arbre (dans le coffre)")),
                 k(&OpenVault, tr("Change vault", "Changer de coffre")),
@@ -281,6 +282,8 @@ pub(crate) fn defaults() -> Vec<keys::Bind> {
         b("secondary-p", &OpenPalette, None),
         // Ctrl+N: a scratch note, no vault needed. The vault note filed in the tree's folder moved to Ctrl+Alt+N.
         b("secondary-n", &NewScratch, None),
+        // Ctrl+Alt+S (Cmd+Option+S on macOS): a version of the note, free on both systems.
+        b("secondary-alt-s", &SaveRevision, None),
         b("secondary-alt-n", &NewNote, None),
         b("secondary-o", &OpenVault, None),
         b("secondary-shift-c", &CopyAll, None),

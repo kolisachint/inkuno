@@ -16,6 +16,7 @@ mod layout;
 mod motion;
 mod panel_rows;
 mod panes;
+mod revisions;
 mod save_close;
 mod scratch;
 mod shortcuts_page;

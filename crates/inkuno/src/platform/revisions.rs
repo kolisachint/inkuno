@@ -3,9 +3,6 @@
 //! history lives in `<vault>/.inkuno/revisions/`, a scratch folder's in `<scratch>/.revisions/`;
 //! both are hidden from the tree, the search and the Scratch panel.
 
-// ponytail: `latest` is called by the checkpoint key, which lands in the next commit; this line goes then.
-#![allow(dead_code)]
-
 use std::{
     fs, io,
     path::{Path, PathBuf},
