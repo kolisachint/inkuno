@@ -1045,3 +1045,56 @@ fn rail_groups_keep_their_order_and_room(cx: &mut TestAppContext) {
         );
     }
 }
+
+/// Ctrl+Shift+S hides the bar the app draws, with its window buttons. The rail keeps a button
+/// that brings it back, and the choice survives a restart (the layout file).
+#[gpui::test]
+fn the_title_bar_hides_and_comes_back_from_the_rail(cx: &mut TestAppContext) {
+    let root = std::env::temp_dir().join(format!("inkuno-title-bar-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _config = isolated_config(&root);
+    cx.update(bind_keys);
+    cx.update(init_fonts);
+    let (shell, cx) =
+        cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
+    cx.run_until_parked();
+    // The test platform draws no bar of its own: this one is the app's, as on Linux.
+    shell.update(cx, |s, _| s.client = true);
+    // The bar the app draws leaves a strip at the top of the note when it stands alone (the
+    // strip is what the frame laid out, so it says what is on screen). Its window buttons are
+    // not read through `debug_bounds`: gpui keeps those of a frame no longer drawn.
+    let drawn = |cx: &mut gpui::VisualTestContext| {
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip) > px(0.)
+    };
+    assert!(drawn(cx), "the bar is drawn at first");
+
+    cx.simulate_keystrokes("secondary-shift-s");
+    assert!(!shell.read_with(cx, |s, _| s.nav.title_bar));
+    assert!(!drawn(cx), "the bar is hidden: no strip under it");
+    assert!(vault::load_layout().contains("titlebar=hidden"));
+
+    // The rail's button brings the bar back.
+    let at = cx
+        .debug_bounds("rail-titlebar")
+        .expect("the rail keeps the way back")
+        .center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    assert!(shell.read_with(cx, |s, _| s.nav.title_bar));
+    assert!(drawn(cx), "the bar is back");
+
+    // Hidden again: a restart opens without it.
+    cx.simulate_keystrokes("secondary-shift-s");
+    let (shell, cx) =
+        cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
+    cx.run_until_parked();
+    assert!(
+        !shell.read_with(cx, |s, _| s.nav.title_bar),
+        "the choice survives a restart"
+    );
+    let _ = fs::remove_dir_all(&root);
+}

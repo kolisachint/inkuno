@@ -399,6 +399,9 @@ pub struct Nav {
     /// The system draws the title bar (macOS, Windows): the rail does not have to serve as a
     /// handle to move the window.
     pub native_bar: bool,
+    /// The title bar the app draws (Linux) is shown: `false` hides it (`app::ToggleTitleBar`),
+    /// saved in the layout file as `titlebar=hidden`. Without effect where the system draws it.
+    pub title_bar: bool,
     // Left edge and width of the window content, at the last frame.
     pub left: Pixels,
     pub total: Pixels,
@@ -502,6 +505,7 @@ impl Nav {
             reveal: false,
             unfolded: None,
             native_bar: false,
+            title_bar: key("titlebar") != Some("hidden"),
             left: px(0.),
             total: px(0.),
             aside: px(0.),
@@ -539,6 +543,10 @@ impl Nav {
             let mut folded: Vec<&Mode> = self.folded.iter().collect();
             folded.sort_by_key(|m| m.name());
             line += &format!(" fold={}", names(&mut folded.into_iter()));
+        }
+        // The default (shown) is written as nothing, so older files and fresh vaults stay as they were.
+        if !self.title_bar {
+            line += " titlebar=hidden";
         }
         vault::save_layout(&format!("{line}\n"));
     }

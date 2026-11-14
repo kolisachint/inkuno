@@ -92,6 +92,8 @@ impl Render for Shell {
         window.set_client_inset(inset);
         self.nav.left = inset;
         self.nav.native_bar = !client;
+        // The bar the app draws: Linux, and only while it is shown (`app::ToggleTitleBar`).
+        let title_bar = client && self.nav.title_bar;
         self.nav.total = window.viewport_size().width
             - inset * 2.
             - if self.vault.is_some() {
@@ -117,7 +119,7 @@ impl Render for Shell {
                 }
                 let pane = self.groups[group].shown;
                 let (area, said) = self.in_pane(pane, |this| {
-                    this.render_pane(pane, group, pane == active, client, window, cx)
+                    this.render_pane(pane, group, pane == active, title_bar, window, cx)
                 });
                 let bar = self.render_tabs(group, client, cx);
                 // Its tab bar sits on the ground, above the sheet of the note.
@@ -248,6 +250,7 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &ToggleSidebar, window, cx| this.toggle_sidebar(window, cx)),
             )
+            .on_action(cx.listener(|this, _: &ToggleTitleBar, _, cx| this.toggle_title_bar(cx)))
             // Panel separator: it follows the pointer as long as the button is held.
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, window, cx| {
                 // A border between panes, likewise.
@@ -427,7 +430,7 @@ impl Render for Shell {
             }))
             .key_context("Shell")
             .child(body)
-            .when(client, |d| d.child(pill))
+            .when(title_bar, |d| d.child(pill))
             .children(self.render_menu(window, cx))
             .children(self.render_icons(window, cx))
             .when(self.help.open, |d| {
@@ -500,6 +503,14 @@ pub(super) fn resize_edge(pos: Point<Pixels>, size: Size<Pixels>) -> Option<Resi
 }
 
 impl Shell {
+    /// Ctrl+Shift+S: the title bar the app draws shown or hidden, the choice kept in the layout file.
+    /// Where the system draws the bar (macOS, Windows) the app draws none, so nothing moves there.
+    pub(super) fn toggle_title_bar(&mut self, cx: &mut Context<Self>) {
+        self.nav.title_bar = !self.nav.title_bar;
+        self.nav.save();
+        cx.notify();
+    }
+
     // The window's buttons, a bare group at the top right: no background, border or shadow of
     // their own, so they sit on the surface of whatever row is under them. Every top row
     // (tab bar, panel header, board bar, CSV bar) stops `PILL_ROOM` short of them and a narrow
@@ -774,7 +785,7 @@ impl Shell {
         pane: usize,
         group: usize,
         active: bool,
-        client: bool,
+        title_bar: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> (gpui::AnyElement, Option<gpui::AnyElement>) {
@@ -845,12 +856,12 @@ impl Shell {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
         // Without a tab bar, the top row of the pane is a handle to move the window (Linux): the note's text starts under it.
-        let strip = client && !barred;
+        let strip = title_bar && !barred;
         // Under the native bar the traffic lights float over the left end of that same row:
         // it starts past them, with no handle under the lights, and the note steps down for it.
         let traffic = self.nav.native_bar && !barred;
         // A tab bar puts the note below the window buttons: its text no longer steps down for them.
-        let pill = (client && !barred && group == self.corner_group())
+        let pill = (title_bar && !barred && group == self.corner_group())
             .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
         self.pane().editor.update(cx, |e, _| {
             e.corner = 1 + talk.is_some() as usize;

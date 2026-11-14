@@ -485,6 +485,15 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::ToggleTitleBar",
+            tr(
+                "Title bar: show or hide it",
+                "Barre de titre : afficher ou masquer",
+            ),
+            "c-titlebar.svg",
+            Go,
+        ),
+        (
             "app::OpenVault",
             tr("Change vault", "Changer de coffre"),
             "tree.svg",
