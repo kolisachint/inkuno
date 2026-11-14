@@ -86,10 +86,13 @@ impl Vault {
     pub fn find_note(&self, note: &str) -> Result<&Note, String> {
         if looks_like_path(note) {
             let path = self.inside(note, false)?;
-            return self
-                .notes
-                .iter()
-                .find(|n| n.path == path)
+            // `ideas/Plan` names `ideas/Plan.md`: the extension may be left out, as a link leaves it out.
+            let as_written = self.notes.iter().find(|n| n.path == path);
+            return as_written
+                .or_else(|| {
+                    let with_md = with_md(&path);
+                    self.notes.iter().find(|n| n.path == with_md)
+                })
                 .ok_or_else(|| format!("no note at `{note}`"));
         }
         let name = note.split(['#', '|']).next().unwrap_or(note).trim();
@@ -158,10 +161,14 @@ impl Vault {
     pub fn find_file(&self, name: &str) -> Result<PathBuf, String> {
         if looks_like_path(name) {
             let path = self.inside(name, false)?;
-            return path
-                .is_file()
-                .then_some(path)
-                .ok_or_else(|| format!("no file at `{name}`"));
+            if path.is_file() {
+                return Ok(path);
+            }
+            // A note named without its extension, as in `find_note`.
+            return match self.find_note(name) {
+                Ok(note) => Ok(note.path.clone()),
+                Err(_) => Err(format!("no file at `{name}`")),
+            };
         }
         if let Ok(note) = self.find_note(name) {
             return Ok(note.path.clone());
@@ -196,6 +203,13 @@ fn looks_like_path(note: &str) -> bool {
         || note.contains('\\')
         || note.to_lowercase().ends_with(".md")
         || note.to_lowercase().ends_with(".svg")
+}
+
+/// `path` with `.md` added to its name: the note a path without the extension names.
+fn with_md(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".md");
+    PathBuf::from(name)
 }
 
 /// An SVG file of the vault. Inkuno no longer edits diagrams: they open
