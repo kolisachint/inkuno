@@ -14,7 +14,9 @@ use super::{
     outcome::{Outcome, disk},
     pretty,
     store::Vault,
-    suggest, usage,
+    suggest, text,
+    text::Shown,
+    usage,
 };
 use crate::platform::vault as files;
 
@@ -232,13 +234,20 @@ fn on_vault(opts: &Opts, work: impl FnOnce(&mut Vault) -> Outcome) -> Result<Out
     Ok(work(&mut vault))
 }
 
-/// Prints the result: the reason on standard error when the work failed, else `show` of its JSON.
-fn finish(result: Result<Outcome, String>, show: impl FnOnce(&Value) -> String) -> i32 {
+/// Prints the result: the reason on standard error when the work failed; else the JSON of the result
+/// with `--json`, or else the text `text` makes of it.
+fn finish(result: Result<Outcome, String>, json: bool, text: impl FnOnce(&Value) -> Shown) -> i32 {
     match result {
         Err(reason) => failed(reason),
         Ok(outcome) if outcome.is_error => failed(outcome.sentence()),
         Ok(outcome) => {
-            print!("{}", show(&outcome.structured));
+            let shown = if json {
+                Shown::plain(pretty(&outcome.structured))
+            } else {
+                text(&outcome.structured)
+            };
+            print!("{}", shown.out);
+            eprint!("{}", shown.err);
             0
         }
     }
@@ -249,7 +258,11 @@ fn vault(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
-    finish(on_vault(&opts, |vault| ops::vault_info(vault)), pretty)
+    finish(
+        on_vault(&opts, |vault| ops::vault_info(vault)),
+        opts.json,
+        text::vault,
+    )
 }
 
 fn list(args: &[String]) -> i32 {
@@ -280,7 +293,8 @@ fn list(args: &[String]) -> i32 {
     }
     finish(
         on_vault(&opts, |vault| ops::list_notes(vault, &tool)),
-        pretty,
+        opts.json,
+        text::list,
     )
 }
 
@@ -302,7 +316,8 @@ fn search(args: &[String]) -> i32 {
     }
     finish(
         on_vault(&opts, |vault| ops::search_notes(vault, &tool)),
-        pretty,
+        opts.json,
+        text::search,
     )
 }
 
@@ -313,17 +328,11 @@ fn read(args: &[String]) -> i32 {
     };
     let mut tool = given(&opts, &[("--section", "section")]);
     tool["note"] = json!(opts.words[0]);
-    let as_json = opts.json;
     // The text alone is what a reader wants; --json adds the links, the comments and the token.
     finish(
         on_vault(&opts, |vault| ops::read_note(vault, &tool)),
-        move |value| {
-            if as_json {
-                pretty(value)
-            } else {
-                value["text"].as_str().unwrap_or_default().to_string()
-            }
-        },
+        opts.json,
+        text::read,
     )
 }
 
@@ -335,7 +344,8 @@ fn links(args: &[String]) -> i32 {
     let tool = json!({"note": opts.words[0]});
     finish(
         on_vault(&opts, |vault| ops::note_links(vault, &tool)),
-        pretty,
+        opts.json,
+        text::links,
     )
 }
 
@@ -344,7 +354,11 @@ fn tags(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
-    finish(on_vault(&opts, |vault| ops::list_tags(vault)), pretty)
+    finish(
+        on_vault(&opts, |vault| ops::list_tags(vault)),
+        opts.json,
+        text::tags,
+    )
 }
 
 fn show(args: &[String]) -> i32 {
@@ -353,7 +367,11 @@ fn show(args: &[String]) -> i32 {
         Err(code) => return code,
     };
     let tool = json!({"note": opts.words[0]});
-    finish(on_vault(&opts, |vault| ops::show(vault, &tool)), pretty)
+    finish(
+        on_vault(&opts, |vault| ops::show(vault, &tool)),
+        opts.json,
+        text::shown,
+    )
 }
 
 fn new(args: &[String]) -> i32 {
@@ -384,7 +402,8 @@ fn new(args: &[String]) -> i32 {
     }
     finish(
         on_vault(&opts, |vault| ops::create_note(vault, &tool)),
-        pretty,
+        opts.json,
+        text::path,
     )
 }
 
@@ -426,7 +445,8 @@ fn edit(args: &[String]) -> i32 {
     tool["edits"] = edits;
     finish(
         on_vault(&opts, |vault| ops::edit_note(vault, &tool)),
-        pretty,
+        opts.json,
+        text::edit,
     )
 }
 
@@ -457,7 +477,8 @@ fn append(args: &[String]) -> i32 {
     }
     finish(
         on_vault(&opts, |vault| ops::append_to_note(vault, &tool)),
-        pretty,
+        opts.json,
+        text::path,
     )
 }
 
@@ -473,7 +494,8 @@ fn move_note(args: &[String]) -> i32 {
     tool["note"] = json!(opts.words[0]);
     finish(
         on_vault(&opts, |vault| ops::rename_note(vault, &tool)),
-        pretty,
+        opts.json,
+        text::moved,
     )
 }
 
@@ -485,7 +507,8 @@ fn trash(args: &[String]) -> i32 {
     let tool = json!({"note": opts.words[0]});
     finish(
         on_vault(&opts, |vault| ops::trash_note(vault, &tool)),
-        pretty,
+        opts.json,
+        text::path,
     )
 }
 
@@ -497,7 +520,8 @@ fn restore(args: &[String]) -> i32 {
     let tool = json!({"path": opts.words[0]});
     finish(
         on_vault(&opts, |vault| ops::restore_note(vault, &tool)),
-        pretty,
+        opts.json,
+        text::path,
     )
 }
 
@@ -509,7 +533,8 @@ fn daily(args: &[String]) -> i32 {
     let tool = given(&opts, &[("--date", "date"), ("--append", "append")]);
     finish(
         on_vault(&opts, |vault| ops::daily_note(vault, &tool)),
-        pretty,
+        opts.json,
+        text::path,
     )
 }
 
@@ -531,7 +556,8 @@ fn comment(args: &[String]) -> i32 {
     let tool = json!({"note": opts.words[0], "passage": passage, "comment": text});
     finish(
         on_vault(&opts, |vault| ops::add_comment(vault, &tool)),
-        pretty,
+        opts.json,
+        text::path,
     )
 }
 
@@ -563,7 +589,23 @@ fn render(args: &[String]) -> i32 {
         let Some(source) = source.or_else(piped_text) else {
             return usage("render --check needs --mermaid SRC, or a source on standard input");
         };
-        return finish(Ok(draw::check_mermaid(&json!({"source": source}))), pretty);
+        let outcome = draw::check_mermaid(&json!({"source": source}));
+        let readable = outcome.structured["readable"].as_bool() == Some(true);
+        let shown = if opts.json {
+            pretty(&outcome.structured)
+        } else {
+            text::check(&outcome.structured)
+        };
+        print!("{shown}");
+        if readable {
+            return 0;
+        }
+        // A source that does not draw is a failure whatever the output: the reason on standard error.
+        return failed(
+            outcome.structured["error"]
+                .as_str()
+                .unwrap_or("the source does not draw"),
+        );
     }
     let Some(out) = opts.values.get("--out") else {
         return usage("render needs --out FILE.png: the picture is written there");
@@ -607,7 +649,12 @@ fn render(args: &[String]) -> i32 {
     if let Err(error) = files::write(Path::new(out), &png) {
         return failed(format!("{out}: {}", disk(error)));
     }
-    print!("{}", pretty(&outcome.structured));
+    let shown = if opts.json {
+        Shown::plain(pretty(&outcome.structured))
+    } else {
+        text::written(out, &outcome.structured)
+    };
+    print!("{}", shown.out);
     0
 }
 
@@ -651,6 +698,7 @@ const VAULT_HELP: &str = "\
 inkuno vault [--vault DIR]
     the vault: its folder, its notes, templates, diagrams, tables, pictures and
     attachments, its folders, its most used tags, today's daily note and the version
+    --json: the same facts as JSON
 
 example:
   inkuno vault --vault ~/notes
@@ -658,11 +706,13 @@ example:
 
 const LIST_HELP: &str = "\
 inkuno list [--folder F] [--tag T] [--kind K] [--sort S] [--limit N] [--cursor C]
-    the notes and files of the vault: path, title, folder, tags, modified, kind
+    the notes and files of the vault, one path per line; a next page is named on standard
+    error as `more: --cursor C`. --json: path, title, folder, tags, modified, kind, and next
     --folder keeps that folder and what is inside it; --tag matches a tag, with or without #
     --kind note, diagram, table, picture, attachment or all (the default)
     --sort name (the default) or recent; --limit 1 to 200 (default 100)
     --cursor: the next value of the previous page, while that page says there is one
+    --json: the result as JSON
 
 example:
   inkuno list --kind note --sort recent --limit 20
@@ -672,6 +722,7 @@ const SEARCH_HELP: &str = "\
 inkuno search <words…> [--tag T] [--folder F] [--limit N]
     the notes whose name matches, then the notes whose text contains every word, most
     recent first, with a snippet around the match. Templates are not searched.
+    one line per hit: `path: snippet` (a hit by name is its path alone). --json: the hits
     --limit 1 to 50 (default 20); a query of one letter matches names only
 
 example:
@@ -691,7 +742,8 @@ example:
 const LINKS_HELP: &str = "\
 inkuno links <note>
     the notes this one links to, and where they are; the notes that link to it, with the
-    line each link is on; its tags, embedded sections and pictures
+    line each link is on; its tags, embedded sections and pictures. Text: a section per
+    kind (links, backlinks, tags, embeds, pictures), each item indented; --json: the lists
 
 example:
   inkuno links Plan
@@ -699,7 +751,8 @@ example:
 
 const TAGS_HELP: &str = "\
 inkuno tags
-    every tag of the vault, with how many notes carry it, most used first
+    every tag of the vault, with how many notes carry it, most used first: `#tag`, a tab, the
+    count. --json: the tags as JSON
 
 example:
   inkuno tags
@@ -708,7 +761,8 @@ example:
 const SHOW_HELP: &str = "\
 inkuno show <note>
     opens the note, diagram, table or picture in the Inkuno window, in a tab of its own.
-    Fails when Inkuno is not open. Changes nothing in the vault.
+    Fails when Inkuno is not open. Changes nothing in the vault. Prints `shown: <path>`;
+    --json: the same as JSON
 
 example:
   inkuno show Plan
@@ -719,6 +773,7 @@ inkuno new <title…> [--folder F] [--template T] [--text TEXT]
     a new note: its first line is the title and the file name. The body is --text, or
     standard input when there is no --text. A taken name is refused, nothing is overwritten.
     --template: a note of the template folder, its placeholders filled
+    prints the note's path; --json: the result as JSON
 
 example:
   echo \"First line of the body.\" | inkuno new Meeting notes --folder work
@@ -731,6 +786,7 @@ inkuno edit <note> --edits JSON [--token T]
     --edits takes a JSON array of {\"old\": …, \"new\": …}, applied together.
     A changed # title renames the note and rewrites its [[links]].
     --token: the token of read --json; a note changed since it was read is refused
+    prints the note's path, the new one when the title renamed it; --json: the result
 
 example:
   inkuno edit Plan --old \"Draft\" --new \"Final\" --token 3f9a1c
@@ -740,7 +796,7 @@ const APPEND_HELP: &str = "\
 inkuno append <note> [--under HEADING] [--text TEXT] [--token T]
     adds text at the end of the note, or at the end of the section under the heading
     (matched exactly, or as the only heading with that case). The text is --text, else
-    standard input; an empty text is refused.
+    standard input; an empty text is refused. Prints the note's path; --json: the result
 
 example:
   inkuno append Plan --under \"Next steps\" --text \"- call Ana\"
@@ -751,6 +807,8 @@ inkuno move <note> [--name NEW] [--folder F]
     gives a note (or a diagram, picture or attachment) a new name, a new folder, or both.
     The [[links]] to it are rewritten, unless another note still has the old name: then
     links_left says so and nothing is rewritten. A taken name is refused.
+    prints the new path, then `links rewritten: N` when links were rewritten, and a line
+    when another note kept the old name; --json: the result as JSON
 
 example:
   inkuno move Draft --name Plan --folder projects
@@ -759,7 +817,7 @@ example:
 const TRASH_HELP: &str = "\
 inkuno trash <note>
     moves the note or file to .trash, with its saved versions. Nothing is deleted.
-    The path in .trash is printed; restore brings the file back.
+    The path in .trash is printed; restore brings the file back. --json: the result as JSON
 
 example:
   inkuno trash Old-draft
@@ -769,6 +827,7 @@ const RESTORE_HELP: &str = "\
 inkuno restore <path>
     brings a file back from .trash to the vault root, with its saved versions. <path> is
     the path that trash printed. A taken name is numbered, never overwritten.
+    prints the restored note's path; --json: the result as JSON
 
 example:
   inkuno restore .trash/Old-draft.md
@@ -778,6 +837,7 @@ const DAILY_HELP: &str = "\
 inkuno daily [--date YYYY-MM-DD] [--append TEXT]
     the daily note of the date, today by default. It is created from the Daily, Journal,
     Today, Note du jour or Aujourd'hui template when there is one. --append adds a paragraph.
+    prints the note's path; --json: the note as read --json gives it
 
 example:
   inkuno daily --date 2026-03-14 --append \"Shipped the release.\"
@@ -786,6 +846,7 @@ example:
 const COMMENT_HELP: &str = "\
 inkuno comment <note> --passage P --text C
     wraps one passage of the note in {==P==}{>>C<<}. The passage must occur once.
+    prints the note's path; --json: the result as JSON
     In a table cell, a | of the comment is written \\|.
 
 example:
@@ -797,8 +858,9 @@ inkuno render [<file>] [--note N --block K] [--mermaid SRC] [--theme light|dark]
 inkuno render --check [--mermaid SRC]
     a PNG of an SVG file of the vault, of the K-th mermaid block of a note (1 is the first),
     or of a Mermaid source (--mermaid -: read from standard input). The PNG is written to
-    --out, and its size and kind are printed as JSON. --width is in pixels.
-    --check: whether a Mermaid source draws, and the engine's error when it does not
+    --out, and its size and kind are printed (--json: as JSON). --width is in pixels.
+    --check: prints ok and the kind when the source draws; when it does not, the engine's
+    error goes to standard error and the status is 1 (--json: the result as JSON)
 
 example:
   inkuno render --note Plan --block 1 --theme dark --out plan.png
