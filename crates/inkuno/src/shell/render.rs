@@ -63,13 +63,17 @@ impl Render for Shell {
         // shows the vault name, so the title bar carries it on every system (drawn below on
         // Linux, native elsewhere through `set_window_title`).
         let vault_name = self.vault.as_ref().map(|v| vault::stem(v));
-        let title = match (self.pane().displayed_path(), vault_name) {
-            (Some(p), Some(vault)) => format!("{} — {vault} — Inkuno", vault::stem(p)),
-            (Some(p), None) => format!("{} — Inkuno", vault::stem(p)),
-            (None, Some(vault)) => {
+        // A scratch note is named by its title, and says so: it is not in the vault.
+        let scratch = (self.pane().scratch && self.pane().file.is_none())
+            .then(|| logic::scratch::title(self.pane().editor.read(cx).text()));
+        let title = match (scratch, self.pane().displayed_path(), vault_name) {
+            (Some(name), _, _) => format!("{name} — {} — Inkuno", tr("Scratch", "Brouillon")),
+            (None, Some(p), Some(vault)) => format!("{} — {vault} — Inkuno", vault::stem(p)),
+            (None, Some(p), None) => format!("{} — Inkuno", vault::stem(p)),
+            (None, None, Some(vault)) => {
                 format!("{} — {vault} — Inkuno", tr("New note", "Nouvelle note"))
             }
-            (None, None) => "Inkuno".to_string(),
+            (None, None, None) => "Inkuno".to_string(),
         };
         if title != self.title {
             window.set_window_title(&title);
@@ -233,6 +237,12 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)),
             )
+            // Offered only while a scratch note is the one shown (the palette lists what it can do).
+            .when(self.pane().scratch && self.vault.is_some(), |d| {
+                d.on_action(cx.listener(|this, _: &KeepInVault, _, cx| {
+                    _ = this.keep_in_vault(cx);
+                }))
+            })
             .on_action(cx.listener(|this, _: &Quit, window, cx| {
                 cx.stop_propagation();
                 if this.may_close_window(window, cx) {

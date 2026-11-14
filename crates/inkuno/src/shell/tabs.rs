@@ -68,6 +68,17 @@ impl Shell {
         }
     }
 
+    /// What a tab shows of its label: a preview is marked by a dot, a scratch note by the word
+    /// after its title (a folder reads the same way: as a second word).
+    pub(super) fn caption(&self, tab: usize, label: &str) -> String {
+        let pane = &self.panes[tab];
+        match (pane.preview, pane.scratch) {
+            (true, _) => format!("{label} \u{2022}"),
+            (false, true) => format!("{label} · {}", tr("Scratch", "Brouillon")),
+            (false, false) => label.to_string(),
+        }
+    }
+
     /// The labels of a pane's tabs, in order; two tabs of the same name (two folders) say their folder.
     pub(super) fn tab_labels(&self, group: usize, cx: &App) -> Vec<String> {
         let tabs = &self.groups[group].tabs;
@@ -275,10 +286,8 @@ impl Shell {
                     // the others are bare text that the pointer tints, on a flat hover.
                     .when(on, |d| d.bg(t.panel))
                     .when(!on, |d| d.hover(|s| s.bg(t.hover)))
-                    .child(div().min_w_0().truncate().child(match pane.preview {
-                        true => format!("{label} \u{2022}"),
-                        false => label.clone(),
-                    }))
+                    // A preview is marked by a dot, a scratch note by its word after the title.
+                    .child(div().min_w_0().truncate().child(self.caption(tab, &label)))
                     .child(slot)
                     .when(aim == Some(at), |d| d.child(line().left_0()))
                     .when(aim == Some(count) && at + 1 == count, |d| {

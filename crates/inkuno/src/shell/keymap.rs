@@ -52,6 +52,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&editor::FindRegex, tr("Search bar: regular expression ($1 in the replacement)", "Barre de recherche : expression régulière ($1 dans le remplacement)")),
                 t("Tab", tr("Search bar: replace field", "Barre de recherche : champ de remplacement")),
                 k(&editor::ReplaceAll, tr("Search bar: replace all (Enter: this match)", "Barre de recherche : tout remplacer (Entrée : ce passage)")),
+                k(&KeepInVault, tr("Scratch note: keep it in the vault, under its first line (the tab stays open)", "Brouillon : le garder dans le coffre, sous sa première ligne (l'onglet reste ouvert)")),
                 k(&NewScratch, tr("New scratch note: a quick thought in a tab, kept in the app's own folder, outside the vault, until you file it", "Nouveau brouillon : une idée rapide dans un onglet, gardée dans le dossier de l'app, hors du coffre, jusqu'à ce que vous la rangiez")),
                 k(&NewNote, tr("New note in the folder selected in the tree (in the vault)", "Nouvelle note dans le dossier choisi dans l'arbre (dans le coffre)")),
                 k(&OpenVault, tr("Change vault", "Changer de coffre")),

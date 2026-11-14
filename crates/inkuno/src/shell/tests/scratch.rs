@@ -338,3 +338,81 @@ fn scratch_names_are_never_taken(cx: &mut TestAppContext) {
     assert_ne!(platform::scratch::new_path(), second);
     let _ = fs::remove_dir_all(root);
 }
+
+#[gpui::test]
+fn a_scratch_tab_says_so_and_only_a_scratch_note_offers_to_keep_it(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-cue");
+    fs::write(root.join("Note.md"), "# Note\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("Note.md"), window, cx)
+    });
+    cx.run_until_parked();
+    let offered = |cx: &mut gpui::VisualTestContext| {
+        shell.update_in(cx, |s, window, cx| {
+            s.palette_commands(window, cx)
+                .0
+                .iter()
+                .map(|c| c.action)
+                .collect::<Vec<_>>()
+        })
+    };
+    assert!(!offered(cx).contains(&"app::KeepInVault"));
+    assert!(offered(cx).contains(&"app::NewScratch") && offered(cx).contains(&"nav::ShowScratch"));
+    // A scratch note in a second tab: its word after the title, its title in the window.
+    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_input("# Idée");
+    settle(cx);
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    assert!(offered(cx).contains(&"app::KeepInVault"));
+    let caption = shell.read_with(cx, |s, cx| {
+        let tab = s.groups[0].tabs[s.groups[0].tabs.len() - 1];
+        s.caption(tab, &s.tab_name(tab, cx))
+    });
+    assert_eq!(caption, "Idée · Scratch");
+    assert!(shell.read_with(cx, |s, _| s.title.starts_with("Idée")));
+    // The palette's command keeps it in the vault, the tab stays.
+    shell.update_in(cx, |_, window, cx| {
+        window.dispatch_action(Box::new(crate::actions::KeepInVault), cx)
+    });
+    settle(cx);
+    assert_eq!(fs::read_to_string(root.join("Idée.md")).unwrap(), "# Idée");
+    assert!(shell.read_with(cx, |s, _| !s.pane().scratch));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn without_a_vault_closing_a_scratch_note_offers_two_choices(cx: &mut TestAppContext) {
+    let root = std::env::temp_dir().join(format!("inkuno-scratch-choices-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _config = isolated_config(&root);
+    cx.update(bind_keys);
+    cx.update(init_fonts);
+    let (shell, cx) = cx.add_window_view(|window, cx| Shell::new(None, Vec::new(), window, cx));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_input("sans coffre");
+    settle(cx);
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    // No vault: no Keep in vault; the default first, Discard last.
+    let choices: Vec<Option<String>> = shell.read_with(cx, |s, cx| {
+        let palette = s.palette.clone().expect("the choices are shown");
+        let palette = palette.read(cx);
+        (0..3).map(|i| palette.choice_at(i)).collect()
+    });
+    assert_eq!(
+        choices,
+        [
+            Some("Keep as scratch".to_string()),
+            Some("Discard".to_string()),
+            None
+        ]
+    );
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none() && s.pane().scratch));
+    let _ = fs::remove_dir_all(root);
+}

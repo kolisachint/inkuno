@@ -392,6 +392,15 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::KeepInVault",
+            tr(
+                "Keep this scratch note in the vault",
+                "Garder ce brouillon dans le coffre",
+            ),
+            "file-plus.svg",
+            Create,
+        ),
+        (
             "app::SplitPane",
             tr("Split the pane to the right", "Découper le volet à droite"),
             "c-split.svg",
