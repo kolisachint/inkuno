@@ -56,53 +56,53 @@ A **Typora-inspired, document-first writing app**:
   semibold cuts).
 - **Code:** JetBrains Mono.
 - **Current state (Inkuno):** the bundled fonts are **IBM Plex Sans + IBM Plex Mono**
-  (`src/ui/assets.rs:16`), exposed as `sans()` (`src/ui/assets.rs:38`) and
-  `mono()` (`src/ui/assets.rs:42`), overridable from prefs
-  (`src/ui/assets.rs:70`). → **RESKIN**: swap the bundled families to
+  (`crates/inkuno/src/ui/assets.rs:16`), exposed as `sans()` (`crates/inkuno/src/ui/assets.rs:38`) and
+  `mono()` (`crates/inkuno/src/ui/assets.rs:42`), overridable from prefs
+  (`crates/inkuno/src/ui/assets.rs:70`). → **RESKIN**: swap the bundled families to
   Inter + JetBrains Mono; the override mechanism stays.
 - Fallback chain must cover CJK (current code notes Plex has no CJK glyphs,
-  `src/ui/assets.rs:46`).
+  `crates/inkuno/src/ui/assets.rs:46`).
 
 ### Sizes (target, px at scale 1)
 
 | Role      | Size | Line-height | Current state |
 |-----------|------|-------------|---------------|
-| Body      | 16   | 1.7         | Default body size is 16 (`src/logic/prefs.rs:24`); line-height TBD — verify in `src/views/editor/style.rs` |
+| Body      | 16   | 1.7         | Default body size is 16 (`crates/inkuno-logic/src/prefs.rs:24`); line-height TBD — verify in `crates/inkuno/src/views/editor/style.rs` |
 | H1        | 30   | TBD         | TBD — verify heading scale in editor style |
 | H2        | 23   | TBD         | TBD |
 | H3        | 19   | TBD         | TBD |
-| UI chrome | 13–14| —           | UI scale follows body size: `ui = size/16` clamped 0.85–1.5 (`src/ui/theme.rs:118`, `src/ui/theme.rs:116`) |
+| UI chrome | 13–14| —           | UI scale follows body size: `ui = size/16` clamped 0.85–1.5 (`crates/inkuno/src/ui/theme.rs:118`, `crates/inkuno/src/ui/theme.rs:116`) |
 | Code      | 14   | TBD         | TBD — verify code run sizing |
-| Metadata (counts, hints) | 12 | — | Secondary text uses `soft` color token, WCAG AA 4.5:1 (`src/ui/theme.rs:77`) |
+| Metadata (counts, hints) | 12 | — | Secondary text uses `soft` color token, WCAG AA 4.5:1 (`crates/inkuno/src/ui/theme.rs:77`) |
 
 ### Measure + spacing (target)
 
 - **Doc max-width: 800 px** at body 16.
 - **Paragraph spacing: 16 px** between blocks.
 - **Current state (Inkuno):** page widths are Narrow 560 / Normal 800 / Wide 960 /
-  Full (`src/ui/theme.rs:49-51`), width follows zoom
-  (`Page::measure`, `src/ui/theme.rs:44-54`), default Normal
-  (`src/logic/prefs.rs:28`, `Page::of` fallback `src/ui/theme.rs:34`). 800 px
+  Full (`crates/inkuno/src/ui/theme.rs:49-51`), width follows zoom
+  (`Page::measure`, `crates/inkuno/src/ui/theme.rs:44-54`), default Normal
+  (`crates/inkuno-logic/src/prefs.rs:28`, `Page::of` fallback `crates/inkuno/src/ui/theme.rs:34`). 800 px
   landed 2026-11-08 as the Normal measure (option (a), see §14).
-- Interface spacing unit is the rem at UI scale (`src/shell/render.rs:27-28`
+- Interface spacing unit is the rem at UI scale (`crates/inkuno/src/shell/render.rs:27-28`
   `window.set_rem_size(t.px(16.))`).
 
 ### Color + shape (target: quiet neutrals, one accent)
 
 - Three themes: **light, dark, sepia**. Warm paper for sepia (new).
 - **Current state (Inkuno):** 13 built-in themes in `THEMES`
-  (`src/ui/theme.rs:129`), picked from prefs or system appearance
-  (`Theme::of`, `src/ui/theme.rs:134`), with WCAG-AA enforcement for text,
-  accent, and callouts (`src/ui/theme.rs:300-330` approx; tests
-  `every_theme_reads`, `every_pair_reads` in `src/ui/theme.rs:290+`).
+  (`crates/inkuno/src/ui/theme.rs:129`), picked from prefs or system appearance
+  (`Theme::of`, `crates/inkuno/src/ui/theme.rs:134`), with WCAG-AA enforcement for text,
+  accent, and callouts (`crates/inkuno/src/ui/theme.rs:300-330` approx; tests
+  `every_theme_reads`, `every_pair_reads` in `crates/inkuno/src/ui/theme.rs:290+`).
   → **RESKIN**: keep the `Theme` engine + contrast tests; curate the default
   offering down to light/dark/sepia (whether the other 10 stay as extras: **TBD**).
-- Radii: small 6, tab pill 9, large 8, sheet 12 (`src/ui/theme.rs:133-155`
+- Radii: small 6, tab pill 9, large 8, sheet 12 (`crates/inkuno/src/ui/theme.rs:133-155`
   approx: `small()`, `tab()`, `large()`, `sheet()`). Keep.
 - Shadows: `lifted` for floating bars, `floating` for palette/menus
-  (`src/ui/theme.rs:150-162` approx). Keep; no new elevation levels without §1 flow.
-- All tokens centralize in `src/ui/theme.rs` (`Theme` struct,
-  `src/ui/theme.rs:100-124`); views must not hard-code colors/sizes.
+  (`crates/inkuno/src/ui/theme.rs:150-162` approx). Keep; no new elevation levels without §1 flow.
+- All tokens centralize in `crates/inkuno/src/ui/theme.rs` (`Theme` struct,
+  `crates/inkuno/src/ui/theme.rs:100-124`); views must not hard-code colors/sizes.
   (Inkuno rule: layers depend downwards only, `docs/design/architecture.md:19-27`.)
 
 ## 4. Layout standard: three regions
@@ -117,28 +117,28 @@ A **Typora-inspired, document-first writing app**:
 
 - **Left region — explorer.** The file tree, recent notes, calendar, tags, links,
   graph (Inkuno: `Mode::Tree/Recent/Calendar/Tags/Links/Graph` shown via
-  `Nav::left_shown`, `src/shell/docks.rs:70-75`; tree state `src/views/nav.rs`,
-  drawing `src/shell/sidebar.rs`). Default: visible, narrow rail + panel.
+  `Nav::left_shown`, `crates/inkuno/src/shell/docks.rs:70-75`; tree state `crates/inkuno/src/views/nav.rs`,
+  drawing `crates/inkuno/src/shell/sidebar.rs`). Default: visible, narrow rail + panel.
 - **Center region — canvas.** The note(s): tab bar + editor, arranged by the
-  pane tree (`render_layout`, `src/shell/render.rs:990`; placed by
+  pane tree (`render_layout`, `crates/inkuno/src/shell/render.rs:990`; placed by
   `logic/layout.rs`, `docs/design/architecture.md:48`). Always present; it is the focus.
 - **Right region — outline.** Document outline (headings of the active note)
   plus comments panel. Current: outline opens through the palette
-  (`open_outline`, `src/shell/palette_open.rs:29-38`); the comments panel sits
-  right of everything (`src/shell/render.rs:88-90` approx); right-dock stacking
-  via `Nav::right_shown` (`src/shell/docks.rs:42-51`). → Outline as a
+  (`open_outline`, `crates/inkuno/src/shell/palette_open.rs:29-38`); the comments panel sits
+  right of everything (`crates/inkuno/src/shell/render.rs:88-90` approx); right-dock stacking
+  via `Nav::right_shown` (`crates/inkuno/src/shell/docks.rs:42-51`). → Outline as a
   persistent right-dock view: **TBD** (design proposal needed via §1 flow).
 - **Independently toggleable.** Panel states Rail / Split / Full
-  (`Panel`, `src/views/nav.rs:95-99`); full-panel toggle
-  (`toggle_full`, `src/shell/sidebar.rs:64-70`); closing the last left tool
-  collapses to rail (`src/shell/docks.rs:118-120`); right dock renders only
-  when non-empty (`src/shell/docks.rs:47-51`). Every region must be hideable
+  (`Panel`, `crates/inkuno/src/views/nav.rs:95-99`); full-panel toggle
+  (`toggle_full`, `crates/inkuno/src/shell/sidebar.rs:64-70`); closing the last left tool
+  collapses to rail (`crates/inkuno/src/shell/docks.rs:118-120`); right dock renders only
+  when non-empty (`crates/inkuno/src/shell/docks.rs:47-51`). Every region must be hideable
   so the canvas can own the window (zen: both docks hidden).
 - **Small-screen rules.** When panes crowd, the window promotes one group to
-  alone/full (`alone()`, `crowded_in()`, `src/shell/pane.rs:467-474`;
-  `crowded()`, `src/shell/pane.rs:30`); the side panel keeps `NOTE_MIN`
-  (`src/views/nav.rs:35`) room for the note and floors the panel at 120 px
-  (170 with calendar) (`src/shell/sidebar.rs:88-95`). Keep this behavior;
+  alone/full (`alone()`, `crowded_in()`, `crates/inkuno/src/shell/pane.rs:467-474`;
+  `crowded()`, `crates/inkuno/src/shell/pane.rs:30`); the side panel keeps `NOTE_MIN`
+  (`crates/inkuno/src/views/nav.rs:35`) room for the note and floors the panel at 120 px
+  (170 with calendar) (`crates/inkuno/src/shell/sidebar.rs:88-95`). Keep this behavior;
   exact narrow breakpoints (< 700 px etc.): **TBD** — measure, don't invent.
 
 ## 5. Component + interaction standards
@@ -148,43 +148,43 @@ Verdict per component: **KEEP** (as-is) · **RESKIN** (same behavior, new look) 
 
 | Component | Today (with citation) | Verdict | Reason |
 |-----------|----------------------|---------|--------|
-| Tabs + tab bar | Tab bar 34 px high (`src/shell/tabs.rs:6`); tab pills radius 9 (`src/ui/theme.rs:tab()`); cycle/reorder/close actions (`src/actions.rs:6`: `NextTab/PrevTab/MoveTabLeft/...`) | KEEP | Multi-note work needs tabs; restyle only via tokens |
-| Panes / splits | Split right/down, move tabs between panes, even/maximize/zoom (`split`, `src/shell/pane.rs:604`; `toggle_zoom`, `src/shell/pane.rs:457`; actions `SplitPane/SplitDown/MaximizePane`, `src/actions.rs:6`) | KEEP | Power layout; quiet by default (single pane) |
-| Command palette | Views `src/views/palette.rs`; opens for notes/commands/outline/questions (`docs/design/architecture.md:53`, `src/shell/palette_open.rs`); ranked note search (`docs/design/architecture.md:108-111` approx, Palette section) | KEEP | The keyboard-first core; central to vision |
-| File tree / explorer | `views/nav.rs` state + `shell/sidebar.rs` drawing (`docs/design/architecture.md:90`); left-dock stacking (`src/shell/docks.rs:42-51`) | KEEP | Vault navigation; collapses to rail |
-| Outline nav | Palette list of headings (`src/shell/palette_open.rs:29-38`); action `Outline` (`src/actions.rs:6`) | KEEP + TBD dock view | Jump-to-heading is vision (§4 right region); persistent view needs proposal |
-| Graph view | Force-directed, off-UI-thread (`src/views/graph.rs:261-263`); a `Mode` in nav | HIDE (tool, not default) | Useful but anti-chrome-quiet; open on demand only |
-| Calendar / Tags / Recent / Links | Nav modes (`src/views/nav.rs`; toggles `ShowRecent/ShowTags/ShowCalendar/ShowLinks`, `src/shell/render.rs:150-170` approx) | HIDE (tools, not default) | Same as graph: available, never forced |
-| Format bar | Bottom-of-note bar (`src/views/editor/format_bar.rs`, `docs/design/architecture.md:90`); pref `bar`, `off` hides it (`src/logic/prefs.rs:17-18`; `Theme::bar`, `src/ui/theme.rs:122`) | HIDE by default | Vision: no permanent toolbar; keep pref, default `off` (**TBD** user confirms default) |
+| Tabs + tab bar | Tab bar 34 px high (`crates/inkuno/src/shell/tabs.rs:6`); tab pills radius 9 (`crates/inkuno/src/ui/theme.rs:tab()`); cycle/reorder/close actions (`crates/inkuno/src/actions.rs:6`: `NextTab/PrevTab/MoveTabLeft/...`) | KEEP | Multi-note work needs tabs; restyle only via tokens |
+| Panes / splits | Split right/down, move tabs between panes, even/maximize/zoom (`split`, `crates/inkuno/src/shell/pane.rs:604`; `toggle_zoom`, `crates/inkuno/src/shell/pane.rs:457`; actions `SplitPane/SplitDown/MaximizePane`, `crates/inkuno/src/actions.rs:6`) | KEEP | Power layout; quiet by default (single pane) |
+| Command palette | Views `crates/inkuno/src/views/palette.rs`; opens for notes/commands/outline/questions (`docs/design/architecture.md:53`, `crates/inkuno/src/shell/palette_open.rs`); ranked note search (`docs/design/architecture.md:108-111` approx, Palette section) | KEEP | The keyboard-first core; central to vision |
+| File tree / explorer | `views/nav.rs` state + `shell/sidebar.rs` drawing (`docs/design/architecture.md:90`); left-dock stacking (`crates/inkuno/src/shell/docks.rs:42-51`) | KEEP | Vault navigation; collapses to rail |
+| Outline nav | Palette list of headings (`crates/inkuno/src/shell/palette_open.rs:29-38`); action `Outline` (`crates/inkuno/src/actions.rs:6`) | KEEP + TBD dock view | Jump-to-heading is vision (§4 right region); persistent view needs proposal |
+| Graph view | Force-directed, off-UI-thread (`crates/inkuno/src/views/graph.rs:261-263`); a `Mode` in nav | HIDE (tool, not default) | Useful but anti-chrome-quiet; open on demand only |
+| Calendar / Tags / Recent / Links | Nav modes (`crates/inkuno/src/views/nav.rs`; toggles `ShowRecent/ShowTags/ShowCalendar/ShowLinks`, `crates/inkuno/src/shell/render.rs:150-170` approx) | HIDE (tools, not default) | Same as graph: available, never forced |
+| Format bar | Bottom-of-note bar (`crates/inkuno/src/views/editor/format_bar.rs`, `docs/design/architecture.md:90`); pref `bar`, `off` hides it (`crates/inkuno-logic/src/prefs.rs:17-18`; `Theme::bar`, `crates/inkuno/src/ui/theme.rs:122`) | HIDE by default | Vision: no permanent toolbar; keep pref, default `off` (**TBD** user confirms default) |
 | Focus / typewriter modes | **Not in codebase** (no matches for typewriter/focus-mode) | Vision-only, TBD | Typora parity wants them; needs full §1 proposal |
 | Word / char counts | **Not found** (no counter in shell/editor) | TBD | Vision wants quiet counts; placement (status/footer) needs proposal |
-| Auto-save | `EditorEvent::Changed` → `dirty=true` → 400 ms debounce → `flush` (`src/shell/notes.rs:491-510`); atomic writes, crash never truncates (`src/platform/vault.rs:889`) | KEEP | Already local-first; surface a subtle saved indicator (proposal) |
-| Session restore | Layout persisted on change (`panes_state`, `src/shell/render.rs:137-140`); vault backup/restore archives (`src/platform/vault.rs:590`, `:703`) | KEEP + TBD | Layout restore exists; unsaved-text-after-crash recovery: **TBD** — verify `dirty` tabs reload path |
-| Zoom (text) | `ZoomIn/Out/Reset` (`src/actions.rs:6`); `resize_text` (`src/shell/settings.rs:96`); page width follows size (`src/ui/theme.rs:44-54`) | KEEP | Accessibility + vision zoom |
-| Themes UI | `ChooseTheme` (`src/actions.rs:6`); 13 themes (`src/ui/theme.rs:129`) | RESKIN | Curate to light/dark/sepia per §3 |
-| Motion | `motion` pref, instant when off (`Theme::motion`, `src/ui/theme.rs:124`) | KEEP | Respects reduced-motion spirit |
+| Auto-save | `EditorEvent::Changed` → `dirty=true` → 400 ms debounce → `flush` (`crates/inkuno/src/shell/notes.rs:491-510`); atomic writes, crash never truncates (`crates/inkuno/src/platform/vault.rs:889`) | KEEP | Already local-first; surface a subtle saved indicator (proposal) |
+| Session restore | Layout persisted on change (`panes_state`, `crates/inkuno/src/shell/render.rs:137-140`); vault backup/restore archives (`crates/inkuno/src/platform/vault.rs:590`, `:703`) | KEEP + TBD | Layout restore exists; unsaved-text-after-crash recovery: **TBD** — verify `dirty` tabs reload path |
+| Zoom (text) | `ZoomIn/Out/Reset` (`crates/inkuno/src/actions.rs:6`); `resize_text` (`crates/inkuno/src/shell/settings.rs:96`); page width follows size (`crates/inkuno/src/ui/theme.rs:44-54`) | KEEP | Accessibility + vision zoom |
+| Themes UI | `ChooseTheme` (`crates/inkuno/src/actions.rs:6`); 13 themes (`crates/inkuno/src/ui/theme.rs:129`) | RESKIN | Curate to light/dark/sepia per §3 |
+| Motion | `motion` pref, instant when off (`Theme::motion`, `crates/inkuno/src/ui/theme.rs:124`) | KEEP | Respects reduced-motion spirit |
 | Help / shortcuts | Help panel + generated shortcuts page (`docs/design/architecture.md:95`, `docs/design/architecture.md:99`) | KEEP | Keyboard-first needs discoverability |
-| Toasts / update banner | `render_toasts`, `render_update_banner` (`src/shell/render.rs`) | KEEP, quiet | Transient only; never modal for routine info |
+| Toasts / update banner | `render_toasts`, `render_update_banner` (`crates/inkuno/src/shell/render.rs`) | KEEP, quiet | Transient only; never modal for routine info |
 
 ## 6. User preferences (EVOLVING — the user edits this section directly)
 
 This section is explicitly unfinished. The user changes values here; agents
-implement what it says. Current preference keys (all in `src/logic/prefs.rs`):
+implement what it says. Current preference keys (all in `crates/inkuno-logic/src/prefs.rs`):
 
 | Key | Today | User's choice |
 |-----|-------|---------------|
-| `theme` | theme name, else system (`src/ui/theme.rs:134`) | TBD — pick default (sepia? light?) |
-| `font` / `mono` | family names, default Plex (`src/logic/prefs.rs:7-8`, `src/ui/assets.rs:70`) | TBD — Inter / JetBrains Mono (see §3) |
-| `size` | body px, default 16 (`src/logic/prefs.rs:24`) | 16 (confirm) |
-| `page` | narrow/normal/wide/full (`src/logic/prefs.rs:53`) | Normal = 800 px (landed 2026-11-08, see §3) |
-| `wide` | wide-table behavior (`src/logic/prefs.rs:53`) | TBD |
-| `bar` | `off` hides format bar (`src/logic/prefs.rs:17-18`) | default `off` (confirm) |
-| `motion` | `off` = instant (`src/logic/prefs.rs:39`) | TBD |
-| `updates` | update checks on/off (`src/logic/prefs.rs:50-51`) | TBD |
+| `theme` | theme name, else system (`crates/inkuno/src/ui/theme.rs:134`) | TBD — pick default (sepia? light?) |
+| `font` / `mono` | family names, default Plex (`crates/inkuno-logic/src/prefs.rs:7-8`, `crates/inkuno/src/ui/assets.rs:70`) | TBD — Inter / JetBrains Mono (see §3) |
+| `size` | body px, default 16 (`crates/inkuno-logic/src/prefs.rs:24`) | 16 (confirm) |
+| `page` | narrow/normal/wide/full (`crates/inkuno-logic/src/prefs.rs:53`) | Normal = 800 px (landed 2026-11-08, see §3) |
+| `wide` | wide-table behavior (`crates/inkuno-logic/src/prefs.rs:53`) | TBD |
+| `bar` | `off` hides format bar (`crates/inkuno-logic/src/prefs.rs:17-18`) | default `off` (confirm) |
+| `motion` | `off` = instant (`crates/inkuno-logic/src/prefs.rs:39`) | TBD |
+| `updates` | update checks on/off (`crates/inkuno-logic/src/prefs.rs:50-51`) | TBD |
 
 Wanted (not yet prefs — proposals via §1): sepia theme definition; default
 docks open/closed; outline pinned or not; focus/typewriter toggles; keybinding
-overrides file/format (**TBD** — check `src/shell/keymap.rs:326` defaults and
+overrides file/format (**TBD** — check `crates/inkuno/src/shell/keymap.rs:326` defaults and
 whether user overrides exist).
 
 ## 7. Acceptance criteria
@@ -193,24 +193,24 @@ From the vision (§2); each must hold before calling the UI work done:
 
 1. [ ] **The document is the focus.** With both docks hidden and the bar off,
       the window is the note and nothing else (Panel Rail/Full paths,
-      `src/views/nav.rs:95-99`).
+      `crates/inkuno/src/views/nav.rs:95-99`).
 2. [ ] **Unified editing.** No edit/preview mode split; typing renders in place
       (custom editor element, `docs/design/architecture.md:103-111` approx, Editor section).
 3. [ ] **Source preserved.** Round-trip: file on disk unchanged except the
-      user's keystrokes (atomic write `src/platform/vault.rs:889`; merge rule
+      user's keystrokes (atomic write `crates/inkuno/src/platform/vault.rs:889`; merge rule
       `docs/design/architecture.md:100`).
 4. [ ] **Offline.** No network needed for any editing/viewing path (vault is a
-      local folder; update check is opt-out background, `src/logic/prefs.rs:50-51`).
+      local folder; update check is opt-out background, `crates/inkuno-logic/src/prefs.rs:50-51`).
 5. [ ] **Consistent fonts.** Inter for UI/body/headings, JetBrains Mono for
-      code, everywhere (replacing `src/ui/assets.rs:16` defaults).
+      code, everywhere (replacing `crates/inkuno/src/ui/assets.rs:16` defaults).
 6. [ ] **Hideable sidebars.** Left and right regions toggle independently and
-      the choice persists (`settle_nav` saves layout, `src/shell/sidebar.rs:73-82`).
+      the choice persists (`settle_nav` saves layout, `crates/inkuno/src/shell/sidebar.rs:73-82`).
 7. [ ] **Three themes.** Light, dark, sepia; all text ≥ 4.5:1 (extend the
-      `every_theme_reads` test family, `src/ui/theme.rs:290+`).
+      `every_theme_reads` test family, `crates/inkuno/src/ui/theme.rs:290+`).
 8. [ ] **Large-doc responsive.** Typing cost stays per-damaged-line
       (`views/editor/layout.rs` + `paint.rs`, `docs/design/architecture.md:91`); tables >
       1500 rows use light layout (`docs/design/architecture.md:105-107` approx).
-9. [ ] **Auto-save + recovery.** 400 ms debounce flush (`src/shell/notes.rs:504-510`)
+9. [ ] **Auto-save + recovery.** 400 ms debounce flush (`crates/inkuno/src/shell/notes.rs:504-510`)
       plus verified post-crash restore (see §5 TBD).
 10. [ ] **Feels like a writing app.** No IDE chrome by default: no permanent
       toolbar, no forced panels, quietCounts — judged by the user, not by tests.
@@ -225,7 +225,7 @@ From the vision (§2); each must hold before calling the UI work done:
 4. **No mass rewrites.** One component per change (§1). The layer rule holds:
    shell → views → ui → logic (`docs/design/architecture.md:19-27`).
 5. **No new dependencies without asking** (`docs/design/architecture.md:133`). Fonts ship
-   in the binary like today (`src/ui/assets.rs:26-28`).
+   in the binary like today (`crates/inkuno/src/ui/assets.rs:26-28`).
 6. **No untranslated interface text.** All UI strings go through `tr()`
    (`docs/design/architecture.md:131`).
 7. **No invented behavior.** If the code doesn't show it and this doc doesn't
@@ -259,7 +259,7 @@ Every Phase 1 proposal must name which mockup element it implements.
 ## 10. Locked decisions (user, 2026-11-08)
 
 1. **Phase 1 = document canvas + typography first** (not full shell).
-   Touch `src/ui/theme.rs`, `src/ui/assets.rs`, `views/editor/style.rs`,
+   Touch `crates/inkuno/src/ui/theme.rs`, `crates/inkuno/src/ui/assets.rs`, `views/editor/style.rs`,
    `views/editor/render.rs`. Shell keeps working as-is until Phase 2.
 2. **Inkuno power features are KEEP + reskin, none hidden:** tabs, panes,
    palette, tree, graph, docks, calendar/tags all stay, dressed in §3 tokens.
@@ -279,11 +279,11 @@ Every Phase 1 proposal must name which mockup element it implements.
    the width there is their follow-up, verified against `window.rs:497` and
    `md_tables.rs:176` on a green tree.
 5. **Phase 2 plan: Normal 800px (LANDED 2026-11-08, option (a)):**
-   - `src/ui/theme.rs:50` Normal base 720→800; theme.rs width test to px(800)/px(1600). ✅
-   - `src/views/editor/mod.rs:180` PILL_CLEAR px(48)→px(56) (pill bottom is 53px in 860 windows; check render.rs:434-444 at ui>1). ✅
-   - `src/views/editor/mod.rs:181,489-490` MAX_WIDTH px(720)→px(800). ✅ (`mod.rs:795-805` table test: 952 stays, lead 116→76. ✅)
-   - `src/shell/tests/window.rs:480` narrow gate re-derives (threshold 848); asserts keep logic. (verify on green tree)
-   - `src/shell/tests/end_to_end/md_tables.rs:176` wrap threshold recalibrate (~15-25 or longer filler) + dependent offsets :178-185. (verify on green tree)
+   - `crates/inkuno/src/ui/theme.rs:50` Normal base 720→800; theme.rs width test to px(800)/px(1600). ✅
+   - `crates/inkuno/src/views/editor/mod.rs:180` PILL_CLEAR px(48)→px(56) (pill bottom is 53px in 860 windows; check render.rs:434-444 at ui>1). ✅
+   - `crates/inkuno/src/views/editor/mod.rs:181,489-490` MAX_WIDTH px(720)→px(800). ✅ (`mod.rs:795-805` table test: 952 stays, lead 116→76. ✅)
+   - `crates/inkuno/src/shell/tests/window.rs:480` narrow gate re-derives (threshold 848); asserts keep logic. (verify on green tree)
+   - `crates/inkuno/src/shell/tests/end_to_end/md_tables.rs:176` wrap threshold recalibrate (~15-25 or longer filler) + dependent offsets :178-185. (verify on green tree)
    - Leave shell-chrome click tests (boards, cursors_comments) untouched, re-verify only.
    - Re-verify order: window test, page-width test, md_tables/boards/cursors_comments/tags, then full suite.
 
@@ -294,13 +294,13 @@ Every Phase 1 proposal must name which mockup element it implements.
 > Status: proposal. Ground truth for WHAT the keys are lives in code + generated
 > docs, never here. This section is only WHY they are shaped this way.
 >
-> - Source of truth: `defaults()` in `src/shell/keymap.rs` (order matters: for
->   the same context, the last binding wins). Display/parsing: `src/ui/keys.rs`.
+> - Source of truth: `defaults()` in `crates/inkuno/src/shell/keymap.rs` (order matters: for
+>   the same context, the last binding wins). Display/parsing: `crates/inkuno/src/ui/keys.rs`.
 > - Generated doc: `docs/user/src/shortcuts.md` — do NOT hand-edit; regenerate with
 >   `make docs` (test `shortcuts_page_is_current` enforces it).
 > - In-app discovery: help panel `F1` / `Ctrl+/`; every line naming an action
 >   can be re-bound in place in that panel (see `editable()` in
->   `src/shell/keymap.rs` + "Changing a shortcut" in settings doc).
+>   `crates/inkuno/src/shell/keymap.rs` + "Changing a shortcut" in settings doc).
 
 ### 11.1 Principles (borrowed, adapted)
 
@@ -336,7 +336,7 @@ Every Phase 1 proposal must name which mockup element it implements.
    chord working, announce in help/palette), never a silent swap. `make docs`
    + help panel keep code, book, and screen in agreement.
 6. macOS rule: `secondary` = `Cmd` on macOS, `Ctrl` elsewhere
-   (`src/shell/keymap.rs` `defaults()` comment). Word motion uses `Alt` on
+   (`crates/inkuno/src/shell/keymap.rs` `defaults()` comment). Word motion uses `Alt` on
    macOS; pane travel is `Cmd+Alt+arrows`; back/forward are `Cmd+[ / Cmd+]`.
    This doc writes the Linux/Windows form (`Ctrl+*`); macOS readers
    substitute `Cmd`.
@@ -456,13 +456,13 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 ### 12.4 Outline (BUILT 2026-11-08: right dock; palette jump retired)
 
 - CURRENT: right-dock list of the note's headings (`Mode::Outline`,
-  `src/views/nav.rs`), available but hidden by default (`right=[outline]`,
+  `crates/inkuno/src/views/nav.rs`), available but hidden by default (`right=[outline]`,
   `right_shown=[]`); `Ctrl+Shift+O` / palette `› outline` toggles it
   (closed opens + takes the keys, open takes the keys, Escape goes back to
-  the note — `toggle_outline`, `src/shell/docks.rs`); click jumps the cursor
+  the note — `toggle_outline`, `crates/inkuno/src/shell/docks.rs`); click jumps the cursor
   and refocuses the note; parents fold; active section lit and followed;
-  show/fold/width persist through the layout file (`src/shell/sidebar.rs`,
-  `src/shell/tests/docks.rs`).
+  show/fold/width persist through the layout file (`crates/inkuno/src/shell/sidebar.rs`,
+  `crates/inkuno/src/shell/tests/docks.rs`).
 - Spec (as built): right-side list of note headings, follows active
   heading, click scrolls canvas; collapses with panel; keyboard reaching via
   the §11.3-Q1 decision.
@@ -503,13 +503,13 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
   intent, splits-on-demand the verified behavior.
 - **Format bar: hide-visually-first, default stays on.** The `bar` pref default
   does NOT flip (§10 lock); the bar hides visually only (sibling WIP:
-  `opacity(0)` in `src/views/editor/format_bar.rs`, toggle still clickable,
+  `opacity(0)` in `crates/inkuno/src/views/editor/format_bar.rs`, toggle still clickable,
   geometry and tests hold). Palette `› formatting bar` toggles. A toggle
   chord waits for the Phase-2 reskin (§11.3-Q4).
 - **Comments collapse to a dot.** The comments column starts shut
-  (`comments_shut: true`, `src/shell/mod.rs`); the badge becomes one quiet dot
+  (`comments_shut: true`, `crates/inkuno/src/shell/mod.rs`); the badge becomes one quiet dot
   — no icon, no count — same hit area and corner (sibling WIP in
-  `src/shell/render.rs`). Click the dot or palette `› comments` reopens.
+  `crates/inkuno/src/shell/render.rs`). Click the dot or palette `› comments` reopens.
 - **T-fix accepted.** `Ctrl+Shift+T` = reopen last closed tab (browser
   standard); Recent keeps NO chord — `Ctrl+P` opens on recent + `› recent
   notes` command (see `keybindings.md` §8; sibling implemented + tests updated).
@@ -572,17 +572,17 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 ### What landed (no behavior change)
 
 - Inter Variable (upright + italic) + JetBrains Mono Variable (upright +
-  italic) bundled under `assets/fonts/` with OFL notices
+  italic) bundled under `crates/inkuno/assets/fonts/` with OFL notices
   (`LICENSE-Inter.txt`, `LICENSE-JetBrains-Mono.txt`); proof + sources in
   `typography.md` §3.
 - Staged in code as `INTER_FILES` / `JETBRAINS_MONO_FILES`
-  (`src/ui/assets.rs:326-343`), **not** in `FONT_FILES` (`src/ui/assets.rs:22`)
-  — Plex stays the bundled default; `apply_fonts` (`src/ui/assets.rs:62-67`)
+  (`crates/inkuno/src/ui/assets.rs:326-343`), **not** in `FONT_FILES` (`crates/inkuno/src/ui/assets.rs:22`)
+  — Plex stays the bundled default; `apply_fonts` (`crates/inkuno/src/ui/assets.rs:62-67`)
   already prefers an installed Inter / JetBrains Mono.
-- Bundling test `north_star_fonts_are_bundled` (`src/ui/assets.rs:355`);
+- Bundling test `north_star_fonts_are_bundled` (`crates/inkuno/src/ui/assets.rs:355`);
   `cargo check` clean for `assets.rs` (see Q3 note on unrelated tree reds).
 - Blockers for activating the staged fonts: gpui 0.2 cannot embolden a
-  variable font (`src/ui/assets.rs:10-12`); weight/size tokens live in
+  variable font (`crates/inkuno/src/ui/assets.rs:10-12`); weight/size tokens live in
   `theme.rs` (tabs crew) — see `typography.md` §3.
 
 ### 800 px landing (option (a), landed 2026-11-08)
@@ -607,7 +607,7 @@ Normal 800 is the default (§10.4 lock released for this change).
   variables, or wait for a gpui upgrade with synthetic bold? (Blocks
   activating the staged fonts.)
 - **Q3. Note:** at the time of writing, `cargo test` could not run green
-  tree-wide because `src/shell/sidebar.rs` (tabs crew) has a non-exhaustive
+  tree-wide because `crates/inkuno/src/shell/sidebar.rs` (tabs crew) has a non-exhaustive
   `Mode::Outline` match (E0004 at `sidebar.rs:146`) — unrelated to this step;
   re-run `cargo test` (theme/editor/md_tables/window/prefs, then full suite)
   after their landing.
@@ -618,7 +618,7 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 > Steering session 2026-11-08. This section records the 7 decisions only;
 > it changes no tokens, bindings, geometry, or code. Sibling-owned sections
-> (`src/`, `docs/user/`, `mockups/*.html`, `keybindings.md`) are untouched —
+> (`crates/inkuno/src/`, `docs/user/`, `mockups/*.html`, `keybindings.md`) are untouched —
 > their crews land the work; this log is the pointer.
 
 ### Status snapshot

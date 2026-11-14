@@ -56,8 +56,8 @@ jobs:
       - name: Build one binary for Apple Silicon and Intel
         if: steps.build-cache.outcome == 'failure'
         run: |
-          cargo build --release --locked --target aarch64-apple-darwin
-          cargo build --release --locked --target x86_64-apple-darwin
+          cargo build --release --locked -p inkuno --target aarch64-apple-darwin
+          cargo build --release --locked -p inkuno --target x86_64-apple-darwin
           lipo -create -output inkuno-universal \
             target/aarch64-apple-darwin/release/inkuno target/x86_64-apple-darwin/release/inkuno
           lipo -info inkuno-universal
@@ -79,7 +79,7 @@ jobs:
       - run: cargo test --locked
       - name: Package
         run: |
-          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
           scripts/bundle-macos.sh inkuno-universal "$ver" dist/inkuno-macos.dmg
       - name: The disk image holds a valid Inkuno.app
         run: |
@@ -141,12 +141,12 @@ jobs:
       - name: Enable sccache
         uses: mozilla-actions/sccache-action@v0.0.11
       - if: steps.build-cache.outcome == 'failure'
-        run: cargo build --release --locked
+        run: cargo build --release --locked -p inkuno
       - name: Place cached binary when restored (retry fast-path)
         if: steps.build-cache.outcome == 'success'
         run: |
           set -euo pipefail
-          app=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          app=$(sed -n 's/^name = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
           mkdir -p target/release
           cp ".build-cache/$app" "target/release/$app"
           ls -la "target/release/$app"
@@ -156,7 +156,7 @@ jobs:
       - name: Stage binary for the retry cache (retry fast-path)
         run: |
           set -euo pipefail
-          app=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          app=$(sed -n 's/^name = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
           mkdir -p .build-cache-save
           cp "target/release/$app" ".build-cache-save/$app"
       - name: Save Linux binary for retries (retry fast-path)
@@ -172,9 +172,9 @@ jobs:
       - name: Package Linux archive
         run: |
           set -euo pipefail
-          # Follows Cargo.toml so the rename needs no edit here; the rename
+          # Follows crates/inkuno/Cargo.toml so the rename needs no edit here; the rename
           # crew owns the remaining hardcoded `bref` strings in this file.
-          app=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          app=$(sed -n 's/^name = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
           mkdir -p dist
           cp "target/release/$app" "dist/$app"
           tar -C dist -czf "dist/$app-linux-x86_64.tar.gz" "$app"

@@ -4,11 +4,11 @@
 
 use super::*;
 
-const PAGE: &str = "docs/user/src/shortcuts.md";
+const PAGE: &str = "../../docs/user/src/shortcuts.md";
 
 const HEAD: &str = "# Keyboard shortcuts
 
-<!-- Written by the test `shortcuts_page_is_current` from `help_sections` (src/shell/keymap.rs).
+<!-- Written by the test `shortcuts_page_is_current` from `help_sections` (crates/inkuno/src/shell/keymap.rs).
      Do not edit by hand: run `make docs`. -->
 
 Every line of the help panel (`F1`), with the default keys of Linux and Windows. On macOS, read `Cmd` for `Ctrl`, and `Alt` for `Ctrl` when moving by word. Moving between panes is `Cmd + Alt + arrows`, and back and forward are `Cmd + [` and `Cmd + ]`.

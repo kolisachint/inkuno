@@ -3,14 +3,14 @@
   inkuno editor CURRENT-state mockup v1 — ground truth for design discussion. NO redesign.
   Renders docs/design/app-ui.md §12 (Visual spec v1, PROPOSED 2026-11-08) under §10 Phase-1 locks.
   Source refs (file:line, repo /Users/sachinkoli/github/noteapp):
-  - Footer band:      src/views/editor/mod.rs:180 FOOTER 56px; MAX_WIDTH 800; SIDE 24; PILL_CLEAR 56; TOP 20; COPY_SIZE 22
-  - Format bar:       src/views/editor/format_bar.rs:1 BAR_WIDTH (eleven 26px btns + 14px color chevron); Bar::Inline vs Compact; Tools{styles,list,table}; swatches 5 colors
-  - Tabs:             src/shell/tabs.rs:6 TAB_BAR 34px; TAB_PILL 30px; pill radius 9 (theme.tab); text 13px; dirty-dot; preview italic
-  - Tokens:           src/ui/theme.rs:100 THEMES (13: Inkuno Dark/Light, Dracula, One Dark, Gruvbox Dark, Nord, Catppuccin Mocha, Tokyo Night, Rosé Pine, Solarized Dark/Light, Catppuccin Latte, Gruvbox Light, Sepia); Page Narrow560/Normal800/Wide960/Full; size 16 body; rail 44; tab/corner radii
-  - Fonts:            src/ui/assets.rs:16 IBM Plex Sans/Mono bundled (target per app-ui.md §3: Inter + JetBrains Mono)
-  - Regions:          src/views/nav.rs; src/shell/sidebar.rs; src/shell/docks.rs:42 (left explorer dock); src/shell/pane.rs:467 (canvas); src/shell/palette_open.rs:29 open_outline/open_comments (palette-only); src/shell/render.rs:88 (window/pill room)
-  - Live rendering:   headings grow, dimmed markers, code copy btn, callouts, math/mermaid underline, tables align-as-you-type, atomic save 400ms src/shell/notes.rs:491
-  - Keybindings:      app-ui.md §11 (source of truth: src/shell/keymap.rs defaults(); display src/ui/keys.rs; generated docs/user/src/shortcuts.md)
+  - Footer band:      crates/inkuno/src/views/editor/mod.rs:180 FOOTER 56px; MAX_WIDTH 800; SIDE 24; PILL_CLEAR 56; TOP 20; COPY_SIZE 22
+  - Format bar:       crates/inkuno/src/views/editor/format_bar.rs:1 BAR_WIDTH (eleven 26px btns + 14px color chevron); Bar::Inline vs Compact; Tools{styles,list,table}; swatches 5 colors
+  - Tabs:             crates/inkuno/src/shell/tabs.rs:6 TAB_BAR 34px; TAB_PILL 30px; pill radius 9 (theme.tab); text 13px; dirty-dot; preview italic
+  - Tokens:           crates/inkuno/src/ui/theme.rs:100 THEMES (13: Inkuno Dark/Light, Dracula, One Dark, Gruvbox Dark, Nord, Catppuccin Mocha, Tokyo Night, Rosé Pine, Solarized Dark/Light, Catppuccin Latte, Gruvbox Light, Sepia); Page Narrow560/Normal800/Wide960/Full; size 16 body; rail 44; tab/corner radii
+  - Fonts:            crates/inkuno/src/ui/assets.rs:16 IBM Plex Sans/Mono bundled (target per app-ui.md §3: Inter + JetBrains Mono)
+  - Regions:          crates/inkuno/src/views/nav.rs; crates/inkuno/src/shell/sidebar.rs; crates/inkuno/src/shell/docks.rs:42 (left explorer dock); crates/inkuno/src/shell/pane.rs:467 (canvas); crates/inkuno/src/shell/palette_open.rs:29 open_outline/open_comments (palette-only); crates/inkuno/src/shell/render.rs:88 (window/pill room)
+  - Live rendering:   headings grow, dimmed markers, code copy btn, callouts, math/mermaid underline, tables align-as-you-type, atomic save 400ms crates/inkuno/src/shell/notes.rs:491
+  - Keybindings:      app-ui.md §11 (source of truth: crates/inkuno/src/shell/keymap.rs defaults(); display crates/inkuno/src/ui/keys.rs; generated docs/user/src/shortcuts.md)
   - Vision ref:       docs/assets/inkuno.png (Typora-calm target); docs/design/app-ui.md §§1-10 (calm, doc-first)
   Locks honored (§10): Normal 800 (landed 2026-11-08, §14); format bar stays SHOWN; paragraph spacing as-is.
   Badge key (§12.5): [CURRENT] = matches app today, do not regress. [TBD] = proposal/mockup-only, do not mistake for shipped.
@@ -173,7 +173,7 @@
       <div class="tab on">Trip to Lisbon <span class="x">×</span></div>
       <div class="tab preview">Budget 2026 <span class="dot"></span></div>
       <div class="tab">Packing list <span class="x">×</span></div>
-      <span class="note" style="margin-left:6px">tab bar 34px · pill 30px · r9 · 13px <span class="badge cur">Current</span> <span class="note">src/shell/tabs.rs:6</span></span>
+      <span class="note" style="margin-left:6px">tab bar 34px · pill 30px · r9 · 13px <span class="badge cur">Current</span> <span class="note">crates/inkuno/src/shell/tabs.rs:6</span></span>
     </div>
     <div class="canvas">
       <article class="page" aria-label="Note page, Normal width 800">

@@ -14,8 +14,8 @@ which builds the artifacts and publishes only after every download verifies.
 ## Label-gated releases
 
 Merge a PR into `main` with exactly one of `rust:patch`, `rust:minor` or
-`rust:major`. The gate (`release-gate.yml`) reads the current `Cargo.toml`
-version, applies the semver bump, commits `Cargo.toml` + `Cargo.lock`, tags
+`rust:major`. The gate (`release-gate.yml`) reads the current `crates/inkuno/Cargo.toml`
+version, applies the semver bump, commits `crates/inkuno/Cargo.toml` + `Cargo.lock`, tags
 `main` as `vX.Y.Z`, creates a **draft** release with generated notes, then
 calls `release-native.yml` with the tag. Anything else — no label, two
 labels, or an unlabeled merge — is a no-op with a summary line.
@@ -77,7 +77,7 @@ Notes come from the matching changelog section when present, otherwise from
 commit subjects since the previous tag. A first release without previous tags
 is supported. A supplied notes file takes precedence.
 
-Simulation restores `Cargo.toml` and `Cargo.lock` on success, test failure or
+Simulation restores `crates/inkuno/Cargo.toml` and `Cargo.lock` on success, test failure or
 interruption. Normal preparation also restores an uncommitted bump if it
 fails. Once a version commit has succeeded, it is retained for recovery; the
 script does not rewrite committed history.

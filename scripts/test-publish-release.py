@@ -34,7 +34,8 @@ class PublicationTests(unittest.TestCase):
 
     def fixture(self, app):
         self.app = app
-        (self.root / "Cargo.toml").write_text(f'[package]\nname = "{app}"\nversion = "1.2.3"\n')
+        (self.root / "crates/inkuno").mkdir(parents=True, exist_ok=True)
+        (self.root / "crates/inkuno/Cargo.toml").write_text(f'[package]\nname = "{app}"\nversion = "1.2.3"\n')
         for path in self.dist.iterdir():
             path.unlink()
         for name in release.expected_assets(self.root, "v1.2.3"):
@@ -95,7 +96,7 @@ class PublicationTests(unittest.TestCase):
     def test_symlink_rejected(self):
         path = self.dist / "inkuno-macos.dmg"
         path.unlink()
-        path.symlink_to(self.root / "Cargo.toml")
+        path.symlink_to(self.root / "crates/inkuno/Cargo.toml")
         with self.assertRaises(ValueError):
             self.publish()
         self.assertEqual(self.calls, [])

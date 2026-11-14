@@ -42,7 +42,7 @@ xattr -dr com.apple.quarantine /Applications/Inkuno.app
 ```bash
 git clone https://github.com/kolisachint/inkuno.git
 cd inkuno
-cargo install --path . --locked
+cargo install --path crates/inkuno --locked
 ```
 
 This installs the `inkuno` command in `~/.cargo/bin`, without the `.app` bundle. Start it from a terminal.
@@ -105,7 +105,7 @@ Inkuno [never checks for updates](updates.md): fetch the new release yourself, t
 | Linux, ready-made binary | download the new archive and put the binary on your `PATH` again |
 | macOS, `.dmg` | download the new `.dmg` and drop Inkuno on Applications again |
 | `make install` | `git pull`, then `make` and `sudo make install` |
-| `cargo install` | `git pull`, then `cargo install --path . --locked` |
+| `cargo install` | `git pull`, then `cargo install --path crates/inkuno --locked` |
 
 ## Coming from encre
 

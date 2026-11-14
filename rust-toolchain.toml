@@ -1,5 +1,5 @@
 [toolchain]
-# Floor is 1.98, not 1.88: src/shell/render.rs uses `if let` match guards,
+# Floor is 1.98, not 1.88: crates/inkuno/src/shell/render.rs uses `if let` match guards,
 # which 1.88 rejects (E0658). Verified by the full suite on 1.98.1.
 channel = "1.98"
 components = ["rustfmt", "clippy"]

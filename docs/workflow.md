@@ -52,7 +52,7 @@ Proven in the session that built it (24h → 30min target). Follow this literall
   auto-merge to keep a pipeline moving.
 - Release flow (already wired in `.github/workflows/release-gate.yml`): apply
   exactly one of `rust:patch`, `rust:minor`, `rust:major` to the PR; merging to
-  `main` triggers the gate → bump Cargo.toml, commit `chore: release X.Y.Z`,
+  `main` triggers the gate → bump crates/inkuno/Cargo.toml, commit `chore: release X.Y.Z`,
   tag, draft release with author notes, then `release-native.yml` builds
   macOS + Linux and publishes only after every download verifies. Labels must
   exist in the repo (created 2026-11-10; recreate with `gh label create` if

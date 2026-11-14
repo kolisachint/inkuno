@@ -8,7 +8,7 @@
 # CI shards with count-based partitions across matrix runners:
 #   cargo nextest run --locked --profile ci --partition count:1/2
 # `count:` hashes whole tests across shards. The 22 end_to_end chapters run
-# inside ONE #[gpui::test] (`src/shell/tests/end_to_end/mod.rs` chains them as
+# inside ONE #[gpui::test] (`crates/inkuno/src/shell/tests/end_to_end/mod.rs` chains them as
 # a single stateful session), so that test lands on exactly one shard and stays
 # the long pole: sharding parallelises the ~30 shell unit-test modules around
 # it. Splitting chapters into separately runnable tests would need src changes;

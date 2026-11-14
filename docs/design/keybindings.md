@@ -6,23 +6,23 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
 
 ## 1. Source of truth + regen flow
 
-- `defaults()` in `src/shell/keymap.rs:326` is the whole default table. Order
+- `defaults()` in `crates/inkuno/src/shell/keymap.rs:326` is the whole default table. Order
   matters: for the same context, **the last binding wins** (GPUI overlay order;
-  `line::bindings` in `src/ui/line.rs:239` is appended after, so input-line keys
+  `line::bindings` in `crates/inkuno/src/ui/line.rs:239` is appended after, so input-line keys
   take precedence over the fields that use them).
-- Display, parsing, and user overrides live in `src/ui/keys.rs`:
+- Display, parsing, and user overrides live in `crates/inkuno/src/ui/keys.rs`:
   `canon`/`spell`/`show` (§7), `meets` (`:133`), `effective` (`:153`),
   `refusal` (`:180`), `system` (`:191`), `clashes` (`:203`), `read`/`write`
   (`:227`/`:220`), `shown` (`:258`).
-- What the help panel shows is `help_sections()` (`src/shell/keymap.rs:8`).
+- What the help panel shows is `help_sections()` (`crates/inkuno/src/shell/keymap.rs:8`).
 - `docs/user/src/shortcuts.md` is GENERATED from `help_sections` — do NOT hand-edit.
   Regenerate with `make docs` (`INKUNO_WRITE_DOCS=1 cargo test shortcuts_page_is_current`
   writes the page, then `mdbook build`). The test
-  `shortcuts_page_is_current` (`src/shell/tests/shortcuts_page.rs`) fails until
+  `shortcuts_page_is_current` (`crates/inkuno/src/shell/tests/shortcuts_page.rs`) fails until
   the page matches. CONTRIBUTING flow: change `help_sections`/`defaults()`,
   run `make docs`, commit both.
 - Which actions can be re-bound at all is gated by `editable()`
-  (`src/shell/keymap.rs:320`): app/palette/nav/outline/search/table actions are
+  (`crates/inkuno/src/shell/keymap.rs:320`): app/palette/nav/outline/search/table actions are
   open; view-internal caret, gesture and menu plumbing is not.
 
 ## 2. Principles (from app-ui.md §11.1, one line each + what each costs)
@@ -52,7 +52,7 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
 | Plain `Ctrl+letter` | The note itself | `Ctrl+B/I/U` styles, `Ctrl+F/R` find, `Ctrl+D` next occurrence, `Ctrl+K` link |
 
 **Context splits (intentional, not bugs).** Two bindings may share keys when
-their contexts never meet (`meets()`, `src/ui/keys.rs:133`: a binding with no
+their contexts never meet (`meets()`, `crates/inkuno/src/ui/keys.rs:133`: a binding with no
 context or `Shell` meets everything; two views never meet each other, except a
 `Line` field with its carrying view). Documented cases:
 
@@ -96,7 +96,7 @@ mode). Keyless rows (`—`) are grips/`/`/menu-only by design (§6).
 | `Ctrl+K` | `editor::InsertLink` | `› link` |
 | `Ctrl+Enter` | `editor::ToggleTask` | `› tick the task` |
 | `Ctrl+Shift+B` | `editor::ListCycle` | `›` (catalogue `Format`; help-rebindable) |
-| `Ctrl+D` | `editor::SelectNext` | `› multicursor: select the next occurrence` (alias, `src/shell/palette_open.rs:211`) |
+| `Ctrl+D` | `editor::SelectNext` | `› multicursor: select the next occurrence` (alias, `crates/inkuno/src/shell/palette_open.rs:211`) |
 | `Alt+click` | add cursor (mouse) | — |
 | `Ctrl+F` / `Ctrl+R` / `F3` / `Shift+F3` | `editor::Find/FindReplace/FindNext/FindPrev` | `› find/replace in the note` |
 | `Ctrl+Shift+M` | `editor::Comment` | `› comment` |
@@ -124,7 +124,7 @@ Find bar extras (context `Find`): `Enter` first match, `Tab` switch field,
 Chorded: `Alt+Up/Down` move row, `Alt+=` autosum, `Ctrl+Shift+L/E/R` align,
 `Ctrl+Shift+Backspace` delete span, `Ctrl+Enter` task toggle in cells.
 Keyless-by-design (grip / `+` / `›` command, `Table` group first when the
-cursor is in a table via `here_group`, `src/shell/help.rs:223`): insert row
+cursor is in a table via `here_group`, `crates/inkuno/src/shell/help.rs:223`): insert row
 above/below, insert column left/right, move row/column, duplicate row/column,
 sort A→Z / Z→A, transpose, autosum, copy-with-results, delete row/column/table,
 select row/column, table CSV import/export, delimiter/encoding/header.
@@ -209,7 +209,7 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 
 ## 5. macOS translation
 
-`secondary` = `Cmd` on macOS, `Ctrl` elsewhere (`src/ui/keys.rs` `spell`/`show`;
+`secondary` = `Cmd` on macOS, `Ctrl` elsewhere (`crates/inkuno/src/ui/keys.rs` `spell`/`show`;
 `MOD` constant). This doc's `Ctrl+*` reads as `Cmd+*` on macOS, except:
 
 | Linux/Windows | macOS | Why |
@@ -217,24 +217,24 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 | `Alt+Left/Right` (back/forward) | `Cmd+[` / `Cmd+]` | browser convention |
 | `Alt+Shift+arrows` (pane travel) | `Cmd+Alt+arrows` | `Alt+arrows` is word motion |
 | `Alt+arrows` (word motion) | `Ctrl+arrows` | macOS word-motion convention (`word` in `defaults()`) |
-| `Cmd+Left/Right/Up/Down` etc. | line/doc ends + selection | macOS text conventions (`src/shell/keymap.rs`, `#[cfg(target_os = "macos")]` tail of `defaults()`) |
+| `Cmd+Left/Right/Up/Down` etc. | line/doc ends + selection | macOS text conventions (`crates/inkuno/src/shell/keymap.rs`, `#[cfg(target_os = "macos")]` tail of `defaults()`) |
 | `Ctrl+Backspace` (trash) | `Cmd+Backspace` | macOS convention |
 
-`system()` (`src/ui/keys.rs:191`) flags OS-reserved chords to warn, not refuse.
+`system()` (`crates/inkuno/src/ui/keys.rs:191`) flags OS-reserved chords to warn, not refuse.
 
 ## 6. Palette-alias convention
 
 - `› word` (or `Ctrl+P › word`): type what the action DOES; matching is
-  per-word prefix on the folded label (`command()`, `src/views/palette.rs:333`),
+  per-word prefix on the folded label (`command()`, `crates/inkuno/src/views/palette.rs:333`),
   in both languages (`tr()` labels).
-- Catalogue entries live in `commands::catalog()` (`src/logic/commands.rs:56`);
+- Catalogue entries live in `commands::catalog()` (`crates/inkuno-logic/src/commands.rs:56`);
   the palette shows only actions the current view offers
-  (`palette_commands()`, `src/shell/palette_open.rs:211`), with the view's
+  (`palette_commands()`, `crates/inkuno/src/shell/palette_open.rs:211`), with the view's
   group first (`arrange()`): `Block` in a note, `Table` in a table
-  (`here_group()`, `src/shell/help.rs:223`), `Diagram` on a drawing, CSV picks
+  (`here_group()`, `crates/inkuno/src/shell/help.rs:223`), `Diagram` on a drawing, CSV picks
   on a grid.
 - In command queries, catalogue `editor::Table*`/`sheet::Pick*` lines are
-  hidden as doubled (`doubled()`, `src/views/palette.rs:654`): the same gestures
+  hidden as doubled (`doubled()`, `crates/inkuno/src/views/palette.rs:654`): the same gestures
   are offered as grid items when a table is under the cursor.
 - **Aliases** (same function; most name actions the catalogue does not):
   `editor::SelectNext` → `› multicursor…` (`Note` group, everywhere the editor
@@ -251,8 +251,8 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 ## 7. Editable mechanism (help panel + `keys` file)
 
 - Any help line naming an action can be re-bound in place (help `F1`, type to
-  filter, `Enter` a new chord). Gate: `editable()` (`src/shell/keymap.rs:320`).
-- `refusal()` (`src/ui/keys.rs:180`): single keys / `Shift`-only letters type
+  filter, `Enter` a new chord). Gate: `editable()` (`crates/inkuno/src/shell/keymap.rs:320`).
+- `refusal()` (`crates/inkuno/src/ui/keys.rs:180`): single keys / `Shift`-only letters type
   text (`Types`); bare `Esc` belongs to the panel (`Panel`); unreadable stays
   unreadable. `system()` flags OS-kept chords as warnings.
 - `clashes()` (`:203`): who already has these keys where this action applies
@@ -312,7 +312,7 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 - Kanban `Space` tick + `Alt+arrows` carry stay `Board`-only by design; the
   help panel groups them under Diagrams — revisit grouping only, not chords.
 - Remaining stale reference outside this sweep's scope:
-  `src/shell/pane.rs` doc comments (`Ctrl+Alt+T`) — book follow-ups fixed by
+  `crates/inkuno/src/shell/pane.rs` doc comments (`Ctrl+Alt+T`) — book follow-ups fixed by
   the 2026-11-08 docs sweep (`tabs-and-panes.md`, `navigation.md`).
 
 ## 10. Strip-down cross-ref (2026-11-08)

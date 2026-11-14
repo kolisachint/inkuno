@@ -8,16 +8,16 @@
 # main. The label gate (release-gate.yml) only bumps versions that already
 # have a previous tag; it never creates 0.0.1.
 #
-# Inkuno naming: APP follows Cargo.toml and REPO defaults to the Inkuno home
+# Inkuno naming: APP follows crates/inkuno/Cargo.toml and REPO defaults to the Inkuno home
 # below, so no edit is needed here. Remaining `bref` asset
 # strings elsewhere are the rename crew's lane (see docs/releasing.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
+APP=$(sed -n 's/^name = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
 TITLE=Inkuno
 REPO="${INKUNO_REPO:-kolisachint/inkuno}"
-managed=(Cargo.toml Cargo.lock)
+managed=(crates/inkuno/Cargo.toml Cargo.lock)
 die() { echo "release: $*" >&2; exit 1; }
 ver=${1:?usage: scripts/release.sh X.Y.Z [notes-file]}
 [[ $ver =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "version must look like 1.2.3"
@@ -34,8 +34,8 @@ fi
 if [ "$resume" = 1 ]; then
     git rev-parse -q --verify "refs/tags/$tag" >/dev/null || die "no local tag $tag to resume"
     git merge-base --is-ancestor "$tag" HEAD || die "$tag is not an ancestor of HEAD"
-    tagged_ver=$(git show "$tag:Cargo.toml" | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
-    current_ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+    tagged_ver=$(git show "$tag:crates/inkuno/Cargo.toml" | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+    current_ver=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
     [ "$tagged_ver" = "$ver" ] && [ "$current_ver" = "$ver" ] || die "tag and checkout must both carry version $ver"
 else
     if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
@@ -123,7 +123,7 @@ fi
 if [ "$resume" = 0 ]; then
     snapshot
     # First `version` line only; portable across GNU/BSD sed via perl.
-    perl -pi -e 's/^version = ".*"/version = "'"$ver"'"/ if !$done && ($done = /^version = /)' Cargo.toml
+    perl -pi -e 's/^version = ".*"/version = "'"$ver"'"/ if !$done && ($done = /^version = /)' crates/inkuno/Cargo.toml
     cargo update -p "$APP" --offline -q
     if [ "$dry" = 1 ]; then
         cargo test --locked --offline -q
@@ -133,7 +133,7 @@ if [ "$resume" = 0 ]; then
         exit 0
     fi
     cargo test --locked -q
-    git add Cargo.toml Cargo.lock
+    git add crates/inkuno/Cargo.toml Cargo.lock
     git diff --cached --quiet || git commit -q -m "chore: release $ver"
     rollback=0
     git tag -a "$tag" -m "$TITLE $ver"
