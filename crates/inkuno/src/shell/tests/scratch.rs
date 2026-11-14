@@ -105,3 +105,85 @@ fn a_blank_scratch_note_leaves_no_file_behind(cx: &mut TestAppContext) {
     assert!(shell.read_with(cx, |s, _| s.panes.len() == 1));
     let _ = fs::remove_dir_all(root);
 }
+
+/// Types a scratch note, then asks to close it: the list of what becomes of it is shown.
+fn write_and_close(cx: &mut gpui::VisualTestContext, text: &str) {
+    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_input(text);
+    settle(cx);
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+fn closing_a_scratch_note_asks_and_keep_as_scratch_is_the_default(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-keep");
+    let before = vault_notes(&root);
+    write_and_close(cx, "# Idée\n\nà garder");
+    assert!(shell.read_with(cx, |s, _| s.palette.is_some() && s.pane().scratch));
+    // Enter takes the default: the tab closes, the file stays, the vault is untouched.
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    let files = platform::scratch::list();
+    assert_eq!(files.len(), 1);
+    assert_eq!(fs::read_to_string(&files[0]).unwrap(), "# Idée\n\nà garder");
+    assert_eq!(vault_notes(&root), before);
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none() && !s.pane().scratch));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn discard_deletes_the_scratch_file_and_escape_cancels_the_close(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-discard");
+    write_and_close(cx, "# Jeter\n\nnon");
+    // Escape cancels: the tab stays with its text, the file stays.
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(shell.read_with(cx, |s, cx| s.palette.is_none()
+        && s.pane().scratch
+        && s.pane().editor.read(cx).text() == "# Jeter\n\nnon"));
+    assert_eq!(platform::scratch::list().len(), 1);
+    // Discard is the last of the three: down twice, then Enter.
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down down enter");
+    cx.run_until_parked();
+    assert!(platform::scratch::list().is_empty());
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn keep_in_vault_moves_the_note_under_its_title(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-vault");
+    write_and_close(cx, "# Projet Lune\n\nle corps");
+    // Down once: Keep in vault.
+    cx.simulate_keystrokes("down enter");
+    cx.run_until_parked();
+    let kept = root.join("Projet Lune.md");
+    assert_eq!(
+        fs::read_to_string(&kept).unwrap(),
+        "# Projet Lune\n\nle corps"
+    );
+    assert!(platform::scratch::list().is_empty());
+    // The tab stays, now a note of the vault: it is indexed and no longer scratch.
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none()
+        && !s.pane().scratch
+        && s.pane().path.as_deref() == Some(kept.as_path())
+        && s.notes.iter().any(|n| n.path == kept)));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn quitting_or_closing_the_window_never_asks(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-quit");
+    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_input("à l'instant");
+    settle(cx);
+    assert!(cx.simulate_close());
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
+    let files = platform::scratch::list();
+    assert_eq!(files.len(), 1);
+    assert_eq!(fs::read_to_string(&files[0]).unwrap(), "à l'instant");
+    let _ = fs::remove_dir_all(root);
+}

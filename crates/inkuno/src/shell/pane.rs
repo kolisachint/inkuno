@@ -771,16 +771,33 @@ impl Shell {
     }
 
     /// Ctrl+W: closes the tab that has input, what it holds saved first; the pane goes with
-    /// its last tab, and the other takes the whole width. The last tab of the last pane stays.
+    /// its last tab, and the other takes the whole width. The last tab of the last pane stays,
+    /// except a scratch note: closing it leaves a new empty note. A scratch note with text asks
+    /// first what becomes of it (`ask_scratch`).
     pub(super) fn close_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        if self.panes.len() < 2 {
+        if self.pane().scratch && !logic::scratch::is_blank(self.pane().editor.read(cx).text()) {
+            self.ask_scratch(window, cx);
             return false;
         }
+        if self.panes.len() < 2 && !self.pane().scratch {
+            return false;
+        }
+        self.close_now(window, cx)
+    }
+
+    /// Saves the active tab and takes it out; a scratch note left blank is deleted with it.
+    pub(super) fn close_now(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if !self.leave(cx) {
             self.focus_pane(self.active, window, cx);
             return false;
         }
         self.drop_blank_scratch(cx);
+        if self.panes.len() < 2 {
+            // The window keeps a tab: a new empty note takes the place of the last one.
+            let tab = self.active;
+            self.add_tab(window, cx);
+            self.active = tab;
+        }
         self.forget_active();
         self.focus_pane(self.active, window, cx);
         true

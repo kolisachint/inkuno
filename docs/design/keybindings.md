@@ -306,7 +306,9 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   in the app's own folder (`inkuno/scratch` under the config folder, never in the vault), written as it is
   typed, named by its moment (`2026-11-14-103200`, a number after a collision). `app::NewNote` keeps its
   name and its behaviour (the note filed in the tree's folder, in the vault) and its chord moves to
-  `Ctrl+Alt+N`: a chord is stable API, so `Ctrl+N` now means something else for the same action name. Tests:
+  `Ctrl+Alt+N`: a chord is stable API, so `Ctrl+N` now means something else for the same action name.
+  Closing a scratch note with text (`app::ClosePane`) asks in a list: Keep as scratch (default, Enter),
+  Keep in vault… (only with a vault), Discard; Esc cancels. Tests:
   `scratch.rs` (`ctrl_n_writes_a_scratch_note_and_no_vault_file`, `ctrl_n_works_without_a_vault`,
   `ctrl_alt_n_still_creates_a_vault_note`). Tests that made vault notes with `Ctrl+N` now use `Ctrl+Alt+N`:
   `end_to_end/panel.rs`, `tabs.rs`, `window.rs`, `save_close.rs`.
