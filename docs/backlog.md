@@ -32,24 +32,29 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Follow-ups
 
-- Revisions: the MCP server's `rename_note` does not move the history (the server is not changed by this work; it is removed in a later step, `docs/design/revisions.md`).
 - Revisions: `inkuno rev` on a vault that has no `.inkuno` folder and is not open in the app treats the note's own folder as the vault, so history can be split by folder; the app creates `.inkuno` only at the first version. Create it when a vault opens, or document it.
 - Revisions: restoring from the trash brings the history back only when the trash holds the same name; a trash entry removed by hand breaks the pairing (`platform/revisions.rs`, `restore_along`).
-- Revisions: two saves at the same moment: the second is refused (`saved meanwhile`), there is no lock.
 - Revisions: `Keep in vault` still deletes the scratch copy once the vault note is written (a move, not a loss).
 - Revisions: the tree and the Scratch panel are not yet showing history; the Versions side panel and the coloured compare are next (`docs/design/revisions.md`).
 - `Ctrl+Alt+S` is not tried on macOS or on a desktop that keeps it; the screen was not run here.
-- `docs/design/app-ui.md` still says Discard deletes the file (line ~670); the design notes are listed for the owner.
 
-- Help-panel shortcut changes are saved to the `keys` file (`crates/inkuno/src/shell/help.rs:227`), but once `keybindings.json` exists it wins at launch and nothing reads `keys` again: they are lost at the next start. Also `--help` says the JSON is hot-reloaded; it is read at launch only (`crates/inkuno/src/main.rs`).
+- Help-panel shortcut changes are saved to the `keys` file (`crates/inkuno/src/shell/help.rs:227`), but once `keybindings.json` exists it wins at launch and nothing reads `keys` again: they are lost at the next start.
 - GitHub Pages must be set to deploy from GitHub Actions, else the Docs deploy job fails (`.github/workflows/docs.yml:3`).
 - `shortcuts_page_is_current` is compiled out on macOS; the page cannot be regenerated on a Mac (`crates/inkuno/src/shell/tests/shortcuts_page.rs:66`).
 - Two macOS-only clippy warnings fail `-D warnings` locally (`crates/inkuno/src/platform/mod.rs:7`, `crates/inkuno/src/shell/tests/shortcuts_page.rs:7`).
 - Template machinery is reachable only through MCP; decide app UI or keep MCP-only (`crates/inkuno/src/platform/vault.rs:254`, `crates/inkuno-logic/src/daily.rs:15`).
 - `packaging/windows/` remains though Windows is not built (`packaging/windows/`).
 - Scratch notes (2026-11-14): `Discard`, the panel's `Delete` and the `Delete` key move the file to `.trash` inside the scratch folder (`platform/scratch.rs`, `trash`), so nothing is destroyed on disk. Only a blank scratch file is still removed.
-- Scratch notes live under the config folder: on macOS that is `~/Library/Application Support`, which sits inside a vault that is the home folder, where the scan would see it (it skips only dot-folders). Check the scratch folder is outside any vault before a release.
 - `docs/design/*.md` still describes cut actions; listed for the owner, not rewritten.
+- Merge: `identical_change_inside_a_larger_human_block_merges` (`crates/inkuno-logic/src/merge.rs:1015`, ignored): expected, an identical change inside a larger block the person edited merges, no text lost and no conflict copy; today it clashes.
+- Merge: `fifty_hunks_each_side_spread_over_the_note_merge` (`merge.rs:1118`, ignored): expected, 50 hunks on each side of a 5,000-line note merge, no text lost and no spurious conflict copy; today the LCS cap folds the middle into one clash.
+- AltGr layouts on Windows may fire Ctrl+Alt+N, S or B: expected, a character typed with AltGr is text and never a shortcut.
+- Ctrl+B also toggles the sidebar inside the palette and find inputs: expected, in those inputs Ctrl+B leaves the sidebar alone (it toggles it from the note and the tree).
+- The pane divider's drag handle covers the last 4 px of the left pane, its scrollbar included: expected, the left pane's scrollbar takes the pointer, and a divider drag starts only past it.
+- `crates/inkuno/src/dbg_test.rs` is a leftover debug test that prints and asserts nothing: expected, removed, or turned into an assertion on `ui::keys::canon`.
+- A corrupt latest revision file blocks later saves with no repair hint: expected, the refused save names the file and says how to repair it.
+- Moving a note onto a path whose history folder already exists leaves the history behind: expected, the move is refused before the note moves, or the history moves with it (today the note moves, its history stays, and a "Revisions not moved" message says so).
+- Blank scratch files are removed rather than trashed: intended, they hold nothing; listed so it is not taken for a loss.
 - `tr()` second (French) args are still at call sites; removal is in progress (`crates/inkuno-logic/src/lang.rs:6`).
 - `Pane::viewer()` has no non-test callers; remove or keep (`crates/inkuno/src/shell/pane.rs:179`).
 - macOS chrome hiding is unverified on a real Mac until the owner tries it: the window's bar is transparent and its traffic lights are hidden with `setHidden:`; check that the note's top row is clickable, that the lights come back on the next press, and that a full-screen toggle does not show them again (`crates/inkuno/src/platform/mac_chrome.rs`).
