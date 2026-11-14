@@ -13,6 +13,8 @@ reverse (`CONTRIBUTING.md`).
   palette-alias convention, changelog (T-fix: `Ctrl+Shift+T` = reopen tab,
   Recent unbound), reserved keys (`F9` focus/zen candidate). Implements
   `app-ui.md` §11; if it disagrees with `defaults()`, code wins.
+- **Assistant v1 — `app-ui.md` §16** (owner-approved 2026-11-14): the round button and the right-dock
+  panel; the process and `comment --file` are in `cli.md` (Decisions).
 - **`revisions.md` — saved versions.** The revision file format, where the
   history lives (`.inkuno/revisions/`), the diffs, and the dated decisions of
   idea refinement (2026-11-14).

@@ -157,7 +157,7 @@ Verdict per component: **KEEP** (as-is) · **RESKIN** (same behavior, new look) 
 | Calendar / Tags / Recent / Links | Nav modes (`crates/inkuno/src/views/nav.rs`; toggles `ShowRecent/ShowTags/ShowCalendar/ShowLinks`, `crates/inkuno/src/shell/render.rs:150-170` approx) | HIDE (tools, not default) | Same as graph: available, never forced |
 | Format bar | Bottom-of-note bar (`crates/inkuno/src/views/editor/format_bar.rs`, `docs/design/architecture.md:90`); pref `bar`, `off` hides it (`crates/inkuno-logic/src/prefs.rs:17-18`; `Theme::bar`, `crates/inkuno/src/ui/theme.rs:122`) | HIDE by default | Vision: no permanent toolbar; keep pref, default `off` (**TBD** user confirms default) |
 | Focus / typewriter modes | **Not in codebase** (no matches for typewriter/focus-mode) | Vision-only, TBD | Typora parity wants them; needs full §1 proposal |
-| Word / char counts | **Not found** (no counter in shell/editor) | TBD | Vision wants quiet counts; placement (status/footer) needs proposal |
+| Word / char counts | A counter at the bottom right of the note: words and characters of the note, or of the selection (`crates/inkuno/src/views/editor/mod.rs:653`, "Footer counter") | REMOVED 2026-11-14 | Owner decision: removed completely; the round Assistant button takes its corner (§16) |
 | Auto-save | `EditorEvent::Changed` → `dirty=true` → 400 ms debounce → `flush` (`crates/inkuno/src/shell/notes.rs:491-510`); atomic writes, crash never truncates (`crates/inkuno/src/platform/vault.rs:889`) | KEEP | Already local-first; surface a subtle saved indicator (proposal) |
 | Session restore | Layout persisted on change (`panes_state`, `crates/inkuno/src/shell/render.rs:137-140`); vault backup/restore archives (`crates/inkuno/src/platform/vault.rs:590`, `:703`) | KEEP + TBD | Layout restore exists; unsaved-text-after-crash recovery: **TBD** — verify `dirty` tabs reload path |
 | Zoom (text) | `ZoomIn/Out/Reset` (`crates/inkuno/src/actions.rs:6`); `resize_text` (`crates/inkuno/src/shell/settings.rs:96`); page width follows size (`crates/inkuno/src/ui/theme.rs:44-54`) | KEEP | Accessibility + vision zoom |
@@ -456,9 +456,11 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
   button that opens it; hide only via palette (`› formatting bar`).
 - Spec: pill bar, icon buttons, hairline border + soft shadow, active button
   filled (brand 20 %); overflow: collapse to the single opener button.
-- TBD: any always-visible footer/status bar (word count etc.) is MOCKUP-ONLY
-  (§5: RESKIN — word counts not found in app; §7 acceptance keeps cursor
-  context). Do not present mockup status text as shipped.
+- The word counter that sat at the bottom right of the note
+  (`crates/inkuno/src/views/editor/mod.rs:653`) is REMOVED, decided 2026-11-14 (§16).
+  The round Assistant button takes that corner.
+- TBD: any other always-visible footer/status bar (word count etc.) is MOCKUP-ONLY
+  (§5; §7 acceptance keeps cursor context). Do not present mockup status text as shipped.
 
 ### 12.4 Outline (BUILT 2026-11-08: right dock; palette jump retired)
 
@@ -538,7 +540,7 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 | Outline dock | TBD (§12.4) | Palette jump `Ctrl+Shift+O` stays | Persistent dock needs a §1 proposal (§11.3-Q1) |
 | Comments | DOT | Collapsed to dot | Click dot / `› comments` / flip `comments_shut` |
 | Format bar | HIDDEN-VISUALLY | Invisible but present, toggle clickable | Palette `› formatting bar`; Phase-2 chord TBD |
-| Counts | QUIET | No numbered badges (comment count → dot) | Status-bar counts stay mockup-only (§12.3); any footer count needs a §1 proposal |
+| Counts | QUIET | No numbered badges (comment count → dot); the bottom-right word counter is removed 2026-11-14 (§16) | Status-bar counts stay mockup-only (§12.3); any footer count needs a §1 proposal |
 | Tables / embeds / kanban / canvas / sheet / capture / sync / sharing / templates / updates | PALETTE-ONLY | No main-UI chrome; nothing unbound that was bound | Type what it does (`› template`, `› capture`, `› sync`, …) per `keybindings.md` §6 |
 | Themes | CURATED light / dark / sepia | Offering narrows to three (§3) | Other 10 built-ins stay in the engine; re-listing is a one-line curation change + contrast-test re-verify (§7.7) |
 
@@ -686,3 +688,91 @@ Normal 800 is the default (§10.4 lock released for this change).
   (`sheets_tile_the_window_edge_to_edge_with_a_hairline`, `normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline`),
   and `end_to_end/cursors_comments.rs` (the comments column width and its right edge follow the window).
 - macOS now hides the system title bar and its traffic lights with `Ctrl+Shift+S` (and with focus mode), and shows them again on the next press; the state is kept in the layout file like on Linux. The window is created with a transparent bar on macOS only (`shell/mod.rs`), and `platform/mac_chrome.rs` hides the three standard buttons through the NSWindow. Not yet run on a real Mac: see `backlog.md`.
+
+---
+
+## 16. Assistant v1: a read-only reviewer (owner-approved 2026-11-14)
+
+> Status: approved by the owner on 2026-11-14; being built. This section records the decisions.
+> The code is the ground truth for names and bindings once it lands. The command line side
+> (`inkuno comment --file`) and the planned pending-change flow are in `cli.md` (Decisions).
+
+- [x] **Propose** — this section, written in the doc first (§1).
+- [x] **User approves** — owner, 2026-11-14: the decisions of §16.1 to §16.8.
+- [ ] **Implement** — `shell/assistant.rs`, `platform/assistant.rs`, `crates/inkuno-logic/src/assistant.rs`,
+      the counter removal, `inkuno comment --file`. Tests in `shell/tests/` (CONTRIBUTING.md).
+
+### 16.1 The counter is removed
+
+- The word and character counter at the bottom right of the note is removed completely
+  (`crates/inkuno/src/views/editor/mod.rs:653`). It is not moved and not hidden.
+- It is replaced by the Assistant button (§16.2). Nothing else takes its place.
+
+### 16.2 The Assistant button
+
+- A round button, 30 px, at the bottom right corner of the note. The comments bubble stays to its left.
+- States:
+
+| State | Shows |
+|---|---|
+| Idle | quiet |
+| Working | accent colour, slow pulse |
+| Needs you | an accent dot |
+| Not installed | dimmed; its tooltip says the program was not found |
+
+- A click opens the panel, or closes it.
+- Not drawn in focus mode (`F9`, §15).
+
+### 16.3 The panel: a tool of the right dock
+
+- It is a tool of the right dock, like Outline (§4, §12.4). It is always in the right dock.
+- Hidden by default. When Outline is shown too, it stacks under Outline. A saved layout gains it automatically.
+- Opened by the button, or from the command palette by typing `assistant` (action `app::ToggleAssistant`).
+  No default shortcut in v1 (owner decision).
+- Content, top to bottom:
+  1. the conversation;
+  2. when the agent asks permission for something, the request, with **Allow** and **Deny**;
+  3. **Review this note**, and while the agent works, **Stop**;
+  4. the prompt box.
+- The prompt box is one field. Long text wraps. `Enter` sends. `Escape` returns to the note.
+  No multi-line entry in v1 (owner decision; a multi-line box is a later idea).
+
+### 16.4 The agent process
+
+- Inkuno starts the `hoocode` program, found on the PATH, in its RPC mode (`hoocode --mode rpc`,
+  JSON on standard input and output), as a child process.
+- Its working folder is the open vault, or the scratch folder when no vault is open.
+- It starts on the first prompt. It stops when Inkuno quits or the vault changes.
+- When the program is not found, the panel says so quietly. Nothing else changes.
+- hoocode is a separate MIT program. It is never linked into Inkuno.
+- Layers: `platform/assistant.rs` starts the process, reads and writes its lines, and stops it (no window
+  code). `crates/inkuno-logic/src/assistant.rs` holds the messages of the agent's protocol, pure.
+  `shell/assistant.rs` holds the panel and its state.
+
+### 16.5 The setting
+
+- `assistant` in the settings file is the command that starts the agent. The default is `hoocode`.
+- It is changed with **Assistant command…** in the palette. An empty entry returns to the default.
+- Inkuno stores no keys and no model choice. Login and model stay in hoocode's own configuration.
+
+### 16.6 The two actions of v1
+
+- **Chat** about the current note.
+- **Review this note**: the agent writes its findings as comments, in the app's comment syntax,
+  `{==passage==}{>>comment<<}`, by running `inkuno comment`.
+- The agent is told to change nothing but comments. This is an instruction to the agent, not a lock:
+  an agent with a shell can write files. A real lock on writes comes with the pending-change flow
+  (`cli.md`, planned, not built).
+
+### 16.7 Seeing the changes
+
+- An open note sees the agent's comments through the file watcher.
+- If the person is typing in the note at the same time, changes on other lines merge. A comment on the
+  very line being typed can produce a conflict copy of the note (the existing merge behaviour).
+
+### 16.8 Scratch notes and the conversation
+
+- Review works on scratch notes too. `inkuno comment --file PATH` comments on a Markdown file by its path,
+  with no vault (`cli.md`, Decisions). Owner decision: extend the command rather than disable review
+  for scratch notes.
+- The conversation is kept in memory only. It is gone when Inkuno restarts (owner decision).
