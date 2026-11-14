@@ -18,7 +18,7 @@
 //! Pure: no disk here (`platform/revisions.rs` finds the files and their folders).
 
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::merge;
 
@@ -258,10 +258,17 @@ pub fn next_number(saved: impl IntoIterator<Item = u32>) -> u32 {
 
 /// The folder of the revisions of `path` (a note, or a folder whose notes have revisions): the
 /// same path under `root/dir`, so `ideas/plan.md` is `<vault>/.inkuno/revisions/ideas/plan.md`.
-/// `None` when `path` is not inside `root`.
+/// `None` when `path` is not inside `root`, or when what follows `root` climbs out of `root/dir`
+/// (a `..`, a root or a prefix component): the folder would then be a place the vault does not own.
 pub fn folder(root: &Path, dir: &str, path: &Path) -> Option<PathBuf> {
     let rel = path.strip_prefix(root).ok()?;
     if rel.as_os_str().is_empty() {
+        return None;
+    }
+    let inside = rel
+        .components()
+        .all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
+    if !inside {
         return None;
     }
     Some(root.join(dir).join(rel))
@@ -678,6 +685,28 @@ mod tests {
         assert_eq!(
             scratch_bin(scratch),
             PathBuf::from("/home/a/.config/inkuno/scratch/.revisions/.trash")
+        );
+    }
+
+    #[test]
+    fn refuses_a_path_that_climbs_out_of_the_vault_folder() {
+        let vault = Path::new("/home/a/vault");
+        // `..` after the vault root would land outside `.inkuno/revisions`: nothing is mapped.
+        assert_eq!(
+            folder(vault, VAULT_DIR, &vault.join("sub/../../outside/x.md")),
+            None
+        );
+        assert_eq!(
+            folder(vault, VAULT_DIR, &vault.join("sub/../../../../x.md")),
+            None
+        );
+        assert_eq!(folder(vault, VAULT_DIR, &vault.join("a/../b.md")), None);
+        // A plain path under the vault is still mapped.
+        assert_eq!(
+            folder(vault, VAULT_DIR, &vault.join("ideas/plan.md")),
+            Some(PathBuf::from(
+                "/home/a/vault/.inkuno/revisions/ideas/plan.md"
+            ))
         );
     }
 

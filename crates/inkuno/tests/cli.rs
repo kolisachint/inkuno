@@ -311,6 +311,84 @@ fn a_scratch_note_keeps_its_history_in_the_scratch_folder() {
 }
 
 #[test]
+fn dot_dot_paths_never_write_outside_the_vault_history() {
+    let (home, vault) = sandbox("dots");
+    write(&vault.join("notes/x.md"), "# X\n");
+    write(&home.join("outside/y.md"), "# Y\n");
+    // `notes/../../../<home>/vault/notes/x.md` names `vault/notes/x.md` on disk, but folding its
+    // `..` by name would climb out of `.inkuno/revisions` and write into the vault's own tree.
+    let name = home.file_name().unwrap().to_string_lossy().into_owned();
+    let climbing = vault.join(format!("notes/../../../{name}/vault/notes/x.md"));
+    let run = inkuno(
+        &home,
+        &vault,
+        &[
+            "rev",
+            "save",
+            &climbing.to_string_lossy(),
+            "--author",
+            "ana",
+        ],
+    );
+    assert_eq!((run.code, run.out.trim()), (0, "1"), "{}", run.err);
+    assert!(vault.join(".inkuno/revisions/notes/x.md/0001.md").is_file());
+    assert_eq!(top_level(&vault), [".inkuno", "notes"]);
+
+    // A note outside the vault gets no revision in the vault at all: it is a note of its own
+    // folder, which keeps its history in that folder's `.inkuno`, as for any note outside a vault.
+    let outside = vault.join("notes/../../outside/y.md");
+    let run = inkuno(
+        &home,
+        &vault,
+        &["rev", "save", &outside.to_string_lossy(), "--author", "ana"],
+    );
+    assert_eq!((run.code, run.out.trim()), (0, "1"), "{}", run.err);
+    assert!(
+        home.join("outside/.inkuno/revisions/y.md/0001.md")
+            .is_file()
+    );
+    assert!(!vault.join(".inkuno/outside").exists());
+    assert_eq!(top_level(&vault), [".inkuno", "notes"]);
+    let _ = fs::remove_dir_all(home);
+}
+
+/// The names directly in `dir`, sorted.
+fn top_level(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+// Symbolic links are made on unix only: creating one on Windows needs a privilege the tests do not have.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_note_in_the_vault_keeps_its_history_with_the_note() {
+    let (home, vault) = sandbox("link");
+    write(&vault.join("ideas/plan.md"), "# Plan\n\nOne.\n");
+    std::os::unix::fs::symlink(vault.join("ideas/plan.md"), vault.join("link.md")).unwrap();
+    let first = inkuno(
+        &home,
+        &vault,
+        &["rev", "save", "ideas/../ideas/plan.md", "--author", "ana"],
+    );
+    assert_eq!((first.code, first.out.trim()), (0, "1"), "{}", first.err);
+    write(&vault.join("ideas/plan.md"), "# Plan\n\nTwo.\n");
+    let second = inkuno(&home, &vault, &["rev", "save", "link.md", "--author", "bo"]);
+    assert_eq!((second.code, second.out.trim()), (0, "2"), "{}", second.err);
+    // Both saves land in the folder of the real note, not in one named after the link.
+    let folder = vault.join(".inkuno/revisions/ideas/plan.md");
+    assert!(folder.join("0001.md").is_file() && folder.join("0002.md").is_file());
+    assert!(!vault.join(".inkuno/revisions/link.md").exists());
+    let list = inkuno(&home, &vault, &["rev", "list", "ideas/plan.md"]);
+    assert_eq!(list.out.lines().count(), 2, "{}", list.out);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
 fn missing_notes_and_revisions_fail_on_stderr() {
     let (home, vault) = sandbox("missing");
     let no_note = inkuno(&home, &vault, &["rev", "list", "nope.md"]);
