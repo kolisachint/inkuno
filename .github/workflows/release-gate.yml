@@ -2,7 +2,7 @@
 # `bref` asset strings elsewhere are the rename crew's lane (see docs/releasing.md).
 #
 # Merging a PR into main with exactly one rust:patch, rust:minor or rust:major
-# label bumps the Cargo.toml version, commits the bump, tags main (vX.Y.Z),
+# label bumps the crates/inkuno/Cargo.toml version, commits the bump, tags main (vX.Y.Z),
 # creates a draft release and builds it through release-native.yml. Any other
 # merge is a no-op with a summary line. The FIRST release (0.0.1) is always
 # manual via scripts/release.sh: with no previous tag this gate stops before
@@ -71,7 +71,7 @@ jobs:
             } >>"$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          current=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          current=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
           head_msg=$(git log -1 --pretty=%s)
           # A merged `chore: release` fallback PR already carries the bump:
           # tag it instead of bumping twice.
@@ -92,7 +92,7 @@ jobs:
           current, bump = sys.argv[1], sys.argv[2]
           m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", current)
           if not m:
-              sys.exit(f"Cargo.toml version is not semver: {current!r}")
+              sys.exit(f"crates/inkuno/Cargo.toml version is not semver: {current!r}")
           major, minor, patch = map(int, m.groups())
           if bump == "major":
               major, minor, patch = major + 1, 0, 0
@@ -125,11 +125,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if [ "$BUMPED" = true ]; then
-            app=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)
+            app=$(sed -n 's/^name = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
             # First `version` line only (ubuntu runner: GNU sed).
-            sed -i "0,/^version = .*/s//version = \"$NEXT\"/" Cargo.toml
+            sed -i "0,/^version = .*/s//version = \"$NEXT\"/" crates/inkuno/Cargo.toml
             cargo update -p "$app" -q
-            git add Cargo.toml Cargo.lock
+            git add crates/inkuno/Cargo.toml Cargo.lock
             git commit -q -m "chore: release $NEXT"
             git tag -a "$TAG" -m "Inkuno $NEXT"
             # A protected main rejects the push: fall back to a release PR.

@@ -20,7 +20,7 @@ The half-filled circle at the bottom of the rail, or `theme` in the palette.
 
 ## Fonts
 
-Inkuno carries IBM Plex Sans (text), IBM Plex Mono (code) and IBM Plex Serif (page titles), under the SIL Open Font License (`assets/fonts/`). So it looks the same everywhere, with nothing to install.
+Inkuno carries IBM Plex Sans (text), IBM Plex Mono (code) and IBM Plex Serif (page titles), under the SIL Open Font License (`crates/inkuno/assets/fonts/`). So it looks the same everywhere, with nothing to install.
 
 - Type `font` in the palette to choose another font, for the app or for the code, among those installed on your system. Type in the list to filter it.
 - Ideograms and emoji, which Plex does not draw, come from a font of your system.

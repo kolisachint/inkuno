@@ -7,7 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(realpath -m "${1:-docs/assets/demo.gif}")
-cargo build --release --locked
+cargo build --release --locked -p inkuno
 inkuno=$PWD/target/release/inkuno
 work=$(mktemp -d)
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$work"' EXIT

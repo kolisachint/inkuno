@@ -13,8 +13,8 @@ By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). For a sec
 ## Building and testing
 
 ```bash
-cargo run                 # debug build
-cargo run --release       # what gets installed
+cargo run -p inkuno        # debug build
+cargo run --release -p inkuno   # what gets installed
 cargo test --locked       # or: make test
 make docs                 # rewrite the shortcuts page, build the user guide (needs mdbook)
 ```
@@ -44,7 +44,7 @@ cargo nextest run --locked                   # same tests, faster feedback
 ## Tests
 
 - Pure functions are tested in their own module.
-- Every user path is tested end to end in `src/shell/tests/`, with simulated keystrokes: a chapter of `end_to_end/`, or a journey of its own. A new feature adds its path there.
+- Every user path is tested end to end in `crates/inkuno/src/shell/tests/`, with simulated keystrokes: a chapter of `end_to_end/`, or a journey of its own. A new feature adds its path there.
 
 ## Documentation
 
@@ -58,7 +58,7 @@ Each kind of reader has one place:
 
 A visible feature updates:
 
-- the help panel (`help_sections` in `src/shell/keymap.rs`), then `make docs`, which rewrites `docs/user/src/shortcuts.md` from it. The test `shortcuts_page_is_current` fails until the page matches;
+- the help panel (`help_sections` in `crates/inkuno/src/shell/keymap.rs`), then `make docs`, which rewrites `docs/user/src/shortcuts.md` from it. The test `shortcuts_page_is_current` fails until the page matches;
 - the page of the guide on its subject, or a new page listed in `docs/user/src/SUMMARY.md`;
 - the README and the feature list of `docs/index.html`, only for a feature worth a line there.
 

@@ -12,16 +12,16 @@ import tomllib
 def expected_assets(root: Path, tag: str) -> list[str]:
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag):
         raise ValueError("tag must look like v1.2.3")
-    package = tomllib.loads((root / "Cargo.toml").read_text())["package"]
+    package = tomllib.loads((root / "crates/inkuno/Cargo.toml").read_text())["package"]
     app = package["name"]
     version = tag[1:]
     if package["version"] != version:
-        raise ValueError("tag and Cargo.toml versions differ")
+        raise ValueError("tag and crates/inkuno/Cargo.toml versions differ")
     if app not in {"inkuno", "spot", "astrolabe"}:
         raise ValueError(f"unsupported application: {app}")
     # macOS + Linux only. Windows installers/zips and Arch packages were
     # dropped from the pipeline; the rename crew owns the remaining `bref`
-    # asset strings, so names follow Cargo.toml instead of hardcoding them.
+    # asset strings, so names follow crates/inkuno/Cargo.toml instead of hardcoding them.
     names = [f"{app}-macos.dmg", f"{app}-linux-x86_64.tar.gz"]
     return sorted(names)
 

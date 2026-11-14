@@ -48,7 +48,7 @@ fn layers_only_depend_downwards() {
         ),
         // The extracted logic crate answers to the same rule, from its own tree.
         (
-            "crates/logic",
+            "../inkuno-logic/src",
             &[
                 "gpui",
                 "crate::platform",

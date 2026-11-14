@@ -3,7 +3,7 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 
 all:
-	cargo build --release --locked
+	cargo build --release --locked -p inkuno
 
 install:
 	install -Dm755 target/release/inkuno $(DESTDIR)$(PREFIX)/bin/inkuno

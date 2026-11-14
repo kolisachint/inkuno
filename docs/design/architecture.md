@@ -1,6 +1,7 @@
 # Architecture
 
-Inkuno is one Rust crate built on [GPUI](https://www.gpui.rs/) (pinned at 0.2.2). This page is the
+Inkuno is a Cargo workspace built on [GPUI](https://www.gpui.rs/) (pinned at 0.2.2): the app is the
+crate `crates/inkuno`, the pure logic is `crates/inkuno-logic`, and the root manifest only lists them. This page is the
 map: where things live, which way the dependencies go, and the rules the code keeps.
 
 Inkuno is a rename of Bref by Andrea Larboullet Marin; its home is github.com/kolisachint/inkuno.
@@ -8,12 +9,12 @@ Inkuno is a rename of Bref by Andrea Larboullet Marin; its home is github.com/ko
 ## Layers
 
 ```
-src/
+crates/inkuno/src/
   main.rs      entry point: declares the layers, sends `inkuno mcp` to mcp::run(), then shell::run()
   lang.rs      tr("English", "Français"), re-exported from the logic crate
   actions.rs   the app's actions, dispatched by shortcuts, menus and the palette
   logic/       pure functions: no gpui, no disk, no window. Most modules moved to
-               crates/logic and are re-exported here, so every `crate::logic::…` path keeps working
+               crates/inkuno-logic and are re-exported here, so every `crate::logic::…` path keeps working
   platform/    the outside world: disk, processes, network, OS (no gpui)
   ui/          the look shared by every view: theme, fonts and icons, widgets, figures
   views/       gpui entities: editor, side panel, palette, viewer, one-line field (its text: `ui/line.rs`)
@@ -46,7 +47,7 @@ each, all `impl Shell`:
 
 | File | Subject |
 |---|---|
-| `pane.rs` | the panes and their tabs, which one is active, the file a tab shows (`FileView`); splitting, moving a tab between panes, the saved layout. The panes are placed by the tree `crates/logic/src/layout.rs` (`Node`, leaves = groups), drawn by `render_layout` |
+| `pane.rs` | the panes and their tabs, which one is active, the file a tab shows (`FileView`); splitting, moving a tab between panes, the saved layout. The panes are placed by the tree `crates/inkuno-logic/src/layout.rs` (`Node`, leaves = groups), drawn by `render_layout` |
 | `tabs.rs` | the tab bar of a pane |
 | `notes.rs` | opening, previewing, creating, saving notes; links and wikilinks; a rename rewrites the links to it |
 | `library.rs` | the vault: choosing, scanning, watching, icons, backup, trash; the window's door for `inkuno mcp` (`listen`) |
@@ -71,11 +72,11 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 
 | To change… | Go to |
 |---|---|
-| how Markdown is read (headings, links, tags, styles) | `crates/logic/src/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
-| Markdown tables (cells, paste, rows and columns, sort, format) | `crates/logic/src/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
+| how Markdown is read (headings, links, tags, styles) | `crates/inkuno-logic/src/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
+| Markdown tables (cells, paste, rows and columns, sort, format) | `crates/inkuno-logic/src/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
 | the window's door for `inkuno mcp` (`show`) | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
-| a note written elsewhere while typed in | `crates/logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
+| a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `ui/theme.rs` |
 | icons and fonts | `ui/assets.rs` |
 | the text editor | `views/editor/`: `edit.rs` (changes, undo), `cursor.rs`, `style.rs`, `table.rs` and `grid.rs` (Markdown tables), `blocks.rs`, `find.rs`, `completion.rs`, `links.rs`, `notes.rs` (which cells of a table carry a comment), `format_bar.rs`, `mouse.rs`, `clipboard.rs`, `input.rs` (IME) |
@@ -85,7 +86,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `ui/keys.rs` (how keys are read and shown) |
 | the test of a feature | `shell/tests/` (`end_to_end/` is one session, one file per chapter) |
 | the user guide | `docs/user/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
-| the MCP server (`inkuno mcp`) | `src/mcp/` (`mod.rs` the protocol; `notes.rs` reading and writing; `draw.rs` figures to PNG (`logic/mermaid.rs` `kind()` names the diagram kind); `guide.rs` resources and prompts; `tools.rs` the tool list; `vault.rs` the agent's vault); `main` routes `mcp` before the window. Checked by `src/mcp/check.rs` |
+| the MCP server (`inkuno mcp`) | `crates/inkuno/src/mcp/` (`mod.rs` the protocol; `notes.rs` reading and writing; `draw.rs` figures to PNG (`logic/mermaid.rs` `kind()` names the diagram kind); `guide.rs` resources and prompts; `tools.rs` the tool list; `vault.rs` the agent's vault); `main` routes `mcp` before the window. Checked by `crates/inkuno/src/mcp/check.rs` |
 
 ## How the main parts work
 
@@ -94,7 +95,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   edit touched (the others are kept and shifted). A table of more than 1,500 lines is laid out
   light, with cells shaped only near the screen. A test compares every reused layout with a full
   one on thousands of random edits.
-- **Typing rules** (`crates/logic/src/markdown/lists.rs`): pure functions (`on_enter`, `renumber`) decide
+- **Typing rules** (`crates/inkuno-logic/src/markdown/lists.rs`): pure functions (`on_enter`, `renumber`) decide
   what Enter does on a list line and renumber the list around the cursor.
 - **Vault** (`platform/vault.rs`): the note list, its tags and its text are indexed off the UI
   thread when the vault opens, then kept up to date on each save. Changes made elsewhere are
@@ -123,6 +124,6 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 - **Nothing is destroyed or overwritten on disk**: atomic writes, a `.trash`
   folder, and a taken name is refused.
 - **Interface text** always goes through `tr("English", "Français")`: the app is English-only for now and the French forms are being removed.
-- **Pure first**: logic that can be a pure function lives in `crates/logic/src/` (re-exported through `src/logic/`) and is unit-tested there;
+- **Pure first**: logic that can be a pure function lives in `crates/inkuno-logic/src/` (re-exported through `crates/inkuno-logic/src/`) and is unit-tested there;
   every user journey is tested end to end with simulated keystrokes (GPUI's test platform).
 - **No new dependency** without asking: `Cargo.lock` comes from GPUI 0.2.2's and is fragile.

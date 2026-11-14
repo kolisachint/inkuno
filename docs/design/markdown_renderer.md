@@ -5,9 +5,9 @@
 > cites a `file:line`; anything unverified is marked **needs-eyes**, never asserted.
 > Grounding refs: `docs/design/app-ui.md` §§3 (`app-ui.md:48-106`, tokens + typography
 > system) and 12 (`app-ui.md:411-479`, visual spec v1, esp. §12.2 center canvas).
-> Parser ground truth: `src/logic/markdown/` (`mod.rs`, `tables.rs`, `lists.rs`,
+> Parser ground truth: `crates/inkuno-logic/src/markdown/` (`mod.rs`, `tables.rs`, `lists.rs`,
 > `front.rs`, `dates.rs`, `search.rs`); rendering ground truth:
-> `src/views/editor/` (esp. `layout.rs`, `render.rs`, `paint.rs`, `style.rs`,
+> `crates/inkuno/src/views/editor/` (esp. `layout.rs`, `render.rs`, `paint.rs`, `style.rs`,
 > `embed.rs`, `formulas.rs`, `grid.rs`, `table.rs`); user-facing spec:
 > `docs/user/src/writing.md`.
 
@@ -30,8 +30,8 @@ PDF"), and any new syntax. Source on disk stays plain Markdown
 What exists today (verified by reading code):
 
 - **Block classification** is a line-by-line classifier: `Kind` enum
-  (`src/logic/markdown/mod.rs:21`) + `classify`
-  (`src/logic/markdown/mod.rs:103`) covering `Para`, `Heading(1-6)`,
+  (`crates/inkuno-logic/src/markdown/mod.rs:21`) + `classify`
+  (`crates/inkuno-logic/src/markdown/mod.rs:103`) covering `Para`, `Heading(1-6)`,
   `Bullet`, `Ordered`, `Task(bool)`, `Quote`, `Fence`, `Code`, `Rule`,
   `Table`, `Meta` (front-matter lines). Fences detected by `is_fence`
   (`mod.rs:80` area: `count_fences_and_dollars`; fence predicate nearby).
@@ -39,23 +39,23 @@ What exists today (verified by reading code):
   per-language lexer `code` (`mod.rs:683`) coloring comments / strings /
   numbers / keywords; language name taken from the info string, with
   `"" | "text" | "txt" | "plain" | "mermaid"` treated as uncolored
-  (`src/views/editor/layout.rs:1568`); copy affordance is documented behavior
+  (`crates/inkuno/src/views/editor/layout.rs:1568`); copy affordance is documented behavior
   (`docs/user/src/writing.md:30`).
 - **Inline styles**: `inline` (`mod.rs:278`) over `emphasis` (`mod.rs:295`)
   for `**` bold, `*`/`_` italic, `` ` `` code, `~~` strike, `==` highlight,
   `<u>` underline, `<mark>` colors; markers are flagged `DIM`
-  (`src/logic/markdown/mod.rs`, `DIM` flag; user-visible rule:
+  (`crates/inkuno-logic/src/markdown/mod.rs`, `DIM` flag; user-visible rule:
   "markers stay visible but dimmed", `docs/user/src/writing.md:5`). Bars between
   blocks, checkbox styling, and arrow substitutions (`->` → `→`, etc. via
   `symbols`) follow the same flag pipeline.
 - **Links**: protocol-gated `is_url` / `web_link` + `links`
-  (`src/logic/markdown/mod.rs`, `is_url`/`web_link`/`links` block) for
+  (`crates/inkuno-logic/src/markdown/mod.rs`, `is_url`/`web_link`/`links` block) for
   `[text](address)`, bare `http(s)://` URLs, `[[Wiki]]` targets, `#tag`
   ranges; `[ ]`/`[x]` boxes tracked separately (`checkboxes`).
 - **Lists**: Enter continuation / renumber / restyle live in
-  `src/logic/markdown/lists.rs` (`on_enter`, `renumber`, `restyle`).
+  `crates/inkuno-logic/src/markdown/lists.rs` (`on_enter`, `renumber`, `restyle`).
 - **Front matter**: `front_matter` / `body_start` / keys / values
-  (`src/logic/markdown/front.rs`); `Meta` lines are excluded from heading
+  (`crates/inkuno-logic/src/markdown/front.rs`); `Meta` lines are excluded from heading
   treatment. Title-in-first-line convention per `body_start`.
 - **Canvas contract**: single centered column, Normal width 800
   (`app-ui.md:78-88`, `app-ui.md:259-290`); headings / lists / tasks / quote / code /
@@ -77,12 +77,12 @@ Gaps / **needs-eyes** (not verified — do not claim compliance):
 What exists today:
 
 - **Tables**: pipe parsing via `bars` / `cells`
-  (`src/logic/markdown/tables.rs:7`, `:24`); grid ops (insert/delete/move/
+  (`crates/inkuno-logic/src/markdown/tables.rs:7`, `:24`); grid ops (insert/delete/move/
   sort/transpose) in the same file; source-side column alignment capped by
   `ALIGNED = 100` (`tables.rs:472-494`, `format_table` at `tables.rs:475` —
   beyond that width columns are no longer padded but display is unchanged).
   Editor display: a table line becomes a grid whose cells wrap
-  (`src/views/editor/layout.rs:283`); grid lines themselves never wrap
+  (`crates/inkuno/src/views/editor/layout.rs:283`); grid lines themselves never wrap
   (`layout.rs:1600`); non-table lines wrap at the measure
   (`layout.rs:1752-1754`). Cell styling reuses the inline pipeline per cell
   (`highlights` / `tags` cell paths in `mod.rs`).
@@ -111,32 +111,32 @@ Gaps / **needs-eyes**:
 What exists today:
 
 - **Math**: `$$` fence-line counting in `count_fences_and_dollars`
-  (`src/logic/markdown/mod.rs:80`); formulas drawn as figures *under* their
+  (`crates/inkuno-logic/src/markdown/mod.rs:80`); formulas drawn as figures *under* their
   line, first formula of a line only (`docs/user/src/writing.md:32`); display
-  figures built via `figure::latex` (`src/views/editor/layout.rs:1374`,
+  figures built via `figure::latex` (`crates/inkuno/src/views/editor/layout.rs:1374`,
   `:1796`). Inline `$x^2$` is styled/kept inline, not drawn; PDF draws only
   `$$` formulas (`docs/user/src/writing.md`, "Save as PDF" limits).
 - **Mermaid**: only ` ```mermaid ` blocks whose source is one of
-  class / sequence / state diagrams convert (`src/logic/mermaid.rs`: `kind`,
+  class / sequence / state diagrams convert (`crates/inkuno/src/logic/mermaid.rs`: `kind`,
   `to_diagram`); anything else (flowcharts, `graph TD`, erDiagram, …) counts
   skipped lines, not a figure. Rendering: the block reserves a figure slot
   when the cursor has left it (`layout.rs:1341-1356`), drawn off-thread via
-  `figure::mermaid` (`layout.rs:1348`, engine in `src/ui/figure.rs:41-48`);
+  `figure::mermaid` (`layout.rs:1348`, engine in `crates/inkuno/src/ui/figure.rs:41-48`);
   unreadable source shows "Figure illisible" / "Unreadable figure"
-  (`layout.rs:1356`, `:1862`) — covered by `src/shell/tests/feedback.rs:150-172`
+  (`layout.rs:1356`, `:1862`) — covered by `crates/inkuno/src/shell/tests/feedback.rs:150-172`
   (good diagram draws, bad/empty diagram says so, `figure_count` asserted).
   User rule: diagram under its block once the cursor leaves; magnifier opens
   full-size (`docs/user/src/writing.md:31`; `docs/user/src/writing.md:23`).
 - **Footnotes**: GitHub-style — `[^label]` reference + `[^label]:` definition (see §7-Q3, decided).
-  Parsing in `src/logic/markdown/mod.rs`: references `footnote_ref` (`mod.rs:194`),
+  Parsing in `crates/inkuno-logic/src/markdown/mod.rs`: references `footnote_ref` (`mod.rs:194`),
   definitions `footnote_def` (`mod.rs:238`), document collection `footnotes` (`mod.rs:278`)
   with `count_footnotes` pre-scan (`mod.rs:346`) and per-line defined/undefined styling
   `footnote_flags` (`mod.rs:370`). Defined references render as links with hidden brackets
-  off the edited line (`src/views/editor/layout.rs:687`, `:1629`); undefined ones stay literal.
+  off the edited line (`crates/inkuno/src/views/editor/layout.rs:687`, `:1629`); undefined ones stay literal.
   `Ctrl+click` jumps reference → definition and cycles definition → references
-  (`src/views/editor/mouse.rs:696`, hand cursor `src/views/editor/blocks.rs:184`).
-  Export: sharing passes them through literally (`src/logic/sharing.rs:286`); printing keeps
-  the label in place with no link entry (`src/ui/print.rs:279`); PDF prints them in place
+  (`crates/inkuno/src/views/editor/mouse.rs:696`, hand cursor `crates/inkuno/src/views/editor/blocks.rs:184`).
+  Export: sharing passes them through literally (`crates/inkuno-logic/src/sharing.rs:286`); printing keeps
+  the label in place with no link entry (`crates/inkuno/src/ui/print.rs:279`); PDF prints them in place
   with no collected section (`docs/user/src/writing.md`, "Save as PDF" limits).
 
 Gaps / **needs-eyes**:
@@ -154,7 +154,7 @@ What exists today:
 
 - Supported inline HTML is a closed set: `<u>…</u>` for underline (Markdown
   has none — `docs/user/src/writing.md:42`) and `<mark>` / `<mark class="…">`
-  with the five `MARKS` colors (`src/logic/markdown/mod.rs:241`,
+  with the five `MARKS` colors (`crates/inkuno-logic/src/markdown/mod.rs:241`,
   `mark_tag` / `mark_color` / `mark_signs`); `<mark>` portability note:
   "plain HTML, so other apps still show the text highlighted"
   (`docs/user/src/writing.md`, inline-styles list).
@@ -163,8 +163,8 @@ What exists today:
   is no `Html`/`Embed` branch that interprets arbitrary tags.
 - SVG figures from elsewhere are rasterized by resvg, which *ignores*
   `<foreignObject>` HTML and `light-dark()`; `readable` substitutes SVG text
-  (`src/ui/svg.rs:1-9`). Sharing/export strips to readable plain text
-  (`src/logic/sharing.rs:1-34`, rules in `docs/user/src/writing.md`
+  (`crates/inkuno/src/ui/svg.rs:1-9`). Sharing/export strips to readable plain text
+  (`crates/inkuno-logic/src/sharing.rs:1-34`, rules in `docs/user/src/writing.md`
   "Plain-text rules").
 
 Gaps / **needs-eyes**:
@@ -181,9 +181,9 @@ Gaps / **needs-eyes**:
 
 | Tier | Unit (pure logic) | Integration (editor/shell) |
 |------|-------------------|----------------------------|
-| Core | `src/logic/markdown/mod.rs` tests (classify/inline/code/boxes); `lists.rs` Enter/renumber/restyle; `front.rs` matter parsing | `src/shell/tests/end_to_end/writing.rs` (typing/lists/blocks); `outline.rs` (headings skip code blocks); `find_mouse.rs` (marker searchability) |
-| Extended | `src/logic/markdown/tables.rs` tests (cells/paste/format); formula tests with `table_formulas.rs` | `md_tables.rs` (paste/align/wrap thresholds — note `app-ui.md:259-290` recalibration rule), `table_handles.rs`, `table_styles.rs`, `csv.rs` |
-| Optional | `src/logic/mermaid.rs` tests (kind/convert/skip counts); formula evaluator tests (`logic/formula.rs`) | `feedback.rs:150-172` (mermaid good/bad/empty); `diagrams.rs` (bridge diagrams); `media.rs` (pictures/figures); PDF tests for `$$` vs `$…$` |
+| Core | `crates/inkuno-logic/src/markdown/mod.rs` tests (classify/inline/code/boxes); `lists.rs` Enter/renumber/restyle; `front.rs` matter parsing | `crates/inkuno/src/shell/tests/end_to_end/writing.rs` (typing/lists/blocks); `outline.rs` (headings skip code blocks); `find_mouse.rs` (marker searchability) |
+| Extended | `crates/inkuno-logic/src/markdown/tables.rs` tests (cells/paste/format); formula tests with `table_formulas.rs` | `md_tables.rs` (paste/align/wrap thresholds — note `app-ui.md:259-290` recalibration rule), `table_handles.rs`, `table_styles.rs`, `csv.rs` |
+| Optional | `crates/inkuno/src/logic/mermaid.rs` tests (kind/convert/skip counts); formula evaluator tests (`logic/formula.rs`) | `feedback.rs:150-172` (mermaid good/bad/empty); `diagrams.rs` (bridge diagrams); `media.rs` (pictures/figures); PDF tests for `$$` vs `$…$` |
 | Sanitized | `mod.rs` mark-tag tests (`mark_tag`/`mark_color`); `sharing.rs` plain-text rules | Export/copy tests (Markdown vs plain-text copy, `docs/user/src/writing.md` "Copy and share"); PDF "not printed" list |
 
 Rule for all tiers: when a threshold or pixel value changes (e.g. Normal 800,
@@ -285,7 +285,7 @@ must state which side of the split a new knob lives on.
 ### 9.3 Implementation follow-up (for the editor crew — DO NOT implement here)
 
 - [ ] Implement §9.1 containment (table / code internal scroll/clip,
-  alignment preserved) in `src/views/editor/` (`layout.rs`, `grid.rs`,
+  alignment preserved) in `crates/inkuno/src/views/editor/` (`layout.rs`, `grid.rs`,
   `table.rs`) citing this doc.
 - [ ] Confirm §9.2 split: no hard-coded width / type-scale / padding /
   alignment left in engine paths; application passes them in per consumer
