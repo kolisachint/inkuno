@@ -72,6 +72,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Ctrl+E` | Vault tree |
 | Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate |
 |  | Recent notes |
+|  | Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it |
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Ctrl+B` | Sidebar: show or hide the side panel (the rail stays) |

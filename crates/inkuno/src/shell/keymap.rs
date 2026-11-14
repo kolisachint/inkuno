@@ -102,6 +102,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&nav::ShowTree, tr("Vault tree", "Arbre du coffre")),
                 t(tr("Current file", "Fichier affiché"), tr("The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate", "L'arbre marque le fichier du volet et de l'onglet actifs, y compris les schémas, images et tableaux ; la sélection reste distincte")),
                 k(&nav::ShowRecent, tr("Recent notes", "Notes récentes")),
+                k(&nav::ShowScratch, tr("Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it", "Brouillons : le panneau les liste, les plus récents d'abord ; Entrée en ouvre un, Suppr. le jette")),
                 t(tr("A picture", "Une image"), tr("Shown in place of the note", "Affichée à la place de la note")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
                 k(&ToggleSidebar, tr("Sidebar: show or hide the side panel (the rail stays)", "Barre latérale : afficher ou masquer le panneau latéral (le rail reste)")),

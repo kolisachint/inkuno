@@ -274,6 +274,9 @@ impl Shell {
         if self.nav.mode == Mode::Recent {
             self.recent.hash(&mut hasher);
         }
+        if self.nav.mode == Mode::Scratch {
+            self.scratch_rev.hash(&mut hasher);
+        }
         for note in &self.notes {
             (&note.path, &note.name).hash(&mut hasher);
         }
@@ -281,12 +284,16 @@ impl Shell {
     }
 
     pub(super) fn nav_rows(&self) -> Vec<Row> {
+        // Scratch notes are no vault's: their list needs none.
+        if self.nav.mode == Mode::Scratch {
+            return self.scratch_rows();
+        }
         let Some(root) = &self.vault else {
             return Vec::new();
         };
         match self.nav.mode {
             Mode::Tree => tree_rows(root, &self.notes, &self.dirs, &self.images, &self.nav.open),
-            Mode::Search | Mode::Outline => Vec::new(),
+            Mode::Search | Mode::Outline | Mode::Scratch => Vec::new(),
             Mode::Recent => self
                 .by_recency()
                 .into_iter()
@@ -804,6 +811,10 @@ impl Shell {
                 let current = self.pane().displayed_path() == Some(&row.path);
                 // In the recent list, the note's folder serves as detail.
                 let detail = match (&self.vault, row.path.parent()) {
+                    // A scratch note: the moment it was made.
+                    _ if self.nav.mode == Mode::Scratch => {
+                        logic::scratch::label(&vault::stem(&row.path)).unwrap_or_default()
+                    }
                     (Some(root), Some(dir)) if !tree => dir
                         .strip_prefix(root)
                         .map(|d| d.display().to_string())
@@ -825,7 +836,7 @@ impl Shell {
                 };
                 let wide = closed.is_some();
                 let said = closed.map(|_| detail.clone());
-                let foldable = self.nav.mode != Mode::Recent;
+                let foldable = !matches!(self.nav.mode, Mode::Recent | Mode::Scratch);
                 let chevron = match row.dir {
                     Some(true) => "chevron-down.svg",
                     Some(false) => "chevron-right.svg",
@@ -1486,6 +1497,7 @@ impl Shell {
             (Mode::Tree, Some(root)) => vault::stem(root),
             (Mode::Search, _) => tr("Search", "Recherche").to_string(),
             (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
+            (Mode::Scratch, _) => tr("Scratch", "Brouillons").to_string(),
             _ => tr("Recent", "Récents").to_string(),
         };
         let header = div()
@@ -1717,6 +1729,11 @@ impl Shell {
                         tr("New note:", "Nouvelle note :")
                     ),
                 },
+                Mode::Scratch => tr(
+                    "No scratch note: Ctrl+N makes one",
+                    "Aucun brouillon : Ctrl+N en fait un",
+                )
+                .to_string(),
                 _ => tr("No recent note", "Aucune note récente").to_string(),
             };
             div()

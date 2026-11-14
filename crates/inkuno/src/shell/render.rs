@@ -247,6 +247,9 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &nav::ShowRecent, window, cx| {
                 this.show_nav(Mode::Recent, false, window, cx)
             }))
+            .on_action(cx.listener(|this, _: &nav::ShowScratch, window, cx| {
+                this.show_nav(Mode::Scratch, false, window, cx)
+            }))
             .on_action(
                 cx.listener(|this, _: &nav::NewFolder, window, cx| this.new_folder(window, cx)),
             )
