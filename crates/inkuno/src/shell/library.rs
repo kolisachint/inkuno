@@ -514,6 +514,17 @@ impl Shell {
                         .unwrap_or_default()
                         .to_string_lossy()
                         .into_owned();
+                    if let Some(from) = chosen {
+                        let moved = platform::revisions::restore_along(Some(&root), from, &to);
+                        if let Err(e) = moved {
+                            this.fail(
+                                tr("Revisions not put back", "Révisions non remises"),
+                                &to,
+                                e,
+                                cx,
+                            );
+                        }
+                    }
                     this.say(
                         Tone::Done,
                         format!("{} {name}", tr("Restored:", "Restauré :")),

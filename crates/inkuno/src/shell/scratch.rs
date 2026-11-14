@@ -149,18 +149,21 @@ impl Shell {
     /// Discard: the file goes to the scratch folder's `.trash` (nothing is destroyed), and the tab
     /// with it. A file that cannot be moved keeps its tab and its text.
     pub(super) fn discard_scratch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(path) = self.pane().path.clone()
-            && let Err(e) = platform::scratch::trash(&path)
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            let name = vault::stem(&path);
-            let what = tr("Not discarded", "Non jeté");
-            self.say(
-                Tone::Failed,
-                format!("{what} « {name} » : {}", crate::lang::io_reason(&e)),
-                cx,
-            );
-            return;
+        if let Some(path) = self.pane().path.clone() {
+            match platform::scratch::trash(&path) {
+                Ok(trashed) => self.trash_scratch_history(&path, &trashed, cx),
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    let name = vault::stem(&path);
+                    let what = tr("Not discarded", "Non jeté");
+                    self.say(
+                        Tone::Failed,
+                        format!("{what} « {name} » : {}", crate::lang::io_reason(&e)),
+                        cx,
+                    );
+                    return;
+                }
+                Err(_) => {}
+            }
         }
         // Nothing is left to write: the tab closes without saving the text it had.
         let pane = self.pane_mut();
@@ -179,14 +182,26 @@ impl Shell {
         if !self.pane().scratch {
             return false;
         }
-        let dir = self.nav.target_dir().unwrap_or(root);
+        let dir = self.nav.target_dir().unwrap_or(root.clone());
         let scratch_file = self.pane().path.clone();
         let pane = self.pane_mut();
         (pane.scratch, pane.path, pane.new_dir) = (false, None, Some(dir));
         (pane.synced, pane.fresh, pane.dirty, pane.origin) = (true, false, true, None);
         if self.flush_one(cx) {
-            // A copy left behind by a failed delete is no loss: the note is in the vault.
+            // The history follows the note into the vault; a copy left behind by a failed delete
+            // is no loss: the note is in the vault.
             if let Some(file) = scratch_file {
+                let new = self.pane().path.clone();
+                if let Some(new) = new
+                    && let Err(e) = platform::revisions::move_along(Some(&root), &file, &new)
+                {
+                    self.fail(
+                        tr("Revisions not moved", "Révisions non déplacées"),
+                        &file,
+                        e,
+                        cx,
+                    );
+                }
                 let _ = fs::remove_file(file);
             }
             self.pane_mut().new_dir = None;
@@ -242,6 +257,18 @@ impl Shell {
         cx.notify();
     }
 
+    /// A trashed scratch note's revisions go to the scratch folder's trash with it.
+    fn trash_scratch_history(&mut self, path: &Path, trashed: &Path, cx: &mut Context<Self>) {
+        if let Err(e) = platform::revisions::trash_along(None, path, trashed) {
+            self.fail(
+                tr("Revisions not moved", "Révisions non déplacées"),
+                path,
+                e,
+                cx,
+            );
+        }
+    }
+
     /// Deletes scratch notes, as Discard does: each goes to the scratch `.trash`; an open one leaves
     /// with its tab, unsaved text included. A file that cannot be moved is said so.
     fn delete_scratch(&mut self, paths: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
@@ -249,16 +276,20 @@ impl Shell {
             if let Some(tab) = self.pane_showing(path) {
                 self.focus_pane(tab, window, cx);
                 self.discard_scratch(window, cx);
-            } else if let Err(e) = platform::scratch::trash(path)
-                && e.kind() != std::io::ErrorKind::NotFound
-            {
-                let what = tr("Not deleted", "Non supprimé");
-                let name = vault::stem(path);
-                self.say(
-                    Tone::Failed,
-                    format!("{what} « {name} » : {}", crate::lang::io_reason(&e)),
-                    cx,
-                );
+            } else {
+                match platform::scratch::trash(path) {
+                    Ok(trashed) => self.trash_scratch_history(path, &trashed, cx),
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                        let what = tr("Not deleted", "Non supprimé");
+                        let name = vault::stem(path);
+                        self.say(
+                            Tone::Failed,
+                            format!("{what} « {name} » : {}", crate::lang::io_reason(&e)),
+                            cx,
+                        );
+                    }
+                    Err(_) => {}
+                }
             }
         }
         self.nav.marked.clear();

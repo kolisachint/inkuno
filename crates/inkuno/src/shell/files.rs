@@ -71,6 +71,15 @@ impl Shell {
         reload: bool,
         cx: &mut Context<Self>,
     ) {
+        // The note's revisions follow it.
+        if let Err(e) = platform::revisions::move_along(self.vault.as_deref(), from, to) {
+            self.fail(
+                tr("Revisions not moved", "Révisions non déplacées"),
+                from,
+                e,
+                cx,
+            );
+        }
         let shift = |p: &PathBuf| match p.strip_prefix(from) {
             Ok(rest) if rest.as_os_str().is_empty() => to.to_path_buf(),
             Ok(rest) => to.join(rest),
@@ -121,6 +130,15 @@ impl Shell {
                 );
             }
         };
+        // Its revisions go to the vault's trash too: kept, and back with an undo.
+        if let Err(e) = platform::revisions::trash_along(Some(root), path, &trashed) {
+            self.fail(
+                tr("Revisions not moved", "Révisions non déplacées"),
+                path,
+                e,
+                cx,
+            );
+        }
         let name = path
             .file_name()
             .unwrap_or_default()
@@ -159,6 +177,15 @@ impl Shell {
         let made = to.parent().map_or(Ok(()), std::fs::create_dir_all);
         match made.and_then(|()| vault::rename(from, to)) {
             Ok(()) => {
+                if let Err(e) = platform::revisions::restore_along(self.vault.as_deref(), from, to)
+                {
+                    self.fail(
+                        tr("Revisions not put back", "Révisions non remises"),
+                        to,
+                        e,
+                        cx,
+                    );
+                }
                 self.say(
                     Tone::Done,
                     format!(
