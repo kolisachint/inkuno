@@ -8,7 +8,7 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use super::scratch;
@@ -69,16 +69,39 @@ pub fn save(
     text: &str,
     unix: i64,
 ) -> io::Result<Saved> {
+    save_with(home, note, author, memo, text, unix, true)
+}
+
+/// `save`, with the publish route chosen: hard links, or (`use_links` false) the exclusive copy
+/// that file systems without links take. Tests force the copy route through here.
+fn save_with(
+    home: &Home,
+    note: &Path,
+    author: &str,
+    memo: Option<&str>,
+    text: &str,
+    unix: i64,
+    use_links: bool,
+) -> io::Result<Saved> {
     let folder = home
         .folder(note)
         .ok_or_else(|| io::Error::other("the note is not in its vault or scratch folder"))?;
     // Another save may take the number between the listing and the publish: the listing is then
     // read again, and the revision is numbered after the new latest. No file is overwritten.
-    for _ in 0..SAVE_TRIES {
+    for attempt in 0..SAVE_TRIES {
         let numbers = numbers(&folder)?;
         let latest = numbers.iter().copied().max();
         if let Some(latest) = latest {
-            let last = read(&folder.join(revision::file_name(latest)))?;
+            let last = match read(&folder.join(revision::file_name(latest))) {
+                Ok(last) => last,
+                // The copy route shows its file before its bytes are all written: a racing save
+                // reads it again, after a moment. A file that stays unreadable is an error.
+                Err(e) if e.kind() == io::ErrorKind::InvalidData && attempt + 1 < SAVE_TRIES => {
+                    std::thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
             if last.text == text {
                 return Ok(Saved::Unchanged { latest });
             }
@@ -95,7 +118,7 @@ pub fn save(
             text: text.to_string(),
         };
         fs::create_dir_all(&folder)?;
-        match publish(&file, &revision::render(&rev)) {
+        match publish_with(&file, &revision::render(&rev), use_links) {
             Ok(()) => return Ok(Saved::Made { number, file }),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e),
@@ -112,9 +135,9 @@ const SAVE_TRIES: usize = 64;
 
 /// Creates `file` with `text` in it, and fails (`AlreadyExists`) when it exists: a revision is
 /// never overwritten. The text goes to a temporary file of its own in the same folder first, then
-/// is hard-linked to `file`, so `file` appears whole or not at all, and two saves never share a
-/// temporary file.
-fn publish(file: &Path, text: &str) -> io::Result<()> {
+/// is hard-linked to `file` (or, where links are refused, copied into `file` exclusively), so two
+/// saves never share a temporary file. The temporary file is removed in every case.
+fn publish_with(file: &Path, text: &str, use_links: bool) -> io::Result<()> {
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let name = file.file_name().unwrap_or_default().to_string_lossy();
     let tmp = file.with_file_name(format!(
@@ -130,9 +153,39 @@ fn publish(file: &Path, text: &str) -> io::Result<()> {
             out.write_all(text.as_bytes())?;
             out.sync_all()
         });
-    let linked = written.and_then(|()| fs::hard_link(&tmp, file));
+    let linked = written.and_then(|()| link_or_copy(&tmp, file, use_links));
     let _ = fs::remove_file(&tmp);
     linked
+}
+
+/// Gives `file` the bytes of `tmp`: a hard link when `use_links` and the file system has them. A
+/// failure other than `AlreadyExists` (no links on this file system, a permission, a cross-device
+/// link) falls back to the exclusive copy. `AlreadyExists` is returned as it is, on both routes.
+fn link_or_copy(tmp: &Path, file: &Path, use_links: bool) -> io::Result<()> {
+    if use_links {
+        match fs::hard_link(tmp, file) {
+            Err(e) if e.kind() != io::ErrorKind::AlreadyExists => {}
+            done => return done,
+        }
+    }
+    copy_exclusive(tmp, file)
+}
+
+/// Copies `from` to `to`, which must not exist (`AlreadyExists` otherwise, and nothing is touched).
+/// If the copy fails after `to` was created, that partial file is removed.
+fn copy_exclusive(from: &Path, to: &Path) -> io::Result<()> {
+    let mut out = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(to)?;
+    let copied = fs::File::open(from)
+        .and_then(|mut src| io::copy(&mut src, &mut out))
+        .and_then(|_| out.sync_all());
+    drop(out);
+    if copied.is_err() {
+        let _ = fs::remove_file(to);
+    }
+    copied
 }
 
 /// The time now, as Unix seconds.
@@ -370,7 +423,17 @@ mod tests {
 
     #[test]
     fn racing_saves_each_get_their_own_revision() {
-        let root = temp("race");
+        racing_saves(true);
+    }
+
+    #[test]
+    fn racing_saves_on_the_copy_route_each_get_their_own_revision() {
+        racing_saves(false);
+    }
+
+    /// Eight writers racing `save_with` on one note, on the link route or the copy route.
+    fn racing_saves(use_links: bool) {
+        let root = temp(if use_links { "race" } else { "race-copy" });
         let home = Home::Vault(root.clone());
         let note = root.join("plan.md");
         let writers: Vec<_> = (0..8)
@@ -380,7 +443,7 @@ mod tests {
                     (0..12)
                         .map(|i| {
                             let text = format!("writer {t}, save {i}\n");
-                            match save(&home, &note, "ana", None, &text, 0) {
+                            match save_with(&home, &note, "ana", None, &text, 0, use_links) {
                                 Ok(Saved::Made { number, file }) => (number, file, text),
                                 other => panic!("a save failed: {other:?}"),
                             }
@@ -413,6 +476,32 @@ mod tests {
         assert_eq!(names.len(), 96, "{names:?}");
         assert!(names.iter().all(|n| revision::number_of(n).is_some()));
         assert_eq!(all(&home, &note).unwrap().len(), 96);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn publishing_never_overwrites_on_either_route() {
+        let root = temp("publish");
+        for use_links in [true, false] {
+            let file = root.join(format!("{use_links}.md"));
+            publish_with(&file, "one\n", use_links).unwrap();
+            assert_eq!(fs::read_to_string(&file).unwrap(), "one\n");
+            let taken = publish_with(&file, "two\n", use_links).unwrap_err();
+            assert_eq!(taken.kind(), io::ErrorKind::AlreadyExists);
+            assert_eq!(fs::read_to_string(&file).unwrap(), "one\n");
+        }
+        // A copy that fails leaves no partial revision behind.
+        let file = root.join("partial.md");
+        assert!(copy_exclusive(&root.join("missing.tmp"), &file).is_err());
+        assert!(!file.exists());
+        // Nothing is left of the temporary files.
+        let left: Vec<String> = fs::read_dir(&root)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".tmp"))
+            .collect();
+        assert!(left.is_empty(), "{left:?}");
         let _ = fs::remove_dir_all(root);
     }
 
