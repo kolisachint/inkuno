@@ -175,7 +175,7 @@ impl Shell {
     ) -> Option<Stateful<Div>> {
         let t = self.theme;
         let tabs = self.groups[group].tabs.clone();
-        if tabs.len() < 2 {
+        if tabs.len() < 2 || self.focus_mode {
             return None;
         }
         let shown = self.groups[group].shown;

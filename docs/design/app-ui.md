@@ -653,3 +653,7 @@ Normal 800 is the default (§10.4 lock released for this change).
 7. **Linux CI confirms `make-docs` cells.** CI on Linux re-runs the
    `make-docs` cells as the confirmation gate for the sweep + typography
    landings. Status: queued.
+
+### Built 2026-11-14 (clean focus chrome, owner brief)
+
+- Built: `Ctrl+B` sidebar (Bold moves to `Ctrl+Alt+B`), `Ctrl+Shift+S` title bar (Linux; macOS/Windows keep the system bar, gpui 0.2.2 sets it at window creation only), `F9` focus mode (rail, docks, tab bar and title bar hidden; note edge to edge; the 8 px gaps of normal mode stay). Two rail switches at its foot. Decisions and tests: `keybindings.md` §8.

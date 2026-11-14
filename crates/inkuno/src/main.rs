@@ -36,12 +36,12 @@ fn help_text() -> String {
          startup; edit, save, and either restart or wait for the hot-reload below.\n\
          \n\
          keybindings.json:\n\
-         \u{20} {{\"version\": 1, \"bindings\": {{\"app::Palette\": [\"secondary-p\"],\n\
-         \u{20} \u{20} \"editor::Find\": [\"secondary-f\"], \"nav::Graph\": []}},\n\
-         \u{20} \u{20} \"reset\": [\"app::Help\"]}}\n\
+         \u{20} {{\"version\": 1, \"bindings\": {{\"app::OpenPalette\": [\"secondary-p\"],\n\
+         \u{20} \u{20} \"editor::Find\": [\"secondary-f\"], \"nav::ShowTree\": []}},\n\
+         \u{20} \u{20} \"reset\": [\"app::ToggleHelp\"]}}\n\
          \u{20} one chord per action (the legacy file allows several, space-separated);\n\
          \u{20} `\"\"` or `[]` unbinds; `\"reset\"` restores the default keys of its actions.\n\
-         \u{20} action names are the stable `group::Name` rows of the help (e.g. app::Palette).\n\
+         \u{20} action names are `group::Name` as the code names them (e.g. app::OpenPalette).\n\
          \n\
          themes.json:\n\
          \u{20} {{\"version\": 1, \"themes\": [{{\"name\": \"My Dark\", \"base\": \"Inkuno Dark\",\n\

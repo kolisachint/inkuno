@@ -485,6 +485,15 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::ToggleFocus",
+            tr(
+                "Focus mode: the note alone, edge to edge",
+                "Mode focus : la note seule, bord à bord",
+            ),
+            "expand.svg",
+            Look,
+        ),
+        (
             "app::ToggleTitleBar",
             tr(
                 "Title bar: show or hide it",

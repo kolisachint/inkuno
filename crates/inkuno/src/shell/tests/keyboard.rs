@@ -311,3 +311,26 @@ fn ctrl_b_toggles_the_sidebar_from_the_note(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-end shift-left shift-left shift-left secondary-alt-b");
     assert_eq!(text(cx), "# Note\n\n**mot**");
 }
+
+/// The three chrome actions are in the command palette (typed as they do: sidebar, title bar,
+/// focus mode), each with the key it is given in the help panel.
+#[gpui::test]
+fn chrome_actions_are_in_the_palette(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "chrome-palette");
+    fs::write(root.join("Note.md"), "# Note\n").unwrap();
+    shell.update(cx, |s, cx| {
+        s.rescan(&root, cx);
+        s.open_note(&root.join("Note.md"), cx);
+    });
+    cx.run_until_parked();
+    let (commands, _) = shell.update_in(cx, |s, window, cx| s.palette_commands(window, cx));
+    let keys = |action: &str| {
+        commands
+            .iter()
+            .find(|c| c.action == action)
+            .map(|c| c.keys.clone())
+    };
+    assert_eq!(keys("app::ToggleSidebar"), Some(format!("{MOD}+B")));
+    assert_eq!(keys("app::ToggleTitleBar"), Some(format!("{MOD}+Shift+S")));
+    assert_eq!(keys("app::ToggleFocus"), Some("F9".to_string()));
+}

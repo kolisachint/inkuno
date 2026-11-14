@@ -85,7 +85,8 @@ impl Render for Shell {
         #[cfg(test)]
         let tiling = tiling.or(self.client.then(Default::default));
         let client = tiling.is_some();
-        let framed = tiling.is_some_and(|t| !t.is_tiled())
+        let framed = !self.focus_mode
+            && tiling.is_some_and(|t| !t.is_tiled())
             && !window.is_maximized()
             && !window.is_fullscreen();
         let inset = if framed { SHADOW } else { px(0.) };
@@ -93,10 +94,10 @@ impl Render for Shell {
         self.nav.left = inset;
         self.nav.native_bar = !client;
         // The bar the app draws: Linux, and only while it is shown (`app::ToggleTitleBar`).
-        let title_bar = client && self.nav.title_bar;
+        let title_bar = client && self.nav.title_bar && !self.focus_mode;
         self.nav.total = window.viewport_size().width
             - inset * 2.
-            - if self.vault.is_some() {
+            - if self.vault.is_some() && !self.focus_mode {
                 nav::GAP
             } else {
                 px(0.)
@@ -194,15 +195,17 @@ impl Render for Shell {
                 .gap_2()
                 .children(toasts);
             // The left dock first: it settles which tool takes the keys.
-            let docks = self.render_nav(window, cx);
-            let docked = self.render_right_dock(window, cx);
+            // Focus mode draws neither the rail, nor the docks, nor the comments: the note alone.
+            let focus = self.focus_mode;
+            let docks = (!focus).then(|| self.render_nav(window, cx));
+            let docked = (!focus)
+                .then(|| self.render_right_dock(window, cx))
+                .flatten();
             // The ground shows around the sheets: 8 px above, right and below; the rail has none on its side.
             body.flex()
-                .pt(nav::GAP)
-                .pr(nav::GAP)
-                .pb(nav::GAP)
-                .child(docks)
-                .when(self.nav.panel != Panel::Full, |d| {
+                .when(!focus, |d| d.pt(nav::GAP).pr(nav::GAP).pb(nav::GAP))
+                .children(docks)
+                .when(focus || self.nav.panel != Panel::Full, |d| {
                     d.child(note).children(comments).children(docked)
                 })
                 .children(self.palette.clone())
@@ -384,7 +387,14 @@ impl Render for Shell {
                 this.dismiss_failures();
                 this.close_icons(window, cx);
                 this.close_menu(window, cx);
+                // Escape with nothing left to close in the note: out of focus mode.
+                if this.focus_mode {
+                    this.toggle_focus_mode(window, cx);
+                }
             }))
+            .on_action(
+                cx.listener(|this, _: &ToggleFocus, window, cx| this.toggle_focus_mode(window, cx)),
+            )
             .on_action(
                 cx.listener(|this, _: &ContextMenu, window, cx| this.menu_from_keys(window, cx)),
             )
@@ -503,6 +513,16 @@ pub(super) fn resize_edge(pos: Point<Pixels>, size: Size<Pixels>) -> Option<Resi
 }
 
 impl Shell {
+    /// F9: the note alone, edge to edge, or back to the chrome as it was. Keys that sat in a dock
+    /// that is no longer drawn go back to the note.
+    pub(super) fn toggle_focus_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.focus_mode = !self.focus_mode;
+        if self.focus_mode && self.nav.focus.contains_focused(window, cx) {
+            window.focus(&self.pane().editor.focus_handle(cx));
+        }
+        cx.notify();
+    }
+
     /// Ctrl+Shift+S: the title bar the app draws shown or hidden, the choice kept in the layout file.
     /// Where the system draws the bar (macOS, Windows) the app draws none, so nothing moves there.
     pub(super) fn toggle_title_bar(&mut self, cx: &mut Context<Self>) {
@@ -875,7 +895,7 @@ impl Shell {
         });
         // The comments column takes what the panel and the note leave it, 270 px at
         // most; short of 140 px, it does not show (its button stays, a wider window brings it back).
-        let column = (active && !said.is_empty() && !self.comments_shut)
+        let column = (active && !said.is_empty() && !self.comments_shut && !self.focus_mode)
             .then(|| {
                 self.nav.aside = px(270.);
                 let panel = if self.nav.panel == Panel::Split {
@@ -1109,7 +1129,12 @@ impl Shell {
             });
         // From the window's edge once (see `traffic_pad`): the pane starts past the sidebar.
         let traffic_edge = if traffic { self.traffic_pad() } else { px(0.) };
-        let area = ui::widgets::sheet(t)
+        // Focus mode: the note fills the window, without the sheet's corners and shadow.
+        let sheet = match self.focus_mode {
+            true => div().bg(t.bg).overflow_hidden(),
+            false => ui::widgets::sheet(t),
+        };
+        let area = sheet
             .id(("pane", pane))
             .debug_selector(move || format!("pane-{group}"))
             .track_focus(&self.pane().zone)

@@ -12,6 +12,7 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - `shortcuts.md` is generated and checked on Linux CI only.
 - Docs and packaging folders restructured: `book/` -> `docs/user/`, `docs/screenshots` and `docs/site` -> `docs/assets/`, Linux packaging -> `packaging/linux/`.
 - The app moved to `crates/inkuno`, logic to `crates/inkuno-logic`; the root manifest is workspace-only.
+- Clean focus chrome (2026-11-14): `Ctrl+B` sidebar (Bold on `Ctrl+Alt+B`), `Ctrl+Shift+S` title bar, `F9` focus mode (edge to edge), shortcuts from `keybindings.json` documented in the settings page.
 
 ## Kept ideas (not built)
 
@@ -26,6 +27,7 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Follow-ups
 
+- Help-panel shortcut changes are saved to the `keys` file (`crates/inkuno/src/shell/help.rs:227`), but once `keybindings.json` exists it wins at launch and nothing reads `keys` again: they are lost at the next start. Also `--help` says the JSON is hot-reloaded; it is read at launch only (`crates/inkuno/src/main.rs`).
 - GitHub Pages must be set to deploy from GitHub Actions, else the Docs deploy job fails (`.github/workflows/docs.yml:3`).
 - `shortcuts_page_is_current` is compiled out on macOS; the page cannot be regenerated on a Mac (`crates/inkuno/src/shell/tests/shortcuts_page.rs:66`).
 - Two macOS-only clippy warnings fail `-D warnings` locally (`crates/inkuno/src/platform/mod.rs:7`, `crates/inkuno/src/shell/tests/shortcuts_page.rs:7`).
