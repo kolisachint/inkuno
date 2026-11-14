@@ -67,19 +67,16 @@ Diffs are derived when asked, never stored. Line-level, from the same diff the m
 
 ## Command line
 
-The same binary, with no window; it works whether or not the app runs (the app's file watcher
-sees the files). Code: `crates/inkuno/src/cli/` (`rev.rs`, `keys.rs`); end-to-end tests:
-`crates/inkuno/tests/cli.rs`.
+The versions are driven by the command line, which works whether or not the app runs (the app's file
+watcher sees the files). The design of the command line, its exit codes and the other commands
+(`list`, `read`, `new`, `keys`…) are in [cli.md](cli.md). Code: `crates/inkuno/src/cli/rev.rs`;
+end-to-end tests: `crates/inkuno/tests/cli.rs`.
 
 ```
 inkuno rev save <note> [--author NAME] [-m TEXT]     prints the new revision number
 inkuno rev list <note> [--json]                      newest first
 inkuno rev show <note> <n> [--json]                  the text of revision n
 inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
-inkuno keys list [--json]
-inkuno keys set <action> <chord>                     "" removes the shortcut
-inkuno keys reset <action>...
-inkuno help [rev|keys]                               and --help on each command
 ```
 
 - The vault of a note: the nearest folder above it with an `.inkuno` folder; else the vault the app
@@ -87,11 +84,7 @@ inkuno help [rev|keys]                               and --help on each command
   folder) uses the scratch folder.
 - `--author` defaults to the app's author setting, else `INKUNO_AUTHOR`, else the system user name,
   else `unknown`.
-- Errors: stderr, exit 1. A wrong command line: stderr, exit 2.
-- `keys set` reuses the app's rules (`ui/keys.rs`, `shell/keymap.rs`): the actions that can change,
-  refused chords, clashes; it writes `keybindings.json` only when the app's own reader takes it back
-  without a fault.
-- One chord per action, as the file holds one. `keys set` takes a single chord (or `""`).
+- Errors and exit codes: as in [cli.md](cli.md).
 
 ## Decisions
 
@@ -102,7 +95,7 @@ inkuno help [rev|keys]                               and --help on each command
 | 2026-11-14 | Explicit checkpoints only, by the chord or the command line. Files are live on disk, so saving a file never makes a revision. |
 | 2026-11-14 | One author per snapshot. Multi-author views are derived from automatic single-author snapshots taken around each agent write (`kind: auto`, planned, not built). |
 | 2026-11-14 | Agent changes stay tinted and pending until the human accepts, rejects or comments; the human edits them only after accepting; an agent write that touches text the human changed since the agent read it is refused (planned, not built). |
-| 2026-11-14 | The command line replaces the MCP server; the MCP server is removed in a later step (planned). The MCP server is not changed by this work. |
+| 2026-11-14 | The command line replaces the MCP server, and the server is removed: done, see [cli.md](cli.md). |
 | 2026-11-14 | An in-app agent talks over a local socket with the same command line as version 2 (planned). |
 
 ## Not built yet
@@ -111,4 +104,3 @@ inkuno help [rev|keys]                               and --help on each command
 - Automatic (`auto`) snapshots and agent live edits.
 - Restoring a trashed note's history when the bin holds it under another name (the undo of a trash
   and the Trash panel's restore bring it back by name).
-- The MCP server's rename does not move the history (the server is not changed by this work).
