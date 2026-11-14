@@ -608,23 +608,39 @@ fn comment(args: &[String]) -> i32 {
     let opts = match read_args(
         "comment",
         args,
-        &["--passage", "--text"],
+        &["--passage", "--text", "--file"],
         &[],
-        (1, 1, "a note"),
+        (0, 1, "a note or --file PATH"),
     ) {
         Ok(opts) => opts,
         Err(code) => return code,
     };
+    let file = opts.values.get("--file");
+    if file.is_some_and(|path| path.is_empty()) {
+        return usage("comment: --file needs a path");
+    }
+    if file.is_some() && opts.values.contains_key("--vault") {
+        return usage("comment: --file names a file without a vault; drop --vault");
+    }
+    let mut tool = json!({});
+    match (file, opts.words.first()) {
+        (Some(_), Some(_)) => return usage("comment: give a note or --file, not both"),
+        (None, None) => return usage("comment needs a note, or --file PATH"),
+        (Some(path), None) => tool["file"] = json!(path),
+        (None, Some(note)) => tool["note"] = json!(note),
+    }
     let (Some(passage), Some(text)) = (opts.values.get("--passage"), text_value(&opts, "--text"))
     else {
         return usage("comment: give --passage and --text (--text - reads standard input)");
     };
-    let tool = json!({"note": opts.words[0], "passage": passage, "comment": text});
-    finish(
-        on_vault(&opts, |vault| ops::add_comment(vault, &tool)),
-        opts.json,
-        text::path,
-    )
+    tool["passage"] = json!(passage);
+    tool["comment"] = json!(text);
+    let outcome = if file.is_some() {
+        Ok(ops::add_comment_file(&tool))
+    } else {
+        on_vault(&opts, |vault| ops::add_comment(vault, &tool))
+    };
+    finish(outcome, opts.json, text::path)
 }
 
 fn render(args: &[String]) -> i32 {
@@ -925,13 +941,18 @@ example:
 ";
 
 const COMMENT_HELP: &str = "\
-inkuno comment <note> --passage P --text C
-    wraps one passage of the note in {==P==}{>>C<<}. The passage must occur once.
-    --text - reads the comment from standard input. Prints the note's path; --json: the result as JSON
+inkuno comment <note> --passage P --text C [--json]
+inkuno comment --file PATH --passage P --text C [--json]
+    wraps one passage of the note in {==P==}{>>C<<}. The passage must occur once, on one line.
+    --file names a Markdown file by its path, outside any vault: no vault is needed. A note and
+    --file together, or --vault with --file, is a usage error.
+    --text - reads the comment from standard input. Its line breaks become spaces.
+    Prints the note's path (--file: the file's absolute path); --json: the result as JSON
     In a table cell, a | of the comment is written \\|.
 
 example:
   inkuno comment Plan --passage \"two weeks\" --text \"Is this realistic?\"
+  inkuno comment --file ~/notes/scratch.md --passage \"two weeks\" --text \"Is this realistic?\"
 ";
 
 const RENDER_HELP: &str = "\

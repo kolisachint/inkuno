@@ -2,7 +2,10 @@
 //! atomic, a rename rewrites links unless another note still has the old name, and nothing
 //! is deleted.
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use serde_json::{Value, json};
 
@@ -929,40 +932,98 @@ fn daily_template(vault: &Vault) -> Option<std::path::PathBuf> {
     )
 }
 
+/// `inkuno comment <note>`: a note of the vault.
 pub fn add_comment(vault: &mut Vault, args: &Value) -> Outcome {
     let path = match vault_note(vault, args) {
         Ok(path) => path,
         Err(outcome) => return outcome,
     };
-    let passage = match arg_str(args, "passage") {
-        Ok(passage) => passage.to_string(),
+    let (passage, comment) = match comment_args(args) {
+        Ok(pair) => pair,
         Err(message) => return Outcome::err(message),
     };
-    let comment = match arg_str(args, "comment") {
-        Ok(comment) => comment.to_string(),
+    let token = match annotate(&path, &passage, &comment) {
+        Ok(token) => token,
         Err(message) => return Outcome::err(message),
     };
-    let (text, _) = match vault::read_text(&path).map_err(Outcome::err) {
-        Ok(read) => read,
-        Err(outcome) => return outcome,
-    };
-    let next = match comment_on(&text, &passage, &comment) {
-        Ok(next) => next,
-        Err(message) => return Outcome::err(message),
-    };
-    if let Err(message) = files::write(&path, &next).map_err(disk) {
-        return Outcome::err(message);
-    }
     vault.rescan();
-    Outcome::ok(
-        json!({"path": vault::rel(&vault.root, &path), "token": vault::token(next.as_bytes())}),
-    )
+    Outcome::ok(json!({"path": vault::rel(&vault.root, &path), "token": token}))
 }
 
-/// `{==passage==}{>>comment<<}`. In a table cell a `|` of the comment is written `\|`.
-fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String> {
+/// `inkuno comment --file PATH`: a Markdown file by its path. No vault is opened.
+pub fn add_comment_file(args: &Value) -> Outcome {
+    let given = match arg_str(args, "file") {
+        Ok(given) => given,
+        Err(message) => return Outcome::err(message),
+    };
+    let path = match markdown_file(given) {
+        Ok(path) => path,
+        Err(message) => return Outcome::err(message),
+    };
+    let (passage, comment) = match comment_args(args) {
+        Ok(pair) => pair,
+        Err(message) => return Outcome::err(message),
+    };
+    match annotate(&path, &passage, &comment) {
+        Ok(token) => Outcome::ok(json!({"path": path.display().to_string(), "token": token})),
+        Err(message) => Outcome::err(message),
+    }
+}
+
+/// The passage and the comment of a `comment` command. An empty comment is left to `comment_on`,
+/// which refuses it with its own sentence.
+fn comment_args(args: &Value) -> Result<(String, String), String> {
+    let passage = arg_str(args, "passage")?.to_string();
+    let comment = arg_opt(args, "comment").unwrap_or_default().to_string();
+    Ok((passage, comment))
+}
+
+/// The read–annotate–write step both `comment` paths share: the text is read, the passage is
+/// wrapped, and the result is written atomically. Returns the token of the new text.
+fn annotate(path: &Path, passage: &str, comment: &str) -> Result<String, String> {
+    let (text, _) = vault::read_text(path)?;
+    let next = comment_on(&text, passage, comment)?;
+    files::write(path, &next).map_err(disk)?;
+    Ok(vault::token(next.as_bytes()))
+}
+
+/// A `--file` path: it must end in `md` (any case) and name an existing regular file. The absolute
+/// path is returned.
+fn markdown_file(given: &str) -> Result<PathBuf, String> {
+    let is_markdown = Path::new(given)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
+    if !is_markdown {
+        return Err(format!("`{given}` is not a Markdown file"));
+    }
+    let path = fs::canonicalize(given).map_err(|why| match why.kind() {
+        std::io::ErrorKind::NotFound => format!("`{given}` was not found"),
+        _ => format!("`{given}`: {}", disk(why)),
+    })?;
+    if path.is_dir() {
+        return Err(format!("`{given}` is a folder, not a Markdown file"));
+    }
+    if !path.is_file() {
+        return Err(format!("`{given}` is not a regular file"));
+    }
+    Ok(path)
+}
+
+/// `{==passage==}{>>comment<<}`. In a table cell a `|` of the comment is written `\|`. The
+/// syntax is read line by line, so the passage is one line, and the comment's line breaks become
+/// spaces; an empty comment is refused.
+pub(super) fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String> {
     if passage.is_empty() {
         return Err("the passage is empty".into());
+    }
+    if passage.contains(['\n', '\r']) {
+        return Err("the passage must be on one line".into());
+    }
+    let flat = comment.replace("\r\n", " ").replace(['\n', '\r'], " ");
+    let flat = flat.trim();
+    if flat.is_empty() {
+        return Err("the comment is empty".into());
     }
     let mut at = Vec::new();
     let mut from = 0;
@@ -988,9 +1049,9 @@ fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String
     let in_cell =
         *start + passage.len() <= line_end && markdown::is_table_line(&text[line_start..line_end]);
     let said = if in_cell {
-        comment.replace('|', "\\|")
+        flat.replace('|', "\\|")
     } else {
-        comment.to_string()
+        flat.to_string()
     };
     let mut out = String::with_capacity(text.len() + said.len() + 12);
     out.push_str(&text[..*start]);

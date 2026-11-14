@@ -9,6 +9,7 @@ use std::{
 };
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 /// One run of the binary: its exit status and what it printed.
 struct Run {
@@ -72,12 +73,10 @@ fn inkuno_in(home: &Path, dir: &Path, args: &[&str], input: &str) -> Run {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the binary runs");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    // A command that refuses its line before it reads standard input has closed the pipe: the
+    // write then fails with a broken pipe, which is not a failure of the test. Its status and
+    // output are what the test checks.
+    let _ = child.stdin.take().unwrap().write_all(input.as_bytes());
     let output = child.wait_with_output().expect("the binary ends");
     Run {
         code: output.status.code().unwrap_or(-1),
@@ -954,6 +953,171 @@ fn list_search_tags_and_links_read_the_vault() {
         "{}",
         back_text.err
     );
+    let _ = fs::remove_dir_all(home);
+}
+
+/// A folder with no vault anywhere: no `.inkuno` above it, and an empty configuration folder.
+fn loose_folder(name: &str) -> (PathBuf, PathBuf) {
+    let home = std::env::temp_dir().join(format!("inkuno-cli-{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&home);
+    let folder = home.join("notes");
+    fs::create_dir_all(&folder).unwrap();
+    fs::create_dir_all(config_folder(&home)).unwrap();
+    (home, folder)
+}
+
+#[test]
+fn comment_file_works_without_any_vault() {
+    let (home, folder) = loose_folder("comment-file");
+    let note = folder.join("s.md");
+    let absolute = fs::canonicalize(&folder).unwrap().join("s.md");
+    fs::write(&note, "# S\n\nThe passage here.\n").unwrap();
+    let run = inkuno(
+        &home,
+        &folder,
+        &[
+            "comment",
+            "--file",
+            "s.md",
+            "--passage",
+            "passage",
+            "--text",
+            "more?",
+        ],
+    );
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert_eq!(run.out, format!("{}\n", absolute.display()));
+    assert_eq!(
+        fs::read_to_string(&note).unwrap(),
+        "# S\n\nThe {==passage==}{>>more?<<} here.\n"
+    );
+    // The extension is read without regard to case, and --json gives the path and the token.
+    fs::write(folder.join("U.MD"), "# U\n\nTwo lines\n").unwrap();
+    let json = inkuno(
+        &home,
+        &folder,
+        &[
+            "comment",
+            "--file",
+            "U.MD",
+            "--passage",
+            "lines",
+            "--text",
+            "a\nb",
+            "--json",
+        ],
+    );
+    assert_eq!(json.code, 0, "{}", json.err);
+    let value: Value = serde_json::from_str(&json.out).unwrap();
+    let written = fs::read(folder.join("U.MD")).unwrap();
+    assert_eq!(
+        std::str::from_utf8(&written).unwrap(),
+        "# U\n\nTwo {==lines==}{>>a b<<}\n"
+    );
+    assert_eq!(
+        value["path"],
+        absolute.with_file_name("U.MD").to_str().unwrap()
+    );
+    assert_eq!(value["token"], format!("{:x}", Sha256::digest(&written)));
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn comment_file_refusals_exit_with_their_status_and_change_nothing() {
+    let (home, folder) = loose_folder("comment-refused");
+    let original = "# R\n\none one\n";
+    fs::write(folder.join("r.md"), original).unwrap();
+    fs::write(folder.join("t.txt"), original).unwrap();
+    fs::create_dir_all(folder.join("dir.md")).unwrap();
+    let cases: [(&[&str], i32, &str); 6] = [
+        (
+            &["--file", "nope.md", "--passage", "x", "--text", "c"],
+            1,
+            "`nope.md` was not found",
+        ),
+        (
+            &["--file", "t.txt", "--passage", "x", "--text", "c"],
+            1,
+            "`t.txt` is not a Markdown file",
+        ),
+        (
+            &["--file", "dir.md", "--passage", "x", "--text", "c"],
+            1,
+            "is a folder, not a Markdown file",
+        ),
+        (
+            &["--file", "r.md", "--passage", "one", "--text", "c"],
+            1,
+            "`one` occurs more than once",
+        ),
+        (
+            &["--file", "r.md", "--passage", "a\nb", "--text", "c"],
+            1,
+            "the passage must be on one line",
+        ),
+        (
+            &["--file", "r.md", "--passage", "R", "--text", " \n "],
+            1,
+            "the comment is empty",
+        ),
+    ];
+    for (extra, code, reason) in cases {
+        let mut all = vec!["comment"];
+        all.extend_from_slice(extra);
+        let run = inkuno(&home, &folder, &all);
+        assert_eq!(run.code, code, "{extra:?}: {}", run.err);
+        assert!(run.err.contains(reason), "{extra:?}: {}", run.err);
+        assert_eq!(fs::read_to_string(folder.join("r.md")).unwrap(), original);
+    }
+    let note_and_file = inkuno(
+        &home,
+        &folder,
+        &[
+            "comment",
+            "r.md",
+            "--file",
+            "r.md",
+            "--passage",
+            "R",
+            "--text",
+            "c",
+        ],
+    );
+    assert_eq!(note_and_file.code, 2);
+    assert!(
+        note_and_file.err.contains("not both"),
+        "{}",
+        note_and_file.err
+    );
+    let neither = inkuno(
+        &home,
+        &folder,
+        &["comment", "--passage", "R", "--text", "c"],
+    );
+    assert_eq!(neither.code, 2);
+    assert!(neither.err.contains("--file PATH"), "{}", neither.err);
+    let with_vault = inkuno(
+        &home,
+        &folder,
+        &[
+            "comment",
+            "--vault",
+            folder.to_str().unwrap(),
+            "--file",
+            "r.md",
+            "--passage",
+            "R",
+            "--text",
+            "c",
+        ],
+    );
+    assert_eq!(with_vault.code, 2);
+    assert!(
+        with_vault.err.contains("drop --vault"),
+        "{}",
+        with_vault.err
+    );
+    assert_eq!(fs::read_to_string(folder.join("r.md")).unwrap(), original);
     let _ = fs::remove_dir_all(home);
 }
 
