@@ -6,7 +6,6 @@ mod cli;
 mod dbg_test;
 mod lang;
 mod logic;
-mod mcp;
 mod platform;
 mod shell;
 mod ui;
@@ -23,7 +22,6 @@ fn help_text() -> String {
          \n\
          usage:\n\
          \u{20} inkuno                  open the app\n\
-         \u{20} inkuno mcp               run the Model Context Protocol server on stdio\n\
          \u{20} inkuno --check-config    validate the JSON config below, exit 0/1\n\
          \u{20} inkuno --help            show this text\n\
          \n\
@@ -189,10 +187,6 @@ fn export_json_once() {
 }
 
 fn main() {
-    // `inkuno mcp` is a Model Context Protocol server on stdio: no window, no gpui.
-    if std::env::args().nth(1).as_deref() == Some("mcp") {
-        std::process::exit(mcp::run());
-    }
     // Every word that is not an option is a command (`inkuno read`, `rev`, `help`…): the command
     // line, without a window either. A mistyped one is reported, never opened as the app.
     let args: Vec<String> = std::env::args().skip(1).collect();

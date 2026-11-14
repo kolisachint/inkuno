@@ -35,7 +35,7 @@ static CONFIG: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[test]
 fn layers_only_depend_downwards() {
     // Spelled in two pieces: this file lives in src/shell, and the scan reads the source.
-    let server = concat!("crate::", "mcp");
+    let cli = concat!("crate::", "cli");
     let rules: &[(&str, &[&str])] = &[
         (
             "src/logic",
@@ -45,7 +45,7 @@ fn layers_only_depend_downwards() {
                 "crate::ui",
                 "crate::views",
                 "crate::shell",
-                server,
+                cli,
             ],
         ),
         // The extracted logic crate answers to the same rule, from its own tree.
@@ -57,26 +57,22 @@ fn layers_only_depend_downwards() {
                 "crate::ui",
                 "crate::views",
                 "crate::shell",
-                server,
+                cli,
             ],
         ),
         (
             "src/platform",
-            &["gpui", "crate::ui", "crate::views", "crate::shell", server],
+            &["gpui", "crate::ui", "crate::views", "crate::shell", cli],
         ),
         (
             "src/ui",
-            &["crate::views", "crate::shell", "impl Shell", server],
+            &["crate::views", "crate::shell", "impl Shell", cli],
         ),
-        ("src/views", &["crate::shell", "impl Shell", server]),
-        ("src/shell", &[server]),
-        // The command line reads the shortcut table of shell::keymap and nothing that draws.
-        ("src/cli", &["gpui", "crate::views", "impl Shell", server]),
-        // The server uses logic, platform and the pure parts of ui. It never sees a window.
-        (
-            "src/mcp",
-            &["gpui", "crate::views", "crate::shell", "impl Shell"],
-        ),
+        ("src/views", &["crate::shell", "impl Shell", cli]),
+        ("src/shell", &[cli]),
+        // The command line reads the shortcut table of shell::keymap and the pure parts of ui,
+        // and nothing that draws: no window, no view.
+        ("src/cli", &["gpui", "crate::views", "impl Shell"]),
     ];
     fn files(dir: &Path) -> Vec<PathBuf> {
         let entries = fs::read_dir(dir)

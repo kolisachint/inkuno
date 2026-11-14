@@ -13,8 +13,9 @@ impl Shell {
         self.sync(notes, dirs, images, cx);
     }
 
-    /// Opens the window's door to `inkuno mcp` (`platform::link`): an agent asks it to show a file of
-    /// the vault. No door (no port to be had): the agent still writes, it just cannot show.
+    /// Opens the window's door to the command line (`platform::link`): `inkuno show` asks it to
+    /// show a file of the vault. No door (no port to be had): the agent still writes, it just
+    /// cannot show.
     pub(super) fn listen(&mut self, window: &Window, cx: &mut Context<Self>) {
         if cfg!(test) {
             return;

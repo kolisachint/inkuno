@@ -10,11 +10,11 @@ use std::{
 use serde_json::{Value, json};
 
 use super::{
-    Opts, draw, failed, ops, options,
+    Opts, draw, failed, guide, ops, options,
     outcome::{Outcome, disk},
     pretty,
     store::Vault,
-    usage,
+    suggest, usage,
 };
 use crate::platform::vault as files;
 
@@ -105,6 +105,11 @@ const COMMANDS: &[Command] = &[
         name: "render",
         help: RENDER_HELP,
         run: render,
+    },
+    Command {
+        name: "guide",
+        help: GUIDE_HELP,
+        run: guide_cmd,
     },
 ];
 
@@ -605,6 +610,42 @@ fn render(args: &[String]) -> i32 {
     print!("{}", pretty(&outcome.structured));
     0
 }
+
+fn guide_cmd(args: &[String]) -> i32 {
+    let opts = match read_args("guide", args, &[], &[], (0, 1, "a page")) {
+        Ok(opts) => opts,
+        Err(code) => return code,
+    };
+    let Some(name) = opts.words.first() else {
+        for page in guide::names() {
+            println!("{page}");
+        }
+        return 0;
+    };
+    match guide::page(name) {
+        Some(text) => {
+            print!("{text}");
+            0
+        }
+        None => {
+            let names: Vec<String> = guide::names().into_iter().map(String::from).collect();
+            let hint = suggest(name, &names)
+                .first()
+                .map(|near| format!("; did you mean `{near}`?"))
+                .unwrap_or_default();
+            failed(format!("no guide page `{name}`{hint}"))
+        }
+    }
+}
+
+const GUIDE_HELP: &str = "\
+inkuno guide [page]
+    the user guide, built into this program. With no page, the names of its pages, one per
+    line; with a page, that page as Markdown (introduction, writing, links, comments, search…)
+
+example:
+  inkuno guide writing
+";
 
 const VAULT_HELP: &str = "\
 inkuno vault [--vault DIR]
