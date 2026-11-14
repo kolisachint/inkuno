@@ -3,7 +3,8 @@
 
 use serde_json::{Value, json};
 
-use super::{Outcome, Server, draw, notes};
+use super::Server;
+use crate::cli::{draw, ops as notes, outcome::Outcome};
 
 struct Tool {
     name: &'static str,
@@ -36,7 +37,13 @@ pub fn call(server: &mut Server, name: &str, args: &Value) -> Outcome {
         return draw::check_mermaid(args);
     }
     if name == "render" {
-        return draw::render(server, args);
+        // A Mermaid source needs no vault; a picture of a note or a file does.
+        if args.get("mermaid").is_none()
+            && let Err(outcome) = server.need()
+        {
+            return outcome;
+        }
+        return draw::render(server.vault.as_ref(), &server.blind, args);
     }
     let vault = match server.need() {
         Ok(vault) => vault,

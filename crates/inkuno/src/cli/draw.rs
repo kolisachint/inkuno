@@ -12,8 +12,8 @@ use crate::{
 };
 
 use super::{
-    Outcome, Server, arg_opt, arg_str, disk,
-    vault::{self, Vault},
+    outcome::{Outcome, arg_opt, arg_str, arg_usize, disk},
+    store::{self as vault, Vault},
 };
 
 pub fn check_mermaid(args: &Value) -> Outcome {
@@ -28,7 +28,9 @@ pub fn check_mermaid(args: &Value) -> Outcome {
     }
 }
 
-pub fn render(server: &mut Server, args: &Value) -> Outcome {
+/// A PNG of a Mermaid source, an SVG file of the vault, or a note's Mermaid block. `vault` is what
+/// the picture of a file or a note needs; `blind` is the sentence said when there is none.
+pub fn render(vault: Option<&Vault>, blind: &str, args: &Value) -> Outcome {
     let theme = match arg_opt(args, "theme").unwrap_or("light") {
         "light" => false,
         "dark" => true,
@@ -55,9 +57,8 @@ pub fn render(server: &mut Server, args: &Value) -> Outcome {
             Err(error) => return Outcome::err(error),
         }
     } else {
-        let vault = match server.need() {
-            Ok(vault) => vault,
-            Err(outcome) => return outcome,
+        let Some(vault) = vault else {
+            return Outcome::err(blind);
         };
         match picture(vault, path, note, args, theme) {
             Ok(found) => found,
@@ -67,7 +68,7 @@ pub fn render(server: &mut Server, args: &Value) -> Outcome {
     match raster(&svg, width, theme) {
         Ok((png, w, h)) => Outcome::image(
             json!({"width": w, "height": h, "kind": kind, "path": shown}),
-            &png,
+            png,
         ),
         Err(message) => Outcome::err(message),
     }
@@ -128,8 +129,7 @@ fn picture(
     dark: bool,
 ) -> Result<(String, &'static str, Option<String>), Outcome> {
     if let Some(note) = note {
-        let block =
-            super::arg_usize(args, "block").ok_or_else(|| Outcome::err("`block` is missing"))?;
+        let block = arg_usize(args, "block").ok_or_else(|| Outcome::err("`block` is missing"))?;
         if block == 0 {
             return Err(Outcome::err("`block` starts at 1"));
         }
