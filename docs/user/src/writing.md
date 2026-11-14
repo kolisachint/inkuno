@@ -37,7 +37,7 @@ Some details:
 
 | Type | Key | You get |
 |---|---|---|
-| `**bold**` | `Ctrl + B` | bold |
+| `**bold**` | `Ctrl + Alt + B` | bold |
 | `*italic*` | `Ctrl + I` | italic |
 | `<u>underlined</u>` | `Ctrl + U` | underline (Markdown has none, so Inkuno uses the HTML tag) |
 | `~~struck~~` | `Ctrl + Shift + X` | strikethrough |

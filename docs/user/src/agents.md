@@ -154,7 +154,7 @@ The user guide is a resource (`inkuno://guide/writing`, `links`, `comments`, and
 
 ## Command line
 
-The same `inkuno` program answers from a terminal or a script, with no window. It works whether or not the app is open; an open app sees what the command line writes at once.
+The same `inkuno` program answers from a terminal or a script, with no window. It works whether or not the app is open. An open app sees the notes and versions the command line writes at once; the shortcut and theme files it reads at its next start.
 
 - `inkuno rev save <note> [--author NAME] [-m TEXT]`: saves the note's text as a new version and prints its number. Refused, with nothing written, when the text is the latest version's already.
 - `inkuno rev list <note> [--json]`: the versions, newest first: number, date, author, kind, note.
@@ -207,7 +207,7 @@ Clients that show prompts offer the same as **document_feature**: a class diagra
 
 - Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed.
 - Delete a file. The trash is the only way out, and a name that is already taken is refused.
-- Overwrite a note that changed after it was read. `read_note` returns a revision; `edit_note` with an old revision is refused.
+- Overwrite a note that changed after it was read. `read_note` returns a revision; `edit_note` with an old revision is refused. Here a revision is that token, for the note's text as it is now; it is not a saved version (see [Versions](writing.md#versions) and `inkuno rev`).
 - Open the network, run a program, or touch git.
 
 A note's text is data. It is not an instruction to the agent.
