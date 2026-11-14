@@ -10,7 +10,7 @@ Inkuno is a rename of Bref by Andrea Larboullet Marin; its home is github.com/ko
 
 ```
 crates/inkuno/src/
-  main.rs      entry point: declares the layers, sends `inkuno mcp` to mcp::run(), then shell::run()
+  main.rs      entry point: declares the layers; a first word that is not an option goes to cli::run(), else shell::run()
   lang.rs      tr("English", "Français"), re-exported from the logic crate
   actions.rs   the app's actions, dispatched by shortcuts, menus and the palette
   logic/       pure functions: no gpui, no disk, no window. Most modules moved to
@@ -20,10 +20,11 @@ crates/inkuno/src/
   views/       gpui entities: editor, side panel, palette, viewer, one-line field (its text: `ui/line.rs`)
   shell/       the window: owns the panes and the views, routes events, runs the commands
     tests/     the whole app driven by simulated keystrokes
-  cli/         `inkuno rev`, `inkuno keys`, `inkuno help`: the command line, no window. Uses logic,
-               platform, the pure parts of ui and the shortcut table of shell/keymap
-  mcp/         `inkuno mcp`: JSON-RPC over stdio for an agent. Uses logic, platform and the pure
-               parts of ui. Nothing uses it. Its texts stay in English and do not go through tr
+  cli/         the command line, no window: the vault's commands (`inkuno list`, `read`, `new`,
+               `edit`…, `commands.rs` and `ops.rs`), the vault rules (`store.rs`), `draw.rs`,
+               `guide.rs`, `outcome.rs`, the saved versions (`rev.rs`), the shortcuts (`keys.rs`),
+               `help` (`mod.rs`). Uses logic, platform, the pure parts of ui and the shortcut table
+               of shell/keymap. Its texts stay in English and do not go through tr
 ```
 
 A layer only uses the layers below it:
@@ -32,7 +33,6 @@ A layer only uses the layers below it:
 shell ──► views ──► ui ──► logic
   │         │              ▲
   └─────────┴──► platform ─┘        lang, actions: usable everywhere
-mcp ────────────► ui, logic, platform
 cli ────────────► ui, logic, platform (and the shortcut table of shell/keymap)
 ```
 
@@ -53,7 +53,7 @@ each, all `impl Shell`:
 | `pane.rs` | the panes and their tabs, which one is active, the file a tab shows (`FileView`); splitting, moving a tab between panes, the saved layout. The panes are placed by the tree `crates/inkuno-logic/src/layout.rs` (`Node`, leaves = groups), drawn by `render_layout` |
 | `tabs.rs` | the tab bar of a pane |
 | `notes.rs` | opening, previewing, creating, saving notes; links and wikilinks; a rename rewrites the links to it |
-| `library.rs` | the vault: choosing, scanning, watching, icons, backup, trash; the window's door for `inkuno mcp` (`listen`) |
+| `library.rs` | the vault: choosing, scanning, watching, icons, backup, trash; the window's door for `inkuno show` (`listen`) |
 | `sidebar.rs`, `files.rs`, `menu.rs`, `listing.rs` | the side panel, file operations, the context menu, list pages |
 | `palette_open.rs` | every way the palette opens: notes, commands, comments, places |
 | `help.rs`, `keymap.rs` | the help panel; the default shortcuts and their sections |
@@ -78,9 +78,12 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | how Markdown is read (headings, links, tags, styles) | `crates/inkuno-logic/src/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
 | Markdown tables (cells, paste, rows and columns, sort, format) | `crates/inkuno-logic/src/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
-| the command line (`inkuno rev`, `inkuno keys`, `inkuno help`) | `crates/inkuno/src/cli/` (`rev.rs`, `keys.rs`); tests `crates/inkuno/tests/cli.rs`; `docs/design/revisions.md` |
+| the vault commands (`inkuno list`, `read`, `new`, `edit`…) | `crates/inkuno/src/cli/commands.rs` (each command, its options and its help), `ops.rs` (the work), `store.rs` (the vault rules: nothing outside it), `outcome.rs` (results and disk errors in words); tests `crates/inkuno/tests/cli.rs` and `cli/check.rs`; `docs/design/cli.md` |
+| the picture of a note, a file or a Mermaid source (`inkuno render`) | `crates/inkuno/src/cli/draw.rs`; `docs/design/cli.md` |
+| the user guide from the command line (`inkuno guide`) | `crates/inkuno/src/cli/guide.rs` (the pages of `docs/user/src/`, built in) |
+| the saved versions and the shortcuts from the command line (`inkuno rev`, `inkuno keys`) | `crates/inkuno/src/cli/rev.rs`, `keys.rs`; `docs/design/revisions.md` |
 | a note's revisions (format, diffs, the folders that follow the note) | `crates/inkuno-logic/src/revision.rs` (format, paths, diffs), `platform/revisions.rs` (disk); `docs/design/revisions.md` |
-| the window's door for `inkuno mcp` (`show`) | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
+| the window's door for `inkuno show` | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `ui/theme.rs` |
 | icons and fonts | `ui/assets.rs` |
@@ -91,7 +94,6 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `ui/keys.rs` (how keys are read and shown) |
 | the test of a feature | `shell/tests/` (`end_to_end/` is one session, one file per chapter) |
 | the user guide | `docs/user/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
-| the MCP server (`inkuno mcp`) | `crates/inkuno/src/mcp/` (`mod.rs` the protocol; `notes.rs` reading and writing; `draw.rs` figures to PNG (`logic/mermaid.rs` `kind()` names the diagram kind); `guide.rs` resources and prompts; `tools.rs` the tool list; `vault.rs` the agent's vault); `main` routes `mcp` before the window. Checked by `crates/inkuno/src/mcp/check.rs` |
 
 ## How the main parts work
 
@@ -115,12 +117,13 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   side and 16 million pixels). The viewer draws tiles of 512 pixels and keeps the last 64; a
   picture (`Source::Raster`) is not tiled, the graphics card draws it whole.
 - **Startup**: the saved panes are restored before the first frame, so the window appears with its
-  content. Icons are embedded in the binary. `inkuno mcp` never reaches that: `main` runs
-  `mcp::run()` and leaves before the window, one JSON-RPC message at a time, stdout reserved for
-  the protocol.
-- **Agents**: the server refreshes the vault's index on each call. It writes with the same rules
-  as the app: a taken name is refused, a write is atomic, a rename rewrites links, nothing is
-  deleted.
+  content. Icons are embedded in the binary. The command line never reaches that: `main` runs
+  `cli::run()` for a command word and leaves before the window, so a command draws nothing and
+  opens no window.
+- **Command line**: each command reads the vault from disk once, does its work and exits. It
+  writes with the same rules as the app: a taken name is refused, a write is atomic, a rename
+  rewrites links, nothing is deleted. The window is not needed; an open window sees the files
+  through its watcher, and `show` is the one command that asks it something.
 - **Window**: on Linux Inkuno draws its own title bar, shadow and resize edges (client-side
   decorations); on macOS and Windows the system does.
 

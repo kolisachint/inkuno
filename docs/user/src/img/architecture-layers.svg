@@ -11,8 +11,8 @@
 <path d="M854 48L862 48L862 51L854 51Z" stroke="#3fa45b"/>
 <path d="M854 53L862 53L862 56L854 56Z" stroke="#3fa45b"/>
 <text x="760" y="72" text-anchor="middle" fill="#3fa45b" stroke="none">«component»</text>
-<text x="760" y="90" text-anchor="middle" fill="#3fa45b" stroke="none">mcp</text>
-<text x="760" y="108" text-anchor="middle" fill="#3fa45b" stroke="none">inkuno mcp, JSON-RPC on stdio</text>
+<text x="760" y="90" text-anchor="middle" fill="#3fa45b" stroke="none">cli</text>
+<text x="760" y="108" text-anchor="middle" fill="#3fa45b" stroke="none">inkuno &lt;command&gt;, no window</text>
 <path d="M42 220L278 220C279.1 220 280 220.9 280 222L280 308C280 309.1 279.1 310 278 310L42 310C40.9 310 40 309.1 40 308L40 222C40 220.9 40.9 220 42 220Z" stroke="#7d8590"/>
 <path d="M258 226L270 226L270 238L258 238Z" stroke="#7d8590"/>
 <path d="M254 228L262 228L262 231L254 231Z" stroke="#7d8590"/>
@@ -63,7 +63,7 @@
 version 10
 rich 1
 shape 1 component 40 40 240 90 0 0 0 «component»\nshell\nwindow, panes, commands
-shape 2 component 640 40 240 90 3 0 0 «component»\nmcp\ninkuno mcp, JSON-RPC on stdio
+shape 2 component 640 40 240 90 3 0 0 «component»\ncli\ninkuno &lt;command&gt;, no window
 shape 3 component 40 220 240 90 0 0 0 «component»\nviews\neditor, nav, palette, viewer
 shape 4 component 40 400 240 90 0 0 0 «component»\nui\ntheme, fonts, icons, widgets
 shape 5 component 640 400 240 90 0 0 0 «component»\nplatform\ndisk, processes, network, OS
