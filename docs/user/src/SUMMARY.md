@@ -29,7 +29,7 @@
 
 # Reference
 
-- [Agents (MCP)](agents.md)
+- [Agents (command line)](agents.md)
 - [Keyboard shortcuts](shortcuts.md)
 - [Compatibility](compatibility.md)
 - [Troubleshooting](troubleshooting.md)

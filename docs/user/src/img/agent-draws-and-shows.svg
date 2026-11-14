@@ -5,7 +5,7 @@
 <text x="110.5" y="72" text-anchor="middle" fill="#7d8590" stroke="none">(Claude, Codex…)</text>
 <path d="M253 40L359 40C360.1 40 361 40.9 361 42L361 74C361 75.1 360.1 76 359 76L253 76C251.9 76 251 75.1 251 74L251 42C251 40.9 251.9 40 253 40Z" stroke="#7d8590"/>
 <path d="M306 76L306 784" stroke="#7d8590" stroke-dasharray="6 4"/>
-<text x="306" y="63" text-anchor="middle" fill="#7d8590" stroke="none">inkuno mcp</text>
+<text x="306" y="63" text-anchor="middle" fill="#7d8590" stroke="none">command line</text>
 <path d="M433 40L539 40C540.1 40 541 40.9 541 42L541 74C541 75.1 540.1 76 539 76L433 76C431.9 76 431 75.1 431 74L431 42C431 40.9 431.9 40 433 40Z" stroke="#7d8590"/>
 <path d="M486 76L486 784" stroke="#7d8590" stroke-dasharray="6 4"/>
 <text x="486" y="63" text-anchor="middle" fill="#7d8590" stroke="none">Vault (disk)</text>
@@ -29,7 +29,7 @@
 <path d="M661 526H671V570H661Z" stroke="#7d8590" fill="#7d8590" fill-opacity="0.15"/>
 <path d="M110.5 112L289 112" stroke="#7d8590"/>
 <path d="M301 112L289 118L289 106Z" stroke="#7d8590" fill="#7d8590"/>
-<text x="205.8" y="106" text-anchor="middle" fill="#7d8590" stroke="none">create_note</text>
+<text x="205.8" y="106" text-anchor="middle" fill="#7d8590" stroke="none">inkuno new</text>
 <path d="M311 156L469 156" stroke="#7d8590"/>
 <path d="M481 156L469 162L469 150Z" stroke="#7d8590" fill="#7d8590"/>
 <text x="396" y="150" text-anchor="middle" fill="#7d8590" stroke="none">atomic write</text>
@@ -41,13 +41,13 @@
 <text x="205.8" y="238" text-anchor="middle" fill="#7d8590" stroke="none">path</text>
 <path d="M110.5 334L289 334" stroke="#7d8590"/>
 <path d="M301 334L289 340L289 328Z" stroke="#7d8590" fill="#7d8590"/>
-<text x="205.8" y="328" text-anchor="middle" fill="#7d8590" stroke="none">render(block)</text>
+<text x="205.8" y="328" text-anchor="middle" fill="#7d8590" stroke="none">inkuno render</text>
 <path d="M301 378L110.5 378" stroke="#7d8590" stroke-dasharray="6 4"/>
 <path d="M120.5 373L110.5 378L120.5 383" stroke="#7d8590"/>
 <text x="205.8" y="372" text-anchor="middle" fill="#7d8590" stroke="none">PNG</text>
 <path d="M110.5 436L289 436" stroke="#7d8590"/>
 <path d="M301 436L289 442L289 430Z" stroke="#7d8590" fill="#7d8590"/>
-<text x="205.8" y="430" text-anchor="middle" fill="#7d8590" stroke="none">show(path)</text>
+<text x="205.8" y="430" text-anchor="middle" fill="#7d8590" stroke="none">inkuno show</text>
 <path d="M311 526L649 526" stroke="#7d8590"/>
 <path d="M661 526L649 532L649 520Z" stroke="#7d8590" fill="#7d8590"/>
 <text x="486" y="520" text-anchor="middle" fill="#7d8590" stroke="none">show, on 127.0.0.1</text>
@@ -64,18 +64,18 @@
 version 8
 rich 1
 shape 1 lifeline 40 40 141 744 0 0 0 Agent\n(Claude, Codex…)
-shape 2 lifeline 251 40 110 744 0 0 0 inkuno mcp
+shape 2 lifeline 251 40 110 744 0 0 0 command line
 shape 3 lifeline 431 40 110 744 0 0 0 Vault (disk)
 shape 4 lifeline 611 40 110 744 0 0 0 Inkuno window
 shape 16 fragment 16 294 403 110 0 0 0 loop\n[until the drawing is clean]
 shape 17 fragment 16 486 763 254 0 0 0 alt\n[window open on this vault]\n[no window]
-link 5 l1 l2 none solidtriangle straight 0 0 create_note
+link 5 l1 l2 none solidtriangle straight 0 0 inkuno new
 link 6 l2 l3 none solidtriangle straight 0 0 atomic write
 link 7 l3 l2 none arrow straight 0 1 written
 link 8 l2 l1 none arrow straight 0 1 path
-link 9 l1 l2 none solidtriangle straight 0 0 render(block)
+link 9 l1 l2 none solidtriangle straight 0 0 inkuno render
 link 10 l2 l1 none arrow straight 0 1 PNG
-link 11 l1 l2 none solidtriangle straight 0 0 show(path)
+link 11 l1 l2 none solidtriangle straight 0 0 inkuno show
 link 12 l2 l4 none solidtriangle straight 0 0 show, on 127.0.0.1
 link 13 l4 l2 none arrow straight 0 1 ok: tab opened
 link 14 l2 l1 none arrow straight 0 1 shown

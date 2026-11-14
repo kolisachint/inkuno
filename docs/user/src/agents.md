@@ -1,14 +1,14 @@
-# Agents (MCP)
+# Agents (command line)
 
-`inkuno mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server in the same program as Inkuno. An agent (Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, VS Code) can read the vault, write notes and add Mermaid diagrams to them, and Inkuno shows the files. The agent does not get a generic folder: it gets Inkuno's links, its trash, and its diagrams.
+An agent that has a shell runs the `inkuno` command on your vault: Claude Code, Codex CLI, Gemini CLI, hoocode, or a script. It reads notes with `inkuno read`, writes them with `inkuno new`, `edit` and `append`, checks and draws a Mermaid diagram with `inkuno render`, and asks the open window to show a note with `inkuno show`. The commands follow Inkuno's rules: a taken name is refused, a rename rewrites the `[[links]]`, and nothing is deleted, because a trashed file goes to `.trash`.
 
-The server speaks JSON-RPC over the standard input and output of the process. It does not open a window and it does not use the network: `show` reaches the open Inkuno window through 127.0.0.1, on this computer only.
+There is no server to start and no window to open. The commands work on the files of the vault, whether Inkuno is running or not. An open window sees what they write through its file watcher. Nothing leaves the computer: only `show` talks to the window, through 127.0.0.1.
 
-## Setting it up
+## Setting up
 
-### 1. The path of the program
+### 1. The program
 
-The client starts Inkuno itself, often without the `PATH` of your terminal (Claude Desktop on macOS, for one). Give it the full path of the program:
+The agent starts `inkuno` from its shell, so the program must be on the `PATH` of that shell. If it is not, give the agent the full path instead. These are the usual places:
 
 | Installed with | Path |
 |---|---|
@@ -16,198 +16,115 @@ The client starts Inkuno itself, often without the `PATH` of your terminal (Clau
 | `cargo install` | `~/.cargo/bin/inkuno` |
 | The macOS disk image | `/Applications/Inkuno.app/Contents/MacOS/inkuno` |
 
-The examples below use `/usr/bin/inkuno`: put yours. A configuration file does not expand `~`: write the whole path.
+Check it from a terminal with `inkuno help`. It prints every command, with the rules that hold for all of them.
 
-### 2. The arguments
+### 2. Tell the agent
 
-The first argument is always `mcp`. The server works on the vault Inkuno has open when the server starts: after opening another vault in Inkuno, restart the server (in most clients, restart the client). Two more arguments, after `mcp`, change that:
+Say to the agent: "run `inkuno help`". Then put a few lines in the instructions file the agent reads at each start, such as `CLAUDE.md` or `AGENTS.md`:
 
-- `--vault <folder>`: another vault, or a vault for a computer where Inkuno has never been opened.
-- `--read-only`: only the tools that read. The agent cannot write, rename or trash anything.
-
-### 3. The client
-
-#### Claude Code
-
-```bash
-claude mcp add --scope user inkuno -- /usr/bin/inkuno mcp
+```markdown
+## My notes
+My notes are an Inkuno vault. Read and change them with the `inkuno` command, not by editing the files.
+Run `inkuno help` for the commands. Read a note with `inkuno read <note> --json` and keep its `token`;
+pass the token to `inkuno edit` or `inkuno append`. Never delete a note: use `inkuno trash`.
 ```
 
-Everything after `--` is the command and its arguments. `--scope user` makes Inkuno available in every project; without it, only in the current one. `--scope project` writes it in `.mcp.json` at the root of the project, to share with the people who work on it.
+## Which vault
 
-To check: `claude mcp list` shows `inkuno` with `✔ Connected`, and `/mcp` lists it in a session.
+Every command works on one vault, found in this order:
 
-#### Claude Desktop
+1. `--vault DIR`, when it is given.
+2. Else the nearest folder at or above the current one that holds an `.inkuno` folder. So an agent started in a subfolder of your vault finds it.
+3. Else the vault the app has open.
 
-In Claude Desktop, open **Settings**, then **Developer**, then **Edit Config**. That opens `claude_desktop_config.json`:
+A note is named by its title, an alias, or its path in the vault, with or without `.md`: `inkuno read Plan`, `inkuno read ideas/plan`. The `rev` commands take no `--vault`: they find the vault from the path of the note.
 
-| System | File |
+## Commands
+
+Every command takes `--json`, and `--help` gives its options and an example.
+
+| Command | What it does |
 |---|---|
-| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Linux | `~/.config/Claude/claude_desktop_config.json` |
+| **Reading** | |
+| `inkuno vault` | the vault's folder, its counts, its folders and its most used tags |
+| `inkuno list [--folder F] [--tag T] [--kind K] [--sort name\|recent] [--limit N] [--cursor C]` | notes and files, a page at a time. `--kind` is `note`, `diagram`, `table`, `picture`, `attachment` or `all`. `--cursor` is the next value of the previous page, while that page says there is one |
+| `inkuno search <words…> [--tag T] [--folder F] [--limit N]` | notes that contain every word: names first, then text, with a snippet around the match |
+| `inkuno read <note> [--section HEADING\|^BLOCK] [--json]` | the text of a note, or of one section or block. `--json` adds the path, tags, links, embeds, comments and the `token` |
+| `inkuno links <note>` | the notes it links to, the notes that link to it with the line of each link, its tags, embeds and pictures |
+| `inkuno tags` | every tag, with how many notes carry it |
+| `inkuno show <note>` | opens the note in the Inkuno window, in a tab of its own. Changes nothing. Fails when Inkuno is not open |
+| **Writing** | |
+| `inkuno new <title…> [--folder F] [--template T] [--text TEXT]` | a new note. Its first line is the title. The body is `--text`, or standard input when there is no `--text` |
+| `inkuno edit <note> --old OLD --new NEW [--token T]` | replaces a passage that occurs once. `--edits JSON` takes a list of `{"old": …, "new": …}`, applied together or not at all |
+| `inkuno append <note> [--under HEADING] [--text TEXT] [--token T]` | adds text at the end of the note, or at the end of the section under a heading |
+| `inkuno move <note> [--name NEW] [--folder F]` | gives a note a new name, a new folder, or both. The `[[links]]` to it follow |
+| `inkuno trash <note>` | moves the note to `.trash`, with its saved versions. Prints the path it has there |
+| `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
+| `inkuno daily [--date YYYY-MM-DD] [--append TEXT]` | today's daily note, or the one of the date. `--append` adds a paragraph |
+| `inkuno comment <note> --passage P --text C` | wraps one passage in a comment: `{==P==}{>>C<<}`. The passage must occur once |
+| **Diagrams** | |
+| `inkuno render [<file>] [--note N --block K] [--mermaid SRC] [--theme light\|dark] [--width W] --out FILE.png` | a PNG of an SVG file of the vault, of the `K`-th Mermaid block of a note (1 is the first), or of a Mermaid source. `--mermaid -` reads the source from standard input |
+| `inkuno render --check [--mermaid SRC]` | whether a Mermaid source draws, and the engine's error when it does not. Reads standard input when there is no `--mermaid` |
+| **Guide** | |
+| `inkuno guide [page]` | the user guide: its page names, or one page as Markdown |
+| **Versions** | |
+| `inkuno rev save <note> [--author NAME] [-m TEXT]` | saves the note's text as a new version and prints its number. Refused, with nothing written, when the text is the latest version's already |
+| `inkuno rev list <note> [--json]` | the versions, newest first: number, date, author, kind, note |
+| `inkuno rev show <note> <n> [--json]` | the full text of version `n` (with `--json`, its header and text) |
+| `inkuno rev diff <note> [<a>] [<b>] [--format unified\|critic]` | no number compares the latest version with the file as it is now; one number compares that version with the file; two compare `a` with `b`. `unified` (the default) is a patch that `patch` applies; `critic` marks the changes inline as `{--removed--}` and `{++added++}` |
+| **Shortcuts** | |
+| `inkuno keys list [--json]` | every shortcut, its chords now, and whether it was changed |
+| `inkuno keys set <action> <chord>` | gives an action a chord in `keybindings.json`. `""` removes it. A chord is refused when it types text or when another action has it |
+| `inkuno keys reset <action>...` | gives these actions back their default chords |
+| **Help** | |
+| `inkuno help [command]` | the list of commands, or the help of one |
 
-Add `inkuno` to `mcpServers`, next to the servers already there:
+For `rev`, `<note>` is the path of the note's `.md` file.
 
-```json
-{
-  "mcpServers": {
-    "inkuno": {
-      "command": "/Applications/Inkuno.app/Contents/MacOS/inkuno",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+## A worked session
 
-Quit Claude Desktop completely and start it again. Inkuno is then in the list of connectors of the message box. If it is not, the file `mcp-server-inkuno.log` in the logs folder says why: `~/Library/Logs/Claude` on macOS, `%APPDATA%\Claude\logs` on Windows, `~/.config/Claude/logs` on Linux.
-
-#### Codex CLI
-
-```bash
-codex mcp add inkuno -- /usr/bin/inkuno mcp
-```
-
-Or by hand, in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.inkuno]
-command = "/usr/bin/inkuno"
-args = ["mcp"]
-```
-
-To check: `codex mcp list`, or `/mcp` in a session.
-
-#### Gemini CLI
-
-```bash
-gemini mcp add --scope user inkuno /usr/bin/inkuno mcp
-```
-
-Without `--scope user`, the server is written in `.gemini/settings.json` of the current project. By hand, it goes in `mcpServers` of `~/.gemini/settings.json`, as for Claude Desktop. To check: `gemini mcp list`.
-
-#### Cursor
-
-In `~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` for one:
-
-```json
-{
-  "mcpServers": {
-    "inkuno": {
-      "type": "stdio",
-      "command": "/usr/bin/inkuno",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-#### VS Code
-
-Run **MCP: Add Server** from the command palette, choose **Command (stdio)**, type `/usr/bin/inkuno mcp`, and name it `inkuno`. By hand, in `.vscode/mcp.json`, the key is `servers` and `type` is required:
-
-```json
-{
-  "servers": {
-    "inkuno": {
-      "type": "stdio",
-      "command": "/usr/bin/inkuno",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-#### Other clients
-
-Most read the `mcpServers` object shown for Claude Desktop: a `command`, the full path of Inkuno, and `args`, `["mcp"]`.
-
-### 4. Check that it works
-
-Ask the agent to call `vault_info` from the `inkuno` server. It answers with the folder of your vault and how many notes it holds.
-
-- ``no vault: open one in Inkuno, or pass `--vault` ``: Inkuno has never opened a vault on this computer. Open one in Inkuno, or add `--vault` and its folder after `mcp`.
-- `the vault in the config no longer exists`: the vault Inkuno last opened was moved or deleted. Open it again in Inkuno, or pass `--vault`.
-- The client says the server failed to start: the path is wrong. Copy it from the table above and check that the file is there.
-
-To see every tool, resource and prompt without an agent, the MCP Inspector starts the server and lists them (it needs Node.js):
+The agent reads a note and keeps the token; then it changes one passage, which is refused if the note has changed since it was read:
 
 ```bash
-npx @modelcontextprotocol/inspector /usr/bin/inkuno mcp
+inkuno read Plan                    # the text, for the agent to read
+inkuno read Plan --json             # the same, with the links, comments and "token"
+inkuno edit Plan --old "Draft." --new "Final." --token 3f9a…
 ```
 
-## What the agent can do
-
-Reading: the shape of the vault, a list, a search ranked like the palette, one note (a heading or a block), its links and its tags.
-
-Writing: create a note, replace a passage that occurs once, append, rename (links follow, unless another note still has the old name), move to the trash and bring back, the daily note, a comment on one passage.
-
-Diagrams: Mermaid diagrams live in notes as ```mermaid blocks; `render` draws one to PNG to check it, and `check_mermaid` checks a source with no vault.
-
-Showing: when Inkuno is open on the same vault, the agent can open a note, a diagram or a table in a tab of its own (`show`), and the window comes to the front. When Inkuno is closed, or has another vault open, it says so; the files are written all the same.
-
-![An agent adds a diagram through inkuno mcp, which writes the note, renders the Mermaid block until it is clean, then asks the open window to show it](img/agent-draws-and-shows.svg)
-
-*Drawn by an agent with this server.*
-
-The user guide is a resource (`inkuno://guide/writing`, `links`, `comments`, and the other pages).
-
-## Command line
-
-The same `inkuno` program answers from a terminal or a script, with no window. It works whether or not the app is open. An open app sees the notes and versions the command line writes at once; the shortcut and theme files it reads at its next start.
-
-- `inkuno rev save <note> [--author NAME] [-m TEXT]`: saves the note's text as a new version and prints its number. Refused, with nothing written, when the text is the latest version's already.
-- `inkuno rev list <note> [--json]`: the versions, newest first: number, date, author, kind, note.
-- `inkuno rev show <note> <n> [--json]`: the full text of version `n` (with `--json`, its header and text).
-- `inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]`: no number compares the latest version with the file as it is now; one number compares that version with the file; two compare `a` with `b`. `unified` (the default) is a patch that `patch` applies; `critic` marks changes inline as `{--removed--}` and `{++added++}`.
-- `inkuno keys list [--json]`: every shortcut, its chord now, and whether it was changed.
-- `inkuno keys set <action> <chord>` and `inkuno keys reset <action>...`: change the shortcuts in `keybindings.json`. A chord is refused when it types text or when another action has it.
-- `inkuno help rev` and `inkuno help keys`, or `--help` after either word, give each command with an example.
-
-Errors go to standard error with exit status 1; a wrong command line exits with 2.
-
-**Which vault.** The note's vault is the nearest folder above it that holds an `.inkuno` folder. Failing that, it is the vault the app has open, when the note is in it. Failing that, the note's own folder. A note in the app's scratch folder keeps its versions there.
-
-**The author.** `--author` if given; else the author setting of the app (`revision author…` in the palette); else the `INKUNO_AUTHOR` variable; else your system user name; else `unknown`.
-
-**Reading the files.** An agent does not need the command line to read the versions. They are in `.inkuno/revisions/`, next to the note's path in the vault (`ideas/plan.md` is `.inkuno/revisions/ideas/plan.md/0001.md`, `0002.md`…). Each file opens with a front matter block (`revision`, `parent`, `author`, `date`, `kind`, `note`), then the note's text, exactly as it was. The folder is hidden from the tree and the search.
-
-## Prompts
-
-A prompt is a request written in advance that you start yourself: the agent cannot run one. Your client fills it with your arguments and sends it as if you had typed it. Inkuno offers six:
-
-| Prompt | Arguments, in order | What the agent does |
-|---|---|---|
-| `document_feature` | `feature`, then `code` (optional) | reads the guide, looks for notes that already mention the feature, writes a note with a class diagram and a sequence diagram, then shows it in Inkuno |
-| `architecture_overview` | `project` | a hub note, a component diagram, a package diagram, and one note per part |
-| `review_note` | `note` | comments on the passages that need them, and no other change to the note |
-| `weekly_review` | `date` (optional, `YYYY-MM-DD`, default today) | reads the daily notes of that week, Monday to Sunday, and writes one note that sums it up, with links to the days and the notes they mention; a day without a note stays without one |
-| `link_orphans` | `folder` (optional, default the whole vault) | finds the notes with no link in or out and proposes, for each, the note and the sentence where a link to it would go; it changes nothing until you choose |
-| `tidy_tags` | none | groups the tags that mean the same (case, accents, plural, typo) and proposes the one to keep; it changes nothing until you agree |
-
-In Claude Code, type `/` to see them as `/inkuno:document_feature (MCP)`, or type the full name followed by the arguments:
+If the note was changed in the meantime, the token no longer matches and nothing is written:
 
 ```text
-/mcp__inkuno__review_note Roadmap
-/mcp__inkuno__weekly_review 2026-10-28
-/mcp__inkuno__tidy_tags
+$ inkuno edit Plan --old "Final." --new "Last." --token 3f9a…
+inkuno: the note changed since it was read; read it again and retry
 ```
 
-Arguments are split on spaces, so each one is a single word: write `issue-93`, not `issue 93`, and pass a path rather than a sentence. For a longer request, send an ordinary message instead. Other clients show prompts in their own menu, under the name of the server.
+The agent reads the note again, takes the new token, and repeats the edit. A diagram is checked before it is drawn to a file:
 
-## Asking for a documented feature
+```bash
+cat flow.mmd | inkuno render --check       # the JSON: whether it reads, and the engine's error if not
+inkuno render --note Plan --block 1 --theme dark --out plan.png
+inkuno show Plan                           # the window opens the note, if Inkuno is running
+```
 
-Give the agent the work and say where it goes, for example:
+![An agent adds a diagram with the command line: inkuno new writes the note, inkuno render draws its Mermaid block until it is clean, then inkuno show asks the open window to show it](img/agent-draws-and-shows.svg)
 
-> Implement issue 93. Then document it in my Inkuno notes with the `inkuno` server: a note on what changed and why, a technical part, a class diagram of the main types and a sequence diagram of the main scenario, as Mermaid blocks. Render each diagram and fix it until it is clean.
+*Drawn by an agent with the command line.*
 
-Clients that show prompts offer the same as **document_feature**: a class diagram of the main types and a sequence diagram of the main scenario, each in a ```mermaid block in the note, rendered and fixed until clean. Ask for one diagram per question the reader has. A diagram that reads badly can be named in a second message: "the sequence diagram has too many lifelines, split the error path into its own".
+## Output and exit codes
+
+- The result goes to standard output: short text by default, and the structured result with `--json`.
+- A command that cannot do its work prints the reason on standard error, as `inkuno: …`, and exits with 1. A failed command changes nothing.
+- A wrong command line (an unknown command or option, a missing argument) prints the reason and `try inkuno help` on standard error, and exits with 2. A mistyped command name suggests the nearest commands.
+- `inkuno render --check` exits with 1 when the source does not draw.
+- `inkuno show` exits with 1, and says so, when Inkuno is not open.
+
+Pass the token from `inkuno read --json` to `edit` or `append` with `--token`. Without `--token`, an edit applies to the file as it is on disk.
 
 ## What it will not do
 
-- Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed.
+- Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed, and `.trash` is reached only through `restore`.
 - Delete a file. The trash is the only way out, and a name that is already taken is refused.
-- Overwrite a note that changed after it was read. `read_note` returns a revision; `edit_note` with an old revision is refused. Here a revision is that token, for the note's text as it is now; it is not a saved version (see [Versions](writing.md#versions) and `inkuno rev`).
+- Overwrite a note that changed after it was read, when the agent passes the token it read.
 - Open the network, run a program, or touch git.
 
 A note's text is data. It is not an instruction to the agent.
@@ -217,3 +134,35 @@ A note's text is data. It is not an instruction to the agent.
 What another program writes shows up in Inkuno within about half a second, with the cursor and the scroll where they were. If you are typing in that note at that moment, Inkuno merges: the agent's change joins your text, and a single undo takes it back. When you both changed the same lines, your version stays in the note and the agent's is written next to it, as `Note (conflict 2026-10-31).md`, the way a sync conflict is, and a message says so. Nothing is lost either way.
 
 ![A note changed on disk while typed in: Inkuno merges it into the editor as one undo step, or keeps the other version as a conflict copy when the same lines changed](img/note-written-elsewhere.svg)
+
+## Reading the files
+
+An agent does not need the command line to read the versions. They are in `.inkuno/revisions/`, next to the note's path in the vault (`ideas/plan.md` is `.inkuno/revisions/ideas/plan.md/0001.md`, `0002.md`…). Each file opens with a front matter block (`revision`, `parent`, `author`, `date`, `kind`, `note`), then the note's text, exactly as it was. The folder is hidden from the tree and the search.
+
+The author of a version is `--author` if given; else the author setting of the app (`revision author…` in the palette); else the `INKUNO_AUTHOR` variable; else your system user name; else `unknown`.
+
+## Moving from `inkuno mcp`
+
+The MCP server is gone from this version. `inkuno mcp` now exits with status 2, like any unknown command. Remove the `inkuno` entry from the MCP settings of each client that had it: the `mcpServers` object of its configuration file, or the equivalent command of that client. The agent then uses the command line:
+
+| Tool of the server | Command |
+|---|---|
+| `vault_info` | `inkuno vault` |
+| `list_notes` | `inkuno list` |
+| `search_notes` | `inkuno search <words>` |
+| `read_note` | `inkuno read <note> [--section]` |
+| `note_links` | `inkuno links <note>` |
+| `list_tags` | `inkuno tags` |
+| `show` | `inkuno show <note>` |
+| `create_note` | `inkuno new <title>` |
+| `edit_note` | `inkuno edit <note> --old X --new Y`, or `--edits JSON` |
+| `append_to_note` | `inkuno append <note>` |
+| `rename_note` | `inkuno move <note> [--name] [--folder]` |
+| `trash_note`, `restore_note` | `inkuno trash <note>`, `inkuno restore <path>` |
+| `daily_note` | `inkuno daily` |
+| `add_comment` | `inkuno comment <note> --passage P --text C` |
+| `render` | `inkuno render … --out file.png` |
+| `check_mermaid` | `inkuno render --check` |
+| guide resources | `inkuno guide [page]` |
+
+The six prompts, the `--read-only` option and the note and diagram resources are gone too. `inkuno read` gives a note's text, and a diagram is a plain file of the vault. `--read-only` promised what it could not enforce, since an agent with a shell can write files anyway.
