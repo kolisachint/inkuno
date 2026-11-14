@@ -16,13 +16,23 @@ struct Run {
     err: String,
 }
 
+/// The configuration folder the binary reads under the sandbox `home`, as `vault::config_dir` picks
+/// it: macOS keeps it in `Library/Application Support` under `HOME` and ignores `XDG_CONFIG_HOME`.
+fn config_folder(home: &Path) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        home.join("Library/Application Support")
+    } else {
+        home.join("cfg")
+    }
+}
+
 /// A fresh temporary home (configuration folder included) and vault, named after the test.
 fn sandbox(name: &str) -> (PathBuf, PathBuf) {
     let home = std::env::temp_dir().join(format!("inkuno-cli-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&home);
     let vault = home.join("vault");
     fs::create_dir_all(vault.join(".inkuno")).unwrap();
-    fs::create_dir_all(home.join("cfg")).unwrap();
+    fs::create_dir_all(config_folder(&home)).unwrap();
     (home, vault)
 }
 
@@ -31,7 +41,7 @@ fn inkuno(home: &Path, dir: &Path, args: &[&str]) -> Run {
     let output = Command::new(env!("CARGO_BIN_EXE_inkuno"))
         .current_dir(dir)
         .args(args)
-        .env("XDG_CONFIG_HOME", home.join("cfg"))
+        .env("XDG_CONFIG_HOME", config_folder(home))
         .env("HOME", home)
         .env_remove("INKUNO_AUTHOR")
         .env_remove("USER")
@@ -155,7 +165,7 @@ fn the_author_defaults_to_the_environment_then_unknown() {
     let run = Command::new(env!("CARGO_BIN_EXE_inkuno"))
         .current_dir(&vault)
         .args(["rev", "save", "a.md"])
-        .env("XDG_CONFIG_HOME", home.join("cfg"))
+        .env("XDG_CONFIG_HOME", config_folder(&home))
         .env("HOME", &home)
         .env("INKUNO_AUTHOR", "  kim  ")
         .output()
@@ -278,7 +288,7 @@ fn a_vault_above_the_note_holds_its_history() {
 #[test]
 fn a_scratch_note_keeps_its_history_in_the_scratch_folder() {
     let (home, vault) = sandbox("scratch");
-    let scratch = home.join("cfg/inkuno/scratch");
+    let scratch = config_folder(&home).join("inkuno/scratch");
     write(&scratch.join("2026-11-14-103200.md"), "idea\n");
     let note = scratch
         .join("2026-11-14-103200.md")
@@ -368,7 +378,7 @@ fn keys_lists_sets_and_resets_shortcuts() {
         "{}",
         set.err
     );
-    let file = fs::read_to_string(home.join("cfg/inkuno/keybindings.json")).unwrap();
+    let file = fs::read_to_string(config_folder(&home).join("inkuno/keybindings.json")).unwrap();
     let json: Value = serde_json::from_str(&file).expect("the file is JSON");
     assert_eq!(json["version"], 1);
     assert_eq!(json["bindings"]["app::OpenPalette"][0], "secondary-shift-o");
@@ -444,7 +454,9 @@ fn keys_refuses_bad_actions_chords_and_duplicates() {
         taken.err
     );
     assert!(
-        !home.join("cfg/inkuno/keybindings.json").exists(),
+        !config_folder(&home)
+            .join("inkuno/keybindings.json")
+            .exists(),
         "nothing is written on a refusal"
     );
 
