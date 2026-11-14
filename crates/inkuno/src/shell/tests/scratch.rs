@@ -239,3 +239,102 @@ fn scratch_tabs_come_back_without_a_vault(cx: &mut TestAppContext) {
     assert!(restarted.read_with(cx, |s, _| s.pane().scratch));
     let _ = fs::remove_dir_all(root);
 }
+
+#[gpui::test]
+fn the_scratch_panel_lists_newest_first_and_opens_a_note(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-panel");
+    let dir = platform::scratch::dir();
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("2026-11-13-235959.md"), "# Hier\n\nun").unwrap();
+    fs::write(dir.join("2026-11-14-090000.md"), "\n# Matin\n\ndeux").unwrap();
+    // Blank: nothing to list, nothing to keep.
+    fs::write(dir.join("2026-11-14-103200.md"), "   \n").unwrap();
+    shell.update_in(cx, |s, window, cx| {
+        s.show_nav(Mode::Scratch, false, window, cx)
+    });
+    cx.run_until_parked();
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.mode), Mode::Scratch);
+    let names: Vec<String> = shell.read_with(cx, |s, _| {
+        s.nav_rows().into_iter().map(|r| r.name).collect()
+    });
+    assert_eq!(names, ["Matin", "Hier"]);
+    // Opened from the panel: a tab of its own, the note as a scratch note.
+    let morning = dir.join("2026-11-14-090000.md");
+    shell.update_in(cx, |s, window, cx| {
+        s.scratch_do(nav::Do::Open, &morning, window, cx)
+    });
+    cx.run_until_parked();
+    assert!(shell.read_with(cx, |s, _| s.pane().scratch
+        && s.pane().path.as_deref() == Some(morning.as_path())));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn keep_in_vault_and_delete_work_from_the_panel(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-panel-gestures");
+    let dir = platform::scratch::dir();
+    fs::create_dir_all(&dir).unwrap();
+    let kept = dir.join("2026-11-12-080000.md");
+    let gone = dir.join("2026-11-12-090000.md");
+    fs::write(&kept, "# Gardé\n\ncorps").unwrap();
+    fs::write(&gone, "# Jeté").unwrap();
+    shell.update_in(cx, |s, window, cx| {
+        s.scratch_do(nav::Do::KeepInVault, &kept, window, cx)
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(root.join("Gardé.md")).unwrap(),
+        "# Gardé\n\ncorps"
+    );
+    assert!(!kept.exists());
+    // Delete from the panel: an open note leaves with its tab, and its file goes.
+    shell.update_in(cx, |s, window, cx| s.open_from_nav(&gone, window, cx));
+    cx.run_until_parked();
+    shell.update_in(cx, |s, window, cx| {
+        s.scratch_do(nav::Do::DeleteScratch, &gone, window, cx)
+    });
+    cx.run_until_parked();
+    assert!(!gone.exists());
+    assert!(shell.read_with(cx, |s, _| {
+        s.panes
+            .iter()
+            .all(|p| p.path.as_deref() != Some(gone.as_path()))
+    }));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn scratch_notes_are_absent_from_the_tree_recent_and_search(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "scratch-absent");
+    fs::write(root.join("Coffre.md"), "# Coffre\n\nmot").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_input("# Secret\n\nmot partagé");
+    settle(cx);
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    let file = platform::scratch::list().remove(0);
+    assert!(shell.read_with(cx, |s, _| {
+        s.nav_rows().iter().all(|row| row.path != file)
+            && s.recent.iter().all(|p| *p != file)
+            && s.notes
+                .iter()
+                .all(|n| n.path != file && !n.body.contains("Secret"))
+    }));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn scratch_names_are_never_taken(cx: &mut TestAppContext) {
+    let (root, _shell, cx, _config) = start(cx, "scratch-names");
+    let _ = cx;
+    let first = platform::scratch::new_path();
+    platform::scratch::write(&first, "a").unwrap();
+    let second = platform::scratch::new_path();
+    assert_ne!(first, second);
+    assert!(!second.exists());
+    platform::scratch::write(&second, "b").unwrap();
+    assert_ne!(platform::scratch::new_path(), second);
+    let _ = fs::remove_dir_all(root);
+}

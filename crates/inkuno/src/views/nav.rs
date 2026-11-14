@@ -20,8 +20,20 @@ use crate::{
 actions!(
     nav,
     [
-        ShowTree, ShowRecent, ToggleFull, Prev, Next, Fold, Unfold, Open, Close, NewFolder, Rename,
-        Duplicate, Trash
+        ShowTree,
+        ShowRecent,
+        ShowScratch,
+        ToggleFull,
+        Prev,
+        Next,
+        Fold,
+        Unfold,
+        Open,
+        Close,
+        NewFolder,
+        Rename,
+        Duplicate,
+        Trash
     ]
 );
 // The entries of a row's menu that have no other way, for the open file, from the palette.
@@ -62,10 +74,18 @@ pub enum Mode {
     Search,
     /// Outline: the headings of the open note, in the right dock.
     Outline,
+    /// Scratch notes: the ones not filed in the vault yet, newest first.
+    Scratch,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 4] = [Mode::Tree, Mode::Recent, Mode::Search, Mode::Outline];
+    pub const ALL: [Mode; 5] = [
+        Mode::Tree,
+        Mode::Recent,
+        Mode::Search,
+        Mode::Outline,
+        Mode::Scratch,
+    ];
 
     /// As written in the `layout` file.
     pub fn name(self) -> &'static str {
@@ -74,6 +94,7 @@ impl Mode {
             Mode::Recent => "recent",
             Mode::Search => "search",
             Mode::Outline => "outline",
+            Mode::Scratch => "scratch",
         }
     }
 
@@ -269,6 +290,10 @@ pub enum Do {
     MoveTo,
     Duplicate,
     Trash,
+    /// A scratch note of the panel: filed in the vault, under its title.
+    KeepInVault,
+    /// A scratch note of the panel: its file deleted, as Discard does.
+    DeleteScratch,
     CopyLink,
     CopyPath,
     CopyRelative,
@@ -318,6 +343,8 @@ impl Do {
             Do::Rename => of(cx, &Rename),
             Do::Duplicate => of(cx, &Duplicate),
             Do::Trash => of(cx, &Trash),
+            Do::KeepInVault => of(cx, &crate::actions::KeepInVault),
+            Do::DeleteScratch => of(cx, &Trash),
             Do::CloseTab => of(cx, &crate::actions::ClosePane),
             Do::CloseOtherTabs => of(cx, &crate::actions::CloseOtherTabs),
             Do::CloseTabsInPane => of(cx, &crate::actions::CloseTabsInPane),

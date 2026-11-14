@@ -18,6 +18,26 @@ pub fn is_blank(text: &str) -> bool {
     text.trim().is_empty()
 }
 
+/// The title of a scratch note: its first non-blank line, without the `#` of a heading, cut to 80
+/// characters; `New note` for a blank text.
+pub fn title(text: &str) -> String {
+    let line = text
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or_default();
+    let title: String = line
+        .trim()
+        .trim_start_matches('#')
+        .trim()
+        .chars()
+        .take(80)
+        .collect();
+    match title.is_empty() {
+        true => tr("New note", "Nouvelle note").to_string(),
+        false => title,
+    }
+}
+
 /// Splits a scratch name into its moment and its collision number: `2026-11-14-103200 2` gives
 /// (`2026-11-14-103200`, 2). A name that is not a scratch name gives `None`.
 fn parts(stem: &str) -> Option<(&str, u32)> {
@@ -145,6 +165,15 @@ mod tests {
                 "2026-11-13-235959",
             ]
         );
+    }
+
+    #[test]
+    fn a_title_is_the_first_line_without_its_heading_mark() {
+        assert_eq!(title("# Idée du matin\n\ncorps"), "Idée du matin");
+        assert_eq!(title("\n\n   \nDeuxième\n"), "Deuxième");
+        assert_eq!(title("  ## Titre  "), "Titre");
+        assert_eq!(title(" \n "), "New note");
+        assert_eq!(title(&"a".repeat(200)).chars().count(), 80);
     }
 
     #[test]

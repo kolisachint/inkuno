@@ -151,6 +151,8 @@ struct Shell {
     focus_mode: bool,
     /// The scratch note whose close waits for its choice (Keep, Keep in vault, Discard), by its editor.
     scratch_ask: Option<Entity<Editor>>,
+    /// Counts the changes of the scratch notes: the Scratch panel's rows are read again when it moves.
+    scratch_rev: u64,
     /// The help panel, open or not.
     help: Help,
     /// The bindings in effect, and what the user changed in the default shortcuts.
@@ -251,6 +253,7 @@ impl Shell {
             copied: false,
             focus_mode: false,
             scratch_ask: None,
+            scratch_rev: 0,
             help: Help::default(),
             bound: defaults(),
             changes: keys::Changes::new(),

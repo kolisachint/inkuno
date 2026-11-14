@@ -51,6 +51,7 @@ impl Shell {
                 if first {
                     self.push_dirs(cx);
                 }
+                self.scratch_rev += 1;
                 self.calm();
             }
             Err(e) => {
@@ -78,6 +79,7 @@ impl Shell {
         }
         if let Some(path) = pane.path.clone() {
             let _ = fs::remove_file(path);
+            self.scratch_rev += 1;
         }
     }
 
@@ -146,7 +148,7 @@ impl Shell {
 
     /// Discard: the file goes, and the tab with it. A file that cannot be deleted keeps its tab
     /// and its text.
-    fn discard_scratch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn discard_scratch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(path) = self.pane().path.clone()
             && let Err(e) = fs::remove_file(&path)
             && e.kind() != std::io::ErrorKind::NotFound
@@ -188,10 +190,79 @@ impl Shell {
                 let _ = fs::remove_file(file);
             }
             self.pane_mut().new_dir = None;
+            self.scratch_rev += 1;
             return true;
         }
         let pane = self.pane_mut();
         (pane.scratch, pane.path, pane.new_dir, pane.synced) = (true, scratch_file, None, false);
         false
+    }
+    /// The Scratch panel's rows: the scratch notes that have text, newest first, by their title.
+    pub(super) fn scratch_rows(&self) -> Vec<nav::Row> {
+        platform::scratch::list()
+            .into_iter()
+            .filter_map(|path| {
+                let text = fs::read_to_string(&path).ok()?;
+                (!logic::scratch::is_blank(&text)).then(|| nav::Row {
+                    name: logic::scratch::title(&text),
+                    path,
+                    depth: 0,
+                    dir: None,
+                })
+            })
+            .collect()
+    }
+
+    /// A gesture on a scratch note of the panel (its menu, the keys): it is outside the vault, so
+    /// its gestures are its own.
+    pub(super) fn scratch_do(
+        &mut self,
+        what: nav::Do,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match what {
+            nav::Do::Open => self.open_from_nav(path, window, cx),
+            nav::Do::OpenAside => self.open_aside(path, window, cx),
+            nav::Do::KeepInVault => {
+                self.open_from_nav(path, window, cx);
+                _ = self.keep_in_vault(cx);
+            }
+            nav::Do::Trash | nav::Do::DeleteScratch => {
+                let all = self.targets(path);
+                self.delete_scratch(&all, window, cx);
+            }
+            nav::Do::CopyPath => {
+                cx.write_to_clipboard(ClipboardItem::new_string(path.display().to_string()))
+            }
+            nav::Do::Reveal => cx.reveal_path(path),
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    /// Deletes scratch notes, as Discard does: an open one leaves with its tab, unsaved text included.
+    /// A file that cannot be deleted is said so.
+    fn delete_scratch(&mut self, paths: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
+        for path in paths {
+            if let Some(tab) = self.pane_showing(path) {
+                self.focus_pane(tab, window, cx);
+                self.discard_scratch(window, cx);
+            } else if let Err(e) = fs::remove_file(path)
+                && e.kind() != std::io::ErrorKind::NotFound
+            {
+                let what = tr("Not deleted", "Non supprimé");
+                let name = vault::stem(path);
+                self.say(
+                    Tone::Failed,
+                    format!("{what} « {name} » : {}", crate::lang::io_reason(&e)),
+                    cx,
+                );
+            }
+        }
+        self.nav.marked.clear();
+        self.scratch_rev += 1;
+        cx.notify();
     }
 }

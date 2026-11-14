@@ -97,6 +97,10 @@ impl Shell {
         let Some(root) = self.vault.clone() else {
             return;
         };
+        // A scratch note is outside the vault: it has its own gestures.
+        if let Some(path) = target.clone().filter(|p| platform::scratch::holds(p)) {
+            return self.scratch_do(what, &path, window, cx);
+        }
         if let Do::List = what {
             return self.open_listing(target.unwrap_or(root), window, cx);
         }
@@ -436,7 +440,21 @@ impl Shell {
             && self.nav.marked.len() > 1;
         // Groups of entries; a line separates those that have any.
         let mut groups: Vec<Vec<(&'static str, Do)>> = vec![Vec::new(); 7];
-        if menu.tab.is_some() {
+        let scratch =
+            menu.tab.is_none() && menu.target.as_deref().is_some_and(platform::scratch::holds);
+        if scratch {
+            groups[0].push((tr("Open", "Ouvrir"), Do::Open));
+            groups[0].push((tr("Open to the side", "Ouvrir à côté"), Do::OpenAside));
+            if self.vault.is_some() {
+                groups[1].push((
+                    tr("Keep in vault…", "Garder dans le coffre…"),
+                    Do::KeepInVault,
+                ));
+            }
+            groups[2].push((tr("Copy path", "Copier le chemin"), Do::CopyPath));
+            groups[2].push((reveal_label(), Do::Reveal));
+            groups[3].push((tr("Delete", "Supprimer"), Do::DeleteScratch));
+        } else if menu.tab.is_some() {
             groups[0].push((tr("Close", "Fermer"), Do::CloseTab));
             groups[0].push((
                 tr("Close other tabs", "Fermer les autres onglets"),

@@ -36,6 +36,7 @@ actions!(
         OpenPalette,
         NewNote,
         NewScratch,
+        KeepInVault,
         OpenVault,
         CopyAll,
         ToggleHelp,

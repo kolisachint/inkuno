@@ -164,6 +164,7 @@ palette-only, `›` + help-rebindable.
 | `Ctrl+D` | `nav::Duplicate` | Nav | — |
 | `Ctrl+Backspace` (macOS `Cmd+Backspace`) | `nav::Trash` | Nav | — |
 | `Ctrl+N` | `app::NewScratch` (scratch note, no vault needed) | — | `› new scratch note` |
+| — | `nav::ShowScratch` (the Scratch panel: scratch notes, newest first) | — | `› scratch notes` |
 | `Ctrl+Alt+N` | `app::NewNote` (note in the tree's folder, in the vault) | — | `› new note in folder` |
 | `Ctrl+J` / `Ctrl+O` | `app::Today/OpenVault` | — | `› today/change vault` |
 | `Ctrl+Shift+D` | `app::NewDiagram` | — | `› new diagram` |
@@ -308,7 +309,10 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   name and its behaviour (the note filed in the tree's folder, in the vault) and its chord moves to
   `Ctrl+Alt+N`: a chord is stable API, so `Ctrl+N` now means something else for the same action name.
   Closing a scratch note with text (`app::ClosePane`) asks in a list: Keep as scratch (default, Enter),
-  Keep in vault… (only with a vault), Discard; Esc cancels. Tests:
+  Keep in vault… (only with a vault), Discard; Esc cancels. The Scratch panel (`nav::ShowScratch`,
+  palette only, like Recent) lists them by title with their moment; its menu has Open, Keep in vault…
+  and Delete (`Delete` key too: the file goes, an open note leaves with its tab; no `.trash` for
+  scratch notes). Tests:
   `scratch.rs` (`ctrl_n_writes_a_scratch_note_and_no_vault_file`, `ctrl_n_works_without_a_vault`,
   `ctrl_alt_n_still_creates_a_vault_note`). Tests that made vault notes with `Ctrl+N` now use `Ctrl+Alt+N`:
   `end_to_end/panel.rs`, `tabs.rs`, `window.rs`, `save_close.rs`.

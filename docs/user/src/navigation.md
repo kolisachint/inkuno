@@ -45,6 +45,7 @@ A previewed note only counts as opened once you click or type in it. It then mov
 - **Order**: names are sorted as in a file manager: `Note 2` before `Note 10`.
 - **Fold all**: the double-chevron button at the top of the tree folds every folder. When they are all folded, it unfolds them all.
 - **New note**: with the tree on display, `Ctrl + Alt + N` creates the note in the folder of the selected line. The button left of the folder button, at the top of the tree, creates it at the root of the vault instead. `Ctrl + N` makes a scratch note instead, see [Scratch notes](writing.md#scratch-notes).
+- **Scratch notes**: `scratch notes` in the palette lists the scratch notes that are not in the vault yet, newest first. See [Scratch notes](writing.md#scratch-notes).
 - **New folder**: the folder button, `Ctrl + Shift + N`, or `new folder` in the palette. The field says where the folder goes.
 - **Several lines**: `Ctrl + click` adds a line to the selection or takes it out. `Shift + click` selects everything from the last line chosen. Dragging, duplicating, copying links or paths, and moving to the trash then apply to all of them.
 - **Drag and drop**: drag a note or a folder onto a folder to move it there, or below the last line to move it to the top of the vault. Nothing is ever overwritten: if the name is taken, the move is refused.

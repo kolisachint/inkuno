@@ -386,6 +386,12 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "nav::ShowScratch",
+            tr("Scratch notes", "Brouillons"),
+            "pencil.svg",
+            Go,
+        ),
+        (
             "app::SplitPane",
             tr("Split the pane to the right", "Découper le volet à droite"),
             "c-split.svg",
