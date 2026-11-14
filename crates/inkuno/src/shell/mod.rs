@@ -203,6 +203,7 @@ impl Shell {
                 this.leave(cx);
                 this.drop_blank_scratch(cx);
             });
+            this.assistant_halt(cx);
             async {}
         })
         .detach();
@@ -307,6 +308,8 @@ impl Shell {
         }
         this.watch(cx);
         this.listen(window, cx);
+        this.assistant_listen(window, cx);
+        this.assistant_check(cx);
         let weak = cx.weak_entity();
         this.help.key_tap = Some(cx.intercept_keystrokes(move |event, window, cx| {
             // Escape in the middle of a drag: nothing moves (before any binding takes the key).

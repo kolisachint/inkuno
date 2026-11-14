@@ -1240,6 +1240,59 @@ pub fn headings(text: &str) -> Vec<(u8, &str, usize)> {
     found
 }
 
+/// `{==passage==}{>>comment<<}`. In a table cell a `|` of the comment is written `\|`. The
+/// syntax is read line by line, so the passage is one line, and the comment's line breaks become
+/// spaces; an empty comment is refused.
+pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String> {
+    if passage.is_empty() {
+        return Err("the passage is empty".into());
+    }
+    if passage.contains(['\n', '\r']) {
+        return Err("the passage must be on one line".into());
+    }
+    let flat = comment.replace("\r\n", " ").replace(['\n', '\r'], " ");
+    let flat = flat.trim();
+    if flat.is_empty() {
+        return Err("the comment is empty".into());
+    }
+    let mut at = Vec::new();
+    let mut from = 0;
+    while let Some(found) = text[from..].find(passage) {
+        at.push(from + found);
+        from += found + passage.len().max(1);
+        if at.len() > 1 {
+            break;
+        }
+    }
+    let [start] = at.as_slice() else {
+        return Err(if at.is_empty() {
+            format!("`{passage}` was not found")
+        } else {
+            format!("`{passage}` occurs more than once")
+        });
+    };
+    let line_start = text[..*start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let line_end = text[*start..]
+        .find('\n')
+        .map(|i| *start + i)
+        .unwrap_or(text.len());
+    let in_cell = *start + passage.len() <= line_end && is_table_line(&text[line_start..line_end]);
+    let said = if in_cell {
+        flat.replace('|', "\\|")
+    } else {
+        flat.to_string()
+    };
+    let mut out = String::with_capacity(text.len() + said.len() + 12);
+    out.push_str(&text[..*start]);
+    out.push_str("{==");
+    out.push_str(passage);
+    out.push_str("==}{>>");
+    out.push_str(&said);
+    out.push_str("<<}");
+    out.push_str(&text[*start + passage.len()..]);
+    Ok(out)
+}
+
 /// Comments of the line, written in CriticMarkup `{==text==}{>>comment<<}`: the range
 /// of the whole, that of the commented text and that of the comment. A comment on its own,
 /// `{>>comment<<}`, has an empty commented text, at its start.

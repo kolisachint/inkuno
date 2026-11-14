@@ -691,16 +691,17 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ---
 
-## 16. Assistant v1: a read-only reviewer (owner-approved 2026-11-14)
+## 16. Assistant v1: a reviewer that cannot change the text (built 2026-11-14)
 
-> Status: approved by the owner on 2026-11-14; being built. This section records the decisions.
-> The code is the ground truth for names and bindings once it lands. The command line side
-> (`inkuno comment --file`) and the planned pending-change flow are in `cli.md` (Decisions).
+> Status: approved by the owner on 2026-11-14, built. The code is the ground truth for names. Decisions
+> for the command line side are in `cli.md` (Decisions).
 
-- [x] **Propose** — this section, written in the doc first (§1).
-- [x] **User approves** — owner, 2026-11-14: the decisions of §16.1 to §16.8.
-- [ ] **Implement** — `shell/assistant.rs`, `platform/assistant.rs`, `crates/inkuno-logic/src/assistant.rs`,
-      the counter removal, `inkuno comment --file`. Tests in `shell/tests/` (CONTRIBUTING.md).
+- [x] **Propose**, **User approves**: this section, owner-approved 2026-11-14.
+- [x] **Implement**: `shell/assistant.rs` (panel, state, process side), `platform/assistant.rs` (child process),
+      `crates/inkuno-logic/src/assistant.rs` (the words, the findings, the placing of comments),
+      `markdown::comment_on` (one comment, shared with `inkuno comment`).
+- [x] **Test**: `shell/tests/assistant.rs` (events fed by hand, no process), `platform/assistant.rs`
+      (a fake agent in `sh`), `inkuno-logic` `assistant.rs`.
 
 ### 16.1 The counter is removed
 
@@ -717,9 +718,11 @@ Normal 800 is the default (§10.4 lock released for this change).
 |---|---|
 | Idle | quiet |
 | Working | accent colour, slow pulse |
-| Needs you | an accent dot |
+| Needs you | an accent dot: an answer, a finished review or an error arrived while the panel was not shown |
 | Not installed | dimmed; its tooltip says the program was not found |
 
+- `Needs you` is cleared (back to Idle) when the panel is shown. While the panel is shown, the end of a run
+  goes straight to Idle.
 - A click opens the panel, or closes it.
 - Not drawn in focus mode (`F9`, §15).
 
@@ -730,24 +733,30 @@ Normal 800 is the default (§10.4 lock released for this change).
 - Opened by the button, or from the command palette by typing `assistant` (action `app::ToggleAssistant`).
   No default shortcut in v1 (owner decision).
 - Content, top to bottom:
-  1. the conversation;
-  2. when the agent asks permission for something, the request, with **Allow** and **Deny**;
-  3. **Review this note**, and while the agent works, **Stop**;
-  4. the prompt box.
+  1. the conversation: the person's questions, the agent's answers, quiet lines for errors and for a review in progress;
+  2. **Review this note**, and while the agent works, **Stop**;
+  3. the prompt box.
+- There is no Allow and no Deny. The agent has no tool that changes anything (§16.4), and its protocol never
+  asks the client a question, so there is nothing to answer.
 - The prompt box is one field. Long text wraps. `Enter` sends. `Escape` returns to the note.
   No multi-line entry in v1 (owner decision; a multi-line box is a later idea).
 
 ### 16.4 The agent process
 
-- Inkuno starts the `hoocode` program, found on the PATH, in its RPC mode (`hoocode --mode rpc`,
-  JSON on standard input and output), as a child process.
-- Its working folder is the open vault, or the scratch folder when no vault is open.
-- It starts on the first prompt. It stops when Inkuno quits or the vault changes.
+- Inkuno starts the `hoocode` program, found on the PATH, as a child process with the flags
+  `--mode rpc --no-session --disallowed-tools Shell,ShellKill,Write,Edit` after the user's own words
+  (`platform/assistant.rs`, `arguments`). Its protocol is JSON Lines of hoocode's own, one object a line.
+- So the read-only rule is enforced by the tools the agent is started with, not only by an instruction:
+  it has no shell and no write tool. A review's findings are text in its answer; Inkuno writes them (§16.6).
+- Its working folder is the open vault, or the scratch folder when no vault is open. A new folder means a new
+  agent: the old one is stopped first.
+- It starts on the first prompt. It stops when Inkuno quits, when the vault changes, or when the setting
+  changes.
 - When the program is not found, the panel says so quietly. Nothing else changes.
 - hoocode is a separate MIT program. It is never linked into Inkuno.
 - Layers: `platform/assistant.rs` starts the process, reads and writes its lines, and stops it (no window
-  code). `crates/inkuno-logic/src/assistant.rs` holds the messages of the agent's protocol, pure.
-  `shell/assistant.rs` holds the panel and its state.
+  code). `crates/inkuno-logic/src/assistant.rs` holds the words sent and read back, pure.
+  `shell/assistant.rs` holds the panel, its state and the process side.
 
 ### 16.5 The setting
 
@@ -757,22 +766,38 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ### 16.6 The two actions of v1
 
-- **Chat** about the current note.
-- **Review this note**: the agent writes its findings as comments, in the app's comment syntax,
-  `{==passage==}{>>comment<<}`, by running `inkuno comment`.
-- The agent is told to change nothing but comments. This is an instruction to the agent, not a lock:
-  an agent with a shell can write files. A real lock on writes comes with the pending-change flow
-  (`cli.md`, planned, not built).
+- **Chat** about the current note. The note's unsaved edits are written first, so the agent reads what the
+  person sees. The transcript shows the question; the words sent to the agent also name the note's file
+  (`logic::assistant::chat_prompt`).
+- **Review this note**: the note is saved, and the agent is asked for findings in a fixed text form
+  (`logic::assistant::review_prompt`): `PASSAGE:` a line copied from the note, `COMMENT:` the remark, at
+  most 12, or the single line `NO FINDINGS`. The answer is not shown; its text is collected while the agent
+  works, and read when the agent ends (`logic::assistant::findings`).
+- Placing the findings (`Shell::apply_review`): each finding is placed with `markdown::comment_on` on the
+  note's current text, in order (`logic::assistant::place`). A finding is skipped when its passage is not
+  in the text exactly once, or when it lies inside a comment already there. The skipped ones are counted.
+  The summary: "Wrote N comments.", "1 finding could not be placed.", or "No findings.".
+- The words are written by Inkuno, never by the agent. A review that is stopped, or whose agent fails or
+  exits, writes nothing.
 
 ### 16.7 Seeing the changes
 
-- An open note sees the agent's comments through the file watcher.
-- If the person is typing in the note at the same time, changes on other lines merge. A comment on the
-  very line being typed can produce a conflict copy of the note (the existing merge behaviour).
+- An open note is changed with one splice (`Editor::absorb`, the route an outside change takes): all the
+  comments of one review are one undo step, `Ctrl + Z` takes them back, and the cursor and scroll stay where
+  they were. The note becomes dirty and is saved by the usual debounce.
+  `logic::assistant::edit_between` gives the one splice that turns the old text into the new one.
+- When no tab shows the note any more, its file is read, the findings are placed, and the result is written
+  with `vault::write` (atomic). The watcher then follows as for any outside write.
+- If the person is typing in the note at the same time, the normal merge applies (see the Agents page of the guide).
 
 ### 16.8 Scratch notes and the conversation
 
 - Review works on scratch notes too. `inkuno comment --file PATH` comments on a Markdown file by its path,
-  with no vault (`cli.md`, Decisions). Owner decision: extend the command rather than disable review
-  for scratch notes.
+  with no vault (`cli.md`, Decisions); the Assistant itself does not use that command.
 - The conversation is kept in memory only. It is gone when Inkuno restarts (owner decision).
+
+### 16.9 Known limits
+
+- The agent cannot ask before it uses a tool. hoocode's RPC mode has no approval messages (its `app-server`
+  protocol has them). Edits by the assistant wait for the pending-change flow (`cli.md`, planned).
+- The prompt box is one field without newlines.

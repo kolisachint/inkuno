@@ -57,7 +57,7 @@ each, all `impl Shell`:
 | `sidebar.rs`, `files.rs`, `menu.rs`, `listing.rs` | the side panel, file operations, the context menu, list pages |
 | `palette_open.rs` | every way the palette opens: notes, commands, comments, places |
 | `help.rs`, `keymap.rs` | the help panel; the default shortcuts and their sections |
-| `assistant.rs` | the Assistant panel in the right dock: its conversation, the permission requests, the prompt box, and the state of the agent process it drives (`platform/assistant.rs`) |
+| `assistant.rs` | the Assistant panel in the right dock: its conversation, the review, the prompt box, the state of the agent process it drives (`platform/assistant.rs`), and the writing of a review's comments into the note |
 | `settings.rs`, `toasts.rs` | settings, status messages |
 | `render.rs` | drawing the window |
 
@@ -82,7 +82,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | the vault commands (`inkuno list`, `read`, `new`, `edit`…) | `crates/inkuno/src/cli/commands.rs` (each command, its options and its help), `ops.rs` (the work), `store.rs` (the vault rules: nothing outside it, but `comment --file`, which reaches the one file it names), `outcome.rs` (results and disk errors in words); tests `crates/inkuno/tests/cli.rs` and `cli/check.rs`; `docs/design/cli.md` |
 | the Assistant: the panel and its state | `shell/assistant.rs`; the design in `docs/design/app-ui.md` §16 |
 | the Assistant's child process (start, lines in and out, stop) | `platform/assistant.rs` (no window code) |
-| the messages of the Assistant's agent protocol | `crates/inkuno-logic/src/assistant.rs` (pure) |
+| the words of the Assistant: the prompts sent, the findings read back, the placing of each comment | `crates/inkuno-logic/src/assistant.rs` (pure); one comment is placed by `markdown::comment_on` (`crates/inkuno-logic/src/markdown/mod.rs`), the same as `inkuno comment` |
 | the picture of a note, a file or a Mermaid source (`inkuno render`) | `crates/inkuno/src/cli/draw.rs`; `docs/design/cli.md` |
 | the user guide from the command line (`inkuno guide`) | `crates/inkuno/src/cli/guide.rs` (the pages of `docs/user/src/`, built in) |
 | the saved versions and the shortcuts from the command line (`inkuno rev`, `inkuno keys`) | `crates/inkuno/src/cli/rev.rs`, `keys.rs`; `docs/design/revisions.md` |
@@ -128,9 +128,11 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   writes with the same rules as the app: a taken name is refused, a write is atomic, a rename
   rewrites links, nothing is deleted. The window is not needed; an open window sees the files
   through its watcher, and `show` is the one command that asks it something.
-- **Assistant**: the agent is a child process, the `hoocode` program in its RPC mode, started on the first
-  prompt and stopped at quit or a vault change. `platform/assistant.rs` moves its lines; `shell/assistant.rs`
-  shows them in the right dock. Nothing is linked in: hoocode is a separate program.
+- **Assistant**: the agent is a child process, the `hoocode` program in its RPC mode with no shell and no
+  write tool (`platform/assistant.rs`, `FLAGS`), started on the first prompt and stopped at quit, a vault
+  change or a new setting. `platform/assistant.rs` moves its lines; `shell/assistant.rs` shows them in the
+  right dock. A review's findings are text in the agent's answer: Inkuno writes them into the note as one
+  undo step. Nothing is linked in: hoocode is a separate program.
 - **Window**: on Linux Inkuno draws its own title bar, shadow and resize edges (client-side
   decorations); on macOS and Windows the system does.
 

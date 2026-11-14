@@ -10,6 +10,7 @@ use std::{
 use serde_json::{Value, json};
 
 use super::{draw, guide, ops as notes, outcome::Outcome, store::Vault};
+use crate::logic::markdown;
 
 fn scratch() -> PathBuf {
     static N: AtomicU64 = AtomicU64::new(0);
@@ -236,23 +237,23 @@ fn names_aliases_and_a_change_on_disk() {
 fn a_comment_stays_on_one_line_and_its_passage_too() {
     let text = "# T\n\nalpha beta\n";
     assert_eq!(
-        notes::comment_on(text, "alpha\nbeta", "c").unwrap_err(),
+        markdown::comment_on(text, "alpha\nbeta", "c").unwrap_err(),
         "the passage must be on one line"
     );
     assert_eq!(
-        notes::comment_on(text, "alpha", "one\r\ntwo\nthree").unwrap(),
+        markdown::comment_on(text, "alpha", "one\r\ntwo\nthree").unwrap(),
         "# T\n\n{==alpha==}{>>one two three<<} beta\n"
     );
     assert_eq!(
-        notes::comment_on(text, "alpha", "  padded  ").unwrap(),
+        markdown::comment_on(text, "alpha", "  padded  ").unwrap(),
         "# T\n\n{==alpha==}{>>padded<<} beta\n"
     );
     assert_eq!(
-        notes::comment_on(text, "alpha", "").unwrap_err(),
+        markdown::comment_on(text, "alpha", "").unwrap_err(),
         "the comment is empty"
     );
     assert_eq!(
-        notes::comment_on(text, "alpha", "\n \r\n").unwrap_err(),
+        markdown::comment_on(text, "alpha", "\n \r\n").unwrap_err(),
         "the comment is empty"
     );
 }

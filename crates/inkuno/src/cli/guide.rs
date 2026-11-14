@@ -24,6 +24,10 @@ const PAGES: &[(&str, &str)] = &[
         include_str!("../../../../docs/user/src/comments.md"),
     ),
     (
+        "assistant",
+        include_str!("../../../../docs/user/src/assistant.md"),
+    ),
+    (
         "daily-notes",
         include_str!("../../../../docs/user/src/daily-notes.md"),
     ),

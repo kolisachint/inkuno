@@ -650,7 +650,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
     assert!(shell.read_with(cx, |s, _| s.prefs.bar == "off" && !s.theme.bar));
     assert!(
         !shell.read_with(cx, |s, cx| s.pane().editor.read(cx).bar_shown())
-            && cx.debug_bounds("counts").is_some()
+            && cx.debug_bounds("counts").is_none()
     );
     assert!(vault::load_settings().contains("bar=off\n"));
     // Escape during the list: the previewed choice is taken back.

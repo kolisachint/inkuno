@@ -207,9 +207,16 @@ impl Shell {
             }
             match event {
                 PaletteEvent::Submit(text) => {
-                    this.prefs.assistant = text.trim().to_string();
+                    let text = text.trim().to_string();
+                    let changed = text != this.prefs.assistant;
+                    this.prefs.assistant = text;
                     vault::save_settings(&this.prefs.to_text());
                     this.palette = None;
+                    // Another command: the agent that runs is stopped, the next prompt starts the new one.
+                    if changed {
+                        this.assistant_halt(cx);
+                    }
+                    this.assistant_check(cx);
                     window.focus(&this.pane().editor.focus_handle(cx));
                 }
                 PaletteEvent::Dismiss => {
