@@ -133,7 +133,9 @@ fn closing_a_scratch_note_asks_and_keep_as_scratch_is_the_default(cx: &mut TestA
 }
 
 #[gpui::test]
-fn discard_deletes_the_scratch_file_and_escape_cancels_the_close(cx: &mut TestAppContext) {
+fn discard_moves_the_scratch_file_to_the_trash_and_escape_cancels_the_close(
+    cx: &mut TestAppContext,
+) {
     let (root, shell, cx, _config) = start(cx, "scratch-discard");
     write_and_close(cx, "# Jeter\n\nnon");
     // Escape cancels: the tab stays with its text, the file stays.
@@ -142,13 +144,19 @@ fn discard_deletes_the_scratch_file_and_escape_cancels_the_close(cx: &mut TestAp
     assert!(shell.read_with(cx, |s, cx| s.palette.is_none()
         && s.pane().scratch
         && s.pane().editor.read(cx).text() == "# Jeter\n\nnon"));
-    assert_eq!(platform::scratch::list().len(), 1);
+    let file = platform::scratch::list().remove(0);
     // Discard is the last of the three: down twice, then Enter.
     cx.simulate_keystrokes("secondary-w");
     cx.run_until_parked();
     cx.simulate_keystrokes("down down enter");
     cx.run_until_parked();
+    // Nothing is destroyed: the note waits in the scratch folder's .trash, out of the panel.
     assert!(platform::scratch::list().is_empty());
+    assert!(!file.exists());
+    assert_eq!(
+        fs::read_to_string(platform::scratch::bin().join(file.file_name().unwrap())).unwrap(),
+        "# Jeter\n\nnon"
+    );
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
     let _ = fs::remove_dir_all(root);
 }
@@ -300,6 +308,11 @@ fn keep_in_vault_and_delete_work_from_the_panel(cx: &mut TestAppContext) {
             .iter()
             .all(|p| p.path.as_deref() != Some(gone.as_path()))
     }));
+    assert!(
+        platform::scratch::bin()
+            .join("2026-11-12-090000.md")
+            .exists()
+    );
     let _ = fs::remove_dir_all(root);
 }
 
