@@ -149,6 +149,8 @@ struct Shell {
     /// Focus mode (F9): the note alone, edge to edge. Not saved. Nothing of the chrome is changed
     /// to hide it, so leaving the mode shows exactly what was there.
     focus_mode: bool,
+    /// The scratch note whose close waits for its choice (Keep, Keep in vault, Discard), by its editor.
+    scratch_ask: Option<Entity<Editor>>,
     /// The help panel, open or not.
     help: Help,
     /// The bindings in effect, and what the user changed in the default shortcuts.
@@ -248,6 +250,7 @@ impl Shell {
             edge: None,
             copied: false,
             focus_mode: false,
+            scratch_ask: None,
             help: Help::default(),
             bound: defaults(),
             changes: keys::Changes::new(),

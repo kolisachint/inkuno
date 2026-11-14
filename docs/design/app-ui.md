@@ -657,3 +657,16 @@ Normal 800 is the default (§10.4 lock released for this change).
 ### Built 2026-11-14 (clean focus chrome, owner brief)
 
 - Built: `Ctrl+B` sidebar (Bold moves to `Ctrl+Alt+B`), `Ctrl+Shift+S` title bar (Linux; macOS/Windows keep the system bar, gpui 0.2.2 sets it at window creation only), `F9` focus mode (rail, docks, tab bar and title bar hidden; note edge to edge; the 8 px gaps of normal mode stay). Two rail switches at its foot. Decisions and tests: `keybindings.md` §8.
+
+### Scratch notes (built 2026-11-14, owner brief)
+
+- Built: `Ctrl+N` makes a scratch note in a tab of its own (no vault needed); `Ctrl+Alt+N` makes the vault note
+  filed in the tree's folder, as before. A scratch note lives in the app's own folder, never in the vault, and
+  is written as it is typed.
+- Closing a scratch note: a blank one goes silently with its file. One with text asks, in the palette's list
+  (`Palette::choose`, the settings' list): **Keep as scratch** (the default, `Enter`), **Keep in vault…** (the
+  note moves under its title, into the tree's folder or the vault root; its tab stays, as a note of the vault;
+  only offered with a vault), **Discard** (last; deletes the file), `Esc` cancels the close. Closing several
+  tabs at once (`Close other tabs`, `Close all files`) keeps scratch notes without asking.
+- Quitting or closing the window never asks: scratch notes are on disk already.
+- Decisions and tests: `keybindings.md` §8 (2026-11-14), `shell/tests/scratch.rs`.
