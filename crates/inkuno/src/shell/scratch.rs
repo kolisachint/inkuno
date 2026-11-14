@@ -85,7 +85,7 @@ impl Shell {
 
     /// Closing a scratch note with text asks what becomes of it, in a short list: Keep as scratch
     /// (the default, Enter) closes the tab and leaves the file; Keep in vault moves the note into
-    /// the vault; Discard deletes it. Escape cancels the close.
+    /// the vault; Discard moves it to the scratch `.trash`. Escape cancels the close.
     pub(super) fn ask_scratch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let choices = logic::scratch::choices(self.vault.is_some());
         let options: Vec<String> = choices.iter().map(|c| c.label().to_string()).collect();

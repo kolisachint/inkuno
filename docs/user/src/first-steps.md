@@ -16,7 +16,7 @@ On Linux, you can put Inkuno one key away: bind the command `inkuno` in your des
 
 Start typing. The first line is the title of the note, and the name of its file. There is no save button: notes are written to disk as you type. See [Files on disk](vault.md) for how files are named and saved.
 
-`Ctrl + N` creates a new note.
+`Ctrl + N` makes a scratch note: a quick thought, in a tab of its own, kept in the app's folder until you file it. `Ctrl + Alt + N` makes a note in the vault, in the folder selected in the tree.
 
 The bottom right of the note counts its words and characters, or those of the selection. Characters are counted as written, Markdown markers included, line ends excluded.
 
