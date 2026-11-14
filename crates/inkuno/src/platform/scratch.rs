@@ -45,6 +45,33 @@ pub fn new_path() -> PathBuf {
     vault::free_path(&dir(), &stem, "md")
 }
 
+/// The folder where deleted scratch notes go: `.trash` inside the scratch folder. The scratch
+/// panel lists only the `.md` files of the scratch folder itself, so it never shows this one.
+pub fn bin() -> PathBuf {
+    dir().join(".trash")
+}
+
+/// Moves a scratch note into `bin()`, under its name (numbered when taken, as the vault's trash
+/// does): nothing is destroyed on disk. Returns the new path. A missing file is `NotFound`.
+pub fn trash(path: &Path) -> io::Result<PathBuf> {
+    let bin = bin();
+    fs::create_dir_all(&bin)?;
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    let free = (1..)
+        .map(|n| match n {
+            1 => bin.join(&name),
+            n => bin.join(format!("{n} {name}")),
+        })
+        .find(|p| !p.exists())
+        .unwrap();
+    fs::rename(path, &free)?;
+    Ok(free)
+}
+
 /// Writes the scratch note whole, atomically, creating the folder when it is missing.
 pub fn write(path: &Path, text: &str) -> io::Result<()> {
     if let Some(parent) = path.parent() {
@@ -77,5 +104,33 @@ pub fn clean_blank() {
         if fs::read_to_string(&path).is_ok_and(|text| scratch::is_blank(&text)) {
             let _ = fs::remove_file(&path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trash_keeps_every_note_under_a_free_name() {
+        let root = std::env::temp_dir().join(format!("inkuno-scratch-bin-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        isolate(root.clone());
+        fs::write(root.join("A.md"), "un").unwrap();
+        let first = trash(&root.join("A.md")).unwrap();
+        fs::write(root.join("A.md"), "deux").unwrap();
+        let second = trash(&root.join("A.md")).unwrap();
+        assert_eq!(first, bin().join("A.md"));
+        assert_eq!(second, bin().join("2 A.md"));
+        assert_eq!(fs::read_to_string(&second).unwrap(), "deux");
+        assert_eq!(fs::read_to_string(&first).unwrap(), "un");
+        // The panel reads the scratch folder itself: the bin is not a note of it.
+        assert!(list().is_empty());
+        assert_eq!(
+            trash(&root.join("A.md")).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        let _ = fs::remove_dir_all(root);
     }
 }

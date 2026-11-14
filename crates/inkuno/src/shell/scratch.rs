@@ -146,11 +146,11 @@ impl Shell {
         }
     }
 
-    /// Discard: the file goes, and the tab with it. A file that cannot be deleted keeps its tab
-    /// and its text.
+    /// Discard: the file goes to the scratch folder's `.trash` (nothing is destroyed), and the tab
+    /// with it. A file that cannot be moved keeps its tab and its text.
     pub(super) fn discard_scratch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(path) = self.pane().path.clone()
-            && let Err(e) = fs::remove_file(&path)
+            && let Err(e) = platform::scratch::trash(&path)
             && e.kind() != std::io::ErrorKind::NotFound
         {
             let name = vault::stem(&path);
@@ -242,14 +242,14 @@ impl Shell {
         cx.notify();
     }
 
-    /// Deletes scratch notes, as Discard does: an open one leaves with its tab, unsaved text included.
-    /// A file that cannot be deleted is said so.
+    /// Deletes scratch notes, as Discard does: each goes to the scratch `.trash`; an open one leaves
+    /// with its tab, unsaved text included. A file that cannot be moved is said so.
     fn delete_scratch(&mut self, paths: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
         for path in paths {
             if let Some(tab) = self.pane_showing(path) {
                 self.focus_pane(tab, window, cx);
                 self.discard_scratch(window, cx);
-            } else if let Err(e) = fs::remove_file(path)
+            } else if let Err(e) = platform::scratch::trash(path)
                 && e.kind() != std::io::ErrorKind::NotFound
             {
                 let what = tr("Not deleted", "Non supprimé");

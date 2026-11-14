@@ -34,7 +34,7 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Two macOS-only clippy warnings fail `-D warnings` locally (`crates/inkuno/src/platform/mod.rs:7`, `crates/inkuno/src/shell/tests/shortcuts_page.rs:7`).
 - Template machinery is reachable only through MCP; decide app UI or keep MCP-only (`crates/inkuno/src/platform/vault.rs:254`, `crates/inkuno-logic/src/daily.rs:15`).
 - `packaging/windows/` remains though Windows is not built (`packaging/windows/`).
-- Scratch notes: `Discard`, the panel's `Delete` and the `Delete` key delete the file for good, with no `.trash` (the owner asked for deletion; CONTRIBUTING says nothing is destroyed on disk). Owner to confirm, or move them to a `.trash` in the scratch folder (`crates/inkuno/src/shell/scratch.rs`, `delete_scratch`).
+- Scratch notes (2026-11-14): `Discard`, the panel's `Delete` and the `Delete` key move the file to `.trash` inside the scratch folder (`platform/scratch.rs`, `trash`), so nothing is destroyed on disk. Only a blank scratch file is still removed.
 - Scratch notes live under the config folder: on macOS that is `~/Library/Application Support`, which sits inside a vault that is the home folder, where the scan would see it (it skips only dot-folders). Check the scratch folder is outside any vault before a release.
 - `docs/design/*.md` still describes cut actions; listed for the owner, not rewritten.
 - `tr()` second (French) args are still at call sites; removal is in progress (`crates/inkuno-logic/src/lang.rs:6`).
