@@ -7,7 +7,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{Opts, failed, options, usage};
+use super::{Opts, failed, options, pretty, usage};
 use crate::lang::tr;
 use crate::logic::prefs::Prefs;
 use crate::logic::revision::{self, Format, Revision};
@@ -310,8 +310,4 @@ fn header_json(rev: &Revision) -> Value {
         "kind": rev.kind.word(),
         "note": rev.note,
     })
-}
-
-fn pretty(value: &Value) -> String {
-    serde_json::to_string_pretty(value).unwrap_or_default() + "\n"
 }

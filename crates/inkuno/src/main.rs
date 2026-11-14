@@ -24,11 +24,11 @@ fn help_text() -> String {
          usage:\n\
          \u{20} inkuno                  open the app\n\
          \u{20} inkuno mcp               run the Model Context Protocol server on stdio\n\
-         \u{20} inkuno rev <save|list|show|diff>   saved versions of a note (see `inkuno rev --help`)\n\
-         \u{20} inkuno keys <list|set|reset>       keyboard shortcuts, as keybindings.json (see `inkuno keys --help`)\n\
-         \u{20} inkuno help [rev|keys]    this text, or the help of one of those commands\n\
          \u{20} inkuno --check-config    validate the JSON config below, exit 0/1\n\
          \u{20} inkuno --help            show this text\n\
+         \n\
+         commands, which need no window (`inkuno help` gives the options):\n\
+         {top}\n\
          \n\
          config dir:\n\
          \u{20} {} (Linux ~/.config/inkuno/, macOS ~/Library/Application Support/inkuno/)\n\
@@ -67,7 +67,8 @@ fn help_text() -> String {
          runs applies at the next start. A faulty entry is ignored on its own and reported,\n\
          it never crashes the app.\n",
         env!("CARGO_PKG_VERSION"),
-        dir.display()
+        dir.display(),
+        top = cli::TOP,
     )
 }
 
@@ -192,12 +193,10 @@ fn main() {
     if std::env::args().nth(1).as_deref() == Some("mcp") {
         std::process::exit(mcp::run());
     }
-    // `inkuno rev`, `keys` and `help`: the command line, without a window either.
+    // Every word that is not an option is a command (`inkuno read`, `rev`, `help`…): the command
+    // line, without a window either. A mistyped one is reported, never opened as the app.
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if matches!(
-        args.first().map(String::as_str),
-        Some("rev" | "keys" | "help")
-    ) {
+    if args.first().is_some_and(|word| !word.starts_with('-')) {
         std::process::exit(cli::run(&args));
     }
     if std::env::args().any(|arg| arg == "--help" || arg == "-h") {
