@@ -22,7 +22,8 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Alt+R` | Search bar: regular expression ($1 in the replacement) |
 | `Tab` | Search bar: replace field |
 | `Ctrl+Enter` | Search bar: replace all (Enter: this match) |
-| `Ctrl+N` | New note |
+| `Ctrl+N` | New scratch note: a quick thought in a tab, kept in the app's own folder, outside the vault, until you file it |
+| `Ctrl+Alt+N` | New note in the folder selected in the tree (in the vault) |
 | `Ctrl+O` | Change vault |
 | `Ctrl+P › terminal` | Open a terminal in the vault |
 | `Ctrl+P › clone` | Clone a vault from a git address (also on the welcome screen) |

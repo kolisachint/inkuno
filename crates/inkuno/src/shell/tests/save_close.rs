@@ -85,7 +85,7 @@ fn failed_close_preserves_empty_files_drafts_and_title_renames(cx: &mut TestAppC
     cx.simulate_keystrokes("secondary-w");
     assert!(empty.exists());
     // An empty unnamed draft needs no write.
-    cx.simulate_keystrokes("secondary-n secondary-w");
+    cx.simulate_keystrokes("secondary-alt-n secondary-w");
     assert_eq!(shell.read_with(cx, |s, _| s.panes.len()), 1);
     // An unnamed draft whose destination vanished stays unnamed with all its text.
     let dir = root.join("Gone");

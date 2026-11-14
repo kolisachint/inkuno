@@ -35,6 +35,7 @@ actions!(
         MoveTabRight,
         OpenPalette,
         NewNote,
+        NewScratch,
         OpenVault,
         CopyAll,
         ToggleHelp,

@@ -114,10 +114,14 @@ impl Shell {
         cx.notify();
         match fs::read_to_string(path) {
             Ok(text) => {
-                self.pane_mut().synced = vault::stem(path) == vault::title_of(&text);
+                // A scratch note keeps its moment as its name: its title never renames it, and no
+                // link points at it.
+                let scratch = platform::scratch::holds(path);
+                self.pane_mut().scratch = scratch;
+                self.pane_mut().synced = !scratch && vault::stem(path) == vault::title_of(&text);
                 self.pane_mut().fresh = false;
                 self.pane_mut().h1 = vault::h1_of(&text);
-                self.pane_mut().origin = Some(vault::stem(path));
+                self.pane_mut().origin = (!scratch).then(|| vault::stem(path));
                 self.pane_mut().path = Some(path.to_path_buf());
                 self.pane_mut().base = text.clone();
                 self.calm();
@@ -236,6 +240,7 @@ impl Shell {
         self.pane_mut().synced = true;
         self.pane_mut().preview = false;
         self.pane_mut().new_dir = None;
+        self.pane_mut().scratch = false;
         self.pane_mut().fresh = true;
         self.pane_mut().dirty = !text.is_empty();
         let cursor = text.len();
@@ -411,7 +416,7 @@ impl Shell {
     /// join the typed text as one undo step. When both changed the same lines, its version is
     /// written next to the note, as a sync conflict is. False if that copy could not be written:
     /// the note is then not saved, so that nothing is lost.
-    fn take_outside(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
+    pub(super) fn take_outside(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
         let Ok(disk) = fs::read_to_string(path) else {
             return true;
         };
@@ -457,6 +462,9 @@ impl Shell {
     // ponytail: synchronous write on the UI thread (a few KB, < 1 ms);
     // move to a background task if notes get very large.
     pub(super) fn flush_one(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.pane().scratch {
+            return self.flush_scratch(cx);
+        }
         let Some(root) = self.vault.clone() else {
             return !self.pane().dirty;
         };

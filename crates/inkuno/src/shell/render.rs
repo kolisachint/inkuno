@@ -106,7 +106,9 @@ impl Render for Shell {
         let pill = self.render_window_controls(window, cx);
 
         let body = div().flex_1().min_h_0().relative();
-        let body = if self.vault.is_none() {
+        // Without a vault, the welcome page; a scratch note needs no vault, so its tab takes the place.
+        let scratch = self.panes.iter().any(|pane| pane.scratch);
+        let body = if self.vault.is_none() && !scratch {
             self.render_welcome(body, cx)
         } else {
             // The panes as the layout arranges them: each draws the tab it shows as if it were the
@@ -238,6 +240,7 @@ impl Render for Shell {
                 }
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| this.new_note_here(window, cx)))
+            .on_action(cx.listener(|this, _: &NewScratch, window, cx| this.new_scratch(window, cx)))
             .on_action(cx.listener(|this, _: &nav::ShowTree, window, cx| {
                 this.show_nav(Mode::Tree, false, window, cx)
             }))
@@ -711,7 +714,7 @@ impl Shell {
         // The keys in effect; an action left without a shortcut is not announced.
         let actions: [(Box<dyn gpui::Action>, &str); 3] = [
             (Box::new(OpenPalette), "notes"),
-            (Box::new(NewNote), tr("new note", "nouvelle note")),
+            (Box::new(NewScratch), tr("scratch note", "brouillon")),
             (Box::new(ToggleHelp), tr("shortcuts", "raccourcis")),
         ];
         // A vault that cannot be read takes no note: neither a new one nor the day's.

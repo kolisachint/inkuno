@@ -357,8 +357,14 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
         ("editor::Redo", tr("Redo", "Rétablir"), "c-redo.svg", Note),
         (
             "app::NewNote",
-            tr("New note", "Nouvelle note"),
+            tr("New note in folder", "Nouvelle note dans un dossier"),
             "file-plus.svg",
+            Create,
+        ),
+        (
+            "app::NewScratch",
+            tr("New scratch note", "Nouveau brouillon"),
+            "pencil.svg",
             Create,
         ),
         (

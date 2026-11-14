@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod link;
+pub mod scratch;
 pub mod vault;
 
 use std::{ffi::OsStr, fs, process::Command};

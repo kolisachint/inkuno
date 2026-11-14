@@ -17,4 +17,5 @@ pub mod note;
 pub mod prefs;
 pub mod rank;
 pub mod recall;
+pub mod scratch;
 pub mod wiki;

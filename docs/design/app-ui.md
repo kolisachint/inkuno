@@ -373,7 +373,7 @@ App / vault / panes (global + `Shell` / `Nav` / `Palette` contexts):
 | `Ctrl+P` | Find by name/text, create, filter by `#tag` (`› word` sub-commands) |
 | `F10` / `Ctrl+Shift+P` | Command palette (every command by what it does) |
 | `F1` / `Ctrl+/` | Help (re-bindable in place) |
-| `Ctrl+N` / `Ctrl+J` / `Ctrl+O` | New note / today's note / change vault |
+| `Ctrl+N` / `Ctrl+Alt+N` / `Ctrl+J` / `Ctrl+O` | Scratch note (2026-11-14) / note in the tree's folder / today's note / change vault |
 | `Ctrl+T` / `Ctrl+E` / `Ctrl+G` / `Ctrl+L` | Tags / tree / graph / backlinks |
 | `Ctrl+Shift+J` | Calendar |
 | `Ctrl+Shift+F` | Vault search panel |

@@ -39,7 +39,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     }));
 
     // New note from the tree: filed in the selection's folder.
-    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_keystrokes("secondary-alt-n");
     cx.simulate_input("# Sous");
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.run_until_parked();

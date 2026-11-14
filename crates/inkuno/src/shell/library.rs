@@ -337,6 +337,10 @@ impl Shell {
 
     /// Puts the note at the head of the recent ones and saves the list.
     pub(super) fn touch(&mut self, path: &Path) {
+        // A scratch note is no vault note: the recent list keeps to the vault.
+        if platform::scratch::holds(path) {
+            return;
+        }
         self.recent.retain(|p| p != path);
         self.recent.insert(0, path.to_path_buf());
         self.recent.truncate(200);

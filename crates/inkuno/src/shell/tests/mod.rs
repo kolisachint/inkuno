@@ -17,6 +17,7 @@ mod motion;
 mod panel_rows;
 mod panes;
 mod save_close;
+mod scratch;
 mod shortcuts_page;
 mod tabs;
 mod window;
@@ -230,6 +231,7 @@ fn isolated_config(root: &Path) -> std::sync::MutexGuard<'static, ()> {
     for key in ["XDG_CONFIG_HOME", "HOME", "APPDATA", "USERPROFILE"] {
         unsafe { std::env::set_var(key, root.join(".config")) };
     }
+    platform::scratch::isolate(root.join(".config").join("inkuno").join("scratch"));
     guard
 }
 
