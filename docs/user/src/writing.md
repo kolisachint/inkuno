@@ -154,7 +154,7 @@ Headings inside code blocks are not listed.
 - **Author**: `revision author…` in the palette sets the name on your versions. See [Settings](settings.md#revision-author).
 - **Where they are**: in the hidden `.inkuno` folder of the vault, next to the note's path (`.inkuno/revisions/ideas/plan.md/0002.md`). The tree, the search and the recent notes do not show them. A note that is renamed or moved takes its versions with it; a deleted one keeps them in `.inkuno/trash`.
 - **Scratch notes** keep their versions in the scratch folder, the same way.
-- **Reading them**: the versions are plain Markdown files. The [command line](agents.md#command-line) lists, shows and compares them (`inkuno rev list`, `inkuno rev show`, `inkuno rev diff`).
+- **Reading them**: the versions are plain Markdown files. The [command line](agents.md#commands) lists, shows and compares them (`inkuno rev list`, `inkuno rev show`, `inkuno rev diff`).
 
 ## Scratch notes
 

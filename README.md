@@ -20,7 +20,7 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 - **Tables.** Cells wrap, `Tab` moves between them, and pasting from a spreadsheet works.
 - **Linked notes.** `[[Links]]`, tags and daily notes. The tree follows the active file, including diagrams, pictures and tables.
 - **More than notes.** List pages and Mermaid diagrams in notes.
-- **Agents.** `inkuno mcp` lets an agent read notes, write notes and add Mermaid diagrams to them, with Inkuno's links, trash and diagrams. [Guide](docs/user/src/agents.md)
+- **Agents.** `inkuno` on the command line lets an agent with a shell read notes, write them and add Mermaid diagrams, with Inkuno's links, trash and diagrams. [Guide](docs/user/src/agents.md)
 - **Safe tab closing.** Close a tab, the other tabs or a whole pane from a tab's right click, or every file from the palette. If saving fails, the document stays open with its edits and undo history.
 - **Local sharing.** Copy a whole note to the clipboard, or the code block under the cursor.
 - **Keyboard first.** One palette for notes and commands. Every shortcut is listed in the app (`F1`) and can be changed.
@@ -78,7 +78,7 @@ The [user guide](docs/user/src/introduction.md) covers everything. It is also pu
 | [Settings and appearance](docs/user/src/settings.md) | themes, fonts, page width, changing a shortcut |
 | [Updates](docs/user/src/updates.md) | no automatic updates; how to upgrade |
 | [Keyboard shortcuts](docs/user/src/shortcuts.md) | every shortcut, as the help panel lists them |
-| [Agents (MCP)](docs/user/src/agents.md) | `inkuno mcp`: an agent reads notes, writes notes and adds Mermaid diagrams |
+| [Agents (command line)](docs/user/src/agents.md) | `inkuno read`, `new`, `edit`…: an agent reads notes, writes notes and adds Mermaid diagrams |
 | [Compatibility](docs/user/src/compatibility.md), [Troubleshooting](docs/user/src/troubleshooting.md), [Performance](docs/user/src/performance.md) | systems, known problems, measurements |
 
 ## Contributing
