@@ -72,6 +72,10 @@ pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
     if !matches!(sort, "name" | "recent") {
         return Outcome::err(format!("unknown sort `{sort}`"));
     }
+    let scope = match scope(vault, args) {
+        Ok(scope) => scope,
+        Err(message) => return Outcome::err(message),
+    };
     let limit = arg_usize(args, "limit").unwrap_or(100).clamp(1, 200);
     let cursor: usize = arg_opt(args, "cursor")
         .and_then(|c| c.parse().ok())
@@ -79,7 +83,7 @@ pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
     let mut rows = Vec::new();
     if matches!(kind, "note" | "all") {
         for note in &vault.notes {
-            if !kept(vault, &note.path, &note.tags, args) {
+            if !kept(vault, &note.path, &note.tags, scope.as_deref(), args) {
                 continue;
             }
             rows.push((
@@ -107,7 +111,7 @@ pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
             continue;
         }
         for path in paths {
-            if !kept(vault, path, &[], args) {
+            if !kept(vault, path, &[], scope.as_deref(), args) {
                 continue;
             }
             let modified = path
@@ -151,8 +155,22 @@ pub fn list_notes(vault: &Vault, args: &Value) -> Outcome {
     Outcome::ok(json!({"notes": notes, "next": next}))
 }
 
-fn kept(vault: &Vault, path: &Path, tags: &[String], args: &Value) -> bool {
-    if let Some(folder) = arg_opt(args, "folder") {
+/// The folder a listing keeps, as a path relative to the vault (`None` for the whole vault). The
+/// folder is read the way `new` and `move` read theirs, so `.`, `./ideas` and `ideas/` agree.
+fn scope(vault: &Vault, args: &Value) -> Result<Option<String>, String> {
+    let Some(folder) = args.get("folder").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let dir = vault.inside(folder, false)?;
+    if !dir.is_dir() {
+        return Err(format!("no folder `{folder}`"));
+    }
+    let rel = vault::rel(&vault.root, &dir);
+    Ok((!rel.is_empty()).then_some(rel))
+}
+
+fn kept(vault: &Vault, path: &Path, tags: &[String], scope: Option<&str>, args: &Value) -> bool {
+    if let Some(folder) = scope {
         let dir = vault::folder(&vault.root, path);
         if dir != folder && !dir.starts_with(&format!("{folder}/")) {
             return false;
@@ -172,13 +190,17 @@ pub fn search_notes(vault: &Vault, args: &Value) -> Outcome {
         Ok(query) => query,
         Err(message) => return Outcome::err(message),
     };
+    let scope = match scope(vault, args) {
+        Ok(scope) => scope,
+        Err(message) => return Outcome::err(message),
+    };
     let limit = arg_usize(args, "limit").unwrap_or(20).clamp(1, 50);
     let q = query.to_lowercase();
     let words: Vec<&str> = q.split_whitespace().collect();
     let mut scored = Vec::new();
     let mut named = vec![false; vault.notes.len()];
     for (i, note) in vault.notes.iter().enumerate() {
-        if vault.is_template(note) || !kept(vault, &note.path, &note.tags, args) {
+        if vault.is_template(note) || !kept(vault, &note.path, &note.tags, scope.as_deref(), args) {
             continue;
         }
         if let Some(score) = rank::fuzzy(&q, &note.name.to_lowercase()) {
@@ -197,7 +219,10 @@ pub fn search_notes(vault: &Vault, args: &Value) -> Outcome {
     if hits.len() < limit && q.chars().count() >= 2 {
         let word = words.first().copied().unwrap_or(q.as_str());
         for (i, note) in vault.notes.iter().enumerate() {
-            if named[i] || vault.is_template(note) || !kept(vault, &note.path, &note.tags, args) {
+            if named[i]
+                || vault.is_template(note)
+                || !kept(vault, &note.path, &note.tags, scope.as_deref(), args)
+            {
                 continue;
             }
             if rank::contains_all(&note.lower, &words) {
@@ -342,7 +367,10 @@ pub fn note_links(vault: &Vault, args: &Value) -> Outcome {
     };
     let path = note.path.clone();
     let back: Vec<Value> = wiki::backlinks_of(vault, &path);
-    let text = fs::read_to_string(&path).unwrap_or_default();
+    let text = match fs::read_to_string(&path).map_err(disk) {
+        Ok(text) => text,
+        Err(message) => return Outcome::err(message),
+    };
     let pictures: Vec<Value> = text
         .lines()
         .filter_map(|line| markdown::image(line).map(|(_, name)| name))
@@ -391,9 +419,6 @@ pub fn create_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(dir) => dir,
         Err(outcome) => return outcome,
     };
-    if let Err(message) = fs::create_dir_all(&dir).map_err(disk) {
-        return Outcome::err(message);
-    }
     if let Some(taken) = vault::name_taken(&dir, &name, "md") {
         return Outcome::err(format!(
             "a note already has the name `{name}` ({})",
@@ -425,6 +450,10 @@ pub fn create_note(vault: &mut Vault, args: &Value) -> Outcome {
         }
         body
     };
+    // The folder is made last: a refused note leaves nothing behind.
+    if let Err(message) = fs::create_dir_all(&dir).map_err(disk) {
+        return Outcome::err(message);
+    }
     let path = dir.join(format!("{name}.md"));
     if let Err(message) = files::write(&path, &body).map_err(disk) {
         return Outcome::err(message);
@@ -458,7 +487,11 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
-    if let Some(expected) = arg_opt(args, "token")
+    let expected = match given_token(args) {
+        Ok(expected) => expected,
+        Err(message) => return Outcome::err(message),
+    };
+    if let Some(expected) = expected
         && expected != token
     {
         return Outcome::err("the note changed since it was read; read it again and retry");
@@ -467,9 +500,16 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         return Outcome::err("`edits` must be a list");
     };
     let mut next = text.clone();
-    for edit in edits {
-        let old = edit.get("old").and_then(|v| v.as_str()).unwrap_or("");
-        let new = edit.get("new").and_then(|v| v.as_str()).unwrap_or("");
+    for (i, edit) in edits.iter().enumerate() {
+        let (Some(old), Some(new)) = (
+            edit.get("old").and_then(Value::as_str),
+            edit.get("new").and_then(Value::as_str),
+        ) else {
+            return Outcome::err(format!(
+                "edit {} needs a text `old` and a text `new`",
+                i + 1
+            ));
+        };
         if old.is_empty() {
             return Outcome::err("an empty passage cannot be replaced");
         }
@@ -491,6 +531,15 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         "name_kept": reason,
         "rewritten": rewritten,
     }))
+}
+
+/// The token an edit or an append was given, when it was given. An empty token is no token.
+fn given_token(args: &Value) -> Result<Option<&str>, String> {
+    match args.get("token").and_then(Value::as_str) {
+        None => Ok(None),
+        Some("") => Err("`token` is empty; pass the token that `read --json` gives".into()),
+        Some(token) => Ok(Some(token)),
+    }
 }
 
 /// A changed `# title` renames the file and the links, unless the new name is taken:
@@ -547,7 +596,11 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
-    if let Some(expected) = arg_opt(args, "token")
+    let expected = match given_token(args) {
+        Ok(expected) => expected,
+        Err(message) => return Outcome::err(message),
+    };
+    if let Some(expected) = expected
         && expected != token
     {
         return Outcome::err("the note changed since it was read; read it again and retry");
@@ -629,7 +682,11 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         || files::is_attachment(&path)
         || vault.diagrams.iter().any(|p| p == &path);
     let name = arg_opt(args, "name").map(|n| n.to_string());
-    let folder = arg_opt(args, "folder").map(|n| n.to_string());
+    // `--folder ""` is the vault root, so the key counts as given even when it is empty.
+    let folder = args
+        .get("folder")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     if name.is_none() && folder.is_none() {
         return Outcome::err("`name` or `folder` is missing");
     }
@@ -643,9 +700,7 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
             Err(outcome) => return outcome,
         },
     };
-    if let Err(message) = fs::create_dir_all(&dir).map_err(disk) {
-        return Outcome::err(message);
-    }
+    // Everything is checked before anything is made or moved: a refusal leaves the disk as it was.
     let file_name = if let Some(name) = &name {
         if image {
             let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("svg");
@@ -665,7 +720,8 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         old_file.clone()
     };
     let dest = dir.join(&file_name);
-    if dest != path && dest.exists() {
+    // A case-only rename finds its own file at the new name on a case-insensitive disk: no clash.
+    if dest != path && dest.exists() && !files::same_file(&dest, &path) {
         return Outcome::err(format!(
             "a file already has the name `{}` ({})",
             files::stem(&dest),
@@ -673,6 +729,9 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         ));
     }
     if dest != path {
+        if let Err(message) = fs::create_dir_all(&dir).map_err(disk) {
+            return Outcome::err(message);
+        }
         // The history follows the note: first, so a refusal moves nothing; back, if the note cannot.
         let moved = revisions::move_along(Some(&vault.root), &path, &dest)
             .and_then(|()| files::rename(&path, &dest));
@@ -712,12 +771,13 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         vault.rescan();
         0
     };
+    // The moved note itself may still answer to the old name in another case: it is not another note.
     let left = old_link != new_link
         && rewritten == 0
         && vault
             .notes
             .iter()
-            .any(|n| n.name.eq_ignore_ascii_case(&old_link));
+            .any(|n| n.name.eq_ignore_ascii_case(&old_link) && !files::same_file(&n.path, &dest));
     Outcome::ok(json!({
         "path": vault::rel(&vault.root, &dest),
         "rewritten": rewritten,
@@ -837,7 +897,7 @@ pub fn daily_note(vault: &mut Vault, args: &Value) -> Outcome {
     read_note(vault, &json!({"note": name}))
 }
 
-fn parse_date(text: &str) -> Result<(i32, u32, u32), String> {
+pub fn parse_date(text: &str) -> Result<(i32, u32, u32), String> {
     let mut parts = text.split('-');
     let year = parts.next().and_then(|p| p.parse().ok());
     let month = parts.next().and_then(|p| p.parse().ok());

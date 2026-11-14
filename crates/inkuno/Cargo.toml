@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/kolisachint/inkuno"
 
 [dependencies]
-# Déjà tirée par gpui, à la même version : images PNG du serveur MCP.
+# Not used by the code any more; its removal is in docs/backlog.md. Also pulled in by gpui, at the same version.
 base64 = "0.22.1"
 # Déjà tirée par gpui, à la même version : l'archive de la sauvegarde.
 flate2 = "1.1.4"

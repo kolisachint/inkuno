@@ -187,17 +187,20 @@ fn export_json_once() {
 }
 
 fn main() {
-    // Every word that is not an option is a command (`inkuno read`, `rev`, `help`…): the command
-    // line, without a window either. A mistyped one is reported, never opened as the app.
+    // Anything but the app's own arguments is the command line (`inkuno read`, `--vault DIR list`…),
+    // without a window either. A mistyped one is reported, never opened as the app.
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().is_some_and(|word| !word.starts_with('-')) {
+    let own = args.iter().all(|arg| {
+        matches!(arg.as_str(), "--help" | "-h" | "--check-config") || arg.starts_with("-psn_")
+    });
+    if !own {
         std::process::exit(cli::run(&args));
     }
-    if std::env::args().any(|arg| arg == "--help" || arg == "-h") {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print!("{}", help_text());
         return;
     }
-    if std::env::args().any(|arg| arg == "--check-config") {
+    if args.iter().any(|arg| arg == "--check-config") {
         std::process::exit(check_config());
     }
     // The last panic is kept in the config folder.

@@ -3,7 +3,7 @@
 //! runs it on the vault, and prints the result: the JSON, or for `read` the text of the note.
 
 use std::{
-    io::{self, IsTerminal, Read},
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 
@@ -179,27 +179,70 @@ fn given(opts: &Opts, keys: &[(&str, &str)]) -> Value {
     args
 }
 
-/// Adds a whole-number option to the tool's arguments, when it is given. Not a number is a usage error.
-fn whole(name: &str, opts: &Opts, args: &mut Value, option: &str, key: &str) -> Result<(), i32> {
+/// Adds a whole-number option to the tool's arguments, when it is given. Not a number, or a number
+/// outside `min..=max`, is a usage error.
+fn whole(
+    name: &str,
+    opts: &Opts,
+    args: &mut Value,
+    option: &str,
+    key: &str,
+    (min, max): (u64, u64),
+) -> Result<(), i32> {
     let Some(text) = opts.values.get(option) else {
         return Ok(());
     };
     let number: u64 = text
         .parse()
         .map_err(|_| usage(&format!("{name}: `{text}` is not a whole number")))?;
+    if !(min..=max).contains(&number) {
+        let bound = if max == u64::MAX {
+            format!("at least {min}")
+        } else {
+            format!("from {min} to {max}")
+        };
+        return Err(usage(&format!(
+            "{name}: {option} takes a number {bound}, not `{text}`"
+        )));
+    }
     args[key] = json!(number);
     Ok(())
 }
 
-/// The standard input, when there is some text on it. A terminal gives none: nobody is typing a note.
-fn piped_text() -> Option<String> {
-    let stdin = io::stdin();
-    if stdin.is_terminal() {
-        return None;
+/// An option whose value is one of `allowed`; any other value is a usage error.
+fn one_of(name: &str, opts: &Opts, option: &str, allowed: &[&str]) -> Result<(), i32> {
+    match opts.values.get(option) {
+        Some(value) if !allowed.contains(&value.as_str()) => Err(usage(&format!(
+            "{name}: {option} takes one of {}, not `{value}`",
+            allowed.join(", ")
+        ))),
+        _ => Ok(()),
     }
+}
+
+/// A `--token` that is given must not be empty: an empty one would check nothing.
+fn token_given(name: &str, opts: &Opts) -> Result<(), i32> {
+    match opts.values.get("--token") {
+        Some(token) if token.is_empty() => Err(usage(&format!(
+            "{name}: --token is empty; give the token that `read --json` gives"
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// Standard input, read to its end. Only a `-` asks for it.
+fn stdin_text() -> String {
     let mut text = String::new();
-    stdin.lock().read_to_string(&mut text).ok()?;
-    (!text.is_empty()).then_some(text)
+    let _ = io::stdin().read_to_string(&mut text);
+    text
+}
+
+/// The value of a text option: `-` is standard input, read now; any other value is the text itself.
+fn text_value(opts: &Opts, option: &str) -> Option<String> {
+    match opts.values.get(option)?.as_str() {
+        "-" => Some(stdin_text()),
+        text => Some(text.to_string()),
+    }
 }
 
 /// The vault a command works on: `--vault DIR`; else the nearest folder above the current one (itself
@@ -278,6 +321,15 @@ fn list(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
+    let kinds = ["note", "diagram", "table", "picture", "attachment", "all"];
+    if let Err(code) = one_of("list", &opts, "--kind", &kinds).and(one_of(
+        "list",
+        &opts,
+        "--sort",
+        &["name", "recent"],
+    )) {
+        return code;
+    }
     let mut tool = given(
         &opts,
         &[
@@ -288,7 +340,7 @@ fn list(args: &[String]) -> i32 {
             ("--cursor", "cursor"),
         ],
     );
-    if let Err(code) = whole("list", &opts, &mut tool, "--limit", "limit") {
+    if let Err(code) = whole("list", &opts, &mut tool, "--limit", "limit", (1, 200)) {
         return code;
     }
     finish(
@@ -311,7 +363,7 @@ fn search(args: &[String]) -> i32 {
     };
     let mut tool = given(&opts, &[("--tag", "tag"), ("--folder", "folder")]);
     tool["query"] = json!(opts.words.join(" "));
-    if let Err(code) = whole("search", &opts, &mut tool, "--limit", "limit") {
+    if let Err(code) = whole("search", &opts, &mut tool, "--limit", "limit", (1, 50)) {
         return code;
     }
     finish(
@@ -394,10 +446,8 @@ fn new(args: &[String]) -> i32 {
         ],
     );
     tool["title"] = json!(opts.words.join(" "));
-    // The body comes from standard input when there is no --text; an empty input is no body.
-    if !opts.values.contains_key("--text")
-        && let Some(text) = piped_text()
-    {
+    // The body is --text, or standard input with `--text -`; without --text the note has no body.
+    if let Some(text) = text_value(&opts, "--text") {
         tool["text"] = json!(text);
     }
     finish(
@@ -414,12 +464,25 @@ fn edits_of(opts: &Opts) -> Result<Value, i32> {
         opts.values.get("--old"),
         opts.values.get("--new"),
     ) {
-        (Some(text), None, None) => match serde_json::from_str::<Value>(text) {
-            Ok(list) if list.is_array() => Ok(list),
-            _ => Err(usage(
-                "edit: --edits needs a JSON array of {\"old\": …, \"new\": …}",
-            )),
-        },
+        (Some(text), None, None) => {
+            let list = serde_json::from_str::<Value>(text)
+                .ok()
+                .filter(Value::is_array)
+                .ok_or_else(|| {
+                    usage("edit: --edits needs a JSON array of {\"old\": …, \"new\": …}")
+                })?;
+            for (i, item) in list.as_array().into_iter().flatten().enumerate() {
+                let texts = item.get("old").is_some_and(Value::is_string)
+                    && item.get("new").is_some_and(Value::is_string);
+                if !texts {
+                    return Err(usage(&format!(
+                        "edit: --edits item {} needs a text \"old\" and a text \"new\"",
+                        i + 1
+                    )));
+                }
+            }
+            Ok(list)
+        }
         (None, Some(old), Some(new)) => Ok(json!([{"old": old, "new": new}])),
         _ => Err(usage("edit: give --old with --new, or --edits")),
     }
@@ -436,6 +499,9 @@ fn edit(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
+    if let Err(code) = token_given("edit", &opts) {
+        return code;
+    }
     let edits = match edits_of(&opts) {
         Ok(edits) => edits,
         Err(code) => return code,
@@ -461,20 +527,15 @@ fn append(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
-    let mut tool = given(
-        &opts,
-        &[
-            ("--under", "under"),
-            ("--token", "token"),
-            ("--text", "text"),
-        ],
-    );
-    tool["note"] = json!(opts.words[0]);
-    if !opts.values.contains_key("--text")
-        && let Some(text) = piped_text()
-    {
-        tool["text"] = json!(text);
+    if let Err(code) = token_given("append", &opts) {
+        return code;
     }
+    let Some(text) = text_value(&opts, "--text") else {
+        return usage("append: give --text TEXT, or --text - to read standard input");
+    };
+    let mut tool = given(&opts, &[("--under", "under"), ("--token", "token")]);
+    tool["note"] = json!(opts.words[0]);
+    tool["text"] = json!(text);
     finish(
         on_vault(&opts, |vault| ops::append_to_note(vault, &tool)),
         opts.json,
@@ -530,6 +591,11 @@ fn daily(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
+    if let Some(date) = opts.values.get("--date")
+        && let Err(message) = ops::parse_date(date)
+    {
+        return usage(&format!("daily: {message}"));
+    }
     let tool = given(&opts, &[("--date", "date"), ("--append", "append")]);
     finish(
         on_vault(&opts, |vault| ops::daily_note(vault, &tool)),
@@ -549,9 +615,9 @@ fn comment(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
-    let (Some(passage), Some(text)) = (opts.values.get("--passage"), opts.values.get("--text"))
+    let (Some(passage), Some(text)) = (opts.values.get("--passage"), text_value(&opts, "--text"))
     else {
-        return usage("comment: give --passage and --text");
+        return usage("comment: give --passage and --text (--text - reads standard input)");
     };
     let tool = json!({"note": opts.words[0], "passage": passage, "comment": text});
     finish(
@@ -579,15 +645,11 @@ fn render(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(code) => return code,
     };
-    // A source is read from standard input when it is `-`, or when --check has none.
-    let source = match opts.values.get("--mermaid").map(String::as_str) {
-        Some("-") => Some(piped_text().unwrap_or_default()),
-        Some(text) => Some(text.to_string()),
-        None => None,
-    };
+    // `--mermaid -` reads the source from standard input; nothing else does.
+    let source = text_value(&opts, "--mermaid");
     if opts.switches.contains("--check") {
-        let Some(source) = source.or_else(piped_text) else {
-            return usage("render --check needs --mermaid SRC, or a source on standard input");
+        let Some(source) = source else {
+            return usage("render --check needs --mermaid SRC, or --mermaid - for standard input");
         };
         let outcome = draw::check_mermaid(&json!({"source": source}));
         let readable = outcome.structured["readable"].as_bool() == Some(true);
@@ -607,6 +669,16 @@ fn render(args: &[String]) -> i32 {
                 .unwrap_or("the source does not draw"),
         );
     }
+    if let Err(code) = one_of("render", &opts, "--theme", &["light", "dark"]) {
+        return code;
+    }
+    if let Some(width) = opts.values.get("--width")
+        && !width.parse::<f64>().is_ok_and(|w| w.is_finite() && w > 0.0)
+    {
+        return usage(&format!(
+            "render: `{width}` is not a width in pixels: a number above 0"
+        ));
+    }
     let Some(out) = opts.values.get("--out") else {
         return usage("render needs --out FILE.png: the picture is written there");
     };
@@ -624,14 +696,22 @@ fn render(args: &[String]) -> i32 {
     if let Some(path) = opts.words.first() {
         tool["path"] = json!(path);
     }
-    if let Err(code) = whole("render", &opts, &mut tool, "--block", "block") {
+    if let Err(code) = whole(
+        "render",
+        &opts,
+        &mut tool,
+        "--block",
+        "block",
+        (1, u64::MAX),
+    ) {
         return code;
     }
-    if let Some(width) = opts.values.get("--width") {
-        match width.parse::<f64>() {
-            Ok(width) => tool["width"] = json!(width),
-            Err(_) => return usage(&format!("render: `{width}` is not a width in pixels")),
-        }
+    if let Some(width) = opts
+        .values
+        .get("--width")
+        .and_then(|w| w.parse::<f64>().ok())
+    {
+        tool["width"] = json!(width);
     }
     // A Mermaid source needs no vault; a picture of a note or a file does.
     let outcome = if source.is_some() {
@@ -770,13 +850,13 @@ example:
 
 const NEW_HELP: &str = "\
 inkuno new <title…> [--folder F] [--template T] [--text TEXT]
-    a new note: its first line is the title and the file name. The body is --text, or
-    standard input when there is no --text. A taken name is refused, nothing is overwritten.
-    --template: a note of the template folder, its placeholders filled
+    a new note: its first line is the title and the file name. The body is --text TEXT, or
+    --text - for standard input; without --text the note has only its title. A taken name is
+    refused, nothing is overwritten. --template: a note of the template folder, its placeholders filled
     prints the note's path; --json: the result as JSON
 
 example:
-  echo \"First line of the body.\" | inkuno new Meeting notes --folder work
+  echo \"First line of the body.\" | inkuno new Meeting notes --folder work --text -
 ";
 
 const EDIT_HELP: &str = "\
@@ -795,8 +875,9 @@ example:
 const APPEND_HELP: &str = "\
 inkuno append <note> [--under HEADING] [--text TEXT] [--token T]
     adds text at the end of the note, or at the end of the section under the heading
-    (matched exactly, or as the only heading with that case). The text is --text, else
-    standard input; an empty text is refused. Prints the note's path; --json: the result
+    (matched exactly, or as the only heading with that case). The text is --text TEXT, or
+    --text - for standard input; without --text it is refused, and an empty text is refused.
+    Prints the note's path; --json: the result
 
 example:
   inkuno append Plan --under \"Next steps\" --text \"- call Ana\"
@@ -846,7 +927,7 @@ example:
 const COMMENT_HELP: &str = "\
 inkuno comment <note> --passage P --text C
     wraps one passage of the note in {==P==}{>>C<<}. The passage must occur once.
-    prints the note's path; --json: the result as JSON
+    --text - reads the comment from standard input. Prints the note's path; --json: the result as JSON
     In a table cell, a | of the comment is written \\|.
 
 example:
@@ -855,10 +936,10 @@ example:
 
 const RENDER_HELP: &str = "\
 inkuno render [<file>] [--note N --block K] [--mermaid SRC] [--theme light|dark] [--width W] --out FILE.png
-inkuno render --check [--mermaid SRC]
+inkuno render --check --mermaid SRC|-
     a PNG of an SVG file of the vault, of the K-th mermaid block of a note (1 is the first),
     or of a Mermaid source (--mermaid -: read from standard input). The PNG is written to
-    --out, and its size and kind are printed (--json: as JSON). --width is in pixels.
+    --out, and its size and kind are printed (--json: as JSON). --width is a number above 0.
     --check: prints ok and the kind when the source draws; when it does not, the engine's
     error goes to standard error and the status is 1 (--json: the result as JSON)
 
