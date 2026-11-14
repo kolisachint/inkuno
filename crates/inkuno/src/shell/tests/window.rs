@@ -1197,6 +1197,44 @@ fn focus_mode_gives_the_note_the_window_and_restores_the_chrome(cx: &mut TestApp
     assert_eq!(chrome(cx), before);
 }
 
+/// Esc does one thing. With a menu open in focus mode and the focus back in the note, the first Esc
+/// closes the menu and the mode stays; the second Esc, with nothing open, leaves the mode.
+#[gpui::test]
+fn escape_closes_the_menu_before_it_leaves_focus_mode(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "escape-menu");
+    fs::write(root.join("Une.md"), "# Une\n\ntexte\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("Une.md"), window, cx)
+    });
+    cx.run_until_parked();
+    cx.simulate_keystrokes("f9");
+    assert!(shell.read_with(cx, |s, _| s.focus_mode));
+    cx.simulate_keystrokes("shift-f10");
+    assert!(
+        shell.read_with(cx, |s, _| s.menu.is_some()),
+        "the cursor's menu is open"
+    );
+    cx.update(|window, cx| {
+        let note = shell.read(cx).pane().editor.focus_handle(cx);
+        window.focus(&note);
+    });
+    cx.simulate_keystrokes("escape");
+    assert!(
+        shell.read_with(cx, |s, _| s.menu.is_none()),
+        "the first Esc closes the menu"
+    );
+    assert!(
+        shell.read_with(cx, |s, _| s.focus_mode),
+        "and the focus mode stays"
+    );
+    cx.simulate_keystrokes("escape");
+    assert!(
+        !shell.read_with(cx, |s, _| s.focus_mode),
+        "the second Esc, with nothing open, leaves the focus mode"
+    );
+}
+
 /// Normal mode is edge to edge: the first note starts at the content's origin and two panes tile with the
 /// hairline between them and no gap. The bar the app draws (`client`) puts the note's strip at the top of
 /// the content; hidden (`app::ToggleTitleBar`), the note starts at the content's top with no strip. The

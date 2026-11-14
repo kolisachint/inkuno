@@ -404,16 +404,7 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &ToggleCommands, window, cx| this.open_commands(window, cx)),
             )
-            // Escape in the note, when it has nothing to close: the right-click menu.
-            .on_action(cx.listener(|this, _: &editor::Cancel, window, cx| {
-                this.dismiss_failures();
-                this.close_icons(window, cx);
-                this.close_menu(window, cx);
-                // Escape with nothing left to close in the note: out of focus mode.
-                if this.focus_mode {
-                    this.toggle_focus_mode(window, cx);
-                }
-            }))
+            .on_action(cx.listener(|this, _: &editor::Cancel, window, cx| this.escape(window, cx)))
             .on_action(
                 cx.listener(|this, _: &ToggleFocus, window, cx| this.toggle_focus_mode(window, cx)),
             )
@@ -543,6 +534,20 @@ impl Shell {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
         cx.notify();
+    }
+
+    /// Esc closes what is open (the failures shown, the icon grid, the menu) and does nothing else
+    /// then. Only with nothing open does it leave focus mode: one press, one thing.
+    pub(super) fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let open = self.menu.is_some()
+            || self.icon_pick.is_some()
+            || self.toasts.iter().any(|t| t.tone == Tone::Failed);
+        self.dismiss_failures();
+        self.close_icons(window, cx);
+        self.close_menu(window, cx);
+        if !open && self.focus_mode {
+            self.toggle_focus_mode(window, cx);
+        }
     }
 
     /// Ctrl+Shift+S: the title bar the app draws shown or hidden, the choice kept in the layout file.
