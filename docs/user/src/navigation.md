@@ -1,6 +1,6 @@
 # The palette and the panel
 
-The [palette](first-steps.md#find-anything-the-palette) (`Ctrl + P`) finds and creates notes. The panel shows the vault in four views: the tree, recent notes, vault search, and the outline.
+The [palette](first-steps.md#find-anything-the-palette) (`Ctrl + P`) finds and creates notes. The panel shows the vault in three views: the tree, recent notes and vault search. The right dock holds the outline, the headings of the open note, and the [Assistant](assistant.md) panel.
 
 ## The rail and its views
 
@@ -11,10 +11,10 @@ A rail of icons stays on the left of the window. It opens a panel beside the not
 | Tree | `Ctrl + E` | the vault and its folders. The displayed file is highlighted. |
 | Recent | — | every note, from the most to the least recently opened (`› recent notes`; `Ctrl + P` opens on recent) |
 | Search | — | the matches of a vault search, note by note |
-| Outline | — | the headings of the open note, in the right dock |
 
 The rail also holds, at the top: the command palette, the vault tree, search and new note. Everything else left the rail for the palette: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
 
+- **Right dock**: the outline and the Assistant are tools of the right dock, hidden at first. The Assistant opens from its button or the palette (`assistant`); see [Assistant](assistant.md).
 - **Fold**: press the key of the view on display, or click its icon. The panel folds back to the rail.
 - **Resize**: drag the line between the panel and the note. Dragged all the way left, the panel folds to its rail. All the way right, it takes the whole window. Double-click the line for the default width.
 - **Whole window**: `Ctrl + M`, or the arrows button at the top of the panel, puts the panel on the whole window, and back.

@@ -39,7 +39,7 @@ Every command works on one vault, found in this order:
 
 `--vault DIR` and `--json` may also come before the command word: `inkuno --vault ~/notes list`.
 
-A note is named by its title, an alias, or its path in the vault, with or without `.md`: `inkuno read Plan`, `inkuno read ideas/plan`. The `rev` commands take no `--vault`: they find the vault from the path of the note. `keys` needs no vault at all.
+A note is named by its title, an alias, or its path in the vault, with or without `.md`: `inkuno read Plan`, `inkuno read ideas/plan`. The `rev` commands take no `--vault`: they find the vault from the path of the note. `keys` needs no vault at all. `comment --file` takes a path and needs no vault either.
 
 ## Commands
 
@@ -64,6 +64,7 @@ Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set`
 | `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
 | `inkuno daily [--date YYYY-MM-DD] [--append TEXT]` | today's daily note, or the one of the date. `--append` adds a paragraph |
 | `inkuno comment <note> --passage P --text C` | wraps one passage in a comment: `{==P==}{>>C<<}`. The passage must occur once. `--text -` reads the comment from standard input |
+| `inkuno comment --file PATH --passage P --text C` | the same, on a Markdown file named by its path, with no vault. `PATH` must exist and end in `.md`. `--file` replaces the note name; giving both, or neither, is a usage error |
 | **Diagrams** | |
 | `inkuno render [<file>] [--note N --block K] [--mermaid SRC] [--theme light\|dark] [--width W] --out FILE.png` | a PNG of an SVG file of the vault, of the `K`-th Mermaid block of a note (1 is the first), or of a Mermaid source. `--mermaid -` reads the source from standard input |
 | `inkuno render --check --mermaid SRC` | whether a Mermaid source draws, and the engine's error when it does not. `--mermaid -` reads the source from standard input; without `--mermaid` the command is refused |
@@ -120,13 +121,21 @@ inkuno show Plan                           # the window opens the note, if Inkun
 - `inkuno render --check` exits with 1 when the source does not draw.
 - `inkuno show` exits with 1, and says so, when Inkuno is not open.
 
+`comment --file` is for a note outside any vault, such as a scratch note in the configuration folder (`~/.config/inkuno/scratch/` on Linux):
+
+```bash
+inkuno comment --file ~/.config/inkuno/scratch/idea.md --passage "ship on Friday" --text "is this realistic?"
+```
+
+A passage must be on one line, and an empty comment is refused. Newlines in the comment become spaces. The file must exist and end in `.md`.
+
 Pass the token from `inkuno read --json` to `edit` or `append` with `--token`. Without `--token`, an edit applies to the file as it is on disk; an empty `--token` is refused.
 
 Standard input is read only when a command asks for it: `--text -` or `--mermaid -`. Nothing else reads it.
 
 ## What it will not do
 
-- Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed or reached, and a link into one is refused too; `.trash` is reached only through `restore`.
+- Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed or reached, and a link into one is refused too; `.trash` is reached only through `restore`. The one exception is `comment --file`, which reaches only the file it names.
 - Delete a file. The trash is the only way out, and a name that is already taken is refused.
 - Overwrite a note that changed after it was read, when the agent passes the token it read.
 - Open the network, run a program, or touch git.

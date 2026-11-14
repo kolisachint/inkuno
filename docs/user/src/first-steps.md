@@ -18,7 +18,7 @@ Start typing. The first line is the title of the note, and the name of its file.
 
 `Ctrl + N` makes a scratch note: a quick thought, in a tab of its own, kept in the app's folder until you file it. `Ctrl + Alt + N` makes a note in the vault, in the folder selected in the tree.
 
-The bottom right of the note counts its words and characters, or those of the selection. Characters are counted as written, Markdown markers included, line ends excluded.
+The round **Assistant** button at the bottom right of the note opens the [Assistant](assistant.md) panel. It needs the `hoocode` program, installed and logged in.
 
 ## The blank page
 

@@ -20,7 +20,8 @@ command word; `cli::run` reads them and counts them as if they came after it.
   exception is `show`, which asks the open window to show a file (see Decisions).
 - **The app's rules, not new ones.** A taken name is refused. A write is atomic. A rename rewrites
   the `[[links]]` to the note, unless another note still has the old name. Nothing is deleted:
-  `trash` moves a file to `.trash`. Nothing outside the vault is reached.
+  `trash` moves a file to `.trash`. Nothing outside the vault is reached, except the one file that
+  `comment --file` names (see Decisions).
 - **Standard input only on request.** `--text -` (`new`, `append`, `comment`) and `--mermaid -`
   (`render`) read it; no other option does. Without `--text`, `new` makes a note with no body and
   `append` is a usage error. Nothing waits on a pipe that was not asked for.
@@ -47,8 +48,8 @@ names within a small edit distance, nearest first, at most three (`suggest` in `
 
 ## The vault
 
-Every command but `rev` and `keys` works on one vault, found in this order (`cli/commands.rs`,
-`vault_of`):
+Every command but `rev`, `keys` and `comment --file` works on one vault, found in this order
+(`cli/commands.rs`, `vault_of`):
 
 1. `--vault DIR`.
 2. The nearest folder at or above the current one that holds an `.inkuno` folder.
@@ -61,6 +62,10 @@ for the place the path really reaches. `--folder ""` and `--folder .` are the va
 listing's `--folder` is read by the same rule as `new` and `move` (`Vault::inside`). `rev` takes no `--vault`: it finds the
 vault from the path of the note (`rev.rs`, `revisions.md`). `keys` works on the shortcut file of the
 config folder, not on a vault.
+
+`comment --file PATH` is the one other command with no vault. It names a Markdown file by its path,
+so a scratch note, which lives outside any vault, can be reviewed. It reaches exactly that file and
+nothing else. The reason is recorded in Decisions.
 
 ## The token
 
@@ -91,7 +96,7 @@ The token is not a saved version. The field was called `revision` in the agent's
 ## Commands
 
 Reading: `vault`, `list`, `search`, `read`, `links`, `tags`, `show`.
-Writing: `new`, `edit`, `append`, `move`, `trash`, `restore`, `daily`, `comment`.
+Writing: `new`, `edit`, `append`, `move`, `trash`, `restore`, `daily`, `comment` (and `comment --file PATH`, with no vault).
 Diagrams: `render`, `render --check`.
 Guide: `guide [page]`.
 Versions: `rev save`, `rev list`, `rev show`, `rev diff`.
@@ -110,6 +115,7 @@ The options of each one are in `cli/commands.rs`, and in `docs/user/src/agents.m
 | 2026-11-14 | `show` keeps a local door to the open window: `platform/link.rs`, a TCP port on 127.0.0.1 with a secret, both in `<config>/inkuno/agent` while the window is open. It is the only command that talks to the app. It fails with a sentence when the app is not open, and it changes nothing. |
 | 2026-11-14 | Text by default, `--json` for the structure. Errors on standard error with exit 1; a wrong command line exits 2. |
 | 2026-11-14 | Arguments are read by hand, with no new dependency. |
-| 2026-11-14 (planned, not built) | An Assistant panel in the right dock. It starts the `hoocode` binary over its RPC mode. The first version is a read-only reviewer: chat about the note, and "Review this note" writes comments. The command that starts the agent is a setting. Inkuno stores no keys: the agent's own program holds them. |
+| 2026-11-14 (built) | An Assistant panel in the right dock. It starts the `hoocode` program in its RPC mode (`hoocode --mode rpc`, JSON on standard input and output) as a child process, with the open vault, or the scratch folder when no vault is open, as its working folder. The first version is a read-only reviewer: chat about the note, and "Review this note" writes comments by running `inkuno comment`. The command that starts the agent is the `assistant` setting. Inkuno stores no keys and no model: the agent's own program holds them. Code: `platform/assistant.rs` runs the child process (start, lines in and out, stop), and `shell/assistant.rs` holds the panel and its state; the full description is in `app-ui.md` §16. |
+| 2026-11-14 (built) | `inkuno comment --file PATH --passage P --text C [--json]` comments on a Markdown file by its path, with no vault. It is how a scratch note, which lives outside any vault, is reviewed: the owner chose to extend the command rather than disable review for scratch notes. `--file` replaces the note name. Giving both, or neither, or `--vault` with `--file`, is a usage error (exit 2). The file must exist and end in `.md` (else exit 1). A passage must be on one line; newlines in the comment become spaces; an empty comment is refused. This is a deliberate, recorded exception to "nothing outside the vault is reached": it reaches exactly the one file the caller names. |
 | 2026-11-14 (planned, not built) | `inkuno write <note> --author NAME`. Each agent write is bracketed by automatic single-author snapshots (`kind: auto`). The change is pending: the agent's text is tinted until the human accepts, rejects or comments on it. Only the pending area is read-only for the human. A write that touches text the human changed since the agent read it is refused. |
 | 2026-11-14 (planned, not built) | Later, the same commands talk to the running app over a local socket, instead of only writing files and asking through `show`. |

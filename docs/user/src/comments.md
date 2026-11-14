@@ -12,6 +12,8 @@ The comment is kept in the note itself, as [CriticMarkup](https://criticmarkup.c
 
 The file stays plain Markdown. In Inkuno, the text is highlighted and the comment follows it, faded.
 
+The review of the [Assistant](assistant.md) writes its findings in this form too.
+
 ## The comments panel
 
 A panel to the right of the note lists its comments.

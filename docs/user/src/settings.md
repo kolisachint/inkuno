@@ -53,6 +53,11 @@ A small table keeps its own size, and nothing goes past the window.
 - `revision author…` in the palette sets the name on the versions you save. Enter keeps it, Escape keeps the old one. Empty keeps the default.
 - The default is the `INKUNO_AUTHOR` environment variable, else your system user name, else `unknown`.
 
+## Assistant command
+
+- `Assistant command…` in the palette sets the command that starts the [Assistant](assistant.md). The default is `hoocode`. An empty entry returns to the default.
+- Inkuno stores no keys and no model. Login and model stay in the configuration of that program.
+
 ## Language
 
 The interface is in English.
@@ -71,6 +76,7 @@ These choices are kept in a file named `settings`, in the [configuration folder]
 | `bar` | `on`, `off` | `formatting bar` |
 | `motion` | `on`, `off` | `animations` |
 | `author` | any line of text | `revision author…` (empty: the default) |
+| `assistant` | the command that starts the [Assistant](assistant.md), `hoocode` by default | `Assistant command…` (empty: the default) |
 
 ## Changing a shortcut
 

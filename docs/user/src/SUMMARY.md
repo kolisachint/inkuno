@@ -12,6 +12,7 @@
 - [Writing notes](writing.md)
 - [Links, embeds and files](links.md)
 - [Comments](comments.md)
+- [Assistant](assistant.md)
 - [Daily notes](daily-notes.md)
 
 # Finding your way
