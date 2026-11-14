@@ -87,12 +87,17 @@ pub fn run(args: &[String]) -> i32 {
 }
 
 /// The note's home and its path, as the app would know them. Errors name the note.
+///
+/// The path is resolved on disk (`..` and symbolic links included), so the revisions are found
+/// where the note really is: a path that climbs out of its vault names a note outside it, and
+/// never a folder inside the vault's history.
 pub fn locate(note: &str) -> Result<(Home, PathBuf), String> {
-    let path = std::path::absolute(note).map_err(|e| format!("{note}: {e}"))?;
+    let path = std::fs::canonicalize(note)
+        .map_err(|_| format!("no such note: {note} (a .md file is expected)"))?;
     if path.extension().is_none_or(|e| e != "md") || !path.is_file() {
         return Err(format!("no such note: {note} (a .md file is expected)"));
     }
-    let scratch_dir = scratch::dir();
+    let scratch_dir = real(&scratch::dir());
     if path.starts_with(&scratch_dir) {
         return Ok((Home::Scratch(scratch_dir), path));
     }
@@ -100,14 +105,19 @@ pub fn locate(note: &str) -> Result<(Home, PathBuf), String> {
     Ok((Home::Vault(vault_root(&folder)), path))
 }
 
-/// The vault of a note in `folder`: the nearest folder above with an `.inkuno` folder, else the
-/// vault the app has open when the note is in it, else `folder` itself.
+/// A path as the disk spells it, or the path itself when it does not exist.
+fn real(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// The vault of a note in `folder` (a real path): the nearest folder above with an `.inkuno`
+/// folder, else the vault the app has open when the note is in it, else `folder` itself.
 fn vault_root(folder: &Path) -> PathBuf {
     if let Some(root) = folder.ancestors().find(|dir| dir.join(".inkuno").is_dir()) {
         return root.to_path_buf();
     }
     let (open, _) = vault::load_config();
-    match open {
+    match open.map(|root| real(&root)) {
         Some(root) if folder.starts_with(&root) => root,
         _ => folder.to_path_buf(),
     }
