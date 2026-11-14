@@ -122,7 +122,7 @@ fn tabs_open_switch_close_and_come_back(cx: &mut TestAppContext) {
 
     // A new note opens in a tab of its own; left empty then closed, no empty file stays in the vault.
     let before = fs::read_dir(&root).unwrap().count();
-    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_keystrokes("secondary-alt-n");
     assert_eq!(tabs(&shell, cx, 0).0.len(), 4);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.tab_labels(0, cx)[3].clone()),
@@ -608,9 +608,9 @@ fn tabs_close_in_bulk_from_their_menu(cx: &mut TestAppContext) {
     cx.simulate_input("non enregistré");
     let editor = shell.read_with(cx, |s, _| s.pane().editor.clone());
     // A draft with text is saved as a note; an empty one leaves nothing.
-    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_keystrokes("secondary-alt-n");
     cx.simulate_input("# Brouillon\n\ntexte");
-    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_keystrokes("secondary-alt-n");
     shell.update_in(cx, |s, window, cx| {
         s.add_pane(Side::Right, window, cx);
     });

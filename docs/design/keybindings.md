@@ -163,7 +163,9 @@ palette-only, `›` + help-rebindable.
 | `F2` | `nav::Rename` | Nav | — |
 | `Ctrl+D` | `nav::Duplicate` | Nav | — |
 | `Ctrl+Backspace` (macOS `Cmd+Backspace`) | `nav::Trash` | Nav | — |
-| `Ctrl+N` / `Ctrl+J` / `Ctrl+O` | `app::NewNote/Today/OpenVault` | — | `› new/today/change vault` |
+| `Ctrl+N` | `app::NewScratch` (scratch note, no vault needed) | — | `› new scratch note` |
+| `Ctrl+Alt+N` | `app::NewNote` (note in the tree's folder, in the vault) | — | `› new note in folder` |
+| `Ctrl+J` / `Ctrl+O` | `app::Today/OpenVault` | — | `› today/change vault` |
 | `Ctrl+Shift+D` | `app::NewDiagram` | — | `› new diagram` |
 | `Ctrl+Shift+S` | `app::ToggleTitleBar` (the bar the app draws, Linux: shown or hidden; its buttons come back from the rail) | — | `› title bar: show or hide it` |
 | `Ctrl+M` | `nav::ToggleFull` (panel full-window) | Shell | `› panel on the whole window` |
@@ -298,6 +300,16 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   `tabs-and-panes.md` / `navigation.md` / `settings.md`; mockup 720 → 800
   annotations. `docs/user/src/shortcuts.md` untouched — regen owned by Linux CI
   (`make docs` can't run on macOS).
+
+- **2026-11-14 — scratch notes on `Ctrl+N`, the vault note moves to `Ctrl+Alt+N`:** `app::NewScratch`
+  (new) opens a scratch note in a tab, the cursor in it, with no vault needed. Its file is plain Markdown
+  in the app's own folder (`inkuno/scratch` under the config folder, never in the vault), written as it is
+  typed, named by its moment (`2026-11-14-103200`, a number after a collision). `app::NewNote` keeps its
+  name and its behaviour (the note filed in the tree's folder, in the vault) and its chord moves to
+  `Ctrl+Alt+N`: a chord is stable API, so `Ctrl+N` now means something else for the same action name. Tests:
+  `scratch.rs` (`ctrl_n_writes_a_scratch_note_and_no_vault_file`, `ctrl_n_works_without_a_vault`,
+  `ctrl_alt_n_still_creates_a_vault_note`). Tests that made vault notes with `Ctrl+N` now use `Ctrl+Alt+N`:
+  `end_to_end/panel.rs`, `tabs.rs`, `window.rs`, `save_close.rs`.
 
 - **2026-11-14 — sidebar on `Ctrl+B`, bold moves to `Ctrl+Alt+B`:** `app::ToggleSidebar` (new) shows or
   hides the left dock (`Panel::Rail` ↔ `Split`, saved in the layout file) from any view, the note

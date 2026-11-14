@@ -13,10 +13,11 @@ pub(super) const MIN_PANE: Pixels = px(300.);
 /// No pane is made lower: room for its tab bar and five lines of text.
 pub(super) const MIN_PANE_H: Pixels = px(200.);
 
-/// A saved tab that comes back: a file still in the vault. A token an older version
-/// wrote for a tool tab (`@graph`, `@calendar`) is no file and is ignored.
-fn restorable(path: &Path, root: &Path) -> bool {
-    path.is_file() && path.starts_with(root)
+/// A saved tab that comes back: a file still in the vault, or a scratch note. A token an older
+/// version wrote for a tool tab (`@graph`, `@calendar`) is no file and is ignored.
+fn restorable(path: &Path, root: Option<&Path>) -> bool {
+    path.is_file()
+        && (platform::scratch::holds(path) || root.is_some_and(|root| path.starts_with(root)))
 }
 
 /// Where a tab goes: at a place in the bar of a pane, or into a new pane split off a side of one.
@@ -75,6 +76,9 @@ pub(super) struct Pane {
     /// What is shown is only a preview (arrows in the tree, graph): the history
     /// ignores it until it is opened for good.
     pub(super) peek: bool,
+    /// A scratch note (Ctrl+N): its file is in the scratch folder, never in the vault, and it is
+    /// written as it is typed, vault or not. Its file is made at its first text.
+    pub(super) scratch: bool,
 }
 
 /// A pane of the window: its tabs, left to right (indices in `Shell::panes`), and the one it shows.
@@ -209,6 +213,7 @@ impl Shell {
             base: String::new(),
             listing: None,
             peek: false,
+            scratch: false,
         }
     }
 
@@ -775,6 +780,7 @@ impl Shell {
             self.focus_pane(self.active, window, cx);
             return false;
         }
+        self.drop_blank_scratch(cx);
         self.forget_active();
         self.focus_pane(self.active, window, cx);
         true
@@ -826,6 +832,7 @@ impl Shell {
                 failed.get_or_insert(target);
                 continue;
             }
+            self.drop_blank_scratch(cx);
             if self.panes.len() == 1 {
                 self.add_tab(window, cx);
                 self.active = find(self, target).unwrap_or(tab);
@@ -850,6 +857,7 @@ impl Shell {
         self.each_pane(|this| {
             this.follow_title(cx);
             this.drop_if_empty(cx);
+            this.drop_blank_scratch(cx);
         });
         true
     }
@@ -872,7 +880,7 @@ impl Shell {
         tree: Option<Node>,
         saved: Vec<(Vec<PathBuf>, usize)>,
         current: bool,
-        root: &Path,
+        root: Option<&Path>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -1007,10 +1015,11 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let note = root.join("Note.md");
         std::fs::write(&note, "# Note\n").unwrap();
-        assert!(restorable(&note, &root));
-        assert!(!restorable(&root.join("@graph"), &root));
-        assert!(!restorable(Path::new("@calendar"), &root));
-        assert!(!restorable(&root.join("Missing.md"), &root));
+        assert!(restorable(&note, Some(&root)));
+        assert!(!restorable(&note, None));
+        assert!(!restorable(&root.join("@graph"), Some(&root)));
+        assert!(!restorable(Path::new("@calendar"), Some(&root)));
+        assert!(!restorable(&root.join("Missing.md"), Some(&root)));
         let _ = std::fs::remove_dir_all(&root);
     }
 

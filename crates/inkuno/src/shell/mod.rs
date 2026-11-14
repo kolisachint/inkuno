@@ -12,6 +12,7 @@ mod notes;
 mod palette_open;
 mod pane;
 mod render;
+mod scratch;
 mod settings;
 mod sidebar;
 mod tabs;
@@ -190,12 +191,15 @@ impl Shell {
         cx.on_app_quit(|this, cx| {
             this.each_pane(|this| {
                 this.leave(cx);
+                this.drop_blank_scratch(cx);
             });
             async {}
         })
         .detach();
 
         let nav = Nav::new(cx.focus_handle());
+        // Scratch notes left blank by a crash go; the others come back with the tabs.
+        platform::scratch::clean_blank();
 
         let mut this = Self {
             panes: vec![pane],
@@ -256,13 +260,32 @@ impl Shell {
                 // the first pane to the most recent note.
                 let panes = vault::load_file("panes");
                 let (tree, saved) = read_panes(&panes);
-                this.restore_panes(tree, saved, panes.starts_with("v3 "), &root, window, cx);
+                this.restore_panes(
+                    tree,
+                    saved,
+                    panes.starts_with("v3 "),
+                    Some(&root),
+                    window,
+                    cx,
+                );
                 this.panes_saved = this.panes_state();
                 if this.nav.panel == Panel::Full {
                     window.focus(&this.nav.focus);
                 }
             }
-            None => window.focus(&this.focus),
+            None => {
+                // No vault: only the scratch notes of the last layout come back (they need none).
+                let panes = vault::load_file("panes");
+                let (tree, saved) = read_panes(&panes);
+                let scratch = saved
+                    .iter()
+                    .any(|(tabs, _)| tabs.iter().any(|tab| platform::scratch::holds(tab)));
+                if scratch {
+                    this.restore_panes(tree, saved, panes.starts_with("v3 "), None, window, cx);
+                } else {
+                    window.focus(&this.focus);
+                }
+            }
         }
         this.watch(cx);
         this.listen(window, cx);

@@ -14,8 +14,14 @@ pub fn today() -> (i32, u32, u32) {
 }
 
 /// Local time, `09:05`: hours and minutes.
-#[cfg(unix)]
 pub fn clock() -> (u32, u32) {
+    let (hour, minute, _) = hms();
+    (hour, minute)
+}
+
+/// Local time to the second: hours, minutes, seconds.
+#[cfg(unix)]
+pub fn hms() -> (u32, u32, u32) {
     // SAFETY: like `today`, `localtime_r` only writes into `tm`, which is ours.
     let tm = unsafe {
         let now = libc::time(std::ptr::null_mut());
@@ -23,11 +29,11 @@ pub fn clock() -> (u32, u32) {
         libc::localtime_r(&now, &mut tm);
         tm
     };
-    (tm.tm_hour as u32, tm.tm_min as u32)
+    (tm.tm_hour as u32, tm.tm_min as u32, tm.tm_sec as u32)
 }
 
 #[cfg(windows)]
-pub fn clock() -> (u32, u32) {
+pub fn hms() -> (u32, u32, u32) {
     #[repr(C)]
     #[derive(Default)]
     #[allow(dead_code)]
@@ -48,7 +54,7 @@ pub fn clock() -> (u32, u32) {
     let mut now = Local::default();
     // SAFETY: `GetLocalTime` fills the structure it is given, and does not fail.
     unsafe { GetLocalTime(&mut now) };
-    (now.hour as u32, now.minute as u32)
+    (now.hour as u32, now.minute as u32, now.second as u32)
 }
 
 #[cfg(windows)]

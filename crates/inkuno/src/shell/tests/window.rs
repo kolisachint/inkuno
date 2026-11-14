@@ -196,7 +196,7 @@ fn opens_on_the_body(cx: &mut TestAppContext) {
     );
 
     // A new note written then emptied leaves nothing behind when leaving.
-    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_keystrokes("secondary-alt-n");
     cx.simulate_input("Brouillon");
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.run_until_parked();
@@ -204,7 +204,7 @@ fn opens_on_the_body(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-a backspace");
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.run_until_parked();
-    cx.simulate_keystrokes("secondary-n");
+    cx.simulate_keystrokes("secondary-alt-n");
     cx.run_until_parked();
     let mut notes: Vec<_> = fs::read_dir(&root)
         .unwrap()

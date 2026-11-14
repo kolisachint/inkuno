@@ -15,6 +15,7 @@ pub use inkuno_logic::note;
 pub use inkuno_logic::prefs;
 pub use inkuno_logic::rank;
 pub use inkuno_logic::recall;
+pub use inkuno_logic::scratch;
 pub use inkuno_logic::wiki;
 
 pub mod mermaid;

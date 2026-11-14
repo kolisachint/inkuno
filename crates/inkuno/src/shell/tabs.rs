@@ -46,7 +46,12 @@ impl Shell {
                 None => vault::stem(&listing.of),
             };
         }
-        if let Some(path) = pane.file_path().or(pane.path.as_ref()) {
+        // A scratch note is named by its first line: its file name is only its moment.
+        if let Some(path) = pane
+            .file_path()
+            .or(pane.path.as_ref())
+            .filter(|_| !pane.scratch)
+        {
             return vault::stem(path);
         }
         let first = pane

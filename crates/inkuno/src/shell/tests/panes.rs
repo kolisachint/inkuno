@@ -648,7 +648,7 @@ fn an_old_tool_tab_restores_the_files_around_it(cx: &mut TestAppContext) {
                 1,
             )],
             false,
-            &root,
+            Some(&root),
             window,
             cx,
         );

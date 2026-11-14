@@ -146,3 +146,10 @@ Headings inside code blocks are not listed.
 | `Ctrl + A` `C` `X` `V` | select all, copy, cut, paste |
 | Double click, triple click | select a word, a line. Keep dragging to extend by words, by lines. |
 | `Ctrl + +` (or `Ctrl + =`), `Ctrl + -`, `Ctrl + 0` | bigger, smaller, default text size |
+
+## Scratch notes
+
+- **New scratch note**: `Ctrl + N`, or `new scratch note` in the palette. It opens in a tab of its own, the cursor in it, for a thought you do not want to file yet. No vault is needed.
+- **Where it lives**: a scratch note is a plain `.md` file in the app's own folder (`inkuno/scratch` in the config folder: `~/.config` on Linux, `~/Library/Application Support` on macOS). It is never written into your vault, and the vault's search, links and recent notes do not see it.
+- **Saved as you type**: the file is written a moment after each change, and it is named after the moment it was made, such as `2026-11-14-103200.md`.
+- **A note in the vault**: `Ctrl + Alt + N` (`new note in folder` in the palette) makes a note straight in the vault, in the folder selected in the tree, as before.
