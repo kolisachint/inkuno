@@ -164,7 +164,7 @@ impl Shell {
     /// follows the sidebar: the rail alone when collapsed, the rail plus the open panel (at
     /// whatever width it was dragged to) when expanded; zero when the lights are not there.
     pub(super) fn traffic_pad(&self) -> Pixels {
-        if !self.nav.native_bar {
+        if !self.nav.lights {
             return px(0.);
         }
         let t = self.theme;
@@ -370,7 +370,7 @@ impl Shell {
                 // Under a native title bar the traffic lights float over the window's top left:
                 // the first tab starts right of them, measured from the window's edge once — the
                 // bar already starts past the sidebar, so it pads only what the sidebar leaves.
-                .when(self.nav.native_bar, |d| d.pl(pad))
+                .when(self.nav.lights, |d| d.pl(pad))
                 .when(corner, |d| d.pr(t.px(render::PILL_ROOM)))
                 // Past the last tab, it lands at the end; out of the bar, nowhere in it.
                 .on_drag_move(cx.listener(

@@ -582,9 +582,8 @@ impl Render for Viewer {
             .size_full()
             .relative()
             .track_focus(&self.focus)
-            // The sheet's corners: the sheet under it clips to a rectangle, not to its corners.
+            // Flat, like the pane under it: no corners.
             .bg(t.bg)
-            .rounded(t.sheet())
             .cursor(if self.drag.is_some() {
                 CursorStyle::ClosedHand
             } else {

@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod link;
+pub mod mac_chrome;
 pub mod revisions;
 pub mod scratch;
 pub mod vault;

@@ -351,9 +351,13 @@ note, with an optional line on what changed; nothing is saved when the text is t
   takes the window edge to edge. Owner brief 2026-11-14: the rail and the title bar go too (the 2026-11-08
   line kept the rail). It is a view flag (`Shell::focus_mode`, not saved): nothing of the chrome is changed
   to hide it, so `F9` again, or `Esc` in the note (`editor::Cancel` propagates when nothing is open), shows
-  the same layout as before. Edge to edge only in this mode: in normal mode the 8 px gaps stay (§10 item 4,
-  `window.rs` sheets test). Palette line moved from `palette_open.rs` to the catalogue (`commands.rs`).
+  the same layout as before. Edge to edge in normal mode too since 2026-11-14 (§10 item 4 lifted; see the row below). Palette line moved from `palette_open.rs` to the catalogue (`commands.rs`).
   Tests: `window.rs` (`focus_mode_gives_the_note_the_window_and_restores_the_chrome`).
+
+- **2026-11-14 — panes edge to edge in normal mode (owner decision):** no ground around the panes;
+  a 1 px hairline between neighbours, its handle overlapping both sides. The §10 item 4 gap lock is
+  lifted. Tests: `window.rs` (`sheets_tile_the_window_edge_to_edge_with_a_hairline`,
+  `normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline`).
 
 ## 9. Reserved / gaps log
 

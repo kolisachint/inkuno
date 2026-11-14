@@ -678,11 +678,12 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Atelier: the notes and the panel are sheets on the ground, 8 px of it between two sheets and at the window's edges
-/// (top, right, bottom), none between the rail and the panel. In every width, with the panel folded and open, with one
+/// The panes take the window edge to edge (owner decision 2026-11-14, app-ui.md §10 item 4): the note and the
+/// panel reach the window's top, right and bottom edges, and a hairline (`nav::DIVIDER`, 1 px) separates
+/// neighbours, none between the rail and the note. In every width, with the panel folded and open, with one
 /// pane and two, and at the smallest and largest zoom.
 #[gpui::test]
-fn sheets_lie_on_the_ground_with_eight_pixels_between(cx: &mut TestAppContext) {
+fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "ground");
     let (one, two) = (root.join("Une.md"), root.join("Deux.md"));
     fs::write(&one, "# Titre\n\nTexte\n").unwrap();
@@ -691,8 +692,8 @@ fn sheets_lie_on_the_ground_with_eight_pixels_between(cx: &mut TestAppContext) {
         s.rescan(&root, cx);
         s.open_note(&one, cx);
     });
-    let gap = nav::GAP;
-    assert_eq!(gap, px(8.));
+    let line = nav::DIVIDER;
+    assert_eq!(line, px(1.));
     let mut seen = 0;
     let mut check =
         |what: &str, width: f32, panels: bool, panes: usize, cx: &mut gpui::VisualTestContext| {
@@ -710,19 +711,19 @@ fn sheets_lie_on_the_ground_with_eight_pixels_between(cx: &mut TestAppContext) {
             for (i, sheet) in sheets.iter().enumerate() {
                 assert_eq!(
                     (sheet.top(), sheet.bottom()),
-                    (gap, px(720.) - gap),
+                    (px(0.), px(720.)),
                     "{what}: pane {i} {sheet:?}"
                 );
             }
             assert_eq!(
                 sheets.last().unwrap().right(),
-                px(width) - gap,
+                px(width),
                 "{what}: right edge {sheets:?}"
             );
             for pair in sheets.windows(2) {
                 assert_eq!(
                     pair[1].left() - pair[0].right(),
-                    gap,
+                    line,
                     "{what}: between the panes {pair:?}"
                 );
             }
@@ -736,12 +737,12 @@ fn sheets_lie_on_the_ground_with_eight_pixels_between(cx: &mut TestAppContext) {
                 );
                 assert_eq!(
                     (panel.top(), panel.bottom()),
-                    (gap, px(720.) - gap),
+                    (px(0.), px(720.)),
                     "{what}: panel {panel:?}"
                 );
                 assert_eq!(
                     sheets[0].left() - panel.right(),
-                    gap,
+                    line,
                     "{what}: between the panel and the note {panel:?} {sheets:?}"
                 );
             } else {
@@ -1194,4 +1195,79 @@ fn focus_mode_gives_the_note_the_window_and_restores_the_chrome(cx: &mut TestApp
     );
     settle(cx);
     assert_eq!(chrome(cx), before);
+}
+
+/// Normal mode is edge to edge: the first note starts at the content's origin and two panes tile with the
+/// hairline between them and no gap. The bar the app draws (`client`) puts the note's strip at the top of
+/// the content; hidden (`app::ToggleTitleBar`), the note starts at the content's top with no strip. The
+/// content's origin is the window's corner, less the frame the app draws on Linux: its margin (`client_inset`)
+/// and the 1 px border of the framed content.
+#[gpui::test]
+fn normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "origin");
+    fs::write(root.join("Une.md"), "# Une\n\ntexte\n").unwrap();
+    fs::write(root.join("Deux.md"), "# Deux\n\ntexte\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("Une.md"), window, cx)
+    });
+    shell.update_in(cx, |s, window, cx| {
+        s.open_aside(&root.join("Deux.md"), window, cx)
+    });
+    shell.update(cx, |s, cx| {
+        s.nav.panel = nav::Panel::Split;
+        cx.notify();
+    });
+    let settle = |cx: &mut gpui::VisualTestContext| {
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+    };
+    settle(cx);
+
+    // The test platform draws no frame: the content's origin is the window's corner.
+    let first = cx.debug_bounds("pane-0").expect("the first note is drawn");
+    let second = cx.debug_bounds("pane-1").expect("the second note is drawn");
+    assert_eq!(first.origin.y, px(0.), "{first:?}");
+    assert_eq!(
+        second.left() - first.right(),
+        nav::DIVIDER,
+        "{first:?} {second:?}"
+    );
+    assert_eq!(
+        (first.top(), first.bottom()),
+        (second.top(), second.bottom()),
+        "the panes share their top and bottom edges"
+    );
+
+    // With the bar the app draws: the note's strip sits at the content's top.
+    shell.update(cx, |s, _| s.client = true);
+    settle(cx);
+    let inset = cx
+        .update(|window, _| window.client_inset())
+        .unwrap_or(px(0.))
+        + px(1.);
+    let note = cx.debug_bounds("pane-0").expect("the first note is drawn");
+    assert_eq!(
+        note.top(),
+        inset,
+        "the first pane starts at the content's top"
+    );
+    let strip = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip)
+    };
+    assert!(strip(cx) > px(0.), "the bar is drawn: its strip is kept");
+
+    // Hidden: no strip, and the note starts at the content's top.
+    cx.simulate_keystrokes("secondary-shift-s");
+    settle(cx);
+    assert_eq!(strip(cx), px(0.), "hidden: no strip");
+    let note = cx.debug_bounds("pane-0").expect("the first note is drawn");
+    assert_eq!(
+        note.top() - inset,
+        px(0.),
+        "hidden: the note starts at the content's top"
+    );
+    let _ = fs::remove_dir_all(&root);
 }

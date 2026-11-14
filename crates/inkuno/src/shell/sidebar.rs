@@ -1316,37 +1316,60 @@ impl Shell {
         }
         let full = panel == Panel::Full;
         let content = self.render_stack(false, window, cx);
-        // 5 px handle, invisible until the pointer is over it; double-click: original width.
-        let divider = div()
-            .id("nav-divider")
-            .debug_selector(|| "nav-divider".into())
-            .flex_none()
-            .w(DIVIDER)
-            .h_full()
-            .flex()
-            .justify_center()
-            .cursor(CursorStyle::ResizeLeftRight)
-            .group("nav-divider")
-            .child(
-                div()
-                    .w_full()
-                    .h_full()
-                    .when(self.nav.dragging, |d| d.bg(t.hover))
-                    .group_hover("nav-divider", |s| s.bg(t.hover)),
-            )
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, e: &MouseDownEvent, window, cx| {
-                    if e.click_count >= 2 {
-                        this.nav.list_w = LIST_W;
-                        this.nav.panel = Panel::Split;
-                        this.settle_nav(window, cx);
-                    } else {
-                        this.nav.dragging = true;
-                    }
-                    cx.stop_propagation();
-                }),
-            );
+        // A 1 px hairline between the panel and the note; its handle (DIVIDER_HIT each side) is laid over
+        // both. Double-click: original width.
+        let divider = div().flex_none().relative().w(DIVIDER).h_full().child(
+            div()
+                .id("nav-divider")
+                .debug_selector(|| "nav-divider".into())
+                .group("nav-divider")
+                .absolute()
+                .occlude()
+                .top_0()
+                .bottom_0()
+                .left(-nav::DIVIDER_HIT)
+                .right(-nav::DIVIDER_HIT)
+                .flex()
+                .justify_center()
+                .cursor(CursorStyle::ResizeLeftRight)
+                .child(
+                    div()
+                        .w(DIVIDER)
+                        .h_full()
+                        .bg(t.border)
+                        .when(self.nav.dragging, |d| d.bg(t.accent))
+                        .group_hover("nav-divider", |s| s.bg(t.accent)),
+                )
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                        if e.click_count >= 2 {
+                            this.nav.list_w = LIST_W;
+                            this.nav.panel = Panel::Split;
+                            this.settle_nav(window, cx);
+                        } else {
+                            this.nav.dragging = true;
+                        }
+                        cx.stop_propagation();
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        if this.nav.dragging {
+                            this.settle_nav(window, cx)
+                        }
+                    }),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        if this.nav.dragging {
+                            this.settle_nav(window, cx)
+                        }
+                    }),
+                ),
+        );
         wrapper
             .map(|d| if full { d.flex_1() } else { d.flex_none() })
             .child(rail)
@@ -1365,35 +1388,59 @@ impl Shell {
             return None;
         }
         let content = self.render_stack(true, window, cx);
-        let divider = div()
-            .id("dock-divider")
-            .debug_selector(|| "dock-divider".into())
-            .flex_none()
-            .w(DIVIDER)
-            .h_full()
-            .flex()
-            .justify_center()
-            .cursor(CursorStyle::ResizeLeftRight)
-            .group("dock-divider")
-            .child(
-                div()
-                    .w_full()
-                    .h_full()
-                    .when(self.nav.right_dragging, |d| d.bg(t.hover))
-                    .group_hover("dock-divider", |s| s.bg(t.hover)),
-            )
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, e: &MouseDownEvent, window, cx| {
-                    if e.click_count >= 2 {
-                        this.nav.right_w = LIST_W;
-                        this.settle_nav(window, cx);
-                    } else {
-                        this.nav.right_dragging = true;
-                    }
-                    cx.stop_propagation();
-                }),
-            );
+        // The hairline (DIVIDER) keeps the place between the note and the dock; its handle is laid over
+        // both sides and carries the listeners (gpui hits the handle, not the 1 px box).
+        let divider = div().flex_none().relative().w(DIVIDER).h_full().child(
+            div()
+                .id("dock-divider")
+                .debug_selector(|| "dock-divider".into())
+                .group("dock-divider")
+                .absolute()
+                .occlude()
+                .top_0()
+                .bottom_0()
+                .left(-nav::DIVIDER_HIT)
+                .right(-nav::DIVIDER_HIT)
+                .flex()
+                .justify_center()
+                .cursor(CursorStyle::ResizeLeftRight)
+                .child(
+                    div()
+                        .w(DIVIDER)
+                        .h_full()
+                        .bg(t.border)
+                        .when(self.nav.right_dragging, |d| d.bg(t.accent))
+                        .group_hover("dock-divider", |s| s.bg(t.accent)),
+                )
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                        if e.click_count >= 2 {
+                            this.nav.right_w = LIST_W;
+                            this.settle_nav(window, cx);
+                        } else {
+                            this.nav.right_dragging = true;
+                        }
+                        cx.stop_propagation();
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        if this.nav.right_dragging {
+                            this.settle_nav(window, cx)
+                        }
+                    }),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        if this.nav.right_dragging {
+                            this.settle_nav(window, cx)
+                        }
+                    }),
+                ),
+        );
         Some(
             div()
                 .h_full()
@@ -1437,11 +1484,11 @@ impl Shell {
             sections.push(section);
         }
         self.nav.activate(active);
-        // Flat on the ground, not a sheet: a hairline border instead of a card and its shadow.
+        // Flat, edge to edge: no card and no shadow. Its one hairline is on the rail's side (the left
+        // panel) or none (the right dock, whose divider with the note is the line).
         div()
             .bg(t.bg)
-            .border_1()
-            .border_color(t.border)
+            .when(!right, |d| d.border_l_1().border_color(t.border))
             .overflow_hidden()
             .debug_selector(move || {
                 if right {
@@ -1507,7 +1554,7 @@ impl Shell {
             // included: the header clears them from its own edge, so its title starts exactly at
             // the traffic inset from the window (TRAFFIC_ROOM past the rail), in line with every
             // other top row, instead of the whole inset twice.
-            .pl(if !right && first && self.nav.native_bar {
+            .pl(if !right && first && self.nav.lights {
                 (t.px(TRAFFIC_ROOM) - t.px(RAIL)).max(t.px(8.))
             } else {
                 t.px(8.)

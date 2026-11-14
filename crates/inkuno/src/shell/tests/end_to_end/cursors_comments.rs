@@ -258,7 +258,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     lay(cx, 420., Mode::Tree, Panel::Split, 600.);
     let pane = cx.debug_bounds("pane-0").unwrap();
     assert!(
-        pane.size.width >= px(199.) && pane.right() == px(420. - 8.),
+        pane.size.width >= px(199.) && pane.right() == px(420.),
         "{pane:?}"
     );
     // Panel collapsed: the column comes back, narrower; search and the counter fit in the note.
@@ -268,7 +268,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         cx.debug_bounds("comments").unwrap(),
     );
     assert!(
-        pane.size.width >= px(199.) && said.size.width == px(172.) && said.right() <= px(420. - 8.),
+        pane.size.width >= px(199.) && said.size.width == px(180.) && said.right() <= px(420.),
         "{pane:?} {said:?}"
     );
     // The column lies on the ground: 8 px after the note's sheet, its cards 8 px apart and inside it, at every width.

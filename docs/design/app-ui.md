@@ -273,6 +273,13 @@ Every Phase 1 proposal must name which mockup element it implements.
    shown — flipping it moves the bottom-right corner button that
    `boards.rs`/`cursors_comments.rs` click at `height-31`; paragraph spacing
    stays as laid out (a blanket Text pad would also gap list items).
+   > **Gap lock LIFTED (owner decision 2026-11-14).** The 8 px ground between the sheets and the
+   > window's edges is gone in every mode. Panes take the window's edge to edge; neighbours (panes,
+   > the panel, the right dock) are separated by a 1 px hairline (`nav::DIVIDER`, the divider colour)
+   > whose handle overlaps both sides (`nav::DIVIDER_HIT`). A pane has no outer margin, no corners and
+   > no shadow. The window keeps its own frame (rounding, shadow and resize margin where Inkuno draws
+   > it). The comments column keeps its 8 px from the note: it is a column of cards, not a pane. The
+   > rest of item 4 (page widths, pill clearance) stands.
    Normal page measure is now 800 (option (a) landed, item 5 below);
    pill clearance went PILL_CLEAR 48→56 with it. Inset crew owns
    `render.rs` + `layout.rs` + `shell/mod.rs`: any traffic math depending on
@@ -656,7 +663,7 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ### Built 2026-11-14 (clean focus chrome, owner brief)
 
-- Built: `Ctrl+B` sidebar (Bold moves to `Ctrl+Alt+B`), `Ctrl+Shift+S` title bar (Linux; macOS/Windows keep the system bar, gpui 0.2.2 sets it at window creation only), `F9` focus mode (rail, docks, tab bar and title bar hidden; note edge to edge; the 8 px gaps of normal mode stay). Two rail switches at its foot. Decisions and tests: `keybindings.md` §8.
+- Built: `Ctrl+B` sidebar (Bold moves to `Ctrl+Alt+B`), `Ctrl+Shift+S` title bar (Linux; macOS/Windows keep the system bar, gpui 0.2.2 sets it at window creation only), `F9` focus mode (rail, docks, tab bar and title bar hidden; note edge to edge; the 8 px gaps of normal mode stay; lifted the same day, see §15). Two rail switches at its foot. Decisions and tests: `keybindings.md` §8.
 
 ### Scratch notes (built 2026-11-14, owner brief)
 
@@ -671,3 +678,10 @@ Normal 800 is the default (§10.4 lock released for this change).
 - Quitting or closing the window never asks: scratch notes are on disk already, and the scratch tabs open
   at quit come back with the other tabs, with or without a vault (`restore_panes`, the `panes` file).
 - Decisions and tests: `keybindings.md` §8 (2026-11-14), `shell/tests/scratch.rs`.
+
+### Owner decision 2026-11-14: edge to edge in normal mode (built)
+
+- The §10 item 4 gap lock is lifted: normal mode takes the focus-mode geometry (panes flush with the
+  window's edges, a 1 px hairline between neighbours, flat panes). Tests: `window.rs`
+  (`sheets_tile_the_window_edge_to_edge_with_a_hairline`, `normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline`),
+  and `end_to_end/cursors_comments.rs` (the comments column width and its right edge follow the window).
