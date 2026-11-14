@@ -16,6 +16,9 @@ reverse (`CONTRIBUTING.md`).
 - **`revisions.md` — saved versions.** The revision file format, where the
   history lives (`.inkuno/revisions/`), the diffs, and the dated decisions of
   idea refinement (2026-11-14).
+- **`cli.md` — command line.** The one binary with no window, for people and agents with a
+  shell: files only, hand-written arguments, text or `--json`, exit codes, the vault rules, the
+  token, the engine files, and the dated decisions (2026-11-14) that replaced the server.
 - **Steering log:** `app-ui.md` §15 (2026-11-08 session — 7 user-agreed decisions;
   done: rebuild-trigger armed, Rail kept; queued: split-hide, F9, GPUI
   upgrade, docs sweep, Linux CI-confirm). Pointer only — crews land the work
