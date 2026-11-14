@@ -17,40 +17,90 @@ struct Hunk {
 pub fn onto(base: &str, ours: &str, theirs: &str) -> Option<Vec<(Range<usize>, String)>> {
     let (b, o, t) = (lines(base), lines(ours), lines(theirs));
     let (mine, others) = (hunks(&b, &o), hunks(&b, &t));
+    let empty = |r: &Range<usize>| r.start == r.end;
     let mut edits = Vec::new();
-    for hunk in others {
-        let same = |h: &&Hunk| h.base == hunk.base && o[h.side.clone()] == t[hunk.side.clone()];
+    for whole in others {
+        let same = |h: &&Hunk| h.base == whole.base && o[h.side.clone()] == t[whole.side.clone()];
         if mine.iter().any(|h| same(&h)) {
             // The same change on both sides: it is already in `ours`.
             continue;
         }
-        let empty = |r: &Range<usize>| r.start == r.end;
-        let clash = mine.iter().any(|h| {
-            (hunk.base.start < h.base.end && h.base.start < hunk.base.end)
-                || (empty(&hunk.base) && empty(&h.base) && hunk.base.start == h.base.start)
-        });
-        if clash {
-            return None;
+        for hunk in left_to_apply(&whole, &mine)? {
+            if mine
+                .iter()
+                .any(|h| empty(&hunk.base) && empty(&h.base) && hunk.base.start == h.base.start)
+            {
+                // Two insertions at one place: their order cannot be chosen.
+                return None;
+            }
+            // Where the block's edges land in `ours`. An insertion of ours at the start comes
+            // before their block, one at the end comes after it.
+            let shift = |at: usize, start: bool| {
+                mine.iter()
+                    .filter(|h| h.base.end < at || h.base.end == at && (start || !empty(&h.base)))
+                    .fold(at as isize, |n, h| {
+                        n + h.side.len() as isize - h.base.len() as isize
+                    }) as usize
+            };
+            let start = shift(hunk.base.start, true);
+            let end = if empty(&hunk.base) {
+                start
+            } else {
+                shift(hunk.base.end, false)
+            };
+            let byte = |line: usize| o[..line].iter().map(|l| l.len()).sum::<usize>();
+            let mut with = t[hunk.side.clone()].concat();
+            if !with.is_empty() {
+                // `ours` may lack the newline of its last line: the text must not join that line.
+                if start > 0 && !o[start - 1].ends_with('\n') {
+                    with.insert(0, '\n');
+                }
+                // `ours` goes on after the range: the text must end its line.
+                if end < o.len() && !with.ends_with('\n') {
+                    with.push('\n');
+                }
+            }
+            edits.push((byte(start)..byte(end), with));
         }
-        // Where the block's edges land in `ours`. An insertion of ours at the start comes before
-        // their block, one at the end comes after it.
-        let shift = |at: usize, start: bool| {
-            mine.iter()
-                .filter(|h| h.base.end < at || h.base.end == at && (start || !empty(&h.base)))
-                .fold(at as isize, |n, h| {
-                    n + h.side.len() as isize - h.base.len() as isize
-                }) as usize
-        };
-        let start = shift(hunk.base.start, true);
-        let end = if empty(&hunk.base) {
-            start
-        } else {
-            shift(hunk.base.end, false)
-        };
-        let byte = |line: usize| o[..line].iter().map(|l| l.len()).sum::<usize>();
-        edits.push((byte(start)..byte(end), t[hunk.side.clone()].concat()));
     }
     Some(edits)
+}
+
+/// What is still to apply of one of `theirs`'s hunks once `ours` is taken into account. A hunk
+/// that only deletes lines, and whose lines `ours` already deleted in part, is cut down to the
+/// lines `ours` still has. `None` when the hunk overlaps a change of `ours`: a clash.
+fn left_to_apply(hunk: &Hunk, mine: &[Hunk]) -> Option<Vec<Hunk>> {
+    let touching: Vec<&Hunk> = mine
+        .iter()
+        .filter(|h| hunk.base.start < h.base.end && h.base.start < hunk.base.end)
+        .collect();
+    if touching.is_empty() {
+        return Some(vec![hunk.clone()]);
+    }
+    if !hunk.side.is_empty() || touching.iter().any(|h| !h.side.is_empty()) {
+        return None;
+    }
+    let mut cuts: Vec<Range<usize>> = touching.iter().map(|h| h.base.clone()).collect();
+    cuts.sort_by_key(|r| r.start);
+    let mut rest = Vec::new();
+    let mut at = hunk.base.start;
+    for cut in cuts {
+        if cut.start > at {
+            rest.push(at..cut.start);
+        }
+        at = at.max(cut.end);
+    }
+    if at < hunk.base.end {
+        rest.push(at..hunk.base.end);
+    }
+    Some(
+        rest.into_iter()
+            .map(|base| Hunk {
+                base,
+                side: hunk.side.clone(),
+            })
+            .collect(),
+    )
 }
 
 fn lines(text: &str) -> Vec<&str> {
@@ -424,6 +474,46 @@ mod tests {
                 "a\nb\nc\n",
                 Text("a\nc\n"),
             ),
+            // Both delete the same line, the agent also deletes the line after it: the union.
+            (
+                "both delete overlapping runs",
+                "a\nb\nc\nd\ne\n",
+                "a\nd\ne\n",
+                "a\nb\ne\n",
+                Text("a\ne\n"),
+            ),
+            // Agent deletes a superset of what the human deleted (human deleted b, agent a and b).
+            (
+                "agent deletes superset of human",
+                "a\nb\nc\n",
+                "a\nc\n",
+                "c\n",
+                Text("c\n"),
+            ),
+            // Agent deletes a subset of what the human deleted: nothing left to do.
+            (
+                "agent deletes subset of human",
+                "a\nb\nc\n",
+                "c\n",
+                "a\nc\n",
+                Text("c\n"),
+            ),
+            // Agent deletes a run that spans a line the human deleted, and one more line.
+            (
+                "agent deletes run around human deletion",
+                "a\nb\nc\nd\ne\n",
+                "a\nd\ne\n",
+                "a\ne\n",
+                Text("a\ne\n"),
+            ),
+            // Agent rewrites a run the human deleted in part: clash.
+            (
+                "agent rewrites run human deleted in part",
+                "a\nb\nc\n",
+                "a\nc\n",
+                "a\nB!\n",
+                Clash,
+            ),
         ]);
     }
 
@@ -570,6 +660,70 @@ mod tests {
             ("single line, human newline", "a", "a\n", "a", Text("a\n")),
             // Single line, agent adds a newline.
             ("single line, agent newline", "a", "a", "a\n", Text("a\n")),
+            // Human removed the final newline; agent appends a line: it goes on its own line.
+            (
+                "final newline removed, agent appends",
+                "a\nb\n",
+                "a\nb",
+                "a\nb\nc\n",
+                Text("a\nb\nc\n"),
+            ),
+            // Human removed the final newline; agent appends an unterminated line.
+            (
+                "final newline removed, agent appends bare",
+                "a\nb\n",
+                "a\nb",
+                "a\nb\nc",
+                Text("a\nb\nc"),
+            ),
+            // Human removed the final newline; agent appends a blank line.
+            (
+                "final newline removed, agent blank line",
+                "a\nb\n",
+                "a\nb",
+                "a\nb\n\n",
+                Text("a\nb\n\n"),
+            ),
+            // Agent removed the final newline; human typed a line after the last line.
+            (
+                "agent drops final newline, human appends",
+                "a\nb\n",
+                "a\nb\nX\n",
+                "a\nb",
+                Text("a\nb\nX\n"),
+            ),
+            // Agent drops the final newline, human appended nothing: the agent's text as is.
+            (
+                "agent drops final newline, human idle",
+                "a\nb\n",
+                "a\nb\n",
+                "a\nb",
+                Text("a\nb"),
+            ),
+            // Agent appends without a final newline to a note whose newline is kept.
+            (
+                "agent appends bare line to kept newline",
+                "a\nb\n",
+                "a\nb\n",
+                "a\nb\nc",
+                Text("a\nb\nc"),
+            ),
+            // Human removed the final newline and agent edits that line: clash.
+            (
+                "final newline removed, agent edits that line",
+                "a\nb\n",
+                "a\nb",
+                "a\nB\n",
+                Clash,
+            ),
+            // Human's text is empty, agent appended a line without newline.
+            (
+                "human emptied, agent appends bare",
+                "a\n",
+                "",
+                "a\nc",
+                Text("c"),
+            ),
         ]);
     }
 
@@ -842,7 +996,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "BUG: a final newline removed by the human glues the agent's appended line onto the human's line"]
     fn random_merges_with_dropped_final_newlines_keep_every_line() {
         for (base, ours, theirs) in random_cases_dropping_final_newlines(5, 3_000) {
             if let Some(edits) = onto(&base, &ours, &theirs) {
@@ -987,7 +1140,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "BUG: human removed the final newline, agent appended a line: the new line is glued onto the human's line"]
     fn removed_final_newline_does_not_glue_the_agents_line() {
         // Repro: base "a\nb\n", ours "a\nb", theirs "a\nb\nc\n". Expected "a\nb\nc\n", got "a\nbc\n".
         assert_eq!(
@@ -997,7 +1149,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "BUG: both sides delete the same line; the other lines they deleted overlap, so a clean union is refused"]
     fn both_sides_delete_overlapping_lines_merge_to_the_union() {
         // Repro: base "a\nb\nc\nd\ne\n", ours "a\nd\ne\n" (b, c deleted), theirs "a\nb\ne\n" (c, d deleted).
         // Expected "a\ne\n", got None.
