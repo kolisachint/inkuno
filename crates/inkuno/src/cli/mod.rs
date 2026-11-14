@@ -12,6 +12,7 @@ pub mod ops;
 pub mod outcome;
 mod rev;
 pub mod store;
+mod text;
 
 #[cfg(test)]
 mod check;
@@ -61,7 +62,8 @@ Notes are named by their title, an alias, or their path in the vault. Link a not
 Nothing is deleted: trash moves a file to .trash. Pass the token from `inkuno read --json` to
 `edit` or `append`, and a note changed since is refused. Every command takes --vault DIR; without
 it, the vault is the folder above the current one that holds an .inkuno folder, else the vault the
-app has open. `inkuno <command> --help` gives the options and an example.
+app has open. Commands print text; --json prints the result as JSON. `inkuno <command> --help`
+gives the options and an example.
 ";
 
 /// Runs a command. `args` starts with the command word; the result is the exit status.
