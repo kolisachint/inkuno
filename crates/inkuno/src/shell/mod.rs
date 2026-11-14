@@ -265,7 +265,10 @@ impl Shell {
         match vault {
             Some(root) => {
                 this.set_vault(root.clone(), window, cx);
-                this.recent = recent.into_iter().filter(|p| p.is_file()).collect();
+                this.recent = recent
+                    .into_iter()
+                    .filter(|p| p.is_file() && !vault::is_app_file(p))
+                    .collect();
                 // The tabs of last time, those whose file is still there; the older formats left
                 // the first pane to the most recent note.
                 let panes = vault::load_file("panes");

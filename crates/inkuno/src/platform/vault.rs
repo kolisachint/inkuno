@@ -15,6 +15,7 @@ use std::{
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
+use super::scratch;
 use crate::logic::note::{Note, lowered};
 use crate::{lang::tr, logic::markdown};
 
@@ -317,18 +318,61 @@ fn is_dir(entry: &fs::DirEntry) -> bool {
         .is_ok_and(|kind| kind.is_dir() || (kind.is_symlink() && entry.path().is_dir()))
 }
 
+/// The folders of the app's own state: its config folder (layout, keys, and the scratch notes, which
+/// live under it) and the scratch folder. A vault can hold them: on macOS the config folder is under
+/// the home folder, and the home folder can be a vault. Their files are not the vault's.
+fn app_folders() -> [PathBuf; 2] {
+    [config_dir().join("inkuno"), scratch::dir()]
+}
+
+/// The app's own folders that lie inside `root`, as paths under `root` (the walks compare them
+/// with the paths they visit, which start from `root` as given).
+fn app_folders_in(root: &Path) -> Vec<PathBuf> {
+    let real_root = real(root);
+    app_folders()
+        .iter()
+        .filter_map(|app| {
+            let rel = real(app).strip_prefix(&real_root).ok()?.to_path_buf();
+            (!rel.as_os_str().is_empty()).then(|| root.join(rel))
+        })
+        .collect()
+}
+
+/// Whether `path` is one of the app's own files, scratch notes included.
+pub fn is_app_file(path: &Path) -> bool {
+    app_folders().iter().any(|app| path.starts_with(app))
+}
+
+/// Whether `path` is in one of the `skip` folders, or is one of them.
+fn under(path: &Path, skip: &[PathBuf]) -> bool {
+    skip.iter().any(|folder| path.starts_with(folder))
+}
+
+/// The path as the disk spells it: canonical when it exists, else the canonical spelling of its
+/// nearest existing folder with the rest appended. Used to compare the vault with the app folders.
+fn real(path: &Path) -> PathBuf {
+    match fs::canonicalize(path) {
+        Ok(path) => path,
+        Err(_) => match (path.parent(), path.file_name()) {
+            (Some(parent), Some(name)) => real(parent).join(name),
+            _ => path.to_path_buf(),
+        },
+    }
+}
+
 /// Fingerprint of the vault's state: the paths of its notes, images and folders,
 /// and the date of each file. It changes as soon as another program touches it, without
 /// reading a single file.
 pub fn fingerprint(root: &Path) -> u64 {
     let mut seen = Vec::new();
+    let skip = app_folders_in(root);
     let mut visited = HashSet::new();
     first_visit(&mut visited, root);
     let mut dirs = vec![root.to_path_buf()];
     while let Some(dir) = dirs.pop() {
         for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
             let path = entry.path();
-            if entry.file_name().to_string_lossy().starts_with('.') {
+            if entry.file_name().to_string_lossy().starts_with('.') || under(&path, &skip) {
                 continue;
             }
             if is_dir(&entry) {
@@ -361,6 +405,18 @@ fn matters(root: &Path, event: &Event) -> bool {
         })
     };
     !event.kind.is_access() && (event.paths.is_empty() || !event.paths.iter().all(hidden))
+}
+
+/// Whether a system event means the vault must be reread: an error (events may be lost), or a
+/// change that matters outside the app's own folders (a scratch note saved is no vault change).
+fn reread_for(root: &Path, skip: &[PathBuf], event: &notify::Result<Event>) -> bool {
+    match event {
+        Err(_) => true,
+        Ok(event) => {
+            let own = !event.paths.is_empty() && event.paths.iter().all(|p| under(p, skip));
+            matters(root, event) && !own
+        }
+    }
 }
 
 /// A signal that wakes the task waiting on it, without it having to poll: the system's
@@ -407,9 +463,9 @@ impl Signal {
 /// Watching stops when the result is dropped.
 pub fn watch(root: &Path, changed: Arc<Signal>) -> Option<RecommendedWatcher> {
     let base = root.to_path_buf();
+    let skip = app_folders_in(root);
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
-        // A system error: events may have been lost, better reread.
-        if event.map_or(true, |e| matters(&base, &e)) {
+        if reread_for(&base, &skip, &event) {
             changed.raise();
         }
     })
@@ -445,6 +501,7 @@ pub fn rescan_full(
     let mut files = Vec::new();
     let mut images = Vec::new();
     let mut found = Vec::new();
+    let skip = app_folders_in(root);
     let mut visited = HashSet::new();
     first_visit(&mut visited, root);
     let mut dirs = vec![root.to_path_buf()];
@@ -458,7 +515,7 @@ pub fn rescan_full(
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if entry.file_name().to_string_lossy().starts_with('.') {
+            if entry.file_name().to_string_lossy().starts_with('.') || under(&path, &skip) {
                 continue;
             }
             if is_dir(&entry) {
@@ -1637,6 +1694,42 @@ mod tests {
             assert!(!is_attachment(Path::new(name)), "{name}");
         }
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_vault_holding_the_app_folders_shows_none_of_their_files() {
+        use notify::{EventKind, event::CreateKind};
+        let root = scratch("holding");
+        // The scratch folder lies inside the vault, under a config folder of its own.
+        let app = root.join("Application Support/inkuno");
+        crate::platform::scratch::isolate(app.join("scratch"));
+        fs::create_dir_all(app.join("scratch")).unwrap();
+        fs::write(app.join("scratch/2026-11-14-103200.md"), "idée\n").unwrap();
+        fs::write(root.join("plan.md"), "# Plan\n").unwrap();
+        let (notes, dirs, _) = scan(&root);
+        let shown: Vec<PathBuf> = notes.iter().map(|n| n.path.clone()).collect();
+        assert_eq!(shown, vec![root.join("plan.md")]);
+        // The scratch subtree is not listed (the config folder itself is skipped at run time by
+        // `app_folders`, whose `config_dir` the test cannot choose).
+        assert!(dirs.iter().all(|d| !d.starts_with(app.join("scratch"))));
+        // A scratch note written does not change the vault's fingerprint, nor wake its reread.
+        let before = fingerprint(&root);
+        fs::write(app.join("scratch/2026-11-14-103900.md"), "deux\n").unwrap();
+        assert_eq!(fingerprint(&root), before);
+        let skip = app_folders_in(&root);
+        let created = EventKind::Create(CreateKind::File);
+        let scratch_write = Event::new(created).add_path(app.join("scratch/2026-11-14-103900.md"));
+        assert!(!reread_for(&root, &skip, &Ok(scratch_write)));
+        let note = Event::new(created).add_path(root.join("plan.md"));
+        assert!(reread_for(&root, &skip, &Ok(note)));
+        assert!(reread_for(
+            &root,
+            &skip,
+            &Err(notify::Error::generic("lost"))
+        ));
+        assert!(is_app_file(&app.join("scratch/2026-11-14-103200.md")));
+        assert!(!is_app_file(&root.join("plan.md")));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
