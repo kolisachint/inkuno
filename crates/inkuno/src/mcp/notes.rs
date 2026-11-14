@@ -10,7 +10,7 @@ use crate::{
     lang::{date_name, time_name},
     logic::wiki::Anchor,
     logic::{daily, markdown, markdown::Link, rank},
-    platform::{clock, link, vault as files},
+    platform::{clock, link, revisions, vault as files},
 };
 
 use super::{
@@ -522,7 +522,11 @@ fn follow_title(
             0,
         );
     }
-    if let Err(error) = files::rename(path, &dest) {
+    // The history follows the note: first, so a refusal moves nothing; back, if the note cannot move.
+    let moved = revisions::move_along(Some(&vault.root), path, &dest)
+        .and_then(|()| files::rename(path, &dest));
+    if let Err(error) = moved {
+        let _ = revisions::move_along(Some(&vault.root), &dest, path);
         vault.rescan();
         return (path.to_path_buf(), false, Some(disk(error)), 0);
     }
@@ -662,10 +666,14 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
             vault::rel(&vault.root, &dest)
         ));
     }
-    if dest != path
-        && let Err(message) = files::rename(&path, &dest).map_err(disk)
-    {
-        return Outcome::err(message);
+    if dest != path {
+        // The history follows the note: first, so a refusal moves nothing; back, if the note cannot.
+        let moved = revisions::move_along(Some(&vault.root), &path, &dest)
+            .and_then(|()| files::rename(&path, &dest));
+        if let Err(error) = moved {
+            let _ = revisions::move_along(Some(&vault.root), &dest, &path);
+            return Outcome::err(disk(error));
+        }
     }
     let new_stem = files::stem(&dest);
     let (old_link, new_link) = if image || !dest.extension().is_some_and(|e| e == "md") {
@@ -738,9 +746,17 @@ pub fn trash_note(vault: &mut Vault, args: &Value) -> Outcome {
     };
     match files::trash(&vault.root, &path).map_err(disk) {
         Ok(trashed) => {
+            // Its history goes to the bin with it, under the name the undo looks for.
+            let history = revisions::trash_along(Some(&vault.root), &path, &trashed);
             let path = vault::rel(&vault.root, &trashed);
             vault.rescan();
-            Outcome::ok(json!({"path": path}))
+            match history {
+                Ok(()) => Outcome::ok(json!({"path": path})),
+                Err(error) => Outcome::err(format!(
+                    "moved to .trash, but its history was not: {}",
+                    disk(error)
+                )),
+            }
         }
         Err(message) => Outcome::err(message),
     }
@@ -761,9 +777,16 @@ pub fn restore_note(vault: &mut Vault, args: &Value) -> Outcome {
     }
     match files::restore(&vault.root, &path).map_err(disk) {
         Ok(restored) => {
+            let history = revisions::restore_along(Some(&vault.root), &path, &restored);
             let path = vault::rel(&vault.root, &restored);
             vault.rescan();
-            Outcome::ok(json!({"path": path}))
+            match history {
+                Ok(()) => Outcome::ok(json!({"path": path})),
+                Err(error) => Outcome::err(format!(
+                    "put back, but its history was not: {}",
+                    disk(error)
+                )),
+            }
         }
         Err(message) => Outcome::err(message),
     }

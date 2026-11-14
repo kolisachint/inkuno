@@ -321,6 +321,36 @@ fn editing_renames_and_comments_follow_the_app() {
 }
 
 #[test]
+fn the_history_follows_a_note_through_rename_trash_and_restore() {
+    use crate::platform::revisions::{self, Home};
+    let root = scratch();
+    write(&root, "Plan.md", "# Plan\n\none\n");
+    let home = Home::Vault(root.clone());
+    let plan = root.join("Plan.md");
+    revisions::save(&home, &plan, "ana", None, "# Plan\n\none\n", 0).unwrap();
+    let mut vault = open(&root);
+    let moved = ok(notes::rename_note(
+        &mut vault,
+        &json!({"note": "Plan.md", "name": "Idea"}),
+    ));
+    assert_eq!(moved["path"], "Idea.md");
+    let idea = root.join("Idea.md");
+    assert_eq!(revisions::all(&home, &idea).unwrap().len(), 1);
+    assert!(!root.join(".inkuno/revisions/Plan.md").exists());
+    // Trashed, the history waits in the bin; restored, it comes back with the note.
+    let trashed = ok(notes::trash_note(&mut vault, &json!({"note": "Idea"})));
+    assert_eq!(trashed["path"], ".trash/Idea.md");
+    assert!(revisions::all(&home, &idea).unwrap().is_empty());
+    ok(notes::restore_note(
+        &mut vault,
+        &json!({"path": ".trash/Idea.md"}),
+    ));
+    assert!(idea.is_file());
+    assert_eq!(revisions::all(&home, &idea).unwrap().len(), 1);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn bytes_on_disk_stay_bytes() {
     let root = scratch();
     fs::write(
