@@ -230,6 +230,7 @@ impl Shell {
         (self.layout, self.zoomed) = (Node::default(), None);
         self.closed.clear();
         self.vault = Some(root.clone());
+        self.assistant_reset(cx);
         self.lost = None;
         self.icons = vault::load_icons(&root);
         self.notes.clear();

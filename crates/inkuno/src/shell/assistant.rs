@@ -1,24 +1,33 @@
 //! The assistant: a panel of the right dock that talks to the agent about the open note, and the
-//! round button at the note's foot that opens it. This file holds the state and the panel. The
-//! process side (starting the agent's command, its protocol) is the seam at the bottom: the
-//! `assistant_*` methods are what it calls, and nothing here starts a process.
+//! round button at the note's foot that opens it. The agent is `hoocode` in its RPC mode, started
+//! without a shell or a write tool: it reads the note and answers. A review's answer is a list of
+//! findings, and Inkuno writes them into the note as comments (one undo step). This file holds the
+//! state, the panel and the process side (the child process is `platform::assistant`).
 
 use super::*;
+use crate::logic::assistant as words;
+use crate::platform::assistant::{Agent, Event};
+use crate::platform::vault::Signal;
+use crate::ui::line::Line;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 /// What the agent is doing, as the button and the panel show it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Missing is set by the process side, when the command is not installed.
 pub(crate) enum Status {
+    /// The command is not installed: nothing can be asked.
     Missing,
     Idle,
     Working,
-    /// The agent asks something: a request waits for Allow or Deny.
+    /// An answer, a finished review or an error arrived while the panel was not shown.
     NeedsYou,
 }
 
 /// Who a line of the transcript is from. `Note` is a quiet system line: errors, tool activity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Agent and Note are written by the process side.
 pub(crate) enum Who {
     You,
     Agent,
@@ -26,30 +35,40 @@ pub(crate) enum Who {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // The process side reads and writes the transcript.
 pub(crate) struct Entry {
     pub who: Who,
     pub text: String,
 }
 
-/// A request from the agent that waits for Allow or Deny.
+/// A review in progress: the note under review, and the answer collected so far. The answer is
+/// not shown; it becomes comments when the agent ends.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // The id is what the process side answers.
-pub(crate) struct Ask {
-    pub id: String,
-    pub text: String,
+pub(crate) struct Review {
+    pub path: PathBuf,
+    pub answer: String,
 }
 
 pub(crate) struct Assistant {
     pub status: Status,
     pub entries: Vec<Entry>,
-    pub ask: Option<Ask>,
     /// The prompt box, at the foot of the panel.
     pub field: Entity<field::Field>,
     pub scroll: gpui::ScrollHandle,
+    /// The running agent, started on the first prompt in `folder`.
+    pub agent: Option<Agent>,
+    /// Raised by the agent's reader thread for each event; `Shell::assistant_listen` waits on it.
+    pub signal: Arc<Signal>,
+    /// The folder the running agent was started in.
+    pub folder: Option<PathBuf>,
+    pub review: Option<Review>,
+    /// Stop was asked: what the agent still says before it ends is dropped.
+    pub stopping: bool,
     /// The prompts sent to the agent, for the tests.
     #[cfg(test)]
     pub sent: Vec<String>,
+    /// Whether the command counts as installed: the tests do not read the machine's PATH.
+    #[cfg(test)]
+    pub found: bool,
 }
 
 impl Assistant {
@@ -76,11 +95,17 @@ impl Assistant {
         Self {
             status: Status::Idle,
             entries: Vec::new(),
-            ask: None,
             field,
             scroll: gpui::ScrollHandle::new(),
+            agent: None,
+            signal: Arc::new(Signal::default()),
+            folder: None,
+            review: None,
+            stopping: false,
             #[cfg(test)]
             sent: Vec::new(),
+            #[cfg(test)]
+            found: true,
         }
     }
 }
@@ -106,9 +131,40 @@ fn assistant_button(
         .child(label)
 }
 
+/// Whether an agent's refusal is a login problem: the hint of the login is added after it.
+fn login_problem(error: &str) -> bool {
+    ["No model selected", "No API key", "Authentication failed"]
+        .iter()
+        .any(|text| error.contains(text))
+}
+
+/// The sentence that ends a review: what was written, what could not be placed.
+fn review_summary(placed: usize, skipped: usize) -> String {
+    let written = match placed {
+        0 => String::new(),
+        1 => tr("Wrote 1 comment.", "1 commentaire écrit.").to_string(),
+        n => format!("Wrote {n} comments."),
+    };
+    let missed = match skipped {
+        0 => String::new(),
+        1 => tr(
+            "1 finding could not be placed.",
+            "1 remarque n'a pas pu être placée.",
+        )
+        .to_string(),
+        n => format!("{n} findings could not be placed."),
+    };
+    [written, missed]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 impl Shell {
     /// Opens the assistant's panel in the right dock, or hides it when it is shown. Opening it
     /// stacks it under what the dock shows (the outline stays), and gives the prompt box the keys.
+    /// An answer that waited for the panel is seen now: the status goes back to Idle.
     pub(super) fn toggle_assistant(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.docked(Mode::Assistant) {
             return self.hide_tool(Mode::Assistant, window, cx);
@@ -121,6 +177,9 @@ impl Shell {
         self.nav.folded.remove(&Mode::Assistant);
         self.nav.activate(Mode::Assistant);
         self.nav.reveal = true;
+        if self.assistant.status == Status::NeedsYou {
+            self.assistant.status = Status::Idle;
+        }
         window.focus(&self.assistant.field.focus_handle(cx));
         self.settle_nav(window, cx);
     }
@@ -128,6 +187,11 @@ impl Shell {
     /// The agent is free to take a prompt: not working, and installed.
     fn assistant_free(&self) -> bool {
         !matches!(self.assistant.status, Status::Working | Status::Missing)
+    }
+
+    /// A note is open in the active tab (not a file, not a list): it can be reviewed.
+    fn review_open(&self) -> bool {
+        self.pane().path.is_some() && self.pane().file.is_none() && self.pane().listing.is_none()
     }
 
     /// The round button at the note's foot, on the right: its icon and its tooltip follow the status.
@@ -188,7 +252,7 @@ impl Shell {
             .occlude()
             .hover(|s| s.bg(t.hover))
             .child(icon)
-            // A waiting request: the dot the comments bubble also draws.
+            // An answer waiting for the panel: the dot the comments bubble also draws.
             .children((status == Status::NeedsYou).then(|| {
                 div()
                     .debug_selector(|| "assistant-badge".into())
@@ -203,8 +267,7 @@ impl Shell {
             .on_click(cx.listener(|this, _, window, cx| this.toggle_assistant(window, cx)))
     }
 
-    /// The panel in the right dock: the transcript, a request waiting for an answer, the review and
-    /// stop buttons, and the prompt box.
+    /// The panel in the right dock: the transcript, the review and stop buttons, and the prompt box.
     pub(super) fn render_assistant(
         &mut self,
         window: &mut Window,
@@ -279,41 +342,7 @@ impl Shell {
             .p_3()
             .children(entries)
             .children(empty);
-        // A request from the agent, with the two answers.
-        let ask = self.assistant.ask.clone().map(|ask| {
-            div()
-                .id("assistant-ask")
-                .debug_selector(|| "assistant-ask".into())
-                .mx_3()
-                .mb_2()
-                .p_2()
-                .rounded(t.large())
-                .bg(t.hover)
-                .flex()
-                .flex_col()
-                .gap_2()
-                .text_size(t.px(13.))
-                .text_color(t.text)
-                .child(ask.text)
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(
-                            assistant_button("assistant-allow", tr("Allow", "Autoriser"), true, t)
-                                .on_click(
-                                    cx.listener(|this, _, _, cx| this.assistant_answer(true, cx)),
-                                ),
-                        )
-                        .child(
-                            assistant_button("assistant-deny", tr("Deny", "Refuser"), true, t)
-                                .on_click(
-                                    cx.listener(|this, _, _, cx| this.assistant_answer(false, cx)),
-                                ),
-                        ),
-                )
-        });
-        let review = self.review_prompt().filter(|_| self.assistant_free());
+        let review_enabled = self.review_open() && self.assistant_free();
         let actions = div()
             .flex()
             .gap_2()
@@ -323,14 +352,10 @@ impl Shell {
                 assistant_button(
                     "assistant-review",
                     tr("Review this note", "Relire cette note"),
-                    review.is_some(),
+                    review_enabled,
                     t,
                 )
-                .on_click(cx.listener(|this, _, window, cx| {
-                    if let Some(prompt) = this.review_prompt().filter(|_| this.assistant_free()) {
-                        this.assistant_prompt(prompt, window, cx);
-                    }
-                })),
+                .on_click(cx.listener(|this, _, _, cx| this.assistant_review(cx))),
             )
             .children((status == Status::Working).then(|| {
                 assistant_button("assistant-stop", tr("Stop", "Arrêter"), true, t)
@@ -372,7 +397,6 @@ impl Shell {
             .flex()
             .flex_col()
             .child(transcript)
-            .children(ask)
             .child(actions)
             .child(prompt)
             .into_any_element()
@@ -389,14 +413,12 @@ impl Shell {
     }
 
     /// Sets what the agent is doing.
-    #[allow(dead_code)] // Called by the process side.
     pub(crate) fn assistant_status(&mut self, status: Status, cx: &mut Context<Self>) {
         self.assistant.status = status;
         cx.notify();
     }
 
     /// Streams text into the last line of the agent, or starts one.
-    #[allow(dead_code)] // Called by the process side.
     pub(crate) fn assistant_more(&mut self, text: &str, cx: &mut Context<Self>) {
         let continues = matches!(self.assistant.entries.last(), Some(e) if e.who == Who::Agent);
         match continues {
@@ -414,70 +436,365 @@ impl Shell {
         cx.notify();
     }
 
-    /// Sets or clears the request waiting for an answer. A request makes the status `NeedsYou`.
-    #[allow(dead_code)] // Called by the process side.
-    pub(crate) fn assistant_asks(&mut self, ask: Option<Ask>, cx: &mut Context<Self>) {
-        if ask.is_some() {
-            self.assistant.status = Status::NeedsYou;
+    /// Whether the command is installed. The tests set it by hand (`Assistant::found`).
+    #[cfg(test)]
+    fn command_found(&self) -> bool {
+        self.assistant.found
+    }
+
+    #[cfg(not(test))]
+    fn command_found(&self) -> bool {
+        platform::assistant::find(self.prefs.assistant_command()).is_some()
+    }
+
+    /// Sets Missing or Idle from whether the command is installed. Working is left alone.
+    pub(crate) fn assistant_check(&mut self, cx: &mut Context<Self>) {
+        let found = self.command_found();
+        let status = &mut self.assistant.status;
+        if !found {
+            *status = Status::Missing;
+        } else if *status == Status::Missing {
+            *status = Status::Idle;
         }
-        self.assistant.ask = ask;
         cx.notify();
     }
 
-    /// A prompt from the user (Enter, or "Review this note"): it is shown as a line of the
-    /// transcript, the box is cleared, and it goes to the agent.
+    /// A run ended: Idle while the panel is shown, NeedsYou while it is not (the answer waits for
+    /// the person). Missing when the command is no longer found.
+    fn assistant_settle(&mut self, cx: &mut Context<Self>) {
+        self.assistant.status = if !self.command_found() {
+            Status::Missing
+        } else if self.docked(Mode::Assistant) {
+            Status::Idle
+        } else {
+            Status::NeedsYou
+        };
+        cx.notify();
+    }
+
+    /// The folder the agent works in: the vault, or the scratch folder while no vault is open.
+    fn assistant_folder(&self) -> PathBuf {
+        match &self.vault {
+            Some(root) => root.clone(),
+            None => {
+                let dir = platform::scratch::dir();
+                let _ = fs::create_dir_all(&dir);
+                dir
+            }
+        }
+    }
+
+    /// A note's path as the agent is told it: relative to the working folder when it is inside.
+    fn assistant_words(&self, path: &Path) -> String {
+        match path.strip_prefix(self.assistant_folder()) {
+            Ok(relative) => relative.display().to_string(),
+            Err(_) => path.display().to_string(),
+        }
+    }
+
+    /// The note of the active tab, as the agent is told it, or `None` when the tab has no note file.
+    fn assistant_note(&self) -> Option<String> {
+        self.pane()
+            .path
+            .as_deref()
+            .map(|path| self.assistant_words(path))
+    }
+
+    /// The prompt is sent to the agent. The agent is started in the working folder on the first
+    /// prompt, and again when the folder changes. Nothing reaches the agent in a test: it records
+    /// the prompt in `sent` instead.
+    pub(crate) fn assistant_run(&mut self, prompt: String, cx: &mut Context<Self>) {
+        self.assistant_sent(&prompt);
+        if cfg!(test) {
+            self.assistant.status = Status::Working;
+            cx.notify();
+            return;
+        }
+        let folder = self.assistant_folder();
+        let running =
+            self.assistant.agent.is_some() && self.assistant.folder.as_ref() == Some(&folder);
+        if !running {
+            self.assistant_halt(cx);
+            let command = self.prefs.assistant_command().to_string();
+            match Agent::start(&command, &folder, self.assistant.signal.clone()) {
+                Ok(agent) => {
+                    self.assistant.agent = Some(agent);
+                    self.assistant.folder = Some(folder);
+                }
+                Err(error) => return self.assistant_fail(&error, cx),
+            }
+        }
+        let sent = self
+            .assistant
+            .agent
+            .as_ref()
+            .map(|agent| agent.prompt(&prompt));
+        match sent {
+            Some(Ok(())) => self.assistant_status(Status::Working, cx),
+            Some(Err(error)) => {
+                self.assistant.agent = None;
+                self.assistant.folder = None;
+                self.assistant_fail(&error, cx);
+            }
+            None => {}
+        }
+    }
+
+    /// The prompt, as the tests read it.
+    #[cfg(test)]
+    fn assistant_sent(&mut self, prompt: &str) {
+        self.assistant.sent.push(prompt.to_string());
+    }
+
+    #[cfg(not(test))]
+    fn assistant_sent(&mut self, _prompt: &str) {}
+
+    /// A prompt that could not be sent: the error is shown, and the agent is free again.
+    fn assistant_fail(&mut self, error: &str, cx: &mut Context<Self>) {
+        self.assistant.review = None;
+        self.assistant.status = if self.command_found() {
+            Status::Idle
+        } else {
+            Status::Missing
+        };
+        self.assistant_say(Who::Note, error, cx);
+    }
+
+    /// Stops the agent now: the setting changed, the vault changed, the app quits. A review in
+    /// progress is dropped with it, so that a half answer writes nothing.
+    pub(crate) fn assistant_halt(&mut self, cx: &mut Context<Self>) {
+        self.assistant.agent = None;
+        self.assistant.folder = None;
+        self.assistant.review = None;
+        self.assistant.stopping = false;
+        if self.assistant.status == Status::Working {
+            self.assistant.status = Status::Idle;
+        }
+        self.assistant_check(cx);
+    }
+
+    /// A vault change: the agent stops and the transcript starts again.
+    pub(crate) fn assistant_reset(&mut self, cx: &mut Context<Self>) {
+        self.assistant_halt(cx);
+        self.assistant.entries.clear();
+        self.assistant.scroll.scroll_to_bottom();
+        cx.notify();
+    }
+
+    /// Waits for the agent's events (its reader thread raises the signal) and shows them. Started
+    /// once, with the window; the tests call `assistant_events` directly.
+    pub(super) fn assistant_listen(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if cfg!(test) {
+            return;
+        }
+        let signal = self.assistant.signal.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            loop {
+                signal
+                    .wait(cx.background_executor().timer(Duration::from_secs(3600)))
+                    .await;
+                let Ok(()) = this.update_in(cx, |this, window, cx| {
+                    let events = this
+                        .assistant
+                        .agent
+                        .as_ref()
+                        .map(Agent::take)
+                        .unwrap_or_default();
+                    this.assistant_events(events, window, cx);
+                }) else {
+                    return;
+                };
+            }
+        })
+        .detach();
+    }
+
+    /// Shows what the agent said, in order: its text, the end of a run, its errors.
+    pub(crate) fn assistant_events(
+        &mut self,
+        events: Vec<Event>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for event in events {
+            match event {
+                Event::Started => {
+                    if !self.assistant.stopping {
+                        self.assistant_status(Status::Working, cx);
+                    }
+                }
+                Event::Text(text) => {
+                    if self.assistant.stopping {
+                        continue;
+                    }
+                    match &mut self.assistant.review {
+                        Some(review) => review.answer.push_str(&text),
+                        None => self.assistant_more(&text, cx),
+                    }
+                }
+                // The tool's name is not shown: the transcript stays about the answer.
+                Event::Tool(_) => {}
+                Event::Refused(error) => {
+                    self.assistant.review = None;
+                    self.assistant_say(Who::Note, &error, cx);
+                    if login_problem(&error) {
+                        self.assistant_say(
+                            Who::Note,
+                            tr(
+                                "Log in with hoocode first: run `hoocode` in a terminal and use /login.",
+                                "Connectez-vous d'abord avec hoocode : lancez `hoocode` dans un terminal et utilisez /login.",
+                            ),
+                            cx,
+                        );
+                    }
+                    self.assistant_settle(cx);
+                }
+                Event::Failed(error) => {
+                    // A failed answer is not reviewed: the run still ends, and writes nothing.
+                    self.assistant.review = None;
+                    self.assistant_say(Who::Note, &error, cx);
+                }
+                Event::Ended => {
+                    self.assistant.stopping = false;
+                    if let Some(review) = self.assistant.review.take() {
+                        self.apply_review(review, cx);
+                    }
+                    self.assistant_settle(cx);
+                }
+                Event::Exited(tail) => {
+                    let working = self.assistant.status == Status::Working;
+                    self.assistant.agent = None;
+                    self.assistant.folder = None;
+                    self.assistant.review = None;
+                    self.assistant.stopping = false;
+                    if working {
+                        self.assistant_say(
+                            Who::Note,
+                            tr("The assistant stopped.", "L'assistant s'est arrêté."),
+                            cx,
+                        );
+                        if !tail.is_empty() {
+                            self.assistant_say(Who::Note, &tail, cx);
+                        }
+                        self.assistant_settle(cx);
+                    } else {
+                        self.assistant_check(cx);
+                    }
+                }
+            }
+        }
+    }
+
+    /// "Review this note": the note is saved, its review is asked, and its answer is read when the
+    /// agent ends (`apply_review`). Ignored while the agent works or is not installed.
+    pub(crate) fn assistant_review(&mut self, cx: &mut Context<Self>) {
+        if !self.assistant_free() || !self.review_open() {
+            return;
+        }
+        let Some(path) = self.pane().path.clone() else {
+            return;
+        };
+        if !self.flush_one(cx) {
+            return;
+        }
+        let note = self.assistant_words(&path);
+        self.assistant.review = Some(Review {
+            path,
+            answer: String::new(),
+        });
+        self.assistant_say(Who::You, tr("Review this note", "Relire cette note"), cx);
+        self.assistant_say(Who::Note, tr("Reviewing…", "Relecture en cours…"), cx);
+        self.assistant_run(words::review_prompt(&note), cx);
+    }
+
+    /// Writes the findings of a finished review into the note, as one undo step when the note is
+    /// open, or straight to its file when no tab shows it. The note is saved by the usual debounce.
+    fn apply_review(&mut self, review: Review, cx: &mut Context<Self>) {
+        let found = words::findings(&review.answer);
+        if found.is_empty() {
+            self.assistant_say(Who::Note, tr("No findings.", "Aucune remarque."), cx);
+            return;
+        }
+        let open = self
+            .panes
+            .iter()
+            .position(|pane| pane.path.as_deref() == Some(review.path.as_path()));
+        let current = match open {
+            Some(i) => self.panes[i].editor.read(cx).text().to_string(),
+            None => match fs::read_to_string(&review.path) {
+                Ok(text) => text,
+                Err(e) => {
+                    let what = tr(
+                        "The note could not be read:",
+                        "La note n'a pas pu être lue :",
+                    );
+                    let why = crate::lang::io_reason(&e);
+                    return self.assistant_say(Who::Note, &format!("{what} {why}"), cx);
+                }
+            },
+        };
+        let placed = words::place(&current, &found);
+        if placed.placed > 0 {
+            match open {
+                Some(i) => {
+                    if let Some(edit) = words::edit_between(&current, &placed.text) {
+                        self.panes[i]
+                            .editor
+                            .update(cx, |editor, cx| editor.absorb(&[edit], cx));
+                    }
+                }
+                None => {
+                    if let Err(e) = vault::write(&review.path, &placed.text) {
+                        let why = crate::lang::io_reason(&e);
+                        return self.assistant_say(Who::Note, &why, cx);
+                    }
+                }
+            }
+            // The comments are in the note: the column that lists them is shown.
+            self.comments_shut = false;
+        }
+        let summary = review_summary(placed.placed, placed.skipped);
+        self.assistant_say(Who::Note, &summary, cx);
+    }
+
+    /// Stops the agent's turn. A review in progress is dropped first, so nothing is written.
+    pub(crate) fn assistant_stop(&mut self, cx: &mut Context<Self>) {
+        if self.assistant.status != Status::Working {
+            return;
+        }
+        self.assistant.review = None;
+        self.assistant.stopping = true;
+        self.assistant_say(Who::Note, tr("Stopped.", "Arrêté."), cx);
+        match &self.assistant.agent {
+            Some(agent) => {
+                let _ = agent.abort();
+            }
+            None => {
+                self.assistant.stopping = false;
+                self.assistant_settle(cx);
+            }
+        }
+    }
+
+    /// A prompt from the user (Enter in the box): the note's unsaved edits are written first, so
+    /// that the agent reads what the person sees. The transcript shows the question only; the
+    /// words sent name the note and its file.
     pub(crate) fn assistant_prompt(
         &mut self,
-        prompt: String,
+        question: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.assistant_say(Who::You, &prompt, cx);
+        if !self.flush_one(cx) {
+            return;
+        }
+        let prompt = words::chat_prompt(self.assistant_note().as_deref(), &question);
+        self.assistant_say(Who::You, &question, cx);
         self.assistant.field.update(cx, |field, cx| {
-            field.line = crate::ui::line::Line::default();
+            field.line = Line::default();
             cx.notify();
         });
         window.focus(&self.assistant.field.focus_handle(cx));
         self.assistant_run(prompt, cx);
-    }
-}
-
-// The process side: filled in by the wiring step.
-impl Shell {
-    /// The prompt is sent to the agent.
-    pub(crate) fn assistant_run(&mut self, prompt: String, _cx: &mut Context<Self>) {
-        // The process side: filled in by the wiring step.
-        #[cfg(test)]
-        self.assistant.sent.push(prompt);
-        #[cfg(not(test))]
-        drop(prompt);
-    }
-
-    /// Allow or Deny: the request is answered, and the agent goes on.
-    pub(crate) fn assistant_answer(&mut self, allow: bool, cx: &mut Context<Self>) {
-        // The process side: the answer goes to the agent with the request's id.
-        let _ = allow;
-        self.assistant.ask = None;
-        if self.assistant.status == Status::NeedsYou {
-            self.assistant.status = Status::Working;
-        }
-        cx.notify();
-    }
-
-    /// Stops the agent's turn.
-    pub(crate) fn assistant_stop(&mut self, cx: &mut Context<Self>) {
-        // The process side: stops the running turn.
-        self.assistant.ask = None;
-        self.assistant.status = Status::Idle;
-        cx.notify();
-    }
-
-    /// The prompt for "Review this note", or `None` when no note is open.
-    pub(crate) fn review_prompt(&self) -> Option<String> {
-        let open = self.pane().path.is_some()
-            && self.pane().file.is_none()
-            && self.pane().listing.is_none();
-        // The wiring step writes the real prompt.
-        open.then(|| "Review this note".to_string())
     }
 }

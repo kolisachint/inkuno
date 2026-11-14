@@ -63,7 +63,7 @@ Nothing is deleted: trash moves a file to .trash. Pass the token from `inkuno re
 `edit` or `append`, and a note changed since is refused. The commands that work on a vault take
 --vault DIR; without it, the vault is the folder above the current one that holds an .inkuno
 folder, else the vault the app has open. `rev` finds the vault from the note's path, and `keys`
-needs none. --vault DIR and --json may also come before the command word. Commands print text;
+and `comment --file` need none. --vault DIR and --json may also come before the command word. Commands print text;
 --json prints the result as JSON. `inkuno <command> --help` gives the options and an example.
 ";
 

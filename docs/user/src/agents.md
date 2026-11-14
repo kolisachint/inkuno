@@ -129,6 +129,8 @@ inkuno comment --file ~/.config/inkuno/scratch/idea.md --passage "ship on Friday
 
 A passage must be on one line, and an empty comment is refused. Newlines in the comment become spaces. The file must exist and end in `.md`.
 
+The [Assistant](assistant.md) built into Inkuno does not run these commands. It is started without a shell, and the comments of its review are written by Inkuno itself.
+
 Pass the token from `inkuno read --json` to `edit` or `append` with `--token`. Without `--token`, an edit applies to the file as it is on disk; an empty `--token` is refused.
 
 Standard input is read only when a command asks for it: `--text -` or `--mermaid -`. Nothing else reads it.

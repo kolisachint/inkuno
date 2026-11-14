@@ -2,7 +2,6 @@
 //! lines. Its output is parsed here into [`Event`]s, which the panel takes with [`Agent::take`]; a
 //! reader thread raises the [`Signal`] for each one. Only the standard library and serde_json: no
 //! window, no gpui. The protocol is the one of hoocode's `crates/hoocode-code-rpc`.
-#![allow(dead_code)] // until the panel is wired to it
 
 use std::{
     env,

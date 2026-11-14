@@ -1,5 +1,10 @@
-//! The assistant's words: the prompts sent to the agent, and the findings read back from its
-//! answer. Pure text: the process that carries them lives in `platform/assistant.rs`.
+//! The assistant's words: the prompts sent to the agent, the findings read back from its
+//! answer, and the placing of those findings in a note. Pure text: the process that carries
+//! them lives in `platform/assistant.rs`.
+
+use std::ops::Range;
+
+use crate::markdown;
 
 /// The words sent with a question about the open note.
 pub fn chat_prompt(note: Option<&str>, question: &str) -> String {
@@ -120,6 +125,69 @@ fn unquote(value: &str) -> String {
         }
     }
     value.to_string()
+}
+
+/// What placing the findings in a note gave: the new text, and how many findings were placed and
+/// how many were left out.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Placed {
+    pub text: String,
+    pub placed: usize,
+    pub skipped: usize,
+}
+
+/// Wraps each finding's passage in `text`, in order, with `markdown::comment_on`. A finding is
+/// left out when its passage is not in the text exactly once, or when it lies inside a comment
+/// that is already there (a second finding on the same words would nest in the first).
+pub fn place(text: &str, found: &[(String, String)]) -> Placed {
+    let mut out = Placed {
+        text: text.to_string(),
+        placed: 0,
+        skipped: 0,
+    };
+    for (passage, comment) in found {
+        let inside = out.text.find(passage.as_str()).is_some_and(|at| {
+            markdown::all_comments(&out.text)
+                .iter()
+                .any(|note| note.at <= at && at < note.end)
+        });
+        match markdown::comment_on(&out.text, passage, comment) {
+            Ok(next) if !inside => {
+                out.text = next;
+                out.placed += 1;
+            }
+            _ => out.skipped += 1,
+        }
+    }
+    out
+}
+
+/// The one splice that turns `old` into `new`: the range of `old` that differs, and its
+/// replacement. `None` when they are the same. Both ends fall on character boundaries.
+pub fn edit_between(old: &str, new: &str) -> Option<(Range<usize>, String)> {
+    if old == new {
+        return None;
+    }
+    let (a, b) = (old.as_bytes(), new.as_bytes());
+    let mut start = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    while !old.is_char_boundary(start) || !new.is_char_boundary(start) {
+        start -= 1;
+    }
+    let room = a.len().min(b.len()) - start;
+    let mut tail = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(room)
+        .take_while(|(x, y)| x == y)
+        .count();
+    while !old.is_char_boundary(old.len() - tail) || !new.is_char_boundary(new.len() - tail) {
+        tail -= 1;
+    }
+    Some((
+        start..old.len() - tail,
+        new[start..new.len() - tail].to_string(),
+    ))
 }
 
 #[cfg(test)]
@@ -263,5 +331,50 @@ mod tests {
         );
         let fenced = "```\nPASSAGE: a\nCOMMENT: b\n```\n";
         assert_eq!(findings(fenced), vec![pair("a", "b")]);
+    }
+
+    #[test]
+    fn findings_are_placed_in_order_and_the_others_are_counted() {
+        let text = "# T\n\nthe cache is cleared daily\nships in March\nalpha and alpha\n";
+        let found = [
+            pair("the cache is cleared daily", "Daily when?"),
+            pair("alpha", "twice in the note"),
+            pair("nowhere", "not here"),
+            pair("ships in March", "Which year?"),
+        ];
+        let placed = place(text, &found);
+        assert_eq!(placed.placed, 2);
+        assert_eq!(placed.skipped, 2);
+        assert_eq!(
+            placed.text,
+            "# T\n\n{==the cache is cleared daily==}{>>Daily when?<<}\n\
+             {==ships in March==}{>>Which year?<<}\nalpha and alpha\n"
+        );
+    }
+
+    #[test]
+    fn a_passage_inside_a_comment_already_there_is_left_out() {
+        let text = "{==alpha==}{>>first<<} beta\n";
+        let placed = place(text, &[pair("alpha", "again")]);
+        assert_eq!(placed.placed, 0);
+        assert_eq!(placed.skipped, 1);
+        assert_eq!(placed.text, text);
+    }
+
+    #[test]
+    fn the_edit_between_two_texts_is_the_one_changed_span() {
+        assert_eq!(edit_between("abc", "abc"), None);
+        assert_eq!(
+            edit_between("abcdef", "abXYZdef"),
+            Some((2..3, "XYZ".into()))
+        );
+        assert_eq!(edit_between("ab", "abcd"), Some((2..2, "cd".into())));
+        assert_eq!(edit_between("abcd", "ab"), Some((2..4, "".into())));
+        // Multi-byte characters: the edit never splits one.
+        let (range, text) = edit_between("café!", "cafè!").unwrap();
+        let old = "café!";
+        assert_eq!(&old[range.clone()], "é");
+        assert_eq!(text, "è");
+        assert!(old.is_char_boundary(range.start) && old.is_char_boundary(range.end));
     }
 }
