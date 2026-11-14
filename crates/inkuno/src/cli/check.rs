@@ -233,6 +233,31 @@ fn names_aliases_and_a_change_on_disk() {
 }
 
 #[test]
+fn a_comment_stays_on_one_line_and_its_passage_too() {
+    let text = "# T\n\nalpha beta\n";
+    assert_eq!(
+        notes::comment_on(text, "alpha\nbeta", "c").unwrap_err(),
+        "the passage must be on one line"
+    );
+    assert_eq!(
+        notes::comment_on(text, "alpha", "one\r\ntwo\nthree").unwrap(),
+        "# T\n\n{==alpha==}{>>one two three<<} beta\n"
+    );
+    assert_eq!(
+        notes::comment_on(text, "alpha", "  padded  ").unwrap(),
+        "# T\n\n{==alpha==}{>>padded<<} beta\n"
+    );
+    assert_eq!(
+        notes::comment_on(text, "alpha", "").unwrap_err(),
+        "the comment is empty"
+    );
+    assert_eq!(
+        notes::comment_on(text, "alpha", "\n \r\n").unwrap_err(),
+        "the comment is empty"
+    );
+}
+
+#[test]
 fn editing_renames_and_comments_follow_the_app() {
     let root = scratch();
     write(&root, "Old.md", "# Old\n\nbody\n");
