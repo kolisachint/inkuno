@@ -104,7 +104,7 @@ fn notes_round_trip_through_the_tools() {
     assert_eq!(read["links"][0]["target"], "Plan");
     assert_eq!(read["links"][0]["path"], "Plan.md");
     let plan = ok(notes::read_note(&vault, &json!({"note": "Plan"})));
-    let revision = plan["revision"].as_str().unwrap().to_string();
+    let token = plan["token"].as_str().unwrap().to_string();
     assert_eq!(
         ok(notes::search_notes(&vault, &json!({"query": "plan"})))["hits"][0]["title"],
         "Plan"
@@ -148,7 +148,7 @@ fn notes_round_trip_through_the_tools() {
     assert!(err(notes::read_note(&vault, &json!({"note": "Skeleton"}))).contains("no note"));
     let edited = ok(notes::edit_note(
         &mut vault,
-        &json!({"note": "Plan", "revision": revision, "edits": [{"old": "The plan.", "new": "The revised plan."}]}),
+        &json!({"note": "Plan", "token": token, "edits": [{"old": "The plan.", "new": "The revised plan."}]}),
     ));
     assert!(!edited["renamed"].as_bool().unwrap());
     ok(notes::append_to_note(
@@ -160,7 +160,13 @@ fn notes_round_trip_through_the_tools() {
             .unwrap()
             .contains("More.")
     );
-    assert!(err(notes::edit_note(&mut vault, &json!({"note": "Plan", "revision": revision, "edits": [{"old": "The plan.", "new": "x"}]}))).contains("changed since"));
+    assert!(
+        err(notes::edit_note(
+            &mut vault,
+            &json!({"note": "Plan", "token": token, "edits": [{"old": "The plan.", "new": "x"}]})
+        ))
+        .contains("changed since")
+    );
     assert!(
         err(notes::edit_note(
             &mut vault,

@@ -231,7 +231,7 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         Ok(note) => note,
         Err(outcome) => return outcome,
     };
-    let (text, revision) = match vault::read_text(&note.path) {
+    let (text, token) = match vault::read_text(&note.path) {
         Ok(read) => read,
         Err(message) => return Outcome::err(message),
     };
@@ -253,7 +253,7 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         "links": outgoing(vault, &text),
         "embeds": embeds(vault, &text),
         "comments": comments_of(&text),
-        "revision": revision,
+        "token": token,
     }))
 }
 
@@ -454,12 +454,12 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(path) => path,
         Err(outcome) => return outcome,
     };
-    let (text, revision) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (text, token) = match vault::read_text(&path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
-    if let Some(expected) = arg_opt(args, "revision")
-        && expected != revision
+    if let Some(expected) = arg_opt(args, "token")
+        && expected != token
     {
         return Outcome::err("the note changed since it was read; read it again and retry");
     }
@@ -483,10 +483,10 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         return Outcome::err(message);
     }
     let (path, renamed, reason, rewritten) = follow_title(vault, &path, &text, &next);
-    let revision = vault::revision(next.as_bytes());
+    let token = vault::token(next.as_bytes());
     Outcome::ok(json!({
         "path": vault::rel(&vault.root, &path),
-        "revision": revision,
+        "token": token,
         "renamed": renamed,
         "name_kept": reason,
         "rewritten": rewritten,
@@ -543,12 +543,12 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(text) => text,
         Err(message) => return Outcome::err(message),
     };
-    let (body, revision) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (body, token) = match vault::read_text(&path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
-    if let Some(expected) = arg_opt(args, "revision")
-        && expected != revision
+    if let Some(expected) = arg_opt(args, "token")
+        && expected != token
     {
         return Outcome::err("the note changed since it was read; read it again and retry");
     }
@@ -570,7 +570,7 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
     }
     vault.rescan();
     Outcome::ok(
-        json!({"path": vault::rel(&vault.root, &path), "revision": vault::revision(next.as_bytes())}),
+        json!({"path": vault::rel(&vault.root, &path), "token": vault::token(next.as_bytes())}),
     )
 }
 
@@ -889,7 +889,7 @@ pub fn add_comment(vault: &mut Vault, args: &Value) -> Outcome {
     }
     vault.rescan();
     Outcome::ok(
-        json!({"path": vault::rel(&vault.root, &path), "revision": vault::revision(next.as_bytes())}),
+        json!({"path": vault::rel(&vault.root, &path), "token": vault::token(next.as_bytes())}),
     )
 }
 

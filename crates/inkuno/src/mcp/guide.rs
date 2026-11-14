@@ -346,7 +346,7 @@ List every tag with list_tags. Group the tags that mean the same: a different ca
 - or _ or / between words, a typo, a translation. For each group, give each tag with its count, the tag to keep \
 (usually the most used), and the notes that carry the others (list_notes with tag). \
 Do not change any note: give the list, and wait for the user to agree. Then, for each note, read_note and edit_note \
-with its revision to replace the tag, and do not delete a file.";
+with its token to replace the tag, and do not delete a file.";
 
 /// `%20` and the like. A `%` that is not an escape is kept.
 fn decode(uri: &str) -> String {

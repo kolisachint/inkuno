@@ -275,8 +275,8 @@ pub fn unix(time: SystemTime) -> u64 {
         .unwrap_or(0)
 }
 
-/// Hash of the file as it is on disk. `edit_note` refuses a revision that is no longer this.
-pub fn revision(bytes: &[u8]) -> String {
+/// Hash of the file as it is on disk. `edit_note` refuses a token that is no longer this.
+pub fn token(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -285,8 +285,8 @@ pub fn revision(bytes: &[u8]) -> String {
 
 pub fn read_text(path: &Path) -> Result<(String, String), String> {
     let text = fs::read_to_string(path).map_err(disk)?;
-    let rev = revision(text.as_bytes());
-    Ok((text, rev))
+    let token = token(text.as_bytes());
+    Ok((text, token))
 }
 
 /// A file of this name, ignoring case, already in `dir`.
