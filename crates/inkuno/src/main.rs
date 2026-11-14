@@ -37,7 +37,7 @@ fn help_text() -> String {
          files; the first run without it exports the current state there (nothing is\n\
          deleted). A faulty entry is ignored on its own: startup toasts it,\n\
          `inkuno --check-config` lists it. Key clashes with the defaults are checked at\n\
-         startup; edit, save, and either restart or wait for the hot-reload below.\n\
+         startup; edit, save, then restart the app: the files are read at each start.\n\
          \n\
          keybindings.json:\n\
          \u{20} {{\"version\": 1, \"bindings\": {{\"app::OpenPalette\": [\"secondary-p\"],\n\
@@ -63,9 +63,9 @@ fn help_text() -> String {
          JSON shape and version, readable and allowed chords, chords taken twice,\n\
          chords the system may keep, theme colors (#rrggbb) and contrast.\n\
          \n\
-         hot-reload: the app watches both files and live-applies a save (debounced):\n\
-         shortcuts rebind at once, themes restyle at once; a faulty file keeps the\n\
-         previous state and toasts its faults, it never crashes the app.\n",
+         read at start: the app reads both files when it starts, so a save made while it\n\
+         runs applies at the next start. A faulty entry is ignored on its own and reported,\n\
+         it never crashes the app.\n",
         env!("CARGO_PKG_VERSION"),
         dir.display()
     )

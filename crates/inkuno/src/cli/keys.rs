@@ -24,8 +24,8 @@ An action is named as the code names it, group::Name (app::OpenPalette,
 editor::Bold); `keys list` shows them all. A chord is written as in the file:
 secondary-p (Cmd on macOS, Ctrl elsewhere), ctrl-tab, alt-left, f9, shift-enter.
 A chord that types text (a letter alone) is refused, and so is one that another
-action already has in the same place. The app reads the file at its next start,
-or at once on a save while it runs.
+action already has in the same place. The app reads the file at its next start:
+a change made while it runs applies after a restart.
 
 examples:
   inkuno keys set app::OpenPalette secondary-shift-o
