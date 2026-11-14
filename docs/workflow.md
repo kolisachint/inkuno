@@ -66,5 +66,5 @@ Proven in the session that built it (24h → 30min target). Follow this literall
 - Never commit on the user's branch unasked — writers
   leave diffs uncommitted; the integrator commits grouped merges.
 - Batch all independent tool calls and subagent dispatches in one turn.
-- Keep a live todo list; park small calls in `docs/BACKLOG.md` instead of
+- Keep a live todo list; park small calls in `docs/backlog.md` instead of
   expanding scope.

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Usage: scripts/record-demo.sh [output.gif]   (default: docs/screenshots/demo.gif)
+# Usage: scripts/record-demo.sh [output.gif]   (default: docs/assets/demo.gif)
 #
 # Records the GIF of the README: Inkuno typing a note on a virtual X screen, in a fresh vault and
 # configuration. Linux only; needs Xvfb, xdotool, ffmpeg and a Vulkan driver (Mesa's software
 # one, lavapipe, works without a GPU: mesa-vulkan-drivers on Ubuntu).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-out=$(realpath -m "${1:-docs/screenshots/demo.gif}")
+out=$(realpath -m "${1:-docs/assets/demo.gif}")
 cargo build --release --locked
 inkuno=$PWD/target/release/inkuno
 work=$(mktemp -d)

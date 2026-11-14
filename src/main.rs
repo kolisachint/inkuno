@@ -1,4 +1,4 @@
-//! Inkuno: a fast, minimal Markdown note-taking app. ARCHITECTURE.md maps the code.
+//! Inkuno: a fast, minimal Markdown note-taking app. docs/design/architecture.md maps the code.
 
 mod actions;
 #[cfg(test)]

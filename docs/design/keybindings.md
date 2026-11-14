@@ -15,7 +15,7 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
   `refusal` (`:180`), `system` (`:191`), `clashes` (`:203`), `read`/`write`
   (`:227`/`:220`), `shown` (`:258`).
 - What the help panel shows is `help_sections()` (`src/shell/keymap.rs:8`).
-- `book/src/shortcuts.md` is GENERATED from `help_sections` — do NOT hand-edit.
+- `docs/user/src/shortcuts.md` is GENERATED from `help_sections` — do NOT hand-edit.
   Regenerate with `make docs` (`INKUNO_WRITE_DOCS=1 cargo test shortcuts_page_is_current`
   writes the page, then `mdbook build`). The test
   `shortcuts_page_is_current` (`src/shell/tests/shortcuts_page.rs`) fails until
@@ -271,7 +271,7 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 
 - Policy (from §11.1-P5): chords are stable API. A rename keeps the old chord
   working ≥1 release, announced in help + palette; never a silent swap.
-  Hand-written guide pages (`book/src/navigation.md`, `tabs-and-panes.md`)
+  Hand-written guide pages (`docs/user/src/navigation.md`, `tabs-and-panes.md`)
   follow in the same change.
 - **2026-11-08 — T-fix (accepted): `Ctrl+Shift+T` = reopen last closed tab**
   (browser standard). `nav::ShowRecent` loses its chord entirely: recent notes
@@ -295,7 +295,7 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   Blocks wording fixed to match the §6 overrule (`›` aliases an equal path
   next to `/` + grip); book tint wording + T-chords fixed in
   `tabs-and-panes.md` / `navigation.md` / `settings.md`; mockup 720 → 800
-  annotations. `book/src/shortcuts.md` untouched — regen owned by Linux CI
+  annotations. `docs/user/src/shortcuts.md` untouched — regen owned by Linux CI
   (`make docs` can't run on macOS).
 
 ## 9. Reserved / gaps log

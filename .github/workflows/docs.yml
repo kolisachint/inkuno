@@ -1,4 +1,4 @@
-# Builds the user guide (book/, an mdBook) with the website (docs/), checks every link, and
+# Builds the user guide (docs/user/, an mdBook) with the website (docs/), checks every link, and
 # publishes both to GitHub Pages from main: the website at the root, the guide under /guide/.
 # Pages must be set to deploy from GitHub Actions (Settings › Pages › Source). After changing
 # that setting, publish at once with Actions › Docs › Run workflow, on main.
@@ -29,7 +29,7 @@ jobs:
         run: |
           mkdir _site
           cp -r docs/. _site/
-          mdbook build book --dest-dir ../_site/guide
+          mdbook build docs/user --dest-dir ../../_site/guide
       # Links inside the repository and the site, anchors included: on every change.
       - name: Links within the repository
         uses: lycheeverse/lychee-action@v2
@@ -37,14 +37,14 @@ jobs:
           args: >-
             --offline --include-fragments --no-progress
             --exclude-path _site/guide/print.html --exclude-path _site/guide/404.html
-            README.md CONTRIBUTING.md ARCHITECTURE.md SECURITY.md 'book/src/*.md' '_site/**/*.html'
+            README.md CONTRIBUTING.md docs/design/architecture.md SECURITY.md 'docs/user/src/*.md' '_site/**/*.html'
           fail: true
       # Links to other sites: only on the weekly run, so a site that is down blocks nobody.
       - name: Links to other sites
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --no-progress --max-retries 3 README.md CONTRIBUTING.md ARCHITECTURE.md 'book/src/*.md' 'docs/*.html'
+          args: --no-progress --max-retries 3 README.md CONTRIBUTING.md docs/design/architecture.md 'docs/user/src/*.md' 'docs/*.html'
           fail: true
       - if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-pages-artifact@v3

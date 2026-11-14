@@ -5,11 +5,12 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 ## Done in the November cleanup
 
 - The November trim slices (canvas, tables, obsidian, chrome, sync, deps) are all merged into main.
-- Root `inkuno.ico`, `book/src/img/git-sync.svg` and the README save-as-PDF anchor are gone.
+- Root `inkuno.ico`, the git-sync illustration and the README save-as-PDF anchor are gone.
 - `ReplaceInVault`, `--capture`/`vault::capture` and the `pane.tool` machinery are cut.
 - The daily note opens from the blank-page button only (`src/shell/render.rs:709`); no chord, no palette entry.
 - `logic/history.rs`, prefs `updates` and `Editor::lookups` are gone.
 - `shortcuts.md` is generated and checked on Linux CI only.
+- Docs and packaging folders restructured: `book/` -> `docs/user/`, `docs/screenshots` and `docs/site` -> `docs/assets/`, Linux packaging -> `packaging/linux/`.
 
 ## Kept ideas (not built)
 
@@ -32,5 +33,3 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - `docs/design/*.md` still describes cut actions; listed for the owner, not rewritten.
 - `tr()` second (French) args are still at call sites; removal is in progress (`crates/logic/src/lang.rs:6`).
 - `Pane::viewer()` has no non-test callers; remove or keep (`src/shell/pane.rs:179`).
-- The `is_table` doc comment still says CSV/TSV opens in a grid; it opens as plain text (`src/platform/vault.rs:294`).
-- The tabs page names docks but has no docks section; navigation lists Tree/Recent only while Search/Outline exist (`book/src/tabs-and-panes.md:1`, `src/views/nav.rs:57`).

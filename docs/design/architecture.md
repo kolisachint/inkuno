@@ -32,7 +32,7 @@ shell ──► views ──► ui ──► logic
 mcp ────────────► ui, logic, platform
 ```
 
-![The layers of Inkuno and which ones each uses](book/src/img/architecture-layers.svg)
+![The layers of Inkuno and which ones each uses](../user/src/img/architecture-layers.svg)
 
 *The source is in the SVG, so Inkuno opens it in the viewer.*
 
@@ -84,7 +84,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | the command palette | `views/palette.rs`, `shell/palette_open.rs` |
 | a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `ui/keys.rs` (how keys are read and shown) |
 | the test of a feature | `shell/tests/` (`end_to_end/` is one session, one file per chapter) |
-| the user guide | `book/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
+| the user guide | `docs/user/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
 | the MCP server (`inkuno mcp`) | `src/mcp/` (`mod.rs` the protocol; `notes.rs` reading and writing; `draw.rs` figures to PNG (`logic/mermaid.rs` `kind()` names the diagram kind); `guide.rs` resources and prompts; `tools.rs` the tool list; `vault.rs` the agent's vault); `main` routes `mcp` before the window. Checked by `src/mcp/check.rs` |
 
 ## How the main parts work

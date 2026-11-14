@@ -1,6 +1,6 @@
 # Agent instructions
 
-Contributor rules live in `CONTRIBUTING.md` and `ARCHITECTURE.md`; follow them. This file adds one coordination rule for parallel agent work.
+Contributor rules live in `CONTRIBUTING.md` and `docs/design/architecture.md`; follow them. This file adds one coordination rule for parallel agent work.
 
 ## Parallel work: one worktree per writer
 

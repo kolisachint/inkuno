@@ -41,7 +41,7 @@ Pass read_note's revision to edit_note: a revision that no longer matches is ref
 When Inkuno is open, show opens a note or a file in its window, so the user sees what you did. Put a Mermaid diagram in a note as a ```mermaid block, and render shows you what it looks like.\
 ";
 
-/// The app icon, `com.inkuno.Inkuno.svg`, so a client can show the server.
+/// The app icon, `packaging/linux/com.inkuno.Inkuno.svg`, so a client can show the server.
 const ICON: &str = "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiB2aWV3Qm94PSIwIDAgMTI4IDEyOCI+CiAgPHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyOCIgZmlsbD0iIzE4MjIxYSIvPgogIDxnIHRyYW5zZm9ybT0icm90YXRlKC03IDQwIDQ4KSI+CiAgICA8cmVjdCB4PSIxNSIgeT0iMTciIHdpZHRoPSI1MCIgaGVpZ2h0PSI2MiIgcng9IjExIiBmaWxsPSIjZWNlN2RjIi8+CiAgICA8cGF0aCBkPSJNMjcgMzNINDciIHN0cm9rZT0iIzE4MjIxYSIgc3Ryb2tlLXdpZHRoPSI3IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJyb3RhdGUoNyA4OCA4MCkiPgogICAgPHJlY3QgeD0iNjYiIHk9IjUyIiB3aWR0aD0iNTAiIGhlaWdodD0iNjIiIHJ4PSIxMSIgZmlsbD0iIzBkMTQwZSIvPgogICAgPHJlY3QgeD0iNjMiIHk9IjQ5IiB3aWR0aD0iNTAiIGhlaWdodD0iNjIiIHJ4PSIxMSIgZmlsbD0iIzNhNGIzNiIvPgogICAgPHBhdGggZD0iTTc1IDk2SDk1IiBzdHJva2U9IiNlY2U3ZGMiIHN0cm9rZS13aWR0aD0iNyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxwYXRoIGQ9Ik00MCA1N0w4OCA3MiIgc3Ryb2tlPSIjZTg4NzNmIiBzdHJva2Utd2lkdGg9IjYuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGNpcmNsZSBjeD0iNDAiIGN5PSI1NyIgcj0iOS41IiBmaWxsPSIjZTg4NzNmIi8+CiAgPGNpcmNsZSBjeD0iODgiIGN5PSI3MiIgcj0iOS41IiBmaWxsPSIjZTg4NzNmIi8+Cjwvc3ZnPgo=";
 
 struct Server {
