@@ -165,7 +165,7 @@ palette-only, `›` + help-rebindable.
 | `Ctrl+Backspace` (macOS `Cmd+Backspace`) | `nav::Trash` | Nav | — |
 | `Ctrl+N` / `Ctrl+J` / `Ctrl+O` | `app::NewNote/Today/OpenVault` | — | `› new/today/change vault` |
 | `Ctrl+Shift+D` | `app::NewDiagram` | — | `› new diagram` |
-| `Ctrl+Shift+S` / `Ctrl+Alt+E` | `app::SyncVault/ShareDocument` | — | `› sync/share` |
+| `Ctrl+Shift+S` | `app::ToggleTitleBar` (the bar the app draws, Linux: shown or hidden; its buttons come back from the rail) | — | `› title bar: show or hide it` |
 | `Ctrl+M` | `nav::ToggleFull` (panel full-window) | Shell | `› panel on the whole window` |
 | `Ctrl+B` | `app::ToggleSidebar` (left dock shown or hidden, the rail stays; works in the note) | — | `› sidebar: show or hide the side panel` |
 
@@ -304,6 +304,13 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   included, so the note keeps the keys. `editor::Bold` moves to `Ctrl+Alt+B`; `Ctrl+B` in the note no
   longer makes text bold. Help row in `Navigation`, palette `› sidebar`. Tests: `keyboard.rs`
   (`ctrl_b_toggles_the_sidebar_from_the_note`), `end_to_end/history_panes.rs` (menu hint).
+- **2026-11-14 — title bar on `Ctrl+Shift+S`:** `app::ToggleTitleBar` (new) hides or shows the bar the
+  app draws on Linux (window buttons and the top strip of a note that stands alone). The choice is
+  saved in the layout file (`titlebar=hidden`). The rail's foot keeps two switches, sidebar and title
+  bar, so the bar always comes back from there. macOS and Windows draw no bar of their own here, so
+  the key changes nothing on screen there: gpui 0.2.2 sets the native bar at window creation only.
+  `Ctrl+Shift+S` was free: the sync chord (`app::SyncVault`) left with the November trim, and its row
+  is replaced. Tests: `window.rs` (`the_title_bar_hides_and_comes_back_from_the_rail`).
 
 ## 9. Reserved / gaps log
 

@@ -23,6 +23,7 @@ actions!(
         MaximizePane,
         ClosePane,
         ToggleSidebar,
+        ToggleTitleBar,
         CloseOtherTabs,
         CloseTabsInPane,
         CloseAllFiles,

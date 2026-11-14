@@ -155,6 +155,9 @@ impl AssetSource for Assets {
             "c-split-down.svg" => {
                 r#"<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M2.5 8H13.5"/>"#
             }
+            "c-titlebar.svg" => {
+                r#"<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M2.5 6H13.5"/>"#
+            }
             "c-zoom-in.svg" => {
                 r#"<circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2L13 13M5.3 7H8.7M7 5.3V8.7"/>"#
             }

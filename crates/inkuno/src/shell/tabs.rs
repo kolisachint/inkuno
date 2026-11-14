@@ -339,7 +339,7 @@ impl Shell {
             });
         // The window buttons sit over the top right corner: the right pane's bar stops before them,
         // so that no tab scrolls under them.
-        let corner = client && group == self.corner_group();
+        let corner = client && self.nav.title_bar && group == self.corner_group();
         // From the window's edge once (see `traffic_pad`): already past the sidebar.
         let pad = self.traffic_pad();
         Some(

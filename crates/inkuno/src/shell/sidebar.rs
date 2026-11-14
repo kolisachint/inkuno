@@ -1131,6 +1131,7 @@ impl Shell {
         }
         let panel = self.nav.panel;
         let unfolded = self.left_open();
+        let (sidebar, title_bar) = (unfolded, self.nav.title_bar);
 
         // The view in sight is a small sheet laid on the rail, its icon in the accent.
         let on_sheet = |b: Stateful<Div>, on: bool| {
@@ -1256,6 +1257,46 @@ impl Shell {
                     .when(!self.nav.native_bar, |d| {
                         d.map(crate::ui::widgets::drag_window)
                     }),
+            )
+            // The two chrome switches, at the foot of the rail: the one part of the chrome that stays
+            // when the title bar is hidden, so the bar always comes back from here.
+            .child(
+                div()
+                    .mb_1()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_1()
+                    .child(on_sheet(
+                        button("rail-sidebar", "c-split.svg", sidebar, t)
+                            .debug_selector(|| "rail-sidebar".into())
+                            .tooltip(tip(
+                                tr(
+                                    "Sidebar: show or hide the side panel",
+                                    "Barre latérale : afficher ou masquer le panneau",
+                                ),
+                                keys(&ToggleSidebar),
+                                t,
+                            ))
+                            .on_click(
+                                cx.listener(|this, _, window, cx| this.toggle_sidebar(window, cx)),
+                            ),
+                        sidebar,
+                    ))
+                    .child(on_sheet(
+                        button("rail-titlebar", "c-titlebar.svg", title_bar, t)
+                            .debug_selector(|| "rail-titlebar".into())
+                            .tooltip(tip(
+                                tr(
+                                    "Title bar: show or hide it",
+                                    "Barre de titre : afficher ou masquer",
+                                ),
+                                keys(&ToggleTitleBar),
+                                t,
+                            ))
+                            .on_click(cx.listener(|this, _, _, cx| this.toggle_title_bar(cx))),
+                        title_bar,
+                    )),
             );
 
         let wrapper = div().h_full().flex().min_w_0();
