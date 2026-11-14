@@ -12,6 +12,9 @@ impl Shell {
         for pane in &self.panes {
             pane.editor.update(cx, |e, cx| e.set_theme(theme, cx));
         }
+        self.assistant
+            .field
+            .update(cx, |f, cx| f.set_theme(theme, cx));
         if let Some(palette) = &self.palette {
             palette.update(cx, |p, cx| p.set_theme(theme, cx));
         }
@@ -31,6 +34,9 @@ impl Shell {
         }
         if setting == Setting::Author {
             return self.ask_author(window, cx);
+        }
+        if setting == Setting::Assistant {
+            return self.ask_assistant(window, cx);
         }
         // The theme's default is not one of the list: it follows the system, light or dark.
         let default = match setting {
@@ -140,7 +146,7 @@ impl Shell {
                         Setting::Wide => this.prefs.wide = key,
                         Setting::Bar => this.prefs.bar = key,
                         Setting::Motion => this.prefs.motion = key,
-                        Setting::Author => {}
+                        Setting::Author | Setting::Assistant => {}
                     }
                 }
                 _ => this.prefs = before.clone(),
@@ -171,6 +177,37 @@ impl Shell {
             match event {
                 PaletteEvent::Submit(text) => {
                     this.prefs.author = logic::revision::clean_author(text);
+                    vault::save_settings(&this.prefs.to_text());
+                    this.palette = None;
+                    window.focus(&this.pane().editor.focus_handle(cx));
+                }
+                PaletteEvent::Dismiss => {
+                    this.palette = None;
+                    window.focus(&this.pane().editor.focus_handle(cx));
+                }
+                _ => {}
+            }
+            cx.notify();
+        })
+        .detach();
+        window.focus(&prompt.focus_handle(cx));
+        self.palette = Some(prompt);
+        cx.notify();
+    }
+
+    /// The command that starts the assistant: a typed line, prefilled with the current one. Empty
+    /// keeps the default (`hoocode`). Escape keeps the setting.
+    fn ask_assistant(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (theme, label) = (self.theme, Setting::Assistant.label());
+        let current = self.prefs.assistant.clone();
+        let prompt = cx.new(|cx| Palette::prompt(label, &current, theme, cx));
+        cx.subscribe_in(&prompt, window, move |this, asked, event, window, cx| {
+            if this.palette.as_ref() != Some(asked) {
+                return;
+            }
+            match event {
+                PaletteEvent::Submit(text) => {
+                    this.prefs.assistant = text.trim().to_string();
                     vault::save_settings(&this.prefs.to_text());
                     this.palette = None;
                     window.focus(&this.pane().editor.focus_handle(cx));

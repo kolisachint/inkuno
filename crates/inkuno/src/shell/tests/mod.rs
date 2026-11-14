@@ -2,6 +2,7 @@
 //! shell, the views and the vault on disk are checked. Pure functions are tested in their own
 //! modules instead.
 
+mod assistant;
 mod benches;
 mod current_file;
 mod editing;

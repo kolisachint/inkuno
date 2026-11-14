@@ -832,12 +832,20 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
         cx.run_until_parked();
         assert_eq!(shell.read_with(cx, |s, _| s.theme.size), size);
         let now = measure(cx);
-        // The note's foot: counter and comments button side by side, none over another.
-        let foot = ["counts", "comments-toggle"].map(|name| {
+        // The note's foot: the comments bubble and the assistant button side by side, none over
+        // another, both inside the note.
+        let pane = cx.debug_bounds("pane-0").expect("the note is drawn");
+        let foot = ["comments-toggle", "assistant-toggle"].map(|name| {
             cx.debug_bounds(name)
                 .unwrap_or_else(|| panic!("{name} at {size}"))
         });
         assert!(foot[0].right() <= foot[1].left(), "at {size}: {foot:?}");
+        assert!(
+            foot.iter().all(|b| b.left() >= pane.left()
+                && b.right() <= pane.right()
+                && b.bottom() <= pane.bottom()),
+            "at {size}: {foot:?} outside {pane:?}"
+        );
         for (i, (got, was)) in now.iter().zip(base).enumerate() {
             assert!(
                 (got / was - scale).abs() < 0.04,

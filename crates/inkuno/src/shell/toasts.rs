@@ -109,7 +109,7 @@ pub(super) fn status_card(t: Theme) -> Div {
 }
 
 impl Shell {
-    /// Status messages, stacked above the word counter: a click removes them.
+    /// Status messages, stacked above the note's bottom edge: a click removes them.
     pub(super) fn render_toasts(&self, cx: &mut Context<Self>) -> Vec<Div> {
         let t = self.theme;
         self.toasts

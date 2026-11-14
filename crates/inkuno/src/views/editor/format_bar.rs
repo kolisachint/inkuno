@@ -57,20 +57,18 @@ impl Editor {
     }
 
     /// Where to put the bar: centred on the page (the text column is centred in the pane), further left when
-    /// the counter and the corner buttons would touch it, collapsed into a button, at the same centre, when
+    /// the corner buttons would touch it, collapsed into a button, at the same centre, when
     /// it no longer has room; `None` if it is off or
     /// this is not the active pane, or as long as the note's width is not known.
-    // ponytail: the counter's room is estimated (7.4 px per character at 12 px, spaces and middle dots count more than letters) rather than measured.
     pub(super) fn bar_place(&mut self) -> Option<Bar> {
         let width = f32::from(self.viewport.size.width);
         if !self.theme.bar || !self.bar_here || width == 0. {
             return None;
         }
-        // At the interface's scale, like the counter and the buttons around.
+        // At the interface's scale, like the corner buttons around.
         let (u, bar) = (self.theme.ui, BAR_WIDTH * self.theme.ui);
-        let counts = (self.counts().chars().count() as f32 * 7.4 + 16.) * u;
         let x = (width / 2. - bar / 2.)
-            .min(width - (12. + 34. * self.corner as f32) * u - counts - 8. * u - bar);
+            .min(width - (12. + 34. * self.corner as f32) * u - 8. * u - bar);
         Some(if x >= 8. * u {
             Bar::Inline(x)
         } else {

@@ -72,7 +72,7 @@ impl Shell {
     }
 
     /// The tool is drawn in a dock that is open.
-    fn docked(&self, mode: Mode) -> bool {
+    pub(super) fn docked(&self, mode: Mode) -> bool {
         self.left_open() && self.dock_tools(false).contains(&mode)
             || self.right_open() && self.dock_tools(true).contains(&mode)
     }
@@ -293,7 +293,7 @@ impl Shell {
         };
         match self.nav.mode {
             Mode::Tree => tree_rows(root, &self.notes, &self.dirs, &self.images, &self.nav.open),
-            Mode::Search | Mode::Outline | Mode::Scratch => Vec::new(),
+            Mode::Search | Mode::Outline | Mode::Scratch | Mode::Assistant => Vec::new(),
             Mode::Recent => self
                 .by_recency()
                 .into_iter()
@@ -1519,7 +1519,7 @@ impl Shell {
         right: bool,
         stacked: bool,
         keys_here: bool,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let t = self.theme;
@@ -1545,6 +1545,7 @@ impl Shell {
             (Mode::Search, _) => tr("Search", "Recherche").to_string(),
             (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
             (Mode::Scratch, _) => tr("Scratch", "Brouillons").to_string(),
+            (Mode::Assistant, _) => tr("Assistant", "Assistant").to_string(),
             _ => tr("Recent", "Récents").to_string(),
         };
         let header = div()
@@ -1896,6 +1897,7 @@ impl Shell {
             .map(|d| match mode {
                 _ if shut => d,
                 Mode::Outline => d.child(self.render_outline(cx)),
+                Mode::Assistant => d.child(self.render_assistant(window, cx)),
                 _ => d.child(
                     div()
                         .flex_1()

@@ -2,6 +2,7 @@
 //! keeps the vault and the settings. One `impl Shell` per subject, in the files of
 //! this folder.
 
+mod assistant;
 mod files;
 mod help;
 pub(crate) mod keymap;
@@ -158,6 +159,8 @@ struct Shell {
     scratch_rev: u64,
     /// The help panel, open or not.
     help: Help,
+    /// The assistant's panel and its state (the process side is the seam in `assistant.rs`).
+    assistant: assistant::Assistant,
     /// The bindings in effect, and what the user changed in the default shortcuts.
     bound: Vec<keys::Bind>,
     changes: keys::Changes,
@@ -205,6 +208,7 @@ impl Shell {
         .detach();
 
         let nav = Nav::new(cx.focus_handle());
+        let assistant = assistant::Assistant::new(theme, window, cx);
         // Scratch notes left blank by a crash go; the others come back with the tabs.
         platform::scratch::clean_blank();
 
@@ -259,6 +263,7 @@ impl Shell {
             scratch_ask: None,
             scratch_rev: 0,
             help: Help::default(),
+            assistant,
             bound: defaults(),
             changes: keys::Changes::new(),
         };

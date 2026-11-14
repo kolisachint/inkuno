@@ -185,68 +185,6 @@ pub fn excerpt(text: &str, hit: &Hit, before: usize) -> (String, Range<usize>) {
     (shown, ahead.len()..ahead.len() + end - hit.at.start)
 }
 
-/// Number of words and characters of the text, as written: Markdown marks
-/// count as characters, line endings do not.
-pub fn counts(text: &str) -> (usize, usize) {
-    (
-        text.unicode_words().count(),
-        text.graphemes(true)
-            .filter(|g| !matches!(*g, "\n" | "\r\n"))
-            .count(),
-    )
-}
-
-/// The counts of `new`, knowing those of `old` (`was`): only the lines that differ
-/// are recounted. No word nor character spans a line ending: the lines'
-/// counts add up.
-pub fn recount(old: &str, was: (usize, usize), new: &str) -> (usize, usize) {
-    let (a, b) = (old.as_bytes(), new.as_bytes());
-    // By blocks first (a memory comparison), then byte by byte in the block that differs.
-    const BLOCK: usize = 4096;
-    let blocks = a
-        .as_chunks::<BLOCK>()
-        .0
-        .iter()
-        .zip(b.as_chunks::<BLOCK>().0)
-        .take_while(|(x, y)| x == y)
-        .count()
-        * BLOCK;
-    let same = blocks
-        + a[blocks..]
-            .iter()
-            .zip(&b[blocks..])
-            .take_while(|(x, y)| x == y)
-            .count();
-    // The common start stops after a line ending, the common end starts after another.
-    let head = a[..same]
-        .iter()
-        .rposition(|&c| c == b'\n')
-        .map_or(0, |i| i + 1);
-    let (a, b) = (&a[head..], &b[head..]);
-    let blocks = a
-        .rchunks_exact(BLOCK)
-        .zip(b.rchunks_exact(BLOCK))
-        .take_while(|(x, y)| x == y)
-        .count()
-        * BLOCK;
-    let (x, y) = (&a[..a.len() - blocks], &b[..b.len() - blocks]);
-    let tail = blocks
-        + x.iter()
-            .rev()
-            .zip(y.iter().rev())
-            .take_while(|(x, y)| x == y)
-            .count();
-    let tail = a[a.len() - tail..]
-        .iter()
-        .position(|&c| c == b'\n')
-        .map_or(0, |i| tail - i - 1);
-    let (gone, come) = (
-        counts(&old[head..old.len() - tail]),
-        counts(&new[head..new.len() - tail]),
-    );
-    (was.0 + come.0 - gone.0, was.1 + come.1 - gone.1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

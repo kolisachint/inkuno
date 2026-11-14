@@ -6,13 +6,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let (shell, root) = (&j.shell, &j.root);
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
     cx.simulate_input("# Test");
-    // Footer: the counter follows typing, then counts only the selection.
-    let counts = |cx: &mut gpui::VisualTestContext| {
-        shell.update(cx, |s, cx| s.pane().editor.update(cx, |e, _| e.counts()))
-    };
-    assert_eq!(counts(cx), "1 word · 6 characters");
     cx.simulate_keystrokes("shift-left shift-left");
-    assert_eq!(counts(cx), "Selection: 1 word · 2 characters");
     cx.simulate_keystrokes("right");
     cx.simulate_keystrokes("enter");
     cx.simulate_input("1. un");

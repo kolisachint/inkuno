@@ -401,6 +401,9 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &ToggleHelp, window, cx| {
                 this.set_help(!this.help.open, window, cx)
             }))
+            .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
+                this.toggle_assistant(window, cx)
+            }))
             .on_action(
                 cx.listener(|this, _: &ToggleCommands, window, cx| this.open_commands(window, cx)),
             )
@@ -897,6 +900,10 @@ impl Shell {
                     cx.notify();
                 }))
         });
+        // The assistant's round button, at the note's foot on the right (none in focus mode, where
+        // the docks are hidden). It sits beside the comments bubble, which keeps its place on the left.
+        let assistant_btn = (!self.focus_mode).then(|| self.assistant_toggle(cx));
+        let corner = assistant_btn.is_some() as usize + talk.is_some() as usize;
         // The list page closed with input in its filter or one of its cells: nothing
         // receives it anymore, it goes back to the note.
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {
@@ -911,7 +918,7 @@ impl Shell {
         let pill = (title_bar && !barred && group == self.corner_group())
             .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
         self.pane().editor.update(cx, |e, _| {
-            e.corner = 1 + talk.is_some() as usize;
+            e.corner = corner;
             e.bar_here = active;
             e.pill = pill;
             e.strip = if strip || traffic {
@@ -1131,6 +1138,7 @@ impl Shell {
                 note.child(self.pane().editor.clone())
                     .children(empty)
                     .children(talk)
+                    .children(assistant_btn)
             }
         };
         // While a tab or a file from the tree is dragged, the area that would receive it is tinted:

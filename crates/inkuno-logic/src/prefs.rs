@@ -18,10 +18,22 @@ pub struct Prefs {
     pub motion: String,
     /// Author of the revisions a person saves; empty: `INKUNO_AUTHOR`, else the OS user name.
     pub author: String,
+    /// Command that starts the assistant; empty: `hoocode` (see `assistant_command`).
+    pub assistant: String,
 }
 
 impl Prefs {
     pub const SIZE: f32 = 16.;
+    /// The assistant's command when the setting is empty.
+    pub const ASSISTANT: &'static str = "hoocode";
+
+    /// The command the assistant starts: the setting, trimmed; `hoocode` when it is empty.
+    pub fn assistant_command(&self) -> &str {
+        match self.assistant.trim() {
+            "" => Self::ASSISTANT,
+            command => command,
+        }
+    }
 
     pub fn parse(text: &str) -> Self {
         let mut prefs = Self {
@@ -34,6 +46,7 @@ impl Prefs {
             bar: String::new(),
             motion: String::new(),
             author: String::new(),
+            assistant: String::new(),
         };
         for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
             match key {
@@ -52,6 +65,7 @@ impl Prefs {
                 "bar" => prefs.bar = value.into(),
                 "motion" => prefs.motion = value.into(),
                 "author" => prefs.author = value.into(),
+                "assistant" => prefs.assistant = value.into(),
                 _ => {}
             }
         }
@@ -70,6 +84,7 @@ impl Prefs {
             ("bar", &self.bar),
             ("motion", &self.motion),
             ("author", &self.author),
+            ("assistant", &self.assistant),
         ] {
             if !value.is_empty() {
                 text.push_str(&format!("{key}={value}\n"));
@@ -114,5 +129,15 @@ mod tests {
         assert_eq!(Prefs::parse(&named.to_text()), named);
         assert!(!prefs.to_text().contains("author="));
         assert!(!prefs.to_text().contains("page=") && !prefs.to_text().contains("wide="));
+        // Assistant command: absent until chosen, `hoocode` when empty or blank.
+        assert_eq!(prefs.assistant_command(), "hoocode");
+        assert!(!prefs.to_text().contains("assistant="));
+        let agent = Prefs::parse("assistant=mybot --fast\n");
+        assert_eq!(agent.assistant_command(), "mybot --fast");
+        assert_eq!(Prefs::parse(&agent.to_text()), agent);
+        assert_eq!(
+            Prefs::parse("assistant=  \n").assistant_command(),
+            "hoocode"
+        );
     }
 }

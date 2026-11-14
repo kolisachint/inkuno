@@ -227,6 +227,10 @@ impl AssetSource for Assets {
             "list-number.svg" => {
                 r#"<path d="M7 4H13.5M7 8H13.5M7 12H13.5M2.7 3.6L3.8 3V5.4M2.7 8.4A1 1 0 0 1 4.4 9C4.4 9.7 3 10.4 2.7 11H4.5"/>"#
             }
+            // The assistant: a four-point sparkle, drawn for this app.
+            "assistant.svg" => {
+                r#"<path d="M8 2.5Q8.6 7.4 13.5 8Q8.6 8.6 8 13.5Q7.4 8.6 2.5 8Q7.4 7.4 8 2.5Z"/>"#
+            }
             "list-task.svg" => {
                 r#"<rect x="2.5" y="2.5" width="3.5" height="3.5" rx="0.8"/><path d="M3.2 4.3L4 5L5.4 3.4M8 4.3H13.5M8 11.7H13.5"/><rect x="2.5" y="10" width="3.5" height="3.5" rx="0.8"/>"#
             }
