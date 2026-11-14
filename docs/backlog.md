@@ -42,7 +42,9 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - GitHub Pages must be set to deploy from GitHub Actions, else the Docs deploy job fails (`.github/workflows/docs.yml:3`).
 - `shortcuts_page_is_current` is compiled out on macOS; the page cannot be regenerated on a Mac (`crates/inkuno/src/shell/tests/shortcuts_page.rs:66`).
 - Two macOS-only clippy warnings fail `-D warnings` locally (`crates/inkuno/src/platform/mod.rs:7`, `crates/inkuno/src/shell/tests/shortcuts_page.rs:7`).
-- Template machinery is reachable only through MCP; decide app UI or keep MCP-only (`crates/inkuno/src/platform/vault.rs:254`, `crates/inkuno-logic/src/daily.rs:15`).
+- Template machinery is reachable only through `inkuno new --template`; decide app UI or keep the command line only (`crates/inkuno/src/platform/vault.rs:254`, `crates/inkuno-logic/src/daily.rs:15`).
+- `base64` in `crates/inkuno/Cargo.toml` is no longer used by the code since the server was removed: removing it changes the fragile `Cargo.lock`, so it needs the owner's go-ahead.
+- A mistyped command suggests up to three names, nearest first: `inkuno lsit` says ``did you mean `edit` or `list`?``. Expected: the suggestions come from the spelling of the command names only (`crates/inkuno/src/cli/mod.rs`, `suggest`).
 - `packaging/windows/` remains though Windows is not built (`packaging/windows/`).
 - Scratch notes (2026-11-14): `Discard`, the panel's `Delete` and the `Delete` key move the file to `.trash` inside the scratch folder (`platform/scratch.rs`, `trash`), so nothing is destroyed on disk. Only a blank scratch file is still removed.
 - `docs/design/*.md` still describes cut actions; listed for the owner, not rewritten.
