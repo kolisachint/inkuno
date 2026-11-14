@@ -373,6 +373,10 @@ pub fn run() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
                     title: Some(title.into()),
+                    // macOS: the content runs under the transparent bar, which `app::ToggleTitleBar`
+                    // and focus mode hide with the traffic lights (`platform::mac_chrome`). gpui reads
+                    // this at creation only, and Windows keeps its own bar.
+                    appears_transparent: cfg!(target_os = "macos"),
                     ..Default::default()
                 }),
                 // Must match the .desktop file name for the desktop to associate the icon.
