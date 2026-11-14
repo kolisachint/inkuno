@@ -25,7 +25,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         (text(cx), cursors(cx)),
         ("e chats\ne chiens\ne rats".to_string(), 3)
     );
-    cx.simulate_keystrokes("shift-end secondary-b");
+    cx.simulate_keystrokes("shift-end secondary-alt-b");
     assert_eq!(text(cx), "**e chats**\n**e chiens**\n**e rats**");
     // One undo step reverts the gesture for the three cursors at once, and only it.
     cx.simulate_keystrokes("secondary-z");

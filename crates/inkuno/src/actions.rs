@@ -22,6 +22,7 @@ actions!(
         EvenPanes,
         MaximizePane,
         ClosePane,
+        ToggleSidebar,
         CloseOtherTabs,
         CloseTabsInPane,
         CloseAllFiles,

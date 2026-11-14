@@ -196,6 +196,22 @@ impl Shell {
         self.settle_nav(window, cx);
     }
 
+    /// Ctrl+B: the left dock shown or hidden. Hidden, it folds onto the rail (the same state as
+    /// the last tool closed by hand, saved in the layout file); shown, it reopens on the tool it
+    /// last showed, the tree if none. The keys stay where they are: the note keeps them.
+    pub(super) fn toggle_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.left_open() {
+            true => self.nav.panel = Panel::Rail,
+            false => {
+                if self.dock_tools(false).is_empty() {
+                    self.put_tool(Mode::Tree);
+                }
+                self.nav.panel = Panel::Split;
+            }
+        }
+        self.settle_nav(window, cx);
+    }
+
     /// After a panel change: focus leaves what is no longer
     /// shown, and the layout is saved.
     pub(super) fn settle_nav(&mut self, window: &mut Window, cx: &mut Context<Self>) {

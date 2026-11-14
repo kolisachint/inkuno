@@ -51,7 +51,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     start(cx, grid);
     let at = center(cx, Part::Col(1));
     cx.simulate_click(at, none);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(flat(cx), "Nom|**Âge**/Léa|**31**/Max|**7**");
     assert!(aligned(cx), "{:?}", text(cx));
     assert_eq!(
@@ -59,10 +59,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         markdown::BOLD,
         "the bar lights the button when every cell has it"
     );
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(flat(cx), "Nom|Âge/Léa|31/Max|7");
     assert!(aligned(cx));
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(
         flat(cx),
@@ -83,7 +83,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Text selected across two rows: each cell touched, the `|` untouched; the second row is still a row.
     start(cx, grid);
     cx.simulate_keystrokes("shift-down shift-right shift-right shift-right");
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(
         flat(cx),
         "Nom|Âge/**Léa**|**31**/**Max**|7",
@@ -92,7 +92,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     assert!(aligned(cx));
     // The selection followed its text: the same gesture takes it off.
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(flat(cx), "Nom|Âge/Léa|31/Max|7");
     // Some cells have it already: it goes where it is missing, and a second gesture removes it everywhere.
     let marked = "| Nom | Âge |\n| --- | --- |\n| **Léa** | 31  |\n| Max | 7   |";
@@ -100,14 +100,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     let at = center(cx, Part::Corner);
     cx.simulate_click(at, none);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(
         flat(cx),
         "**Nom**|**Âge**/**Léa**|**31**/**Max**|**7**",
         "{:?}",
         text(cx)
     );
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(flat(cx), "Nom|Âge/Léa|31/Max|7");
     // Empty cells are skipped: no `****` is left behind. The corner takes them all.
     let holes = "| a |  |\n| - | - |\n|  | d |";
@@ -115,7 +115,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     let at = center(cx, Part::Corner);
     cx.simulate_click(at, none);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(flat(cx), "**a**|/|**d**", "{:?}", text(cx));
     assert!(aligned(cx));
     // Highlight and code go cell by cell too; escaped bars and accents stay whole.
@@ -152,7 +152,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes(
         "shift-down shift-down shift-down shift-down shift-down shift-right shift-right",
     );
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     let t = text(cx);
     assert!(t.contains("**suite**") || t.contains("**su**ite"), "{t:?}");
     assert!(
@@ -163,7 +163,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     // A cursor alone in a cell: its signs go in the cell, the table stays aligned and the cursor between them.
     start(cx, grid);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     cx.simulate_input("x");
     assert_eq!(flat(cx), "Nom|Âge/**x**Léa|31/Max|7", "{:?}", text(cx));
     assert!(aligned(cx));

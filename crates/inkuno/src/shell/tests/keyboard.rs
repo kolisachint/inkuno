@@ -265,3 +265,49 @@ fn buttons_from_the_keys(cx: &mut TestAppContext) {
         "the click left the keys in the note"
     );
 }
+
+/// Ctrl+B shows and hides the side panel while the note has the keys: the rail stays, the focus
+/// stays in the note. Bold has moved to Ctrl+Alt+B, so Ctrl+B leaves the text alone.
+#[gpui::test]
+fn ctrl_b_toggles_the_sidebar_from_the_note(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "sidebar-chord");
+    fs::write(root.join("Note.md"), "# Note\n\nmot").unwrap();
+    shell.update(cx, |s, cx| {
+        s.rescan(&root, cx);
+        s.open_note(&root.join("Note.md"), cx);
+    });
+    cx.run_until_parked();
+    shell.update(cx, |s, _| s.nav.panel = nav::Panel::Split);
+    cx.run_until_parked();
+    let in_note = |cx: &mut gpui::VisualTestContext| {
+        cx.update(|window, cx| {
+            let s = shell.read(cx);
+            s.pane().editor.focus_handle(cx).is_focused(window)
+        })
+    };
+    let text = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
+    };
+    let panel = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.nav.panel);
+
+    cx.update(|window, cx| {
+        let note = shell.read(cx).pane().editor.focus_handle(cx);
+        window.focus(&note);
+    });
+    assert!(in_note(cx));
+    assert_eq!(panel(cx), nav::Panel::Split);
+
+    cx.simulate_keystrokes("secondary-b");
+    assert_eq!(panel(cx), nav::Panel::Rail, "the panel folds onto the rail");
+    assert!(in_note(cx), "the note keeps the keys");
+    assert_eq!(text(cx), "# Note\n\nmot", "Ctrl+B is not bold any more");
+
+    cx.simulate_keystrokes("secondary-b");
+    assert_eq!(panel(cx), nav::Panel::Split, "the panel is back");
+    assert!(in_note(cx));
+    assert!(shell.read_with(cx, |s, _| s.left_open()));
+
+    // Bold is one chord further: the word is selected and made bold on Ctrl+Alt+B.
+    cx.simulate_keystrokes("secondary-end shift-left shift-left shift-left secondary-alt-b");
+    assert_eq!(text(cx), "# Note\n\n**mot**");
+}

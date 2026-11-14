@@ -49,7 +49,7 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
 | `Ctrl+Shift+*` | Vault / panel / list scope | `Ctrl+Shift+F` search vault, `S` sync, `O` outline, `P` commands, `Z` redo, `B` list-cycle, `M` comment, `C` copy block/selection, `N` new folder, `D` new diagram, `J` calendar, `T` reopen tab |
 | `Alt+*` | Move / act on the thing under the cursor | `Alt+Up/Down` move block (row in a table), `Alt+=` autosum, `Alt+Enter` open embed, `Alt+Left/Right` back/forward, `Alt+Shift+arrows` travel panes |
 | `Ctrl+Enter` | Confirm / act in place | Task toggle, palette open-aside, find-bar replace-all, sheet insert-below |
-| Plain `Ctrl+letter` | The note itself | `Ctrl+B/I/U` styles, `Ctrl+F/R` find, `Ctrl+D` next occurrence, `Ctrl+K` link |
+| Plain `Ctrl+letter` | The note itself | `Ctrl+I/U` styles, `Ctrl+Alt+B` bold, `Ctrl+F/R` find, `Ctrl+D` next occurrence, `Ctrl+K` link; `Ctrl+B` is the sidebar (§8) |
 
 **Context splits (intentional, not bugs).** Two bindings may share keys when
 their contexts never meet (`meets()`, `crates/inkuno/src/ui/keys.rs:133`: a binding with no
@@ -89,7 +89,7 @@ mode). Keyless rows (`—`) are grips/`/`/menu-only by design (§6).
 
 | Keys | Action | Palette |
 |---|---|---|
-| `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | `editor::Bold/Italic/Underline` | `› bold/italic/underline` |
+| `Ctrl+Alt+B` / `Ctrl+I` / `Ctrl+U` | `editor::Bold/Italic/Underline` | `› bold/italic/underline` |
 | `Ctrl+Shift+X` | `editor::Strike` | `› strikethrough` |
 | `Ctrl+Shift+H` | `editor::Highlight` | `› highlight` |
 | `Ctrl+Shift+K` | `editor::InlineCode` | `› inline code` |
@@ -167,6 +167,7 @@ palette-only, `›` + help-rebindable.
 | `Ctrl+Shift+D` | `app::NewDiagram` | — | `› new diagram` |
 | `Ctrl+Shift+S` / `Ctrl+Alt+E` | `app::SyncVault/ShareDocument` | — | `› sync/share` |
 | `Ctrl+M` | `nav::ToggleFull` (panel full-window) | Shell | `› panel on the whole window` |
+| `Ctrl+B` | `app::ToggleSidebar` (left dock shown or hidden, the rail stays; works in the note) | — | `› sidebar: show or hide the side panel` |
 
 Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 `Enter` open, `Ctrl+Enter` preview (peek), `Ctrl+Up` parent, `Ctrl+F` search,
@@ -297,6 +298,12 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   `tabs-and-panes.md` / `navigation.md` / `settings.md`; mockup 720 → 800
   annotations. `docs/user/src/shortcuts.md` untouched — regen owned by Linux CI
   (`make docs` can't run on macOS).
+
+- **2026-11-14 — sidebar on `Ctrl+B`, bold moves to `Ctrl+Alt+B`:** `app::ToggleSidebar` (new) shows or
+  hides the left dock (`Panel::Rail` ↔ `Split`, saved in the layout file) from any view, the note
+  included, so the note keeps the keys. `editor::Bold` moves to `Ctrl+Alt+B`; `Ctrl+B` in the note no
+  longer makes text bold. Help row in `Navigation`, palette `› sidebar`. Tests: `keyboard.rs`
+  (`ctrl_b_toggles_the_sidebar_from_the_note`), `end_to_end/history_panes.rs` (menu hint).
 
 ## 9. Reserved / gaps log
 

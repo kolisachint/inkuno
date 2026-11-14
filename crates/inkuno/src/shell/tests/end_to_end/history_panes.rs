@@ -14,7 +14,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let keys = |cx: &mut gpui::VisualTestContext, what: nav::Do| cx.update(|_, cx| what.keys(cx));
     assert_eq!(keys(cx, nav::Do::Rename), "F2");
     assert_eq!(keys(cx, nav::Do::Duplicate), format!("{MOD}+D"));
-    assert_eq!(keys(cx, nav::Do::Bold), format!("{MOD}+B"));
+    assert_eq!(keys(cx, nav::Do::Bold), format!("{MOD}+Alt+B"));
     assert_eq!(keys(cx, nav::Do::OpenLink), format!("{MOD}+click"));
     assert_eq!(keys(cx, nav::Do::Icon), "");
     shell.update(cx, |s, cx| s.key_set("nav::Rename", "f6".into(), &[], cx));
