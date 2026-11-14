@@ -17,7 +17,7 @@ use crate::{
     platform::vault::{self, Signal},
 };
 
-use super::disk;
+use super::outcome::disk;
 
 /// One open vault. The watcher is kept so it lives as long as the server does.
 pub struct Vault {

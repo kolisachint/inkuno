@@ -14,8 +14,8 @@ use crate::{
 };
 
 use super::{
-    Outcome, arg_opt, arg_str, arg_usize, disk,
-    vault::{self, Vault},
+    outcome::{Outcome, arg_opt, arg_str, arg_usize, disk},
+    store::{self as vault, Vault},
 };
 
 pub fn vault_info(vault: &Vault) -> Outcome {

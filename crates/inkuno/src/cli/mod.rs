@@ -3,8 +3,12 @@
 //! running, and the app sees its changes through its file watcher. Results go to standard output,
 //! errors to standard error with exit status 1; a wrong command line exits with 2.
 
+pub mod draw;
 mod keys;
+pub mod ops;
+pub mod outcome;
 mod rev;
+pub mod store;
 
 use std::collections::BTreeMap;
 

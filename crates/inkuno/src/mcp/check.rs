@@ -9,7 +9,8 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{Outcome, Server, notes, tools, vault::Vault};
+use super::{Server, tools};
+use crate::cli::{ops as notes, outcome::Outcome, store::Vault};
 
 fn scratch() -> PathBuf {
     static N: AtomicU64 = AtomicU64::new(0);
@@ -568,7 +569,7 @@ fn read_only_hides_writing_and_the_guide_is_a_resource() {
     );
     let rendered = tools::call(&mut server, "render", &json!({"note": "Note", "block": 1}));
     assert!(!rendered.is_error, "{}", rendered.structured);
-    assert_eq!(rendered.content[1]["mimeType"], "image/png");
+    assert!(rendered.png.is_some());
     let started = Instant::now();
     let _ = tools::call(&mut server, "search_notes", &json!({"query": "Note"}));
     assert!(started.elapsed().as_secs() < 5);

@@ -7,11 +7,8 @@
 //!
 //! Nothing but JSON-RPC goes to stdout, one message per line. Logs, if any, go to stderr.
 
-mod draw;
 mod guide;
-mod notes;
 mod tools;
-mod vault;
 
 use std::{
     io::{self, BufRead, Write},
@@ -21,6 +18,10 @@ use std::{
 
 use serde_json::{Value, json};
 
+use crate::cli::{
+    outcome::{Outcome, arg_opt, disk},
+    store as vault,
+};
 use crate::platform::vault as files;
 
 const PARSE: i32 = -32700;
@@ -49,79 +50,6 @@ struct Server {
     /// Told to the model by every tool that needs a vault, when there is none.
     blind: String,
     read_only: bool,
-}
-
-/// What a tool returns. The text is the same JSON as `structured` (a sentence when it failed),
-/// so an older client that only reads `content` still sees it.
-pub(super) struct Outcome {
-    content: Vec<Value>,
-    structured: Value,
-    is_error: bool,
-}
-
-impl Outcome {
-    fn ok(value: Value) -> Self {
-        let text = serde_json::to_string(&value).unwrap_or_default();
-        Self {
-            content: vec![json!({"type": "text", "text": text})],
-            structured: value,
-            is_error: false,
-        }
-    }
-
-    fn err(message: impl Into<String>) -> Self {
-        let message = message.into();
-        Self {
-            content: vec![json!({"type": "text", "text": message})],
-            structured: json!({"error": message}),
-            is_error: true,
-        }
-    }
-
-    fn image(value: Value, png: &[u8]) -> Self {
-        use base64::Engine;
-        let data = base64::engine::general_purpose::STANDARD.encode(png);
-        let mut this = Self::ok(value);
-        this.content
-            .push(json!({"type": "image", "data": data, "mimeType": "image/png"}));
-        this
-    }
-}
-
-pub(super) fn arg_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
-    match args.get(key) {
-        Some(Value::String(text)) if !text.is_empty() => Ok(text),
-        Some(_) => Err(format!("`{key}` must be a text")),
-        None => Err(format!("`{key}` is missing")),
-    }
-}
-
-pub(super) fn arg_opt<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
-    args.get(key)
-        .and_then(|v| v.as_str())
-        .filter(|text| !text.is_empty())
-}
-
-pub(super) fn arg_usize(args: &Value, key: &str) -> Option<usize> {
-    args.get(key).and_then(|v| v.as_u64()).map(|n| n as usize)
-}
-
-/// Why a disk operation failed, in the words the app already uses, in English.
-pub(super) fn disk(error: io::Error) -> String {
-    use io::ErrorKind::*;
-    match error.kind() {
-        PermissionDenied => "permission denied",
-        NotFound => "not found",
-        AlreadyExists => "this name is already taken",
-        ReadOnlyFilesystem => "the disk is read-only",
-        StorageFull => "the disk is full",
-        InvalidFilename => "invalid name",
-        NotADirectory => "not a folder",
-        IsADirectory => "this is a folder",
-        DirectoryNotEmpty => "the folder is not empty",
-        _ => return error.to_string(),
-    }
-    .into()
 }
 
 /// Runs the server on the process's standard streams. `0` when the client closes stdin.
@@ -306,10 +234,23 @@ impl Server {
         if !args.is_object() {
             return failure(id, PARAMS, "`arguments` must be an object");
         }
+        use base64::Engine;
         let outcome = tools::call(self, name, &args);
+        // The text is the same JSON as the structured result (a sentence when it failed); a
+        // picture comes as base64, for a client that reads `content` only.
+        let text = if outcome.is_error {
+            outcome.sentence()
+        } else {
+            serde_json::to_string(&outcome.structured).unwrap_or_default()
+        };
+        let mut content = vec![json!({"type": "text", "text": text})];
+        if let Some(png) = &outcome.png {
+            let data = base64::engine::general_purpose::STANDARD.encode(png);
+            content.push(json!({"type": "image", "data": data, "mimeType": "image/png"}));
+        }
         success(
             id,
-            json!({"content": outcome.content, "structuredContent": outcome.structured, "isError": outcome.is_error}),
+            json!({"content": content, "structuredContent": outcome.structured, "isError": outcome.is_error}),
         )
     }
 
