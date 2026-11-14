@@ -7,9 +7,9 @@ use std::ops::Range;
 
 /// A changed block: lines `base` of the base became lines `side` of the other text.
 #[derive(Debug, Clone, PartialEq)]
-struct Hunk {
-    base: Range<usize>,
-    side: Range<usize>,
+pub struct Hunk {
+    pub base: Range<usize>,
+    pub side: Range<usize>,
 }
 
 /// What `theirs` changed, as byte replacements in `ours`, in order. `None` when both changed the
@@ -103,7 +103,7 @@ fn left_to_apply(hunk: &Hunk, mine: &[Hunk]) -> Option<Vec<Hunk>> {
     )
 }
 
-fn lines(text: &str) -> Vec<&str> {
+pub fn lines(text: &str) -> Vec<&str> {
     text.split_inclusive('\n').collect()
 }
 
@@ -112,7 +112,7 @@ fn lines(text: &str) -> Vec<&str> {
 // are cut (a few lines when someone types); swap for Myers' diff if big rewrites must merge finely.
 const CELLS: usize = 1_000_000;
 
-fn hunks(base: &[&str], side: &[&str]) -> Vec<Hunk> {
+pub fn hunks(base: &[&str], side: &[&str]) -> Vec<Hunk> {
     let head = base.iter().zip(side).take_while(|(a, b)| a == b).count();
     let tail = base[head..]
         .iter()

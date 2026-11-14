@@ -16,6 +16,8 @@ pub struct Prefs {
     pub bar: String,
     /// Short fades when something opens: `off` makes everything instant, anything else keeps them.
     pub motion: String,
+    /// Author of the revisions a person saves; empty: `INKUNO_AUTHOR`, else the OS user name.
+    pub author: String,
 }
 
 impl Prefs {
@@ -31,6 +33,7 @@ impl Prefs {
             wide: String::new(),
             bar: String::new(),
             motion: String::new(),
+            author: String::new(),
         };
         for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
             match key {
@@ -48,6 +51,7 @@ impl Prefs {
                 "wide" => prefs.wide = value.into(),
                 "bar" => prefs.bar = value.into(),
                 "motion" => prefs.motion = value.into(),
+                "author" => prefs.author = value.into(),
                 _ => {}
             }
         }
@@ -65,6 +69,7 @@ impl Prefs {
             ("wide", &self.wide),
             ("bar", &self.bar),
             ("motion", &self.motion),
+            ("author", &self.author),
         ] {
             if !value.is_empty() {
                 text.push_str(&format!("{key}={value}\n"));
@@ -103,6 +108,11 @@ mod tests {
         assert_eq!(still.motion, "off");
         assert_eq!(Prefs::parse(&still.to_text()), still);
         assert!(!prefs.to_text().contains("motion="));
+        // Revision author: absent until chosen, kept as typed.
+        let named = Prefs::parse("author=Sachin Kolisetty\n");
+        assert_eq!(named.author, "Sachin Kolisetty");
+        assert_eq!(Prefs::parse(&named.to_text()), named);
+        assert!(!prefs.to_text().contains("author="));
         assert!(!prefs.to_text().contains("page=") && !prefs.to_text().contains("wide="));
     }
 }

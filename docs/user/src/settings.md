@@ -48,6 +48,11 @@ A small table keeps its own size, and nothing goes past the window.
 - `formatting bar` in the palette shows or hides the [formatting bar](writing.md#the-formatting-bar) under the note.
 - `animations` in the palette turns the short fades off. When on, the panel, the formatting bar and a folder of the tree fade in over about 0.13 s as they open. Nothing moves on typing, scrolling or the caret, and no fade delays a result. Hovers and closing are instant.
 
+## Revision author
+
+- `revision author…` in the palette sets the name on the versions you save. Enter keeps it, Escape keeps the old one. Empty keeps the default.
+- The default is the `INKUNO_AUTHOR` environment variable, else your system user name, else `unknown`.
+
 ## Language
 
 The interface is in English.
@@ -65,6 +70,7 @@ These choices are kept in a file named `settings`, in the [configuration folder]
 | `wide` | `column`, `center` | `wide tables` |
 | `bar` | `on`, `off` | `formatting bar` |
 | `motion` | `on`, `off` | `animations` |
+| `author` | any line of text | `revision author…` (empty: the default) |
 
 ## Changing a shortcut
 

@@ -29,6 +29,9 @@ impl Shell {
         if self.vault.is_none() {
             return;
         }
+        if setting == Setting::Author {
+            return self.ask_author(window, cx);
+        }
         // The theme's default is not one of the list: it follows the system, light or dark.
         let default = match setting {
             Setting::Theme => tr(
@@ -137,6 +140,7 @@ impl Shell {
                         Setting::Wide => this.prefs.wide = key,
                         Setting::Bar => this.prefs.bar = key,
                         Setting::Motion => this.prefs.motion = key,
+                        Setting::Author => {}
                     }
                 }
                 _ => this.prefs = before.clone(),
@@ -151,6 +155,37 @@ impl Shell {
         .detach();
         window.focus(&palette.focus_handle(cx));
         self.palette = Some(palette);
+        cx.notify();
+    }
+
+    /// The name on the revisions: a typed line, prefilled with the current one. Empty keeps the
+    /// default (`INKUNO_AUTHOR`, else the OS user name). Escape keeps the setting.
+    fn ask_author(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (theme, label) = (self.theme, Setting::Author.label());
+        let current = self.prefs.author.clone();
+        let prompt = cx.new(|cx| Palette::prompt(label, &current, theme, cx));
+        cx.subscribe_in(&prompt, window, move |this, asked, event, window, cx| {
+            if this.palette.as_ref() != Some(asked) {
+                return;
+            }
+            match event {
+                PaletteEvent::Submit(text) => {
+                    this.prefs.author = logic::revision::clean_author(text);
+                    vault::save_settings(&this.prefs.to_text());
+                    this.palette = None;
+                    window.focus(&this.pane().editor.focus_handle(cx));
+                }
+                PaletteEvent::Dismiss => {
+                    this.palette = None;
+                    window.focus(&this.pane().editor.focus_handle(cx));
+                }
+                _ => {}
+            }
+            cx.notify();
+        })
+        .detach();
+        window.focus(&prompt.focus_handle(cx));
+        self.palette = Some(prompt);
         cx.notify();
     }
 

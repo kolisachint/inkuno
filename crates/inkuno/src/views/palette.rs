@@ -81,6 +81,8 @@ pub enum Setting {
     Bar,
     /// Fades when something opens.
     Motion,
+    /// Name on the revisions a person saves (a typed line, not a list).
+    Author,
 }
 
 impl Setting {
@@ -93,6 +95,7 @@ impl Setting {
             Setting::Wide => tr("Wide tables…", "Grands tableaux…"),
             Setting::Bar => tr("Formatting bar…", "Barre de mise en forme…"),
             Setting::Motion => tr("Animations…", "Animations…"),
+            Setting::Author => tr("Revision author…", "Auteur des versions…"),
         }
     }
 }
@@ -559,6 +562,7 @@ impl Palette {
             Setting::Wide,
             Setting::Bar,
             Setting::Motion,
+            Setting::Author,
         ] {
             if !q.is_empty() && command(&q, setting.label()) {
                 items.push(Item::Setting(setting));

@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod link;
+pub mod revisions;
 pub mod scratch;
 pub mod vault;
 
