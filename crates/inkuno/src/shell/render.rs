@@ -245,6 +245,9 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &nav::ToggleFull, window, cx| this.toggle_full(window, cx)),
             )
+            .on_action(
+                cx.listener(|this, _: &ToggleSidebar, window, cx| this.toggle_sidebar(window, cx)),
+            )
             // Panel separator: it follows the pointer as long as the button is held.
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, window, cx| {
                 // A border between panes, likewise.

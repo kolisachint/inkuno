@@ -476,6 +476,15 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::ToggleSidebar",
+            tr(
+                "Sidebar: show or hide the side panel",
+                "Barre latérale : afficher ou masquer le panneau",
+            ),
+            "c-split.svg",
+            Go,
+        ),
+        (
             "app::OpenVault",
             tr("Change vault", "Changer de coffre"),
             "tree.svg",

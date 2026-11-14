@@ -73,6 +73,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Recent notes |
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
+| `Ctrl+B` | Sidebar: show or hide the side panel (the rail stays) |
 | `Arrows` | Select and preview |
 | `Enter` / `Esc` | Open the note / back to the note |
 | `Ctrl+Shift+N` | New folder (also in the palette) |
@@ -182,7 +183,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Selected lines: task list (again: plain text) |
 |  | Selected lines: plain text |
 | `Ctrl+Enter` | Check / uncheck a task or a \[ \] box; in a table cell, add one |
-| `Ctrl+B` | Bold |
+| `Ctrl+Alt+B` | Bold |
 | `Ctrl+I` | Italic |
 | `Ctrl+U` | Underline |
 | `Ctrl+Shift+X` | Strikethrough |

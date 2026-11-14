@@ -393,7 +393,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
     };
     // Each style: its marks around the word, the selection stays on the word, the same gesture removes them.
     for (key, shown, flag) in [
-        ("secondary-b", "un **mot** ici", markdown::BOLD),
+        ("secondary-alt-b", "un **mot** ici", markdown::BOLD),
         ("secondary-i", "un *mot* ici", markdown::ITALIC),
         ("secondary-u", "un <u>mot</u> ici", markdown::UNDER),
         ("secondary-shift-x", "un ~~mot~~ ici", markdown::STRIKE),
@@ -424,13 +424,13 @@ fn formatting_journey(cx: &mut TestAppContext) {
     }
     // Several styles on a word, then one in the middle is removed: the others stay.
     pick(cx, "un mot ici", 3, 3);
-    cx.simulate_keystrokes("secondary-b secondary-u secondary-shift-h");
+    cx.simulate_keystrokes("secondary-alt-b secondary-u secondary-shift-h");
     assert_eq!(text(cx), "un **<u>==mot==</u>** ici");
     assert_eq!(
         styles(cx),
         markdown::BOLD | markdown::UNDER | markdown::HIGHLIGHT
     );
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "un <u>==mot==</u> ici");
     cx.simulate_keystrokes("secondary-u");
     assert_eq!(
@@ -439,65 +439,65 @@ fn formatting_journey(cx: &mut TestAppContext) {
     );
     // Bold around italic: the cursor in the italic removes the bold without touching the italic.
     pick(cx, "**a *b* c**", 5, 0);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "a *b* c");
     // Cursor alone: two marks and the cursor between them; typing fills them; the next gesture removes them.
     pick(cx, "ab", 1, 0);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "a****b");
     cx.simulate_input("x");
     assert_eq!(text(cx), "a**x**b");
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "axb");
     // Empty pair: the gesture removes it instead of stacking another.
     pick(cx, "ab", 1, 0);
-    cx.simulate_keystrokes("secondary-b secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b secondary-alt-b");
     assert_eq!(text(cx), "ab");
     // Edge blanks stay outside, the bullet and the heading too.
     pick(cx, "un mot ici", 3, 4);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "un **mot** ici");
     pick(cx, "- liste", 0, 7);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "- **liste**");
     pick(cx, "# Titre", 2, 5);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "# **Titre**");
     // Only blanks: nothing moves, and nothing to undo.
     pick(cx, "a   b", 1, 3);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "a   b");
     // Text in other scripts, accents, emojis, wide characters: the marks land on the right bytes.
     for note in ["日本語 é🙂", "é", "🙂", "a|b\\c \"d\""] {
         pick(cx, note, 0, note.chars().count());
-        cx.simulate_keystrokes("secondary-b secondary-shift-h");
+        cx.simulate_keystrokes("secondary-alt-b secondary-shift-h");
         assert_eq!(text(cx), format!("**=={note}==**"), "{note}");
-        cx.simulate_keystrokes("secondary-shift-h secondary-b");
+        cx.simulate_keystrokes("secondary-shift-h secondary-alt-b");
         assert_eq!(text(cx), note, "{note}");
     }
     // Several lines: each has its marks, except code blocks and blank lines; one gesture, one undo.
     let note = "- un\n- deux\n\n```\ncode\n```\nfin";
     pick(cx, note, 0, note.chars().count());
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "- **un**\n- **deux**\n\n```\ncode\n```\n**fin**");
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), note);
-    cx.simulate_keystrokes("secondary-b secondary-z");
+    cx.simulate_keystrokes("secondary-alt-b secondary-z");
     assert_eq!(text(cx), note);
     // An unclosed code block is not one: its text gets the style.
     pick(cx, "```\nsuite", 4, 5);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "```\n**suite**");
     // Inside a code block, nothing changes.
     pick(cx, "```\ncode\n```", 5, 4);
-    cx.simulate_keystrokes("secondary-b secondary-u");
+    cx.simulate_keystrokes("secondary-alt-b secondary-u");
     assert_eq!(text(cx), "```\ncode\n```");
     pick(cx, "```\ncode\n```", 6, 0);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert_eq!(text(cx), "```\ncode\n```");
     // A table cell, and a comment: the selection stays valid there.
     pick(cx, "| a | b |\n| --- | --- |\n| c | d |", 26, 1);
-    cx.simulate_keystrokes("secondary-b");
+    cx.simulate_keystrokes("secondary-alt-b");
     assert!(text(cx).contains("| **c** |"), "{}", text(cx));
     // Several cursors: each gets its marks, a single undo removes them all.
     pick(cx, "un chat\nun chien", 0, 0);
@@ -524,7 +524,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
     mark(cx, "secondary-i");
     assert_eq!(text(cx), "un mot ici");
     pick(cx, "un mot ici", 3, 3);
-    mark(cx, "secondary-b");
+    mark(cx, "secondary-alt-b");
     assert_eq!(
         (text(cx), selected(cx).as_str()),
         ("un **mot** ici".to_string(), "mot")
@@ -536,7 +536,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
         (text(cx), selected(cx).as_str()),
         ("un **<u>==mot==</u>** ici".to_string(), "mot")
     );
-    mark(cx, "secondary-b");
+    mark(cx, "secondary-alt-b");
     mark(cx, "secondary-u");
     mark(cx, "secondary-shift-h");
     assert_eq!(text(cx), "un mot ici");
