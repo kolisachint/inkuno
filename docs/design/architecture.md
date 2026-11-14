@@ -20,6 +20,8 @@ crates/inkuno/src/
   views/       gpui entities: editor, side panel, palette, viewer, one-line field (its text: `ui/line.rs`)
   shell/       the window: owns the panes and the views, routes events, runs the commands
     tests/     the whole app driven by simulated keystrokes
+  cli/         `inkuno rev`, `inkuno keys`, `inkuno help`: the command line, no window. Uses logic,
+               platform, the pure parts of ui and the shortcut table of shell/keymap
   mcp/         `inkuno mcp`: JSON-RPC over stdio for an agent. Uses logic, platform and the pure
                parts of ui. Nothing uses it. Its texts stay in English and do not go through tr
 ```
@@ -31,6 +33,7 @@ shell ──► views ──► ui ──► logic
   │         │              ▲
   └─────────┴──► platform ─┘        lang, actions: usable everywhere
 mcp ────────────► ui, logic, platform
+cli ────────────► ui, logic, platform (and the shortcut table of shell/keymap)
 ```
 
 ![The layers of Inkuno and which ones each uses](../user/src/img/architecture-layers.svg)
@@ -75,6 +78,8 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | how Markdown is read (headings, links, tags, styles) | `crates/inkuno-logic/src/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
 | Markdown tables (cells, paste, rows and columns, sort, format) | `crates/inkuno-logic/src/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
+| the command line (`inkuno rev`, `inkuno keys`, `inkuno help`) | `crates/inkuno/src/cli/` (`rev.rs`, `keys.rs`); tests `crates/inkuno/tests/cli.rs`; `docs/design/revisions.md` |
+| a note's revisions (format, diffs, the folders that follow the note) | `crates/inkuno-logic/src/revision.rs` (format, paths, diffs), `platform/revisions.rs` (disk); `docs/design/revisions.md` |
 | the window's door for `inkuno mcp` (`show`) | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `ui/theme.rs` |

@@ -152,6 +152,26 @@ Showing: when Inkuno is open on the same vault, the agent can open a note, a dia
 
 The user guide is a resource (`inkuno://guide/writing`, `links`, `comments`, and the other pages).
 
+## Command line
+
+The same `inkuno` program answers from a terminal or a script, with no window. It works whether or not the app is open; an open app sees what the command line writes at once.
+
+- `inkuno rev save <note> [--author NAME] [-m TEXT]`: saves the note's text as a new version and prints its number. Refused, with nothing written, when the text is the latest version's already.
+- `inkuno rev list <note> [--json]`: the versions, newest first: number, date, author, kind, note.
+- `inkuno rev show <note> <n> [--json]`: the full text of version `n` (with `--json`, its header and text).
+- `inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]`: no number compares the latest version with the file as it is now; one number compares that version with the file; two compare `a` with `b`. `unified` (the default) is a patch that `patch` applies; `critic` marks changes inline as `{--removed--}` and `{++added++}`.
+- `inkuno keys list [--json]`: every shortcut, its chord now, and whether it was changed.
+- `inkuno keys set <action> <chord>` and `inkuno keys reset <action>...`: change the shortcuts in `keybindings.json`. A chord is refused when it types text or when another action has it.
+- `inkuno help rev` and `inkuno help keys`, or `--help` after either word, give each command with an example.
+
+Errors go to standard error with exit status 1; a wrong command line exits with 2.
+
+**Which vault.** The note's vault is the nearest folder above it that holds an `.inkuno` folder. Failing that, it is the vault the app has open, when the note is in it. Failing that, the note's own folder. A note in the app's scratch folder keeps its versions there.
+
+**The author.** `--author` if given; else the author setting of the app (`revision author…` in the palette); else the `INKUNO_AUTHOR` variable; else your system user name; else `unknown`.
+
+**Reading the files.** An agent does not need the command line to read the versions. They are in `.inkuno/revisions/`, next to the note's path in the vault (`ideas/plan.md` is `.inkuno/revisions/ideas/plan.md/0001.md`, `0002.md`…). Each file opens with a front matter block (`revision`, `parent`, `author`, `date`, `kind`, `note`), then the note's text, exactly as it was. The folder is hidden from the tree and the search.
+
 ## Prompts
 
 A prompt is a request written in advance that you start yourself: the agent cannot run one. Your client fills it with your arguments and sends it as if you had typed it. Inkuno offers six:

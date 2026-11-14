@@ -3,8 +3,7 @@
 //! history lives in `<vault>/.inkuno/revisions/`, a scratch folder's in `<scratch>/.revisions/`;
 //! both are hidden from the tree, the search and the Scratch panel.
 
-// ponytail: nothing calls the saving, listing and reading functions until the checkpoint key and
-// the command line land (next commits); this line goes then.
+// ponytail: `latest` is called by the checkpoint key, which lands in the next commit; this line goes then.
 #![allow(dead_code)]
 
 use std::{

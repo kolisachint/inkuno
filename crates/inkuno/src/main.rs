@@ -1,6 +1,7 @@
 //! Inkuno: a fast, minimal Markdown note-taking app. docs/design/architecture.md maps the code.
 
 mod actions;
+mod cli;
 #[cfg(test)]
 mod dbg_test;
 mod lang;
@@ -23,6 +24,9 @@ fn help_text() -> String {
          usage:\n\
          \u{20} inkuno                  open the app\n\
          \u{20} inkuno mcp               run the Model Context Protocol server on stdio\n\
+         \u{20} inkuno rev <save|list|show|diff>   saved versions of a note (see `inkuno rev --help`)\n\
+         \u{20} inkuno keys <list|set|reset>       keyboard shortcuts, as keybindings.json (see `inkuno keys --help`)\n\
+         \u{20} inkuno help [rev|keys]    this text, or the help of one of those commands\n\
          \u{20} inkuno --check-config    validate the JSON config below, exit 0/1\n\
          \u{20} inkuno --help            show this text\n\
          \n\
@@ -187,6 +191,14 @@ fn main() {
     // `inkuno mcp` is a Model Context Protocol server on stdio: no window, no gpui.
     if std::env::args().nth(1).as_deref() == Some("mcp") {
         std::process::exit(mcp::run());
+    }
+    // `inkuno rev`, `keys` and `help`: the command line, without a window either.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if matches!(
+        args.first().map(String::as_str),
+        Some("rev" | "keys" | "help")
+    ) {
+        std::process::exit(cli::run(&args));
     }
     if std::env::args().any(|arg| arg == "--help" || arg == "-h") {
         print!("{}", help_text());
