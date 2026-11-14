@@ -398,6 +398,12 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::ToggleAssistant",
+            tr("Assistant", "Assistant"),
+            "assistant.svg",
+            Go,
+        ),
+        (
             "app::KeepInVault",
             tr(
                 "Keep this scratch note in the vault",

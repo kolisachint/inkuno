@@ -14,7 +14,6 @@ pub use tables::*;
 
 use std::ops::Range;
 
-use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -2325,91 +2324,6 @@ mod tests {
             (found.len(), found[0].clone()),
             (1, "İ".len().."İstan".len())
         );
-    }
-
-    #[test]
-    fn counts_words_and_characters() {
-        assert_eq!(counts(""), (0, 0));
-        assert_eq!(counts("# Été\n\nl'idée, **déjà** 2 fois\n"), (5, 28));
-        assert_eq!(counts("👨‍👩‍👧 ok"), (1, 4));
-        // Recounting only the changed lines gives the counts of the whole text.
-        let texts = [
-            "",
-            "a",
-            "un mot\n",
-            "un mot\ndeux\n",
-            "un mot\r\ndeux\r\n",
-            "un mot\ndeux mots\n",
-            "un\n\ndeux\n",
-            "été\nl'idée 👨‍👩‍👧\nfin",
-            "un mot\ndeux\ntrois\n",
-            "x\r",
-            "x\r\n",
-            "\n",
-            "\n\n",
-            "deux\n",
-        ];
-        for old in texts {
-            for new in texts {
-                assert_eq!(
-                    recount(old, counts(old), new),
-                    counts(new),
-                    "{old:?} -> {new:?}"
-                );
-            }
-        }
-        // A long text, compared by blocks: a keystroke at the start, in the middle, at the end, and a line removed.
-        let long: String = (0..2000).map(|i| format!("ligne {i} d'été\n")).collect();
-        for at in [0, 7, long.len() / 2, long.len() - 1, long.len()] {
-            let typed = format!("{}mot {}", &long[..at], &long[at..]);
-            assert_eq!(
-                recount(&long, counts(&long), &typed),
-                counts(&typed),
-                "keystroke at {at}"
-            );
-            assert_eq!(
-                recount(&typed, counts(&typed), &long),
-                counts(&long),
-                "indent at {at}"
-            );
-        }
-        // Random edits (always the same): insert, delete, replace, anywhere.
-        let bits = [
-            "a",
-            " ",
-            "\n",
-            "\r\n",
-            "\r",
-            "é",
-            "👨‍👩‍👧",
-            "l'idée",
-            "3.14",
-            "mot mot\n",
-            "",
-            "\n\n",
-        ];
-        let mut seed = 42u64;
-        let mut next = |n: usize| {
-            seed = seed
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (seed >> 33) as usize % n.max(1)
-        };
-        let (mut text, mut known) = (String::new(), (0, 0));
-        for step in 0..3000 {
-            let cut = |t: &str, mut i: usize| {
-                while !t.is_char_boundary(i) {
-                    i -= 1;
-                }
-                i
-            };
-            let from = cut(&text, next(text.len() + 1));
-            let to = cut(&text, (from + next(6)).min(text.len())).max(from);
-            let fresh = format!("{}{}{}", &text[..from], bits[next(bits.len())], &text[to..]);
-            known = recount(&text, known, &fresh);
-            assert_eq!(known, counts(&fresh), "edit {step}: {text:?} -> {fresh:?}");
-            text = fresh;
-        }
     }
 
     #[test]

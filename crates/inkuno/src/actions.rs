@@ -41,6 +41,7 @@ actions!(
         OpenVault,
         CopyAll,
         ToggleHelp,
+        ToggleAssistant,
         CloseHelp,
         ChooseTheme,
         ContextMenu,

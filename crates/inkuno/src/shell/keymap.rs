@@ -107,6 +107,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&nav::ShowScratch, tr("Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it", "Brouillons : le panneau les liste, les plus récents d'abord ; Entrée en ouvre un, Suppr. le jette")),
                 t(tr("A picture", "Une image"), tr("Shown in place of the note", "Affichée à la place de la note")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
+                p("assistant", tr("Assistant: show or hide its panel in the right dock (also a round button at the foot of the note)", "Assistant : afficher ou masquer son panneau dans le dock de droite (aussi un bouton rond en bas de la note)")),
                 k(&ToggleSidebar, tr("Sidebar: show or hide the side panel (the rail stays)", "Barre latérale : afficher ou masquer le panneau latéral (le rail reste)")),
                 k(&ToggleFocus, tr("Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back", "Mode focus : la note seule, bord à bord, sans barres ni panneaux ; F9 ou Échap revient")),
                 k(&ToggleTitleBar, tr("Title bar: show or hide the bar the app draws (its buttons come back with it)", "Barre de titre : afficher ou masquer la barre dessinée par l'app (ses boutons reviennent avec elle)")),

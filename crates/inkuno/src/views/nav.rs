@@ -79,15 +79,18 @@ pub enum Mode {
     Outline,
     /// Scratch notes: the ones not filed in the vault yet, newest first.
     Scratch,
+    /// The assistant: a panel of the right dock, beside the note. It always lives there.
+    Assistant,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 5] = [
+    pub const ALL: [Mode; 6] = [
         Mode::Tree,
         Mode::Recent,
         Mode::Search,
         Mode::Outline,
         Mode::Scratch,
+        Mode::Assistant,
     ];
 
     /// As written in the `layout` file.
@@ -98,6 +101,7 @@ impl Mode {
             Mode::Search => "search",
             Mode::Outline => "outline",
             Mode::Scratch => "scratch",
+            Mode::Assistant => "assistant",
         }
     }
 
@@ -458,74 +462,112 @@ pub struct Nav {
     pub outline_collapsed: HashSet<usize>,
 }
 
+/// What the `layout` file says, read apart from any window (`Nav::new` restores the panel from it).
+#[derive(Debug, PartialEq)]
+pub struct Layout {
+    pub mode: Mode,
+    pub left_shown: Vec<Mode>,
+    pub right: Vec<Mode>,
+    pub right_shown: Vec<Mode>,
+    pub folded: HashSet<Mode>,
+    pub right_w: Pixels,
+    pub panel: Panel,
+    pub list_w: Pixels,
+    pub title_bar: bool,
+}
+
+/// Reads a `layout` file. The assistant never lives in the left dock: a file that names it
+/// there, or names a right dock without it, gets it back on the right.
+pub fn read_layout(saved: &str) -> Layout {
+    let mut words = saved.split_whitespace();
+    let mode = words
+        .next()
+        .and_then(Mode::named)
+        .filter(|m| *m != Mode::Assistant)
+        .unwrap_or_default();
+    // Then, in any order, what an older file does not have: the right dock.
+    let (positional, keyed): (Vec<&str>, Vec<&str>) = words.partition(|w| !w.contains('='));
+    let key = |name: &str| {
+        keyed
+            .iter()
+            .find_map(|w| w.strip_prefix(name)?.strip_prefix('='))
+    };
+    let list = |name: &str| {
+        let mut tools: Vec<Mode> = Vec::new();
+        for tool in key(name)
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(Mode::named)
+        {
+            if !tools.contains(&tool) {
+                tools.push(tool);
+            }
+        }
+        tools
+    };
+    // A tool on both sides stays on the left, where it always was.
+    let mut left_shown = list("left");
+    left_shown.retain(|m| *m != Mode::Assistant);
+    if !left_shown.contains(&mode) {
+        left_shown.insert(0, mode);
+    }
+    // The outline lives in the right dock, available but hidden (the zen default): an older
+    // file, or none, leaves it there; an explicit `right=` (even an empty one) is respected.
+    let mut right: Vec<Mode> = match key("right") {
+        None => vec![Mode::Outline, Mode::Assistant],
+        Some(_) => list("right")
+            .into_iter()
+            .filter(|m| !left_shown.contains(m))
+            .collect(),
+    };
+    if !right.contains(&Mode::Assistant) {
+        right.push(Mode::Assistant);
+    }
+    let right_shown = list("show")
+        .into_iter()
+        .filter(|m| right.contains(m))
+        .collect();
+    let folded = list("fold").into_iter().collect();
+    let mut words = positional.into_iter();
+    Layout {
+        mode,
+        left_shown,
+        right,
+        right_shown,
+        folded,
+        right_w: key("width").and_then(|w| w.parse().ok()).map_or(LIST_W, px),
+        panel: match words.next() {
+            Some("split") => Panel::Split,
+            Some("full") => Panel::Full,
+            _ => Panel::Rail,
+        },
+        list_w: {
+            let list = words.next().and_then(|w| w.parse().ok()).map_or(LIST_W, px);
+            // A leftover width of the cut graph view, if an old file names one: skipped.
+            let _ = words.next();
+            list
+        },
+        title_bar: key("titlebar") != Some("hidden"),
+    }
+}
+
 impl Nav {
     /// Restores the panel as it was when the app closed.
     pub fn new(focus: FocusHandle) -> Self {
-        let saved = vault::load_layout();
-        let mut words = saved.split_whitespace();
-        let mode = words.next().and_then(Mode::named).unwrap_or_default();
-        // Then, in any order, what an older file does not have: the right dock.
-        let (positional, keyed): (Vec<&str>, Vec<&str>) = words.partition(|w| !w.contains('='));
-        let key = |name: &str| {
-            keyed
-                .iter()
-                .find_map(|w| w.strip_prefix(name)?.strip_prefix('='))
-        };
-        let list = |name: &str| {
-            let mut tools: Vec<Mode> = Vec::new();
-            for tool in key(name)
-                .unwrap_or_default()
-                .split(',')
-                .filter_map(Mode::named)
-            {
-                if !tools.contains(&tool) {
-                    tools.push(tool);
-                }
-            }
-            tools
-        };
-        // A tool on both sides stays on the left, where it always was.
-        let mut left_shown = list("left");
-        if !left_shown.contains(&mode) {
-            left_shown.insert(0, mode);
-        }
-        // The outline lives in the right dock, available but hidden (the zen default): an older
-        // file, or none, leaves it there; an explicit `right=` (even an empty one) is respected.
-        let right: Vec<Mode> = match key("right") {
-            None => vec![Mode::Outline],
-            Some(_) => list("right")
-                .into_iter()
-                .filter(|m| !left_shown.contains(m))
-                .collect(),
-        };
-        let right_shown = list("show")
-            .into_iter()
-            .filter(|m| right.contains(m))
-            .collect();
-        let folded = list("fold").into_iter().collect();
-        let mut words = positional.into_iter();
+        let saved = read_layout(&vault::load_layout());
         Self {
             focus,
-            mode,
+            mode: saved.mode,
             parked: HashMap::new(),
-            left_shown,
-            right_w: key("width").and_then(|w| w.parse().ok()).map_or(LIST_W, px),
-            right,
-            right_shown,
+            left_shown: saved.left_shown,
+            right_w: saved.right_w,
+            right: saved.right,
+            right_shown: saved.right_shown,
             right_dragging: false,
-            folded,
+            folded: saved.folded,
             outline_collapsed: HashSet::new(),
-            panel: match words.next() {
-                Some("split") => Panel::Split,
-                Some("full") => Panel::Full,
-                _ => Panel::Rail,
-            },
-            list_w: {
-                let list = words.next().and_then(|w| w.parse().ok()).map_or(LIST_W, px);
-                // A leftover width of the cut graph view, if an old file names one: skipped.
-                let _ = words.next();
-                list
-            },
+            panel: saved.panel,
+            list_w: saved.list_w,
             dragging: false,
             sel: None,
             followed: None,
@@ -539,7 +581,7 @@ impl Nav {
             unfolded: None,
             native_bar: false,
             lights: false,
-            title_bar: key("titlebar") != Some("hidden"),
+            title_bar: saved.title_bar,
             left: px(0.),
             total: px(0.),
             aside: px(0.),
@@ -562,7 +604,7 @@ impl Nav {
         }
         // The stock right dock (the outline, available but hidden) is the default: older files,
         // and fresh vaults, write no `right=` line for it.
-        let stock = self.right_shown.is_empty() && self.right == [Mode::Outline];
+        let stock = self.right_shown.is_empty() && self.right == [Mode::Outline, Mode::Assistant];
         if !stock && !self.right.is_empty() {
             line += &format!(
                 " right={} width={}",
@@ -771,6 +813,35 @@ pub use crate::logic::commands::reveal_label;
 mod tests {
     use super::*;
     use std::{fs, time::SystemTime};
+
+    #[test]
+    fn the_assistant_lives_in_the_right_dock() {
+        // No file: the outline and the assistant wait hidden on the right, the tree on the left.
+        let stock = read_layout("");
+        assert_eq!(stock.right, [Mode::Outline, Mode::Assistant]);
+        assert!(stock.right_shown.is_empty());
+        assert_eq!(stock.left_shown, [Mode::Tree]);
+        // An older file's right dock: the assistant joins it, on the right.
+        let older = read_layout("tree split 410 right=outline width=300 show=outline\n");
+        assert_eq!(older.right, [Mode::Outline, Mode::Assistant]);
+        assert_eq!(older.right_shown, [Mode::Outline]);
+        assert_eq!(older.left_shown, [Mode::Tree]);
+        // An explicit empty right dock still gets the assistant.
+        assert_eq!(
+            read_layout("tree split 410 right=\n").right,
+            [Mode::Assistant]
+        );
+        // Named on the left, it goes back to the right; the left dock keeps the others.
+        let left = read_layout("tree split 410 left=tree,assistant\n");
+        assert_eq!(left.left_shown, [Mode::Tree]);
+        assert!(left.right.contains(&Mode::Assistant));
+        // Named as the first word, it is not the left dock's tool either.
+        assert_eq!(read_layout("assistant rail 410\n").mode, Mode::Tree);
+        // Shown with the others, as written.
+        let shown = read_layout("tree split 410 right=outline,assistant show=assistant,outline\n");
+        assert_eq!(shown.right_shown, [Mode::Assistant, Mode::Outline]);
+        assert_eq!(Mode::named("assistant"), Some(Mode::Assistant));
+    }
 
     #[test]
     fn the_name_keeps_its_room_before_the_folder() {

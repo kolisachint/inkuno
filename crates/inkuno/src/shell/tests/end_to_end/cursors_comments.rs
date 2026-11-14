@@ -300,7 +300,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("secondary-f");
     cx.run_until_parked();
     within(cx, "find-bar", "pane-0");
-    within(cx, "counts", "pane-0");
+    within(cx, "assistant-toggle", "pane-0");
     cx.simulate_keystrokes("escape");
     cx.simulate_resize(whole);
     shell.update(cx, |s, cx| {

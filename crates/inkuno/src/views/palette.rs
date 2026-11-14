@@ -83,6 +83,8 @@ pub enum Setting {
     Motion,
     /// Name on the revisions a person saves (a typed line, not a list).
     Author,
+    /// The command that starts the assistant (a typed line, not a list).
+    Assistant,
 }
 
 impl Setting {
@@ -96,6 +98,7 @@ impl Setting {
             Setting::Bar => tr("Formatting bar…", "Barre de mise en forme…"),
             Setting::Motion => tr("Animations…", "Animations…"),
             Setting::Author => tr("Revision author…", "Auteur des versions…"),
+            Setting::Assistant => tr("Assistant command…", "Commande de l'assistant…"),
         }
     }
 }
@@ -563,6 +566,7 @@ impl Palette {
             Setting::Bar,
             Setting::Motion,
             Setting::Author,
+            Setting::Assistant,
         ] {
             if !q.is_empty() && command(&q, setting.label()) {
                 items.push(Item::Setting(setting));

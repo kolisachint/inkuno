@@ -4,11 +4,8 @@ use super::*;
 
 impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Left of the buttons the window puts in the corner (copy, comments).
-        // The count is truncated in a narrow note, instead of going out on the left.
         let t = self.theme;
-        let after = (12. + 34. * self.corner as f32) * t.ui;
-        // The formatting bar, in the middle of the page, apart from the counter, which stays at the right.
+        // The formatting bar, in the middle of the page, clear of the corner buttons.
         self.bar.at = self.bar_place();
         let folded = self.bar.at == Some(Bar::Compact);
         let bar = match self.bar.at {
@@ -24,35 +21,8 @@ impl Render for Editor {
             _ => None,
         };
         let toggle = folded.then(|| self.bar_toggle(cx));
-        // Collapsed, the counter is truncated before going under the button, in the middle.
-        let left = if folded {
-            f32::from(self.viewport.size.width) / 2. + (15. + 8.) * t.ui
-        } else {
-            8. * t.ui
-        };
-        let counts = div()
-            .absolute()
-            .bottom_4()
-            .left(px(left))
-            .right(px(after))
-            .flex()
-            .justify_end()
-            .child(
-                div()
-                    .debug_selector(|| "counts".into())
-                    .h(t.px(30.))
-                    .min_w_0()
-                    .px_2()
-                    .rounded(t.large())
-                    .flex()
-                    .items_center()
-                    .bg(self.theme.bg)
-                    .text_size(t.px(12.))
-                    .text_color(self.theme.soft)
-                    .child(div().min_w_0().truncate().child(self.counts())),
-            );
         // The text scrolls behind this band: it fades into the page, then hides what lies under
-        // the counter and the bar. Panes are flat (edge to edge), so the band's corners are square too.
+        // the bar. Panes are flat (edge to edge), so the band's corners are square too.
         let t = self.theme;
         let band = div()
             .debug_selector(|| "note-band".into())
@@ -291,7 +261,6 @@ impl Render for Editor {
         .on_scroll_wheel(cx.listener(Self::scroll))
         .child(EditorElement(cx.entity()))
         .child(band)
-        .child(counts)
         .children(toggle)
         .children(bar);
         // The find bar beside the note, not inside it: typing a search never reaches the note's keys.

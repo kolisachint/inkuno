@@ -174,10 +174,9 @@ actions!(
     ]
 );
 
-/// Floor once kept at the bottom of the note for the counter and the formatting bar or its
-/// button: the bar is gone from the main UI (its module stays, reachable from the palette),
-/// so the text uses the full height and the cursor and the popups stay above nothing.
-/// Kept at zero while the shell still draws its own corner buttons over the text.
+/// Floor kept at the bottom of the note for the formatting bar or its button. Kept at zero: the
+/// text uses the full height, and the corner buttons the shell draws (the assistant, the comments
+/// bubble) float over it.
 pub(super) const FOOTER: Pixels = px(0.);
 const TOP: Pixels = px(20.);
 /// Top margin when the window buttons would cover the first line: under their bottom edge and shadow.
@@ -240,9 +239,6 @@ pub enum EditorEvent {
     /// A link to a heading or a block of a note, to open: the note and where in it; with Shift, aside.
     OpenAt(crate::logic::wiki::Target, bool),
 }
-
-/// What the footer counter depends on: the text version and the selection.
-type CountKey = (u64, Option<Range<usize>>);
 
 pub struct Editor {
     focus: FocusHandle,
@@ -360,12 +356,8 @@ pub struct Editor {
     /// The `revision` the lines in `rows` were laid out for: pointer events between an edit and the next
     /// paint must not slice the text with their offsets.
     rows_revision: u64,
-    /// Footer counter, kept as long as the text and the selection do not move.
-    counted: Option<(CountKey, String)>,
-    /// The text counted last, its version and its counts: on a keystroke, only the changed
-    /// lines are recounted (`md::recount`).
-    tally: Option<(u64, String, (usize, usize))>,
-    /// Number of buttons the window puts in the corner, right of the counter.
+    /// Number of corner buttons the window draws over the note (the assistant, the comments
+    /// bubble); the formatting bar keeps clear of them.
     pub corner: usize,
     /// The formatting bar: what it offers, where it sits, folded or open.
     bar: BarState,
@@ -486,8 +478,6 @@ impl Editor {
             version: 0,
             revision: 0,
             rows_revision: 0,
-            counted: None,
-            tally: None,
             corner: 1,
             bar: BarState::default(),
             bar_here: true,
@@ -648,55 +638,6 @@ impl Editor {
     #[cfg(test)]
     pub fn figure_count(&self) -> (usize, usize) {
         (self.figures.len(), self.waiting.len())
-    }
-
-    /// Footer counter: words and characters of the note, or of the selection. Recounted only when the text or the selection change.
-    pub fn counts(&mut self) -> String {
-        // Without a selection, moving the cursor changes nothing in the count.
-        let key = (
-            self.version,
-            (!self.sel.is_empty()).then(|| self.sel.clone()),
-        );
-        if let Some((_, label)) = self.counted.as_ref().filter(|(known, _)| *known == key) {
-            return label.clone();
-        }
-        let plural =
-            |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
-        let both = |(words, chars): (usize, usize)| {
-            format!(
-                "{} · {}",
-                plural(words, tr("word", "mot"), tr("words", "mots")),
-                plural(
-                    chars,
-                    tr("character", "caractère"),
-                    tr("characters", "caractères")
-                )
-            )
-        };
-        let label = if self.sel.is_empty() {
-            let whole = match &self.tally {
-                Some((version, _, whole)) if *version == self.version => *whole,
-                Some((_, old, was)) => md::recount(old, *was, &self.content),
-                None => md::counts(&self.content),
-            };
-            if self
-                .tally
-                .as_ref()
-                .is_none_or(|(version, ..)| *version != self.version)
-            {
-                // ponytail: a copy of the text for the next recount; keep the counts in `splice` if it weighs.
-                self.tally = Some((self.version, self.content.clone(), whole));
-            }
-            both(whole)
-        } else {
-            format!(
-                "{} {}",
-                tr("Selection:", "Sélection :"),
-                both(md::counts(&self.content[self.sel.clone()]))
-            )
-        };
-        self.counted = Some((key, label.clone()));
-        label
     }
 
     /// Type of the line holding byte `i`, in the last layout.
