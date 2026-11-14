@@ -596,11 +596,32 @@ pub fn clean_name(name: &str) -> Option<String> {
 
 /// Moves or renames, never overwriting what already has that name.
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
-    if to.exists() {
+    if to.exists() && !same_file(from, to) {
         let taken = tr("this name is already taken", "ce nom est déjà pris");
         return Err(io::Error::new(io::ErrorKind::AlreadyExists, taken));
     }
     fs::rename(from, to)
+}
+
+/// Whether two paths name one entry of the disk: the same device and inode on Unix, the same
+/// canonical path elsewhere. On a case-insensitive disk `Zz.md` and `zz.md` are one entry, so a
+/// case-only rename is not a clash.
+#[cfg(unix)]
+pub fn same_file(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (a.metadata(), b.metadata()) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+        _ => false,
+    }
+}
+
+/// Whether two paths name one entry of the disk: the same canonical path.
+#[cfg(not(unix))]
+pub fn same_file(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
 }
 
 /// Renames a note and returns its path. If its name followed its title, the
