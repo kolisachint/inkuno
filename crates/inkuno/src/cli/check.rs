@@ -441,6 +441,33 @@ fn paths_cannot_leave_the_vault() {
 }
 
 #[test]
+fn a_note_path_may_leave_out_its_extension() {
+    let root = scratch();
+    write(&root, "ideas/Plan.md", "# Plan\n");
+    write(&root, "pics/a.svg", "<svg></svg>");
+    let vault = open(&root);
+    // `ideas/Plan` is `ideas/Plan.md`, for a note as for a file; a note that is not there is not found.
+    let note = vault.find_note("ideas/Plan").ok().unwrap();
+    assert_eq!(note.path, vault.root.join("ideas/Plan.md"));
+    assert_eq!(
+        vault.find_file("ideas/Plan").unwrap(),
+        vault.root.join("ideas/Plan.md")
+    );
+    assert!(vault.find_note("ideas/Missing").is_err());
+    // A file that is not a note keeps its name, extension and all.
+    assert_eq!(
+        vault.find_file("pics/a.svg").unwrap(),
+        vault.root.join("pics/a.svg")
+    );
+    // A path without the extension that leaves the vault is refused all the same.
+    assert!(vault.find_note("../Plan").err().unwrap().contains("leave"));
+    assert!(vault.find_file("../Plan").unwrap_err().contains("leave"));
+    let read = ok(notes::read_note(&vault, &json!({"note": "ideas/Plan"})));
+    assert_eq!(read["title"], "Plan");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn an_unreadable_folder_does_not_hide_the_rest() {
     let root = scratch();
     write(&root, "Ok.md", "# Ok\n");
