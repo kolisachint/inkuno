@@ -12,7 +12,7 @@
 - Inkuno needs a working Vulkan driver (Mesa or the vendor one).
 - Inkuno draws its own title bar, shadow and resize edges, because GNOME under Wayland draws none for applications. Drag the window by the pill at the top right, by the title of the panel, or by the empty part of the rail or of a table's bar. A double click maximizes it. You can also hold `Alt` and drag from anywhere. `Ctrl+Shift+S` hides that title bar, with its window buttons; the rail's button at its foot brings it back, and the choice is kept.
 
-On macOS and Windows, the system title bar is used.
+On macOS and Windows, the system title bar is used. On macOS, `Ctrl+Shift+S` hides it with its traffic lights, and shows them again.
 
 ## Fonts
 

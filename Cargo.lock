@@ -2678,6 +2678,8 @@ dependencies = [
  "libc",
  "mermaid-rs-renderer",
  "notify",
+ "objc",
+ "raw-window-handle",
  "regex",
  "resvg",
  "roxmltree",

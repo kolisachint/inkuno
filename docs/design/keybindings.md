@@ -168,7 +168,7 @@ palette-only, `›` + help-rebindable.
 | `Ctrl+Alt+N` | `app::NewNote` (note in the tree's folder, in the vault) | — | `› new note in folder` |
 | `Ctrl+J` / `Ctrl+O` | `app::Today/OpenVault` | — | `› today/change vault` |
 | `Ctrl+Shift+D` | `app::NewDiagram` | — | `› new diagram` |
-| `Ctrl+Shift+S` | `app::ToggleTitleBar` (the bar the app draws, Linux: shown or hidden; its buttons come back from the rail) | — | `› title bar: show or hide it` |
+| `Ctrl+Shift+S` | `app::ToggleTitleBar` (the bar the app draws on Linux, or the system bar and its traffic lights on macOS: shown or hidden; the rail's switch brings it back) | — | `› title bar: show or hide it` |
 | `Ctrl+M` | `nav::ToggleFull` (panel full-window) | Shell | `› panel on the whole window` |
 | `Ctrl+B` | `app::ToggleSidebar` (left dock shown or hidden, the rail stays; works in the note) | — | `› sidebar: show or hide the side panel` |
 
@@ -341,8 +341,9 @@ note, with an optional line on what changed; nothing is saved when the text is t
 - **2026-11-14 — title bar on `Ctrl+Shift+S`:** `app::ToggleTitleBar` (new) hides or shows the bar the
   app draws on Linux (window buttons and the top strip of a note that stands alone). The choice is
   saved in the layout file (`titlebar=hidden`). The rail's foot keeps two switches, sidebar and title
-  bar, so the bar always comes back from there. macOS and Windows draw no bar of their own here, so
-  the key changes nothing on screen there: gpui 0.2.2 sets the native bar at window creation only.
+  bar, so the bar always comes back from there. macOS hides and shows the system bar and its three
+  traffic lights too (2026-11-14, `platform/mac_chrome.rs`; the bar is transparent from creation, which is
+  the only time gpui 0.2.2 sets it). Windows draws no bar of its own here, so the key changes nothing there.
   `Ctrl+Shift+S` was free: the sync chord (`app::SyncVault`) left with the November trim, and its row
   is replaced. Tests: `window.rs` (`the_title_bar_hides_and_comes_back_from_the_rail`).
 

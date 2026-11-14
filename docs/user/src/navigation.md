@@ -19,7 +19,7 @@ The rail also holds, at the top: the command palette, the vault tree, search and
 - **Resize**: drag the line between the panel and the note. Dragged all the way left, the panel folds to its rail. All the way right, it takes the whole window. Double-click the line for the default width.
 - **Whole window**: `Ctrl + M`, or the arrows button at the top of the panel, puts the panel on the whole window, and back.
 - **Sidebar**: `Ctrl + B` shows or hides the panel, and the rail stays. It works from the note too. The same switch is at the foot of the rail, and the choice is kept at the next start.
-- **Title bar**: `Ctrl + Shift + S` hides the bar Inkuno draws on Linux, with its window buttons. The switch at the foot of the rail brings it back, and the choice is kept at the next start. On macOS and Windows the system draws the bar, so the key changes nothing there.
+- **Title bar**: `Ctrl + Shift + S` hides the bar Inkuno draws on Linux, with its window buttons. The switch at the foot of the rail brings it back, and the choice is kept at the next start. On macOS the key hides the system bar and its three window buttons, and shows them again; focus mode hides them too. On Windows the system draws the bar, so the key changes nothing there.
 - **Focus mode**: `F9`, or `› focus mode` in the palette, leaves the note alone, edge to edge: no rail, no panel, no tab bar, no title bar. `F9` again, or `Esc` in the note, brings back the layout as it was.
 
 

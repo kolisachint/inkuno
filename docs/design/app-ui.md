@@ -685,3 +685,4 @@ Normal 800 is the default (§10.4 lock released for this change).
   window's edges, a 1 px hairline between neighbours, flat panes). Tests: `window.rs`
   (`sheets_tile_the_window_edge_to_edge_with_a_hairline`, `normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline`),
   and `end_to_end/cursors_comments.rs` (the comments column width and its right edge follow the window).
+- macOS now hides the system title bar and its traffic lights with `Ctrl+Shift+S` (and with focus mode), and shows them again on the next press; the state is kept in the layout file like on Linux. The window is created with a transparent bar on macOS only (`shell/mod.rs`), and `platform/mac_chrome.rs` hides the three standard buttons through the NSWindow. Not yet run on a real Mac: see `backlog.md`.

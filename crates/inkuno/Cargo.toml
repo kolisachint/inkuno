@@ -35,5 +35,10 @@ unicode-width = "0.2.2"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.177"
 
+# Already pulled in by gpui, at these same versions: the macOS window buttons (`platform::mac_chrome`).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2.7"
+raw-window-handle = "0.6.2"
+
 [dev-dependencies]
 gpui = { version = "0.2.2", features = ["test-support"] }
