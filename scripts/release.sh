@@ -10,7 +10,7 @@
 #
 # Inkuno naming: APP follows Cargo.toml and REPO defaults to the Inkuno home
 # below, so no edit is needed here. Remaining `bref` asset
-# strings elsewhere are the rename crew's lane (see RELEASING.md).
+# strings elsewhere are the rename crew's lane (see docs/releasing.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

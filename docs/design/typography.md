@@ -95,8 +95,8 @@ Landed per the user's final call (option (a) in `app-ui.md` §14): Normal is now
    `src/shell/settings.rs:34,41` (`Setting::Page` list renders labels).
    Under option (b), add the key + label + `Page::of` round-trip.
 8. Book follow-ups (when the flip lands, separate proposal): 
-   `book/src/settings.md:23`, `book/src/compatibility.md:18`,
-   `book/src/introduction.md:24` still promise bundled Plex.
+   `docs/user/src/settings.md:23`, `docs/user/src/compatibility.md:18`,
+   `docs/user/src/introduction.md:24` still promise bundled Plex.
 
 ## 5. Open questions
 

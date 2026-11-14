@@ -7,35 +7,50 @@ use super::{Outcome, Server, arg_opt, vault};
 const PAGES: &[(&str, &str)] = &[
     (
         "introduction",
-        include_str!("../../book/src/introduction.md"),
+        include_str!("../../docs/user/src/introduction.md"),
     ),
-    ("install", include_str!("../../book/src/install.md")),
-    ("first-steps", include_str!("../../book/src/first-steps.md")),
-    ("writing", include_str!("../../book/src/writing.md")),
-    ("links", include_str!("../../book/src/links.md")),
-    ("comments", include_str!("../../book/src/comments.md")),
-    ("daily-notes", include_str!("../../book/src/daily-notes.md")),
-    ("navigation", include_str!("../../book/src/navigation.md")),
+    ("install", include_str!("../../docs/user/src/install.md")),
+    (
+        "first-steps",
+        include_str!("../../docs/user/src/first-steps.md"),
+    ),
+    ("writing", include_str!("../../docs/user/src/writing.md")),
+    ("links", include_str!("../../docs/user/src/links.md")),
+    ("comments", include_str!("../../docs/user/src/comments.md")),
+    (
+        "daily-notes",
+        include_str!("../../docs/user/src/daily-notes.md"),
+    ),
+    (
+        "navigation",
+        include_str!("../../docs/user/src/navigation.md"),
+    ),
     (
         "tabs-and-panes",
-        include_str!("../../book/src/tabs-and-panes.md"),
+        include_str!("../../docs/user/src/tabs-and-panes.md"),
     ),
-    ("search", include_str!("../../book/src/search.md")),
-    ("vault", include_str!("../../book/src/vault.md")),
-    ("sync", include_str!("../../book/src/sync.md")),
-    ("settings", include_str!("../../book/src/settings.md")),
-    ("updates", include_str!("../../book/src/updates.md")),
-    ("shortcuts", include_str!("../../book/src/shortcuts.md")),
+    ("search", include_str!("../../docs/user/src/search.md")),
+    ("vault", include_str!("../../docs/user/src/vault.md")),
+    ("sync", include_str!("../../docs/user/src/sync.md")),
+    ("settings", include_str!("../../docs/user/src/settings.md")),
+    ("updates", include_str!("../../docs/user/src/updates.md")),
+    (
+        "shortcuts",
+        include_str!("../../docs/user/src/shortcuts.md"),
+    ),
     (
         "compatibility",
-        include_str!("../../book/src/compatibility.md"),
+        include_str!("../../docs/user/src/compatibility.md"),
     ),
     (
         "troubleshooting",
-        include_str!("../../book/src/troubleshooting.md"),
+        include_str!("../../docs/user/src/troubleshooting.md"),
     ),
-    ("performance", include_str!("../../book/src/performance.md")),
-    ("agents", include_str!("../../book/src/agents.md")),
+    (
+        "performance",
+        include_str!("../../docs/user/src/performance.md"),
+    ),
+    ("agents", include_str!("../../docs/user/src/agents.md")),
 ];
 
 type PromptArg<'a> = (&'a str, &'a str, bool);

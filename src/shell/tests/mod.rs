@@ -29,7 +29,7 @@ static CONFIG: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// The layers only depend downwards: `logic` and `platform` never see gpui nor the layers
 /// above them, `ui` never sees the views, and the views never see the shell, whose code stays
-/// in `src/shell`. See ARCHITECTURE.md.
+/// in `src/shell`. See docs/design/architecture.md.
 #[test]
 fn layers_only_depend_downwards() {
     // Spelled in two pieces: this file lives in src/shell, and the scan reads the source.

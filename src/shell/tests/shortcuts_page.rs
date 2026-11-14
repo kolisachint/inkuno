@@ -1,10 +1,10 @@
-//! The page of the user guide that lists every shortcut, `book/src/shortcuts.md`, is written
+//! The page of the user guide that lists every shortcut, `docs/user/src/shortcuts.md`, is written
 //! from the help panel's sections: the same lines, in English, with the default keys of Linux
 //! and Windows (macOS shows other keys, so the page is not checked there).
 
 use super::*;
 
-const PAGE: &str = "book/src/shortcuts.md";
+const PAGE: &str = "docs/user/src/shortcuts.md";
 
 const HEAD: &str = "# Keyboard shortcuts
 

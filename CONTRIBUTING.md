@@ -19,9 +19,9 @@ cargo test --locked       # or: make test
 make docs                 # rewrite the shortcuts page, build the user guide (needs mdbook)
 ```
 
-The system packages needed on each platform are listed in the [install guide](book/src/install.md). The tests need no display: they run on GPUI's test platform. They include an end-to-end run driven by simulated keystrokes.
+The system packages needed on each platform are listed in the [install guide](docs/user/src/install.md). The tests need no display: they run on GPUI's test platform. They include an end-to-end run driven by simulated keystrokes.
 
-Ignored benchmarks measure vaults of thousands of notes, pasting 300,000 TSV lines into a note, and notes with Markdown tables of up to tens of thousands of rows. Run them with `cargo test --release --locked -- --ignored --nocapture`; each reads its parameters from environment variables named in its doc comment. Their results are in the guide's [Performance](book/src/performance.md) page.
+Ignored benchmarks measure vaults of thousands of notes, pasting 300,000 TSV lines into a note, and notes with Markdown tables of up to tens of thousands of rows. Run them with `cargo test --release --locked -- --ignored --nocapture`; each reads its parameters from environment variables named in its doc comment. Their results are in the guide's [Performance](docs/user/src/performance.md) page.
 
 **CI caching and sharding:** CI compiles through [sccache](https://github.com/mozilla/sccache) (GitHub Actions cache backend, alongside the `target/` cache) and runs the tests with [cargo-nextest](https://nexte.st) in the `ci` profile from `.config/nextest.toml`, sharded over two runners (`--partition count:1/2`). The end-to-end suite is one serial test (all its chapters in a single session), so it always runs whole on one shard. Local opt-ins; plain `cargo test --locked` stays the default and is unaffected:
 
@@ -33,7 +33,7 @@ cargo nextest run --locked                   # same tests, faster feedback
 
 ## Rules of the code base
 
-- **Read [ARCHITECTURE.md](ARCHITECTURE.md) first**: the layers (`logic`, `platform`, `ui`, `views`, `shell`), which way they depend, and where each feature lives. A file that passes 1,500 lines gets split by subject.
+- **Read [docs/design/architecture.md](docs/design/architecture.md) first**: the layers (`logic`, `platform`, `ui`, `views`, `shell`), which way they depend, and where each feature lives. A file that passes 1,500 lines gets split by subject.
 - **GPUI is pinned to 0.2.2** and its API moves. Check a signature in the source of that version, not in the documentation of `main`.
 - **`Cargo.lock` is fragile**: it started as the one GPUI 0.2.2 was published with. No global `cargo update`; one dependency at a time. No new dependency without an agreement in the issue.
 - **Code, comments**, commit messages, the README and issues are in English.
@@ -53,13 +53,13 @@ Each kind of reader has one place:
 | Reader | Place |
 |---|---|
 | someone deciding whether to try Inkuno | `README.md` and the website, `docs/index.html`: what it is, why, how to install. Short. |
-| a user | the user guide, `book/src/` (an [mdBook](https://rust-lang.github.io/mdBook/)), one page per subject |
-| a contributor | `CONTRIBUTING.md`, `ARCHITECTURE.md` |
+| a user | the user guide, `docs/user/src/` (an [mdBook](https://rust-lang.github.io/mdBook/)), one page per subject |
+| a contributor | `CONTRIBUTING.md`, `docs/design/architecture.md` |
 
 A visible feature updates:
 
-- the help panel (`help_sections` in `src/shell/keymap.rs`), then `make docs`, which rewrites `book/src/shortcuts.md` from it. The test `shortcuts_page_is_current` fails until the page matches;
-- the page of the guide on its subject, or a new page listed in `book/src/SUMMARY.md`;
+- the help panel (`help_sections` in `src/shell/keymap.rs`), then `make docs`, which rewrites `docs/user/src/shortcuts.md` from it. The test `shortcuts_page_is_current` fails until the page matches;
+- the page of the guide on its subject, or a new page listed in `docs/user/src/SUMMARY.md`;
 - the README and the feature list of `docs/index.html`, only for a feature worth a line there.
 
 Write the guide in short sentences, one idea per bullet, keys in backticks, button and command names in bold. The README stays under about 120 lines: details go to the guide. Do not add screenshots; the GIF of the README is recorded by `scripts/record-demo.sh`.
@@ -76,4 +76,4 @@ CI builds the guide and checks every link (`.github/workflows/docs.yml`); pushes
 
 ## Releasing (maintainer)
 
-`scripts/release.sh X.Y.Z` prepares a draft and explicitly starts the native packaging workflow. The release is published only after all expected downloads have been built, attached and checked. See [RELEASING.md](RELEASING.md) for simulation, recovery and artifact-only builds.
+`scripts/release.sh X.Y.Z` prepares a draft and explicitly starts the native packaging workflow. The release is published only after all expected downloads have been built, attached and checked. See [docs/releasing.md](docs/releasing.md) for simulation, recovery and artifact-only builds.

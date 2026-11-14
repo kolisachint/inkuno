@@ -9,7 +9,7 @@
 > `front.rs`, `dates.rs`, `search.rs`); rendering ground truth:
 > `src/views/editor/` (esp. `layout.rs`, `render.rs`, `paint.rs`, `style.rs`,
 > `embed.rs`, `formulas.rs`, `grid.rs`, `table.rs`); user-facing spec:
-> `book/src/writing.md`.
+> `docs/user/src/writing.md`.
 
 ## 1. Tier table (user-set contract)
 
@@ -21,9 +21,9 @@
 | Sanitized | HTML support | Inline `<u>`, `<mark>` (incl. `<mark class="…">` colors); everything else: kept as typed, never executed |
 
 Non-goals of this contract: editing interactions (marker hiding lives with the
-editor crew), export fidelity (PDF rules live in `book/src/writing.md` "Save as
+editor crew), export fidelity (PDF rules live in `docs/user/src/writing.md` "Save as
 PDF"), and any new syntax. Source on disk stays plain Markdown
-(`book/src/writing.md:3-5`; `app-ui.md` vision, `app-ui.md:30-46`).
+(`docs/user/src/writing.md:3-5`; `app-ui.md` vision, `app-ui.md:30-46`).
 
 ## 2. Core (CommonMark) — status vs gaps
 
@@ -40,12 +40,12 @@ What exists today (verified by reading code):
   numbers / keywords; language name taken from the info string, with
   `"" | "text" | "txt" | "plain" | "mermaid"` treated as uncolored
   (`src/views/editor/layout.rs:1568`); copy affordance is documented behavior
-  (`book/src/writing.md:30`).
+  (`docs/user/src/writing.md:30`).
 - **Inline styles**: `inline` (`mod.rs:278`) over `emphasis` (`mod.rs:295`)
   for `**` bold, `*`/`_` italic, `` ` `` code, `~~` strike, `==` highlight,
   `<u>` underline, `<mark>` colors; markers are flagged `DIM`
   (`src/logic/markdown/mod.rs`, `DIM` flag; user-visible rule:
-  "markers stay visible but dimmed", `book/src/writing.md:5`). Bars between
+  "markers stay visible but dimmed", `docs/user/src/writing.md:5`). Bars between
   blocks, checkbox styling, and arrow substitutions (`->` → `→`, etc. via
   `symbols`) follow the same flag pipeline.
 - **Links**: protocol-gated `is_url` / `web_link` + `links`
@@ -87,10 +87,10 @@ What exists today:
   (`layout.rs:1752-1754`). Cell styling reuses the inline pipeline per cell
   (`highlights` / `tags` cell paths in `mod.rs`).
 - **Strikethrough + task items**: `STRIKE` flag + `Task(bool)` kind (see §2);
-  `Ctrl+Enter` toggles boxes (`book/src/writing.md:12`, `:62`).
+  `Ctrl+Enter` toggles boxes (`docs/user/src/writing.md:12`, `:62`).
 - **Callout panels**: `> [!NOTE]` etc. with per-kind colors, GitHub-style
-  (`book/src/writing.md:29`); the five `/note…/caution` slash commands insert
-  them (`book/src/writing.md:72-80`).
+  (`docs/user/src/writing.md:29`); the five `/note…/caution` slash commands insert
+  them (`docs/user/src/writing.md:72-80`).
 - **Autolinks**: bare `http(s)://` handled in `links` (§2).
 
 Gaps / **needs-eyes**:
@@ -101,7 +101,7 @@ Gaps / **needs-eyes**:
 - Discontinuous tables (blank line inside a table), multiple header rows:
   **needs-eyes**.
 - GFM alert titles / custom titles beyond the five kinds: not supported
-  (only `NOTE TIP IMPORTANT WARNING CAUTION`, `book/src/writing.md:29`).
+  (only `NOTE TIP IMPORTANT WARNING CAUTION`, `docs/user/src/writing.md:29`).
 - Large tables: `app-ui.md` acceptance criterion cites "> 1500 rows use light
   layout" (`app-ui.md:190-216`) — **needs-eyes**: verify the threshold constant
   and path in `layout.rs`/`grid.rs` before citing it as contract.
@@ -112,10 +112,10 @@ What exists today:
 
 - **Math**: `$$` fence-line counting in `count_fences_and_dollars`
   (`src/logic/markdown/mod.rs:80`); formulas drawn as figures *under* their
-  line, first formula of a line only (`book/src/writing.md:32`); display
+  line, first formula of a line only (`docs/user/src/writing.md:32`); display
   figures built via `figure::latex` (`src/views/editor/layout.rs:1374`,
   `:1796`). Inline `$x^2$` is styled/kept inline, not drawn; PDF draws only
-  `$$` formulas (`book/src/writing.md`, "Save as PDF" limits).
+  `$$` formulas (`docs/user/src/writing.md`, "Save as PDF" limits).
 - **Mermaid**: only ` ```mermaid ` blocks whose source is one of
   class / sequence / state diagrams convert (`src/logic/mermaid.rs`: `kind`,
   `to_diagram`); anything else (flowcharts, `graph TD`, erDiagram, …) counts
@@ -126,7 +126,7 @@ What exists today:
   (`layout.rs:1356`, `:1862`) — covered by `src/shell/tests/feedback.rs:150-172`
   (good diagram draws, bad/empty diagram says so, `figure_count` asserted).
   User rule: diagram under its block once the cursor leaves; magnifier opens
-  full-size (`book/src/writing.md:31`; `book/src/writing.md:23`).
+  full-size (`docs/user/src/writing.md:31`; `docs/user/src/writing.md:23`).
 - **Footnotes**: GitHub-style — `[^label]` reference + `[^label]:` definition (see §7-Q3, decided).
   Parsing in `src/logic/markdown/mod.rs`: references `footnote_ref` (`mod.rs:194`),
   definitions `footnote_def` (`mod.rs:238`), document collection `footnotes` (`mod.rs:278`)
@@ -137,7 +137,7 @@ What exists today:
   (`src/views/editor/mouse.rs:696`, hand cursor `src/views/editor/blocks.rs:184`).
   Export: sharing passes them through literally (`src/logic/sharing.rs:286`); printing keeps
   the label in place with no link entry (`src/ui/print.rs:279`); PDF prints them in place
-  with no collected section (`book/src/writing.md`, "Save as PDF" limits).
+  with no collected section (`docs/user/src/writing.md`, "Save as PDF" limits).
 
 Gaps / **needs-eyes**:
 
@@ -153,18 +153,18 @@ Gaps / **needs-eyes**:
 What exists today:
 
 - Supported inline HTML is a closed set: `<u>…</u>` for underline (Markdown
-  has none — `book/src/writing.md:42`) and `<mark>` / `<mark class="…">`
+  has none — `docs/user/src/writing.md:42`) and `<mark>` / `<mark class="…">`
   with the five `MARKS` colors (`src/logic/markdown/mod.rs:241`,
   `mark_tag` / `mark_color` / `mark_signs`); `<mark>` portability note:
   "plain HTML, so other apps still show the text highlighted"
-  (`book/src/writing.md`, inline-styles list).
+  (`docs/user/src/writing.md`, inline-styles list).
 - Rendering pipeline treats unknown HTML as ordinary text (no tag execution
   path was found in `paint.rs`/`layout.rs`) — **needs-eyes**: confirm there
   is no `Html`/`Embed` branch that interprets arbitrary tags.
 - SVG figures from elsewhere are rasterized by resvg, which *ignores*
   `<foreignObject>` HTML and `light-dark()`; `readable` substitutes SVG text
   (`src/ui/svg.rs:1-9`). Sharing/export strips to readable plain text
-  (`src/logic/sharing.rs:1-34`, rules in `book/src/writing.md`
+  (`src/logic/sharing.rs:1-34`, rules in `docs/user/src/writing.md`
   "Plain-text rules").
 
 Gaps / **needs-eyes**:
@@ -175,7 +175,7 @@ Gaps / **needs-eyes**:
   verify `paint.rs` + export paths (`sharing.rs`, `print.rs`) before
   contracting it.
 - `<mark>` inside table cells / headings / PDF output: **needs-eyes**
-  (PDF path per `book/src/writing.md` limits).
+  (PDF path per `docs/user/src/writing.md` limits).
 
 ## 6. Test strategy per tier
 
@@ -184,7 +184,7 @@ Gaps / **needs-eyes**:
 | Core | `src/logic/markdown/mod.rs` tests (classify/inline/code/boxes); `lists.rs` Enter/renumber/restyle; `front.rs` matter parsing | `src/shell/tests/end_to_end/writing.rs` (typing/lists/blocks); `outline.rs` (headings skip code blocks); `find_mouse.rs` (marker searchability) |
 | Extended | `src/logic/markdown/tables.rs` tests (cells/paste/format); formula tests with `table_formulas.rs` | `md_tables.rs` (paste/align/wrap thresholds — note `app-ui.md:259-290` recalibration rule), `table_handles.rs`, `table_styles.rs`, `csv.rs` |
 | Optional | `src/logic/mermaid.rs` tests (kind/convert/skip counts); formula evaluator tests (`logic/formula.rs`) | `feedback.rs:150-172` (mermaid good/bad/empty); `diagrams.rs` (bridge diagrams); `media.rs` (pictures/figures); PDF tests for `$$` vs `$…$` |
-| Sanitized | `mod.rs` mark-tag tests (`mark_tag`/`mark_color`); `sharing.rs` plain-text rules | Export/copy tests (Markdown vs plain-text copy, `book/src/writing.md` "Copy and share"); PDF "not printed" list |
+| Sanitized | `mod.rs` mark-tag tests (`mark_tag`/`mark_color`); `sharing.rs` plain-text rules | Export/copy tests (Markdown vs plain-text copy, `docs/user/src/writing.md` "Copy and share"); PDF "not printed" list |
 
 Rule for all tiers: when a threshold or pixel value changes (e.g. Normal 800,
 `PILL_CLEAR`, `ALIGNED`), re-verify in the order window → page-width →
@@ -193,9 +193,9 @@ Rule for all tiers: when a threshold or pixel value changes (e.g. Normal 800,
 ## 7. Open questions
 
 1. **Mermaid overflow**: ~~currently has no contracted overflow rule~~ RESOLVED in principle 2026-11-09 by §9.1 (container-inviolable; scroll/clip internally, magnifier as escape hatch; exact per-figure mechanics with editor crew). Candidates were: (a) shrink-to-measure like PDF
-   ("shrunk to fit the page", `book/src/writing.md`), (b) horizontal scroll
+   ("shrunk to fit the page", `docs/user/src/writing.md`), (b) horizontal scroll
    region, (c) clip with magnifier affordance (magnifier already exists,
-   `book/src/writing.md:31`). Which is canonical for the canvas? (Related
+   `docs/user/src/writing.md:31`). Which is canonical for the canvas? (Related
    live work: mermaid figures under blocks; Typora-style marker hiding must
    not fight the figure slot.)
 2. **HTML sanitizer choice**: allowlist-by-construction (today's apparent
@@ -212,7 +212,7 @@ Rule for all tiers: when a threshold or pixel value changes (e.g. Normal 800,
    (`layout.rs:1600`) while cells wrap (`layout.rs:283`); source alignment
    stops at `ALIGNED` (`tables.rs:472`). What is the canvas rule when a table
    exceeds the measure — PDF shares width and wraps cells
-   (`book/src/writing.md`), but the live canvas rule needs contracting
+   (`docs/user/src/writing.md`), but the live canvas rule needs contracting
    (related live work: table wrap/clip).
 5. **Code-fence rendering scope**: single-line lexer per language
    (`mod.rs:683`, `/* */` and multi-line strings explicitly out of scope in
@@ -221,7 +221,7 @@ Rule for all tiers: when a threshold or pixel value changes (e.g. Normal 800,
    after lang, ` ```mermaid ` vs ` ``` mermaid`) also need pinning.
 6. **Marker-hiding interplay** (for the editor crew, recorded here): markers
    are `DIM` today; the arrows-substitution precedent hides replacements only
-   off the editing line (`book/src/writing.md:33`). If Typora-style hiding
+   off the editing line (`docs/user/src/writing.md:33`). If Typora-style hiding
    lands, this contract's Core section needs a "source line vs display"
    amendment — hiding must never rewrite source (vision: `app-ui.md:30-46`).
 
@@ -256,7 +256,7 @@ Suggested mechanics (for the editor crew to implement, §9.3):
 - Same container rule extends to wide figures under blocks (Mermaid, math):
   shrink, scroll, or clip internally — never widen the doc (resolves §7-Q1
   in principle; exact per-figure mechanics stay with the editor crew, with
-  the existing magnifier affordance, `book/src/writing.md:31`, as the
+  the existing magnifier affordance, `docs/user/src/writing.md:31`, as the
   full-size escape hatch).
 
 Resolves §7-Q4 (table wrap/clip) and §7-Q1 (Mermaid overflow) at the

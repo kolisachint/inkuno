@@ -10,7 +10,7 @@ create-missing = false
 
 [output.html]
 git-repository-url = "https://github.com/kolisachint/inkuno"
-edit-url-template = "https://github.com/kolisachint/inkuno/edit/main/book/{path}"
+edit-url-template = "https://github.com/kolisachint/inkuno/edit/main/docs/user/{path}"
 site-url = "/inkuno/guide/"
 no-section-label = true
 

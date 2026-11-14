@@ -7,9 +7,9 @@ all:
 
 install:
 	install -Dm755 target/release/inkuno $(DESTDIR)$(PREFIX)/bin/inkuno
-	install -Dm644 com.inkuno.Inkuno.desktop $(DESTDIR)$(PREFIX)/share/applications/com.inkuno.Inkuno.desktop
-	install -Dm644 com.inkuno.Inkuno.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/com.inkuno.Inkuno.svg
-	install -Dm644 inkuno.metainfo.xml $(DESTDIR)$(PREFIX)/share/metainfo/inkuno.metainfo.xml
+	install -Dm644 packaging/linux/com.inkuno.Inkuno.desktop $(DESTDIR)$(PREFIX)/share/applications/com.inkuno.Inkuno.desktop
+	install -Dm644 packaging/linux/com.inkuno.Inkuno.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/com.inkuno.Inkuno.svg
+	install -Dm644 packaging/linux/inkuno.metainfo.xml $(DESTDIR)$(PREFIX)/share/metainfo/inkuno.metainfo.xml
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/inkuno/LICENSE
 
 uninstall:
@@ -23,9 +23,9 @@ test:
 	cargo test --locked
 
 # The user guide: the shortcuts page is written from the help panel, then the book is built
-# into book/book/ (needs mdbook: `cargo install mdbook`).
+# into docs/user/book/ (needs mdbook: `cargo install mdbook`).
 docs:
 	INKUNO_WRITE_DOCS=1 cargo test --locked shortcuts_page_is_current
-	mdbook build book
+	mdbook build docs/user
 
 .PHONY: all install uninstall test docs
