@@ -23,6 +23,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Tab` | Search bar: replace field |
 | `Ctrl+Enter` | Search bar: replace all (Enter: this match) |
 |  | Scratch note: keep it in the vault, under its first line (the tab stays open) |
+| `Ctrl+Alt+S` | Save a version: the note as it is now, kept as a numbered revision with its author and an optional line on what changed (the files are readable by agents) |
 | `Ctrl+N` | New scratch note: a quick thought in a tab, kept in the app's own folder, outside the vault, until you file it |
 | `Ctrl+Alt+N` | New note in the folder selected in the tree (in the vault) |
 | `Ctrl+O` | Change vault |

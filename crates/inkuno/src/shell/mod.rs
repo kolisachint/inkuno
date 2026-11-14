@@ -12,6 +12,7 @@ mod notes;
 mod palette_open;
 mod pane;
 mod render;
+mod revisions;
 mod scratch;
 mod settings;
 mod sidebar;

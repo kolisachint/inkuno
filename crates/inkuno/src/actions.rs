@@ -37,6 +37,7 @@ actions!(
         NewNote,
         NewScratch,
         KeepInVault,
+        SaveRevision,
         OpenVault,
         CopyAll,
         ToggleHelp,

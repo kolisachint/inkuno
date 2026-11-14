@@ -147,6 +147,15 @@ Headings inside code blocks are not listed.
 | Double click, triple click | select a word, a line. Keep dragging to extend by words, by lines. |
 | `Ctrl + +` (or `Ctrl + =`), `Ctrl + -`, `Ctrl + 0` | bigger, smaller, default text size |
 
+## Versions
+
+- **Save a version**: `Ctrl + Alt + S`, or `save a version` in the palette. It keeps the note as it is now as a numbered version (1, 2, 3…), with its author and an optional line on what changed: type it and press Enter, or Enter alone to skip it, Escape to cancel.
+- **Nothing changed**: when the text is the same as the last version, the status line says `Nothing changed since revision N`, and nothing is saved.
+- **Author**: `revision author…` in the palette sets the name on your versions. See [Settings](settings.md#revision-author).
+- **Where they are**: in the hidden `.inkuno` folder of the vault, next to the note's path (`.inkuno/revisions/ideas/plan.md/0002.md`). The tree, the search and the recent notes do not show them. A note that is renamed or moved takes its versions with it; a deleted one keeps them in `.inkuno/trash`.
+- **Scratch notes** keep their versions in the scratch folder, the same way.
+- **Reading them**: the versions are plain Markdown files. The [command line](agents.md#command-line) lists, shows and compares them (`inkuno rev list`, `inkuno rev show`, `inkuno rev diff`).
+
 ## Scratch notes
 
 - **New scratch note**: `Ctrl + N`, or `new scratch note` in the palette. It opens in a tab of its own, the cursor in it, for a thought you do not want to file yet. No vault is needed.

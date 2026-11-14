@@ -251,6 +251,9 @@ impl Render for Shell {
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| this.new_note_here(window, cx)))
             .on_action(cx.listener(|this, _: &NewScratch, window, cx| this.new_scratch(window, cx)))
+            .on_action(
+                cx.listener(|this, _: &SaveRevision, window, cx| this.save_revision(window, cx)),
+            )
             .on_action(cx.listener(|this, _: &nav::ShowTree, window, cx| {
                 this.show_nav(Mode::Tree, false, window, cx)
             }))

@@ -109,6 +109,6 @@ inkuno help [rev|keys]                               and --help on each command
 
 - The Versions side panel and the coloured inline compare.
 - Automatic (`auto`) snapshots and agent live edits.
-- Restoring a trashed note's history from the Trash panel (the undo of a trash brings it back; the
-  Trash panel's own restore does too, when the bin has it).
+- Restoring a trashed note's history when the bin holds it under another name (the undo of a trash
+  and the Trash panel's restore bring it back by name).
 - The MCP server's rename does not move the history (the server is not changed by this work).

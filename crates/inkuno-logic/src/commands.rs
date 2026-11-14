@@ -362,6 +362,12 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Create,
         ),
         (
+            "app::SaveRevision",
+            tr("Save a version", "Enregistrer une version"),
+            "check.svg",
+            Note,
+        ),
+        (
             "app::NewScratch",
             tr("New scratch note", "Nouveau brouillon"),
             "pencil.svg",

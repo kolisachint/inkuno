@@ -210,6 +210,8 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 `Ctrl+Shift+O` outline (`› outline of the note`); `Ctrl+P` palette (notes,
 `#tag` filter, `› word` commands, create); `F10`/`Ctrl+Shift+P` commands;
 `F1`/`Ctrl+/` help (rebindable in place); `Ctrl+Q` quit; `Ctrl+S` save now.
+`Ctrl+Alt+S` save a version (`app::SaveRevision`, `› save a version`): a numbered revision of the
+note, with an optional line on what changed; nothing is saved when the text is the latest version's.
 
 ## 5. macOS translation
 
@@ -301,6 +303,18 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   `tabs-and-panes.md` / `navigation.md` / `settings.md`; mockup 720 → 800
   annotations. `docs/user/src/shortcuts.md` untouched — regen owned by Linux CI
   (`make docs` can't run on macOS).
+
+- **2026-11-14 — save a version on `Ctrl+Alt+S`:** `app::SaveRevision` (new; `secondary-alt-s`, free on
+  both systems; `Cmd+Option+S` on macOS) writes a revision of the current note (vault or scratch) into
+  its history (`docs/design/revisions.md`): the author from the `author` setting (`revision author…`
+  in the palette), else `INKUNO_AUTHOR`, else the system user name. A one-line input asks what changed
+  (Enter skips it, Esc cancels). Unchanged text says `Nothing changed since revision N`, asks nothing
+  and writes nothing. Tests: `shell/tests/revisions.rs`.
+
+- **2026-11-14 — scratch deletes go to `.trash`:** `Discard`, the Scratch panel's `Delete` and the
+  `Delete` key move the scratch file to `.trash` inside the scratch folder (`platform/scratch.rs`,
+  `trash`) instead of deleting it; the panel never lists the bin. Tests: `shell/tests/scratch.rs`
+  (`discard_moves_the_scratch_file_to_the_trash_and_escape_cancels_the_close`).
 
 - **2026-11-14 — scratch notes on `Ctrl+N`, the vault note moves to `Ctrl+Alt+N`:** `app::NewScratch`
   (new) opens a scratch note in a tab, the cursor in it, with no vault needed. Its file is plain Markdown
