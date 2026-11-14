@@ -633,9 +633,15 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
     if name.is_none() && folder.is_none() {
         return Outcome::err("`name` or `folder` is missing");
     }
-    let dir = match place(vault, folder.as_deref()) {
-        Ok(dir) => dir,
-        Err(outcome) => return outcome,
+    // A new name alone keeps the note in its folder: only --folder moves it.
+    let dir = match folder.as_deref() {
+        None => path
+            .parent()
+            .map_or_else(|| vault.root.clone(), Path::to_path_buf),
+        Some(_) => match place(vault, folder.as_deref()) {
+            Ok(dir) => dir,
+            Err(outcome) => return outcome,
+        },
     };
     if let Err(message) = fs::create_dir_all(&dir).map_err(disk) {
         return Outcome::err(message);
