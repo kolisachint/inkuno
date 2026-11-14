@@ -150,6 +150,8 @@ struct Shell {
     /// Focus mode (F9): the note alone, edge to edge. Not saved. Nothing of the chrome is changed
     /// to hide it, so leaving the mode shows exactly what was there.
     focus_mode: bool,
+    /// The macOS traffic lights' hidden state last applied to the window (`None` before the first frame).
+    lights_hidden: Option<bool>,
     /// The scratch note whose close waits for its choice (Keep, Keep in vault, Discard), by its editor.
     scratch_ask: Option<Entity<Editor>>,
     /// Counts the changes of the scratch notes: the Scratch panel's rows are read again when it moves.
@@ -253,6 +255,7 @@ impl Shell {
             edge: None,
             copied: false,
             focus_mode: false,
+            lights_hidden: None,
             scratch_ask: None,
             scratch_rev: 0,
             help: Help::default(),

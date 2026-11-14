@@ -99,13 +99,17 @@ impl Render for Shell {
         self.nav.native_bar = !client;
         // The bar the app draws: Linux, and only while it is shown (`app::ToggleTitleBar`).
         let title_bar = client && self.nav.title_bar && !self.focus_mode;
-        self.nav.total = window.viewport_size().width
-            - inset * 2.
-            - if self.vault.is_some() && !self.focus_mode {
-                nav::GAP
-            } else {
-                px(0.)
-            };
+        // Where the system draws the bar, its traffic lights float over the note's top left while it
+        // is shown. On macOS `app::ToggleTitleBar` and focus mode hide the bar and its lights too.
+        let native_shown = self.nav.title_bar && !self.focus_mode;
+        self.nav.lights = self.nav.native_bar && (native_shown || !cfg!(target_os = "macos"));
+        // Applied when it changes (and on the first frame, which applies the persisted choice).
+        if self.lights_hidden != Some(!native_shown) {
+            self.lights_hidden = Some(!native_shown);
+            platform::mac_chrome::set_traffic_lights_hidden(window, !native_shown);
+        }
+        // Panes take the window's edge to edge: the content is the window less its frame margin.
+        self.nav.total = window.viewport_size().width - inset * 2.;
 
         let pill = self.render_window_controls(window, cx);
 
@@ -207,9 +211,8 @@ impl Render for Shell {
             let docked = (!focus)
                 .then(|| self.render_right_dock(window, cx))
                 .flatten();
-            // The ground shows around the sheets: 8 px above, right and below; the rail has none on its side.
+            // Edge to edge (app-ui.md §10 item 4, lifted 2026-11-14): no ground around the panes.
             body.flex()
-                .when(!focus, |d| d.pt(nav::GAP).pr(nav::GAP).pb(nav::GAP))
                 .children(docks)
                 .when(focus || self.nav.panel != Panel::Full, |d| {
                     d.child(note).children(comments).children(docked)
@@ -560,9 +563,9 @@ impl Shell {
         let controls = window.window_controls();
         div()
             .absolute()
-            // On the top strip: as high as the tab bar (28), which starts one gap down, so that the buttons
+            // On the top strip, at the window's top edge: as high as the tab bar (28), so that the buttons
             // and the tab rows share their middle.
-            .top(nav::GAP)
+            .top_0()
             .right_2()
             .h(t.px(tabs::TAB_BAR))
             .flex()
@@ -617,7 +620,7 @@ impl Shell {
                 .gap_3()
                 .px_4()
                 // Under the native bar the traffic lights float over the left end of the page.
-                .when(self.nav.native_bar, |d| d.pl(t.px(TRAFFIC_ROOM)))
+                .when(self.nav.lights, |d| d.pl(t.px(TRAFFIC_ROOM)))
                 .text_center()
                 .child(
                     div()
@@ -898,7 +901,7 @@ impl Shell {
         let strip = title_bar && !barred;
         // Under the native bar the traffic lights float over the left end of that same row:
         // it starts past them, with no handle under the lights, and the note steps down for it.
-        let traffic = self.nav.native_bar && !barred;
+        let traffic = self.nav.lights && !barred;
         // A tab bar puts the note below the window buttons: its text no longer steps down for them.
         let pill = (title_bar && !barred && group == self.corner_group())
             .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
@@ -1148,12 +1151,10 @@ impl Shell {
             });
         // From the window's edge once (see `traffic_pad`): the pane starts past the sidebar.
         let traffic_edge = if traffic { self.traffic_pad() } else { px(0.) };
-        // Focus mode: the note fills the window, without the sheet's corners and shadow.
-        let sheet = match self.focus_mode {
-            true => div().bg(t.bg).overflow_hidden(),
-            false => ui::widgets::sheet(t),
-        };
-        let area = sheet
+        // Flat, edge to edge: a pane has no corners and no shadow; its neighbour is a hairline away.
+        let area = div()
+            .bg(t.bg)
+            .overflow_hidden()
             .id(("pane", pane))
             .debug_selector(move || format!("pane-{group}"))
             .track_focus(&self.pane().zone)
@@ -1233,14 +1234,13 @@ impl Shell {
                     .children(name);
                 d.child(if traffic { bare } else { bare.map(drag_window) })
             })
-            // The active pane of several: a 1 px ring around its sheet, the accent at 30 %. Alone, a pane needs none.
+            // The active pane of several: a 1 px ring around it, the accent at 30 %. Alone, a pane needs none.
             .when(many && active, |d| {
                 d.child(
                     div()
                         .debug_selector(|| "pane-active".into())
                         .absolute()
                         .inset_0()
-                        .rounded(t.sheet())
                         .border_1()
                         .border_color(t.accent.opacity(0.3)),
                 )
@@ -1292,51 +1292,83 @@ impl Shell {
                         .collect::<Vec<_>>()
                         .join(".")
                 );
-                // The border is the gap between two sheets: a line only while the pointer is on it.
+                // The border is a 1 px hairline between two panes (the divider colour); it turns accent
+                // while the pointer is on it or it is dragged. It is drawn by the handle below.
                 let line = div()
-                    .bg(if dragged {
-                        t.accent
-                    } else {
-                        gpui::transparent_black()
-                    })
+                    .bg(if dragged { t.accent } else { t.border })
                     .group_hover("pane-border", |s| s.bg(t.accent));
+                // The handle is wider than the line: laid over the panes on both sides, it takes the
+                // pointer there (occluding the panes under it), and it carries the listeners (gpui
+                // hits the handle, not the 1 px box that holds its place in the split).
+                let handle = div()
+                    .id(gpui::SharedString::from(id.clone()))
+                    .debug_selector(move || id.clone())
+                    .group("pane-border")
+                    .absolute()
+                    .occlude()
+                    .flex()
+                    .justify_center()
+                    .map(|d| match row {
+                        true => d
+                            .top_0()
+                            .bottom_0()
+                            .left(-nav::DIVIDER_HIT)
+                            .right(-nav::DIVIDER_HIT)
+                            .cursor(CursorStyle::ResizeLeftRight)
+                            .child(line.w(nav::DIVIDER).h_full()),
+                        false => d
+                            .left_0()
+                            .right_0()
+                            .top(-nav::DIVIDER_HIT)
+                            .bottom(-nav::DIVIDER_HIT)
+                            .flex_col()
+                            .cursor(CursorStyle::ResizeUpDown)
+                            .child(line.h(nav::DIVIDER).w_full()),
+                    })
+                    // Held, it follows the pointer; a double click shares this split evenly.
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, e: &gpui::MouseDownEvent, _, cx| {
+                            match e.click_count >= 2 {
+                                true => {
+                                    if let Some(node) = this.layout.at_mut(&here) {
+                                        node.even();
+                                    }
+                                }
+                                false => this.pane_drag = Some((here.clone(), border)),
+                            }
+                            cx.stop_propagation();
+                            cx.notify();
+                        }),
+                    )
+                    // A release on the handle, or outside it, ends the drag here: the handle occludes the
+                    // panes under it, so the window does not see the release.
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(|this, _, _, cx| {
+                            if this.pane_drag.take().is_some() {
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .on_mouse_up_out(
+                        MouseButton::Left,
+                        cx.listener(|this, _, _, cx| {
+                            if this.pane_drag.take().is_some() {
+                                cx.notify();
+                            }
+                        }),
+                    );
+                // The place of the divider in the split: one hairline wide.
                 split = split.child(
                     div()
-                        .id(gpui::SharedString::from(id.clone()))
-                        .debug_selector(move || id.clone())
-                        .group("pane-border")
                         .flex_none()
-                        .flex()
-                        .justify_center()
+                        .relative()
                         .map(|d| match row {
-                            true => d
-                                .w(nav::GAP)
-                                .h_full()
-                                .cursor(CursorStyle::ResizeLeftRight)
-                                .child(line.w(px(2.)).h_full()),
-                            false => d
-                                .h(nav::GAP)
-                                .w_full()
-                                .flex_col()
-                                .cursor(CursorStyle::ResizeUpDown)
-                                .child(line.h(px(2.)).w_full()),
+                            true => d.w(nav::DIVIDER).h_full(),
+                            false => d.h(nav::DIVIDER).w_full(),
                         })
-                        // Held, it follows the pointer; a double click shares this split evenly.
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |this, e: &gpui::MouseDownEvent, _, cx| {
-                                match e.click_count >= 2 {
-                                    true => {
-                                        if let Some(node) = this.layout.at_mut(&here) {
-                                            node.even();
-                                        }
-                                    }
-                                    false => this.pane_drag = Some((here.clone(), border)),
-                                }
-                                cx.stop_propagation();
-                                cx.notify();
-                            }),
-                        ),
+                        .child(handle),
                 );
             }
             path.push(at);

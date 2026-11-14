@@ -126,16 +126,6 @@ pub fn tip(
         .into()
     }
 }
-/// A sheet laid on the ground: the note, the panel, a tool. `bg`, the sheet radius, the `lifted` shadow.
-/// The caller sets its size and place; the contents clip to its corners.
-pub fn sheet(t: Theme) -> Div {
-    div()
-        .bg(t.bg)
-        .rounded(t.sheet())
-        .shadow(t.lifted())
-        .overflow_hidden()
-}
-
 /// What floats over the page: the palette, the menus, the help, the toasts, a dragged tab. `bg`, the
 /// sheet radius, a hairline ring of `border` and the `floating` shadow. The caller sets its size and place.
 pub fn floating(t: Theme) -> Div {

@@ -59,10 +59,13 @@ pub const INDENT: f32 = 12.;
 pub const LIST_W: Pixels = px(260.);
 /// Width the panel and the comments column always leave to the note.
 pub const NOTE_MIN: Pixels = px(200.);
-/// Ground between two sheets and around the window's edges (none on the rail's side).
+/// Spacing inside a column (the comments). Panes take the window edge to edge: no gap separates them.
 pub const GAP: Pixels = px(8.);
-/// Handle between the panel and the note: the gap itself, so that dragging it needs no thin line.
-pub const DIVIDER: Pixels = GAP;
+/// The hairline between two panes or docks (owner decision 2026-11-14, app-ui.md §10 item 4): 1 px
+/// of layout. Its handle is `DIVIDER_HIT` wide on each side, drawn over the neighbours.
+pub const DIVIDER: Pixels = px(1.);
+/// Half the width of the handle that drags a divider, laid over the panes on either side of it.
+pub const DIVIDER_HIT: Pixels = px(4.);
 
 // Old `layout` files naming a removed view fall back to the tree (`named` returns `None`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -426,6 +429,9 @@ pub struct Nav {
     /// The system draws the title bar (macOS, Windows): the rail does not have to serve as a
     /// handle to move the window.
     pub native_bar: bool,
+    /// The traffic lights float over the note's top left now: where the system draws the bar and
+    /// it is shown. macOS hides them with `app::ToggleTitleBar` and in focus mode; elsewhere as `native_bar`.
+    pub lights: bool,
     /// The title bar the app draws (Linux) is shown: `false` hides it (`app::ToggleTitleBar`),
     /// saved in the layout file as `titlebar=hidden`. Without effect where the system draws it.
     pub title_bar: bool,
@@ -532,6 +538,7 @@ impl Nav {
             reveal: false,
             unfolded: None,
             native_bar: false,
+            lights: false,
             title_bar: key("titlebar") != Some("hidden"),
             left: px(0.),
             total: px(0.),
