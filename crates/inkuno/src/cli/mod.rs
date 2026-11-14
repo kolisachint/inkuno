@@ -6,11 +6,15 @@
 
 mod commands;
 pub mod draw;
+mod guide;
 mod keys;
 pub mod ops;
 pub mod outcome;
 mod rev;
 pub mod store;
+
+#[cfg(test)]
+mod check;
 
 use std::collections::{BTreeMap, BTreeSet};
 

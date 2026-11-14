@@ -1,4 +1,4 @@
-//! The running app's door, for `inkuno mcp`: a TCP port on 127.0.0.1 and a secret, both written in
+//! The running app's door, for `inkuno show`: a TCP port on 127.0.0.1 and a secret, both written in
 //! `<config>/inkuno/agent` when the window opens. One request a connection, one JSON line each way:
 //! `{"secret", "show": path}` asks the window to show a file of its vault; the answer is
 //! `{"ok": true}` or `{"error": sentence}`. The secret keeps out the other programs of the machine,
@@ -30,7 +30,7 @@ pub struct Asked {
     pub answer: mpsc::Sender<Answer>,
 }
 
-/// What `inkuno mcp` says when no window answers: the file is written all the same.
+/// What `inkuno show` says when no window answers: the file is written all the same.
 pub const NOT_OPEN: &str = "Inkuno is not open: start it to see the file";
 
 fn door() -> PathBuf {

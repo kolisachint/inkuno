@@ -1,4 +1,4 @@
-//! One temporary vault per test. The tools are called the way a client calls them.
+//! One temporary vault per test. The operations are called the way the commands call them.
 
 use std::{
     fs,
@@ -9,8 +9,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{Server, tools};
-use crate::cli::{ops as notes, outcome::Outcome, store::Vault};
+use super::{draw, guide, ops as notes, outcome::Outcome, store::Vault};
 
 fn scratch() -> PathBuf {
     static N: AtomicU64 = AtomicU64::new(0);
@@ -62,24 +61,21 @@ fn write(root: &std::path::Path, rel: &str, text: &str) {
 
 #[test]
 fn a_missing_vault_is_a_sentence() {
-    let mut server = Server::open(Some(scratch().join("missing")), false);
-    let message = err(tools::call(&mut server, "vault_info", &json!({})));
-    assert_eq!(message, "not found");
-    let mut blind = Server {
-        vault: None,
-        blind: "no vault: open one in Inkuno, or pass `--vault`".into(),
-        read_only: false,
+    let message = match Vault::open(scratch().join("missing")) {
+        Ok(_) => panic!("a missing folder opened"),
+        Err(message) => message,
     };
-    assert!(err(tools::call(&mut blind, "read_note", &json!({"note": "A"}))).contains("no vault"));
+    assert_eq!(message, "not found");
     assert!(
-        ok(tools::call(
-            &mut blind,
-            "check_mermaid",
+        ok(draw::check_mermaid(
             &json!({"source": "classDiagram\nClass A"})
         ))["readable"]
             .as_bool()
             .unwrap()
     );
+    // A picture of a note needs a vault: without one, the sentence the command gives is returned.
+    let blind = draw::render(None, "no vault", &json!({"note": "A", "block": 1}));
+    assert_eq!(blind.sentence(), "no vault");
 }
 
 #[test]
@@ -211,7 +207,7 @@ fn names_aliases_and_a_change_on_disk() {
         "Alpha.md"
     );
     fs::write(root.join("Fresh.md"), "# Fresh\n\njust written\n").unwrap();
-    vault.refresh();
+    vault.rescan();
     assert_eq!(
         ok(notes::read_note(&vault, &json!({"note": "Fresh"})))["title"],
         "Fresh"
@@ -473,111 +469,27 @@ fn an_unreadable_folder_does_not_hide_the_rest() {
 }
 
 #[test]
-fn read_only_hides_writing_and_the_guide_is_a_resource() {
+fn the_guide_pages_are_text_and_a_picture_needs_a_vault() {
     let root = scratch();
     write(
         &root,
         "Note.md",
         "# Note\n\n```mermaid\nflowchart LR\n  A --> B\n```\n",
     );
-    let mut server = Server::open(Some(root.clone()), true);
-    let names: Vec<String> = tools::list(true)
-        .into_iter()
-        .map(|t| t["name"].as_str().unwrap().to_string())
-        .collect();
-    assert!(names.contains(&"read_note".into()) && !names.contains(&"create_note".into()));
-    assert!(
-        err(tools::call(
-            &mut server,
-            "create_note",
-            &json!({"title": "X"})
-        ))
-        .contains("read-only")
-    );
-    let init = server.answer(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{}}}"#).unwrap();
-    assert!(
-        init["result"]["instructions"]
-            .as_str()
-            .unwrap()
-            .contains("read-only")
-    );
-    let page = server.answer(r#"{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"inkuno://guide/writing"}}"#).unwrap();
-    assert!(
-        page["result"]["contents"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("Writing notes")
-    );
-    let note = server.answer(r#"{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"inkuno://note/Note.md"}}"#).unwrap();
-    assert!(
-        note["result"]["contents"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("flowchart")
-    );
-    let prompt = server.answer(r#"{"jsonrpc":"2.0","id":5,"method":"prompts/get","params":{"name":"review_note","arguments":{"note":"Note"}}}"#).unwrap();
-    assert!(
-        prompt["result"]["messages"][0]["content"]["text"]
-            .as_str()
-            .unwrap()
-            .contains("add_comment")
-    );
-    assert_eq!(server.answer(r#"{"jsonrpc":"2.0","id":6,"method":"prompts/get","params":{"name":"review_note","arguments":{}}}"#).unwrap()["error"]["code"], -32602);
-    let prompts = server
-        .answer(r#"{"jsonrpc":"2.0","id":7,"method":"prompts/list"}"#)
-        .unwrap();
-    assert_eq!(prompts["result"]["prompts"].as_array().unwrap().len(), 6);
-    let text = |server: &mut Server, request: &str| {
-        server.answer(request).unwrap()["result"]["messages"][0]["content"]["text"]
-            .as_str()
-            .unwrap()
-            .to_string()
-    };
-    let week = text(
-        &mut server,
-        r#"{"jsonrpc":"2.0","id":8,"method":"prompts/get","params":{"name":"weekly_review"}}"#,
-    );
-    assert!(
-        week.contains("holds today") && week.contains("Do not call daily_note"),
-        "{week}"
-    );
-    let week = text(
-        &mut server,
-        r#"{"jsonrpc":"2.0","id":9,"method":"prompts/get","params":{"name":"weekly_review","arguments":{"date":"2026-10-28"}}}"#,
-    );
-    assert!(week.contains("holds 2026-10-28"), "{week}");
-    let orphans = text(
-        &mut server,
-        r#"{"jsonrpc":"2.0","id":10,"method":"prompts/get","params":{"name":"link_orphans","arguments":{}}}"#,
-    );
-    assert!(
-        orphans.contains("in the vault") && orphans.contains("note_links"),
-        "{orphans}"
-    );
-    let orphans = text(
-        &mut server,
-        r#"{"jsonrpc":"2.0","id":11,"method":"prompts/get","params":{"name":"link_orphans","arguments":{"folder":"Projets/Été"}}}"#,
-    );
-    assert!(orphans.contains("the folder \"Projets/Été\""), "{orphans}");
-    let tags = text(
-        &mut server,
-        r#"{"jsonrpc":"2.0","id":12,"method":"prompts/get","params":{"name":"tidy_tags"}}"#,
-    );
-    assert!(
-        tags.contains("list_tags") && tags.contains("wait for the user"),
-        "{tags}"
-    );
-    assert_eq!(
-        server
-            .answer(r#"{"jsonrpc":"2.0","id":13,"method":"prompts/get","params":{"name":"nope"}}"#)
-            .unwrap()["error"]["code"],
-        -32602
-    );
-    let rendered = tools::call(&mut server, "render", &json!({"note": "Note", "block": 1}));
+    assert!(guide::names().contains(&"writing"));
+    assert!(guide::page("writing").unwrap().contains("Writing notes"));
+    assert!(guide::page("nope").is_none());
+    let vault = open(&root);
+    let rendered = draw::render(Some(&vault), "", &json!({"note": "Note", "block": 1}));
     assert!(!rendered.is_error, "{}", rendered.structured);
-    assert!(rendered.png.is_some());
+    assert!(
+        rendered
+            .png
+            .as_deref()
+            .is_some_and(|png| png.starts_with(b"\x89PNG"))
+    );
     let started = Instant::now();
-    let _ = tools::call(&mut server, "search_notes", &json!({"query": "Note"}));
+    let _ = notes::search_notes(&vault, &json!({"query": "Note"}));
     assert!(started.elapsed().as_secs() < 5);
     let _ = fs::remove_dir_all(&root);
 }

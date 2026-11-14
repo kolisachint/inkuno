@@ -1,4 +1,4 @@
-//! Figures over MCP: Mermaid sources and SVG files, rendered to PNG.
+//! Figures: Mermaid sources and SVG files, rendered to PNG.
 //! `check_mermaid` says whether a source draws and its kind; `render`
 //! draws a Mermaid source, an SVG file, or a ```mermaid block of a note.
 

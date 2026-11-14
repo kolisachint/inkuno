@@ -1,25 +1,23 @@
-//! The vault an agent works on: the index the app would have, refreshed when the disk changes,
-//! and the rule that nothing is reached outside that folder.
+//! The vault a command works on: the index the app would have, read once from disk, and the rule
+//! that nothing is reached outside that folder.
 
 use std::{
     fs, io,
     path::{Component, Path, PathBuf},
-    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use notify::RecommendedWatcher;
 use sha2::{Digest, Sha256};
 
 use crate::{
     logic::note::Note,
     logic::{rank, wiki},
-    platform::vault::{self, Signal},
+    platform::vault,
 };
 
 use super::outcome::disk;
 
-/// One open vault. The watcher is kept so it lives as long as the server does.
+/// One vault, read from disk when it is opened: a command runs once, then it is done.
 pub struct Vault {
     pub root: PathBuf,
     pub notes: Vec<Note>,
@@ -29,9 +27,6 @@ pub struct Vault {
     pub tables: Vec<PathBuf>,
     pub attachments: Vec<PathBuf>,
     pub unreadable: Vec<(PathBuf, io::ErrorKind)>,
-    fingerprint: u64,
-    signal: Arc<Signal>,
-    watcher: Option<RecommendedWatcher>,
 }
 
 impl Vault {
@@ -43,8 +38,6 @@ impl Vault {
         if !root.is_dir() {
             return Err("not a folder".into());
         }
-        let signal = Arc::new(Signal::default());
-        let watcher = vault::watch(&root, signal.clone());
         let mut vault = Vault {
             root,
             notes: Vec::new(),
@@ -54,24 +47,12 @@ impl Vault {
             tables: Vec::new(),
             attachments: Vec::new(),
             unreadable: Vec::new(),
-            fingerprint: 0,
-            signal,
-            watcher,
         };
         vault.rescan();
         if vault.unreadable.iter().any(|(path, _)| path == &vault.root) {
             return Err(disk_kind(vault.unreadable[0].1));
         }
         Ok(vault)
-    }
-
-    /// Rereads the vault when another program changed it, or when it cannot be watched.
-    pub fn refresh(&mut self) {
-        let raised = self.signal.take();
-        let now = vault::fingerprint(&self.root);
-        if raised || self.watcher.is_none() || now != self.fingerprint {
-            self.rescan();
-        }
     }
 
     pub fn rescan(&mut self) {
@@ -98,7 +79,6 @@ impl Vault {
         self.tables = tables;
         self.attachments = attachments;
         self.unreadable = unreadable;
-        self.fingerprint = vault::fingerprint(&self.root);
     }
 
     /// `note` as a `[[link]]` would write it (a name, then an alias), or a path inside the vault.

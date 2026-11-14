@@ -7,10 +7,6 @@ pub fn tr(en: &'static str, _fr: &'static str) -> &'static str {
     en
 }
 
-/// English from now on, whatever the system's language: `inkuno mcp` talks to a model, and
-/// the library's names and templates it returns are part of what the model reads.
-pub fn speak_english() {}
-
 /// Runs `f` unchanged: the interface is English everywhere, so there is nothing to force
 /// anymore. Kept (ungated, unlike the old test-only helper) so the call sites that wrapped
 /// their setup in it still compile: a dependency never builds with `cfg(test)`.
