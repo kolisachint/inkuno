@@ -5,8 +5,10 @@ person or an agent with a shell works on a vault: it reads and writes the note f
 diagram, and prints the result. Agents use it, and the server they used before is removed (see
 Decisions). The user's view is in `docs/user/src/agents.md`; this page is the design.
 
-Code: `crates/inkuno/src/cli/`. `main.rs` routes a first word that is not an option to `cli::run()`;
-without one the window opens. `inkuno --check-config` and `inkuno --help` stay with `main.rs`.
+Code: `crates/inkuno/src/cli/`. `main.rs` routes every argument list but the app's own to `cli::run()`.
+The app's own are none (the window opens), `--help`, `-h`, `--check-config` (both stay with
+`main.rs`) and the `-psn_…` macOS passes at launch. `--vault DIR` and `--json` may come before the
+command word; `cli::run` reads them and counts them as if they came after it.
 
 ## Principles
 
@@ -19,8 +21,14 @@ without one the window opens. `inkuno --check-config` and `inkuno --help` stay w
 - **The app's rules, not new ones.** A taken name is refused. A write is atomic. A rename rewrites
   the `[[links]]` to the note, unless another note still has the old name. Nothing is deleted:
   `trash` moves a file to `.trash`. Nothing outside the vault is reached.
+- **Standard input only on request.** `--text -` (`new`, `append`, `comment`) and `--mermaid -`
+  (`render`) read it; no other option does. Without `--text`, `new` makes a note with no body and
+  `append` is a usage error. Nothing waits on a pipe that was not asked for.
 - **No new dependency.** The command line reads its arguments by hand: `options()` in `cli/mod.rs`.
-  `--json` and `--help` are switches of every command; an unknown option is a usage error.
+  `--help` is a switch of every command, `--json` of those that print a result; an unknown option
+  is a usage error, and a bare `--` ends the options.
+- **Wrong values are refused before the work.** A value outside an option's choices or range (a
+  `--kind`, a `--limit`, a `--date`, a `--width`) is a usage error, exit 2, before the vault is read.
 - **Text by default, `--json` for the structure.** The result goes to standard output. The reasons
   for a failure go to standard error.
 
@@ -29,10 +37,10 @@ without one the window opens. `inkuno --check-config` and `inkuno --help` stay w
 | Exit | Meaning |
 |---|---|
 | 0 | The work is done. The result is on standard output. |
-| 1 | The work failed. `inkuno: <reason>` on standard error. A failed command changes nothing. |
+| 1 | The work failed. `inkuno: <reason>` on standard error. A refused command changes nothing: a bad argument is exit 2, a taken name, a stale token or a path outside the vault is exit 1. `move` also rewrites the links to the note and reports how many. |
 | 2 | A wrong command line: an unknown command or option, a missing argument. The reason, and `try inkuno help`, on standard error. |
 
-`inkuno render --check` exits 1 when the Mermaid source does not draw. Its JSON says why.
+`inkuno render --check` exits 1 when the Mermaid source does not draw; `--json` says why.
 
 A mistyped command name is suggested: `inkuno lsit` names `edit` or `list`. The suggestions are the
 names within a small edit distance, nearest first, at most three (`suggest` in `cli/mod.rs`).
@@ -48,7 +56,9 @@ Every command but `rev` and `keys` works on one vault, found in this order (`cli
 
 A note is named by its title, an alias, or its path inside the vault, with or without `.md`
 (`Vault::find_note`). A path that climbs out of the vault, or a link that leads outside, is refused
-(`Vault::inside`). `.trash` is reachable only by `restore`. `rev` takes no `--vault`: it finds the
+(`Vault::inside`). `.trash` is reachable only by `restore`. A link into a hidden folder is refused as well: the rule holds
+for the place the path really reaches. `--folder ""` and `--folder .` are the vault root, and a
+listing's `--folder` is read by the same rule as `new` and `move` (`Vault::inside`). `rev` takes no `--vault`: it finds the
 vault from the path of the note (`rev.rs`, `revisions.md`). `keys` works on the shortcut file of the
 config folder, not on a vault.
 

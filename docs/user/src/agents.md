@@ -37,11 +37,13 @@ Every command works on one vault, found in this order:
 2. Else the nearest folder at or above the current one that holds an `.inkuno` folder. So an agent started in a subfolder of your vault finds it.
 3. Else the vault the app has open.
 
-A note is named by its title, an alias, or its path in the vault, with or without `.md`: `inkuno read Plan`, `inkuno read ideas/plan`. The `rev` commands take no `--vault`: they find the vault from the path of the note.
+`--vault DIR` and `--json` may also come before the command word: `inkuno --vault ~/notes list`.
+
+A note is named by its title, an alias, or its path in the vault, with or without `.md`: `inkuno read Plan`, `inkuno read ideas/plan`. The `rev` commands take no `--vault`: they find the vault from the path of the note. `keys` needs no vault at all.
 
 ## Commands
 
-Every command takes `--json`, and `--help` gives its options and an example.
+Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set` and `keys reset` print text only. `--help` gives the options of any command and an example.
 
 | Command | What it does |
 |---|---|
@@ -54,17 +56,17 @@ Every command takes `--json`, and `--help` gives its options and an example.
 | `inkuno tags` | every tag, with how many notes carry it |
 | `inkuno show <note>` | opens the note in the Inkuno window, in a tab of its own. Changes nothing. Fails when Inkuno is not open |
 | **Writing** | |
-| `inkuno new <title…> [--folder F] [--template T] [--text TEXT]` | a new note. Its first line is the title. The body is `--text`, or standard input when there is no `--text` |
+| `inkuno new <title…> [--folder F] [--template T] [--text TEXT]` | a new note. Its first line is the title. The body is `--text TEXT`; `--text -` reads it from standard input. Without `--text` the note has only its title |
 | `inkuno edit <note> --old OLD --new NEW [--token T]` | replaces a passage that occurs once. `--edits JSON` takes a list of `{"old": …, "new": …}`, applied together or not at all |
-| `inkuno append <note> [--under HEADING] [--text TEXT] [--token T]` | adds text at the end of the note, or at the end of the section under a heading |
+| `inkuno append <note> [--under HEADING] --text TEXT [--token T]` | adds text at the end of the note, or at the end of the section under a heading. `--text -` reads the text from standard input; without `--text` the command is refused |
 | `inkuno move <note> [--name NEW] [--folder F]` | gives a note a new name, a new folder, or both. The `[[links]]` to it follow |
 | `inkuno trash <note>` | moves the note to `.trash`, with its saved versions. Prints the path it has there |
 | `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
 | `inkuno daily [--date YYYY-MM-DD] [--append TEXT]` | today's daily note, or the one of the date. `--append` adds a paragraph |
-| `inkuno comment <note> --passage P --text C` | wraps one passage in a comment: `{==P==}{>>C<<}`. The passage must occur once |
+| `inkuno comment <note> --passage P --text C` | wraps one passage in a comment: `{==P==}{>>C<<}`. The passage must occur once. `--text -` reads the comment from standard input |
 | **Diagrams** | |
 | `inkuno render [<file>] [--note N --block K] [--mermaid SRC] [--theme light\|dark] [--width W] --out FILE.png` | a PNG of an SVG file of the vault, of the `K`-th Mermaid block of a note (1 is the first), or of a Mermaid source. `--mermaid -` reads the source from standard input |
-| `inkuno render --check [--mermaid SRC]` | whether a Mermaid source draws, and the engine's error when it does not. Reads standard input when there is no `--mermaid` |
+| `inkuno render --check --mermaid SRC` | whether a Mermaid source draws, and the engine's error when it does not. `--mermaid -` reads the source from standard input; without `--mermaid` the command is refused |
 | **Guide** | |
 | `inkuno guide [page]` | the user guide: its page names, or one page as Markdown |
 | **Versions** | |
@@ -101,7 +103,7 @@ inkuno: the note changed since it was read; read it again and retry
 The agent reads the note again, takes the new token, and repeats the edit. A diagram is checked before it is drawn to a file:
 
 ```bash
-cat flow.mmd | inkuno render --check       # the JSON: whether it reads, and the engine's error if not
+cat flow.mmd | inkuno render --check --mermaid -   # whether it reads, and the engine's error if not
 inkuno render --note Plan --block 1 --theme dark --out plan.png
 inkuno show Plan                           # the window opens the note, if Inkuno is running
 ```
@@ -113,16 +115,18 @@ inkuno show Plan                           # the window opens the note, if Inkun
 ## Output and exit codes
 
 - The result goes to standard output: short text by default, and the structured result with `--json`.
-- A command that cannot do its work prints the reason on standard error, as `inkuno: …`, and exits with 1. A failed command changes nothing.
+- A command that cannot do its work prints the reason on standard error, as `inkuno: …`, and exits with 1. A refused command changes nothing: a bad argument, a name already taken, a stale token, a path outside the vault. A `move` also rewrites the `[[links]]` to the note in other notes, and says how many it rewrote.
 - A wrong command line (an unknown command or option, a missing argument) prints the reason and `try inkuno help` on standard error, and exits with 2. A mistyped command name suggests the nearest commands.
 - `inkuno render --check` exits with 1 when the source does not draw.
 - `inkuno show` exits with 1, and says so, when Inkuno is not open.
 
-Pass the token from `inkuno read --json` to `edit` or `append` with `--token`. Without `--token`, an edit applies to the file as it is on disk.
+Pass the token from `inkuno read --json` to `edit` or `append` with `--token`. Without `--token`, an edit applies to the file as it is on disk; an empty `--token` is refused.
+
+Standard input is read only when a command asks for it: `--text -` or `--mermaid -`. Nothing else reads it.
 
 ## What it will not do
 
-- Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed, and `.trash` is reached only through `restore`.
+- Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed or reached, and a link into one is refused too; `.trash` is reached only through `restore`.
 - Delete a file. The trash is the only way out, and a name that is already taken is refused.
 - Overwrite a note that changed after it was read, when the agent passes the token it read.
 - Open the network, run a program, or touch git.
