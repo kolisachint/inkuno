@@ -312,7 +312,9 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
   Keep in vault… (only with a vault), Discard; Esc cancels. The Scratch panel (`nav::ShowScratch`,
   palette only, like Recent) lists them by title with their moment; its menu has Open, Keep in vault…
   and Delete (`Delete` key too: the file goes, an open note leaves with its tab; no `.trash` for
-  scratch notes). Tests:
+  scratch notes). A scratch tab's caption ends in `· Scratch` (`Shell::caption`), its window title is its
+  title; `› keep this scratch note in the vault` (`app::KeepInVault`) is offered only while one is shown.
+  Tests:
   `scratch.rs` (`ctrl_n_writes_a_scratch_note_and_no_vault_file`, `ctrl_n_works_without_a_vault`,
   `ctrl_alt_n_still_creates_a_vault_note`). Tests that made vault notes with `Ctrl+N` now use `Ctrl+Alt+N`:
   `end_to_end/panel.rs`, `tabs.rs`, `window.rs`, `save_close.rs`.
