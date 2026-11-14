@@ -4,12 +4,14 @@
 //! both are hidden from the tree, the search and the Scratch panel.
 
 use std::{
-    fs, io,
+    fs,
+    io::{self, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::{scratch, vault};
+use super::scratch;
 use crate::logic::revision::{self, Revision};
 
 /// Where a note lives, which decides where its history is kept.
@@ -70,35 +72,67 @@ pub fn save(
     let folder = home
         .folder(note)
         .ok_or_else(|| io::Error::other("the note is not in its vault or scratch folder"))?;
-    let numbers = numbers(&folder)?;
-    let latest = numbers.iter().copied().max();
-    if let Some(latest) = latest {
-        let last = read(&folder.join(revision::file_name(latest)))?;
-        if last.text == text {
-            return Ok(Saved::Unchanged { latest });
+    // Another save may take the number between the listing and the publish: the listing is then
+    // read again, and the revision is numbered after the new latest. No file is overwritten.
+    for _ in 0..SAVE_TRIES {
+        let numbers = numbers(&folder)?;
+        let latest = numbers.iter().copied().max();
+        if let Some(latest) = latest {
+            let last = read(&folder.join(revision::file_name(latest)))?;
+            if last.text == text {
+                return Ok(Saved::Unchanged { latest });
+            }
+        }
+        let number = revision::next_number(numbers);
+        let file = folder.join(revision::file_name(number));
+        let rev = Revision {
+            number,
+            parent: latest,
+            author: author.to_string(),
+            date: revision::rfc3339(unix),
+            kind: revision::Kind::Checkpoint,
+            note: memo.map(str::to_string),
+            text: text.to_string(),
+        };
+        fs::create_dir_all(&folder)?;
+        match publish(&file, &revision::render(&rev)) {
+            Ok(()) => return Ok(Saved::Made { number, file }),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
         }
     }
-    let number = revision::next_number(numbers);
-    let file = folder.join(revision::file_name(number));
-    if file.exists() {
-        // Another save took this number since the folder was listed: nothing is overwritten.
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            format!("revision {number} was saved meanwhile, try again"),
-        ));
-    }
-    let rev = Revision {
-        number,
-        parent: latest,
-        author: author.to_string(),
-        date: revision::rfc3339(unix),
-        kind: revision::Kind::Checkpoint,
-        note: memo.map(str::to_string),
-        text: text.to_string(),
-    };
-    fs::create_dir_all(&folder)?;
-    vault::write(&file, revision::render(&rev))?;
-    Ok(Saved::Made { number, file })
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "the revisions changed while saving, try again",
+    ))
+}
+
+/// How many times a save lists the revisions again when another save takes its number.
+const SAVE_TRIES: usize = 64;
+
+/// Creates `file` with `text` in it, and fails (`AlreadyExists`) when it exists: a revision is
+/// never overwritten. The text goes to a temporary file of its own in the same folder first, then
+/// is hard-linked to `file`, so `file` appears whole or not at all, and two saves never share a
+/// temporary file.
+fn publish(file: &Path, text: &str) -> io::Result<()> {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let name = file.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = file.with_file_name(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    let written = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+        .and_then(|mut out| {
+            out.write_all(text.as_bytes())?;
+            out.sync_all()
+        });
+    let linked = written.and_then(|()| fs::hard_link(&tmp, file));
+    let _ = fs::remove_file(&tmp);
+    linked
 }
 
 /// The time now, as Unix seconds.
@@ -277,6 +311,7 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::vault;
 
     fn temp(name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!("inkuno-rev-{name}-{}", std::process::id()));
@@ -330,6 +365,54 @@ mod tests {
         );
         // The vault's own files are not touched by the history.
         assert!(!root.join("ideas").join(".inkuno").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn racing_saves_each_get_their_own_revision() {
+        let root = temp("race");
+        let home = Home::Vault(root.clone());
+        let note = root.join("plan.md");
+        let writers: Vec<_> = (0..8)
+            .map(|t| {
+                let (home, note) = (home.clone(), note.clone());
+                std::thread::spawn(move || {
+                    (0..12)
+                        .map(|i| {
+                            let text = format!("writer {t}, save {i}\n");
+                            match save(&home, &note, "ana", None, &text, 0) {
+                                Ok(Saved::Made { number, file }) => (number, file, text),
+                                other => panic!("a save failed: {other:?}"),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut made: Vec<(u32, PathBuf, String)> = writers
+            .into_iter()
+            .flat_map(|w| w.join().unwrap())
+            .collect();
+        made.sort_by_key(|m| m.0);
+        // Every save got its own number, 1 to 96, and every file holds the text its writer saved.
+        assert_eq!(
+            made.iter().map(|m| m.0).collect::<Vec<_>>(),
+            (1..=96).collect::<Vec<u32>>()
+        );
+        for (number, file, text) in &made {
+            let rev = read(file).unwrap();
+            assert_eq!((rev.number, &rev.text), (*number, text));
+        }
+        // The folder holds exactly those revisions: no temporary file is left behind.
+        let folder = root.join(".inkuno/revisions/plan.md");
+        let names: Vec<String> = fs::read_dir(&folder)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names.len(), 96, "{names:?}");
+        assert!(names.iter().all(|n| revision::number_of(n).is_some()));
+        assert_eq!(all(&home, &note).unwrap().len(), 96);
         let _ = fs::remove_dir_all(root);
     }
 
