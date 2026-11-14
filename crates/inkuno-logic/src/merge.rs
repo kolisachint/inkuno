@@ -130,11 +130,881 @@ mod tests {
 
     /// `ours` with what `theirs` changed put in, or `None`.
     fn merged(base: &str, ours: &str, theirs: &str) -> Option<String> {
-        let mut text = ours.to_string();
-        for (range, with) in onto(base, ours, theirs)?.into_iter().rev() {
-            text.replace_range(range, &with);
+        Some(apply_checked(ours, &onto(base, ours, theirs)?))
+    }
+
+    /// `ours` with `edits` applied, after checking they are in order, in bounds and on char
+    /// boundaries: the editor must never get a range that would panic or split a character.
+    fn apply_checked(ours: &str, edits: &[(Range<usize>, String)]) -> String {
+        let mut end = 0;
+        for (range, _) in edits {
+            assert!(
+                end <= range.start && range.start <= range.end && range.end <= ours.len(),
+                "ranges out of order or out of bounds: {edits:?} for {ours:?}"
+            );
+            assert!(
+                ours.is_char_boundary(range.start) && ours.is_char_boundary(range.end),
+                "range {range:?} splits a character in {ours:?}"
+            );
+            end = range.end;
         }
-        Some(text)
+        let mut text = ours.to_string();
+        for (range, with) in edits.iter().rev() {
+            text.replace_range(range.clone(), with);
+        }
+        text
+    }
+
+    /// What a case expects: the merged text, or a clash (`None`).
+    #[derive(Clone, Copy)]
+    enum Want {
+        Text(&'static str),
+        Clash,
+    }
+    use Want::{Clash, Text};
+
+    /// Scenario name, base, ours, theirs, and what must come out.
+    type Case = (&'static str, &'static str, &'static str, &'static str, Want);
+
+    fn check(cases: &[Case]) {
+        for &(name, base, ours, theirs, want) in cases {
+            let got = merged(base, ours, theirs);
+            match want {
+                Text(text) => assert_eq!(got.as_deref(), Some(text), "case `{name}`"),
+                Clash => assert_eq!(got, None, "case `{name}` should clash"),
+            }
+        }
+    }
+
+    #[test]
+    fn disjoint_edits_by_human_and_agent_all_survive() {
+        check(&[
+            // Human edits the top, agent the bottom.
+            (
+                "human top, agent bottom",
+                "t\nm\nb\n",
+                "T!\nm\nb\n",
+                "t\nm\nB!\n",
+                Text("T!\nm\nB!\n"),
+            ),
+            // Agent edits the top, human the bottom.
+            (
+                "agent top, human bottom",
+                "t\nm\nb\n",
+                "t\nm\nB!\n",
+                "T!\nm\nb\n",
+                Text("T!\nm\nB!\n"),
+            ),
+            // Many alternating hunks from both sides.
+            (
+                "alternating hunks",
+                "l1\nl2\nl3\nl4\nl5\nl6\n",
+                "H1\nl2\nH3\nl4\nH5\nl6\n",
+                "l1\nA2\nl3\nA4\nl5\nA6\n",
+                Text("H1\nA2\nH3\nA4\nH5\nA6\n"),
+            ),
+            // Agent appends at the end while the human types in the middle.
+            (
+                "agent appends, human types in middle",
+                "a\nb\nc\n",
+                "a\nb typed\nc\n",
+                "a\nb\nc\nd\n",
+                Text("a\nb typed\nc\nd\n"),
+            ),
+            // Agent prepends while the human appends at the end.
+            (
+                "agent prepends, human appends",
+                "a\nb\n",
+                "a\nb\nz\n",
+                "p\na\nb\n",
+                Text("p\na\nb\nz\n"),
+            ),
+            // Agent deletes a block the human did not touch.
+            (
+                "agent deletes untouched block",
+                "a\nb\nc\nd\n",
+                "a\nb\nc\nD!\n",
+                "a\nd\n",
+                Text("a\nD!\n"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn adjacent_edits_touch_but_do_not_overlap() {
+        check(&[
+            // Neighbouring lines, one changed by each side.
+            (
+                "neighbours",
+                "a\nb\nc\n",
+                "A\nb\nc\n",
+                "a\nB\nc\n",
+                Text("A\nB\nc\n"),
+            ),
+            // Agent inserts right after a line the human changed.
+            (
+                "agent inserts after human change",
+                "a\nb\n",
+                "a!\nb\n",
+                "a\nNEW\nb\n",
+                Text("a!\nNEW\nb\n"),
+            ),
+            // Agent inserts right before a line the human changed.
+            (
+                "agent inserts before human change",
+                "a\nb\n",
+                "a\nB!\n",
+                "a\nNEW\nb\n",
+                Text("a\nNEW\nB!\n"),
+            ),
+            // Human inserts right after a line the agent changed.
+            (
+                "human inserts after agent change",
+                "a\nb\n",
+                "a\nmine\nb\n",
+                "A!\nb\n",
+                Text("A!\nmine\nb\n"),
+            ),
+            // Human inserts right before a line the agent changed.
+            (
+                "human inserts before agent change",
+                "a\nb\n",
+                "a\nmine\nb\n",
+                "a\nB!\n",
+                Text("a\nmine\nB!\n"),
+            ),
+            // Both insert the same text at the same place: it is there once.
+            (
+                "same insertion by both",
+                "a\nb\n",
+                "a\nX\nb\n",
+                "a\nX\nb\n",
+                Text("a\nX\nb\n"),
+            ),
+            // Both insert different text at the same place: their order cannot be chosen.
+            (
+                "different insertions, same place",
+                "a\nb\n",
+                "a\nmine\nb\n",
+                "a\ntheirs\nb\n",
+                Clash,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn identical_changes_on_both_sides_apply_once() {
+        check(&[
+            // The same edit on both sides.
+            (
+                "identical edit",
+                "a\nb\nc\n",
+                "a\nB\nc\n",
+                "a\nB\nc\n",
+                Text("a\nB\nc\n"),
+            ),
+            // The same deletion on both sides.
+            (
+                "identical deletion",
+                "a\nb\nc\n",
+                "a\nc\n",
+                "a\nc\n",
+                Text("a\nc\n"),
+            ),
+            // The same insertion on both sides.
+            (
+                "identical insertion",
+                "a\nb\nc\n",
+                "a\nX\nb\nc\n",
+                "a\nX\nb\nc\n",
+                Text("a\nX\nb\nc\n"),
+            ),
+            // Same edit on both, plus the agent's own append.
+            (
+                "identical edit plus agent append",
+                "a\nb\nc\n",
+                "a\nB\nc\n",
+                "a\nB\nc\nd\n",
+                Text("a\nB\nc\nd\n"),
+            ),
+            // Both rewrote the whole file the same way.
+            (
+                "identical whole-file rewrite",
+                "a\nb\n",
+                "x\ny\n",
+                "x\ny\n",
+                Text("x\ny\n"),
+            ),
+            // Both emptied the file.
+            ("identical emptying", "a\nb\n", "", "", Text("")),
+        ]);
+    }
+
+    #[test]
+    fn deletions_by_one_or_both_sides() {
+        check(&[
+            // Agent deletes a block; human edits a line inside it: clash.
+            (
+                "human edits agent-deleted block",
+                "a\nb\nc\nd\n",
+                "a\nB!\nc\nd\n",
+                "a\nd\n",
+                Clash,
+            ),
+            // Agent deletes b and c; human inserts a new line between b and c: clash (as git does,
+            // the new line is inside the deleted block, so the agent's deletion cannot be placed).
+            (
+                "human inserts inside agent-deleted block",
+                "a\nb\nc\nd\n",
+                "a\nb\nNEW\nc\nd\n",
+                "a\nd\n",
+                Clash,
+            ),
+            // Human inserts right after a line the agent deletes.
+            (
+                "human inserts after agent-deleted line",
+                "a\nb\nc\n",
+                "a\nb\nNEW\nc\n",
+                "a\nc\n",
+                Text("a\nNEW\nc\n"),
+            ),
+            // Human inserts right before a line the agent deletes.
+            (
+                "human inserts before agent-deleted line",
+                "a\nb\nc\n",
+                "a\nNEW\nb\nc\n",
+                "a\nc\n",
+                Text("a\nNEW\nc\n"),
+            ),
+            // Agent empties the file while the human changed a line: clash.
+            (
+                "agent empties, human edited",
+                "a\nb\n",
+                "a\nB!\n",
+                "",
+                Clash,
+            ),
+            // Human empties the file, agent appends a line: the agent's line survives.
+            (
+                "human empties, agent appends",
+                "a\nb\n",
+                "",
+                "a\nb\nc\n",
+                Text("c\n"),
+            ),
+            // Human empties the file, agent idle.
+            (
+                "human empties, agent idle",
+                "a\nb\n",
+                "",
+                "a\nb\n",
+                Text(""),
+            ),
+            // Agent empties the file, human typed at the end: the typed line survives.
+            (
+                "agent empties, human typed at end",
+                "a\nb\n",
+                "a\nb\nX\n",
+                "",
+                Text("X\n"),
+            ),
+            // Agent empties the file, human idle.
+            (
+                "agent empties, human idle",
+                "a\nb\n",
+                "a\nb\n",
+                "",
+                Text(""),
+            ),
+            // Human deletes one line, agent deletes a different line far away.
+            (
+                "both delete different lines",
+                "a\nb\nc\nd\n",
+                "a\nc\nd\n",
+                "a\nb\nc\n",
+                Text("a\nc\n"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn whole_file_rewrites_and_moved_blocks() {
+        check(&[
+            // Agent rewrites every line while the human changed one: clash.
+            (
+                "agent rewrites all, human edited one",
+                "a\nb\nc\n",
+                "a\nB!\nc\n",
+                "x\ny\nz\n",
+                Clash,
+            ),
+            // Agent rewrites the other lines and keeps the one the human changed.
+            (
+                "agent rewrites around human line",
+                "a\nb\nc\nd\ne\n",
+                "a\nb\nC!\nd\ne\n",
+                "A\nB\nc\nD\nE\n",
+                Text("A\nB\nC!\nD\nE\n"),
+            ),
+            // Agent moves the first block to the end while the human edits the third line.
+            (
+                "agent moves first line to end",
+                "A\nB\nC\nD\n",
+                "A\nB\nC!\nD\n",
+                "B\nC\nD\nA\n",
+                Text("B\nC!\nD\nA\n"),
+            ),
+            // Agent moves the last line to the top while the human edits the third line.
+            (
+                "agent moves last line to top",
+                "A\nB\nC\nD\n",
+                "A\nB\nC!\nD\n",
+                "D\nA\nB\nC\n",
+                Text("D\nA\nB\nC!\n"),
+            ),
+            // Agent moves a line the human edited: clash.
+            (
+                "agent moves human-edited line",
+                "A\nB\nC\nD\n",
+                "A!\nB\nC\nD\n",
+                "B\nC\nD\nA\n",
+                Clash,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn trailing_newlines_and_empty_texts() {
+        check(&[
+            // Agent adds the final newline the base lacked.
+            (
+                "agent adds final newline",
+                "a\nb",
+                "a\nb",
+                "a\nb\n",
+                Text("a\nb\n"),
+            ),
+            // Human adds the final newline while the agent edits the first line.
+            (
+                "human adds final newline, agent edits first",
+                "a\nb",
+                "a\nb\n",
+                "A\nb",
+                Text("A\nb\n"),
+            ),
+            // Human pressed Enter after the last line while the agent edited that line: clash.
+            (
+                "human Enter at end, agent edits last line",
+                "a\nb",
+                "a\nb\n",
+                "a\nB",
+                Clash,
+            ),
+            // Agent appends after an unterminated last line the human did not touch.
+            (
+                "agent appends after unterminated line",
+                "a\nb",
+                "a\nb",
+                "a\nb\nc",
+                Text("a\nb\nc"),
+            ),
+            // Empty base: the human typed, the agent did nothing.
+            (
+                "empty base, human typed",
+                "",
+                "typed\n",
+                "",
+                Text("typed\n"),
+            ),
+            // Empty base: the agent wrote, the human did nothing.
+            (
+                "empty base, agent wrote",
+                "",
+                "",
+                "theirs\n",
+                Text("theirs\n"),
+            ),
+            // Empty base: both wrote different text.
+            (
+                "empty base, both wrote differently",
+                "",
+                "mine\n",
+                "theirs\n",
+                Clash,
+            ),
+            // Empty base: both wrote the same text.
+            (
+                "empty base, both wrote the same",
+                "",
+                "same\n",
+                "same\n",
+                Text("same\n"),
+            ),
+            // Empty ours (human deleted everything), agent idle.
+            (
+                "human emptied, agent idle",
+                "a\nb\n",
+                "",
+                "a\nb\n",
+                Text(""),
+            ),
+            // Empty theirs (agent emptied), human idle.
+            (
+                "agent emptied, human idle",
+                "a\nb\n",
+                "a\nb\n",
+                "",
+                Text(""),
+            ),
+            // Empty theirs while the human changed a line: clash.
+            ("agent emptied, human edited", "a\nb\n", "a\nB\n", "", Clash),
+            // Everything empty.
+            ("all empty", "", "", "", Text("")),
+            // Single line without newline, human types.
+            ("single line, human types", "a", "a!", "a", Text("a!")),
+            // Single line without newline, agent types.
+            ("single line, agent types", "a", "a", "a?", Text("a?")),
+            // Single line without newline, both change it differently: clash.
+            ("single line, both change", "a", "a!", "a?", Clash),
+            // Single line, human adds a newline.
+            ("single line, human newline", "a", "a\n", "a", Text("a\n")),
+            // Single line, agent adds a newline.
+            ("single line, agent newline", "a", "a", "a\n", Text("a\n")),
+        ]);
+    }
+
+    #[test]
+    fn line_endings_blank_lines_repeats_and_multibyte_text() {
+        check(&[
+            // CRLF on both sides.
+            (
+                "crlf both",
+                "a\r\nb\r\n",
+                "a\r\nB!\r\n",
+                "a\r\nb\r\nc\r\n",
+                Text("a\r\nB!\r\nc\r\n"),
+            ),
+            // Human's lines are CRLF, agent's are LF.
+            (
+                "crlf human, lf agent",
+                "a\nb\n",
+                "a\r\nb\n",
+                "a\nb\nc\n",
+                Text("a\r\nb\nc\n"),
+            ),
+            // Agent converts the whole file to CRLF while the human edited a line: clash.
+            (
+                "agent converts to crlf, human edited",
+                "a\nb\n",
+                "a!\nb\n",
+                "a\r\nb\r\n",
+                Clash,
+            ),
+            // Agent adds a blank line above a line the human changed.
+            (
+                "blank line added above human line",
+                "a\n\n\nb\n",
+                "a\n\n\nB\n",
+                "a\n\n\n\nb\n",
+                Text("a\n\n\n\nB\n"),
+            ),
+            // Repeated lines: human changed the last one, agent appends one more.
+            (
+                "repeats: human edits last, agent appends",
+                "x\nx\nx\n",
+                "x\nx\nY\n",
+                "x\nx\nx\nx\n",
+                Text("x\nx\nY\nx\n"),
+            ),
+            // Repeats: human deleted one, agent appends one: the note keeps two.
+            (
+                "repeats: human deletes, agent appends",
+                "x\nx\n",
+                "x\n",
+                "x\nx\nx\n",
+                Text("x\nx\n"),
+            ),
+            // Repeats: human inserted between two, agent appends an identical line.
+            (
+                "repeats: human inserts, agent appends",
+                "x\nx\n",
+                "x\ny\nx\n",
+                "x\nx\nx\n",
+                Text("x\ny\nx\nx\n"),
+            ),
+            // Repeats: human deletes the first, agent changes the last.
+            (
+                "repeats: first deleted, last changed",
+                "x\ny\nx\n",
+                "y\nx\n",
+                "x\ny\nZ\n",
+                Text("y\nZ\n"),
+            ),
+            // Accents, combining marks, CJK and emoji on both sides.
+            (
+                "accents, CJK, emoji",
+                "cafe\u{301}\n日本語\n🙂 smile\n",
+                "cafe\u{301} typed\n日本語\n🙂 smile\n",
+                "cafe\u{301}\n日本語 です\n🙂 smile\n",
+                Text("cafe\u{301} typed\n日本語 です\n🙂 smile\n"),
+            ),
+            // The human types after a multi-byte line that the agent then extends.
+            (
+                "multibyte line, agent inserts after",
+                "日\n",
+                "日本\n",
+                "日\n🙂\n",
+                Text("日本\n🙂\n"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn very_long_lines_merge_by_line() {
+        let long = "x".repeat(100_000);
+        let base = format!("{long}\nshort\n");
+        let ours = format!("{long} typed\nshort\n");
+        let theirs = format!("{long}\nSHORT\n");
+        assert_eq!(
+            merged(&base, &ours, &theirs).unwrap(),
+            format!("{long} typed\nSHORT\n")
+        );
+    }
+
+    #[test]
+    fn markdown_shaped_parallel_edits() {
+        check(&[
+            // Agent rewrites one list item while the human ticks a box on another.
+            (
+                "list item rewritten, other box ticked",
+                "- [ ] buy milk\n- [ ] call Ann\n- old item\n",
+                "- [x] buy milk\n- [ ] call Ann\n- old item\n",
+                "- [ ] buy milk\n- [ ] call Ann\n- new item text\n",
+                Text("- [x] buy milk\n- [ ] call Ann\n- new item text\n"),
+            ),
+            // Agent deletes the item the human was ticking: clash.
+            (
+                "item ticked by human, deleted by agent",
+                "- [ ] a\n- [ ] b\n",
+                "- [x] a\n- [ ] b\n",
+                "- [ ] b\n",
+                Clash,
+            ),
+            // Agent adds a table row while the human edits another row.
+            (
+                "table row added, other row edited",
+                "| a | 1 |\n| b | 2 |\n",
+                "| a | 9 |\n| b | 2 |\n",
+                "| a | 1 |\n| b | 2 |\n| c | 3 |\n",
+                Text("| a | 9 |\n| b | 2 |\n| c | 3 |\n"),
+            ),
+            // Agent inserts a row above the row the human edits.
+            (
+                "table row inserted above edited row",
+                "| a | 1 |\n| b | 2 |\n",
+                "| a | 1 |\n| b | 20 |\n",
+                "| a | 1 |\n| x | 0 |\n| b | 2 |\n",
+                Text("| a | 1 |\n| x | 0 |\n| b | 20 |\n"),
+            ),
+            // Agent edits the front matter, human edits the body.
+            (
+                "front matter by agent, body by human",
+                "---\ntitle: A\n---\n\nBody one.\n",
+                "---\ntitle: A\n---\n\nBody one, typed.\n",
+                "---\ntitle: B\n---\n\nBody one.\n",
+                Text("---\ntitle: B\n---\n\nBody one, typed.\n"),
+            ),
+            // Human and agent both change the title line: clash.
+            (
+                "title changed by both",
+                "---\ntitle: A\n---\n\nBody.\n",
+                "---\ntitle: Mine\n---\n\nBody.\n",
+                "---\ntitle: B\n---\n\nBody.\n",
+                Clash,
+            ),
+            // Agent inserts a bullet under a heading while the human renames the heading.
+            (
+                "bullet under heading, heading renamed",
+                "# Notes\n\nText\n",
+                "# My notes\n\nText\n",
+                "# Notes\n\n- item\nText\n",
+                Text("# My notes\n\n- item\nText\n"),
+            ),
+            // Agent inserts directly under the heading line, human renames the heading.
+            (
+                "bullet right under heading, heading renamed",
+                "# Notes\n\nText\n",
+                "# My notes\n\nText\n",
+                "# Notes\n- item\n\nText\n",
+                Text("# My notes\n- item\n\nText\n"),
+            ),
+        ]);
+    }
+
+    /// Lines of `text` as they are in the note, without their newline.
+    fn human_lines(text: &str) -> Vec<&str> {
+        text.split_inclusive('\n')
+            .map(|line| line.trim_end_matches('\n'))
+            .filter(|line| line.starts_with('H'))
+            .collect()
+    }
+
+    /// Tiny deterministic generator, no dependency: a linear congruential one.
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((self.0 >> 33) % n as u64) as usize
+        }
+    }
+
+    /// A note of up to `max` lines from a small alphabet (repeats, blanks, accents, CJK, emoji),
+    /// sometimes without its final newline.
+    fn random_note(rng: &mut Lcg, max: usize) -> String {
+        const ALPHABET: [&str; 7] = ["a", "b", "", "é", "日本", "x 🙂", "a"];
+        let mut text = String::new();
+        for _ in 0..rng.below(max + 1) {
+            text += ALPHABET[rng.below(ALPHABET.len())];
+            text.push('\n');
+        }
+        if rng.below(3) == 0 {
+            text.pop();
+        }
+        text
+    }
+
+    /// `text` with up to three lines inserted, replaced or deleted. New lines are `tag` plus a
+    /// serial number, so each one can be found again in the merged text.
+    fn edit_lines(rng: &mut Lcg, text: &str, tag: char, serial: &mut usize) -> String {
+        let mut lines: Vec<String> = text.split_inclusive('\n').map(String::from).collect();
+        for _ in 0..rng.below(4) {
+            *serial += 1;
+            let line = format!("{tag}{serial}\n");
+            let at = rng.below(lines.len() + 1);
+            match rng.below(3) {
+                0 => lines.insert(at, line),
+                1 if at < lines.len() => {
+                    lines.remove(at);
+                }
+                _ if at < lines.len() => lines[at] = line,
+                _ => lines.push(line),
+            }
+        }
+        lines.concat()
+    }
+
+    /// Random (base, ours, theirs): the human (`H` lines) and the agent (`A` lines) each edited
+    /// the same base.
+    fn random_cases(seed: u64, count: usize) -> Vec<(String, String, String)> {
+        let mut rng = Lcg(seed);
+        (0..count)
+            .map(|_| {
+                let base = random_note(&mut rng, 10);
+                let (mut human, mut agent) = (0, 0);
+                let ours = edit_lines(&mut rng, &base, 'H', &mut human);
+                let theirs = edit_lines(&mut rng, &base, 'A', &mut agent);
+                (base, ours, theirs)
+            })
+            .collect()
+    }
+
+    /// `random_cases`, where either side may also have lost its final newline (Enter removed).
+    fn random_cases_dropping_final_newlines(
+        seed: u64,
+        count: usize,
+    ) -> Vec<(String, String, String)> {
+        let mut rng = Lcg(seed ^ 0x9e37_79b9);
+        random_cases(seed, count)
+            .into_iter()
+            .map(|(base, mut ours, mut theirs)| {
+                if rng.below(4) == 0 && ours.ends_with('\n') {
+                    ours.pop();
+                }
+                if rng.below(4) == 0 && theirs.ends_with('\n') {
+                    theirs.pop();
+                }
+                (base, ours, theirs)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn random_merges_with_dropped_final_newlines_are_well_formed() {
+        for (base, ours, theirs) in random_cases_dropping_final_newlines(6, 3_000) {
+            if let Some(edits) = onto(&base, &ours, &theirs) {
+                apply_checked(&ours, &edits);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "BUG: a final newline removed by the human glues the agent's appended line onto the human's line"]
+    fn random_merges_with_dropped_final_newlines_keep_every_line() {
+        for (base, ours, theirs) in random_cases_dropping_final_newlines(5, 3_000) {
+            if let Some(edits) = onto(&base, &ours, &theirs) {
+                let text = apply_checked(&ours, &edits);
+                for line in human_lines(&ours) {
+                    assert!(
+                        text.split('\n').any(|l| l == line),
+                        "lost {line:?}: base {base:?} ours {ours:?} theirs {theirs:?} gave {text:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "BUG: an identical change inside a larger block the human edited clashes instead of merging"]
+    fn identical_change_inside_a_larger_human_block_merges() {
+        // Repro: base "a\nb\nc\n", ours "a\nB\nc!\n" (b and c adjacent, one hunk), theirs "a\nB\nc\n".
+        // Expected "a\nB\nc!\n", got None.
+        assert_eq!(
+            merged("a\nb\nc\n", "a\nB\nc!\n", "a\nB\nc\n").as_deref(),
+            Some("a\nB\nc!\n")
+        );
+    }
+
+    #[test]
+    fn random_one_sided_edits_give_the_changed_side() {
+        for (base, ours, theirs) in random_cases(1, 3_000) {
+            let case = format!("base {base:?} ours {ours:?} theirs {theirs:?}");
+            // Theirs is the same as ours: nothing to add.
+            assert_eq!(
+                merged(&base, &ours, &ours).as_deref(),
+                Some(ours.as_str()),
+                "onto(base, ours, ours): {case}"
+            );
+            // Only the agent changed: its text.
+            assert_eq!(
+                merged(&base, &base, &theirs).as_deref(),
+                Some(theirs.as_str()),
+                "only theirs changed: {case}"
+            );
+            // Only the human changed: the human's text.
+            assert_eq!(
+                merged(&base, &ours, &base).as_deref(),
+                Some(ours.as_str()),
+                "only ours changed: {case}"
+            );
+        }
+    }
+
+    #[test]
+    fn random_merges_give_ordered_in_bounds_edits_on_char_boundaries() {
+        let mut merges = 0;
+        for (base, ours, theirs) in random_cases(2, 3_000) {
+            if let Some(edits) = onto(&base, &ours, &theirs) {
+                merges += 1;
+                // Panics on a bad range or a split character.
+                apply_checked(&ours, &edits);
+            }
+        }
+        assert!(
+            merges > 1_000,
+            "only {merges} merges: the generator is too clashy to test much"
+        );
+    }
+
+    #[test]
+    fn random_merges_keep_every_line_the_human_typed() {
+        for (base, ours, theirs) in random_cases(3, 3_000) {
+            if let Some(edits) = onto(&base, &ours, &theirs) {
+                let text = apply_checked(&ours, &edits);
+                for line in human_lines(&ours) {
+                    assert!(
+                        text.split('\n').any(|l| l == line),
+                        "lost {line:?}: base {base:?} ours {ours:?} theirs {theirs:?} gave {text:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn random_merges_do_not_depend_on_which_side_is_applied_onto() {
+        for (base, ours, theirs) in random_cases(4, 3_000) {
+            if let (Some(a), Some(b)) =
+                (merged(&base, &ours, &theirs), merged(&base, &theirs, &ours))
+            {
+                assert_eq!(a, b, "base {base:?} ours {ours:?} theirs {theirs:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn fifty_hunks_each_side_in_one_region_merge_quickly() {
+        let base_lines: Vec<String> = (0..5_000).map(|n| format!("line {n}\n")).collect();
+        let (mut ours, mut theirs, mut expected) =
+            (base_lines.clone(), base_lines.clone(), base_lines.clone());
+        for k in 0..50 {
+            let (human, agent) = (2_000 + 16 * k, 2_008 + 16 * k);
+            ours[human] = format!("human {k}\n");
+            expected[human] = format!("human {k}\n");
+            theirs[agent] = format!("agent {k}\n");
+            expected[agent] = format!("agent {k}\n");
+        }
+        let (base, ours, theirs) = (base_lines.concat(), ours.concat(), theirs.concat());
+        let started = std::time::Instant::now();
+        assert_eq!(
+            merged(&base, &ours, &theirs).as_deref(),
+            Some(expected.concat().as_str())
+        );
+        assert!(
+            started.elapsed().as_secs() < 5,
+            "took {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    #[ignore = "BUG: 50 hunks each side spread over a 5,000-line note clash, the LCS cap merges the middle into one block"]
+    fn fifty_hunks_each_side_spread_over_the_note_merge() {
+        let base_lines: Vec<String> = (0..5_000).map(|n| format!("line {n}\n")).collect();
+        let (mut ours, mut theirs, mut expected) =
+            (base_lines.clone(), base_lines.clone(), base_lines.clone());
+        for k in 0..50 {
+            let (human, agent) = (10 + 100 * k, 50 + 100 * k);
+            ours[human] = format!("human {k}\n");
+            expected[human] = format!("human {k}\n");
+            theirs[agent] = format!("agent {k}\n");
+            expected[agent] = format!("agent {k}\n");
+        }
+        let (base, ours, theirs) = (base_lines.concat(), ours.concat(), theirs.concat());
+        let started = std::time::Instant::now();
+        assert_eq!(
+            merged(&base, &ours, &theirs).as_deref(),
+            Some(expected.concat().as_str())
+        );
+        assert!(
+            started.elapsed().as_secs() < 5,
+            "took {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    #[ignore = "BUG: human removed the final newline, agent appended a line: the new line is glued onto the human's line"]
+    fn removed_final_newline_does_not_glue_the_agents_line() {
+        // Repro: base "a\nb\n", ours "a\nb", theirs "a\nb\nc\n". Expected "a\nb\nc\n", got "a\nbc\n".
+        assert_eq!(
+            merged("a\nb\n", "a\nb", "a\nb\nc\n").as_deref(),
+            Some("a\nb\nc\n")
+        );
+    }
+
+    #[test]
+    #[ignore = "BUG: both sides delete the same line; the other lines they deleted overlap, so a clean union is refused"]
+    fn both_sides_delete_overlapping_lines_merge_to_the_union() {
+        // Repro: base "a\nb\nc\nd\ne\n", ours "a\nd\ne\n" (b, c deleted), theirs "a\nb\ne\n" (c, d deleted).
+        // Expected "a\ne\n", got None.
+        assert_eq!(
+            merged("a\nb\nc\nd\ne\n", "a\nd\ne\n", "a\nb\ne\n").as_deref(),
+            Some("a\ne\n")
+        );
     }
 
     #[test]
