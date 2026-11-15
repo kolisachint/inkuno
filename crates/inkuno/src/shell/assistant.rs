@@ -118,6 +118,9 @@ pub(crate) struct Assistant {
     /// Whether the command counts as installed: the tests do not read the machine's PATH.
     #[cfg(test)]
     pub found: bool,
+    /// The next start of the agent fails with this sentence (the tests).
+    #[cfg(test)]
+    pub refuse_start: Option<String>,
 }
 
 impl Assistant {
@@ -157,6 +160,8 @@ impl Assistant {
             sent: Vec::new(),
             #[cfg(test)]
             found: true,
+            #[cfg(test)]
+            refuse_start: None,
         }
     }
 }
@@ -637,7 +642,6 @@ impl Shell {
     /// prompt, and again when the folder changes. In a test only the process is not started (see
     /// `start_agent`): the prompt is also recorded in `sent`.
     pub(crate) fn assistant_run(&mut self, prompt: String, cx: &mut Context<Self>) {
-        self.assistant_sent(&prompt);
         let folder = self.assistant_folder();
         let running =
             self.assistant.agent.is_some() && self.assistant.folder.as_ref() == Some(&folder);
@@ -645,7 +649,14 @@ impl Shell {
             // The old agent stops, but a review in progress is kept: it is the one being asked.
             self.stop_agent();
             let command = self.prefs.assistant_command().to_string();
-            match start_agent(&command, &folder, self.assistant.signal.clone()) {
+            #[cfg(test)]
+            let started = match self.assistant.refuse_start.take() {
+                Some(error) => Err(error),
+                None => start_agent(&command, &folder, self.assistant.signal.clone()),
+            };
+            #[cfg(not(test))]
+            let started = start_agent(&command, &folder, self.assistant.signal.clone());
+            match started {
                 Ok(agent) => {
                     self.assistant.agent = Some(agent);
                     self.assistant.folder = Some(folder);
@@ -653,6 +664,7 @@ impl Shell {
                 Err(error) => return self.assistant_fail(&error, cx),
             }
         }
+        self.assistant_sent(&prompt);
         let sent = self
             .assistant
             .agent
@@ -677,6 +689,18 @@ impl Shell {
 
     #[cfg(not(test))]
     fn assistant_sent(&mut self, _prompt: &str) {}
+
+    /// The prompt box is emptied once a run has started. A prompt that did not start stays in the box,
+    /// so the person can send it again.
+    fn clear_box_if_started(&mut self, cx: &mut Context<Self>) {
+        if self.assistant.status != Status::Working {
+            return;
+        }
+        self.assistant.field.update(cx, |field, cx| {
+            field.line = Line::default();
+            cx.notify();
+        });
+    }
 
     /// A prompt that could not be sent: the error is shown, and the agent is free again.
     fn assistant_fail(&mut self, error: &str, cx: &mut Context<Self>) {
@@ -835,9 +859,6 @@ impl Shell {
         if !self.assistant_free() || !self.review_open() {
             return;
         }
-        let Some(path) = self.pane().path.clone() else {
-            return;
-        };
         if !self.flush_one(cx) {
             let said = tr(
                 "The note could not be saved, so it was not reviewed.",
@@ -845,6 +866,10 @@ impl Shell {
             );
             return self.assistant_say(Who::Note, said, cx);
         }
+        // Read after the save: a `# Title` change renames the note, and the agent is told the new name.
+        let Some(path) = self.pane().path.clone() else {
+            return;
+        };
         let note = self.assistant_words(&path);
         self.assistant.job = Some(Job::Review(Review {
             path,
@@ -914,9 +939,6 @@ impl Shell {
         if !self.assistant_free() || !self.review_open() {
             return;
         }
-        let Some(path) = self.pane().path.clone() else {
-            return;
-        };
         if pending::has_pending(self.pane().editor.read(cx).text()) {
             let said = tr(
                 "Accept or reject the pending changes first.",
@@ -931,6 +953,10 @@ impl Shell {
             );
             return self.assistant_say(Who::Note, said, cx);
         }
+        // Read after the save: a `# Title` change renames the note, and the prompt names the new file.
+        let Some(path) = self.pane().path.clone() else {
+            return;
+        };
         let (base, range) = {
             let editor = self.pane().editor.read(cx);
             let span = editor.span();
@@ -954,10 +980,6 @@ impl Shell {
         };
         let passage = range.clone().map(|range| &base[range]);
         let prompt = words::improve_prompt(&self.assistant_words(&path), passage, instruction);
-        self.assistant.field.update(cx, |field, cx| {
-            field.line = Line::default();
-            cx.notify();
-        });
         self.assistant.job = Some(Job::Improve(Improve {
             path,
             base,
@@ -971,6 +993,7 @@ impl Shell {
             cx,
         );
         self.assistant_run(prompt, cx);
+        self.clear_box_if_started(cx);
     }
 
     /// Writes the agent's proposal into its note as pending changes: one undo step when a tab shows
@@ -978,7 +1001,13 @@ impl Shell {
     /// makes them: the text before (skipped when it is the latest revision), then the proposed text.
     /// A proposal that cannot be placed is said in one line, and nothing is written.
     fn apply_improve(&mut self, improve: Improve, cx: &mut Context<Self>) {
-        let Some(text) = words::proposal(&improve.answer) else {
+        // The text the block replaces: a fenced passage keeps its fences in the proposal.
+        let original = match &improve.range {
+            Some(range) => &improve.base[range.clone()],
+            None => improve.base.as_str(),
+        };
+        let fenced = words::starts_with_fence(original);
+        let Some(text) = words::proposal(&improve.answer, fenced) else {
             let said = tr(
                 "The assistant proposed no change.",
                 "L'assistant n'a proposé aucun changement.",
@@ -1011,10 +1040,8 @@ impl Shell {
         let home = history::home_of(&improve.path, self.vault.as_deref());
         if let Some(home) = &home {
             let author = self.revision_author();
-            let memo = tr(
-                "before a change by the assistant",
-                "avant un changement de l'assistant",
-            );
+            // History data: the same fixed English memo as `inkuno write` gives (cli/ops.rs).
+            let memo = "before a change by assistant";
             if let Err(why) = auto_revision(home, &improve.path, &author, memo, &current) {
                 let what = tr(
                     "Not written: the version before the change was not saved:",
@@ -1033,8 +1060,12 @@ impl Shell {
             }
             None => {
                 if let Err(e) = vault::write(&improve.path, &marked) {
+                    let what = tr(
+                        "Not written: the proposal was not saved:",
+                        "Non écrit : la proposition n'a pas été enregistrée :",
+                    );
                     let why = crate::lang::io_reason(&e);
-                    return self.assistant_say(Who::Note, &why, cx);
+                    return self.assistant_say(Who::Note, &format!("{what} {why}"), cx);
                 }
             }
         }
@@ -1117,11 +1148,8 @@ impl Shell {
         }
         let prompt = words::chat_prompt(self.assistant_note().as_deref(), &question);
         self.assistant_say(Who::You, &question, cx);
-        self.assistant.field.update(cx, |field, cx| {
-            field.line = Line::default();
-            cx.notify();
-        });
         window.focus(&self.assistant.field.focus_handle(cx));
         self.assistant_run(prompt, cx);
+        self.clear_box_if_started(cx);
     }
 }

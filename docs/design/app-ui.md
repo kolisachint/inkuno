@@ -939,13 +939,18 @@ Normal 800 is the default (§10.4 lock released for this change).
 - The scope: the selection of the active note when it is not empty, else the whole note.
 - The instruction: the prompt box's text when it is not blank (the box is then cleared), else the default
   (`logic::assistant::IMPROVE_INSTRUCTION`: clearer and tighter, same meaning, same language, same Markdown structure).
-- The note is saved first, as Review does (the same failure line, with the word *improved*). `base` is the note's full text
-  at that moment, kept in memory with the note's path and the byte range of the selection in `base` (`None` for the whole
-  note). The transcript shows the question as a `You` line (**Improve selection** or **Improve this note**, with `: instruction`
+- The note is saved first, as Review does (the same failure line, with the word *improved*). The path is read after that
+  save, not before: a save renames a note whose `# Title` line changed (`flush_one`), and the prompt names the file as it is
+  then. `base` is the note's full text at that moment, kept in memory with that path and the byte range of the selection in
+  `base` (`None` for the whole note). Review reads its path the same way (§16.6). The transcript shows the question as a `You` line (**Improve selection** or **Improve this note**, with `: instruction`
   when the person typed one), and a quiet line **Working on a proposal…**.
 - `improve_prompt` names the file to read for context, gives the instruction, and for a selection gives the passage verbatim
   between the lines `BEGIN PASSAGE` and `END PASSAGE`. It asks for an answer that is nothing but the new text between a line
   `BEGIN TEXT` and a line `END TEXT`, with no code fence, and the single line `NO CHANGE` when nothing should change.
+  The prompt also says **Write in the language of the note.**, so the answer keeps the note's language whatever the
+  instruction's.
+- The box is emptied only once the run has started (the status is Working). A prompt that could not start (the command
+  refuses, or the agent does not start) stays in the box, with its error line, and leaves no job behind.
 
 ### 18.3 How the answer comes back
 
@@ -957,6 +962,10 @@ Normal 800 is the default (§10.4 lock released for this change).
 - `logic::assistant::rewritten` gives the whole proposed text. The block replaces the passage, or the whole note. Its leading
   and trailing line breaks go; its line breaks take the kind of `base` (CRLF when `base` has CRLF). A passage that ended with a
   line break keeps one, and so does a note that ended with one.
+- The fence rule: `proposal` takes a second argument, whether the text the block replaces (the selected passage, or the whole
+  note when there is no selection) starts with a fence line (`logic::assistant::starts_with_fence`). One code fence wrapped
+  round the block is dropped only when that is false. So a fenced passage comes back with its fences, and an unfenced passage
+  returned inside a wrapper fence has the wrapper removed.
 
 ### 18.4 The job
 
@@ -971,16 +980,18 @@ Normal 800 is the default (§10.4 lock released for this change).
   nothing was proposed.**; the person changed the same lines → **You changed the same lines meanwhile, so nothing was
   proposed. Ask again.** A line of the answer that is `NO CHANGE`, or no block, gives **The assistant proposed no change.**
 - Accepted, the proposal is one undo step: `logic::assistant::edit_between` gives the splice, applied by `Editor::absorb`
-  when a tab shows the note; otherwise `vault::write` (atomic) writes the marked text. Other changes of the person since the
-  agent read the note are kept, and the agent's are placed in the current text (as `inkuno write` does).
+  when a tab shows the note; otherwise `vault::write` (atomic) writes the marked text, and a failed write says **Not written:
+  the proposal was not saved:** with the reason. Other changes of the person since the agent read the note are kept, and the
+  agent's are placed in the current text (as `inkuno write` does).
 - Then one quiet line: **N changes are pending in the note: accept or reject them there.** (for one: **1 change is pending in
   the note: accept or reject it there.**), counted by `pending::areas`.
 
 ### 18.6 Revisions
 
 - Around a successful proposal two `kind: auto` revisions are saved, as `inkuno write` saves them (`revisions.md`, 2026-11-15):
-  - the text before the change (`current`), by the person's author setting (the one `Save a version` uses), skipped when it is
-    already the latest revision's text;
+  - the text before the change (`current`), by the person's author setting (the one `Save a version` uses), with the note
+    **before a change by assistant** (fixed English, the same words as `inkuno write`: history data is not translated),
+    skipped when it is already the latest revision's text;
   - the proposed text, `pending::accept_all(marked)`, by the author `assistant`, with the note `proposed, pending`.
 - A failure of the first save stops the proposal with one line that says why; nothing is written. A failure of the second is a
   warning line; the changes stay pending.
@@ -993,5 +1004,5 @@ Normal 800 is the default (§10.4 lock released for this change).
 - A whole-note improvement sends the note and gets the whole note back: a very long note is slow.
 - One job at a time; a second improvement waits for the first answer, and is refused meanwhile.
 - A line `END TEXT` after the block, in the agent's commentary, is taken as part of the text (the last one closes it).
-- The default instruction is English. The agent is asked to answer in the note's language.
+- The default instruction is English. The prompt asks for the answer in the note's language (§18.2).
 - The passage of a selection that holds a table or a figure is not special-cased.
