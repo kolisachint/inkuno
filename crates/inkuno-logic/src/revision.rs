@@ -31,7 +31,7 @@ const FENCE: &str = "---";
 /// Unchanged lines shown around each change in a unified diff.
 pub const CONTEXT: usize = 3;
 
-/// Why a revision was made. `auto` (taken around each agent write) is read but not yet written.
+/// Why a revision was made. `auto` is taken around each agent write (`inkuno write`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Checkpoint,
@@ -603,9 +603,16 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_auto_kind_but_writes_only_checkpoints() {
+    fn reads_and_writes_both_kinds_of_revision() {
         let file = "---\nrevision: 2\nkind: auto\n---\n";
         assert_eq!(parse(file).unwrap().kind, Kind::Auto);
+        assert!(
+            render(&Revision {
+                kind: Kind::Auto,
+                ..rev(2, "x")
+            })
+            .contains("kind: auto\n")
+        );
         assert_eq!(Kind::Checkpoint.word(), "checkpoint");
         assert_eq!(Kind::Auto.word(), "auto");
     }

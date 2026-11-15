@@ -29,7 +29,7 @@ note: dropped the plugin idea, keep it local-first
 | `parent` | The revision saved before it. Left out for the first. |
 | `author` | One line. Defaults to `unknown` when missing. |
 | `date` | UTC, RFC 3339, to the second. |
-| `kind` | `checkpoint` (written now) or `auto` (reserved: read, never written yet). Defaults to `checkpoint`. |
+| `kind` | `checkpoint` (a person's save) or `auto` (written around each `inkuno write`). Defaults to `checkpoint`. |
 | `note` | Optional, one line. Any text: a value with colons, quotes, `\`, tabs or line breaks is written as a quoted string with escapes. Empty means no note. |
 
 Unknown keys are ignored. The header ends at the first line that is exactly `---` after the opening
@@ -93,14 +93,16 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
 | 2026-11-14 | Full snapshots with a front matter block; diffs are derived, never stored. |
 | 2026-11-14 | Revisions live hidden in `.inkuno/revisions/` inside the vault (scratch: `.revisions/`). |
 | 2026-11-14 | Explicit checkpoints only, by the chord or the command line. Files are live on disk, so saving a file never makes a revision. |
-| 2026-11-14 | One author per snapshot. Multi-author views are derived from automatic single-author snapshots taken around each agent write (`kind: auto`, planned, not built). |
-| 2026-11-14 | Agent changes stay tinted and pending until the human accepts, rejects or comments; the human edits them only after accepting; an agent write that touches text the human changed since the agent read it is refused (planned, not built). |
+| 2026-11-14 | One author per snapshot. Multi-author views are derived from automatic single-author snapshots taken around each agent write (`kind: auto`). |
+| 2026-11-14 | Agent changes stay tinted and pending until the human accepts, rejects or comments; the human edits them only after accepting; an agent write that touches text the human changed since the agent read it is refused. The write and the refusals are built (2026-11-15, `inkuno write`); the tint, accept and reject are the app's side, not built yet. |
+| 2026-11-15 | An agent write is bracketed by two `kind: auto` revisions: the text before it (the person's default author), and the proposed text (the agent's `--author`, note `proposed, pending`). A write that changes nothing in a snapshot's text saves no revision. |
+| 2026-11-15 | Pending changes are CriticMarkup in block form, one area per removed and added block pair, in the note file itself, so that the note stays plain text for every other reader. A note with pending changes takes no new agent write. |
 | 2026-11-14 | The command line replaces the MCP server, and the server is removed: done, see [cli.md](cli.md). |
 | 2026-11-14 | An in-app agent talks over a local socket with the same command line as version 2 (planned). |
 
 ## Not built yet
 
 - The Versions side panel and the coloured inline compare.
-- Automatic (`auto`) snapshots and agent live edits.
+- Agent live edits in the app: the tint of pending changes, and accept or reject of one change (the marks are already in the file).
 - Restoring a trashed note's history when the bin holds it under another name (the undo of a trash
   and the Trash panel's restore bring it back by name).

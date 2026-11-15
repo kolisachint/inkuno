@@ -194,6 +194,16 @@ pub fn path(v: &Value) -> Shown {
     Shown::plain(format!("{}\n", text_of(&v["path"])))
 }
 
+/// `write`: how many changes wait in the note, then its path.
+pub fn wrote(v: &Value) -> Shown {
+    let count = v["changes"].as_u64().unwrap_or(0);
+    let noun = if count == 1 { "change" } else { "changes" };
+    Shown::plain(format!(
+        "{count} {noun} pending in {}\n",
+        text_of(&v["path"])
+    ))
+}
+
 /// `edit`: the path (the new one when the title renamed the note). A title that could not rename
 /// the note is said on standard error: the text was saved all the same.
 pub fn edit(v: &Value) -> Shown {

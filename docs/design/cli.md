@@ -22,7 +22,7 @@ command word; `cli::run` reads them and counts them as if they came after it.
   the `[[links]]` to the note, unless another note still has the old name. Nothing is deleted:
   `trash` moves a file to `.trash`. Nothing outside the vault is reached, except the one file that
   `comment --file` names (see Decisions).
-- **Standard input only on request.** `--text -` (`new`, `append`, `comment`) and `--mermaid -`
+- **Standard input only on request.** `--text -` (`new`, `append`, `write`, `comment`) and `--mermaid -`
   (`render`) read it; no other option does. Without `--text`, `new` makes a note with no body and
   `append` is a usage error. Nothing waits on a pipe that was not asked for.
 - **No new dependency.** The command line reads its arguments by hand: `options()` in `cli/mod.rs`.
@@ -70,7 +70,7 @@ nothing else. The reason is recorded in Decisions.
 ## The token
 
 `read --json` returns a `token`: the SHA-256 of the note's bytes as they were read
-(`store::token`). `edit` and `append` take it with `--token`. When the file on disk no longer has
+(`store::token`). `edit`, `append` and `write` take it with `--token`. When the file on disk no longer has
 that hash, the write is refused: `the note changed since it was read; read it again and retry`.
 Without `--token`, the write applies to the file as it is.
 
@@ -83,7 +83,7 @@ The token is not a saved version. The field was called `revision` in the agent's
 |---|---|
 | `cli/mod.rs` | the top help (`TOP`), the dispatch, the option reader, the suggestions for a mistyped command |
 | `cli/commands.rs` | every vault command: its options, its `--help` text with an example, and how its options become the arguments of the operation |
-| `cli/ops.rs` | what each command does on the vault (`list_notes`, `read_note`, `edit_note`, `rename_note`, `trash_note`, `daily_note`, `add_comment`…), each returning an `Outcome` |
+| `cli/ops.rs` | what each command does on the vault (`list_notes`, `read_note`, `edit_note`, `write_note`, `rename_note`, `trash_note`, `daily_note`, `add_comment`…), each returning an `Outcome` |
 | `cli/store.rs` | the vault as the commands see it: the index read once, the path rules, the lookup of a note, the token |
 | `cli/outcome.rs` | the result type, the readers of the arguments, the disk errors in words |
 | `cli/draw.rs` | `inkuno render` and `render --check`: a Mermaid source, an SVG file of the vault, or a note's Mermaid block, to PNG |
@@ -96,7 +96,7 @@ The token is not a saved version. The field was called `revision` in the agent's
 ## Commands
 
 Reading: `vault`, `list`, `search`, `read`, `links`, `tags`, `show`.
-Writing: `new`, `edit`, `append`, `move`, `trash`, `restore`, `daily`, `comment` (and `comment --file PATH`, with no vault).
+Writing: `new`, `edit`, `append`, `write`, `move`, `trash`, `restore`, `daily`, `comment` (and `comment --file PATH`, with no vault).
 Diagrams: `render`, `render --check`.
 Guide: `guide [page]`.
 Versions: `rev save`, `rev list`, `rev show`, `rev diff`.
@@ -118,5 +118,5 @@ The options of each one are in `cli/commands.rs`, and in `docs/user/src/agents.m
 | 2026-11-14 (built) | An Assistant panel in the right dock. It starts the `hoocode` program in its RPC mode, `hoocode --mode rpc --no-session --disallowed-tools Shell,ShellKill,Write,Edit,WebFetch,WebSearch,Agent`, as a child process, in the open vault or in the scratch folder when no vault is open. It is a reviewer: chat about the note, and "Review this note" asks for findings as text, which Inkuno writes as comments into the note (one undo step). The agent is never asked to run `inkuno comment`, and there is no Allow or Deny. The command that starts the agent is the `assistant` setting. Inkuno stores no keys and no model: the agent's own program holds them. Code: `platform/assistant.rs` runs the child process, `shell/assistant.rs` holds the panel and its state, `crates/inkuno-logic/src/assistant.rs` the words; the full description is in `app-ui.md` §16. |
 | 2026-11-14 (built) | hoocode's RPC mode is JSON Lines of its own, not JSON-RPC 2.0: it has no handshake and no approval messages (its `app-server` protocol has them). So the Assistant cannot ask before a tool call. The agent therefore runs with no shell and no write tool (the flags above), and Inkuno writes the comments of a review itself. The read-only rule is enforced by those tools, not by an instruction. A real approval flow waits for the pending-change flow below. |
 | 2026-11-14 (built) | `inkuno comment --file PATH --passage P --text C [--json]` comments on a Markdown file by its path, with no vault. It is how a scratch note, which lives outside any vault, is reviewed: the owner chose to extend the command rather than disable review for scratch notes. `--file` replaces the note name. Giving both, or neither, or `--vault` with `--file`, is a usage error (exit 2). The file must exist and end in `.md` (else exit 1). A passage must be on one line; newlines in the comment become spaces; an empty comment is refused. This is a deliberate, recorded exception to "nothing outside the vault is reached": it reaches exactly the one file the caller names. |
-| 2026-11-14 (planned, not built) | `inkuno write <note> --author NAME`. Each agent write is bracketed by automatic single-author snapshots (`kind: auto`). The change is pending: the agent's text is tinted until the human accepts, rejects or comments on it. Only the pending area is read-only for the human. A write that touches text the human changed since the agent read it is refused. |
+| 2026-11-15 (built) | `inkuno write <note> --author NAME (--text TEXT \| --text -) [--token T] [--json]` proposes the note's full new text. The difference is written into the note as pending marks: a removed block `{--…--}` and an added block `{++…++}` on lines of their own (`logic/pending.rs`, CriticMarkup in block form). Two blocks next to each other are one change. The base is the file as it is, or, with a `--token`, the saved version the token names; a token that matches no saved version is refused with `the note changed since it was read`. A write is refused while the note has pending changes, and a change to lines a person changed since the agent read them is refused too (`line N was changed …`). Around each write two automatic snapshots (`kind: auto`) are saved: the text before, by the person's default author, and the proposed text by `--author`. Nothing is written when the first snapshot fails. The tint, and accept or reject, are the app's side and come next. |
 | 2026-11-14 (planned, not built) | Later, the same commands talk to the running app over a local socket, instead of only writing files and asking through `show`. |

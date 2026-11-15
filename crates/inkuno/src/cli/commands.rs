@@ -79,6 +79,11 @@ const COMMANDS: &[Command] = &[
         run: append,
     },
     Command {
+        name: "write",
+        help: WRITE_HELP,
+        run: write,
+    },
+    Command {
         name: "move",
         help: MOVE_HELP,
         run: move_note,
@@ -543,6 +548,43 @@ fn append(args: &[String]) -> i32 {
     )
 }
 
+/// `inkuno write`: a proposed full text of the note, as pending changes. `--author` is required.
+fn write(args: &[String]) -> i32 {
+    let opts = match read_args(
+        "write",
+        args,
+        &["--author", "--text", "--token"],
+        &[],
+        (1, 1, "a note"),
+    ) {
+        Ok(opts) => opts,
+        Err(code) => return code,
+    };
+    if let Err(code) = token_given("write", &opts) {
+        return code;
+    }
+    let Some(author) = opts.values.get("--author") else {
+        return usage("write: give --author NAME, the agent that proposes the text");
+    };
+    let author = crate::logic::revision::clean_author(author);
+    if author.is_empty() {
+        return usage("write: --author is empty; give the name of the agent");
+    }
+    // The text is the whole new text: --text TEXT, or --text - for standard input.
+    let Some(proposed) = text_value(&opts, "--text") else {
+        return usage("write: give --text TEXT, or --text - to read standard input");
+    };
+    let mut tool = given(&opts, &[("--token", "token")]);
+    tool["note"] = json!(opts.words[0]);
+    tool["author"] = json!(author);
+    tool["text"] = json!(proposed);
+    finish(
+        on_vault(&opts, |vault| ops::write_note(vault, &tool)),
+        opts.json,
+        text::wrote,
+    )
+}
+
 fn move_note(args: &[String]) -> i32 {
     let opts = match read_args("move", args, &["--name", "--folder"], &[], (1, 1, "a note")) {
         Ok(opts) => opts,
@@ -897,6 +939,19 @@ inkuno append <note> [--under HEADING] [--text TEXT] [--token T]
 
 example:
   inkuno append Plan --under \"Next steps\" --text \"- call Ana\"
+";
+
+const WRITE_HELP: &str = "\
+inkuno write <note> --author NAME (--text TEXT | --text -) [--token T]
+    proposes the note's full new text. Each change is written into the note as a pending mark
+    ({--removed lines--} then {++added lines++}) until a person accepts or rejects it in Inkuno.
+    Refused while the note has pending changes. --token: the token of read --json the text was
+    made from; a token of a saved version merges, a note changed in the same lines is refused.
+    Each write saves two automatic revisions: the text before, and the proposed text.
+    Prints `N changes pending in <note>`; --json: the path, the count and the two revisions
+
+example:
+  inkuno write Plan --author claude --text - --token 3f9a1c < new-plan.md
 ";
 
 const MOVE_HELP: &str = "\

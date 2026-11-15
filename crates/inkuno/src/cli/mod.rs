@@ -44,6 +44,7 @@ writing
   inkuno move <note>                 rename or move a note; the [[links]] to it follow
   inkuno trash <note>                move a note to .trash (nothing is deleted)
   inkuno restore <path>              bring a file back from .trash
+  inkuno write <note>                propose a full new text: its changes wait as pending marks
   inkuno daily                       today's daily note, or the one of --date
   inkuno comment <note|--file PATH>  comment a passage: {==passage==}{>>comment<<}
 diagrams

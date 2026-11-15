@@ -1320,7 +1320,7 @@ fn every_command_has_help_with_an_example() {
     let (home, vault) = sandbox("every");
     let commands = [
         "vault", "list", "search", "read", "links", "tags", "show", "new", "edit", "append",
-        "move", "trash", "restore", "daily", "comment", "render", "guide",
+        "write", "move", "trash", "restore", "daily", "comment", "render", "guide",
     ];
     let top = inkuno(&home, &vault, &["help"]);
     for command in commands {
@@ -1576,5 +1576,254 @@ fn links_of_an_unreadable_note_is_an_error_not_an_empty_answer() {
     let links = inkuno(&home, &vault, &["links", "Bad"]);
     assert_eq!(links.code, 1, "{}", links.out);
     assert!(links.err.contains("UTF-8"), "{}", links.err);
+    let _ = fs::remove_dir_all(home);
+}
+
+/// The note's text after a `write`, the first line of its pending marks included.
+fn note_text(vault: &Path, name: &str) -> String {
+    fs::read_to_string(vault.join(name)).unwrap()
+}
+
+#[test]
+fn write_marks_the_note_and_saves_two_automatic_revisions() {
+    let (home, vault) = sandbox("write");
+    write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
+    let run = inkuno(
+        &home,
+        &vault,
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "# Plan\n\nTwo.\n",
+        ],
+    );
+    assert_eq!(
+        (run.code, run.out.as_str()),
+        (0, "1 change pending in plan.md\n"),
+        "{}",
+        run.err
+    );
+    assert_eq!(
+        note_text(&vault, "plan.md"),
+        "# Plan\n\n{--\nOne.\n--}\n{++\nTwo.\n++}\n"
+    );
+    let list = inkuno(&home, &vault, &["rev", "list", "plan.md", "--json"]);
+    let revs: Value = serde_json::from_str(&list.out).unwrap();
+    let revs = revs.as_array().unwrap();
+    assert_eq!(revs.len(), 2, "{}", list.out);
+    // Newest first: the proposed text by the agent, then the text before it by the person's default.
+    assert_eq!(revs[0]["kind"], "auto");
+    assert_eq!(revs[0]["author"], "claude");
+    assert_eq!(revs[0]["note"], "proposed, pending");
+    assert_eq!(revs[1]["kind"], "auto");
+    assert_eq!(revs[1]["author"], "unknown");
+    assert_eq!(revs[1]["note"], "before a change by claude");
+    let shown = inkuno(&home, &vault, &["rev", "show", "plan.md", "2"]);
+    assert_eq!(shown.out, "# Plan\n\nTwo.\n");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn write_reports_its_result_as_json() {
+    let (home, vault) = sandbox("write-json");
+    write(&vault.join("plan.md"), "a\n");
+    let run = inkuno(
+        &home,
+        &vault,
+        &[
+            "write", "plan.md", "--author", "claude", "--text", "a\nb\n", "--json",
+        ],
+    );
+    assert_eq!(run.code, 0, "{}", run.err);
+    let result: Value = serde_json::from_str(&run.out).unwrap();
+    assert_eq!(result["path"], "plan.md");
+    assert_eq!(result["changes"], 1);
+    assert_eq!(result["before"], 1);
+    assert_eq!(result["proposed"], 2);
+    // A second write of the same text is refused and changes nothing.
+    let again = inkuno(
+        &home,
+        &vault,
+        &["write", "plan.md", "--author", "claude", "--text", "x\n"],
+    );
+    assert_eq!(again.code, 1);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn write_is_refused_while_changes_are_pending() {
+    let (home, vault) = sandbox("write-pending");
+    write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
+    let first = inkuno(
+        &home,
+        &vault,
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "# Plan\n\nTwo.\n",
+        ],
+    );
+    assert_eq!(first.code, 0, "{}", first.err);
+    let marked = note_text(&vault, "plan.md");
+    let second = inkuno(
+        &home,
+        &vault,
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "# Plan\n\nThree.\n",
+        ],
+    );
+    assert_eq!(second.code, 1);
+    assert!(second.err.contains("accept or reject"), "{}", second.err);
+    assert!(second.out.is_empty());
+    assert_eq!(note_text(&vault, "plan.md"), marked);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn write_refuses_a_token_no_saved_version_has() {
+    let (home, vault) = sandbox("write-stale");
+    write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
+    let old = token_of(&home, &vault, "plan.md");
+    // The person changes the note; no saved version has the old token.
+    write(&vault.join("plan.md"), "# Plan\n\nOne, edited.\n");
+    let run = inkuno(
+        &home,
+        &vault,
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "# Plan\n\nTwo.\n",
+            "--token",
+            old.as_str(),
+        ],
+    );
+    assert_eq!(run.code, 1);
+    assert!(run.err.contains("changed since it was read"), "{}", run.err);
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n\nOne, edited.\n");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_stale_token_of_a_saved_version_merges_when_other_lines_changed() {
+    let (home, vault) = sandbox("write-merge");
+    write(&vault.join("plan.md"), "# Plan\n\nOne.\n\nTwo.\n");
+    let read_token = token_of(&home, &vault, "plan.md");
+    let saved = inkuno(
+        &home,
+        &vault,
+        &["rev", "save", "plan.md", "--author", "ana"],
+    );
+    assert_eq!(saved.code, 0, "{}", saved.err);
+    // The person changes the last line only.
+    write(&vault.join("plan.md"), "# Plan\n\nOne.\n\nThree.\n");
+    let run = inkuno(
+        &home,
+        &vault,
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "# Plan\n\nUno.\n\nTwo.\n",
+            "--token",
+            read_token.as_str(),
+        ],
+    );
+    assert_eq!(
+        (run.code, run.out.as_str()),
+        (0, "1 change pending in plan.md\n"),
+        "{}",
+        run.err
+    );
+    let text = note_text(&vault, "plan.md");
+    assert!(text.contains("{--\nOne.\n--}\n{++\nUno.\n++}"), "{text}");
+    assert!(text.contains("Three."), "{text}");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_stale_token_of_a_saved_version_is_refused_when_the_same_lines_changed() {
+    let (home, vault) = sandbox("write-clash");
+    write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
+    let read_token = token_of(&home, &vault, "plan.md");
+    assert_eq!(
+        inkuno(
+            &home,
+            &vault,
+            &["rev", "save", "plan.md", "--author", "ana"]
+        )
+        .code,
+        0
+    );
+    write(&vault.join("plan.md"), "# Plan\n\nEin.\n");
+    let run = inkuno(
+        &home,
+        &vault,
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "# Plan\n\nUno.\n",
+            "--token",
+            read_token.as_str(),
+        ],
+    );
+    assert_eq!(run.code, 1, "{}", run.out);
+    assert!(run.err.contains("line 3"), "{}", run.err);
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n\nEin.\n");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn write_needs_an_author_and_a_text() {
+    let (home, vault) = sandbox("write-usage");
+    write(&vault.join("plan.md"), "# Plan\n");
+    let no_author = inkuno(&home, &vault, &["write", "plan.md", "--text", "x\n"]);
+    assert_eq!(no_author.code, 2, "{}", no_author.err);
+    assert!(no_author.err.contains("--author"), "{}", no_author.err);
+    let no_text = inkuno_in(
+        &home,
+        &vault,
+        &["write", "plan.md", "--author", "claude"],
+        "not read\n",
+    );
+    assert_eq!(no_text.code, 2, "{}", no_text.err);
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn write_reads_the_new_text_from_standard_input() {
+    let (home, vault) = sandbox("write-stdin");
+    write(&vault.join("plan.md"), "# Plan\n\nOld.\n");
+    let run = inkuno_in(
+        &home,
+        &vault,
+        &["write", "plan.md", "--author", "claude", "--text", "-"],
+        "# Plan\n\nNew.\n",
+    );
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(
+        note_text(&vault, "plan.md").contains("{++\nNew.\n++}"),
+        "{}",
+        note_text(&vault, "plan.md")
+    );
     let _ = fs::remove_dir_all(home);
 }
