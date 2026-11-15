@@ -59,7 +59,7 @@ Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set`
 | `inkuno new <title…> [--folder F] [--template T] [--text TEXT]` | a new note. Its first line is the title. The body is `--text TEXT`; `--text -` reads it from standard input. Without `--text` the note has only its title |
 | `inkuno edit <note> --old OLD --new NEW [--token T]` | replaces a passage that occurs once. `--edits JSON` takes a list of `{"old": …, "new": …}`, applied together or not at all |
 | `inkuno append <note> [--under HEADING] --text TEXT [--token T]` | adds text at the end of the note, or at the end of the section under a heading. `--text -` reads the text from standard input; without `--text` the command is refused |
-| `inkuno write <note> --author NAME --text TEXT [--token T]` | proposes the note's full new text. The changes wait in the note until you accept or reject them in Inkuno. `--text -` reads the text from standard input. See [Pending changes](#pending-changes) |
+| `inkuno write <note> --author NAME --text TEXT --token T` | proposes the note's full new text. The changes wait in the note until you accept or reject them in Inkuno. `--token` is required. `--text -` reads the text from standard input. See [Pending changes](#pending-changes) |
 | `inkuno move <note> [--name NEW] [--folder F]` | gives a note a new name, a new folder, or both. The `[[links]]` to it follow |
 | `inkuno trash <note>` | moves the note to `.trash`, with its saved versions. Prints the path it has there |
 | `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
@@ -117,7 +117,7 @@ inkuno show Plan                           # the window opens the note, if Inkun
 ## Output and exit codes
 
 - The result goes to standard output: short text by default, and the structured result with `--json`.
-- A command that cannot do its work prints the reason on standard error, as `inkuno: …`, and exits with 1. A refused command changes nothing: a bad argument, a name already taken, a stale token, a path outside the vault. A `move` also rewrites the `[[links]]` to the note in other notes, and says how many it rewrote.
+- A command that cannot do its work prints the reason on standard error, as `inkuno: …`, and exits with 1. A refused command changes nothing: a bad argument, a name already taken, a stale token, a path outside the vault. The one exception is a `write` whose proposed version cannot be saved: the write stands, with a warning. A `move` also rewrites the `[[links]]` to the note in other notes, and says how many it rewrote.
 - A wrong command line (an unknown command or option, a missing argument) prints the reason and `try inkuno help` on standard error, and exits with 2. A mistyped command name suggests the nearest commands.
 - `inkuno render --check` exits with 1 when the source does not draw.
 - `inkuno show` exits with 1, and says so, when Inkuno is not open.
@@ -134,7 +134,7 @@ A passage must be on one line, and an empty comment is refused. Newlines in the 
 
 The [Assistant](assistant.md) built into Inkuno does not run these commands. It is started without a shell, and the comments of its review are written by Inkuno itself.
 
-Pass the token from `inkuno read --json` to `edit`, `append` or `write` with `--token`. Without `--token`, an edit applies to the file as it is on disk; an empty `--token` is refused.
+Pass the token from `inkuno read --json` to `edit`, `append` or `write` with `--token`. `write` requires it: without it the command is refused, because only the token says which text the agent read. Without `--token`, `edit` and `append` apply to the file as it is on disk; an empty `--token` is refused.
 
 ### Pending changes
 
@@ -151,11 +151,22 @@ the line it adds
 unchanged line
 ```
 
+A read and a write, with the token the agent kept:
+
+```
+inkuno read Plan --json             # the text the agent reads, and its "token"
+inkuno write Plan --author claude --text - --token 3f9a… < new-plan.md
+```
+
 - A removed block and an added block next to each other are one change. Inkuno shows the change as tinted text until you accept or reject it.
-- A note with pending changes is refused by `inkuno write` until you accept or reject them all. The command says so.
+- A note with pending changes is refused by `inkuno write` until you accept or reject them all. The command says so. An empty text is refused too.
 - A write that touches lines you changed since the agent read the note is refused, and nothing is written. If you changed other lines, the agent's change is merged with yours.
-- Each write saves two automatic revisions: the note as it was before, and the proposed text. They are in the note's history (`inkuno rev list`).
+- The proposed version is the note as it would be once every change is accepted. When the agent's base was older than the note, it holds your other edits too, not only the agent's literal text.
+- Each write saves two automatic revisions: the note as it was before, and the proposed text. The first is skipped when the text is the latest saved version already (`"before": null` in the JSON). They are in the note's history (`inkuno rev list`).
+- If the proposed version cannot be saved, the write still stands: the changes are pending, `proposed` is `null` in the JSON, and a warning goes to standard error.
+- `inkuno write` never renames the note file, even when the proposed text changes its `#` title line. The title change is pending like any other.
 - `inkuno write` prints `N changes pending in <note>`. With `--json` it gives the path, the number of changes and the two revision numbers.
+- `edit`, `append` and `comment` are refused when the change they would make touches a pending change: `the change touches a pending change: accept or reject it in Inkuno first`. An edit elsewhere in the note, and an append at its end, still work.
 
 Standard input is read only when a command asks for it: `--text -` or `--mermaid -`. Nothing else reads it.
 
@@ -163,10 +174,11 @@ Standard input is read only when a command asks for it: `--text -` or `--mermaid
 
 In the note, the lines the agent adds have a green background. The lines it removes have a red background, and they are struck through. The marker lines are dimmed. The note's foot says how many changes are pending. A click there takes you to the first one.
 
-- You cannot type in a pending change. Typing, `Backspace`, paste, cut and replace on its lines are refused, with the message *This change is pending: accept or reject it first.* You can still select and copy. Typing and `Enter` just before or just after the change work.
-- Put the caret in a change. Then, in the command palette (`F10`) or the right-click menu, choose **Accept the change** or **Reject the change**. Accept keeps the added lines and drops the removed ones. Reject does the reverse.
+- You cannot type in a pending change. Typing, `Backspace`, paste, cut and replace on its lines are refused, with the message *This change is pending: accept or reject it first.* You can still select and copy.
+- At the edges of a change, what works: `Enter` just before the change and just after it (a line break is added there). Typing a letter on the kept line above the change, or at the start of the kept line below it, works too. A letter cannot go at the start of the change's first marker line, nor at the end of the note when its last marker line has no line break after it (press `Enter` first). `Backspace` at the start of the kept line below a change is refused, because it would remove the break of the marker line.
+- Put the caret in a change. Then, in the command palette (`F10`) or the right-click menu, choose **Accept the change** or **Reject the change**. Accept keeps the added lines and drops the removed ones. Reject does the reverse. With the caret outside every change, the first press of **Accept the change**, **Reject the change** or **Comment on the change** only moves the caret to the next change (after the last one, back to the first), and a message says so. Press again to act on it. The right-click menu acts on the change under the pointer.
 - **Accept all changes** and **Reject all changes** do this for the whole note.
-- **Comment on the change** asks for one line. It writes the line as a comment on the first added line, and the change stays pending.
+- **Comment on the change** asks for one line. It writes the line as a comment on the first added line, and the change stays pending. If the change has moved or gone while the line is asked for, nothing is written, and a message says so.
 - Each of these is one step for `Ctrl + Z`. There is no key for them yet.
 
 ## What it will not do

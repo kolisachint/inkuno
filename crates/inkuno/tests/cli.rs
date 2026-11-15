@@ -60,6 +60,11 @@ fn inkuno(home: &Path, dir: &Path, args: &[&str]) -> Run {
 
 /// Runs `inkuno` with `input` on its standard input, as a pipe would give it.
 fn inkuno_in(home: &Path, dir: &Path, args: &[&str], input: &str) -> Run {
+    inkuno_piped(home, dir, args, input.as_bytes())
+}
+
+/// Runs `inkuno` with the raw bytes `input` on its standard input.
+fn inkuno_piped(home: &Path, dir: &Path, args: &[&str], input: &[u8]) -> Run {
     let mut child = Command::new(env!("CARGO_BIN_EXE_inkuno"))
         .current_dir(dir)
         .args(args)
@@ -76,7 +81,7 @@ fn inkuno_in(home: &Path, dir: &Path, args: &[&str], input: &str) -> Run {
     // A command that refuses its line before it reads standard input has closed the pipe: the
     // write then fails with a broken pipe, which is not a failure of the test. Its status and
     // output are what the test checks.
-    let _ = child.stdin.take().unwrap().write_all(input.as_bytes());
+    let _ = child.stdin.take().unwrap().write_all(input);
     let output = child.wait_with_output().expect("the binary ends");
     Run {
         code: output.status.code().unwrap_or(-1),
@@ -1588,6 +1593,7 @@ fn note_text(vault: &Path, name: &str) -> String {
 fn write_marks_the_note_and_saves_two_automatic_revisions() {
     let (home, vault) = sandbox("write");
     write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
+    let token = token_of(&home, &vault, "plan.md");
     let run = inkuno(
         &home,
         &vault,
@@ -1598,6 +1604,8 @@ fn write_marks_the_note_and_saves_two_automatic_revisions() {
             "claude",
             "--text",
             "# Plan\n\nTwo.\n",
+            "--token",
+            token.as_str(),
         ],
     );
     assert_eq!(
@@ -1630,11 +1638,20 @@ fn write_marks_the_note_and_saves_two_automatic_revisions() {
 fn write_reports_its_result_as_json() {
     let (home, vault) = sandbox("write-json");
     write(&vault.join("plan.md"), "a\n");
+    let token = token_of(&home, &vault, "plan.md");
     let run = inkuno(
         &home,
         &vault,
         &[
-            "write", "plan.md", "--author", "claude", "--text", "a\nb\n", "--json",
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "a\nb\n",
+            "--json",
+            "--token",
+            token.as_str(),
         ],
     );
     assert_eq!(run.code, 0, "{}", run.err);
@@ -1643,11 +1660,20 @@ fn write_reports_its_result_as_json() {
     assert_eq!(result["changes"], 1);
     assert_eq!(result["before"], 1);
     assert_eq!(result["proposed"], 2);
-    // A second write of the same text is refused and changes nothing.
+    // A second write is refused (the note has pending changes) and changes nothing.
     let again = inkuno(
         &home,
         &vault,
-        &["write", "plan.md", "--author", "claude", "--text", "x\n"],
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "x\n",
+            "--token",
+            token.as_str(),
+        ],
     );
     assert_eq!(again.code, 1);
     let _ = fs::remove_dir_all(home);
@@ -1657,6 +1683,7 @@ fn write_reports_its_result_as_json() {
 fn write_is_refused_while_changes_are_pending() {
     let (home, vault) = sandbox("write-pending");
     write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
+    let token = token_of(&home, &vault, "plan.md");
     let first = inkuno(
         &home,
         &vault,
@@ -1667,10 +1694,14 @@ fn write_is_refused_while_changes_are_pending() {
             "claude",
             "--text",
             "# Plan\n\nTwo.\n",
+            "--token",
+            token.as_str(),
         ],
     );
     assert_eq!(first.code, 0, "{}", first.err);
     let marked = note_text(&vault, "plan.md");
+    // The token of the marked text the person now has: the agent read it after its own change.
+    let marked_token = token_of(&home, &vault, "plan.md");
     let second = inkuno(
         &home,
         &vault,
@@ -1681,6 +1712,8 @@ fn write_is_refused_while_changes_are_pending() {
             "claude",
             "--text",
             "# Plan\n\nThree.\n",
+            "--token",
+            marked_token.as_str(),
         ],
     );
     assert_eq!(second.code, 1);
@@ -1813,10 +1846,20 @@ fn write_needs_an_author_and_a_text() {
 fn write_reads_the_new_text_from_standard_input() {
     let (home, vault) = sandbox("write-stdin");
     write(&vault.join("plan.md"), "# Plan\n\nOld.\n");
+    let token = token_of(&home, &vault, "plan.md");
     let run = inkuno_in(
         &home,
         &vault,
-        &["write", "plan.md", "--author", "claude", "--text", "-"],
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "-",
+            "--token",
+            token.as_str(),
+        ],
         "# Plan\n\nNew.\n",
     );
     assert_eq!(run.code, 0, "{}", run.err);
@@ -1825,5 +1868,182 @@ fn write_reads_the_new_text_from_standard_input() {
         "{}",
         note_text(&vault, "plan.md")
     );
+    let _ = fs::remove_dir_all(home);
+}
+
+/// A note with one pending change between two kept lines.
+const PENDING: &str = "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n";
+const TOUCHES: &str = "the change touches a pending change: accept or reject it in Inkuno first";
+
+#[test]
+fn write_needs_the_token_of_read_json() {
+    let (home, vault) = sandbox("write-no-token");
+    write(&vault.join("plan.md"), "# Plan\n");
+    let run = inkuno(
+        &home,
+        &vault,
+        &["write", "plan.md", "--author", "claude", "--text", "x\n"],
+    );
+    assert_eq!(run.code, 2, "{}", run.err);
+    assert!(
+        run.err.contains(
+            "write: give --token T, the token of `read --json`: it says which text the agent read"
+        ),
+        "{}",
+        run.err
+    );
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn write_refuses_an_empty_text_and_changes_nothing() {
+    let (home, vault) = sandbox("write-empty");
+    write(&vault.join("plan.md"), "# Plan\n");
+    let token = token_of(&home, &vault, "plan.md");
+    for empty in ["", "  \n"] {
+        let run = inkuno(
+            &home,
+            &vault,
+            &[
+                "write",
+                "plan.md",
+                "--author",
+                "claude",
+                "--text",
+                empty,
+                "--token",
+                token.as_str(),
+            ],
+        );
+        assert_eq!(run.code, 1, "{:?}: {}", empty, run.err);
+        assert!(run.err.contains("the text is empty"), "{}", run.err);
+    }
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn text_from_standard_input_that_is_not_utf8_fails_for_every_command() {
+    let (home, vault) = sandbox("stdin-bytes");
+    write(&vault.join("plan.md"), "# Plan\n");
+    let token = token_of(&home, &vault, "plan.md");
+    let bad: &[u8] = &[b'x', 0xff, 0xfe, b'\n'];
+    let write_run = inkuno_piped(
+        &home,
+        &vault,
+        &[
+            "write",
+            "plan.md",
+            "--author",
+            "claude",
+            "--text",
+            "-",
+            "--token",
+            token.as_str(),
+        ],
+        bad,
+    );
+    assert_eq!(write_run.code, 1, "{}", write_run.err);
+    assert!(
+        write_run
+            .err
+            .contains("standard input could not be read as text"),
+        "{}",
+        write_run.err
+    );
+    let append_run = inkuno_piped(&home, &vault, &["append", "plan.md", "--text", "-"], bad);
+    assert_eq!(append_run.code, 1, "{}", append_run.err);
+    assert!(
+        append_run
+            .err
+            .contains("standard input could not be read as text"),
+        "{}",
+        append_run.err
+    );
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn edit_and_comment_refuse_a_change_of_a_pending_area() {
+    let (home, vault) = sandbox("pending-refused");
+    write(&vault.join("plan.md"), PENDING);
+    let refused = [
+        inkuno(
+            &home,
+            &vault,
+            &["edit", "plan.md", "--old", "--}", "--new", "--X}"],
+        ),
+        inkuno(
+            &home,
+            &vault,
+            &["edit", "plan.md", "--old", "new", "--new", "newer"],
+        ),
+        inkuno(
+            &home,
+            &vault,
+            &["comment", "plan.md", "--passage", "++}", "--text", "note"],
+        ),
+        inkuno(
+            &home,
+            &vault,
+            &["comment", "plan.md", "--passage", "new", "--text", "note"],
+        ),
+    ];
+    for run in &refused {
+        assert_eq!(run.code, 1, "{}", run.err);
+        assert!(run.err.contains(TOUCHES), "{}", run.err);
+        assert!(run.out.is_empty(), "{}", run.out);
+    }
+    assert_eq!(note_text(&vault, "plan.md"), PENDING);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn comment_file_refuses_a_passage_in_a_pending_area() {
+    let (home, vault) = sandbox("pending-file");
+    let file = vault.join("loose.md");
+    write(&file, PENDING);
+    let run = inkuno(
+        &home,
+        &vault,
+        &[
+            "comment",
+            "--file",
+            file.to_str().unwrap(),
+            "--passage",
+            "++}",
+            "--text",
+            "note",
+        ],
+    );
+    assert_eq!(run.code, 1, "{}", run.err);
+    assert!(run.err.contains(TOUCHES), "{}", run.err);
+    assert_eq!(fs::read_to_string(&file).unwrap(), PENDING);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn edits_outside_the_areas_and_an_append_at_the_end_still_work() {
+    let (home, vault) = sandbox("pending-outside");
+    write(&vault.join("plan.md"), PENDING);
+    let edit = inkuno(
+        &home,
+        &vault,
+        &["edit", "plan.md", "--old", "b", "--new", "c"],
+    );
+    assert_eq!(edit.code, 0, "{}", edit.err);
+    let append = inkuno(&home, &vault, &["append", "plan.md", "--text", "last"]);
+    assert_eq!(append.code, 0, "{}", append.err);
+    let comment = inkuno(
+        &home,
+        &vault,
+        &["comment", "plan.md", "--passage", "c", "--text", "note"],
+    );
+    assert_eq!(comment.code, 0, "{}", comment.err);
+    let text = note_text(&vault, "plan.md");
+    assert!(text.contains("{--\nold\n--}\n{++\nnew\n++}\n"), "{text}");
+    assert!(text.ends_with("{==c==}{>>note<<}\n\nlast\n"), "{text}");
     let _ = fs::remove_dir_all(home);
 }

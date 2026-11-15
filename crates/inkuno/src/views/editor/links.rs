@@ -53,8 +53,12 @@ impl Editor {
             true => (String::new(), picked.trim().to_string()),
             false => (picked, Self::copied_url(cx).unwrap_or_default()),
         };
+        let linked = format!("[{text}]({url})");
+        if self.touches_pending(&sel, &linked) {
+            return self.refuse_pending(cx);
+        }
         self.push_undo(true);
-        self.edit(sel.clone(), &format!("[{text}]({url})"), cx);
+        self.edit(sel.clone(), &linked, cx);
         let at = match (text.is_empty(), url.is_empty()) {
             (true, _) => 1,
             (false, true) => text.len() + 3,
@@ -87,13 +91,21 @@ impl Editor {
             .into_iter()
             .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
         {
-            self.push_undo(true);
             // A comment alone on its line takes the line with it.
             if noted.start == whole.start && line.trim() == &line[whole.clone()] {
+                if self.touches_pending(&self.dropped_range(lr.clone()), "") {
+                    return self.refuse_pending(cx);
+                }
+                self.push_undo(true);
                 return self.remove_line(lr, cx);
             }
             let kept = line[noted].to_string();
-            return self.edit(lr.start + whole.start..lr.start + whole.end, &kept, cx);
+            let range = lr.start + whole.start..lr.start + whole.end;
+            if self.touches_pending(&range, &kept) {
+                return self.refuse_pending(cx);
+            }
+            self.push_undo(true);
+            return self.edit(range, &kept, cx);
         }
         if self.in_code(lr.start) {
             return;
@@ -108,10 +120,23 @@ impl Editor {
                 return;
             };
             let len = cells[0].len();
+            // All or none: every cell is checked before the first is marked.
+            let marks: Vec<(Range<usize>, String)> = cells
+                .iter()
+                .rev()
+                .map(|cell| {
+                    let text = &self.content[cell.clone()];
+                    (cell.clone(), format!("{{=={text}==}}{{>><<}}"))
+                })
+                .collect();
+            let checked: Vec<(Range<usize>, &str)> =
+                marks.iter().map(|(r, t)| (r.clone(), t.as_str())).collect();
+            if self.touches_pending_any(&checked) {
+                return self.refuse_pending(cx);
+            }
             self.push_undo(true);
-            for cell in cells.iter().rev() {
-                let text = self.content[cell.clone()].to_string();
-                self.edit(cell.clone(), &format!("{{=={text}==}}{{>><<}}"), cx);
+            for (range, text) in marks {
+                self.edit(range, &text, cx);
             }
             return self.move_to(first + len + 9, cx);
         }
@@ -125,8 +150,12 @@ impl Editor {
             return;
         }
         let text = self.content[sel.clone()].to_string();
+        let marked = format!("{{=={text}==}}{{>><<}}");
+        if self.touches_pending(&sel, &marked) {
+            return self.refuse_pending(cx);
+        }
         self.push_undo(true);
-        self.edit(sel.clone(), &format!("{{=={text}==}}{{>><<}}"), cx);
+        self.edit(sel.clone(), &marked, cx);
         self.move_to(sel.start + text.len() + 9, cx);
     }
 
@@ -198,8 +227,12 @@ impl Editor {
         } else {
             "\n"
         };
+        let note = format!("\n\n{head}<<}}{tail}");
+        if self.touches_pending(&(range.end..range.end), &note) {
+            return self.refuse_pending(cx);
+        }
         self.push_undo(true);
-        self.edit(range.end..range.end, &format!("\n\n{head}<<}}{tail}"), cx);
+        self.edit(range.end..range.end, &note, cx);
         self.move_to(range.end + 2 + head.len(), cx);
     }
 
@@ -211,6 +244,14 @@ impl Editor {
 
     /// Like `remove_line`, the cursor left to follow the text; where the text closed up.
     fn drop_line(&mut self, lr: Range<usize>, cx: &mut Context<Self>) -> usize {
+        let range = self.dropped_range(lr);
+        self.edit(range.clone(), "", cx);
+        range.start
+    }
+
+    /// The bytes that dropping the line `lr` takes: the line, its break, and the blank line before
+    /// it when the text would otherwise keep two blank lines.
+    fn dropped_range(&self, lr: Range<usize>) -> Range<usize> {
         let before = self.content[..lr.start]
             .bytes()
             .rev()
@@ -218,15 +259,13 @@ impl Editor {
             .take_while(|&b| b == b'\n')
             .count();
         let after = &self.content[lr.end..];
-        let range = if lr.start == 0 {
+        if lr.start == 0 {
             lr.start..lr.end + after.starts_with('\n') as usize
         } else if before == 2 && !(after.is_empty() || after.starts_with("\n\n")) {
             lr.start - 1..lr.end
         } else {
             lr.start - before..lr.end
-        };
-        self.edit(range.clone(), "", cx);
-        range.start
+        }
     }
 
     /// The comment lines right under a table ending at `end`: each alone on its line, a single
@@ -249,18 +288,18 @@ impl Editor {
         found
     }
 
-    /// Follows the rows and columns of a table that changed in the comment lines under it, in
-    /// the same undo step: each is renamed after its row or column, or goes with it
-    /// (see `md::retarget`).
-    pub(super) fn retarget_comments(
-        &mut self,
+    /// The changes that follow the rows and columns of a table in the comment lines under it: each
+    /// is renamed after its row or column, or goes with it (see `md::retarget`). Each is `(range,
+    /// text, whether the line goes)`, last line first, so the ranges stay right while applied.
+    /// Nothing is changed here: `retarget_refused` and `retarget_comments` make the change.
+    pub(super) fn retarget_plan(
+        &self,
         lines: &[Range<usize>],
         moved: (&[Option<usize>], &[Option<usize>]),
         old: &md::Scopes,
         new: &md::Scopes,
         gone: bool,
-        cx: &mut Context<Self>,
-    ) {
+    ) -> Vec<(Range<usize>, String, bool)> {
         let texts: Vec<String> = lines
             .iter()
             .map(|lr| self.content[lr.clone()].to_string())
@@ -272,13 +311,38 @@ impl Editor {
             moved,
             gone,
         );
+        // A line that goes is dropped as `remove_line` does.
+        let mut plan = Vec::new();
         for ((lr, text), edit) in lines.iter().zip(&texts).zip(edits).rev() {
             match edit {
-                None => {
-                    self.drop_line(lr.clone(), cx);
-                }
-                Some(new) if new != *text => self.splice(lr.clone(), &new, cx),
+                None => plan.push((self.dropped_range(lr.clone()), String::new(), true)),
+                Some(new) if new != *text => plan.push((lr.clone(), new, false)),
                 Some(_) => {}
+            }
+        }
+        plan
+    }
+
+    /// Whether a plan of `retarget_plan` is refused: one of its lines is in a pending change.
+    pub(super) fn retarget_refused(&self, plan: &[(Range<usize>, String, bool)]) -> bool {
+        let checked: Vec<(Range<usize>, &str)> = plan
+            .iter()
+            .map(|(r, t, _)| (r.clone(), t.as_str()))
+            .collect();
+        self.touches_pending_any(&checked)
+    }
+
+    /// Makes the changes of a plan of `retarget_plan`, in the same undo step (the caller pushes it).
+    pub(super) fn retarget_comments(
+        &mut self,
+        plan: Vec<(Range<usize>, String, bool)>,
+        cx: &mut Context<Self>,
+    ) {
+        for (range, text, dropped) in plan {
+            if dropped {
+                self.edit(range, "", cx);
+            } else {
+                self.splice(range, &text, cx);
             }
         }
     }
@@ -325,17 +389,21 @@ impl Editor {
             return;
         }
         let lines = self.comment_lines_after(range.end);
-        // Same undo step as the edit that renamed.
-        let held = std::mem::replace(&mut self.held, true);
+        // Same undo step as the edit that renamed. The edit is made already, so a comment line in a
+        // pending change keeps its old name rather than being refused.
         let same = |n: usize| (0..n).map(Some).collect::<Vec<_>>();
-        self.retarget_comments(
+        let plan = self.retarget_plan(
             &lines,
             (&same(old.0.len()), &same(old.1.len())),
             &old,
             &new,
             false,
-            cx,
         );
+        if self.retarget_refused(&plan) {
+            return;
+        }
+        let held = std::mem::replace(&mut self.held, true);
+        self.retarget_comments(plan, cx);
         self.held = held;
     }
 }

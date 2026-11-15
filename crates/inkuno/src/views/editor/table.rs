@@ -792,6 +792,21 @@ impl Editor {
             // A gesture with nowhere to go: the header stays on top, the last row does not go down.
             _ => return,
         };
+        // A table with a pending change in it is left whole: nothing of it is rewritten, or refused in part.
+        let (whole, text) = match &grid {
+            Some(rows) => (range.clone(), self.format_table(&range, rows)),
+            None => {
+                let stop = if self.content[range.end..].starts_with('\n') {
+                    range.end + 1
+                } else {
+                    range.end
+                };
+                (range.start..stop, String::new())
+            }
+        };
+        if self.touches_pending(&whole, &text) {
+            return self.refuse_pending(cx);
+        }
         // The comments under the table follow what they are about, or go with it, in the same undo step.
         let lines = self.comment_lines_after(range.end);
         let tracks = !lines.is_empty();
@@ -842,9 +857,13 @@ impl Editor {
                     )
                 }
             };
+            let plan = self.retarget_plan(&lines, (&rows_to, &cols_to), &old, &new, gone);
+            if self.retarget_refused(&plan) {
+                return self.refuse_pending(cx);
+            }
             self.push_undo(true);
             self.held = true;
-            self.retarget_comments(&lines, (&rows_to, &cols_to), &old, &new, gone, cx);
+            self.retarget_comments(plan, cx);
         }
         match grid {
             Some(grid) => self.set_table(range, &grid, at, cx),
@@ -884,12 +903,12 @@ impl Editor {
         let lead = if apart { "" } else { "\n" };
         let tail = if c == line.end { "" } else { "\n" };
         let table = md::new_table(cols, rows);
+        let text = format!("{lead}{}{tail}", md::format_table(&table, ""));
+        if self.touches_pending(&(c..c), &text) {
+            return self.refuse_pending(cx);
+        }
         self.push_undo(true);
-        self.edit(
-            c..c,
-            &format!("{lead}{}{tail}", md::format_table(&table, "")),
-            cx,
-        );
+        self.edit(c..c, &text, cx);
         if let Some((range, rows, _)) = self.table_at(c + lead.len()) {
             self.set_table(range, &rows, (0, 0), cx);
         }
@@ -978,8 +997,13 @@ impl Editor {
                 }
                 _ => sel,
             };
+            let cell = md::cell_text(text);
+            if self.touches_pending(&sel, &cell) {
+                self.refuse_pending(cx);
+                return true;
+            }
             self.push_undo(true);
-            self.edit(sel, &md::cell_text(text), cx);
+            self.edit(sel, &cell, cx);
             self.realign(cx);
             return true;
         };

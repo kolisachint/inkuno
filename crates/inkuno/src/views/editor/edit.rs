@@ -115,18 +115,18 @@ impl Editor {
         cx.notify();
     }
 
-    /// Whether an edit of `range` would change a pending change (`logic::pending`): the person
-    /// accepts or rejects that change first, so such an edit is refused.
-    /// The text `text` would replace `range`. Besides the bytes of a change, an edit that ends where
-    /// a change starts is refused unless `text` ends a line: the line break before the change would
-    /// go, or the text would be glued to the change's first mark.
+    /// Whether replacing `range` with `text` is refused because of a pending change: the person
+    /// accepts or rejects that change first. The rule is `logic::pending::refuses`, nothing more.
     pub(super) fn touches_pending(&self, range: &Range<usize>, text: &str) -> bool {
-        crate::logic::pending::touches_any(&self.pending, range.clone())
-            || (!text.ends_with('\n')
-                && self
-                    .pending
-                    .iter()
-                    .any(|area| area.range.start == range.end))
+        crate::logic::pending::refuses(&self.content, range.clone(), text)
+    }
+
+    /// Whether any of `edits` (each a range of the current text, with its text) is refused. Checked
+    /// before the first is made, so a route of several splices is all or nothing.
+    pub(super) fn touches_pending_any(&self, edits: &[(Range<usize>, &str)]) -> bool {
+        edits
+            .iter()
+            .any(|(range, text)| self.touches_pending(range, text))
     }
 
     /// Says that an edit was refused because of a pending change: a message, shown once.
@@ -241,7 +241,9 @@ impl Editor {
     pub(super) fn renumber(&mut self, cx: &mut Context<Self>) {
         if let Some((text, cursor)) = md::renumber(&self.content, self.cursor()) {
             // Renumbering that would change a pending change is left out: the change stays as it is.
-            if self.touches_pending(&changed_span(&self.content, &text), "") {
+            let span = changed_span(&self.content, &text);
+            let inserted = &text[span.start..text.len() - (self.content.len() - span.end)];
+            if self.touches_pending(&span, inserted) {
                 return;
             }
             self.epoch += 1;

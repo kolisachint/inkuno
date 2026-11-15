@@ -248,8 +248,9 @@ pub enum EditorEvent {
     /// A short message for the shell to show once: an edit refused for a pending change, a
     /// change action with no change to act on, or the reason a comment was refused.
     Notice(String),
-    /// Asks for the line of a comment on pending change `index` (the shell opens the prompt).
-    AskChangeComment(usize),
+    /// Asks for the line of a comment on the pending change whose text is this (the shell opens the
+    /// prompt). The text names the change, since an outside edit may move it while the prompt is open.
+    AskChangeComment(String),
 }
 
 pub struct Editor {

@@ -235,18 +235,23 @@ fn token_given(name: &str, opts: &Opts) -> Result<(), i32> {
     }
 }
 
-/// Standard input, read to its end. Only a `-` asks for it.
-fn stdin_text() -> String {
+/// Standard input, read to its end. Only a `-` asks for it. A read that fails (bytes that are not
+/// UTF-8, say) is a failure: an empty text would be taken for the person's words.
+fn stdin_text() -> Result<String, String> {
     let mut text = String::new();
-    let _ = io::stdin().read_to_string(&mut text);
-    text
+    io::stdin()
+        .read_to_string(&mut text)
+        .map_err(|_| "standard input could not be read as text".to_string())?;
+    Ok(text)
 }
 
 /// The value of a text option: `-` is standard input, read now; any other value is the text itself.
-fn text_value(opts: &Opts, option: &str) -> Option<String> {
-    match opts.values.get(option)?.as_str() {
-        "-" => Some(stdin_text()),
-        text => Some(text.to_string()),
+/// `Err` when standard input cannot be read as text.
+fn text_value(opts: &Opts, option: &str) -> Result<Option<String>, String> {
+    match opts.values.get(option).map(String::as_str) {
+        None => Ok(None),
+        Some("-") => stdin_text().map(Some),
+        Some(text) => Ok(Some(text.to_string())),
     }
 }
 
@@ -452,8 +457,10 @@ fn new(args: &[String]) -> i32 {
     );
     tool["title"] = json!(opts.words.join(" "));
     // The body is --text, or standard input with `--text -`; without --text the note has no body.
-    if let Some(text) = text_value(&opts, "--text") {
-        tool["text"] = json!(text);
+    match text_value(&opts, "--text") {
+        Ok(Some(text)) => tool["text"] = json!(text),
+        Ok(None) => {}
+        Err(reason) => return failed(reason),
     }
     finish(
         on_vault(&opts, |vault| ops::create_note(vault, &tool)),
@@ -535,8 +542,10 @@ fn append(args: &[String]) -> i32 {
     if let Err(code) = token_given("append", &opts) {
         return code;
     }
-    let Some(text) = text_value(&opts, "--text") else {
-        return usage("append: give --text TEXT, or --text - to read standard input");
+    let text = match text_value(&opts, "--text") {
+        Ok(Some(text)) => text,
+        Ok(None) => return usage("append: give --text TEXT, or --text - to read standard input"),
+        Err(reason) => return failed(reason),
     };
     let mut tool = given(&opts, &[("--under", "under"), ("--token", "token")]);
     tool["note"] = json!(opts.words[0]);
@@ -571,18 +580,30 @@ fn write(args: &[String]) -> i32 {
         return usage("write: --author is empty; give the name of the agent");
     }
     // The text is the whole new text: --text TEXT, or --text - for standard input.
-    let Some(proposed) = text_value(&opts, "--text") else {
-        return usage("write: give --text TEXT, or --text - to read standard input");
+    let proposed = match text_value(&opts, "--text") {
+        Ok(Some(text)) => text,
+        Ok(None) => return usage("write: give --text TEXT, or --text - to read standard input"),
+        Err(reason) => return failed(reason),
     };
+    // Without the token nothing says which text the agent read, so a change by the person could
+    // not be told apart: the token is required.
+    if !opts.values.contains_key("--token") {
+        return usage(
+            "write: give --token T, the token of `read --json`: it says which text the agent read",
+        );
+    }
     let mut tool = given(&opts, &[("--token", "token")]);
     tool["note"] = json!(opts.words[0]);
     tool["author"] = json!(author);
     tool["text"] = json!(proposed);
-    finish(
-        on_vault(&opts, |vault| ops::write_note(vault, &tool)),
-        opts.json,
-        text::wrote,
-    )
+    let result = on_vault(&opts, |vault| ops::write_note(vault, &tool));
+    // The write stood, but its version could not be saved: said on standard error.
+    if let Ok(outcome) = &result
+        && let Some(warning) = outcome.structured["warning"].as_str()
+    {
+        eprintln!("inkuno: {warning}");
+    }
+    finish(result, opts.json, text::wrote)
 }
 
 fn move_note(args: &[String]) -> i32 {
@@ -671,8 +692,11 @@ fn comment(args: &[String]) -> i32 {
         (Some(path), None) => tool["file"] = json!(path),
         (None, Some(note)) => tool["note"] = json!(note),
     }
-    let (Some(passage), Some(text)) = (opts.values.get("--passage"), text_value(&opts, "--text"))
-    else {
+    let text = match text_value(&opts, "--text") {
+        Ok(text) => text,
+        Err(reason) => return failed(reason),
+    };
+    let (Some(passage), Some(text)) = (opts.values.get("--passage"), text) else {
         return usage("comment: give --passage and --text (--text - reads standard input)");
     };
     tool["passage"] = json!(passage);
@@ -704,7 +728,10 @@ fn render(args: &[String]) -> i32 {
         Err(code) => return code,
     };
     // `--mermaid -` reads the source from standard input; nothing else does.
-    let source = text_value(&opts, "--mermaid");
+    let source = match text_value(&opts, "--mermaid") {
+        Ok(source) => source,
+        Err(reason) => return failed(reason),
+    };
     if opts.switches.contains("--check") {
         let Some(source) = source else {
             return usage("render --check needs --mermaid SRC, or --mermaid - for standard input");
@@ -924,6 +951,7 @@ inkuno edit <note> --edits JSON [--token T]
     --edits takes a JSON array of {\"old\": …, \"new\": …}, applied together.
     A changed # title renames the note and rewrites its [[links]].
     --token: the token of read --json; a note changed since it was read is refused
+    A change that touches a pending change is refused: accept or reject it in Inkuno first.
     prints the note's path, the new one when the title renamed it; --json: the result
 
 example:
@@ -935,6 +963,7 @@ inkuno append <note> [--under HEADING] [--text TEXT] [--token T]
     adds text at the end of the note, or at the end of the section under the heading
     (matched exactly, or as the only heading with that case). The text is --text TEXT, or
     --text - for standard input; without --text it is refused, and an empty text is refused.
+    A text that touches a pending change is refused: accept or reject it in Inkuno first.
     Prints the note's path; --json: the result
 
 example:
@@ -942,15 +971,18 @@ example:
 ";
 
 const WRITE_HELP: &str = "\
-inkuno write <note> --author NAME (--text TEXT | --text -) [--token T]
+inkuno write <note> --author NAME (--text TEXT | --text -) --token T
     proposes the note's full new text. Each change is written into the note as a pending mark
     ({--removed lines--} then {++added lines++}) until a person accepts or rejects it in Inkuno.
-    Refused while the note has pending changes. --token: the token of read --json the text was
-    made from; a token of a saved version merges, a note changed in the same lines is refused.
-    Each write saves two automatic revisions: the text before, and the proposed text.
+    Refused while the note has pending changes, and when the text is empty.
+    --token is required: the token of read --json, which says which text the agent read. A token
+    of a saved version merges; a note changed in the same lines is refused.
+    Each write saves two automatic revisions: the text before, and the proposed text. If the
+    proposed version cannot be saved, the write stands and a warning goes to standard error.
     Prints `N changes pending in <note>`; --json: the path, the count and the two revisions
 
 example:
+  inkuno read Plan --json
   inkuno write Plan --author claude --text - --token 3f9a1c < new-plan.md
 ";
 
@@ -1004,6 +1036,7 @@ inkuno comment --file PATH --passage P --text C [--json]
     --text - reads the comment from standard input. Its line breaks become spaces.
     Prints the note's path (--file: the file's absolute path); --json: the result as JSON
     In a table cell, a | of the comment is written \\|.
+    A passage in a pending change is refused: accept or reject the change in Inkuno first.
 
 example:
   inkuno comment Plan --passage \"two weeks\" --text \"Is this realistic?\"

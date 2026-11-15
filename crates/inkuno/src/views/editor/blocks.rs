@@ -389,6 +389,9 @@ impl Editor {
     /// undo step: `splice` would add a second one for a multi-line text.
     pub(super) fn replace_block(&mut self, old: &str, new: &str, cx: &mut Context<Self>) {
         let (span, text) = block::diff(old, new);
+        if self.touches_pending(&span, &text) {
+            return self.refuse_pending(cx);
+        }
         self.push_undo(true);
         self.held = true;
         self.edit(span, &text, cx);
@@ -401,9 +404,13 @@ impl Editor {
         let rest = &self.content[block.end..];
         let gap = rest.len() - rest.trim_start_matches('\n').len();
         let sep = "\n".repeat(gap.clamp(1, 2));
+        let text = format!("{sep}/");
+        if self.touches_pending(&(block.end..block.end), &text) {
+            return self.refuse_pending(cx);
+        }
         self.push_undo(true);
         self.held = true;
-        self.edit(block.end..block.end, &format!("{sep}/"), cx);
+        self.edit(block.end..block.end, &text, cx);
         self.held = false;
         self.ac_index = 0;
         self.ac_dismissed = None;

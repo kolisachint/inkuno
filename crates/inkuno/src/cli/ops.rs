@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use crate::{
     lang::{date_name, time_name},
     logic::wiki::Anchor,
-    logic::{daily, markdown, markdown::Link, pending, rank, revision},
+    logic::{assistant, daily, markdown, markdown::Link, pending, rank, revision},
     platform::{clock, link, revisions, vault as files},
 };
 
@@ -522,6 +522,9 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
             n => return Outcome::err(format!("`{old}` was found {n} times; it must occur once")),
         }
     }
+    if let Err(message) = guard_pending(&text, &next) {
+        return Outcome::err(message);
+    }
     if let Err(message) = files::write(&path, &next).map_err(disk) {
         return Outcome::err(message);
     }
@@ -534,6 +537,20 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         "name_kept": reason,
         "rewritten": rewritten,
     }))
+}
+
+/// The guard of `edit`, `append` and `comment`: the one splice that turns `text` into `next` may
+/// not touch a pending change (`pending::refuses`). `Err` names the reason in one sentence.
+fn guard_pending(text: &str, next: &str) -> Result<(), String> {
+    let Some((range, inserted)) = assistant::edit_between(text, next) else {
+        return Ok(());
+    };
+    if pending::refuses(text, range, &inserted) {
+        return Err(
+            "the change touches a pending change: accept or reject it in Inkuno first".into(),
+        );
+    }
+    Ok(())
 }
 
 /// The token an edit or an append was given, when it was given. An empty token is no token.
@@ -621,6 +638,9 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
             next
         }
     };
+    if let Err(message) = guard_pending(&body, &next) {
+        return Outcome::err(message);
+    }
     if let Err(message) = files::write(&path, &next).map_err(disk) {
         return Outcome::err(message);
     }
@@ -704,11 +724,20 @@ fn snapshot(
     }
 }
 
+/// Saves one automatic revision: `snapshot`, or a stand-in in tests.
+type Save = fn(&revisions::Home, &Path, &str, &str, &str) -> Result<Option<u32>, String>;
+
 /// `write`: proposes `text` as the note's new full text. The changes wait in the note as pending
 /// marks until a person accepts or rejects them. Around the write, two automatic revisions are
 /// saved: the text before (by the person's default author) and the proposed text (by `author`).
-/// Nothing is written when the proposal is refused or the first snapshot fails.
+/// Nothing is written when the proposal is refused or the first snapshot fails. A failed save of
+/// the proposed text does not undo the write: it is a warning, and its revision is null.
 pub fn write_note(vault: &mut Vault, args: &Value) -> Outcome {
+    write_note_saving(vault, args, snapshot)
+}
+
+/// `write_note` with the save of a revision given (see `Save`).
+fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
     let path = match vault_note(vault, args) {
         Ok(path) => path,
         Err(outcome) => return outcome,
@@ -720,16 +749,24 @@ pub fn write_note(vault: &mut Vault, args: &Value) -> Outcome {
     let Some(proposed) = args.get("text").and_then(Value::as_str) else {
         return Outcome::err("`text` is missing");
     };
+    if proposed.trim().is_empty() {
+        return Outcome::err("the text is empty");
+    }
     let (current, token) = match vault::read_text(&path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
     let home = revisions::home_of(&path, Some(&vault.root))
         .unwrap_or_else(|| revisions::Home::Vault(vault.root.clone()));
-    // The text the agent read: the file as it is, or the saved version its token names.
+    // The text the agent read: the file as it is, or the saved version its token names. The token
+    // is required: without it, a change by the person could not be told from the agent's base.
     let base = match given_token(args) {
         Err(message) => return Outcome::err(message),
-        Ok(None) => current.clone(),
+        Ok(None) => {
+            return Outcome::err(
+                "write needs the token of `read --json`: it says which text the agent read",
+            );
+        }
         Ok(Some(expected)) if expected == token => current.clone(),
         Ok(Some(expected)) => match saved_text_with(&home, &path, expected) {
             Ok(Some(text)) => text,
@@ -747,7 +784,7 @@ pub fn write_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(person) => person,
         Err(message) => return Outcome::err(message),
     };
-    let before = match snapshot(
+    let before = match save(
         &home,
         &path,
         &person,
@@ -760,23 +797,34 @@ pub fn write_note(vault: &mut Vault, args: &Value) -> Outcome {
     if let Err(message) = files::write(&path, &marked).map_err(disk) {
         return Outcome::err(message);
     }
-    let proposed_number = match snapshot(
+    // The write stands even when the proposed version cannot be saved: that is a warning, and the
+    // proposed revision is null.
+    let (proposed_number, warning) = match save(
         &home,
         &path,
         &author,
         "proposed, pending",
         &pending::accept_all(&marked),
     ) {
-        Ok(number) => number,
-        Err(message) => return Outcome::err(message),
+        Ok(number) => (number, None),
+        Err(message) => (
+            None,
+            Some(format!(
+                "the version of the proposed text could not be saved: {message}"
+            )),
+        ),
     };
     vault.rescan();
-    Outcome::ok(json!({
+    let mut result = json!({
         "path": vault::rel(&vault.root, &path),
         "changes": pending::areas(&marked).len(),
         "before": before,
         "proposed": proposed_number,
-    }))
+    });
+    if let Some(warning) = warning {
+        result["warning"] = json!(warning);
+    }
+    Outcome::ok(result)
 }
 
 pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
@@ -1095,6 +1143,7 @@ fn comment_args(args: &Value) -> Result<(String, String), String> {
 fn annotate(path: &Path, passage: &str, comment: &str) -> Result<String, String> {
     let (text, _) = vault::read_text(path)?;
     let next = markdown::comment_on(&text, passage, comment)?;
+    guard_pending(&text, &next)?;
     files::write(path, &next).map_err(disk)?;
     Ok(vault::token(next.as_bytes()))
 }
@@ -1143,5 +1192,59 @@ pub mod wiki {
                 json!({"path": vault::rel(&vault.root, &note.path), "title": note.name, "line": line})
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A save that fails for the proposed version only: the revision before is saved as usual.
+    fn fail_the_proposed(
+        home: &revisions::Home,
+        path: &Path,
+        author: &str,
+        memo: &str,
+        text: &str,
+    ) -> Result<Option<u32>, String> {
+        if memo.starts_with("proposed") {
+            Err(format!("{}: the disk is full", path.display()))
+        } else {
+            snapshot(home, path, author, memo, text)
+        }
+    }
+
+    #[test]
+    fn a_proposed_version_that_cannot_be_saved_is_a_warning_and_the_write_stands() {
+        let dir = std::env::temp_dir().join(format!("inkuno-ops-warn-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Plan.md"), "# Plan\n").unwrap();
+        let mut vault = Vault::open(dir.clone()).unwrap();
+        let token = vault::token("# Plan\n".as_bytes());
+        let args = json!({
+            "note": "Plan",
+            "author": "claude",
+            "text": "# Plan\n\nTwo.\n",
+            "token": token,
+        });
+        let outcome = write_note_saving(&mut vault, &args, fail_the_proposed);
+        assert!(!outcome.is_error, "{}", outcome.sentence());
+        assert_eq!(outcome.structured["changes"], 1);
+        assert_eq!(outcome.structured["proposed"], Value::Null);
+        assert!(
+            outcome.structured["before"].is_u64(),
+            "{}",
+            outcome.structured
+        );
+        let warning = outcome.structured["warning"].as_str().unwrap();
+        assert!(
+            warning.starts_with("the version of the proposed text could not be saved: "),
+            "{warning}"
+        );
+        assert!(!warning.contains('\n'), "{warning}");
+        let text = fs::read_to_string(dir.join("Plan.md")).unwrap();
+        assert!(text.contains("{++\n\nTwo.\n++}"), "{text}");
+        let _ = fs::remove_dir_all(dir);
     }
 }

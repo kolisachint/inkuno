@@ -88,15 +88,27 @@ impl Editor {
                 ""
             };
             let from = if alone { line.start } else { sel.start };
+            let range = from..sel.end;
+            let table = format!("{lead}{table}{tail}");
+            if self.touches_pending(&range, &table) {
+                return self.refuse_pending(cx);
+            }
             self.push_undo(true);
-            return self.edit(from..sel.end, &format!("{lead}{table}{tail}"), cx);
+            return self.edit(range, &table, cx);
         }
-        self.push_undo(true);
         // An address pasted over text makes it a link.
         if !sel.is_empty() && md::is_url(text.trim()) && self.linkable() {
             let linked = format!("[{}]({})", &self.content[sel.clone()], text.trim());
+            if self.touches_pending(&sel, &linked) {
+                return self.refuse_pending(cx);
+            }
+            self.push_undo(true);
             return self.edit(sel, &linked, cx);
         }
+        if self.touches_pending(&sel, &text) {
+            return self.refuse_pending(cx);
+        }
+        self.push_undo(true);
         self.edit(sel, &text, cx);
         // A line pasted under a table becomes part of it: its columns line up.
         self.realign(cx);

@@ -639,8 +639,8 @@ impl Shell {
                 }
             }
             // The comment's line is asked by a prompt of the shell, which then writes it in the note.
-            EditorEvent::AskChangeComment(index) => {
-                self.ask_change_comment(editor.clone(), *index, window, cx)
+            EditorEvent::AskChangeComment(change) => {
+                self.ask_change_comment(editor.clone(), change.clone(), window, cx)
             }
         }
     }

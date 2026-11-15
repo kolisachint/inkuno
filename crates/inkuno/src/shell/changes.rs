@@ -49,12 +49,13 @@ impl Shell {
             }))
     }
 
-    /// Asks for the line of a comment on pending change `index` of `editor`'s note. Enter writes it,
-    /// Escape cancels; the note keeps the focus after either.
+    /// Asks for the line of a comment on the pending change `change` (its text) of `editor`'s note.
+    /// Enter writes it, Escape cancels; the note keeps the focus after either. The change is found
+    /// again by its text when the prompt answers: an outside edit may have moved it meanwhile.
     pub(super) fn ask_change_comment(
         &mut self,
         editor: Entity<Editor>,
-        index: usize,
+        change: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -73,7 +74,7 @@ impl Shell {
                     this.palette = None;
                     window.focus(&editor.focus_handle(cx));
                     let memo = memo.clone();
-                    editor.update(cx, |note, cx| note.comment_on_change(index, &memo, cx));
+                    editor.update(cx, |note, cx| note.comment_on_change(&change, &memo, cx));
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
