@@ -9,5 +9,4 @@ license = "MIT"
 [dependencies]
 # Same versions as the app's Cargo.lock: never re-resolve, keep --locked/--offline green.
 regex = "=1.12.2"
-unicode-segmentation = "=1.13.3"
 unicode-width = "=0.2.2"

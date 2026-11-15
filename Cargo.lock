@@ -2670,7 +2670,6 @@ dependencies = [
 name = "inkuno"
 version = "0.0.6"
 dependencies = [
- "base64",
  "flate2",
  "gpui",
  "inkuno-logic",
@@ -2694,7 +2693,6 @@ name = "inkuno-logic"
 version = "0.0.1"
 dependencies = [
  "regex",
- "unicode-segmentation",
  "unicode-width",
 ]
 
