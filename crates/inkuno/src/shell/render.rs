@@ -405,6 +405,9 @@ impl Render for Shell {
                 this.toggle_assistant(window, cx)
             }))
             .on_action(
+                cx.listener(|this, _: &ToggleOutline, window, cx| this.toggle_outline(window, cx)),
+            )
+            .on_action(
                 cx.listener(|this, _: &ToggleCommands, window, cx| this.open_commands(window, cx)),
             )
             .on_action(cx.listener(|this, _: &editor::Cancel, window, cx| this.escape(window, cx)))

@@ -108,6 +108,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t(tr("A picture", "Une image"), tr("Shown in place of the note", "Affichée à la place de la note")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
                 p("assistant", tr("Assistant: show or hide its panel in the right dock (also a round button at the foot of the note)", "Assistant : afficher ou masquer son panneau dans le dock de droite (aussi un bouton rond en bas de la note)")),
+                k(&ToggleOutline, tr("Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note)", "Plan : afficher ou masquer les titres de la note dans le dock de droite (aussi dans la palette, Plan de la note)")),
                 k(&ToggleSidebar, tr("Sidebar: show or hide the side panel (the rail stays)", "Barre latérale : afficher ou masquer le panneau latéral (le rail reste)")),
                 k(&ToggleFocus, tr("Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back", "Mode focus : la note seule, bord à bord, sans barres ni panneaux ; F9 ou Échap revient")),
                 k(&ToggleTitleBar, tr("Title bar: show or hide the bar the app draws (its buttons come back with it)", "Barre de titre : afficher ou masquer la barre dessinée par l'app (ses boutons reviennent avec elle)")),
@@ -350,6 +351,8 @@ pub(crate) fn defaults() -> Vec<keys::Bind> {
         // The command palette: F10, like the menu bar of a desktop app.
         b("f10", &ToggleCommands, None),
         b("secondary-shift-p", &ToggleCommands, None),
+        // The outline of the note, in the right dock: a press shows it or hides it.
+        b("secondary-shift-o", &ToggleOutline, None),
         // From button to button, where Tab has no other use (the note indents with it). In the window's own
         // context: a binding with none counts as the deepest and would take Tab from the views that use it.
         b("tab", &FocusNext, Some("Shell")),

@@ -28,7 +28,7 @@ action already has in the same place. The app reads the file at its next start:
 a change made while it runs applies after a restart.
 
 examples:
-  inkuno keys set app::OpenPalette secondary-shift-o
+  inkuno keys set app::OpenPalette secondary-shift-j
   inkuno keys list --json
   inkuno keys reset app::OpenPalette
 ";

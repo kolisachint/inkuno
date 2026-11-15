@@ -15,6 +15,7 @@ mod keyboard;
 mod keycaps;
 mod layout;
 mod motion;
+mod outline;
 mod panel_rows;
 mod panes;
 mod revisions;

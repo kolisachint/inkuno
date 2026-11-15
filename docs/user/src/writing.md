@@ -128,11 +128,12 @@ What you type, delete or move then applies to every cursor, and one undo undoes 
 
 ## Outline
 
-`Ctrl + Shift + O` (or **Outline of the note** in the palette) lists the headings of the note, indented by level. The section the cursor is in is selected.
+`Ctrl + Shift + O` (or **Outline of the note** in the palette) shows the outline in the right panel. It lists the headings of the note, indented by level. Press the same chord again to hide it.
 
-- Type to filter.
-- `↑` and `↓` show each heading in place as you move.
-- `Enter` leaves the cursor there. `Esc` puts it back where it was.
+- The heading the cursor is in is highlighted.
+- Click a heading to move the cursor there.
+- The arrow beside a heading folds the part of the note under it.
+- The outline shares the right panel with the Assistant. Its chord takes the panel from the Assistant.
 
 Headings inside code blocks are not listed.
 

@@ -404,6 +404,12 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::ToggleOutline",
+            tr("Outline of the note", "Plan de la note"),
+            "c-outline.svg",
+            Go,
+        ),
+        (
             "app::KeepInVault",
             tr(
                 "Keep this scratch note in the vault",
