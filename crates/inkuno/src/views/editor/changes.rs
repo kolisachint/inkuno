@@ -71,6 +71,9 @@ impl Editor {
     }
 
     fn settle_one(&mut self, cx: &mut Context<Self>, how: fn(&str, usize) -> String) {
+        if self.readonly {
+            return self.refuse_pending(cx);
+        }
         if self.pending.is_empty() {
             return self.no_change(cx);
         }
@@ -93,6 +96,9 @@ impl Editor {
     }
 
     fn settle_all(&mut self, cx: &mut Context<Self>, how: fn(&str) -> String) {
+        if self.readonly {
+            return self.refuse_pending(cx);
+        }
         let Some(first) = self.pending.first().map(|area| area.range.start) else {
             return self.no_change(cx);
         };
@@ -116,6 +122,9 @@ impl Editor {
     /// by its text, which the prompt carries back (`comment_on_change`). With the caret outside
     /// every change, the first press only moves the caret to the next one.
     pub(super) fn ask_change_comment(&mut self, cx: &mut Context<Self>) {
+        if self.readonly {
+            return self.refuse_pending(cx);
+        }
         if self.pending.is_empty() {
             return self.no_change(cx);
         }
@@ -133,6 +142,9 @@ impl Editor {
     /// text any more (an outside edit moved or changed it), nothing is written and the person is told.
     /// Refused, with the reason, when the line cannot carry a comment: empty, or holding comment marks.
     pub fn comment_on_change(&mut self, change: &str, memo: &str, cx: &mut Context<Self>) {
+        if self.readonly {
+            return self.refuse_pending(cx);
+        }
         let Some(area) = self
             .pending
             .iter()

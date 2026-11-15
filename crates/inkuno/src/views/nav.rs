@@ -79,17 +79,21 @@ pub enum Mode {
     Outline,
     /// Scratch notes: the ones not filed in the vault yet, newest first.
     Scratch,
+    /// Versions: the saved versions of the note of the active tab, newest first; Enter compares one
+    /// with the note as it is now (`shell/versions.rs`).
+    Versions,
     /// The assistant: a panel of the right dock, beside the note. It always lives there.
     Assistant,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 6] = [
+    pub const ALL: [Mode; 7] = [
         Mode::Tree,
         Mode::Recent,
         Mode::Search,
         Mode::Outline,
         Mode::Scratch,
+        Mode::Versions,
         Mode::Assistant,
     ];
 
@@ -101,6 +105,7 @@ impl Mode {
             Mode::Search => "search",
             Mode::Outline => "outline",
             Mode::Scratch => "scratch",
+            Mode::Versions => "versions",
             Mode::Assistant => "assistant",
         }
     }
@@ -303,6 +308,10 @@ pub enum Do {
     KeepInVault,
     /// A scratch note of the panel: its file deleted, as Discard does.
     DeleteScratch,
+    /// A version of the panel: compared with the note as it is now, in a tab of its own.
+    CompareVersion,
+    /// A version of the panel: its text copied to the clipboard.
+    CopyVersion,
     CopyLink,
     CopyPath,
     CopyRelative,
@@ -852,6 +861,19 @@ mod tests {
         let shown = read_layout("tree split 410 right=outline,assistant show=assistant,outline\n");
         assert_eq!(shown.right_shown, [Mode::Assistant, Mode::Outline]);
         assert_eq!(Mode::named("assistant"), Some(Mode::Assistant));
+    }
+
+    #[test]
+    fn the_versions_panel_is_a_tool_hidden_by_default() {
+        // Named in a saved layout, it is a tool of the left dock; an older file has no such word.
+        assert_eq!(Mode::named("versions"), Some(Mode::Versions));
+        assert_eq!(Mode::Versions.name(), "versions");
+        assert!(Mode::ALL.contains(&Mode::Versions));
+        let older = read_layout("tree split 410\n");
+        assert_eq!(older.left_shown, [Mode::Tree]);
+        let shown = read_layout("versions split 410\n");
+        assert_eq!(shown.mode, Mode::Versions);
+        assert_eq!(shown.left_shown, [Mode::Versions]);
     }
 
     #[test]

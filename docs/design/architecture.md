@@ -59,6 +59,7 @@ each, all `impl Shell`:
 | `help.rs`, `keymap.rs` | the help panel; the default shortcuts and their sections |
 | `assistant.rs` | the Assistant panel in the right dock: its conversation, the review, the prompt box, the state of the agent process it drives (`platform/assistant.rs`), and the writing of a review's comments into the note |
 | `settings.rs`, `toasts.rs` | settings, status messages |
+| `versions.rs` | the Versions panel (the saved versions of the active note) and the compare tab (`app-ui.md` §19) |
 | `render.rs` | drawing the window |
 
 A `Pane` is what **one tab** holds (a note, or a file in its place); `Shell::panes` lists every
@@ -88,6 +89,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | the user guide from the command line (`inkuno guide`) | `crates/inkuno/src/cli/guide.rs` (the pages of `docs/user/src/`, built in) |
 | the saved versions and the shortcuts from the command line (`inkuno rev`, `inkuno keys`) | `crates/inkuno/src/cli/rev.rs`, `keys.rs`; `docs/design/revisions.md` |
 | a note's revisions (format, diffs, the folders that follow the note) | `crates/inkuno-logic/src/revision.rs` (format, paths, diffs), `platform/revisions.rs` (disk); `docs/design/revisions.md` |
+| the Versions panel and the compare (a read-only tab against a version) | `shell/versions.rs`, `shell/sidebar.rs` (rows), `views/editor/` (`readonly`); `docs/design/app-ui.md` §19 |
 | the window's door for `inkuno show` | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `ui/theme.rs` |

@@ -38,6 +38,7 @@ actions!(
         NewScratch,
         KeepInVault,
         SaveRevision,
+        ShowVersions,
         OpenVault,
         CopyAll,
         ToggleHelp,

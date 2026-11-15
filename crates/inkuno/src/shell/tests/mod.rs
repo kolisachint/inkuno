@@ -24,6 +24,7 @@ mod save_close;
 mod scratch;
 mod shortcuts_page;
 mod tabs;
+mod versions;
 mod window;
 
 use super::*;

@@ -4,6 +4,8 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Done in the November cleanup
 
+- Versions panel and compare (2026-11-15, `app-ui.md` §19): **Versions of the note** in the palette (`history` finds it too) lists the active note's versions, newest first; Enter or a click compares one with the note now, in a read-only tab, the difference drawn as pending changes; the row menu copies a version's text. Tests: `shell/tests/versions.rs`, `inkuno-logic` `revision.rs`, `commands.rs`, `views/palette.rs`.
+
 - Assistant v2 (2026-11-15, `app-ui.md` §18): **Improve selection** / **Improve this note** (the panel's button, the palette, the right-click menu) sends the passage, or the note, with an instruction; the answer comes back as pending changes, one undo step, with two `kind: auto` revisions as `inkuno write` makes them. Chords: `Ctrl+Enter` accepts and `Ctrl+Backspace` rejects a pending change (`keybindings.md`, `app-ui.md` §17.5). Tests: `shell/tests/assistant.rs`, `shell/tests/pending.rs`, `inkuno-logic` `assistant.rs`, `commands.rs`.
 
 - Pending changes in the app (2026-11-15, `app-ui.md` §17): an added line lies on a green wash, a removed one on a red wash, struck through; typing in a change is refused with a message; accept, reject (one change or all) and comment on a change are one undo step each, from the palette and the right-click menu; a hint at the note's foot counts them. `inkuno write` writes the marks (2026-11-15, `cli.md`). Tests: `shell/tests/pending.rs`, `inkuno-logic` `pending.rs`, `ui/theme.rs`.
@@ -51,7 +53,12 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Revisions: `inkuno rev` on a vault that has no `.inkuno` folder and is not open in the app treats the note's own folder as the vault, so history can be split by folder; the app creates `.inkuno` only at the first version. Create it when a vault opens, or document it.
 - Revisions: restoring from the trash brings the history back only when the trash holds the same name; a trash entry removed by hand breaks the pairing (`platform/revisions.rs`, `restore_along`).
 - Revisions: `Keep in vault` still deletes the scratch copy once the vault note is written (a move, not a loss).
-- Revisions: the tree and the Scratch panel are not yet showing history; the Versions side panel and the coloured compare are next (`docs/design/revisions.md`).
+- Versions: restore a version through the pending flow: a proposal of the old text, its changes pending, with the two `kind: auto` revisions `inkuno write` makes (`docs/design/revisions.md`, `app-ui.md` §19.3).
+- Versions: a word-level compare; today a changed line is one removed and one added line (`crates/inkuno-logic/src/pending.rs`, `propose`).
+- Versions: while a compare tab is shown, the panel says `No note is open.`; expected, the panel follows the compared note (`crates/inkuno/src/shell/versions.rs`, `read_versions`).
+- Versions: the layout file marks no tab as shown while a compare is shown, so the next start shows the first tab (`crates/inkuno/src/shell/pane.rs`, `panes_state`).
+- Versions: a version's date is the stored UTC time; the local time needs a conversion from a Unix time (`crates/inkuno/src/platform/clock.rs` gives the local time of now only).
+- Versions: the quiet colour of the automatic rows and the washes of a compare are not yet checked on a real screen (`crates/inkuno/src/shell/sidebar.rs`, `render_rows`).
 - `Ctrl+Alt+S` is not tried on macOS or on a desktop that keeps it; the screen was not run here.
 
 - Help-panel shortcut changes are saved to the `keys` file (`crates/inkuno/src/shell/help.rs:227`), but once `keybindings.json` exists it wins at launch and nothing reads `keys` again: they are lost at the next start.

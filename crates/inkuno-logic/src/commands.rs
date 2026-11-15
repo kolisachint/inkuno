@@ -428,6 +428,12 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::ShowVersions",
+            tr("Versions of the note", "Versions de la note"),
+            "clock.svg",
+            Go,
+        ),
+        (
             "app::ToggleAssistant",
             tr("Assistant", "Assistant"),
             "assistant.svg",
@@ -684,6 +690,15 @@ pub fn reveal_label() -> &'static str {
     }
 }
 
+/// Other words that find a command in the palette, besides its label (the palette matches the label
+/// and these, word by word).
+pub fn aliases(action: &str) -> &'static [&'static str] {
+    match action {
+        "app::ShowVersions" => &["history"],
+        _ => &[],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -758,6 +773,19 @@ mod tests {
             label.to_lowercase().contains("improve"),
             "searchable by `improve`: {label}"
         );
+    }
+
+    #[test]
+    fn the_catalog_offers_the_versions_panel_by_its_name_and_history() {
+        let all = catalog();
+        let (_, label, _, group) = all
+            .iter()
+            .find(|(action, ..)| *action == "app::ShowVersions")
+            .expect("Versions of the note is in the palette");
+        assert_eq!(*group, Group::Go);
+        assert!(label.to_lowercase().contains("versions"), "{label}");
+        assert_eq!(aliases("app::ShowVersions"), ["history"]);
+        assert!(aliases("app::ShowScratch").is_empty());
     }
 
     #[test]

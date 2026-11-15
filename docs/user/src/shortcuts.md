@@ -75,6 +75,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate |
 |  | Recent notes |
 |  | Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it |
+|  | Versions of the note: the panel lists its saved versions, newest first; Enter compares one with the note as it is now |
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Ctrl+P › assistant` | Assistant: show or hide its panel in the right dock (also a round button at the foot of the note) |

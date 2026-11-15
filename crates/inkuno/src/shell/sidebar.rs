@@ -43,6 +43,11 @@ impl Shell {
             return self.hide_tool(mode, window, cx);
         }
         self.put_tool(mode);
+        // The versions are read again each time their panel is shown.
+        if mode == Mode::Versions {
+            self.versions_stale = true;
+            self.sync_versions(cx);
+        }
         self.nav.reveal = true;
         window.focus(&self.nav.focus);
         self.settle_nav(window, cx);
@@ -290,6 +295,9 @@ impl Shell {
         if self.nav.mode == Mode::Scratch {
             self.scratch_rev.hash(&mut hasher);
         }
+        if self.nav.mode == Mode::Versions {
+            self.versions_rev.hash(&mut hasher);
+        }
         for note in &self.notes {
             (&note.path, &note.name).hash(&mut hasher);
         }
@@ -301,12 +309,17 @@ impl Shell {
         if self.nav.mode == Mode::Scratch {
             return self.scratch_rows();
         }
+        if self.nav.mode == Mode::Versions {
+            return self.version_rows();
+        }
         let Some(root) = &self.vault else {
             return Vec::new();
         };
         match self.nav.mode {
             Mode::Tree => tree_rows(root, &self.notes, &self.dirs, &self.images, &self.nav.open),
-            Mode::Search | Mode::Outline | Mode::Scratch | Mode::Assistant => Vec::new(),
+            Mode::Search | Mode::Outline | Mode::Scratch | Mode::Versions | Mode::Assistant => {
+                Vec::new()
+            }
             Mode::Recent => self
                 .by_recency()
                 .into_iter()
@@ -333,7 +346,8 @@ impl Shell {
         let (path, is_note) = (row.path.clone(), row.dir.is_none());
         self.nav.marked.clear();
         self.nav.scroll.scroll_to_item(ix, ScrollStrategy::Center);
-        if is_note && self.nav.panel == Panel::Split {
+        // A version is not a note to preview: it is compared by Enter or a click.
+        if is_note && self.nav.panel == Panel::Split && self.nav.mode != Mode::Versions {
             self.preview_note(&path, window, cx);
         }
         self.nav.sel = Some(path);
@@ -419,6 +433,9 @@ impl Shell {
             return;
         };
         let path = row.path.clone();
+        if self.nav.mode == Mode::Versions {
+            return self.compare_version(&path, window, cx);
+        }
         self.nav.marked.clear();
         if row.dir.is_some() {
             if !self.nav.open.remove(&path) {
@@ -824,6 +841,8 @@ impl Shell {
                 let current = self.pane().displayed_path() == Some(&row.path);
                 // In the recent list, the note's folder serves as detail.
                 let detail = match (&self.vault, row.path.parent()) {
+                    // A version: the moment it was saved, to the minute.
+                    _ if self.nav.mode == Mode::Versions => self.version_date(&row.path),
                     // A scratch note: the moment it was made.
                     _ if self.nav.mode == Mode::Scratch => {
                         logic::scratch::label(&vault::stem(&row.path)).unwrap_or_default()
@@ -849,7 +868,13 @@ impl Shell {
                 };
                 let wide = closed.is_some();
                 let said = closed.map(|_| detail.clone());
-                let foldable = !matches!(self.nav.mode, Mode::Recent | Mode::Scratch);
+                let foldable =
+                    !matches!(self.nav.mode, Mode::Recent | Mode::Scratch | Mode::Versions);
+                // An automatic version is drawn quieter than a person's.
+                let quiet = self.nav.mode == Mode::Versions
+                    && self
+                        .version_of(&row.path)
+                        .is_some_and(|v| v.rev.kind == crate::logic::revision::Kind::Auto);
                 let chevron = match row.dir {
                     Some(true) => "chevron-down.svg",
                     Some(false) => "chevron-right.svg",
@@ -991,6 +1016,7 @@ impl Shell {
                                 _ => d.flex_none().whitespace_nowrap(),
                             })
                             .when(current, |d| d.text_color(t.accent))
+                            .when(quiet && !current, |d| d.text_color(t.soft))
                             .child(div().when(wide, |d| d.min_w_0().truncate()).child(if wide {
                                 stem.to_string()
                             } else {
@@ -1080,10 +1106,13 @@ impl Shell {
                                     this.nav.sel = Some(target.clone());
                                 }
                                 window.focus(&this.nav.focus);
-                                if this
-                                    .vault
-                                    .as_ref()
-                                    .is_some_and(|root| target.starts_with(root))
+                                // A version lives in the vault's hidden history: its menu is the panel's own.
+                                let versions = this.nav.mode == Mode::Versions;
+                                if versions
+                                    || this
+                                        .vault
+                                        .as_ref()
+                                        .is_some_and(|root| target.starts_with(root))
                                 {
                                     this.show_menu(
                                         Menu {
@@ -1539,6 +1568,10 @@ impl Shell {
         let (mode, panel) = (self.nav.mode, self.nav.panel);
         let shut = stacked && self.nav.folded.contains(&mode);
         let keys = |action: &dyn Action| crate::ui::keys::of(cx, action);
+        // The versions are read here, when their panel is drawn and the note or a save changed them.
+        if mode == Mode::Versions {
+            self.sync_versions(cx);
+        }
         let source = self.rows_source();
         if source != self.nav.rows_from {
             self.nav.rows = self.nav_rows();
@@ -1558,6 +1591,7 @@ impl Shell {
             (Mode::Search, _) => tr("Search", "Recherche").to_string(),
             (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
             (Mode::Scratch, _) => tr("Scratch", "Brouillons").to_string(),
+            (Mode::Versions, _) => tr("Versions", "Versions").to_string(),
             (Mode::Assistant, _) => tr("Assistant", "Assistant").to_string(),
             _ => tr("Recent", "Récents").to_string(),
         };
@@ -1795,6 +1829,7 @@ impl Shell {
                     "Aucun brouillon : Ctrl+N en fait un",
                 )
                 .to_string(),
+                Mode::Versions => self.versions_said(),
                 _ => tr("No recent note", "Aucune note récente").to_string(),
             };
             div()

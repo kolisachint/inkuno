@@ -883,6 +883,8 @@ impl Shell {
     /// Writes the findings of a finished review into the note, as one undo step when the note is
     /// open, or straight to its file when no tab shows it. The note is saved by the usual debounce.
     fn apply_review(&mut self, review: Review, cx: &mut Context<Self>) {
+        // The revisions it wrote show in the Versions panel when it is next drawn.
+        self.versions_stale = true;
         let found = words::findings(&review.answer);
         if found.is_empty() {
             self.assistant_say(Who::Note, tr("No findings.", "Aucune remarque."), cx);
@@ -1001,6 +1003,8 @@ impl Shell {
     /// makes them: the text before (skipped when it is the latest revision), then the proposed text.
     /// A proposal that cannot be placed is said in one line, and nothing is written.
     fn apply_improve(&mut self, improve: Improve, cx: &mut Context<Self>) {
+        // The two revisions of the proposal show in the Versions panel when it is next drawn.
+        self.versions_stale = true;
         // The text the block replaces: a fenced passage keeps its fences in the proposal.
         let original = match &improve.range {
             Some(range) => &improve.base[range.clone()],

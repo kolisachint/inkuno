@@ -427,6 +427,49 @@ pub fn diff(
     }
 }
 
+/// What the Versions panel shows of a version on its row: `#12 · sachin`, then `· auto` for an
+/// automatic version and `· <note>` when it has one.
+pub fn row_name(rev: &Revision) -> String {
+    let mut name = format!("#{} · {}", rev.number, rev.author);
+    if rev.kind == Kind::Auto {
+        name += " · auto";
+    }
+    if let Some(note) = rev.note.as_deref().filter(|note| !note.is_empty()) {
+        name += &format!(" · {note}");
+    }
+    name
+}
+
+/// A version's date as the panel shows it: `2026-11-14 10:32`, the UTC time `rev list` prints, to the
+/// minute. A date that is not RFC 3339 is shown as it is.
+pub fn short_date(date: &str) -> String {
+    match date.strip_suffix('Z').and_then(|d| d.split_once('T')) {
+        Some((day, time)) if time.len() >= 5 => format!("{day} {}", &time[..5]),
+        _ => date.to_string(),
+    }
+}
+
+/// Why a version cannot be compared with the note's text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompareError {
+    /// The note's text is the version's: there is nothing to show.
+    Unchanged,
+    /// The version or the note holds pending changes (or their marks): they are accepted or rejected first.
+    Pending,
+}
+
+/// The compare of a version's text with the note's text now: the version's text, with each
+/// difference written as a pending change (the lines the version had and the note lost are removed,
+/// the new ones are added), so that the drawing of pending changes colours it. Pure: `pending::propose`
+/// does the work.
+pub fn compare(version: &str, now: &str) -> Result<String, CompareError> {
+    use crate::pending::{Refusal, propose};
+    propose(version, version, now).map_err(|refusal| match refusal {
+        Refusal::NothingChanged => CompareError::Unchanged,
+        _ => CompareError::Pending,
+    })
+}
+
 /// The author of the revisions a person makes when none is chosen: `INKUNO_AUTHOR`, else the OS
 /// user name (`USER`, then `USERNAME`), else `unknown`. `env` reads a variable.
 pub fn default_author(env: impl Fn(&str) -> Option<String>) -> String {
@@ -836,6 +879,52 @@ mod tests {
         assert_eq!(
             diff(Format::Critic, "n.md", "1", "2", "a\n", "b\n"),
             "{--a--}\n{++b++}\n"
+        );
+    }
+
+    #[test]
+    fn a_row_says_the_number_the_author_the_kind_and_the_note() {
+        assert_eq!(row_name(&rev(12, "x")), "#12 · sachin");
+        let auto = Revision {
+            kind: Kind::Auto,
+            note: Some("proposed, pending".into()),
+            ..rev(3, "x")
+        };
+        assert_eq!(row_name(&auto), "#3 · sachin · auto · proposed, pending");
+        let empty = Revision {
+            note: Some(String::new()),
+            ..rev(4, "x")
+        };
+        assert_eq!(row_name(&empty), "#4 · sachin");
+    }
+
+    #[test]
+    fn a_date_is_shown_to_the_minute_as_rev_list_gives_it() {
+        assert_eq!(short_date("2026-11-14T10:32:00Z"), "2026-11-14 10:32");
+        assert_eq!(short_date("not a date"), "not a date");
+    }
+
+    #[test]
+    fn a_compare_writes_each_difference_as_a_pending_change() {
+        // One changed line, one removed line, one added line, in the version's order.
+        let version = "a\nb\nc\n";
+        let now = "a\nB\nc\nd\n";
+        assert_eq!(
+            compare(version, now).unwrap(),
+            "a\n{--\nb\n--}\n{++\nB\n++}\nc\n{++\nd\n++}\n"
+        );
+        // A removed line only.
+        assert_eq!(compare("a\nb\n", "a\n").unwrap(), "a\n{--\nb\n--}\n");
+        // The same text: nothing to show.
+        assert_eq!(compare("a\n", "a\n"), Err(CompareError::Unchanged));
+        // Marks in either text: refused.
+        assert_eq!(
+            compare("a\n{++\nx\n++}\n", "a\n"),
+            Err(CompareError::Pending)
+        );
+        assert_eq!(
+            compare("a\n", "a\n{--\nx\n--}\n"),
+            Err(CompareError::Pending)
         );
     }
 }
