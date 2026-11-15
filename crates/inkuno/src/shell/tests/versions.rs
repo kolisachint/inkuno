@@ -226,7 +226,6 @@ fn the_panel_says_why_it_has_no_rows(cx: &mut TestAppContext) {
     // A note outside the vault and the scratch folder: it has no history.
     shell.update_in(cx, |s, _, cx| {
         s.pane_mut().path = Some(PathBuf::from("/elsewhere/Note.md"));
-        s.versions_stale = true;
         s.sync_versions(cx);
     });
     assert_eq!(
@@ -535,5 +534,332 @@ fn the_row_menu_copies_the_text_and_cannot_trash_a_version(cx: &mut TestAppConte
     settle(cx);
     assert!(path.is_file(), "{}", path.display());
     assert!(root.join(".inkuno/revisions/Plan.md/0001.md").is_file());
+    let _ = fs::remove_dir_all(root);
+}
+
+/// The text of tab `tab`'s editor.
+fn text_of(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, tab: usize) -> String {
+    shell.read_with(cx, |s, cx| s.panes[tab].editor.read(cx).text().to_string())
+}
+
+/// A version chosen in the panel is not the tree's selection: the tree's keys find nothing to act on.
+#[gpui::test]
+fn a_version_chosen_in_the_panel_is_not_the_selection_of_the_tree(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-tree-keys",
+        "# Plan\nfirst\n",
+        "# Plan\nfirst\nsecond\n",
+    );
+    show_versions(&shell, cx);
+    let version = row_path(&shell, cx, 0);
+    let before = fs::read(&version).unwrap();
+    let files = files_under(&root);
+    // A click on the version row.
+    shell.update_in(cx, |s, window, cx| s.nav_select(0, window, cx));
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.nav.sel.clone()),
+        Some(version.clone())
+    );
+    // The tree is shown: the selection of the panel does not come with it.
+    shell.update_in(cx, |s, window, cx| {
+        s.show_nav(Mode::Tree, false, window, cx)
+    });
+    frame(cx);
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.sel.clone()), None);
+    // Delete, F2 and Ctrl+D, the tree's keys: none of them reaches the version.
+    cx.simulate_keystrokes("delete");
+    cx.simulate_keystrokes("f2 escape");
+    cx.simulate_keystrokes("secondary-d");
+    settle(cx);
+    assert_eq!(fs::read(&version).unwrap(), before);
+    assert_eq!(files_under(&root), files);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Every file gesture on a history file is refused, whatever the selection or the panel shows.
+#[gpui::test]
+fn a_history_file_is_refused_by_every_file_gesture_whatever_the_panel(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-history-refused",
+        "# Plan\nfirst\n",
+        "# Plan\nfirst\nsecond\n",
+    );
+    show_versions(&shell, cx);
+    let version = row_path(&shell, cx, 0);
+    let before = fs::read(&version).unwrap();
+    let files = files_under(&root);
+    // The tree shown, with the version as its target (a stale selection, a menu of another panel).
+    shell.update_in(cx, |s, window, cx| {
+        s.show_nav(Mode::Tree, false, window, cx);
+        for what in [
+            nav::Do::Trash,
+            nav::Do::Rename,
+            nav::Do::Duplicate,
+            nav::Do::MoveTo,
+            nav::Do::Cut,
+        ] {
+            s.menu_do(what, Some(version.clone()), window, cx);
+        }
+    });
+    settle(cx);
+    assert!(says(
+        &shell,
+        cx,
+        "The history of the notes is kept by the app: nothing is done to it."
+    ));
+    assert_eq!(fs::read(&version).unwrap(), before);
+    assert_eq!(files_under(&root), files);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A version whose file is garbage is one quiet row: the others list, and Enter opens nothing.
+#[gpui::test]
+fn one_unreadable_version_hides_neither_the_others_nor_opens_anything(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "versions-unreadable");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\none\n").unwrap();
+    open(&shell, cx, &plan);
+    save_version(cx, "");
+    for word in ["two", "three"] {
+        cx.simulate_keystrokes("secondary-end");
+        cx.simulate_input(&format!("{word}\n"));
+        settle(cx);
+        save_version(cx, "");
+    }
+    // The middle version's file is overwritten with garbage (a hand edit, a bad copy).
+    let middle = root.join(".inkuno/revisions/Plan.md/0002.md");
+    fs::write(&middle, "garbage, not a revision\n").unwrap();
+    show_versions(&shell, cx);
+    let rows = names(&shell, cx);
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert!(rows[0].starts_with("#3 · "), "{rows:?}");
+    assert_eq!(rows[1], "#2 · cannot be read");
+    assert!(rows[2].starts_with("#1 · "), "{rows:?}");
+    // Enter on the marked row opens nothing, and says why.
+    cx.simulate_keystrokes("down down enter");
+    settle(cx);
+    assert_eq!(compares(&shell, cx), 0);
+    assert!(says(
+        &shell,
+        cx,
+        "#2 · this version cannot be read, so it cannot be compared."
+    ));
+    // A refusal changes no row.
+    assert_eq!(names(&shell, cx).len(), 3);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A folder link and a wiki link followed from a comparison never load into it.
+#[gpui::test]
+fn a_comparison_never_becomes_a_note_or_a_list(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-no-note",
+        "# Plan\nkeep\nchange me\nend\n",
+        "# Plan\nkeep\nchanged\nend\nmore\n",
+    );
+    fs::create_dir_all(root.join("dossier")).unwrap();
+    fs::write(root.join("dossier/Inside.md"), "# Inside\n").unwrap();
+    fs::write(root.join("Other.md"), "# Other\n").unwrap();
+    compare_first_by_keys(&shell, cx);
+    let compare = compare_tab(&shell, cx);
+    let compared = text(&shell, cx);
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+
+    // A folder link followed from the comparison: its list page takes a tab of its own.
+    shell.update_in(cx, |s, window, cx| {
+        s.follow(
+            &crate::logic::markdown::Link::Wiki("dossier".into()),
+            window,
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    assert_ne!(shell.read_with(cx, |s, _| s.active), compare);
+    // A note opened from that list (what its cell does).
+    let inside = root.join("dossier/Inside.md");
+    shell.update(cx, |s, cx| s.open_note(&inside, cx));
+    cx.run_until_parked();
+    // The comparison is intact: still a comparison, read-only, with its own text.
+    let intact = shell.read_with(cx, |s, cx| {
+        let tab = &s.panes[compare];
+        (
+            tab.compare.is_some(),
+            tab.editor.read(cx).is_readonly(),
+            tab.path.clone(),
+        )
+    });
+    assert_eq!((intact.0, intact.1), (true, true));
+    assert_eq!(intact.2, None);
+    assert_eq!(text_of(&shell, cx, compare), compared);
+    // The note is in another tab, and it is editable.
+    let note = shell.read_with(cx, |s, cx| {
+        (
+            s.active,
+            s.pane().compare.is_none(),
+            s.pane().path.clone(),
+            s.pane().editor.read(cx).is_readonly(),
+        )
+    });
+    assert_ne!(note.0, compare);
+    assert!(note.1);
+    assert_eq!(note.2, Some(inside.clone()));
+    assert!(!note.3);
+
+    // A wiki link to a note, followed from the comparison: opens in another tab.
+    shell.update_in(cx, |s, window, cx| s.focus_pane(compare, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.follow(
+            &crate::logic::markdown::Link::Wiki("Other".into()),
+            window,
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let other = root.join("Other.md");
+    let (active, path, compared_now) = shell.read_with(cx, |s, cx| {
+        (
+            s.active,
+            s.pane().path.clone(),
+            s.panes[compare].compare.is_some() && s.panes[compare].editor.read(cx).is_readonly(),
+        )
+    });
+    assert_ne!(active, compare);
+    assert_eq!(path, Some(other));
+    assert!(compared_now);
+    assert_eq!(text_of(&shell, cx, compare), compared);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Second line of defence: a note loaded into a comparison tab makes it an editable note.
+#[gpui::test]
+fn a_note_loaded_into_a_comparison_tab_is_an_editable_note(cx: &mut TestAppContext) {
+    // The second line of defence: a route that loads a note into the comparison makes the tab a note.
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-second-line",
+        "# Plan\nkeep\nchange me\n",
+        "# Plan\nkeep\nchanged\n",
+    );
+    fs::write(root.join("Other.md"), "# Other\n").unwrap();
+    compare_first_by_keys(&shell, cx);
+    let compare = compare_tab(&shell, cx);
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update(cx, |s, cx| s.open_note(&root.join("Other.md"), cx));
+    cx.run_until_parked();
+    let (compared, readonly, path) = shell.read_with(cx, |s, cx| {
+        let tab = &s.panes[compare];
+        (
+            tab.compare.is_some(),
+            tab.editor.read(cx).is_readonly(),
+            tab.path.clone(),
+        )
+    });
+    assert!(!compared);
+    assert!(!readonly);
+    assert_eq!(path, Some(root.join("Other.md")));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Pasting a picture into a comparison writes no file and changes no text.
+#[gpui::test]
+fn an_image_pasted_into_a_comparison_is_not_written(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-paste",
+        "# Plan\nkeep\nchange me\n",
+        "# Plan\nkeep\nchanged\n",
+    );
+    compare_first_by_keys(&shell, cx);
+    let text_before = text(&shell, cx);
+    let files = files_under(&root);
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
+    let image = gpui::Image::from_bytes(gpui::ImageFormat::Svg, svg.as_bytes().to_vec());
+    cx.write_to_clipboard(gpui::ClipboardItem::new_image(&image));
+    cx.simulate_keystrokes("secondary-v");
+    settle(cx);
+    assert_eq!(files_under(&root), files);
+    assert_eq!(text(&shell, cx), text_before);
+    assert!(says(&shell, cx, COMPARISON));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// The saved layout marks the note a shown comparison belongs to.
+#[gpui::test]
+fn a_shown_comparison_saves_its_note_as_the_shown_tab(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "versions-layout");
+    let other = root.join("Other.md");
+    let plan = root.join("Plan.md");
+    fs::write(&other, "# Other\n").unwrap();
+    fs::write(&plan, "# Plan\nkeep\nchange me\n").unwrap();
+    open(&shell, cx, &other);
+    open(&shell, cx, &plan);
+    save_version(cx, "");
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            e.load("# Plan\nkeep\nchanged\n".to_string(), 0, cx)
+        })
+    });
+    settle(cx);
+    compare_first_by_keys(&shell, cx);
+    assert_eq!(compares(&shell, cx), 1);
+    // The tabs are Other, Plan, and the comparison shown: the layout marks Plan, the note it compares.
+    let state = shell.read_with(cx, |s, _| s.panes_state());
+    let (_, groups) = crate::shell::pane::read_panes(&state);
+    assert_eq!(groups.len(), 1);
+    let (tabs, shown) = &groups[0];
+    assert_eq!(tabs, &[other, plan.clone()]);
+    assert_eq!(tabs[*shown], plan);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// While a comparison is shown, the panel lists its note and marks the compared version.
+#[gpui::test]
+fn the_panel_lists_the_versions_of_the_note_a_comparison_belongs_to(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-follow-compare",
+        "# Plan\nkeep\nchange me\n",
+        "# Plan\nkeep\nchanged\n",
+    );
+    compare_first_by_keys(&shell, cx);
+    show_versions(&shell, cx);
+    assert_eq!(names(&shell, cx).len(), 1);
+    assert_eq!(shell.read_with(cx, |s, _| s.versions_said()), String::new());
+    // The row of the compared version is the current one.
+    let path = row_path(&shell, cx, 0);
+    assert!(shell.read_with(cx, |s, _| s.version_current(&path)));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A revision written from a terminal shows in the open panel once the window hears of it.
+#[gpui::test]
+fn a_revision_written_from_a_terminal_reaches_the_open_panel(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-terminal",
+        "# Plan\nfirst\n",
+        "# Plan\nfirst\n",
+    );
+    show_versions(&shell, cx);
+    assert_eq!(names(&shell, cx).len(), 1);
+    // `inkuno rev save` writes a version from a terminal: the app's window hears of it, and nothing else.
+    let plan = root.join("Plan.md");
+    history::save(
+        &Home::Vault(root.clone()),
+        &plan,
+        "bo",
+        None,
+        "# Plan\nsecond\n",
+        0,
+    )
+    .unwrap();
+    shell.update_in(cx, |s, _, cx| s.versions_moved(cx));
+    frame(cx);
+    let names = names(&shell, cx);
+    assert_eq!(names.len(), 2, "{names:?}");
+    assert!(names[0].starts_with("#2 · bo"), "{names:?}");
     let _ = fs::remove_dir_all(root);
 }

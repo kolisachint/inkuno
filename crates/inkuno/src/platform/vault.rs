@@ -17,7 +17,10 @@ use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
 use super::scratch;
 use crate::logic::note::{Note, lowered};
-use crate::{lang::tr, logic::markdown};
+use crate::{
+    lang::tr,
+    logic::{markdown, revision},
+};
 
 /// The user's configuration folder, per platform.
 pub fn config_dir() -> PathBuf {
@@ -419,6 +422,23 @@ fn reread_for(root: &Path, skip: &[PathBuf], event: &notify::Result<Event>) -> b
     }
 }
 
+/// Whether a system event touches the revisions (the vault's `.inkuno/revisions`, the scratch
+/// folder's `.revisions`): `inkuno rev save` writes them from a terminal, and they are hidden, so
+/// `matters` ignores them. Such an event marks the Versions list stale, and nothing else is reread.
+/// An error may have lost one, so it counts too.
+fn revisions_moved(root: &Path, event: &notify::Result<Event>) -> bool {
+    match event {
+        Err(_) => true,
+        Ok(event) => {
+            let folders = [
+                root.join(revision::VAULT_DIR),
+                scratch::dir().join(revision::SCRATCH_DIR),
+            ];
+            event.paths.iter().any(|p| under(p, &folders))
+        }
+    }
+}
+
 /// A signal that wakes the task waiting on it, without it having to poll: the system's
 /// thread raises it, the task sleeps until then.
 #[derive(Default)]
@@ -458,13 +478,21 @@ impl Signal {
 }
 
 /// Asks the system to report any change in the vault: `changed` is raised
-/// as soon as there is one. `None` if the system cannot do it (inotify limit
+/// as soon as there is one, and `history` when a revision (`.inkuno/revisions`) changes, which
+/// raises no other signal. `None` if the system cannot do it (inotify limit
 /// reached, network folder): the caller then rereads the vault at regular intervals.
 /// Watching stops when the result is dropped.
-pub fn watch(root: &Path, changed: Arc<Signal>) -> Option<RecommendedWatcher> {
+pub fn watch(
+    root: &Path,
+    changed: Arc<Signal>,
+    history: Arc<Signal>,
+) -> Option<RecommendedWatcher> {
     let base = root.to_path_buf();
     let skip = app_folders_in(root);
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
+        if revisions_moved(&base, &event) {
+            history.raise();
+        }
         if reread_for(&base, &skip, &event) {
             changed.raise();
         }
@@ -1511,6 +1539,26 @@ mod tests {
         assert!(matters(root, &Event::new(created)));
     }
 
+    /// A revision event is for the Versions list only: no reread of the vault.
+    #[test]
+    fn a_revision_written_from_a_terminal_only_marks_the_versions_stale() {
+        use notify::{EventKind, event::CreateKind};
+        let root = Path::new("/v");
+        let event =
+            |path: &str| Event::new(EventKind::Create(CreateKind::File)).add_path(root.join(path));
+        // `inkuno rev save` writes .inkuno/revisions/Plan.md/0002.md: the history signal, and no reread.
+        let saved = event(".inkuno/revisions/Plan.md/0002.md");
+        assert!(revisions_moved(root, &Ok(saved.clone())));
+        assert!(!matters(root, &saved));
+        assert!(!reread_for(root, &[], &Ok(saved)));
+        // A note, a hidden folder of another kind, and the vault's own bin: not revisions.
+        assert!(!revisions_moved(root, &Ok(event("Plan.md"))));
+        assert!(!revisions_moved(root, &Ok(event(".trash/a.md"))));
+        assert!(!revisions_moved(root, &Ok(event(".inkuno/trash/a.md"))));
+        // An error may have lost a revision: the list is marked stale.
+        assert!(revisions_moved(root, &Err(notify::Error::generic("lost"))));
+    }
+
     /// A symbolic link that points back up to the vault, or a second link to an already
     /// walked folder, does not loop and duplicates no note.
     #[cfg(unix)]
@@ -1758,8 +1806,9 @@ mod tests {
         let root = env::temp_dir().join(format!("inkuno-watch-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         let changed = Arc::new(Signal::default());
-        let _watcher =
-            watch(&root, changed.clone()).expect("the system must be able to watch a folder");
+        let history = Arc::new(Signal::default());
+        let _watcher = watch(&root, changed.clone(), history)
+            .expect("the system must be able to watch a folder");
         // No simulated clock here: the system takes a few milliseconds (FSEvents, a bit more).
         fs::write(root.join("neuve.md"), "x").unwrap();
         let start = std::time::Instant::now();
@@ -1769,6 +1818,33 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(changed.take(), "no event in 10 s");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// On disk: a revision written in the history folder raises the history signal, not the vault's.
+    #[test]
+    fn watcher_reports_a_revision_to_the_history_signal_only() {
+        let root = env::temp_dir().join(format!("inkuno-watch-rev-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        // The history folder exists before the watch: its creation is not what is tested.
+        let folder = root.join(".inkuno/revisions/Plan.md");
+        fs::create_dir_all(&folder).unwrap();
+        let changed = Arc::new(Signal::default());
+        let history = Arc::new(Signal::default());
+        let _watcher = watch(&root, changed.clone(), history.clone())
+            .expect("the system must be able to watch a folder");
+        // `inkuno rev save` writes a revision file from a terminal.
+        fs::write(folder.join("0001.md"), "x").unwrap();
+        let start = std::time::Instant::now();
+        while !history.raised.load(Ordering::Acquire)
+            && start.elapsed() < std::time::Duration::from_secs(10)
+        {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(history.take(), "no event in 10 s");
+        // Give the system time to report every event of that write: none reaches the vault's signal.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert!(!changed.take(), "a revision must not reread the vault");
         fs::remove_dir_all(&root).unwrap();
     }
 

@@ -114,6 +114,9 @@ impl Shell {
         cx.notify();
         match fs::read_to_string(path) {
             Ok(text) => {
+                // Second line of defence: a note never loads into a comparison (the routes open a
+                // tab of their own first). If one did, the tab becomes the note: editable, no comparison.
+                self.pane_mut().compare = None;
                 // A scratch note keeps its moment as its name: its title never renames it, and no
                 // link points at it.
                 let scratch = platform::scratch::holds(path);
@@ -241,6 +244,7 @@ impl Shell {
         self.pane_mut().preview = false;
         self.pane_mut().new_dir = None;
         self.pane_mut().scratch = false;
+        self.pane_mut().compare = None;
         self.pane_mut().fresh = true;
         self.pane_mut().dirty = !text.is_empty();
         let cursor = text.len();

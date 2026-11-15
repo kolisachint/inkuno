@@ -3,7 +3,12 @@
 use super::*;
 use crate::ui::assets::ICON_SET;
 use crate::views::nav::*;
-use crate::{lang::tr, logic::markdown::Link, platform::vault, views::editor};
+use crate::{
+    lang::tr,
+    logic::markdown::Link,
+    platform::{revisions as history, vault},
+    views::editor,
+};
 use gpui::{
     Action, Animation, AnimationExt, ClipboardItem, Context, Focusable, MouseButton,
     MouseDownEvent, Window, div, ease_out_quint, prelude::*, px,
@@ -37,6 +42,26 @@ impl Shell {
             .filter(|tab| *tab < self.panes.len());
         let link = menu.and_then(|menu| menu.text).flatten();
         cx.notify();
+        // A version of the panel is a file of the vault's hidden history: only its own gestures apply.
+        if let (Mode::Versions, Some(path)) = (self.nav.mode, &target) {
+            self.version_do(what, path, window, cx);
+            return;
+        }
+        // The app's history (the vault's and the scratch folder's revisions, and their bins) is never
+        // moved, renamed, copied or trashed by a file gesture, whatever the selection shows: refused.
+        if target
+            .as_deref()
+            .is_some_and(|path| history::holds_history(path, self.vault.as_deref()))
+        {
+            return self.say(
+                Tone::Info,
+                tr(
+                    "The history of the notes is kept by the app: nothing is done to it.",
+                    "L'historique des notes est tenu par l'application : rien n'y est fait.",
+                ),
+                cx,
+            );
+        }
         match (what, tab) {
             (Do::CloseTab, Some(tab)) => return self.close_tab(tab, window, cx),
             (Do::CloseOtherTabs, Some(tab)) => return self.close_other_tabs(tab, window, cx),
@@ -98,11 +123,8 @@ impl Shell {
             window.focus(&self.pane().editor.focus_handle(cx));
             return window.dispatch_action(action, cx);
         }
-        // A version of the panel is a file of the vault's hidden history: only its own gestures apply.
+        // The panel without a version targeted (the editor's own menu, the palette): nothing of the tree.
         if self.nav.mode == Mode::Versions {
-            if let Some(path) = target {
-                self.version_do(what, &path, window, cx);
-            }
             return;
         }
         let Some(root) = self.vault.clone() else {

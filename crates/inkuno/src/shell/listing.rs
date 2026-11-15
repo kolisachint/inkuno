@@ -27,6 +27,10 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A comparison never becomes a list page: the list takes a tab of its own.
+        if self.pane().compare.is_some() {
+            self.add_tab(window, cx);
+        }
         let theme = self.theme;
         let filter = cx.new(|cx| Field::new("", theme, cx));
         cx.observe(&filter, |_, _, cx| cx.notify()).detach();

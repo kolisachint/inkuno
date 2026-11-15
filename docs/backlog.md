@@ -55,8 +55,7 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Revisions: `Keep in vault` still deletes the scratch copy once the vault note is written (a move, not a loss).
 - Versions: restore a version through the pending flow: a proposal of the old text, its changes pending, with the two `kind: auto` revisions `inkuno write` makes (`docs/design/revisions.md`, `app-ui.md` §19.3).
 - Versions: a word-level compare; today a changed line is one removed and one added line (`crates/inkuno-logic/src/pending.rs`, `propose`).
-- Versions: while a compare tab is shown, the panel says `No note is open.`; expected, the panel follows the compared note (`crates/inkuno/src/shell/versions.rs`, `read_versions`).
-- Versions: the layout file marks no tab as shown while a compare is shown, so the next start shows the first tab (`crates/inkuno/src/shell/pane.rs`, `panes_state`).
+- Versions: the list reads every version's full text on the window's thread: headers first, the text only when a compare needs it, for long histories (`crates/inkuno/src/shell/versions.rs`, `read_versions`; `crates/inkuno/src/platform/revisions.rs`, `listed`).
 - Versions: a version's date is the stored UTC time; the local time needs a conversion from a Unix time (`crates/inkuno/src/platform/clock.rs` gives the local time of now only).
 - Versions: the quiet colour of the automatic rows and the washes of a compare are not yet checked on a real screen (`crates/inkuno/src/shell/sidebar.rs`, `render_rows`).
 - `Ctrl+Alt+S` is not tried on macOS or on a desktop that keeps it; the screen was not run here.

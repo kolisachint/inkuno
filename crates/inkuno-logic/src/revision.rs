@@ -427,12 +427,13 @@ pub fn diff(
     }
 }
 
-/// What the Versions panel shows of a version on its row: `#12 · sachin`, then `· auto` for an
-/// automatic version and `· <note>` when it has one.
-pub fn row_name(rev: &Revision) -> String {
+/// What the Versions panel shows of a version on its row: `#12 · sachin`, then `· <auto>` for an
+/// automatic version (`auto` is the word for it, translated by the caller) and `· <note>` when it
+/// has one.
+pub fn row_name(rev: &Revision, auto: &str) -> String {
     let mut name = format!("#{} · {}", rev.number, rev.author);
     if rev.kind == Kind::Auto {
-        name += " · auto";
+        name += &format!(" · {auto}");
     }
     if let Some(note) = rev.note.as_deref().filter(|note| !note.is_empty()) {
         name += &format!(" · {note}");
@@ -441,11 +442,13 @@ pub fn row_name(rev: &Revision) -> String {
 }
 
 /// A version's date as the panel shows it: `2026-11-14 10:32`, the UTC time `rev list` prints, to the
-/// minute. A date that is not RFC 3339 is shown as it is.
+/// minute. A date that is not RFC 3339 (hand-edited, short, or with a character that is not ASCII
+/// where the minute is) is shown as it is.
 pub fn short_date(date: &str) -> String {
-    match date.strip_suffix('Z').and_then(|d| d.split_once('T')) {
-        Some((day, time)) if time.len() >= 5 => format!("{day} {}", &time[..5]),
-        _ => date.to_string(),
+    let parts = date.strip_suffix('Z').and_then(|d| d.split_once('T'));
+    match parts.and_then(|(day, time)| Some((day, time.get(..5)?))) {
+        Some((day, minute)) => format!("{day} {minute}"),
+        None => date.to_string(),
     }
 }
 
@@ -884,24 +887,42 @@ mod tests {
 
     #[test]
     fn a_row_says_the_number_the_author_the_kind_and_the_note() {
-        assert_eq!(row_name(&rev(12, "x")), "#12 · sachin");
+        assert_eq!(row_name(&rev(12, "x"), "auto"), "#12 · sachin");
         let auto = Revision {
             kind: Kind::Auto,
             note: Some("proposed, pending".into()),
             ..rev(3, "x")
         };
-        assert_eq!(row_name(&auto), "#3 · sachin · auto · proposed, pending");
+        assert_eq!(
+            row_name(&auto, "auto"),
+            "#3 · sachin · auto · proposed, pending"
+        );
+        // The word of the automatic kind is the caller's: here a French one.
+        assert_eq!(
+            row_name(&auto, "auto FR"),
+            "#3 · sachin · auto FR · proposed, pending"
+        );
         let empty = Revision {
             note: Some(String::new()),
             ..rev(4, "x")
         };
-        assert_eq!(row_name(&empty), "#4 · sachin");
+        assert_eq!(row_name(&empty, "auto"), "#4 · sachin");
     }
 
     #[test]
     fn a_date_is_shown_to_the_minute_as_rev_list_gives_it() {
         assert_eq!(short_date("2026-11-14T10:32:00Z"), "2026-11-14 10:32");
         assert_eq!(short_date("not a date"), "not a date");
+    }
+
+    /// A date with a character that is not ASCII where the minute is, or empty or short, is shown as it is.
+    #[test]
+    fn a_hand_edited_date_never_panics_and_is_shown_as_it_is() {
+        // A non-ASCII character where the minute is: the cut would split it.
+        assert_eq!(short_date("2026-11-14T10:3éZ"), "2026-11-14T10:3éZ");
+        // An empty date, and a short time.
+        assert_eq!(short_date(""), "");
+        assert_eq!(short_date("2026-11-14T1Z"), "2026-11-14T1Z");
     }
 
     #[test]
