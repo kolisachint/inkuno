@@ -335,8 +335,8 @@ pub struct Editor {
     geos: Vec<Geo>,
     /// The commented parts of each table, for one version of the text and one cursor.
     marks: Option<Marks>,
-    /// No editor is read-only anymore (embeds are cut, every editor edits); kept false so the
-    /// layout paths stay as they were.
+    /// A comparison (`shell/versions.rs`): its text is shown, and its caret, selection, copy, find
+    /// and scrolling work, but no change is made (`touches_pending` refuses every edit).
     readonly: bool,
     /// The handle under the pointer: (table start, handle).
     part_hover: Option<(usize, Part)>,
@@ -529,6 +529,16 @@ impl Editor {
 
     pub fn text(&self) -> &str {
         &self.content
+    }
+
+    /// Makes the note read-only (a comparison) or editable again. A read-only note refuses every change.
+    pub fn set_readonly(&mut self, readonly: bool) {
+        self.readonly = readonly;
+    }
+
+    /// Whether the note is read-only: a comparison, which is never changed.
+    pub fn is_readonly(&self) -> bool {
+        self.readonly
     }
 
     /// Replaces the whole content (note change); cursor at byte `cursor`.

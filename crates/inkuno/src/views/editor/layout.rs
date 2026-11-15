@@ -2270,46 +2270,50 @@ impl Editor {
         );
         self.viewport = bounds;
         self.materialize(bounds, window);
-        if !self.readonly {
-            self.view_hitbox = Some(window.insert_hitbox(bounds, HitboxBehavior::Normal));
-            self.copy_hitboxes = self
-                .opening
-                .iter()
-                .map(|&i| &self.rows[i])
-                .map(|r| {
-                    (
-                        r.start,
-                        window.insert_hitbox(self.copy_bounds(r), HitboxBehavior::Normal),
-                    )
-                })
-                .collect();
-            self.view_hitboxes = self
-                .opening
-                .iter()
-                .map(|&i| &self.rows[i])
-                .filter(|r| self.views(r))
-                .map(|r| {
-                    (
-                        r.start,
-                        window.insert_hitbox(self.view_bounds(r), HitboxBehavior::Normal),
-                    )
-                })
-                .collect();
-            self.big_hitboxes = self
-                .rows
-                .iter()
-                .filter_map(|r| {
-                    Some((
-                        r.start,
-                        window.insert_hitbox(self.big_bounds(r)?, HitboxBehavior::Normal),
-                    ))
-                })
-                .collect();
-            let grid = self.grid.and_then(|_| self.popup_at(Self::grid_size()));
-            self.grid_hitbox = grid.map(|at| {
-                window.insert_hitbox(Bounds::new(at, Self::grid_size()), HitboxBehavior::Normal)
-            });
-        }
+        // The pointer areas that change no text (the copy and view buttons, the hand, the big
+        // figures) stay in a comparison too: it is read-only, not inert.
+        self.view_hitbox = Some(window.insert_hitbox(bounds, HitboxBehavior::Normal));
+        self.copy_hitboxes = self
+            .opening
+            .iter()
+            .map(|&i| &self.rows[i])
+            .map(|r| {
+                (
+                    r.start,
+                    window.insert_hitbox(self.copy_bounds(r), HitboxBehavior::Normal),
+                )
+            })
+            .collect();
+        self.view_hitboxes = self
+            .opening
+            .iter()
+            .map(|&i| &self.rows[i])
+            .filter(|r| self.views(r))
+            .map(|r| {
+                (
+                    r.start,
+                    window.insert_hitbox(self.view_bounds(r), HitboxBehavior::Normal),
+                )
+            })
+            .collect();
+        self.big_hitboxes = self
+            .rows
+            .iter()
+            .filter_map(|r| {
+                Some((
+                    r.start,
+                    window.insert_hitbox(self.big_bounds(r)?, HitboxBehavior::Normal),
+                ))
+            })
+            .collect();
+        // The table picker is an edit: a comparison has none.
+        let grid = self
+            .grid
+            .filter(|_| !self.readonly)
+            .and_then(|_| self.popup_at(Self::grid_size()));
+        self.grid_hitbox = grid.map(|at| {
+            window.insert_hitbox(Bounds::new(at, Self::grid_size()), HitboxBehavior::Normal)
+        });
         self.frames(reveal, window);
     }
 

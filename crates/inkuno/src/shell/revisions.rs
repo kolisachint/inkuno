@@ -11,6 +11,17 @@ impl Shell {
     /// the note's text as a new revision. When the text is the latest revision's, says so and asks
     /// nothing.
     pub(super) fn save_revision(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // A comparison is never saved: it is a read-only view of a version against the note.
+        if self.pane().editor.read(cx).is_readonly() {
+            return self.say(
+                Tone::Info,
+                tr(
+                    "This is a comparison: it cannot be saved as a version.",
+                    "Ceci est une comparaison : elle ne peut pas être enregistrée comme version.",
+                ),
+                cx,
+            );
+        }
         if !self.flush_one(cx) {
             return;
         }
@@ -89,6 +100,8 @@ impl Shell {
     /// Writes the revision of the note at `path`, its text as its tab shows it now, and says what
     /// became of it.
     fn write_revision(&mut self, path: &Path, memo: &str, cx: &mut Context<Self>) {
+        // The Versions panel lists the new version when it is next drawn.
+        self.versions_stale = true;
         let Some(home) = history::home_of(path, self.vault.as_deref()) else {
             return;
         };

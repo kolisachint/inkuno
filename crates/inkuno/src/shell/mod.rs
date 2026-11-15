@@ -20,6 +20,7 @@ mod settings;
 mod sidebar;
 mod tabs;
 mod toasts;
+mod versions;
 
 use help::*;
 use keymap::*;
@@ -158,6 +159,12 @@ struct Shell {
     scratch_ask: Option<Entity<Editor>>,
     /// Counts the changes of the scratch notes: the Scratch panel's rows are read again when it moves.
     scratch_rev: u64,
+    /// The Versions panel's list: the versions of the active tab's note, read from disk
+    /// (`versions.rs`), and whether it must be read again (a save, a proposal, the panel shown).
+    versions: Option<versions::Versions>,
+    versions_stale: bool,
+    /// Counts the reads of the list: the panel's rows are built again when it moves.
+    versions_rev: u64,
     /// The help panel, open or not.
     help: Help,
     /// The assistant's panel and its state (the process side is the seam in `assistant.rs`).
@@ -264,6 +271,9 @@ impl Shell {
             lights_hidden: None,
             scratch_ask: None,
             scratch_rev: 0,
+            versions: None,
+            versions_stale: true,
+            versions_rev: 0,
             help: Help::default(),
             assistant,
             bound: defaults(),

@@ -90,6 +90,10 @@ impl EntityInputHandler for Editor {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Composed text in a comparison: nothing is marked, the edit is refused.
+        if self.readonly {
+            return self.refuse_pending(cx);
+        }
         let range = range_utf16
             .map(|r| self.range_from_utf16(&r))
             .or(self.marked.clone())

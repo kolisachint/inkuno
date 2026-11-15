@@ -86,6 +86,14 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
   else `unknown`.
 - Errors and exit codes: as in [cli.md](cli.md).
 
+## In the app
+
+- `Save a version` (`Ctrl+Alt+S`) saves a version of the note in the tab, with its author and the optional line.
+- **Versions of the note** (palette; `history` finds it too) opens the Versions panel: the versions of the active note, newest first,
+  each as `#12 · author`, with its line and its date. Enter or a click compares a version with the note as it is now, in a read-only
+  tab; the difference is drawn as pending changes (green added, red removed). The row menu copies a version's text. Design and
+  limits: `app-ui.md` §19.
+
 ## Decisions
 
 | Date | Decision (owner-approved, 2026-11-14 unless noted) |
@@ -105,9 +113,10 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
 | 2026-11-15 | A failed save of the proposed version does not undo the write: the changes stay pending, `proposed` is null, and one warning goes to standard error (`cli.md`, Decisions). The first save, of the text before, still stops the write. |
 | 2026-11-14 | The command line replaces the MCP server, and the server is removed: done, see [cli.md](cli.md). |
 | 2026-11-14 | An in-app agent talks over a local socket with the same command line as version 2 (planned). |
+| 2026-11-15 | The Versions panel lists the active note's versions, newest first, and a compare shows one against the note now, in a read-only tab with no file: its text is the version's with the difference as pending changes (`pending::propose`), a snapshot, never saved, not restored at the next start. No restore yet; a restore would be a proposal through the pending flow (`app-ui.md` §19). |
 
 ## Not built yet
 
-- The Versions side panel and the coloured inline compare.
+- Restoring a version (through the pending flow, as a proposal).
 - Restoring a trashed note's history when the bin holds it under another name (the undo of a trash
   and the Trash panel's restore bring it back by name).

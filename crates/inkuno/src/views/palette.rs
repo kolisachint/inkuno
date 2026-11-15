@@ -228,6 +228,15 @@ pub fn command(query: &str, label: &str) -> bool {
         .all(|typed| words.iter().any(|word| word.starts_with(typed)))
 }
 
+/// Whether a palette command matches the search: by its label, or by one of its aliases
+/// (`commands::aliases`, such as `history` for the versions).
+fn offered(query: &str, action: &str, label: &str) -> bool {
+    command(query, label)
+        || crate::logic::commands::aliases(action)
+            .iter()
+            .any(|word| command(query, word))
+}
+
 impl Palette {
     /// `entries`: the notes, most recent first.
     /// The notes' folders are shown from `root`.
@@ -444,7 +453,7 @@ impl Palette {
             let q = self.query.text.trim().to_lowercase();
             let found = (0..self.commands.len()).filter(|&i| {
                 q.is_empty()
-                    || command(&q, self.commands[i].label)
+                    || offered(&q, self.commands[i].action, self.commands[i].label)
                     || command(&q, &self.commands[i].keys)
             });
             self.items = found.map(Item::Command).collect();
@@ -552,7 +561,8 @@ impl Palette {
                     )
             };
             let found = (0..self.commands.len()).filter(|&i| {
-                !doubled(self.commands[i].action) && command(&q, self.commands[i].label)
+                !doubled(self.commands[i].action)
+                    && offered(&q, self.commands[i].action, self.commands[i].label)
             });
             items.extend(found.take(8).map(Item::Command));
         }
@@ -1085,7 +1095,7 @@ impl Render for Palette {
 
 #[cfg(test)]
 mod tests {
-    use super::command;
+    use super::{command, offered};
 
     #[test]
     fn finds_commands_by_words() {
@@ -1096,5 +1106,20 @@ mod tests {
         // No more subsequence: scattered letters do not bring up an unrelated command.
         assert!(!command("plan", "Annuler le remplacement dans le coffre"));
         assert!(!command("nvf", "New folder"));
+    }
+
+    #[test]
+    fn a_command_is_also_found_by_its_aliases() {
+        assert!(offered(
+            "history",
+            "app::ShowVersions",
+            "Versions of the note"
+        ));
+        assert!(offered(
+            "versions",
+            "app::ShowVersions",
+            "Versions of the note"
+        ));
+        assert!(!offered("history", "nav::ShowScratch", "Scratch notes"));
     }
 }

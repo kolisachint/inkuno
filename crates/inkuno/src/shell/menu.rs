@@ -98,6 +98,13 @@ impl Shell {
             window.focus(&self.pane().editor.focus_handle(cx));
             return window.dispatch_action(action, cx);
         }
+        // A version of the panel is a file of the vault's hidden history: only its own gestures apply.
+        if self.nav.mode == Mode::Versions {
+            if let Some(path) = target {
+                self.version_do(what, &path, window, cx);
+            }
+            return;
+        }
         let Some(root) = self.vault.clone() else {
             return;
         };
@@ -446,7 +453,25 @@ impl Shell {
         let mut groups: Vec<Vec<(&'static str, Do)>> = vec![Vec::new(); 7];
         let scratch =
             menu.tab.is_none() && menu.target.as_deref().is_some_and(platform::scratch::holds);
-        if scratch {
+        // A version of the panel: compared with the note now, or its text copied.
+        let version =
+            self.nav.mode == Mode::Versions && menu.tab.is_none() && menu.target.is_some();
+        if version {
+            groups[0].push((
+                tr(
+                    "Compare with the note now",
+                    "Comparer avec la note maintenant",
+                ),
+                Do::CompareVersion,
+            ));
+            groups[1].push((
+                tr(
+                    "Copy this version's text",
+                    "Copier le texte de cette version",
+                ),
+                Do::CopyVersion,
+            ));
+        } else if scratch {
             groups[0].push((tr("Open", "Ouvrir"), Do::Open));
             groups[0].push((tr("Open to the side", "Ouvrir à côté"), Do::OpenAside));
             if self.vault.is_some() {

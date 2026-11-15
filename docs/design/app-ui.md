@@ -1006,3 +1006,77 @@ Normal 800 is the default (§10.4 lock released for this change).
 - A line `END TEXT` after the block, in the agent's commentary, is taken as part of the text (the last one closes it).
 - The default instruction is English. The prompt asks for the answer in the note's language (§18.2).
 - The passage of a selection that holds a table or a figure is not special-cased.
+
+## 19. Versions panel and compare (built 2026-11-15)
+
+> Status: built, on the owner's brief of 2026-11-15 (`revisions.md`, Decisions). The code is the ground truth for names.
+> The panel lists the saved versions of a note; a compare shows one of them against the note as it is now.
+
+- [x] **Propose**, **User approves**: the brief of 2026-11-15 (the panel, the compare in a read-only tab, the row menu).
+- [x] **Implement**: `shell/versions.rs` (the list and its cache, the compare, the row gestures), `views/nav.rs` (`Mode::Versions`,
+      `Do::CompareVersion`, `Do::CopyVersion`), `shell/sidebar.rs` (the rows, the empty states, the drawing), `shell/menu.rs` (the
+      entries, `version_do`), `shell/tabs.rs` and `shell/render.rs` (the tab's and the window's name, the palette action, the
+      hint), `shell/pane.rs` (`Pane::compare`), `shell/revisions.rs` (the save refused in a comparison), `shell/assistant.rs` (the list
+      read again after a proposal), `views/editor/` (the `readonly` flag: `edit.rs`, `changes.rs`, `clipboard.rs`, `input.rs`,
+      `layout.rs`, `mod.rs`), `inkuno-logic/src/revision.rs` (`row_name`, `short_date`, `compare`), `commands.rs` (the entry and its
+      alias `history`), `views/palette.rs` (`offered`), `shell/keymap.rs` (the help line).
+- [x] **Test**: `shell/tests/versions.rs` (the palette, newest first and the auto mark, the three empty states, the tab switch and the
+      save, Enter, the read-only rules, not dirty and nothing written, equal texts, marks refused, one tab per version, the row
+      menu and the copy, the menu cannot trash a version), `inkuno-logic` `revision.rs` (row name, date, the compare and its
+      refusals), `commands.rs`, `views/palette.rs` (`history`), `views/nav.rs` (the saved word `versions`).
+
+### 19.1 The panel
+
+- `app::ShowVersions`, palette entry **Versions of the note** (group Go; `history` finds it too). No chord and no rail button, as
+  the Scratch panel. It lives in the left dock, hidden by default; an older layout file names no `versions`, and nothing changes.
+- Rows: the versions of the active tab's note, newest first. A row reads `#12 · author`, then `· auto` for an automatic version,
+  then `· <note>` when it has one. On the right, the date and time, UTC to the minute, as `inkuno rev list` prints them. An
+  automatic version's name is drawn in the quiet colour.
+- The list is read from disk when the panel is shown, after **Save a version**, after an Assistant proposal (Review or Improve), and
+  when the note of the active tab changes. It is cached in `Shell::versions` and keyed by the note's path: nothing is read per frame.
+- Empty states, in the panel's quiet text:
+  - no note in the tab: **No note is open.**
+  - a note outside the vault and the scratch folder: **This note has no history.**
+  - no version yet: **No version yet. Save one with** the chord in force (`Ctrl+Alt+S`).
+  - a history that cannot be read: the reason, not an empty list.
+- Keys: Up and Down move, Enter compares, Escape returns to the note, as in the other panels.
+
+### 19.2 The compare
+
+- Enter, a click, or **Compare with the note now** in the row's menu opens a tab of the active pane: a read-only note with no file,
+  titled `<note> · #12 ↔ now` (the word `now` is `maintenant` in French).
+- Its text is the version's text, with each difference written as a pending change: the lines the version had and the note no longer
+  has are removed lines, the new ones are added lines. The drawing of §17 colours them: green for an added line, red and struck for a
+  removed one. The note's text is the one shown now, unsaved edits included. Decision: `logic::revision::compare`, which is
+  `pending::propose(version, version, now)`.
+- Not opened, with one line and no tab:
+  - the two texts are equal: **Nothing changed since version 12.**
+  - the version or the note holds pending changes or their marks: **This version or the note holds pending changes: accept or reject
+    them first.**
+- Opening the same version again brings its tab to the front. When the note has changed since, that tab's text is replaced by the new
+  compare.
+- The tab is read-only. The caret, the selection, copy, find and scrolling work. Typing, paste, cut, Enter, Tab, Delete, the format
+  bar, the table and block gestures, find-and-replace, accept, reject, comment, undo and Save a version change nothing. Each refusal
+  says **This is a comparison: it cannot be changed.** once (Save a version says it cannot be saved as a version). The editor's
+  `readonly` flag does this: `touches_pending` refuses every edit of a read-only note, and the change actions refuse before they act
+  (§17.2, §17.3).
+- The compare is a snapshot: it does not follow later edits of the note. It is never saved: no dirty mark, no autosave, no file. Closing
+  it asks nothing. It is not added to the recent notes or to the reopen list (Ctrl+Alt+T), and the layout file skips it, so it is not
+  restored at the next start. The "N changes pending" hint is not drawn for it. Review and Improve are not offered: they need a file.
+
+### 19.3 The row menu
+
+- **Compare with the note now** (the default: Enter does the same) and **Copy this version's text**.
+- No other gesture applies to a version: the tree's trash, rename, move and duplicate act on nothing, since a version is history.
+- Restore is not built. It is a follow-up (`backlog.md`): a restore would be a proposal through the pending flow.
+
+### 19.4 Known limits
+
+- Line-level compare only: a changed line is one removed line and one added line. No word-level tint.
+- Tables and figures inside a change get no wash, as in §17.7.
+- The panel follows the note of the active tab. While a comparison tab is active, the panel says **No note is open.**; it does not
+  follow the compared note.
+- The layout file marks no tab as shown while a comparison is shown (the comparison is not saved): the next start shows the first tab.
+- A date is the stored UTC time: the local time of a past version needs a conversion that is not built (`platform/clock.rs` gives the
+  local time of now only).
+- No restore (§19.3).

@@ -4,6 +4,10 @@ use super::*;
 
 impl Editor {
     pub(super) fn copy(&mut self, cut: bool, cx: &mut Context<Self>) {
+        // A cut takes the text away: a comparison keeps it, and says so. A copy goes on as usual.
+        if cut && self.readonly {
+            return self.refuse_pending(cx);
+        }
         if let Some(text) = self.pick_text() {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
             if cut {

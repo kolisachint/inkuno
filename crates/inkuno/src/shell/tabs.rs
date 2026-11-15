@@ -40,6 +40,10 @@ impl Shell {
     /// What a tab is called: its file, its list page, or a new note's first line.
     pub(super) fn tab_name(&self, tab: usize, cx: &App) -> String {
         let pane = &self.panes[tab];
+        // A comparison is named by what it compares: `<note> · #12 ↔ now`.
+        if let Some(compare) = &pane.compare {
+            return compare.title.clone();
+        }
         if let Some(listing) = &pane.listing {
             return match nav::tag_of(&listing.of) {
                 Some(tag) => format!("#{tag}"),

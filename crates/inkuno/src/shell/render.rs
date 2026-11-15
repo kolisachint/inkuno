@@ -66,13 +66,16 @@ impl Render for Shell {
         // A scratch note is named by its title, and says so: it is not in the vault.
         let scratch = (self.pane().scratch && self.pane().file.is_none())
             .then(|| logic::scratch::title(self.pane().editor.read(cx).text()));
+        // A comparison is named by what it compares.
+        let compare = self.pane().compare.as_ref().map(|c| c.title.clone());
         let title = match (scratch, self.pane().displayed_path(), vault_name) {
             (Some(name), _, _) => format!("{name} — {} — Inkuno", tr("Scratch", "Brouillon")),
             (None, Some(p), Some(vault)) => format!("{} — {vault} — Inkuno", vault::stem(p)),
             (None, Some(p), None) => format!("{} — Inkuno", vault::stem(p)),
-            (None, None, Some(vault)) => {
-                format!("{} — {vault} — Inkuno", tr("New note", "Nouvelle note"))
-            }
+            (None, None, Some(vault)) => format!(
+                "{} — {vault} — Inkuno",
+                compare.unwrap_or_else(|| tr("New note", "Nouvelle note").to_string())
+            ),
             (None, None, None) => "Inkuno".to_string(),
         };
         if title != self.title {
@@ -265,6 +268,9 @@ impl Render for Shell {
             }))
             .on_action(cx.listener(|this, _: &nav::ShowScratch, window, cx| {
                 this.show_nav(Mode::Scratch, false, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &ShowVersions, window, cx| {
+                this.show_nav(Mode::Versions, false, window, cx)
             }))
             .on_action(
                 cx.listener(|this, _: &nav::NewFolder, window, cx| this.new_folder(window, cx)),
@@ -909,7 +915,11 @@ impl Shell {
         let assistant_btn = (!self.focus_mode).then(|| self.assistant_toggle(cx));
         let corner = assistant_btn.is_some() as usize + talk.is_some() as usize;
         // The pending changes of the note, said quietly at its foot (none in focus mode).
-        let changes = self.pane().editor.read(cx).pending_changes();
+        // A comparison has changes to show, not to accept: it is not counted.
+        let changes = match self.pane().editor.read(cx).is_readonly() {
+            true => 0,
+            false => self.pane().editor.read(cx).pending_changes(),
+        };
         let hint =
             (changes > 0 && !self.focus_mode).then(|| self.pending_hint(changes, corner, cx));
         // The list page closed with input in its filter or one of its cells: nothing

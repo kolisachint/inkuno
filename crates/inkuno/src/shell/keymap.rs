@@ -105,6 +105,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t(tr("Current file", "Fichier affiché"), tr("The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate", "L'arbre marque le fichier du volet et de l'onglet actifs, y compris les schémas, images et tableaux ; la sélection reste distincte")),
                 k(&nav::ShowRecent, tr("Recent notes", "Notes récentes")),
                 k(&nav::ShowScratch, tr("Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it", "Brouillons : le panneau les liste, les plus récents d'abord ; Entrée en ouvre un, Suppr. le jette")),
+                k(&ShowVersions, tr("Versions of the note: the panel lists its saved versions, newest first; Enter compares one with the note as it is now", "Versions de la note : le panneau liste ses versions enregistrées, les plus récentes d'abord ; Entrée en compare une avec la note telle qu'elle est")),
                 t(tr("A picture", "Une image"), tr("Shown in place of the note", "Affichée à la place de la note")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
                 p("assistant", tr("Assistant: show or hide its panel in the right dock (also a round button at the foot of the note)", "Assistant : afficher ou masquer son panneau dans le dock de droite (aussi un bouton rond en bas de la note)")),

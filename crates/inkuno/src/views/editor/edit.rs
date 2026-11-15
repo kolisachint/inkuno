@@ -115,10 +115,11 @@ impl Editor {
         cx.notify();
     }
 
-    /// Whether replacing `range` with `text` is refused because of a pending change: the person
-    /// accepts or rejects that change first. The rule is `logic::pending::refuses`, nothing more.
+    /// Whether replacing `range` with `text` is refused: in a read-only note every change is, and
+    /// otherwise a change is refused because of a pending change, which the person accepts or rejects
+    /// first. The pending rule is `logic::pending::refuses`, nothing more.
     pub(super) fn touches_pending(&self, range: &Range<usize>, text: &str) -> bool {
-        crate::logic::pending::refuses(&self.content, range.clone(), text)
+        self.readonly || crate::logic::pending::refuses(&self.content, range.clone(), text)
     }
 
     /// Whether any of `edits` (each a range of the current text, with its text) is refused. Checked
@@ -129,15 +130,20 @@ impl Editor {
             .any(|(range, text)| self.touches_pending(range, text))
     }
 
-    /// Says that an edit was refused because of a pending change: a message, shown once.
+    /// Says that an edit was refused: because the note is a comparison, or because of a pending
+    /// change. A message, shown once.
     pub(super) fn refuse_pending(&mut self, cx: &mut Context<Self>) {
-        cx.emit(EditorEvent::Notice(
-            tr(
+        let text = match self.readonly {
+            true => tr(
+                "This is a comparison: it cannot be changed.",
+                "Ceci est une comparaison : elle ne peut pas être modifiée.",
+            ),
+            false => tr(
                 "This change is pending: accept or reject it first.",
                 "Ce changement est en attente : acceptez-le ou refusez-le d'abord.",
-            )
-            .into(),
-        ));
+            ),
+        };
+        cx.emit(EditorEvent::Notice(text.into()));
     }
 
     /// Replaces `range` with `text`, keeping the selection as well as possible. Refused when the
@@ -257,6 +263,10 @@ impl Editor {
     }
 
     pub fn restore(&mut self, redo: bool, cx: &mut Context<Self>) {
+        // A comparison has no history to go back to: its text never changes.
+        if self.readonly {
+            return;
+        }
         let (from, to) = if redo {
             (&mut self.redo, &mut self.undo)
         } else {
@@ -460,7 +470,7 @@ impl Editor {
     /// What another program changed in the note while it was typed in (`merge::onto`), put into
     /// the text: a single undo step, the cursors staying in the text around them.
     pub fn absorb(&mut self, edits: &[(Range<usize>, String)], cx: &mut Context<Self>) {
-        if edits.is_empty() {
+        if edits.is_empty() || self.readonly {
             return;
         }
         self.push_undo(true);

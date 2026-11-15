@@ -79,6 +79,9 @@ pub(super) struct Pane {
     /// A scratch note (Ctrl+N): its file is in the scratch folder, never in the vault, and it is
     /// written as it is typed, vault or not. Its file is made at its first text.
     pub(super) scratch: bool,
+    /// A comparison tab (`versions.rs`): a read-only text of a version against the note now. It has no
+    /// file: it is never saved, restored, kept in the recent notes, nor asked about when closed.
+    pub(super) compare: Option<super::versions::Compare>,
 }
 
 /// A pane of the window: its tabs, left to right (indices in `Shell::panes`), and the one it shows.
@@ -214,6 +217,7 @@ impl Shell {
             listing: None,
             peek: false,
             scratch: false,
+            compare: None,
         }
     }
 
