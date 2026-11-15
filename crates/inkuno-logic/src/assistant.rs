@@ -230,6 +230,8 @@ pub fn improve_prompt(note: &str, passage: Option<&str>, instruction: &str) -> S
          Read the file `{note}` first, for its context. Rewrite {target} as this instruction says: \
          {instruction}\n\
          \n\
+         Write in the language of the note.\n\
+         \n\
          {given}\
          Answer with NOTHING but the new text of {target}, placed between a line `BEGIN TEXT` and a \
          line `END TEXT`:\n\
@@ -258,7 +260,21 @@ fn is_mark(line: &str, mark: &str) -> bool {
 /// line `END TEXT` (labels tolerant, see [`is_mark`]). One code fence wrapped round the block is
 /// dropped. `None` when there is no such block, when the block is empty, or when the answer is
 /// `NO CHANGE`.
-pub fn proposal(answer: &str) -> Option<String> {
+/// Whether the first line of `text` is a code fence line: three backticks or more once its indent
+/// is taken off. The original passage (or note) is checked with this, see [`proposal`].
+pub fn starts_with_fence(text: &str) -> bool {
+    text.lines().next().is_some_and(is_fence)
+}
+
+fn is_fence(line: &str) -> bool {
+    line.trim_start().starts_with("```")
+}
+
+/// The block between the first `BEGIN TEXT` and the last `END TEXT` line of `answer`, or `None`
+/// when there is no such block, when it is empty, or when it is `NO CHANGE`. A block wrapped in one
+/// code fence drops that fence, unless `original_fenced` says the text it replaces starts with a
+/// fence line (see [`starts_with_fence`]): a passage that is itself a fenced block keeps its fences.
+pub fn proposal(answer: &str, original_fenced: bool) -> Option<String> {
     if is_mark(answer, "NO CHANGE") {
         return None;
     }
@@ -269,8 +285,8 @@ pub fn proposal(answer: &str) -> Option<String> {
         return None;
     }
     let mut inner = &lines[begin + 1..end];
-    let fenced = |line: &&str| line.trim_start().starts_with("```");
-    if inner.len() >= 2 && fenced(&inner[0]) && fenced(&inner[inner.len() - 1]) {
+    let wrapped = inner.len() >= 2 && is_fence(inner[0]) && is_fence(inner[inner.len() - 1]);
+    if wrapped && !original_fenced {
         inner = &inner[1..inner.len() - 1];
     }
     let text = inner.join("\n");
@@ -555,6 +571,17 @@ mod tests {
     }
 
     #[test]
+    fn the_improve_prompt_asks_for_the_language_of_the_note() {
+        let prompt = improve_prompt("Plan.md", Some("un peu de texte"), IMPROVE_INSTRUCTION);
+        assert!(
+            prompt.contains("Write in the language of the note."),
+            "{prompt}"
+        );
+        let whole = improve_prompt("Plan.md", None, "Make it formal");
+        assert!(whole.contains("Write in the language of the note."));
+    }
+
+    #[test]
     fn a_passage_ending_with_a_break_is_not_given_a_second_one() {
         let prompt = improve_prompt("a.md", Some("one\n"), "x");
         assert!(prompt.contains("BEGIN PASSAGE\none\nEND PASSAGE"));
@@ -564,12 +591,15 @@ mod tests {
     #[test]
     fn the_block_between_the_text_marks_is_the_proposal() {
         assert_eq!(
-            proposal("BEGIN TEXT\nUn peu plus clair.\nEND TEXT\n"),
+            proposal("BEGIN TEXT\nUn peu plus clair.\nEND TEXT\n", false),
             Some("Un peu plus clair.".into())
         );
         // Lines inside the block are kept, blank ones too; words around it are ignored.
         assert_eq!(
-            proposal("Here it is.\nBEGIN TEXT\nfirst\n\nsecond\nEND TEXT\nThat is all."),
+            proposal(
+                "Here it is.\nBEGIN TEXT\nfirst\n\nsecond\nEND TEXT\nThat is all.",
+                false
+            ),
             Some("first\n\nsecond".into())
         );
     }
@@ -577,17 +607,20 @@ mod tests {
     #[test]
     fn the_text_labels_are_tolerant() {
         assert_eq!(
-            proposal("**BEGIN TEXT:**\nx\n**END TEXT**"),
+            proposal("**BEGIN TEXT:**\nx\n**END TEXT**", false),
             Some("x".into())
         );
-        assert_eq!(proposal("`begin text`\nx\n`End Text:`"), Some("x".into()));
         assert_eq!(
-            proposal("- BEGIN TEXT\nx\n- END TEXT"),
+            proposal("`begin text`\nx\n`End Text:`", false),
+            Some("x".into())
+        );
+        assert_eq!(
+            proposal("- BEGIN TEXT\nx\n- END TEXT", false),
             None,
             "a list mark is not a label"
         );
         assert_eq!(
-            proposal("  BEGIN TEXT  \nx\n  END TEXT  "),
+            proposal("  BEGIN TEXT  \nx\n  END TEXT  ", false),
             Some("x".into())
         );
     }
@@ -595,34 +628,61 @@ mod tests {
     #[test]
     fn a_block_wrapped_in_one_code_fence_drops_the_fence() {
         let answer = "BEGIN TEXT\n```markdown\n# Title\n\nBody.\n```\nEND TEXT";
-        assert_eq!(proposal(answer), Some("# Title\n\nBody.".into()));
+        assert_eq!(proposal(answer, false), Some("# Title\n\nBody.".into()));
         // A fence inside the text, not around it, is text.
         let inside = "BEGIN TEXT\nSee:\n```\ncode\n```\nEND TEXT";
-        assert_eq!(proposal(inside), Some("See:\n```\ncode\n```".into()));
+        assert_eq!(proposal(inside, false), Some("See:\n```\ncode\n```".into()));
+    }
+
+    #[test]
+    fn a_passage_that_is_a_fenced_block_comes_back_with_its_fences() {
+        // The original starts with a fence line: the block is the new passage, fences and all.
+        let original = "```md\nold\n```";
+        assert!(starts_with_fence(original));
+        let answer = "BEGIN TEXT\n```md\nnew\n```\nEND TEXT";
+        assert_eq!(
+            proposal(answer, true),
+            Some("```md\nnew\n```".into()),
+            "the fence is kept"
+        );
+        // The same answer for an unfenced original is wrapped text: the fence goes.
+        assert_eq!(proposal(answer, false), Some("new".into()));
+    }
+
+    #[test]
+    fn an_unfenced_passage_returned_inside_a_wrapper_fence_has_it_stripped() {
+        let original = "un peu de texte";
+        assert!(!starts_with_fence(original));
+        let answer = "BEGIN TEXT\n```\nUn peu plus clair.\n```\nEND TEXT";
+        assert_eq!(proposal(answer, false), Some("Un peu plus clair.".into()));
+        // The fence check reads the first line only, after its indent.
+        assert!(starts_with_fence("  ```rust\nfn main() {}\n```"));
+        assert!(!starts_with_fence("text\n```\ncode\n```"));
+        assert!(!starts_with_fence(""));
     }
 
     #[test]
     fn no_change_gives_no_proposal() {
-        assert_eq!(proposal("NO CHANGE"), None);
-        assert_eq!(proposal("  no change\n"), None);
-        assert_eq!(proposal("BEGIN TEXT\nNO CHANGE\nEND TEXT"), None);
+        assert_eq!(proposal("NO CHANGE", false), None);
+        assert_eq!(proposal("  no change\n", false), None);
+        assert_eq!(proposal("BEGIN TEXT\nNO CHANGE\nEND TEXT", false), None);
     }
 
     #[test]
     fn an_answer_without_a_block_or_with_an_empty_one_gives_no_proposal() {
-        assert_eq!(proposal("Sure, here is a better version: ..."), None);
-        assert_eq!(proposal("BEGIN TEXT\nx\n"), None, "no end mark");
+        assert_eq!(proposal("Sure, here is a better version: ...", false), None);
+        assert_eq!(proposal("BEGIN TEXT\nx\n", false), None, "no end mark");
         assert_eq!(
-            proposal("END TEXT\nBEGIN TEXT\nx"),
+            proposal("END TEXT\nBEGIN TEXT\nx", false),
             None,
             "end before begin"
         );
         assert_eq!(
-            proposal("BEGIN TEXT\n\n   \nEND TEXT"),
+            proposal("BEGIN TEXT\n\n   \nEND TEXT", false),
             None,
             "an empty block"
         );
-        assert_eq!(proposal(""), None);
+        assert_eq!(proposal("", false), None);
     }
 
     #[test]

@@ -950,8 +950,20 @@ fn the_palette_action_improves_the_selection(cx: &mut TestAppContext) {
     cx.dispatch_action(AssistantImprove);
     settle(cx);
     let prompts = sent(&shell, cx);
-    assert_eq!(prompts.len(), 1);
-    assert!(prompts[0].contains("BEGIN PASSAGE\nun peu de texte\nEND PASSAGE"));
+    assert_eq!(prompts.len(), 1, "one prompt");
+    // The selected passage, and only it, is in the prompt; the note is named for the context.
+    assert!(
+        prompts[0].contains("BEGIN PASSAGE\nun peu de texte\nEND PASSAGE"),
+        "the selected passage is sent verbatim: {}",
+        prompts[0]
+    );
+    assert!(!prompts[0].contains("the whole note"), "{}", prompts[0]);
+    assert!(prompts[0].contains("the file `Plan.md`"), "{}", prompts[0]);
+    assert_eq!(
+        entries(&shell, cx)[0],
+        (Who::You, "Improve selection".to_string())
+    );
+    assert_eq!(status(&shell, cx), Status::Working);
     let _ = fs::remove_dir_all(root);
 }
 
@@ -1131,6 +1143,11 @@ fn an_improvement_in_a_vault_keeps_two_automatic_revisions(cx: &mut TestAppConte
         found[0].text, "# Plan\n\nun peu de texte\n",
         "the text before"
     );
+    // The memo is history data: the fixed English words of `inkuno write`, whatever the language.
+    assert_eq!(
+        found[0].note.as_deref(),
+        Some("before a change by assistant")
+    );
     assert_eq!(found[1].author, "assistant");
     assert_eq!(found[1].note.as_deref(), Some("proposed, pending"));
     assert_eq!(
@@ -1138,5 +1155,249 @@ fn an_improvement_in_a_vault_keeps_two_automatic_revisions(cx: &mut TestAppConte
         crate::logic::pending::accept_all(&editor_text(&shell, cx)),
         "the proposed text, as it would be once every change is accepted"
     );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_improvement_after_a_title_change_lands_in_the_renamed_note(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-rename", cx);
+    // The `# Title` line changes: the note is renamed on its save, which has not happened yet.
+    focus_note(&shell, cx);
+    caret(&shell, cx, 6);
+    cx.simulate_input(" v2");
+    settle(cx);
+    assert!(root.join("Plan.md").exists(), "not saved yet");
+    select(&shell, cx, 11..26);
+    click_button(cx);
+    click_improve(cx);
+
+    // The save renamed the note first: the prompt names the new file, and the passage is sent.
+    let prompts = sent(&shell, cx);
+    assert!(
+        prompts[0].contains("the file `Plan v2.md`"),
+        "{}",
+        prompts[0]
+    );
+    assert!(
+        prompts[0].contains("BEGIN PASSAGE\nun peu de texte\nEND PASSAGE"),
+        "{}",
+        prompts[0]
+    );
+    assert!(root.join("Plan v2.md").exists(), "renamed on the save");
+    assert!(!root.join("Plan.md").exists());
+
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    assert_eq!(
+        editor_text(&shell, cx),
+        "# Plan v2\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n",
+        "the proposal is in the renamed note"
+    );
+    assert!(shell.read_with(cx, |s, _| {
+        s.pane()
+            .path
+            .as_deref()
+            .is_some_and(|p| p.ends_with("Plan v2.md"))
+    }));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_review_after_a_title_change_names_the_renamed_note(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-review-rename", cx);
+    focus_note(&shell, cx);
+    caret(&shell, cx, 6);
+    cx.simulate_input(" v2");
+    settle(cx);
+    assert!(root.join("Plan.md").exists(), "not saved yet");
+    click_button(cx);
+    click_review(cx);
+    let words = sent(&shell, cx);
+    assert_eq!(
+        words[0],
+        crate::logic::assistant::review_prompt("Plan v2.md")
+    );
+    assert!(root.join("Plan v2.md").exists(), "renamed on the save");
+    feed(
+        &shell,
+        cx,
+        vec![Event::Text(ONE_FINDING_AND_ONE_MISS.into()), Event::Ended],
+    );
+    assert!(
+        editor_text(&shell, cx).contains("Trop court."),
+        "the finding is in the renamed note: {}",
+        editor_text(&shell, cx)
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_failed_refused_or_exited_improvement_drops_its_job_and_writes_nothing(
+    cx: &mut TestAppContext,
+) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-ends-badly", cx);
+    let original = editor_text(&shell, cx);
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    let ends = [
+        (
+            "failed",
+            vec![
+                Event::Started,
+                Event::Text(CLEARER.into()),
+                Event::Failed("The model failed.".into()),
+            ],
+        ),
+        (
+            "refused",
+            vec![Event::Refused("The prompt was refused.".into())],
+        ),
+        (
+            "exited",
+            vec![
+                Event::Started,
+                Event::Text(CLEARER.into()),
+                Event::Exited("boom".into()),
+            ],
+        ),
+    ];
+    for (name, events) in ends {
+        click_improve(cx);
+        assert_eq!(status(&shell, cx), Status::Working, "{name}: the job runs");
+        feed(&shell, cx, events);
+        assert!(
+            shell.read_with(cx, |s, _| s.assistant.job.is_none()),
+            "{name}: the job is dropped"
+        );
+        // The end of the run that comes after finds no job: nothing is written.
+        feed(&shell, cx, vec![Event::Ended]);
+        assert_eq!(editor_text(&shell, cx), original, "{name}");
+        assert!(
+            !fs::read_to_string(root.join("Plan.md"))
+                .unwrap()
+                .contains("{++"),
+            "{name}: nothing written"
+        );
+        assert_ne!(
+            status(&shell, cx),
+            Status::Working,
+            "{name}: the panel is free"
+        );
+    }
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_proposal_lands_in_its_note_when_another_tab_is_shown_meanwhile(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-tabs", cx);
+    fs::write(root.join("Other.md"), "# Other\n\nautre\n").unwrap();
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    click_improve(cx);
+    // The person opens another note while the agent works: Plan.md keeps its tab.
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("Other.md"), window, cx)
+    });
+    settle(cx);
+    assert!(
+        shell.read_with(cx, |s, _| s
+            .pane()
+            .path
+            .as_deref()
+            .is_some_and(|p| p.ends_with("Other.md"))),
+        "Other.md is the shown tab"
+    );
+
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    let plan = pane_text(&shell, cx, "Plan.md");
+    assert_eq!(
+        plan, "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n",
+        "the proposal is in Plan.md"
+    );
+    assert_eq!(
+        pane_text(&shell, cx, "Other.md"),
+        "# Other\n\nautre\n",
+        "the other note is untouched"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+/// The text of the open tab of the note whose path ends with `name`.
+fn pane_text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, name: &str) -> String {
+    shell.read_with(cx, |s, cx| {
+        let pane = s
+            .panes
+            .iter()
+            .find(|pane| pane.path.as_deref().is_some_and(|p| p.ends_with(name)))
+            .expect("the note has a tab");
+        pane.editor.read(cx).text().to_string()
+    })
+}
+
+#[gpui::test]
+fn a_prompt_that_cannot_start_the_agent_stays_in_the_box(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-start-fails", cx);
+    click_button(cx);
+    shell.update(cx, |s, _| {
+        s.assistant.refuse_start = Some("The assistant could not start.".into())
+    });
+    cx.simulate_input("Summarise this note");
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert!(sent(&shell, cx).is_empty(), "nothing was sent");
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.assistant.field.read(cx).line.text.clone()),
+        "Summarise this note",
+        "the typed prompt is kept"
+    );
+    assert_eq!(status(&shell, cx), Status::Idle);
+    assert_eq!(
+        entries(&shell, cx).last(),
+        Some(&(Who::Note, "The assistant could not start.".to_string()))
+    );
+
+    // Once the agent can start, the same text is sent and the box is emptied.
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert_eq!(sent(&shell, cx).len(), 1);
+    assert!(sent(&shell, cx)[0].ends_with("Summarise this note"));
+    assert!(shell.read_with(cx, |s, cx| s.assistant.field.read(cx).line.text.is_empty()));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_improvement_that_cannot_start_leaves_no_job_and_keeps_the_instruction(
+    cx: &mut TestAppContext,
+) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-start-fails", cx);
+    let original = editor_text(&shell, cx);
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    cx.simulate_input("Make it formal");
+    settle(cx);
+    shell.update(cx, |s, _| {
+        s.assistant.refuse_start = Some("The assistant could not start.".into())
+    });
+    click_improve(cx);
+    assert!(sent(&shell, cx).is_empty(), "nothing was sent");
+    assert!(
+        shell.read_with(cx, |s, _| s.assistant.job.is_none()),
+        "no job is left behind"
+    );
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.assistant.field.read(cx).line.text.clone()),
+        "Make it formal",
+        "the instruction is kept"
+    );
+    assert_eq!(status(&shell, cx), Status::Idle);
+    assert_eq!(editor_text(&shell, cx), original);
     let _ = fs::remove_dir_all(root);
 }
