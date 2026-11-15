@@ -129,6 +129,8 @@ inkuno comment --file ~/.config/inkuno/scratch/idea.md --passage "ship on Friday
 
 A passage must be on one line, and an empty comment is refused. Newlines in the comment become spaces. The file must exist and end in `.md`.
 
+`comment --file` works on exactly the file it names, wherever that file is. It does not apply the vault's rules: a file in a hidden folder, or in the `.trash` folder, is commented like any other file.
+
 The [Assistant](assistant.md) built into Inkuno does not run these commands. It is started without a shell, and the comments of its review are written by Inkuno itself.
 
 Pass the token from `inkuno read --json` to `edit` or `append` with `--token`. Without `--token`, an edit applies to the file as it is on disk; an empty `--token` is refused.

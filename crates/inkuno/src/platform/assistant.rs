@@ -1,7 +1,7 @@
 //! The Assistant's agent: `hoocode --mode rpc`, started in the note's folder and spoken to in JSON
 //! lines. Its output is parsed here into [`Event`]s, which the panel takes with [`Agent::take`]; a
 //! reader thread raises the [`Signal`] for each one. Only the standard library and serde_json: no
-//! window, no gpui. The protocol is the one of hoocode's `crates/hoocode-code-rpc`.
+//! window, no UI toolkit. The protocol is the one of hoocode's `crates/hoocode-code-rpc`.
 
 use std::{
     env,
@@ -23,14 +23,18 @@ use super::vault::Signal;
 use crate::lang::tr;
 
 /// The flags Inkuno passes after the user's words: no saved session, and no tool that writes a
-/// file or runs a command, so the agent can only read and answer.
+/// file, runs a command or fetches from the web, so the agent can only read and answer.
 const FLAGS: [&str; 5] = [
     "--mode",
     "rpc",
     "--no-session",
     "--disallowed-tools",
-    "Shell,ShellKill,Write,Edit",
+    "Shell,ShellKill,Write,Edit,WebFetch,WebSearch,Agent",
 ];
+
+/// The longest record (a line of the agent's output) that is read. A longer one is dropped: a
+/// child that prints without a line feed must not grow the memory without limit.
+const MAX_LINE: usize = 8 * 1024 * 1024;
 
 /// The end of the agent's stderr, kept for [`Event::Exited`].
 const STDERR_TAIL: usize = 2_000;
@@ -49,6 +53,8 @@ pub enum Event {
     Text(String),
     /// `tool_execution_start`: the name of the tool it runs.
     Tool(String),
+    /// The end of one assistant message that did not fail: what follows is another message.
+    Break,
     /// An assistant `message_end` with stop reason `error`: its error message.
     Failed(String),
     /// `agent_end`: the run is over and the agent is idle.
@@ -88,8 +94,11 @@ pub fn parse(line: &str) -> Option<Event> {
         }
         "message_end" => {
             let message = &value["message"];
-            if message["role"] != "assistant" || message["stopReason"] != "error" {
+            if message["role"] != "assistant" {
                 return None;
+            }
+            if message["stopReason"] != "error" {
+                return Some(Event::Break);
             }
             Some(Event::Failed(text(
                 &message["errorMessage"],
@@ -118,8 +127,10 @@ fn program(command: &str) -> &str {
     command.split_whitespace().next().unwrap_or("")
 }
 
-/// Where the program of `command` is: a path with a folder part is taken as it is when it is a
-/// file; a bare name is looked up in each folder of `PATH`. `None` when it is not found.
+/// Where the program of `command` is, as an absolute path: the path that the child is started
+/// with. A path with a folder part is taken as it is when it is a file (a relative one from the
+/// current folder); a bare name is looked up in each folder of `PATH`, where an empty entry is
+/// skipped. `None` when it is not found.
 pub fn find(command: &str) -> Option<PathBuf> {
     find_in(command, env::var_os("PATH").as_deref())
 }
@@ -134,7 +145,7 @@ fn find_in(command: &str, path: Option<&OsStr>) -> Option<PathBuf> {
         .parent()
         .is_some_and(|dir| !dir.as_os_str().is_empty())
     {
-        let file = PathBuf::from(program);
+        let file = absolute(PathBuf::from(program))?;
         return file.is_file().then_some(file);
     }
     // Windows also runs `name.exe` for `name`.
@@ -143,8 +154,20 @@ fn find_in(command: &str, path: Option<&OsStr>) -> Option<PathBuf> {
         names.push(format!("{program}.exe"));
     }
     env::split_paths(path?)
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .filter_map(absolute)
         .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
         .find(|candidate| candidate.is_file())
+}
+
+/// `path` as an absolute path: a relative one is joined with the current folder. `None` when that
+/// folder cannot be read.
+fn absolute(path: PathBuf) -> Option<PathBuf> {
+    if path.is_absolute() {
+        Some(path)
+    } else {
+        env::current_dir().ok().map(|cwd| cwd.join(path))
+    }
 }
 
 /// The arguments after the program of `command`: the user's own words, then [`FLAGS`].
@@ -165,9 +188,34 @@ pub struct Agent {
     events: Arc<Mutex<Vec<Event>>>,
     /// The number of commands sent, for the ids `p<n>` and `a<n>`.
     sent: AtomicU64,
+    /// Under test, an agent with no process keeps the lines sent to it here.
+    #[cfg(test)]
+    written: Option<Mutex<Vec<String>>>,
 }
 
 impl Agent {
+    /// An agent with no process, for the panel's tests: what is sent to it is kept (see
+    /// [`Agent::written`]), and no event ever comes.
+    #[cfg(test)]
+    pub fn detached() -> Agent {
+        Agent {
+            child: None,
+            stdin: Mutex::new(None),
+            events: Arc::new(Mutex::new(Vec::new())),
+            sent: AtomicU64::new(0),
+            written: Some(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// The lines sent to a detached agent, in order.
+    #[cfg(test)]
+    pub fn written(&self) -> Vec<String> {
+        self.written
+            .as_ref()
+            .map(|lines| lock(lines).clone())
+            .unwrap_or_default()
+    }
+
     /// Starts the agent `command` in `folder`. The error is a sentence for the panel.
     pub fn start(command: &str, folder: &Path, signal: Arc<Signal>) -> Result<Agent, String> {
         let word = program(command);
@@ -221,6 +269,8 @@ impl Agent {
             stdin: Mutex::new(Some(stdin)),
             events,
             sent: AtomicU64::new(0),
+            #[cfg(test)]
+            written: None,
         })
     }
 
@@ -274,12 +324,17 @@ impl Agent {
 
     /// Writes one JSON line to the agent.
     fn send(&self, line: Value) -> Result<(), String> {
+        let mut bytes = line.to_string();
+        bytes.push('\n');
+        #[cfg(test)]
+        if let Some(lines) = &self.written {
+            lock(lines).push(bytes);
+            return Ok(());
+        }
         let mut guard = lock(&self.stdin);
         let stdin = guard
             .as_mut()
             .ok_or_else(|| tr("The agent has stopped", "L'agent s'est arrêté").to_string())?;
-        let mut bytes = line.to_string();
-        bytes.push('\n');
         stdin
             .write_all(bytes.as_bytes())
             .and_then(|()| stdin.flush())
@@ -313,15 +368,16 @@ fn read_output(
     let mut reader = BufReader::new(stdout);
     let mut line = Vec::new();
     loop {
-        line.clear();
-        match reader.read_until(b'\n', &mut line) {
-            Ok(0) => break,
-            Ok(_) => {
+        match read_record(&mut reader, &mut line, MAX_LINE) {
+            Ok(Record::End) => break,
+            Ok(Record::Line) => {
                 if let Some(event) = parse(&String::from_utf8_lossy(&line)) {
                     lock(events).push(event);
                     signal.raise();
                 }
             }
+            // Too long to be an event of the protocol: dropped, and the next line is read.
+            Ok(Record::TooLong) => {}
             Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(_) => break,
         }
@@ -331,6 +387,61 @@ fn read_output(
     let exit = String::from_utf8_lossy(&lock(tail)).trim().to_string();
     lock(events).push(Event::Exited(exit));
     signal.raise();
+}
+
+/// What one [`read_record`] gave.
+#[derive(Debug, PartialEq, Eq)]
+enum Record {
+    /// The end of the input: no record is left.
+    End,
+    /// A record, with its line feed when it has one; it is in the buffer.
+    Line,
+    /// A record longer than the cap: its bytes were dropped up to its line feed.
+    TooLong,
+}
+
+/// Reads one record (a line, through its line feed) into `line`. At most `cap` bytes of the
+/// record are kept; a longer one is read to its line feed and dropped, so that the memory used
+/// does not depend on what the child prints.
+fn read_record<R: BufRead>(reader: &mut R, line: &mut Vec<u8>, cap: usize) -> io::Result<Record> {
+    line.clear();
+    let (mut any, mut too_long) = (false, false);
+    loop {
+        let (used, found) = {
+            let buf = match reader.fill_buf() {
+                Ok(buf) => buf,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            };
+            if buf.is_empty() {
+                break;
+            }
+            any = true;
+            let (used, found) = match buf.iter().position(|&b| b == b'\n') {
+                Some(at) => (at + 1, true),
+                None => (buf.len(), false),
+            };
+            let content = if found { used - 1 } else { used };
+            if !too_long {
+                if line.len() + content > cap {
+                    too_long = true;
+                    line.clear();
+                } else {
+                    line.extend_from_slice(&buf[..used]);
+                }
+            }
+            (used, found)
+        };
+        reader.consume(used);
+        if found {
+            break;
+        }
+    }
+    Ok(match (any, too_long) {
+        (false, _) => Record::End,
+        (true, true) => Record::TooLong,
+        (true, false) => Record::Line,
+    })
 }
 
 /// Reads stderr to its end, keeping only its last [`STDERR_TAIL`] bytes.
@@ -451,13 +562,78 @@ mod tests {
             parse(r#"{"type":"message_end","message":{"role":"user","content":[]}}"#),
             None
         );
-        // A stop that is not an error is not a failure.
-        assert_eq!(
-            parse(r#"{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}"#),
-            None
-        );
         assert_eq!(parse("Starting hoocode..."), None);
         assert_eq!(parse(""), None);
+    }
+
+    #[test]
+    fn the_end_of_an_assistant_message_is_a_break_unless_it_failed() {
+        // A message that ends with a tool call, or with its stop: the next one is another message.
+        assert_eq!(
+            parse(
+                r#"{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"toolUse"}}"#
+            ),
+            Some(Event::Break)
+        );
+        assert_eq!(
+            parse(r#"{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}"#),
+            Some(Event::Break)
+        );
+        // A user's message is not the assistant's: nothing for the panel.
+        assert_eq!(
+            parse(r#"{"type":"message_end","message":{"role":"user","stopReason":"stop"}}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn read_record_keeps_a_line_up_to_the_cap_and_drops_a_longer_one() {
+        let input: &[u8] = b"ab\ncdefgh\nabcd\nabcde\nij\nxyz";
+        let mut reader = io::Cursor::new(input);
+        let mut line = Vec::new();
+        let mut seen = Vec::new();
+        loop {
+            let record = read_record(&mut reader, &mut line, 4).unwrap();
+            let content = line.iter().filter(|b| **b != b'\n').count();
+            assert!(content <= 4, "the cap holds: {line:?}");
+            let done = record == Record::End;
+            seen.push((record, line.clone()));
+            if done {
+                break;
+            }
+        }
+        assert_eq!(
+            seen,
+            [
+                (Record::Line, b"ab\n".to_vec()),
+                // Six bytes: over the cap, dropped up to its line feed.
+                (Record::TooLong, Vec::new()),
+                // Exactly the cap (its line feed is not counted): kept.
+                (Record::Line, b"abcd\n".to_vec()),
+                (Record::TooLong, Vec::new()),
+                (Record::Line, b"ij\n".to_vec()),
+                // The last record has no line feed: it is kept as it is.
+                (Record::Line, b"xyz".to_vec()),
+                (Record::End, Vec::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn read_record_drops_an_endless_line_without_growing() {
+        // Without a line feed, the rest of the input is dropped while the cap is kept.
+        let mut input = io::repeat(b'x').take(100_000);
+        let mut reader = BufReader::new(&mut input);
+        let mut line = Vec::new();
+        assert_eq!(
+            read_record(&mut reader, &mut line, 1_000).unwrap(),
+            Record::TooLong
+        );
+        assert!(line.is_empty());
+        assert_eq!(
+            read_record(&mut reader, &mut line, 1_000).unwrap(),
+            Record::End
+        );
     }
 
     #[test]
@@ -493,6 +669,35 @@ mod tests {
     }
 
     #[test]
+    fn find_gives_the_path_the_child_is_started_with() {
+        // A relative path with a folder part is found from the current folder, and given as an
+        // absolute path: the child runs in another folder, so a relative one would not match.
+        let relative = find_in("src/platform/mod.rs --x", None).expect("a file of this crate");
+        assert!(relative.is_absolute(), "{relative:?}");
+        assert_eq!(
+            relative,
+            env::current_dir().unwrap().join("src/platform/mod.rs")
+        );
+
+        // An empty entry of PATH is skipped: it is not the current folder. `Cargo.toml` is in the
+        // current folder, and is not in the folder of the entry.
+        let base = env::temp_dir().join(format!(
+            "inkuno-assistant-find-empty-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&base).unwrap();
+        let path = env::join_paths([PathBuf::new(), base.clone()]).unwrap();
+        assert_eq!(find_in("Cargo.toml", Some(path.as_os_str())), None);
+        let agent = base.join("fakeagent");
+        fs::write(&agent, "").unwrap();
+        assert_eq!(
+            find_in("fakeagent", Some(path.as_os_str())),
+            Some(agent.clone())
+        );
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
     fn arguments_are_the_user_words_then_the_fixed_flags() {
         assert_eq!(
             arguments("hoocode --model fast"),
@@ -503,7 +708,7 @@ mod tests {
                 "rpc",
                 "--no-session",
                 "--disallowed-tools",
-                "Shell,ShellKill,Write,Edit",
+                "Shell,ShellKill,Write,Edit,WebFetch,WebSearch,Agent",
             ]
         );
         assert_eq!(
@@ -513,7 +718,7 @@ mod tests {
                 "rpc",
                 "--no-session",
                 "--disallowed-tools",
-                "Shell,ShellKill,Write,Edit"
+                "Shell,ShellKill,Write,Edit,WebFetch,WebSearch,Agent"
             ]
         );
     }
@@ -602,6 +807,7 @@ done
                 Event::Started,
                 Event::Text("Hello ".into()),
                 Event::Text("world".into()),
+                Event::Break,
                 Event::Ended,
                 Event::Ended,
                 Event::Exited(String::new()),

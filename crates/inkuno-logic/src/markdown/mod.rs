@@ -1242,7 +1242,8 @@ pub fn headings(text: &str) -> Vec<(u8, &str, usize)> {
 
 /// `{==passage==}{>>comment<<}`. In a table cell a `|` of the comment is written `\|`. The
 /// syntax is read line by line, so the passage is one line, and the comment's line breaks become
-/// spaces; an empty comment is refused.
+/// spaces; an empty comment is refused. A `<<}` in the comment gets a space inside, so that it
+/// cannot close the comment early, and a passage holding comment marks is refused.
 pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String> {
     if passage.is_empty() {
         return Err("the passage is empty".into());
@@ -1250,10 +1251,19 @@ pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, St
     if passage.contains(['\n', '\r']) {
         return Err("the passage must be on one line".into());
     }
+    if ["{==", "==}", "{>>", "<<}"]
+        .iter()
+        .any(|mark| passage.contains(mark))
+    {
+        return Err("the passage holds comment marks".into());
+    }
     let flat = comment.replace("\r\n", " ").replace(['\n', '\r'], " ");
-    let flat = flat.trim();
+    let mut flat = flat.trim().to_string();
     if flat.is_empty() {
         return Err("the comment is empty".into());
+    }
+    while flat.contains("<<}") {
+        flat = flat.replace("<<}", "<< }");
     }
     let mut at = Vec::new();
     let mut from = 0;
@@ -1444,6 +1454,50 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
 
 #[cfg(test)]
 mod tests {
+    use super::{all_comments, comment_on};
+
+    #[test]
+    fn a_comment_cannot_close_its_markup_early_or_inject_markdown() {
+        // The comment would close `{>>` at `<<}` and let the link land in the note as Markdown.
+        let text = "A passage here and more.\n";
+        let said = "Fine<<} [see](https://example.com) {>>";
+        let out = comment_on(text, "passage here", said).unwrap();
+        assert_eq!(
+            out,
+            "A {==passage here==}{>>Fine<< } [see](https://example.com) {>><<} and more.\n"
+        );
+        let notes = all_comments(&out);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert_eq!(notes[0].noted, "passage here");
+        assert_eq!(notes[0].said, "Fine<< } [see](https://example.com) {>>");
+        assert_eq!(&out[notes[0].end..], " and more.\n");
+    }
+
+    #[test]
+    fn every_closing_mark_in_a_comment_is_broken_even_when_they_overlap() {
+        let out = comment_on("alpha\n", "alpha", "a<<<}b<<}<<}c").unwrap();
+        let notes = all_comments(&out);
+        assert_eq!(notes.len(), 1);
+        assert!(!notes[0].said.contains("<<}"), "{:?}", notes[0].said);
+        assert_eq!(notes[0].said, "a<<< }b<< }<< }c");
+        assert_eq!(&out[notes[0].end..], "\n");
+    }
+
+    #[test]
+    fn a_passage_holding_comment_marks_is_refused() {
+        let text = "a {== b ==} c {>> d <<} e\n";
+        for passage in ["{==", "==}", "{>>", "<<}"] {
+            let refused = comment_on(text, &format!("x{passage}y"), "note").unwrap_err();
+            assert_eq!(refused, "the passage holds comment marks", "{passage}");
+        }
+        assert_eq!(
+            comment_on(text, "a {== b", "note").unwrap_err(),
+            "the passage holds comment marks"
+        );
+        // Only the marks are refused: a passage with the other punctuation is placed.
+        assert!(comment_on("Hi = x }\n", "x }", "note").is_ok());
+    }
+
     #[test]
     fn sets_a_front_matter_key() {
         let note = "---\nauteur: Herbert\ntags: [sf, roman]\nlu:\n  - 2020\n  - 2023\n---\n# Dune\n\nauteur: pas ici\n";

@@ -15,6 +15,20 @@ use std::{
     sync::Arc,
 };
 
+/// How long a stopped agent has to report its end before it is killed.
+const STOP_GRACE: Duration = Duration::from_secs(3);
+
+/// Starts the agent process. In a test there is no process: a detached agent stands in for it.
+#[cfg(not(test))]
+fn start_agent(command: &str, folder: &Path, signal: Arc<Signal>) -> Result<Agent, String> {
+    Agent::start(command, folder, signal)
+}
+
+#[cfg(test)]
+fn start_agent(_command: &str, _folder: &Path, _signal: Arc<Signal>) -> Result<Agent, String> {
+    Ok(Agent::detached())
+}
+
 /// What the agent is doing, as the button and the panel show it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Status {
@@ -63,6 +77,10 @@ pub(crate) struct Assistant {
     pub review: Option<Review>,
     /// Stop was asked: what the agent still says before it ends is dropped.
     pub stopping: bool,
+    /// Counts the stops asked: a timer of an older stop does nothing.
+    pub stop_gen: u64,
+    /// The agent ended a message of its own: the next text of the chat starts a new paragraph.
+    pub paragraph: bool,
     /// The prompts sent to the agent, for the tests.
     #[cfg(test)]
     pub sent: Vec<String>,
@@ -102,6 +120,8 @@ impl Assistant {
             folder: None,
             review: None,
             stopping: false,
+            stop_gen: 0,
+            paragraph: false,
             #[cfg(test)]
             sent: Vec::new(),
             #[cfg(test)]
@@ -418,12 +438,20 @@ impl Shell {
         cx.notify();
     }
 
-    /// Streams text into the last line of the agent, or starts one.
+    /// Streams text into the last line of the agent, or starts one. Text that comes after the end
+    /// of a message of the agent starts a new paragraph of that line, when there is text before it.
     pub(crate) fn assistant_more(&mut self, text: &str, cx: &mut Context<Self>) {
+        if text.is_empty() {
+            return;
+        }
+        let separate = std::mem::take(&mut self.assistant.paragraph);
         let continues = matches!(self.assistant.entries.last(), Some(e) if e.who == Who::Agent);
         match continues {
             true => {
                 if let Some(last) = self.assistant.entries.last_mut() {
+                    if separate && !last.text.is_empty() {
+                        last.text.push_str("\n\n");
+                    }
                     last.text.push_str(text);
                 }
             }
@@ -501,22 +529,18 @@ impl Shell {
     }
 
     /// The prompt is sent to the agent. The agent is started in the working folder on the first
-    /// prompt, and again when the folder changes. Nothing reaches the agent in a test: it records
-    /// the prompt in `sent` instead.
+    /// prompt, and again when the folder changes. In a test only the process is not started (see
+    /// `start_agent`): the prompt is also recorded in `sent`.
     pub(crate) fn assistant_run(&mut self, prompt: String, cx: &mut Context<Self>) {
         self.assistant_sent(&prompt);
-        if cfg!(test) {
-            self.assistant.status = Status::Working;
-            cx.notify();
-            return;
-        }
         let folder = self.assistant_folder();
         let running =
             self.assistant.agent.is_some() && self.assistant.folder.as_ref() == Some(&folder);
         if !running {
-            self.assistant_halt(cx);
+            // The old agent stops, but a review in progress is kept: it is the one being asked.
+            self.stop_agent();
             let command = self.prefs.assistant_command().to_string();
-            match Agent::start(&command, &folder, self.assistant.signal.clone()) {
+            match start_agent(&command, &folder, self.assistant.signal.clone()) {
                 Ok(agent) => {
                     self.assistant.agent = Some(agent);
                     self.assistant.folder = Some(folder);
@@ -560,13 +584,19 @@ impl Shell {
         self.assistant_say(Who::Note, error, cx);
     }
 
+    /// Drops the agent process, which stops it. A review in progress is kept: `assistant_run` uses
+    /// this to replace the agent, and the review still waits for its answer.
+    fn stop_agent(&mut self) {
+        self.assistant.agent = None;
+        self.assistant.folder = None;
+        self.assistant.stopping = false;
+    }
+
     /// Stops the agent now: the setting changed, the vault changed, the app quits. A review in
     /// progress is dropped with it, so that a half answer writes nothing.
     pub(crate) fn assistant_halt(&mut self, cx: &mut Context<Self>) {
-        self.assistant.agent = None;
-        self.assistant.folder = None;
         self.assistant.review = None;
-        self.assistant.stopping = false;
+        self.stop_agent();
         if self.assistant.status == Status::Working {
             self.assistant.status = Status::Idle;
         }
@@ -632,8 +662,17 @@ impl Shell {
                         None => self.assistant_more(&text, cx),
                     }
                 }
-                // The tool's name is not shown: the transcript stays about the answer.
-                Event::Tool(_) => {}
+                // A tool call or the end of a message: what follows is another message. The
+                // tool's name is not shown: the transcript stays about the answer.
+                Event::Tool(_) | Event::Break => {
+                    if self.assistant.stopping {
+                        continue;
+                    }
+                    match &mut self.assistant.review {
+                        Some(review) => review.answer.push('\n'),
+                        None => self.assistant.paragraph = true,
+                    }
+                }
                 Event::Refused(error) => {
                     self.assistant.review = None;
                     self.assistant_say(Who::Note, &error, cx);
@@ -663,10 +702,8 @@ impl Shell {
                 }
                 Event::Exited(tail) => {
                     let working = self.assistant.status == Status::Working;
-                    self.assistant.agent = None;
-                    self.assistant.folder = None;
+                    self.stop_agent();
                     self.assistant.review = None;
-                    self.assistant.stopping = false;
                     if working {
                         self.assistant_say(
                             Who::Note,
@@ -695,7 +732,11 @@ impl Shell {
             return;
         };
         if !self.flush_one(cx) {
-            return;
+            let said = tr(
+                "The note could not be saved, so it was not reviewed.",
+                "La note n'a pas pu être enregistrée, elle n'a donc pas été relue.",
+            );
+            return self.assistant_say(Who::Note, said, cx);
         }
         let note = self.assistant_words(&path);
         self.assistant.review = Some(Review {
@@ -757,7 +798,9 @@ impl Shell {
         self.assistant_say(Who::Note, &summary, cx);
     }
 
-    /// Stops the agent's turn. A review in progress is dropped first, so nothing is written.
+    /// Stops the agent's turn. A review in progress is dropped first, so nothing is written. The
+    /// agent has `STOP_GRACE` to report its end; if it has not by then, it is killed and the panel
+    /// is free again. When the abort cannot be sent, the agent is killed at once.
     pub(crate) fn assistant_stop(&mut self, cx: &mut Context<Self>) {
         if self.assistant.status != Status::Working {
             return;
@@ -765,15 +808,33 @@ impl Shell {
         self.assistant.review = None;
         self.assistant.stopping = true;
         self.assistant_say(Who::Note, tr("Stopped.", "Arrêté."), cx);
-        match &self.assistant.agent {
-            Some(agent) => {
-                let _ = agent.abort();
-            }
-            None => {
-                self.assistant.stopping = false;
-                self.assistant_settle(cx);
-            }
+        let aborted = self
+            .assistant
+            .agent
+            .as_ref()
+            .is_some_and(|agent| agent.abort().is_ok());
+        if !aborted {
+            return self.assistant_kill(cx);
         }
+        self.assistant.stop_gen += 1;
+        let generation = self.assistant.stop_gen;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(STOP_GRACE).await;
+            this.update(cx, |this, cx| {
+                if this.assistant.stop_gen == generation && this.assistant.stopping {
+                    this.assistant_kill(cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Kills the agent now: the run is over, whatever it still says, and the panel is free.
+    fn assistant_kill(&mut self, cx: &mut Context<Self>) {
+        self.stop_agent();
+        self.assistant.review = None;
+        self.assistant_settle(cx);
     }
 
     /// A prompt from the user (Enter in the box): the note's unsaved edits are written first, so
@@ -786,7 +847,12 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         if !self.flush_one(cx) {
-            return;
+            // The question stays in the box: it can be sent again once the note is saved.
+            let said = tr(
+                "The note could not be saved, so the question was not sent.",
+                "La note n'a pas pu être enregistrée, la question n'a donc pas été envoyée.",
+            );
+            return self.assistant_say(Who::Note, said, cx);
         }
         let prompt = words::chat_prompt(self.assistant_note().as_deref(), &question);
         self.assistant_say(Who::You, &question, cx);

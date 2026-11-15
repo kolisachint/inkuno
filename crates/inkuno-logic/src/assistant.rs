@@ -53,7 +53,7 @@ pub fn findings(answer: &str) -> Vec<(String, String)> {
         if let Some(value) = label(line, "PASSAGE") {
             finish(&mut open, &mut found);
             open = Some(Open {
-                passage: unquote(value),
+                passage: value.to_string(),
                 comment: None,
             });
         } else if let Some(value) = label(line, "COMMENT") {
@@ -136,9 +136,11 @@ pub struct Placed {
     pub skipped: usize,
 }
 
-/// Wraps each finding's passage in `text`, in order, with `markdown::comment_on`. A finding is
-/// left out when its passage is not in the text exactly once, or when it lies inside a comment
-/// that is already there (a second finding on the same words would nest in the first).
+/// Wraps each finding's passage in `text`, in order, with `markdown::comment_on`. The passage is
+/// tried as written first, then without the one pair of quotes or backticks around it (a model
+/// may add them). A finding is left out when neither form is in the text exactly once, or when it
+/// lies inside a comment that is already there (a second finding on the same words would nest in
+/// the first).
 pub fn place(text: &str, found: &[(String, String)]) -> Placed {
     let mut out = Placed {
         text: text.to_string(),
@@ -146,17 +148,26 @@ pub fn place(text: &str, found: &[(String, String)]) -> Placed {
         skipped: 0,
     };
     for (passage, comment) in found {
-        let inside = out.text.find(passage.as_str()).is_some_and(|at| {
-            markdown::all_comments(&out.text)
-                .iter()
-                .any(|note| note.at <= at && at < note.end)
-        });
-        match markdown::comment_on(&out.text, passage, comment) {
-            Ok(next) if !inside => {
+        let unquoted = unquote(passage);
+        let placed = [passage.as_str(), unquoted.as_str()]
+            .into_iter()
+            .find_map(|form| {
+                let inside = out.text.find(form).is_some_and(|at| {
+                    markdown::all_comments(&out.text)
+                        .iter()
+                        .any(|note| note.at <= at && at < note.end)
+                });
+                match markdown::comment_on(&out.text, form, comment) {
+                    Ok(next) if !inside => Some(next),
+                    _ => None,
+                }
+            });
+        match placed {
+            Some(next) => {
                 out.text = next;
                 out.placed += 1;
             }
-            _ => out.skipped += 1,
+            None => out.skipped += 1,
         }
     }
     out
@@ -286,16 +297,47 @@ mod tests {
     }
 
     #[test]
-    fn one_pair_of_quotes_or_backticks_leaves_the_passage() {
+    fn findings_hand_over_the_passage_as_written() {
+        // The quotes are not stripped here: `place` decides whether they belong to the note.
         let answer = "PASSAGE: \"quoted words here\"\nCOMMENT: a\n\
                       PASSAGE: `code words`\nCOMMENT: b\n\
                       PASSAGE: 'single quoted'\nCOMMENT: c\n\
                       PASSAGE: ``double``\nCOMMENT: d";
         let found = findings(answer);
-        assert_eq!(found[0].0, "quoted words here");
-        assert_eq!(found[1].0, "code words");
-        assert_eq!(found[2].0, "single quoted");
-        assert_eq!(found[3].0, "`double`");
+        assert_eq!(found[0].0, "\"quoted words here\"");
+        assert_eq!(found[1].0, "`code words`");
+        assert_eq!(found[2].0, "'single quoted'");
+        assert_eq!(found[3].0, "``double``");
+    }
+
+    #[test]
+    fn a_passage_in_quotes_is_placed_as_written_or_without_them() {
+        let quoted = [pair("\"quoted words\"", "as written")];
+        // The note has the quotes: the passage as written is placed.
+        let as_written = place("say \"quoted words\" now\n", &quoted);
+        assert_eq!(as_written.placed, 1);
+        assert_eq!(
+            as_written.text,
+            "say {==\"quoted words\"==}{>>as written<<} now\n"
+        );
+        // The note has none: the passage without its quotes is placed.
+        let bare = place("say quoted words now\n", &quoted);
+        assert_eq!(bare.placed, 1);
+        assert_eq!(bare.text, "say {==quoted words==}{>>as written<<} now\n");
+        // Both are in the note: the one as written wins.
+        let both = place("\"quoted words\" and quoted words\n", &quoted);
+        assert_eq!(
+            both.text,
+            "{==\"quoted words\"==}{>>as written<<} and quoted words\n"
+        );
+        // Backticks follow the same rule.
+        let code = place("run `ls` now\n", &[pair("`ls`", "a command")]);
+        assert_eq!(code.text, "run {==`ls`==}{>>a command<<} now\n");
+        let plain = place("run ls now\n", &[pair("`ls`", "a command")]);
+        assert_eq!(plain.text, "run {==ls==}{>>a command<<} now\n");
+        // Neither form is in the note: the finding is left out.
+        let missing = place("nothing here\n", &quoted);
+        assert_eq!((missing.placed, missing.skipped), (0, 1));
     }
 
     #[test]

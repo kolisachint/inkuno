@@ -19,13 +19,13 @@ A round button sits at the bottom right corner of the note, 30 pixels wide. The 
 | Idle | quiet |
 | Working | the accent colour, pulsing slowly |
 | Needs you | an accent dot: an answer came while the panel was closed |
-| Not installed | dimmed; the tooltip says hoocode was not found |
+| Not installed | dimmed; the tooltip says `Assistant: hoocode is not installed`, with the command set in the settings |
 
 A click opens the panel, or closes it. Opening the panel clears the dot. The button is not shown in [focus mode](navigation.md) (`F9`).
 
 ## The panel
 
-The panel is a tool of the right dock, next to the outline. It is hidden at first. Open it with the **Assistant** button, or type `assistant` in the palette (`F10`). There is no key for it by default.
+The panel is a tool of the right dock, next to the outline. It is hidden at first. Open it with the **Assistant** button, or open the command palette and type `assistant`. There is no key for it by default.
 
 From top to bottom, the panel has:
 
@@ -54,7 +54,7 @@ If you edit the note while the agent works, the comments go into the text as it 
 
 ## Stop
 
-**Stop** ends the agent's work while it is running. A review that is not finished writes nothing.
+**Stop** ends the agent's work while it is running. A review that is not finished writes nothing. If the agent has not stopped after three seconds, Inkuno ends its process, and the panel is free again.
 
 ## The setting
 
