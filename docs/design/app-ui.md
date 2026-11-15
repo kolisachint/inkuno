@@ -123,11 +123,11 @@ A **Typora-inspired, document-first writing app**:
   pane tree (`render_layout`, `crates/inkuno/src/shell/render.rs:990`; placed by
   `logic/layout.rs`, `docs/design/architecture.md:48`). Always present; it is the focus.
 - **Right region — outline.** Document outline (headings of the active note)
-  plus comments panel. Current: outline opens through the palette
-  (`open_outline`, `crates/inkuno/src/shell/palette_open.rs:29-38`); the comments panel sits
-  right of everything (`crates/inkuno/src/shell/render.rs:88-90` approx); right-dock stacking
-  via `Nav::right_shown` (`crates/inkuno/src/shell/docks.rs:42-51`). → Outline as a
-  persistent right-dock view: **TBD** (design proposal needed via §1 flow).
+  plus comments panel. Current: outline is a right-dock tool, shown by `Ctrl+Shift+O` or the
+  palette's **Outline of the note** (`toggle_outline`, `crates/inkuno/src/shell/sidebar.rs`); the comments panel sits
+  right of everything (`crates/inkuno/src/shell/render.rs` approx); right-dock stacking
+  via `Nav::right_shown` (`crates/inkuno/src/views/nav.rs`). Persistent right-dock view: built 2026-11-08,
+  placement decided 2026-11-15 (§12.4).
 - **Independently toggleable.** Panel states Rail / Split / Full
   (`Panel`, `crates/inkuno/src/views/nav.rs:95-99`); full-panel toggle
   (`toggle_full`, `crates/inkuno/src/shell/sidebar.rs:64-70`); closing the last left tool
@@ -152,7 +152,7 @@ Verdict per component: **KEEP** (as-is) · **RESKIN** (same behavior, new look) 
 | Panes / splits | Split right/down, move tabs between panes, even/maximize/zoom (`split`, `crates/inkuno/src/shell/pane.rs:604`; `toggle_zoom`, `crates/inkuno/src/shell/pane.rs:457`; actions `SplitPane/SplitDown/MaximizePane`, `crates/inkuno/src/actions.rs:6`) | KEEP | Power layout; quiet by default (single pane) |
 | Command palette | Views `crates/inkuno/src/views/palette.rs`; opens for notes/commands/outline/questions (`docs/design/architecture.md:53`, `crates/inkuno/src/shell/palette_open.rs`); ranked note search (`docs/design/architecture.md:108-111` approx, Palette section) | KEEP | The keyboard-first core; central to vision |
 | File tree / explorer | `views/nav.rs` state + `shell/sidebar.rs` drawing (`docs/design/architecture.md:90`); left-dock stacking (`crates/inkuno/src/shell/docks.rs:42-51`) | KEEP | Vault navigation; collapses to rail |
-| Outline nav | Palette list of headings (`crates/inkuno/src/shell/palette_open.rs:29-38`); action `Outline` (`crates/inkuno/src/actions.rs:6`) | KEEP + TBD dock view | Jump-to-heading is vision (§4 right region); persistent view needs proposal |
+| Outline nav | Right-dock list of headings (`crates/inkuno/src/views/nav.rs`); action `ToggleOutline` (`crates/inkuno/src/actions.rs`), chord `Ctrl+Shift+O` and palette `Outline of the note` (2026-11-15) | KEEP | Jump-to-heading is vision (§4 right region); the right-dock view is built (§12.4) |
 | Graph view | Force-directed, off-UI-thread (`crates/inkuno/src/views/graph.rs:261-263`); a `Mode` in nav | HIDE (tool, not default) | Useful but anti-chrome-quiet; open on demand only |
 | Calendar / Tags / Recent / Links | Nav modes (`crates/inkuno/src/views/nav.rs`; toggles `ShowRecent/ShowTags/ShowCalendar/ShowLinks`, `crates/inkuno/src/shell/render.rs:150-170` approx) | HIDE (tools, not default) | Same as graph: available, never forced |
 | Format bar | Bottom-of-note bar (`crates/inkuno/src/views/editor/format_bar.rs`, `docs/design/architecture.md:90`); pref `bar`, `off` hides it (`crates/inkuno-logic/src/prefs.rs:17-18`; `Theme::bar`, `crates/inkuno/src/ui/theme.rs:122`) | HIDE by default | Vision: no permanent toolbar; keep pref, default `off` (**TBD** user confirms default) |
@@ -462,13 +462,14 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 - TBD: any other always-visible footer/status bar (word count etc.) is MOCKUP-ONLY
   (§5; §7 acceptance keeps cursor context). Do not present mockup status text as shipped.
 
-### 12.4 Outline (BUILT 2026-11-08: right dock; palette jump retired)
+### 12.4 Outline (BUILT 2026-11-08: right dock; palette jump retired; chord and palette command 2026-11-15)
 
 - CURRENT: right-dock list of the note's headings (`Mode::Outline`,
   `crates/inkuno/src/views/nav.rs`), available but hidden by default (`right=[outline]`,
-  `right_shown=[]`); `Ctrl+Shift+O` / palette `› outline` toggles it
-  (closed opens + takes the keys, open takes the keys, Escape goes back to
-  the note — `toggle_outline`, `crates/inkuno/src/shell/docks.rs`); click jumps the cursor
+  `right_shown=[]`). Decision 2026-11-15 (owner): `Ctrl+Shift+O` and the palette command
+  **Outline of the note** both toggle it. Hidden: it shows alone in the right dock, in place of
+  the Assistant, and takes the keys; a full-window panel gives way to the split one. Shown: the
+  press hides it (`toggle_outline`, `crates/inkuno/src/shell/sidebar.rs`). Click jumps the cursor
   and refocuses the note; parents fold; active section lit and followed;
   show/fold/width persist through the layout file (`crates/inkuno/src/shell/sidebar.rs`,
   `crates/inkuno/src/shell/tests/docks.rs`).
@@ -537,7 +538,7 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 | Recent | STRIPPED from main UI, UNBOUND | Rail button gone, no chord | Palette `› recent notes` (`Ctrl+P` opens on recent); re-bind via help panel anytime |
 | Links / backlinks | STRIPPED from main UI | Rail button gone | Palette `› backlinks` / `Ctrl+L`; mode untouched |
 | Vault search | STRIPPED from main UI | Rail button gone | Palette `› search the whole vault` / `Ctrl+Shift+F`; mode untouched |
-| Outline dock | TBD (§12.4) | Palette jump `Ctrl+Shift+O` stays | Persistent dock needs a §1 proposal (§11.3-Q1) |
+| Outline dock | Right-dock tool, built (§12.4) | `Ctrl+Shift+O` and palette `Outline of the note` toggle it (2026-11-15) | Width and nesting stay TBD (§12.4); the palette jump is retired |
 | Comments | DOT | Collapsed to dot | Click dot / `› comments` / flip `comments_shut` |
 | Format bar | HIDDEN-VISUALLY | Invisible but present, toggle clickable | Palette `› formatting bar`; Phase-2 chord TBD |
 | Counts | QUIET | No numbered badges (comment count → dot); the bottom-right word counter is removed 2026-11-14 (§16) | Status-bar counts stay mockup-only (§12.3); any footer count needs a §1 proposal |

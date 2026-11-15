@@ -42,6 +42,7 @@ actions!(
         CopyAll,
         ToggleHelp,
         ToggleAssistant,
+        ToggleOutline,
         CloseHelp,
         ChooseTheme,
         ContextMenu,

@@ -207,7 +207,7 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 
 ### Notes + App
 
-`Ctrl+Shift+O` outline (`› outline of the note`); `Ctrl+P` palette (notes,
+`Ctrl+Shift+O` outline: shows or hides it in the right dock (`› outline of the note`); `Ctrl+P` palette (notes,
 `#tag` filter, `› word` commands, create); `F10`/`Ctrl+Shift+P` commands;
 `F1`/`Ctrl+/` help (rebindable in place); `Ctrl+Q` quit; `Ctrl+S` save now.
 `Ctrl+Alt+S` save a version (`app::SaveRevision`, `› save a version`): a numbered revision of the
@@ -367,8 +367,9 @@ note, with an optional line on what changed; nothing is saved when the text is t
   (§11.3-Q2); the §1 proposal this line is. (Only `F1/F2/F3/F9/F10` are taken today.)
 - `Ctrl+Alt+T`: freed by the T-fix; do NOT reassign casually — it is the
   fallback if the T-fix ever regresses.
-- Outline dock (§11.3-Q1): no chord decision. `Ctrl+Shift+O` stays palette
-  jump-to-heading; a future dock reuses or splits per a new proposal.
+- Outline dock (§11.3-Q1), decided 2026-11-15 (owner): `Ctrl+Shift+O` (`app::ToggleOutline`)
+  shows or hides the outline in the right dock, as the palette command `Outline of the note` does.
+  The palette jump-to-heading is retired. Tests: `shell/tests/outline.rs`.
 - Format-bar toggle chord: deferred to Phase 2 reskin (bar stays SHOWN,
   app-ui.md §10 lock).
 - Kanban `Space` tick + `Alt+arrows` carry stay `Board`-only by design; the

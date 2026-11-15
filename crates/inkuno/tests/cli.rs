@@ -485,18 +485,18 @@ fn keys_lists_sets_and_resets_shortcuts() {
     let set = inkuno(
         &home,
         &vault,
-        &["keys", "set", "app::OpenPalette", "secondary-shift-o"],
+        &["keys", "set", "app::OpenPalette", "secondary-shift-j"],
     );
     assert_eq!(
         (set.code, set.out.as_str()),
-        (0, "app::OpenPalette: secondary-shift-o\n"),
+        (0, "app::OpenPalette: secondary-shift-j\n"),
         "{}",
         set.err
     );
     let file = fs::read_to_string(config_folder(&home).join("inkuno/keybindings.json")).unwrap();
     let json: Value = serde_json::from_str(&file).expect("the file is JSON");
     assert_eq!(json["version"], 1);
-    assert_eq!(json["bindings"]["app::OpenPalette"][0], "secondary-shift-o");
+    assert_eq!(json["bindings"]["app::OpenPalette"][0], "secondary-shift-j");
     let after = inkuno(&home, &vault, &["keys", "list", "--json"]);
     let all: Value = serde_json::from_str(&after.out).unwrap();
     let palette = all
@@ -506,7 +506,7 @@ fn keys_lists_sets_and_resets_shortcuts() {
         .find(|a| a["action"] == "app::OpenPalette")
         .unwrap();
     assert_eq!(palette["changed"], true);
-    assert_eq!(palette["keys"][0], "secondary-shift-o");
+    assert_eq!(palette["keys"][0], "secondary-shift-j");
 
     let reset = inkuno(&home, &vault, &["keys", "reset", "app::OpenPalette"]);
     assert_eq!(reset.code, 0, "{}", reset.err);

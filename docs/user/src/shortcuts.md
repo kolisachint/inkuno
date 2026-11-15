@@ -78,6 +78,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Ctrl+P › assistant` | Assistant: show or hide its panel in the right dock (also a round button at the foot of the note) |
+| `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note) |
 | `Ctrl+B` | Sidebar: show or hide the side panel (the rail stays) |
 | `F9` | Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back |
 | `Ctrl+Shift+S` | Title bar: show or hide the bar the app draws (its buttons come back with it) |

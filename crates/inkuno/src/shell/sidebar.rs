@@ -48,6 +48,19 @@ impl Shell {
         self.settle_nav(window, cx);
     }
 
+    /// `app::ToggleOutline` (chord and palette): shows the outline in the right dock, alone, so
+    /// that it takes the place of the assistant there; a press while it is shown hides it. The
+    /// full-window panel gives way to the split one, where the right dock is drawn.
+    pub(super) fn toggle_outline(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.docked(Mode::Outline) {
+            return self.hide_tool(Mode::Outline, window, cx);
+        }
+        if self.nav.panel == Panel::Full {
+            self.nav.panel = Panel::Split;
+        }
+        self.show_nav(Mode::Outline, false, window, cx);
+    }
+
     /// The tools drawn in the left dock (or the right one), top to bottom: those shown there that
     /// live there.
     pub(super) fn dock_tools(&self, right: bool) -> Vec<Mode> {

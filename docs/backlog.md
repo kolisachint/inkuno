@@ -45,7 +45,6 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - `shortcuts_page_is_current` is compiled out on macOS; the page cannot be regenerated on a Mac (`crates/inkuno/src/shell/tests/shortcuts_page.rs:66`).
 - Two macOS-only clippy warnings fail `-D warnings` locally (`crates/inkuno/src/platform/mod.rs:7`, `crates/inkuno/src/shell/tests/shortcuts_page.rs:7`).
 - Template machinery is reachable only through `inkuno new --template`; decide app UI or keep the command line only (`crates/inkuno/src/platform/vault.rs:254`, `crates/inkuno-logic/src/daily.rs:15`).
-- `base64` in `crates/inkuno/Cargo.toml` is no longer used by the code since the server was removed: removing it changes the fragile `Cargo.lock`, so it needs the owner's go-ahead.
 - CLI: link rewriting after a move swallows a write error on another note (`crates/inkuno/src/cli/store.rs`, `relink`), and the H1 rewrite error of a renamed note is ignored (`crates/inkuno/src/cli/ops.rs`, `rename_note`): expected, a note that cannot be written is reported, and the move says which links were left.
 - CLI: `trash` returns an error after the file has moved when the history step fails (`crates/inkuno/src/cli/ops.rs`, `trash_note`): expected, the reason says where the note is now, or the move is undone.
 - CLI: `inkuno links` lists a note embed `![[B]]` under pictures (`crates/inkuno/src/cli/ops.rs`, `note_links`): expected, an embedded note is an embed only.
@@ -71,11 +70,9 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Assistant: the prompt box is one field without newlines: expected, a multi-line box is a later idea.
 - The Assistant cannot ask before a tool call: hoocode's RPC mode has no approval messages (its `app-server` protocol has them). Edits by the assistant wait for the pending-change flow (`cli.md`, `inkuno write`).
 - CLI: `inkuno comment` still matches a passage inside a code fence or inside existing comment markup: expected, those are skipped or refused.
-- Outline cannot be opened today: no rail button, no key and no palette command. The right dock holds it. A way to open it is to be decided.
 - macOS chrome hiding is unverified on a real Mac until the owner tries it: the window's bar is transparent and its traffic lights are hidden with `setHidden:`; check that the note's top row is clickable, that the lights come back on the next press, and that a full-screen toggle does not show them again (`crates/inkuno/src/platform/mac_chrome.rs`).
 - Assistant: the `assistant` setting splits on spaces, so a program path with spaces cannot be set (`crates/inkuno/src/platform/assistant.rs`, `program`): expected, a path with spaces works, or the limit is stated in the setting's help.
 - Assistant on Windows: only `name` and `name.exe` are looked up on `PATH`; `.cmd` and `.bat` are not (`crates/inkuno/src/platform/assistant.rs`, `find_in`): expected, the shims are found too, or the limit is written down.
 - Assistant: prompts are written to the agent on the window's thread (`crates/inkuno/src/shell/assistant.rs`, `assistant_run`): expected, a writer thread takes them if prompts grow.
 - Assistant: the agent may still read any file it is pointed at, since `Read` is not limited to the vault: expected, an allow-list of tools and a folder limit, to be looked at with hoocode.
-- `unicode-segmentation` is no longer used by `inkuno-logic` since the word counter left (`crates/inkuno-logic/Cargo.toml`): its removal changes `Cargo.lock` and waits for the owner, like `base64`.
 - Assistant: the shell's tests start no process, so the non-test path of `assistant_run` that starts the agent (`start_agent`) has no test there: expected, the process is tested in `platform/assistant.rs`, and a shell test with a fake agent program.
