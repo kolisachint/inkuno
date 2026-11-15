@@ -81,6 +81,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
 | the vault commands (`inkuno list`, `read`, `new`, `edit`…) | `crates/inkuno/src/cli/commands.rs` (each command, its options and its help), `ops.rs` (the work), `store.rs` (the vault rules: nothing outside it, but `comment --file`, which reaches the one file it names), `outcome.rs` (results and disk errors in words); tests `crates/inkuno/tests/cli.rs` and `cli/check.rs`; `docs/design/cli.md` |
 | the Assistant: the panel and its state | `shell/assistant.rs`; the design in `docs/design/app-ui.md` §16 |
+| pending changes: the washes, the read-only rule, accept, reject, comment | `views/editor/changes.rs` (the actions), `views/editor/edit.rs` (`touches_pending`), `shell/changes.rs` (the comment prompt and the hint); pure marks in `inkuno-logic/src/pending.rs`; the design in `docs/design/app-ui.md` §17 |
 | the Assistant's child process (start, lines in and out, stop) | `platform/assistant.rs` (no window code) |
 | the words of the Assistant: the prompts sent, the findings read back, the placing of each comment | `crates/inkuno-logic/src/assistant.rs` (pure); one comment is placed by `markdown::comment_on` (`crates/inkuno-logic/src/markdown/mod.rs`), the same as `inkuno comment` |
 | the picture of a note, a file or a Mermaid source (`inkuno render`) | `crates/inkuno/src/cli/draw.rs`; `docs/design/cli.md` |
@@ -91,7 +92,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `ui/theme.rs` |
 | icons and fonts | `ui/assets.rs` |
-| the text editor | `views/editor/`: `edit.rs` (changes, undo), `cursor.rs`, `style.rs`, `table.rs` and `grid.rs` (Markdown tables), `blocks.rs`, `find.rs`, `completion.rs`, `links.rs`, `notes.rs` (which cells of a table carry a comment), `format_bar.rs`, `mouse.rs`, `clipboard.rs`, `input.rs` (IME) |
+| the text editor | `views/editor/`: `edit.rs` (changes, undo, the pending guard), `changes.rs` (accept, reject, comment on a pending change), `cursor.rs`, `style.rs`, `table.rs` and `grid.rs` (Markdown tables), `blocks.rs`, `find.rs`, `completion.rs`, `links.rs`, `notes.rs` (which cells of a table carry a comment), `format_bar.rs`, `mouse.rs`, `clipboard.rs`, `input.rs` (IME) |
 | what a keystroke costs | `views/editor/layout.rs` (`reuse` redoes only the damaged lines) then `paint.rs`; the test `layout_reuse_matches_full_layout` checks every reuse against a full layout |
 | the tree, recent notes, vault search, outline | `views/nav.rs` (state), `shell/sidebar.rs` (drawing) |
 | the command palette | `views/palette.rs`, `shell/palette_open.rs` |

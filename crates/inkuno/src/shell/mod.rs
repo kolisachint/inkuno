@@ -3,6 +3,7 @@
 //! this folder.
 
 mod assistant;
+mod changes;
 mod files;
 mod help;
 pub(crate) mod keymap;

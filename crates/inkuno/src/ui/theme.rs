@@ -120,6 +120,10 @@ pub struct Theme {
     pub hover: Hsla,
     /// The same, a little stronger, while the pointer is down (`.active`).
     pub pressed: Hsla,
+    /// Background of a line the agent added to a note, pending (`pending.rs`): a green wash, quiet.
+    pub added: Hsla,
+    /// Background of a line the agent removed, pending: a red wash, quiet. Its text is `soft`.
+    pub removed: Hsla,
     /// Size of the note's body text, in pixels.
     pub size: f32,
     /// Scale of the interface around the note (panel, menus, help, palette): it follows the note's size,
@@ -478,6 +482,8 @@ impl Theme {
             selection: accent.opacity(share),
             hover: text.opacity(0.07),
             pressed: text.opacity(0.13),
+            added: pending_wash(GREEN, bg, [text, soft]),
+            removed: pending_wash(RED, bg, [text, soft]),
             code_bg,
             panel,
             border,
@@ -629,6 +635,21 @@ pub fn highlight_tint(i: usize) -> Hsla {
         l: 0.55,
         a: 1.,
     }
+}
+
+/// A quiet wash of hue `h` over `bg` for the pending changes (see `Theme::added`): the strongest
+/// of the steps from 22 % down that lets every text in `reads` stay at 4.5:1 on it, else 4 %.
+fn pending_wash(h: f32, bg: Hsla, reads: [Hsla; 2]) -> Hsla {
+    let tint = Hsla {
+        h,
+        s: 0.6,
+        l: 0.5,
+        a: 1.,
+    };
+    (0..=18)
+        .map(|k| blend(tint, bg, 0.22 - k as f32 * 0.01))
+        .find(|c| reads.iter().all(|t| contrast(*t, *c) >= 4.5))
+        .unwrap_or_else(|| blend(tint, bg, 0.04))
 }
 
 /// Hues of the highlights, in the order of `md::MARKS`: yellow, green, blue, pink, purple.
@@ -845,6 +866,9 @@ mod tests {
             for h in HUES {
                 pairs.push(("hue/panel", t.hue(h, t.panel), t.panel, 4.5));
             }
+            pairs.push(("text/added", t.text, t.added, 4.5));
+            pairs.push(("text/removed", t.text, t.removed, 4.5));
+            pairs.push(("soft/removed", t.soft, t.removed, 4.5));
             for (what, fg, bg, min) in pairs {
                 let got = contrast(fg, bg);
                 if got < min {
@@ -914,6 +938,34 @@ mod tests {
                     "{name}: the selection is not told from the open row ({:.3})",
                     contrast(picked, open)
                 ));
+            }
+        }
+        assert!(fails.is_empty(), "{}", fails.join("\n"));
+    }
+
+    /// The pending changes (the agent's added and removed lines) show on the sheet, and their text reads on them.
+    #[test]
+    fn pending_changes_show_and_read() {
+        let mut fails = Vec::new();
+        for (name, _) in THEMES {
+            for look in [WindowAppearance::Light, WindowAppearance::Dark] {
+                let t = Theme::of(&Prefs::parse(&format!("theme={name}\n")), look);
+                for (what, wash) in [("added", t.added), ("removed", t.removed)] {
+                    if contrast(wash, t.bg) < 1.03 {
+                        fails.push(format!(
+                            "{name}: {what} wash does not show ({:.3})",
+                            contrast(wash, t.bg)
+                        ));
+                    }
+                    for (text, label) in [(t.text, "text"), (t.soft, "soft")] {
+                        if contrast(text, wash) < 4.5 {
+                            fails.push(format!(
+                                "{name}: {label} on {what} {:.2}",
+                                contrast(text, wash)
+                            ));
+                        }
+                    }
+                }
             }
         }
         assert!(fails.is_empty(), "{}", fails.join("\n"));

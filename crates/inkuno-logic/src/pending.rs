@@ -228,7 +228,13 @@ pub fn area_at(text: &str, offset: usize) -> Option<usize> {
 /// Whether an edit of the bytes `range` would change any byte of an area, marker lines included.
 /// An empty range is an insertion point: inserting exactly at an area's start or end is allowed.
 pub fn touches(text: &str, range: Range<usize>) -> bool {
-    areas(text).iter().any(|area| {
+    touches_any(&areas(text), range)
+}
+
+/// `touches` for areas already read from the text (the editor keeps them for each version of
+/// its text): whether an edit of `range` changes a byte of any of `found`.
+pub fn touches_any(found: &[Area], range: Range<usize>) -> bool {
+    found.iter().any(|area| {
         let r = &area.range;
         if range.is_empty() {
             r.start < range.start && range.start < r.end
@@ -559,6 +565,16 @@ mod tests {
         assert!(!touches(text, 0..start));
         let end = text.find("b\n").unwrap();
         assert!(!touches(text, end..end + 1));
+    }
+
+    #[test]
+    fn touches_any_gives_what_touches_on_the_areas_read_once() {
+        let text = "a\n{++\nxyz\n++}\nb\n";
+        let found = areas(text);
+        let inside = text.find("yz").unwrap();
+        assert!(touches_any(&found, inside..inside + 1));
+        assert!(!touches_any(&found, 0..1));
+        assert!(!touches_any(&[], inside..inside + 1));
     }
 
     #[test]

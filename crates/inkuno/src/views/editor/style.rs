@@ -22,6 +22,9 @@ impl Editor {
         if new == old {
             return;
         }
+        if self.touches_pending(&block, &new) {
+            return self.refuse_pending(cx);
+        }
         // Position `at` after the change: in a line's content, it follows it; in its
         // marker, it goes to the start of the new content.
         let moved = |at: usize| {

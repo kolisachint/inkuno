@@ -581,6 +581,7 @@ fn shape_flags(
             .is_some_and(|m| m.contains(&source(&subs, i)))
     };
     let style = RunStyle {
+        pending: Default::default(),
         heading: false,
         soft: false,
         italic: false,

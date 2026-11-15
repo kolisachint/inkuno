@@ -94,15 +94,16 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
 | 2026-11-14 | Revisions live hidden in `.inkuno/revisions/` inside the vault (scratch: `.revisions/`). |
 | 2026-11-14 | Explicit checkpoints only, by the chord or the command line. Files are live on disk, so saving a file never makes a revision. |
 | 2026-11-14 | One author per snapshot. Multi-author views are derived from automatic single-author snapshots taken around each agent write (`kind: auto`). |
-| 2026-11-14 | Agent changes stay tinted and pending until the human accepts, rejects or comments; the human edits them only after accepting; an agent write that touches text the human changed since the agent read it is refused. The write and the refusals are built (2026-11-15, `inkuno write`); the tint, accept and reject are the app's side, not built yet. |
+| 2026-11-14 | Agent changes stay tinted and pending until the human accepts, rejects or comments; the human edits them only after accepting; an agent write that touches text the human changed since the agent read it is refused. The write and the refusals are built (2026-11-15, `inkuno write`); the tint, accept, reject and comment are built in the app (2026-11-15, `app-ui.md` §17). |
 | 2026-11-15 | An agent write is bracketed by two `kind: auto` revisions: the text before it (the person's default author), and the proposed text (the agent's `--author`, note `proposed, pending`). A write that changes nothing in a snapshot's text saves no revision. |
 | 2026-11-15 | Pending changes are CriticMarkup in block form, one area per removed and added block pair, in the note file itself, so that the note stays plain text for every other reader. A note with pending changes takes no new agent write. |
+| 2026-11-15 | The app's side of pending changes is built: a green or red wash on the added and removed lines, the marks dimmed; typing in a change is refused with a message, while the caret, the selection, copy, undo and outside changes are not; accept, reject (one change, or all) and comment on a change, each one undo step, from the palette and the right-click menu, with a hint at the note's foot. No chords yet. `app-ui.md` §17. |
 | 2026-11-14 | The command line replaces the MCP server, and the server is removed: done, see [cli.md](cli.md). |
 | 2026-11-14 | An in-app agent talks over a local socket with the same command line as version 2 (planned). |
 
 ## Not built yet
 
 - The Versions side panel and the coloured inline compare.
-- Agent live edits in the app: the tint of pending changes, and accept or reject of one change (the marks are already in the file).
+- Chords for accept, reject and comment on a change (the palette and the right-click menu have them; the owner decides the keys).
 - Restoring a trashed note's history when the bin holds it under another name (the undo of a trash
   and the Trash panel's restore bring it back by name).

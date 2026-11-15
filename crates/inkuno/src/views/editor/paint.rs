@@ -255,6 +255,15 @@ impl Editor {
             if row.hidden() {
                 continue;
             }
+            // A pending change: its lines lie on a quiet wash, green for an addition, red for a removal.
+            let wash = match row.pend {
+                Pend::Added => Some(t.added),
+                Pend::Removed => Some(t.removed),
+                Pend::Plain | Pend::Mark => None,
+            };
+            if let Some(wash) = wash {
+                window.paint_quad(fill(block(px(-12.), top, w + px(24.), row.height), wash));
+            }
             window.with_content_mask(mask, |window| {
                 // In a table, the header background goes under the selection.
                 let table_top = point(o.x - row.dx, top);

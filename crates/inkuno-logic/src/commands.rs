@@ -281,6 +281,36 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Format,
         ),
         (
+            "editor::AcceptChange",
+            tr("Accept the change", "Accepter le changement"),
+            "check.svg",
+            Note,
+        ),
+        (
+            "editor::RejectChange",
+            tr("Reject the change", "Refuser le changement"),
+            "close.svg",
+            Note,
+        ),
+        (
+            "editor::AcceptAllChanges",
+            tr("Accept all changes", "Accepter tous les changements"),
+            "check.svg",
+            Note,
+        ),
+        (
+            "editor::RejectAllChanges",
+            tr("Reject all changes", "Refuser tous les changements"),
+            "close.svg",
+            Note,
+        ),
+        (
+            "editor::CommentChange",
+            tr("Comment on the change", "Commenter le changement"),
+            "c-comment.svg",
+            Note,
+        ),
+        (
             "editor::Find",
             tr("Find in the note", "Chercher dans la note"),
             "search.svg",
@@ -688,6 +718,23 @@ mod tests {
         assert_eq!(keycaps("F10"), ["F10"]);
         assert_eq!(keycaps("Alt+Haut"), ["Alt", "↑"]);
         assert!(keycaps("").is_empty());
+    }
+
+    #[test]
+    fn the_catalog_lists_the_five_change_commands() {
+        let all = catalog();
+        for action in [
+            "editor::AcceptChange",
+            "editor::RejectChange",
+            "editor::AcceptAllChanges",
+            "editor::RejectAllChanges",
+            "editor::CommentChange",
+        ] {
+            assert!(
+                all.iter().any(|(name, ..)| *name == action),
+                "{action} is in the palette"
+            );
+        }
     }
 
     #[test]

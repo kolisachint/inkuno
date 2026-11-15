@@ -94,6 +94,7 @@ impl Editor {
     }
 
     pub(super) fn changed(&mut self, cx: &mut Context<Self>) {
+        self.pending = crate::logic::pending::areas(&self.content).into();
         self.bar.swatches = false;
         // Typora-style: the edited line shows its source. A plain cursor move never calls
         // this, so keyboard navigation keeps the rendered markers hidden.
@@ -114,8 +115,43 @@ impl Editor {
         cx.notify();
     }
 
-    /// Replaces `range` with `text`, keeping the selection as well as possible.
+    /// Whether an edit of `range` would change a pending change (`logic::pending`): the person
+    /// accepts or rejects that change first, so such an edit is refused.
+    /// The text `text` would replace `range`. Besides the bytes of a change, an edit that ends where
+    /// a change starts is refused unless `text` ends a line: the line break before the change would
+    /// go, or the text would be glued to the change's first mark.
+    pub(super) fn touches_pending(&self, range: &Range<usize>, text: &str) -> bool {
+        crate::logic::pending::touches_any(&self.pending, range.clone())
+            || (!text.ends_with('\n')
+                && self
+                    .pending
+                    .iter()
+                    .any(|area| area.range.start == range.end))
+    }
+
+    /// Says that an edit was refused because of a pending change: a message, shown once.
+    pub(super) fn refuse_pending(&mut self, cx: &mut Context<Self>) {
+        cx.emit(EditorEvent::Notice(
+            tr(
+                "This change is pending: accept or reject it first.",
+                "Ce changement est en attente : acceptez-le ou refusez-le d'abord.",
+            )
+            .into(),
+        ));
+    }
+
+    /// Replaces `range` with `text`, keeping the selection as well as possible. Refused when the
+    /// range changes a pending change.
     pub(super) fn splice(&mut self, range: Range<usize>, text: &str, cx: &mut Context<Self>) {
+        if self.touches_pending(&range, text) {
+            return self.refuse_pending(cx);
+        }
+        self.splice_now(range, text, cx);
+    }
+
+    /// `splice` without the guard of the pending changes: the route of an outside change, and of
+    /// accept and reject, which change the pending changes themselves.
+    pub(super) fn splice_now(&mut self, range: Range<usize>, text: &str, cx: &mut Context<Self>) {
         self.push_undo(text.contains('\n') || text == " ");
         let scopes = self.scopes_before(&range, text);
         self.damaged(&range);
@@ -193,6 +229,9 @@ impl Editor {
 
     /// Replaces `range` with `text` and puts the cursor right after.
     pub(super) fn edit(&mut self, range: Range<usize>, text: &str, cx: &mut Context<Self>) {
+        if self.touches_pending(&range, text) {
+            return self.refuse_pending(cx);
+        }
         let end = range.start + text.len();
         self.splice(range, text, cx);
         self.sel = end..end;
@@ -201,6 +240,10 @@ impl Editor {
 
     pub(super) fn renumber(&mut self, cx: &mut Context<Self>) {
         if let Some((text, cursor)) = md::renumber(&self.content, self.cursor()) {
+            // Renumbering that would change a pending change is left out: the change stays as it is.
+            if self.touches_pending(&changed_span(&self.content, &text), "") {
+                return;
+            }
             self.epoch += 1;
             self.content = text;
             self.edited_at = usize::MAX;
@@ -217,7 +260,16 @@ impl Editor {
         } else {
             (&mut self.undo, &mut self.redo)
         };
-        let Some((text, sel)) = from.pop() else {
+        // A step that left the text as it is (an edit refused by a pending change, whose undo step
+        // was taken before the refusal) is skipped: undo must show a change.
+        let mut popped = from.pop();
+        while popped
+            .as_ref()
+            .is_some_and(|(text, _)| *text == self.content)
+        {
+            popped = from.pop();
+        }
+        let Some((text, sel)) = popped else {
             return;
         };
         self.epoch += 1;
@@ -293,6 +345,9 @@ impl Editor {
                 Some(0) if line.end < self.content.len() => self.line_range(line.end + 1).end,
                 _ => line.end,
             };
+            if self.touches_pending(&(after..after), &format!("\n|{}", " |".repeat(cells))) {
+                return self.refuse_pending(cx);
+            }
             self.push_undo(true);
             self.edit(after..after, &format!("\n|{}", " |".repeat(cells)), cx);
             return self.move_to(after + 3, cx);
@@ -301,6 +356,9 @@ impl Editor {
             if r >= 2 && r + 1 == rows.len() && rows[r].iter().all(String::is_empty) {
                 rows.pop();
                 let text = format!("{}\n", self.format_table(&range, &rows));
+                if self.touches_pending(&range, &text) {
+                    return self.refuse_pending(cx);
+                }
                 self.push_undo(true);
                 return self.edit(range, &text, cx);
             }
@@ -347,6 +405,9 @@ impl Editor {
             }
         }
         let block = first.start..self.line_range(self.sel.end).end;
+        if self.touches_pending(&block, "") {
+            return self.refuse_pending(cx);
+        }
         let sel = self.sel.clone();
         let mut deltas = Vec::new();
         let shifted: Vec<String> = self.content[block.clone()]
@@ -403,8 +464,41 @@ impl Editor {
         self.push_undo(true);
         let held = std::mem::replace(&mut self.held, true);
         for (range, text) in edits.iter().rev() {
-            self.splice(range.clone(), text, cx);
+            self.splice_now(range.clone(), text, cx);
         }
         self.held = held;
+    }
+}
+
+/// The bytes of `old` that a rewrite to `new` changes: from the first differing byte to the last,
+/// the same at the end of both. Used to guard a rewrite of the whole text.
+fn changed_span(old: &str, new: &str) -> Range<usize> {
+    let (a, b) = (old.as_bytes(), new.as_bytes());
+    let mut start = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    while !old.is_char_boundary(start) {
+        start -= 1;
+    }
+    let room = (old.len() - start).min(new.len() - start);
+    let mut tail = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(room)
+        .take_while(|(x, y)| x == y)
+        .count();
+    while !old.is_char_boundary(old.len() - tail) {
+        tail -= 1;
+    }
+    start..old.len() - tail
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changed_span;
+
+    #[test]
+    fn the_span_of_a_rewrite_is_the_bytes_that_differ() {
+        assert_eq!(changed_span("1. a\n2. b\n", "1. a\n3. b\n"), 5..6);
+        assert_eq!(changed_span("same", "same"), 4..4);
     }
 }

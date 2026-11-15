@@ -603,13 +603,14 @@ impl Shell {
                 _ => self.follow(link, window, cx),
             },
             EditorEvent::OpenAt(target, aside) => self.open_at(target, *aside, window, cx),
-            EditorEvent::Menu(at, link, commented, keys) => {
+            EditorEvent::Menu(at, link, commented, keys, change) => {
                 let chosen = keys.then_some(0);
                 self.show_menu(
                     nav::Menu {
                         at: *at,
                         text: Some(link.clone()),
                         commented: *commented,
+                        change: *change,
                         chosen,
                         ..Default::default()
                     },
@@ -631,6 +632,16 @@ impl Shell {
             }
             // The diagram, formula or picture takes the note's place; Escape returns to it.
             EditorEvent::View(source) => self.show_figure(source.clone(), window, cx),
+            // A message of the note, shown once while it is not already on screen.
+            EditorEvent::Notice(text) => {
+                if !self.toasts.iter().any(|toast| toast.text == *text) {
+                    self.say(Tone::Info, text.clone(), cx);
+                }
+            }
+            // The comment's line is asked by a prompt of the shell, which then writes it in the note.
+            EditorEvent::AskChangeComment(index) => {
+                self.ask_change_comment(editor.clone(), *index, window, cx)
+            }
         }
     }
 

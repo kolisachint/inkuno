@@ -78,6 +78,9 @@ impl Shell {
             (Do::Code, _) => Some(Box::new(editor::InlineCode)),
             (Do::Link, _) => Some(Box::new(editor::InsertLink)),
             (Do::Comment, _) => Some(Box::new(editor::Comment)),
+            (Do::AcceptChange, _) => Some(Box::new(editor::AcceptChange)),
+            (Do::RejectChange, _) => Some(Box::new(editor::RejectChange)),
+            (Do::CommentChange, _) => Some(Box::new(editor::CommentChange)),
             (Do::Bullets, _) => Some(Box::new(editor::ListBullet)),
             (Do::Numbered, _) => Some(Box::new(editor::ListOrdered)),
             (Do::Tasks, _) => Some(Box::new(editor::ListTask)),
@@ -486,6 +489,21 @@ impl Shell {
             groups[3].push((BlockOp::Delete.label(), Do::Block(BlockOp::Delete)));
         } else if let Some(link) = &menu.text {
             let web = matches!(link, Some(Link::Url(_)));
+            // Inside a pending change: its gestures, on the change under the pointer.
+            if menu.change {
+                groups[0].push((
+                    tr("Accept the change", "Accepter le changement"),
+                    Do::AcceptChange,
+                ));
+                groups[0].push((
+                    tr("Reject the change", "Refuser le changement"),
+                    Do::RejectChange,
+                ));
+                groups[0].push((
+                    tr("Comment on the change", "Commenter le changement"),
+                    Do::CommentChange,
+                ));
+            }
             if link.is_some() {
                 groups[0].push((tr("Open the link", "Ouvrir le lien"), Do::OpenLink));
             }

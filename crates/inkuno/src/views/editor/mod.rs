@@ -2,6 +2,7 @@
 //! rendering changes (sizes, weights, colors).
 
 mod blocks;
+mod changes;
 mod clipboard;
 mod completion;
 mod cursor;
@@ -171,6 +172,11 @@ actions!(
         FindWord,
         FindRegex,
         ReplaceAll,
+        AcceptChange,
+        RejectChange,
+        AcceptAllChanges,
+        RejectAllChanges,
+        CommentChange,
     ]
 );
 
@@ -230,14 +236,20 @@ pub enum EditorEvent {
     Open(Link),
     /// The same, with Shift: to open in the other pane.
     OpenAside(Link),
-    /// Right click in the note: where, the link found there, whether it targets a comment, and whether the keys opened it.
-    Menu(Point<Pixels>, Option<Link>, bool, bool),
+    /// Right click in the note: where, the link found there, whether it targets a comment, whether the keys
+    /// opened it, and whether it is inside a pending change.
+    Menu(Point<Pixels>, Option<Link>, bool, bool, bool),
     /// Click on a block handle: its menu, at that spot.
     BlockMenu(Point<Pixels>),
     /// A diagram, formula or picture to view large.
     View(Source),
     /// A link to a heading or a block of a note, to open: the note and where in it; with Shift, aside.
     OpenAt(crate::logic::wiki::Target, bool),
+    /// A short message for the shell to show once: an edit refused for a pending change, a
+    /// change action with no change to act on, or the reason a comment was refused.
+    Notice(String),
+    /// Asks for the line of a comment on pending change `index` (the shell opens the prompt).
+    AskChangeComment(usize),
 }
 
 pub struct Editor {
@@ -268,6 +280,8 @@ pub struct Editor {
     /// Footnote definitions of the text (see `md::footnotes`), refreshed with the layout:
     /// navigation and the pointer only follow defined labels.
     feet: Vec<md::FootDef>,
+    /// The pending changes of the text (`logic::pending`), read again at each change of the text.
+    pending: Rc<[crate::logic::pending::Area]>,
     /// Revision `feet` was computed for.
     feet_rev: u64,
     /// Last definition jumped to from its label, and which of its references was shown:
@@ -434,6 +448,7 @@ impl Editor {
             edited_at: usize::MAX,
             revealed: None,
             feet: Vec::new(),
+            pending: Rc::from([]),
             feet_rev: u64::MAX,
             foot_jump: None,
             notes: Rc::from([]),
@@ -522,6 +537,7 @@ impl Editor {
         self.revision += 1;
         self.epoch += 1;
         self.content = text;
+        self.pending = crate::logic::pending::areas(&self.content).into();
         self.sel = cursor..cursor;
         self.reversed = false;
         self.more.clear();

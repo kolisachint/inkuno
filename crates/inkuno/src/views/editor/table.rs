@@ -329,6 +329,10 @@ impl Editor {
         if text == old || old.matches('\n').count() + 1 != rows.len() {
             return;
         }
+        // A table inside a pending change is not realigned: that change stays as it is.
+        if self.touches_pending(&range, &text) {
+            return;
+        }
         let map = realigned(&range, &old, &text);
         let sel = map(self.sel.start)..map(self.sel.end);
         self.follow(&map);
@@ -345,6 +349,10 @@ impl Editor {
             return false;
         };
         let at = ranges.first().map_or(self.sel.start, |r| r.start);
+        if ranges.iter().any(|r| self.touches_pending(r, "")) {
+            self.refuse_pending(cx);
+            return true;
+        }
         let guard = self.name_guard(self.sel.start);
         if !ranges.is_empty() {
             self.push_undo(true);
@@ -574,6 +582,9 @@ impl Editor {
     ) {
         let text = self.format_table(&range, rows);
         if self.content[range.clone()] != text {
+            if self.touches_pending(&range, &text) {
+                return self.refuse_pending(cx);
+            }
             self.push_undo(true);
             self.edit(range.clone(), &text, cx);
         }
@@ -609,6 +620,9 @@ impl Editor {
         // At the furthest, just before the `|` that closes the cell.
         let (start, end) = (md::cells(new)[col].start, md::bars(new)[col + 1]);
         let cursor = at + (start + c.saturating_sub(old)).min(end);
+        if self.touches_pending(&range, &text) {
+            return;
+        }
         let was = self.content[range.clone()].to_string();
         self.follow(realigned(&range, &was, &text));
         self.damaged(&range);
