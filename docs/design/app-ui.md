@@ -744,7 +744,7 @@ Normal 800 is the default (§10.4 lock released for this change).
 ### 16.4 The agent process
 
 - Inkuno starts the `hoocode` program, found on the PATH, as a child process with the flags
-  `--mode rpc --no-session --disallowed-tools Shell,ShellKill,Write,Edit` after the user's own words
+  `--mode rpc --no-session --disallowed-tools Shell,ShellKill,Write,Edit,WebFetch,WebSearch,Agent` after the user's own words
   (`platform/assistant.rs`, `arguments`). Its protocol is JSON Lines of hoocode's own, one object a line.
 - So the read-only rule is enforced by the tools the agent is started with, not only by an instruction:
   it has no shell and no write tool. A review's findings are text in its answer; Inkuno writes them (§16.6).

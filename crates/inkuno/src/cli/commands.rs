@@ -944,7 +944,7 @@ const COMMENT_HELP: &str = "\
 inkuno comment <note> --passage P --text C [--json]
 inkuno comment --file PATH --passage P --text C [--json]
     wraps one passage of the note in {==P==}{>>C<<}. The passage must occur once, on one line.
-    --file names a Markdown file by its path, outside any vault: no vault is needed. A note and
+    --file takes a .md file, named by its path, outside any vault: no vault is needed. A note and
     --file together, or --vault with --file, is a usage error.
     --text - reads the comment from standard input. Its line breaks become spaces.
     Prints the note's path (--file: the file's absolute path); --json: the result as JSON

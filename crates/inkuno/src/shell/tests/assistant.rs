@@ -5,6 +5,7 @@
 use super::*;
 use crate::platform::assistant::Event;
 use crate::shell::assistant::{Status, Who};
+use std::time::Duration;
 
 /// Lets the window draw what changed (bounds are read from the last frame), then the tasks run.
 fn settle(cx: &mut gpui::VisualTestContext) {
@@ -250,12 +251,14 @@ fn the_events_stream_text_into_one_agent_line(cx: &mut TestAppContext) {
         cx.debug_bounds("assistant-stop").is_some(),
         "Stop while working"
     );
-    // Text in pieces makes one line of the agent; a tool's name is not shown.
+    // Text in pieces makes one line of the agent; a tool's name is not shown. The text of a
+    // message after a tool call starts a new paragraph of the same line.
     feed(
         &shell,
         cx,
         vec![
             Event::Text("Hel".into()),
+            Event::Break,
             Event::Tool("Read".into()),
             Event::Text("lo".into()),
             Event::Ended,
@@ -263,7 +266,7 @@ fn the_events_stream_text_into_one_agent_line(cx: &mut TestAppContext) {
     );
     assert_eq!(
         entries(&shell, cx)[1..],
-        [(Who::Agent, "Hello".to_string())]
+        [(Who::Agent, "Hel\n\nlo".to_string())]
     );
     assert_eq!(status(&shell, cx), Status::Idle);
     let _ = fs::remove_dir_all(root);
@@ -612,5 +615,163 @@ fn the_panel_is_shown_again_after_a_restart(cx: &mut TestAppContext) {
         shell.read_with(cx, |s, _| s.nav.right_shown.contains(&Mode::Assistant)),
         "the panel is shown again"
     );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_first_review_of_a_session_writes_its_comment(cx: &mut TestAppContext) {
+    // No agent runs yet: the review starts one, and the review waits for its answer through it.
+    let (root, shell, cx, _config) = note_open("assistant-first-review", cx);
+    click_button(cx);
+    click_review(cx);
+    assert_eq!(sent(&shell, cx).len(), 1, "the review was sent");
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text("PASSAGE: un peu de texte\nCOMMENT: Trop court.\n".into()),
+            Event::Ended,
+        ],
+    );
+    assert_eq!(
+        editor_text(&shell, cx),
+        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+    );
+    assert_eq!(
+        entries(&shell, cx).last(),
+        Some(&(Who::Note, "Wrote 1 comment.".to_string()))
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_review_reads_the_text_of_separate_messages(cx: &mut TestAppContext) {
+    // The agent says a line, reads the note, then answers: the line is not glued to the finding.
+    let (root, shell, cx, _config) = note_open("assistant-review-messages", cx);
+    click_button(cx);
+    click_review(cx);
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text("Let me read the note.".into()),
+            Event::Tool("Read".into()),
+            Event::Break,
+            Event::Text("PASSAGE: un peu de texte\nCOMMENT: Trop court.".into()),
+            Event::Ended,
+        ],
+    );
+    assert_eq!(
+        editor_text(&shell, cx),
+        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+    );
+    assert_eq!(
+        entries(&shell, cx).last(),
+        Some(&(Who::Note, "Wrote 1 comment.".to_string()))
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_chat_separates_the_messages_of_the_agent_by_a_paragraph(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-paragraphs", cx);
+    click_button(cx);
+    shell.update_in(cx, |s, window, cx| {
+        s.assistant_prompt("Hi".into(), window, cx)
+    });
+    settle(cx);
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text("Let me read the note.".into()),
+            Event::Tool("Read".into()),
+            Event::Break,
+            Event::Text("It is short.".into()),
+            // A message that ends with no text after it adds no blank line.
+            Event::Break,
+            Event::Ended,
+        ],
+    );
+    assert_eq!(
+        entries(&shell, cx)[1..],
+        [(
+            Who::Agent,
+            "Let me read the note.\n\nIt is short.".to_string()
+        )]
+    );
+    assert_eq!(status(&shell, cx), Status::Idle);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn stop_frees_the_panel_when_the_agent_does_not_end(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-stop-timer", cx);
+    click_button(cx);
+    shell.update_in(cx, |s, window, cx| {
+        s.assistant_prompt("Hi".into(), window, cx)
+    });
+    settle(cx);
+    feed(&shell, cx, vec![Event::Started]);
+    let stop = cx
+        .debug_bounds("assistant-stop")
+        .expect("Stop is drawn while the agent works")
+        .center();
+    cx.simulate_click(stop, gpui::Modifiers::none());
+    settle(cx);
+    // The abort was sent, and the agent does not answer it: no Ended comes.
+    let aborts = shell.read_with(cx, |s, _| {
+        s.assistant
+            .agent
+            .as_ref()
+            .map(|agent| agent.written())
+            .unwrap_or_default()
+    });
+    assert!(
+        aborts
+            .iter()
+            .any(|line| line.contains("\"type\":\"abort\"")),
+        "{aborts:?}"
+    );
+    cx.executor().advance_clock(Duration::from_secs(2));
+    settle(cx);
+    assert_eq!(status(&shell, cx), Status::Working, "2 s: not yet");
+    cx.executor().advance_clock(Duration::from_secs(1));
+    settle(cx);
+    assert_eq!(status(&shell, cx), Status::Idle, "3 s: the panel is free");
+    assert!(shell.read_with(cx, |s, _| s.assistant.agent.is_none()));
+    assert_eq!(
+        entries(&shell, cx).last(),
+        Some(&(Who::Note, "Stopped.".to_string()))
+    );
+
+    // Enter works again: the next prompt starts an agent and is sent.
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.assistant.field.focus_handle(cx))
+    });
+    cx.simulate_input("again");
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert_eq!(sent(&shell, cx).len(), 2);
+    assert_eq!(status(&shell, cx), Status::Working);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn stop_without_an_agent_to_abort_frees_the_panel_at_once(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-stop-now", cx);
+    click_button(cx);
+    shell.update_in(cx, |s, window, cx| {
+        s.assistant_prompt("Hi".into(), window, cx)
+    });
+    settle(cx);
+    // The abort cannot be sent: the agent is gone while the panel still says Working.
+    shell.update(cx, |s, _| s.assistant.agent = None);
+    shell.update(cx, |s, cx| s.assistant_stop(cx));
+    settle(cx);
+    assert_eq!(status(&shell, cx), Status::Idle, "no wait: killed at once");
     let _ = fs::remove_dir_all(root);
 }
