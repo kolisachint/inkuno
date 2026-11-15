@@ -80,7 +80,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | Markdown tables (cells, paste, rows and columns, sort, format) | `crates/inkuno-logic/src/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
 | the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
 | the vault commands (`inkuno list`, `read`, `new`, `edit`…) | `crates/inkuno/src/cli/commands.rs` (each command, its options and its help), `ops.rs` (the work), `store.rs` (the vault rules: nothing outside it, but `comment --file`, which reaches the one file it names), `outcome.rs` (results and disk errors in words); tests `crates/inkuno/tests/cli.rs` and `cli/check.rs`; `docs/design/cli.md` |
-| the Assistant: the panel and its state | `shell/assistant.rs`; the design in `docs/design/app-ui.md` §16 |
+| the Assistant: the panel and its state | `shell/assistant.rs`; the design in `docs/design/app-ui.md` §16 and §18 (Improve) |
 | pending changes: the washes, the read-only rule, accept, reject, comment | `views/editor/changes.rs` (the actions), `views/editor/edit.rs` (`touches_pending`), `shell/changes.rs` (the comment prompt and the hint); pure marks in `inkuno-logic/src/pending.rs`; the design in `docs/design/app-ui.md` §17 |
 | the Assistant's child process (start, lines in and out, stop) | `platform/assistant.rs` (no window code) |
 | the words of the Assistant: the prompts sent, the findings read back, the placing of each comment | `crates/inkuno-logic/src/assistant.rs` (pure); one comment is placed by `markdown::comment_on` (`crates/inkuno-logic/src/markdown/mod.rs`), the same as `inkuno comment` |
@@ -133,7 +133,8 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   write tool (`platform/assistant.rs`, `FLAGS`), started on the first prompt and stopped at quit, a vault
   change or a new setting. `platform/assistant.rs` moves its lines; `shell/assistant.rs` shows them in the
   right dock. A review's findings are text in the agent's answer: Inkuno writes them into the note as one
-  undo step. Nothing is linked in: hoocode is a separate program.
+  undo step. An improvement's proposal is text too, and lands as pending changes (`app-ui.md` §18). Nothing
+  is linked in: hoocode is a separate program.
 - **Window**: on Linux Inkuno draws its own title bar, shadow and resize edges (client-side
   decorations); on macOS and Windows the system does.
 

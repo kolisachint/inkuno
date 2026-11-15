@@ -735,7 +735,7 @@ Normal 800 is the default (§10.4 lock released for this change).
   No default shortcut in v1 (owner decision).
 - Content, top to bottom:
   1. the conversation: the person's questions, the agent's answers, quiet lines for errors and for a review in progress;
-  2. **Review this note**, and while the agent works, **Stop**;
+  2. **Review this note**, **Improve selection** or **Improve this note** (§18), and while the agent works, **Stop**;
   3. the prompt box.
 - There is no Allow and no Deny. The agent has no tool that changes anything (§16.4), and its protocol never
   asks the client a question, so there is nothing to answer.
@@ -800,14 +800,15 @@ Normal 800 is the default (§10.4 lock released for this change).
 ### 16.9 Known limits
 
 - The agent cannot ask before it uses a tool. hoocode's RPC mode has no approval messages (its `app-server`
-  protocol has them). Edits by the assistant wait for the pending-change flow, built 2026-11-15 (§17).
+  protocol has them). Its edits do not exist: its proposals reach the note as pending changes (§18), which the
+  person accepts or rejects (§17). Accept and reject have chords inside a change (`Ctrl+Enter`, `Ctrl+Backspace`,
+  §17.5); accept all, reject all and comment have none.
 - The prompt box is one field without newlines.
 
 ## 17. Pending changes (built 2026-11-15)
 
 > Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The marks are in the note file (`logic/pending.rs`,
-> CriticMarkup in block form); this section is what the editor does with them. The owner decided the
-> no key is bound (§17.5).
+> CriticMarkup in block form); this section is what the editor does with them. Chords: §17.5.
 
 - [x] **Propose**, **User approves**: the flow of `revisions.md` (Decisions, 2026-11-14 and 2026-11-15).
 - [x] **Implement**: `views/editor/layout.rs` (`Pend`, `pend_of`), `paint.rs` (the wash), `text_runs` (dim and
@@ -883,7 +884,15 @@ Normal 800 is the default (§10.4 lock released for this change).
 - Declared in `views/editor/mod.rs` (`AcceptChange`, `RejectChange`, `AcceptAllChanges`, `RejectAllChanges`,
   `CommentChange`), handled in `views/editor/render.rs`.
 - Palette: five entries in `inkuno-logic/src/commands.rs` (group Note; icons `check.svg`, `close.svg`,
-  `c-comment.svg`). No default chord: chords need an owner decision. The shortcuts page is unchanged.
+  `c-comment.svg`).
+- Chords (owner decision, 2026-11-15): **Accept the change** is `Ctrl+Enter` and **Reject the change** is
+  `Ctrl+Backspace`, both only while the caret or the selection is in a change. The editor's key context is then
+  `Editor Change` (`views/editor/render.rs`), and two bindings with the context `Editor && Change` come after the
+  `Editor` ones in `shell/keymap.rs`, so they win there (GPUI takes the deepest matching context, then the later
+  binding). Outside a change `Ctrl+Enter` is still `ToggleTask` and `Ctrl+Backspace` still deletes a word.
+  **Accept all changes**, **Reject all changes** and **Comment on the change** have no chord. The palette shows the
+  chords it has; the help panel lists the five in `Changes in a note`, and `shortcuts.md` is regenerated.
+  Test: `shell/tests/pending.rs` (`ctrl_enter_…`, `ctrl_backspace_…`).
 - Right-click menu: `EditorEvent::Menu` carries whether the click is inside a change; then the menu offers the three
   actions first, on the change under the pointer (`shell/menu.rs`, `views/nav.rs` `Do`).
 
@@ -895,10 +904,94 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ### 17.7 Known limits
 
-- No chords for the five actions.
+- Accept all, reject all and comment on a change have no chord (§17.5).
 - Copy of the whole note (`app::CopyAll`) copies the marker lines as they are: the app has no reading view or export
   that resolves them.
 - A change at the very end of a text without a final line break gets one break more on reject (the limit of
   `logic/pending.rs`).
 - A rewrite that would change a change is left out without a message (renumbering): the numbers stay until the
   change is accepted or rejected.
+
+## 18. Assistant v2: proposals through pending changes (built 2026-11-15)
+
+> Status: built, on the owner's brief of 2026-11-15. The code is the ground truth for names. The agent still has no
+> write tool (§16.4); its proposal reaches the note only through the pending-change flow (§17).
+
+- [x] **Implement**: `shell/assistant.rs` (the job, the action, the write, the revisions), `crates/inkuno-logic/src/assistant.rs`
+      (`improve_prompt`, `proposal`, `rewritten`), `commands.rs` (the palette entry), `shell/menu.rs` and `views/nav.rs`
+      (the right-click entry), `shell/render.rs` (the action's handler).
+- [x] **Test**: `shell/tests/assistant.rs` (the Improve tests: events fed by hand, the prompt read from `sent`), `inkuno-logic`
+      `assistant.rs` (each word of the prompt, the labels, the fence, `NO CHANGE`, CRLF, the three kinds of range), `commands.rs`.
+
+### 18.1 The action
+
+- `app::AssistantImprove`, no chord. Reached from three places:
+  - the panel's second button, next to **Review this note**: **Improve selection** when the note has a non-empty
+    selection, else **Improve this note**;
+  - the command palette: **Improve selection or note** (group Go, next to the Assistant entry; `improve` finds it);
+  - the editor's right-click menu: **Improve selection**, offered only when the selection is not empty.
+- Same gating as Review: the agent is free (not working, installed), and a note with a file path is open. Scratch notes
+  work. Refused before anything is sent, with one quiet line: **Accept or reject the pending changes first.** The box
+  keeps its text.
+
+### 18.2 What is sent
+
+- The scope: the selection of the active note when it is not empty, else the whole note.
+- The instruction: the prompt box's text when it is not blank (the box is then cleared), else the default
+  (`logic::assistant::IMPROVE_INSTRUCTION`: clearer and tighter, same meaning, same language, same Markdown structure).
+- The note is saved first, as Review does (the same failure line, with the word *improved*). `base` is the note's full text
+  at that moment, kept in memory with the note's path and the byte range of the selection in `base` (`None` for the whole
+  note). The transcript shows the question as a `You` line (**Improve selection** or **Improve this note**, with `: instruction`
+  when the person typed one), and a quiet line **Working on a proposal…**.
+- `improve_prompt` names the file to read for context, gives the instruction, and for a selection gives the passage verbatim
+  between the lines `BEGIN PASSAGE` and `END PASSAGE`. It asks for an answer that is nothing but the new text between a line
+  `BEGIN TEXT` and a line `END TEXT`, with no code fence, and the single line `NO CHANGE` when nothing should change.
+
+### 18.3 How the answer comes back
+
+- The answer is collected while the agent works and not shown, as a review's is (`Job`, §18.4).
+- When the agent ends, `logic::assistant::proposal` reads the lines between the first `BEGIN TEXT` and the last `END TEXT`.
+  The labels are tolerant: surrounding whitespace, bold, backticks, a trailing colon, any letter case. One code fence wrapped
+  round the block is dropped. The answer gives nothing (`None`) when there is no such block, when the block is empty, or when
+  it is `NO CHANGE`.
+- `logic::assistant::rewritten` gives the whole proposed text. The block replaces the passage, or the whole note. Its leading
+  and trailing line breaks go; its line breaks take the kind of `base` (CRLF when `base` has CRLF). A passage that ended with a
+  line break keeps one, and so does a note that ended with one.
+
+### 18.4 The job
+
+- The panel holds one job at a time: `Job::Review` (§16.6) or `Job::Improve`. The panel is not free while it runs.
+- **Stop**, a refusal, a failure, an exit, or the kill after the grace period drops the job and writes nothing, as for a review.
+
+### 18.5 Writing the proposal
+
+- `pending::propose(base, current, proposed)`, with `current` the open tab's text, else the file's text.
+- A refusal is said in one line in the person's words: nothing changed → **The assistant proposed no change.**; already
+  pending → **Accept or reject the pending changes first.**; marks in the text → **The text holds pending-change marks, so
+  nothing was proposed.**; the person changed the same lines → **You changed the same lines meanwhile, so nothing was
+  proposed. Ask again.** A line of the answer that is `NO CHANGE`, or no block, gives **The assistant proposed no change.**
+- Accepted, the proposal is one undo step: `logic::assistant::edit_between` gives the splice, applied by `Editor::absorb`
+  when a tab shows the note; otherwise `vault::write` (atomic) writes the marked text. Other changes of the person since the
+  agent read the note are kept, and the agent's are placed in the current text (as `inkuno write` does).
+- Then one quiet line: **N changes are pending in the note: accept or reject them there.** (for one: **1 change is pending in
+  the note: accept or reject it there.**), counted by `pending::areas`.
+
+### 18.6 Revisions
+
+- Around a successful proposal two `kind: auto` revisions are saved, as `inkuno write` saves them (`revisions.md`, 2026-11-15):
+  - the text before the change (`current`), by the person's author setting (the one `Save a version` uses), skipped when it is
+    already the latest revision's text;
+  - the proposed text, `pending::accept_all(marked)`, by the author `assistant`, with the note `proposed, pending`.
+- A failure of the first save stops the proposal with one line that says why; nothing is written. A failure of the second is a
+  warning line; the changes stay pending.
+- A note with no revisions home (`platform/revisions.rs` `home_of` gives none) skips both, silently.
+- The command line keeps its own helper (`cli/ops.rs`, `snapshot`). The shell cannot call it (the layers), so the shell has the
+  same few lines on `platform/revisions.rs` (`save_as`, `home_of`, `now`).
+
+### 18.7 Known limits
+
+- A whole-note improvement sends the note and gets the whole note back: a very long note is slow.
+- One job at a time; a second improvement waits for the first answer, and is refused meanwhile.
+- A line `END TEXT` after the block, in the agent's commentary, is taken as part of the text (the last one closes it).
+- The default instruction is English. The agent is asked to answer in the note's language.
+- The passage of a selection that holds a table or a figure is not special-cased.

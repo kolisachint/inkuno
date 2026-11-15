@@ -456,3 +456,64 @@ fn a_refused_comment_takes_no_undo_step(cx: &mut TestAppContext) {
     );
     let _ = fs::remove_dir_all(root);
 }
+
+#[gpui::test]
+fn ctrl_enter_accepts_the_change_the_caret_is_in(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-chord-accept", NOTE, cx);
+    put(&shell, cx, NOTE.find("new").unwrap() + 1);
+    settle(cx);
+    // The chord wins over the Editor binding of Ctrl+Enter (ToggleTask) inside a change.
+    cx.simulate_keystrokes("secondary-enter");
+    settle(cx);
+    assert_eq!(text(&shell, cx), pending::accept(NOTE, 0));
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE, "one undo step");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn ctrl_backspace_rejects_the_change_the_caret_is_in(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-chord-reject", NOTE, cx);
+    put(&shell, cx, NOTE.find("old").unwrap() + 1);
+    settle(cx);
+    cx.simulate_keystrokes("secondary-backspace");
+    settle(cx);
+    assert_eq!(text(&shell, cx), pending::reject(NOTE, 0));
+    assert_eq!(text(&shell, cx), "# Plan\n\nkeep\nold\nend\n");
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE, "one undo step");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn ctrl_enter_outside_a_change_toggles_the_task_and_accepts_nothing(cx: &mut TestAppContext) {
+    let note = "# Plan\n\n- [ ] milk\n{--\nold\n--}\n{++\nnew\n++}\nend\n";
+    let (root, shell, cx, _config) = open_note("pending-chord-task", note, cx);
+    put(&shell, cx, note.find("milk").unwrap());
+    settle(cx);
+    cx.simulate_keystrokes("secondary-enter");
+    settle(cx);
+    assert_eq!(text(&shell, cx), note.replace("- [ ] milk", "- [x] milk"));
+    assert!(
+        text(&shell, cx).contains("{++\nnew\n++}"),
+        "nothing is accepted"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn ctrl_backspace_outside_a_change_deletes_the_word_as_before(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-chord-word", NOTE, cx);
+    put(&shell, cx, NOTE.find("keep").unwrap() + 4);
+    settle(cx);
+    cx.simulate_keystrokes("secondary-backspace");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE.replacen("keep", "", 1));
+    assert!(
+        text(&shell, cx).contains("{++\nnew\n++}"),
+        "the change stays pending"
+    );
+    let _ = fs::remove_dir_all(root);
+}

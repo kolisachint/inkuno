@@ -725,7 +725,7 @@ impl Editor {
         self.rows.iter().filter(|r| r.hidden()).count()
     }
 
-    #[cfg(test)]
+    /// The selection, as a byte range; the caret as an empty range when nothing is selected.
     pub fn span(&self) -> Range<usize> {
         self.sel.clone()
     }

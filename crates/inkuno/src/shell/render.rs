@@ -404,6 +404,7 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
                 this.toggle_assistant(window, cx)
             }))
+            .on_action(cx.listener(|this, _: &AssistantImprove, _, cx| this.assistant_improve(cx)))
             .on_action(
                 cx.listener(|this, _: &ToggleOutline, window, cx| this.toggle_outline(window, cx)),
             )

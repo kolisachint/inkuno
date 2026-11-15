@@ -4,6 +4,8 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Done in the November cleanup
 
+- Assistant v2 (2026-11-15, `app-ui.md` §18): **Improve selection** / **Improve this note** (the panel's button, the palette, the right-click menu) sends the passage, or the note, with an instruction; the answer comes back as pending changes, one undo step, with two `kind: auto` revisions as `inkuno write` makes them. Chords: `Ctrl+Enter` accepts and `Ctrl+Backspace` rejects a pending change (`keybindings.md`, `app-ui.md` §17.5). Tests: `shell/tests/assistant.rs`, `shell/tests/pending.rs`, `inkuno-logic` `assistant.rs`, `commands.rs`.
+
 - Pending changes in the app (2026-11-15, `app-ui.md` §17): an added line lies on a green wash, a removed one on a red wash, struck through; typing in a change is refused with a message; accept, reject (one change or all) and comment on a change are one undo step each, from the palette and the right-click menu; a hint at the note's foot counts them. `inkuno write` writes the marks (2026-11-15, `cli.md`). Tests: `shell/tests/pending.rs`, `inkuno-logic` `pending.rs`, `ui/theme.rs`.
 
 - The November trim slices (canvas, tables, obsidian, chrome, sync, deps) are all merged into main.
@@ -36,7 +38,6 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Follow-ups
 
-- Pending changes: no chords for accept, reject, accept all, reject all or comment on a change; the owner decides the keys (`views/editor/mod.rs`, `actions!`).
 - Pending changes: the marker lines are dimmed but not drawn smaller, as the brief asked: a smaller size changes the line geometry (`views/editor/layout.rs`, `text_runs`).
 - Pending changes: tables and figures inside a change get no wash; only plain text lines do (`views/editor/paint.rs`, `Pend::Plain` on grid rows).
 - Pending changes: a renumbering or a table realign that would change a pending change is left out silently; the numbers or the alignment wait for accept or reject (`views/editor/edit.rs`, `renumber`; `table.rs`, `realign`).
@@ -81,11 +82,16 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Vault scan: a note in a symlinked hidden folder is still listed (only typed paths are guarded): expected, the scan follows the same rule as typed paths.
 - CLI: `inkuno help --json` says "unknown command": expected, the help as JSON or a clear usage error.
 - Assistant: the prompt box is one field without newlines: expected, a multi-line box is a later idea.
-- The Assistant cannot ask before a tool call: hoocode's RPC mode has no approval messages (its `app-server` protocol has them). Edits by the assistant wait for the pending-change flow (`cli.md`, `inkuno write`).
+- The Assistant cannot ask before a tool call: hoocode's RPC mode has no approval messages (its `app-server` protocol has them).
 - CLI: `inkuno comment` still matches a passage inside a code fence or inside existing comment markup: expected, those are skipped or refused.
 - macOS chrome hiding is unverified on a real Mac until the owner tries it: the window's bar is transparent and its traffic lights are hidden with `setHidden:`; check that the note's top row is clickable, that the lights come back on the next press, and that a full-screen toggle does not show them again (`crates/inkuno/src/platform/mac_chrome.rs`).
 - Assistant: the `assistant` setting splits on spaces, so a program path with spaces cannot be set (`crates/inkuno/src/platform/assistant.rs`, `program`): expected, a path with spaces works, or the limit is stated in the setting's help.
 - Assistant on Windows: only `name` and `name.exe` are looked up on `PATH`; `.cmd` and `.bat` are not (`crates/inkuno/src/platform/assistant.rs`, `find_in`): expected, the shims are found too, or the limit is written down.
+- Assistant Improve: a whole-note improvement sends the whole note and gets all of it back: a very long note is slow (`crates/inkuno/src/shell/assistant.rs`, `assistant_improve`; `crates/inkuno-logic/src/assistant.rs`, `rewritten`): expected, a selection of the note, or a limit with a message.
+- Assistant Improve: the proposal block ends at the last `END TEXT` line, so commentary after the block that holds that line is taken in (`crates/inkuno-logic/src/assistant.rs`, `proposal`): expected, the block is checked against the passage's own lines, or the answer is refused.
+- Assistant Improve: the shell repeats the command line's automatic snapshot (`crates/inkuno/src/cli/ops.rs`, `snapshot`): expected, one helper on `platform/revisions.rs`, which both can use.
+- Assistant Improve: the right-click entry **Improve selection** has no test; the button and the palette do (`crates/inkuno/src/shell/menu.rs`).
+- Keys: `ui::keys::meets` treats `Editor && Change` as apart from `Editor`, so a user's rebinding of `Ctrl+Enter` in the editor is not checked against the accept chord (`crates/inkuno/src/ui/keys.rs`, `meets`): expected, the check knows the change context.
 - Assistant: prompts are written to the agent on the window's thread (`crates/inkuno/src/shell/assistant.rs`, `assistant_run`): expected, a writer thread takes them if prompts grow.
 - Assistant: the agent may still read any file it is pointed at, since `Read` is not limited to the vault: expected, an allow-list of tools and a folder limit, to be looked at with hoocode.
 - Assistant: the shell's tests start no process, so the non-test path of `assistant_run` that starts the agent (`start_agent`) has no test there: expected, the process is tested in `platform/assistant.rs`, and a shell test with a fake agent program.

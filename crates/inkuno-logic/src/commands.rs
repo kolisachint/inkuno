@@ -434,6 +434,15 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::AssistantImprove",
+            tr(
+                "Improve selection or note",
+                "Améliorer la sélection ou la note",
+            ),
+            "assistant.svg",
+            Go,
+        ),
+        (
             "app::ToggleOutline",
             tr("Outline of the note", "Plan de la note"),
             "c-outline.svg",
@@ -735,6 +744,20 @@ mod tests {
                 "{action} is in the palette"
             );
         }
+    }
+
+    #[test]
+    fn the_catalog_lists_the_assistant_improve_command() {
+        let all = catalog();
+        let (_, label, _, group) = all
+            .iter()
+            .find(|(action, ..)| *action == "app::AssistantImprove")
+            .expect("Improve is in the palette");
+        assert_eq!(*group, Group::Go, "with the assistant entry");
+        assert!(
+            label.to_lowercase().contains("improve"),
+            "searchable by `improve`: {label}"
+        );
     }
 
     #[test]

@@ -3,9 +3,11 @@
 //! and read what the panel shows.
 
 use super::*;
+use crate::actions::AssistantImprove;
 use crate::platform::assistant::Event;
+use crate::platform::revisions::{self as history, Home};
 use crate::shell::assistant::{Status, Who};
-use std::time::Duration;
+use std::{ops::Range, time::Duration};
 
 /// Lets the window draw what changed (bounds are read from the last frame), then the tasks run.
 fn settle(cx: &mut gpui::VisualTestContext) {
@@ -25,8 +27,22 @@ fn note_open<'a>(
     &'a mut gpui::VisualTestContext,
     std::sync::MutexGuard<'static, ()>,
 ) {
+    note_with(name, "# Plan\n\nun peu de texte\n", cx)
+}
+
+/// A note `Plan.md` with `content`, open in a window of its own size, with the panel closed.
+fn note_with<'a>(
+    name: &str,
+    content: &str,
+    cx: &'a mut TestAppContext,
+) -> (
+    PathBuf,
+    Entity<Shell>,
+    &'a mut gpui::VisualTestContext,
+    std::sync::MutexGuard<'static, ()>,
+) {
     let (root, shell, cx, config) = start(cx, name);
-    fs::write(root.join("Plan.md"), "# Plan\n\nun peu de texte\n").unwrap();
+    fs::write(root.join("Plan.md"), content).unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     shell.update_in(cx, |s, window, cx| {
         s.open_from_nav(&root.join("Plan.md"), window, cx)
@@ -773,5 +789,354 @@ fn stop_without_an_agent_to_abort_frees_the_panel_at_once(cx: &mut TestAppContex
     shell.update(cx, |s, cx| s.assistant_stop(cx));
     settle(cx);
     assert_eq!(status(&shell, cx), Status::Idle, "no wait: killed at once");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Clicks "Improve selection" or "Improve this note", where it is drawn now.
+fn click_improve(cx: &mut gpui::VisualTestContext) {
+    let at = cx
+        .debug_bounds("assistant-improve")
+        .expect("the improve button is drawn")
+        .center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    settle(cx);
+}
+
+/// Selects the bytes `range` of the note: the caret goes to its start, then Shift+Right to its end.
+/// The text is ASCII in the tests that use it.
+fn select(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, range: Range<usize>) {
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.set_view(range.start, 0., cx))
+    });
+    focus_note(shell, cx);
+    cx.simulate_keystrokes(&"shift-right ".repeat(range.len()));
+    settle(cx);
+}
+
+/// Puts the caret at byte `at` of the note, and gives the note the keys.
+fn caret(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
+    });
+    focus_note(shell, cx);
+}
+
+/// The answer of a rewrite of "un peu de texte" into "Un peu plus clair.".
+const CLEARER: &str = "BEGIN TEXT\nUn peu plus clair.\nEND TEXT\n";
+
+#[gpui::test]
+fn improve_a_selection_sends_the_passage_and_shows_no_answer(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-selection", cx);
+    let original = editor_text(&shell, cx);
+    select(&shell, cx, 8..23);
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).selected().to_string()),
+        "un peu de texte"
+    );
+    click_button(cx);
+    click_improve(cx);
+
+    let prompts = sent(&shell, cx);
+    assert_eq!(prompts.len(), 1, "one prompt");
+    assert!(
+        prompts[0].contains("BEGIN PASSAGE\nun peu de texte\nEND PASSAGE"),
+        "the passage is sent verbatim: {}",
+        prompts[0]
+    );
+    assert!(
+        prompts[0].contains("Improve the writing: clearer and tighter"),
+        "the default instruction is sent"
+    );
+    assert_eq!(status(&shell, cx), Status::Working);
+    let lines = entries(&shell, cx);
+    assert_eq!(lines[0], (Who::You, "Improve selection".to_string()));
+    assert_eq!(lines[1], (Who::Note, "Working on a proposal…".to_string()));
+
+    // The answer is collected, not shown; the note gets it as one pending change.
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    let lines = entries(&shell, cx);
+    assert!(
+        !lines.iter().any(|(_, text)| text.contains("BEGIN TEXT")),
+        "the answer is not shown: {lines:?}"
+    );
+    assert_eq!(
+        lines.last(),
+        Some(&(
+            Who::Note,
+            "1 change is pending in the note: accept or reject it there.".to_string()
+        ))
+    );
+    assert_eq!(
+        editor_text(&shell, cx),
+        "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
+    );
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).pending_changes()),
+        1
+    );
+
+    // Accepting it gives the agent's text; one undo takes the whole proposal back.
+    focus_note(&shell, cx);
+    cx.simulate_keystrokes("secondary-enter");
+    settle(cx);
+    assert_eq!(editor_text(&shell, cx), "# Plan\n\nUn peu plus clair.\n");
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(
+        editor_text(&shell, cx),
+        "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
+    );
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(
+        editor_text(&shell, cx),
+        original,
+        "one undo takes the proposal back"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn improve_the_whole_note_takes_the_instruction_typed_in_the_box(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-whole", cx);
+    click_button(cx);
+    cx.simulate_input("Make it formal");
+    settle(cx);
+    click_improve(cx);
+
+    let prompts = sent(&shell, cx);
+    assert!(prompts[0].contains("the whole note"), "{}", prompts[0]);
+    assert!(prompts[0].contains("Make it formal"), "{}", prompts[0]);
+    assert!(
+        !prompts[0].contains("BEGIN PASSAGE"),
+        "no passage: the whole note"
+    );
+    assert_eq!(
+        entries(&shell, cx)[0],
+        (Who::You, "Improve this note: Make it formal".to_string())
+    );
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.assistant.field.read(cx).line.text.clone()),
+        "",
+        "the box is cleared"
+    );
+
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text("BEGIN TEXT\n# Plan\n\nUn peu plus clair.\nEND TEXT".into()),
+            Event::Ended,
+        ],
+    );
+    assert_eq!(
+        editor_text(&shell, cx),
+        "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_palette_action_improves_the_selection(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-palette", cx);
+    select(&shell, cx, 8..23);
+    cx.dispatch_action(AssistantImprove);
+    settle(cx);
+    let prompts = sent(&shell, cx);
+    assert_eq!(prompts.len(), 1);
+    assert!(prompts[0].contains("BEGIN PASSAGE\nun peu de texte\nEND PASSAGE"));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn improve_is_refused_while_the_note_has_pending_changes(cx: &mut TestAppContext) {
+    let pending = "# Plan\n\n{--\nold\n--}\n{++\nnew\n++}\n";
+    let (root, shell, cx, _config) = note_with("assistant-improve-pending", pending, cx);
+    click_button(cx);
+    click_improve(cx);
+    assert!(sent(&shell, cx).is_empty(), "nothing is sent");
+    assert_eq!(
+        entries(&shell, cx).last(),
+        Some(&(
+            Who::Note,
+            "Accept or reject the pending changes first.".to_string()
+        ))
+    );
+    assert_eq!(status(&shell, cx), Status::Idle);
+    assert_eq!(editor_text(&shell, cx), pending);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn stop_during_an_improvement_writes_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-stop", cx);
+    let original = editor_text(&shell, cx);
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    click_improve(cx);
+    feed(&shell, cx, vec![Event::Text(CLEARER.into())]);
+    let stop = cx
+        .debug_bounds("assistant-stop")
+        .expect("Stop is drawn while the agent works")
+        .center();
+    cx.simulate_click(stop, gpui::Modifiers::none());
+    settle(cx);
+    feed(&shell, cx, vec![Event::Ended]);
+    assert_eq!(editor_text(&shell, cx), original);
+    assert!(
+        !fs::read_to_string(root.join("Plan.md"))
+            .unwrap()
+            .contains("{==")
+            && !fs::read_to_string(root.join("Plan.md"))
+                .unwrap()
+                .contains("{++"),
+        "nothing written"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_answer_without_a_change_writes_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-none", cx);
+    let original = editor_text(&shell, cx);
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    for answer in ["NO CHANGE", "Sure, here is a better version: ..."] {
+        click_improve(cx);
+        feed(
+            &shell,
+            cx,
+            vec![Event::Started, Event::Text(answer.into()), Event::Ended],
+        );
+        assert_eq!(
+            entries(&shell, cx).last(),
+            Some(&(Who::Note, "The assistant proposed no change.".to_string())),
+            "for {answer:?}"
+        );
+        assert_eq!(editor_text(&shell, cx), original, "for {answer:?}");
+    }
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_change_of_another_line_meanwhile_is_merged(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_with(
+        "assistant-improve-merge",
+        "# Plan\n\nun peu de texte\nentre les deux\nla fin\n",
+        cx,
+    );
+    click_button(cx);
+    select(&shell, cx, 8..23);
+    click_improve(cx);
+    // The person types at the end of the last line while the agent works.
+    caret(
+        &shell,
+        cx,
+        "# Plan\n\nun peu de texte\nentre les deux\nla fin".len(),
+    );
+    cx.simulate_input("!");
+    settle(cx);
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    assert_eq!(
+        editor_text(&shell, cx),
+        "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\nentre les deux\nla fin!\n"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_change_of_the_same_line_meanwhile_is_refused(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-clash", cx);
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    click_improve(cx);
+    // The person types inside the line the agent rewrites.
+    caret(&shell, cx, 8);
+    cx.simulate_input("x");
+    settle(cx);
+    let typed = editor_text(&shell, cx);
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    assert_eq!(
+        entries(&shell, cx).last(),
+        Some(&(
+            Who::Note,
+            "You changed the same lines meanwhile, so nothing was proposed. Ask again.".to_string()
+        ))
+    );
+    assert_eq!(
+        editor_text(&shell, cx),
+        typed,
+        "only the person's change is there"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_improvement_of_a_note_that_is_not_open_writes_its_file(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-closed", cx);
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    click_improve(cx);
+    // The tab is taken out while the agent works.
+    shell.update_in(cx, |s, window, cx| {
+        assert!(s.close_now(window, cx));
+    });
+    settle(cx);
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Plan.md")).unwrap(),
+        "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_improvement_in_a_vault_keeps_two_automatic_revisions(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-improve-revisions", cx);
+    select(&shell, cx, 8..23);
+    click_button(cx);
+    click_improve(cx);
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    let found = history::all(&Home::Vault(root.clone()), &root.join("Plan.md")).unwrap();
+    let kinds: Vec<&str> = found.iter().map(|rev| rev.kind.word()).collect();
+    assert_eq!(
+        kinds,
+        ["auto", "auto"],
+        "the text before, then the proposal"
+    );
+    assert_eq!(
+        found[0].text, "# Plan\n\nun peu de texte\n",
+        "the text before"
+    );
+    assert_eq!(found[1].author, "assistant");
+    assert_eq!(found[1].note.as_deref(), Some("proposed, pending"));
+    assert_eq!(
+        found[1].text,
+        crate::logic::pending::accept_all(&editor_text(&shell, cx)),
+        "the proposed text, as it would be once every change is accepted"
+    );
     let _ = fs::remove_dir_all(root);
 }

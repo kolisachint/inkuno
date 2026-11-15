@@ -179,7 +179,8 @@ In the note, the lines the agent adds have a green background. The lines it remo
 - Put the caret in a change. Then, in the command palette (`F10`) or the right-click menu, choose **Accept the change** or **Reject the change**. Accept keeps the added lines and drops the removed ones. Reject does the reverse. With the caret outside every change, the first press of **Accept the change**, **Reject the change** or **Comment on the change** only moves the caret to the next change (after the last one, back to the first), and a message says so. Press again to act on it. The right-click menu acts on the change under the pointer.
 - **Accept all changes** and **Reject all changes** do this for the whole note.
 - **Comment on the change** asks for one line. It writes the line as a comment on the first added line, and the change stays pending. If the change has moved or gone while the line is asked for, nothing is written, and a message says so.
-- Each of these is one step for `Ctrl + Z`. There is no key for them yet.
+- Each of these is one step for `Ctrl + Z`.
+- With the caret in a change, `Ctrl + Enter` accepts it and `Ctrl + Backspace` rejects it. Outside a change, the same keys keep their usual meaning: `Ctrl + Enter` ticks a task, and `Ctrl + Backspace` deletes a word. **Accept all changes**, **Reject all changes** and **Comment on the change** have no key.
 
 ## What it will not do
 
