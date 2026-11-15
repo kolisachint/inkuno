@@ -5,12 +5,14 @@
 //! state, the panel and the process side (the child process is `platform::assistant`).
 
 use super::*;
-use crate::logic::assistant as words;
+use crate::logic::{assistant as words, pending, revision};
 use crate::platform::assistant::{Agent, Event};
+use crate::platform::revisions::{self as history, Home};
 use crate::platform::vault::Signal;
 use crate::ui::line::Line;
 use std::{
     fs,
+    ops::Range,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -62,6 +64,34 @@ pub(crate) struct Review {
     pub answer: String,
 }
 
+/// An improvement in progress: the note, the text it had when asked (`base`), the passage asked
+/// about (`None`: the whole note), and the answer collected so far. The answer is not shown; it
+/// becomes pending changes when the agent ends.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Improve {
+    pub path: PathBuf,
+    pub base: String,
+    pub range: Option<Range<usize>>,
+    pub answer: String,
+}
+
+/// The job the agent runs for the panel. One at a time: the panel is not free while it runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Job {
+    Review(Review),
+    Improve(Improve),
+}
+
+impl Job {
+    /// The answer collected so far, to add to.
+    fn answer(&mut self) -> &mut String {
+        match self {
+            Job::Review(review) => &mut review.answer,
+            Job::Improve(improve) => &mut improve.answer,
+        }
+    }
+}
+
 pub(crate) struct Assistant {
     pub status: Status,
     pub entries: Vec<Entry>,
@@ -74,7 +104,8 @@ pub(crate) struct Assistant {
     pub signal: Arc<Signal>,
     /// The folder the running agent was started in.
     pub folder: Option<PathBuf>,
-    pub review: Option<Review>,
+    /// The job the agent runs, if any: its answer is collected, not shown.
+    pub job: Option<Job>,
     /// Stop was asked: what the agent still says before it ends is dropped.
     pub stopping: bool,
     /// Counts the stops asked: a timer of an older stop does nothing.
@@ -118,7 +149,7 @@ impl Assistant {
             agent: None,
             signal: Arc::new(Signal::default()),
             folder: None,
-            review: None,
+            job: None,
             stopping: false,
             stop_gen: 0,
             paragraph: false,
@@ -179,6 +210,68 @@ fn review_summary(placed: usize, skipped: usize) -> String {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Saves an automatic revision of `text` for the note at `path`, as `inkuno write` does around a
+/// write. Nothing is saved when the text is the latest revision's already. The error names the note.
+fn auto_revision(
+    home: &Home,
+    path: &Path,
+    author: &str,
+    memo: &str,
+    text: &str,
+) -> Result<(), String> {
+    history::save_as(
+        home,
+        path,
+        author,
+        Some(memo),
+        text,
+        history::now(),
+        revision::Kind::Auto,
+    )
+    .map(|_| ())
+    .map_err(|e| format!("{}: {}", path.display(), crate::lang::io_reason(&e)))
+}
+
+/// The line that says why a proposal was not written, in the person's words.
+fn refusal_words(refusal: pending::Refusal) -> &'static str {
+    match refusal {
+        pending::Refusal::NothingChanged => tr(
+            "The assistant proposed no change.",
+            "L'assistant n'a proposé aucun changement.",
+        ),
+        pending::Refusal::AlreadyPending => tr(
+            "Accept or reject the pending changes first.",
+            "Acceptez ou refusez d'abord les changements en attente.",
+        ),
+        pending::Refusal::HoldsMarks => tr(
+            "The text holds pending-change marks, so nothing was proposed.",
+            "Le texte contient des marques de changement, rien n'a été proposé.",
+        ),
+        pending::Refusal::HumanChanged { .. } => tr(
+            "You changed the same lines meanwhile, so nothing was proposed. Ask again.",
+            "Vous avez modifié les mêmes lignes entre-temps, rien n'a été proposé. Redemandez.",
+        ),
+    }
+}
+
+/// The line that counts the pending changes of the note after a proposal.
+fn pending_words(count: usize) -> String {
+    match count {
+        1 => tr(
+            "1 change is pending in the note: accept or reject it there.",
+            "1 changement est en attente dans la note : acceptez-le ou refusez-le là.",
+        )
+        .to_string(),
+        n => format!(
+            "{n} {}",
+            tr(
+                "changes are pending in the note: accept or reject them there.",
+                "changements sont en attente dans la note : acceptez-les ou refusez-les là.",
+            )
+        ),
+    }
 }
 
 impl Shell {
@@ -363,8 +456,16 @@ impl Shell {
             .children(entries)
             .children(empty);
         let review_enabled = self.review_open() && self.assistant_free();
+        // The improve button names what it will improve: the selection, else the whole note.
+        let selected = !self.pane().editor.read(cx).span().is_empty();
+        let improve_label = match selected {
+            true => tr("Improve selection", "Améliorer la sélection"),
+            false => tr("Improve this note", "Améliorer cette note"),
+        };
+        // The buttons wrap when the panel is narrow, so that Stop stays inside it.
         let actions = div()
             .flex()
+            .flex_wrap()
             .gap_2()
             .px_3()
             .pb_2()
@@ -376,6 +477,10 @@ impl Shell {
                     t,
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.assistant_review(cx))),
+            )
+            .child(
+                assistant_button("assistant-improve", improve_label, review_enabled, t)
+                    .on_click(cx.listener(|this, _, _, cx| this.assistant_improve(cx))),
             )
             .children((status == Status::Working).then(|| {
                 assistant_button("assistant-stop", tr("Stop", "Arrêter"), true, t)
@@ -575,7 +680,7 @@ impl Shell {
 
     /// A prompt that could not be sent: the error is shown, and the agent is free again.
     fn assistant_fail(&mut self, error: &str, cx: &mut Context<Self>) {
-        self.assistant.review = None;
+        self.assistant.job = None;
         self.assistant.status = if self.command_found() {
             Status::Idle
         } else {
@@ -595,7 +700,7 @@ impl Shell {
     /// Stops the agent now: the setting changed, the vault changed, the app quits. A review in
     /// progress is dropped with it, so that a half answer writes nothing.
     pub(crate) fn assistant_halt(&mut self, cx: &mut Context<Self>) {
-        self.assistant.review = None;
+        self.assistant.job = None;
         self.stop_agent();
         if self.assistant.status == Status::Working {
             self.assistant.status = Status::Idle;
@@ -657,8 +762,8 @@ impl Shell {
                     if self.assistant.stopping {
                         continue;
                     }
-                    match &mut self.assistant.review {
-                        Some(review) => review.answer.push_str(&text),
+                    match &mut self.assistant.job {
+                        Some(job) => job.answer().push_str(&text),
                         None => self.assistant_more(&text, cx),
                     }
                 }
@@ -668,13 +773,13 @@ impl Shell {
                     if self.assistant.stopping {
                         continue;
                     }
-                    match &mut self.assistant.review {
-                        Some(review) => review.answer.push('\n'),
+                    match &mut self.assistant.job {
+                        Some(job) => job.answer().push('\n'),
                         None => self.assistant.paragraph = true,
                     }
                 }
                 Event::Refused(error) => {
-                    self.assistant.review = None;
+                    self.assistant.job = None;
                     self.assistant_say(Who::Note, &error, cx);
                     if login_problem(&error) {
                         self.assistant_say(
@@ -690,20 +795,22 @@ impl Shell {
                 }
                 Event::Failed(error) => {
                     // A failed answer is not reviewed: the run still ends, and writes nothing.
-                    self.assistant.review = None;
+                    self.assistant.job = None;
                     self.assistant_say(Who::Note, &error, cx);
                 }
                 Event::Ended => {
                     self.assistant.stopping = false;
-                    if let Some(review) = self.assistant.review.take() {
-                        self.apply_review(review, cx);
+                    match self.assistant.job.take() {
+                        Some(Job::Review(review)) => self.apply_review(review, cx),
+                        Some(Job::Improve(improve)) => self.apply_improve(improve, cx),
+                        None => {}
                     }
                     self.assistant_settle(cx);
                 }
                 Event::Exited(tail) => {
                     let working = self.assistant.status == Status::Working;
                     self.stop_agent();
-                    self.assistant.review = None;
+                    self.assistant.job = None;
                     if working {
                         self.assistant_say(
                             Who::Note,
@@ -739,10 +846,10 @@ impl Shell {
             return self.assistant_say(Who::Note, said, cx);
         }
         let note = self.assistant_words(&path);
-        self.assistant.review = Some(Review {
+        self.assistant.job = Some(Job::Review(Review {
             path,
             answer: String::new(),
-        });
+        }));
         self.assistant_say(Who::You, tr("Review this note", "Relire cette note"), cx);
         self.assistant_say(Who::Note, tr("Reviewing…", "Relecture en cours…"), cx);
         self.assistant_run(words::review_prompt(&note), cx);
@@ -798,6 +905,160 @@ impl Shell {
         self.assistant_say(Who::Note, &summary, cx);
     }
 
+    /// "Improve selection" or "Improve this note": the note is saved, its selection (else the whole
+    /// note) is asked to be rewritten, following the prompt box's text (else the default instruction).
+    /// The answer is read when the agent ends (`apply_improve`). A note with pending changes is
+    /// refused first, with one line, and nothing is sent. Ignored while the agent works or is not
+    /// installed, or when no note is open.
+    pub(crate) fn assistant_improve(&mut self, cx: &mut Context<Self>) {
+        if !self.assistant_free() || !self.review_open() {
+            return;
+        }
+        let Some(path) = self.pane().path.clone() else {
+            return;
+        };
+        if pending::has_pending(self.pane().editor.read(cx).text()) {
+            let said = tr(
+                "Accept or reject the pending changes first.",
+                "Acceptez ou refusez d'abord les changements en attente.",
+            );
+            return self.assistant_say(Who::Note, said, cx);
+        }
+        if !self.flush_one(cx) {
+            let said = tr(
+                "The note could not be saved, so it was not improved.",
+                "La note n'a pas pu être enregistrée, elle n'a donc pas été améliorée.",
+            );
+            return self.assistant_say(Who::Note, said, cx);
+        }
+        let (base, range) = {
+            let editor = self.pane().editor.read(cx);
+            let span = editor.span();
+            (
+                editor.text().to_string(),
+                (!span.is_empty()).then_some(span),
+            )
+        };
+        let typed = self.assistant.field.read(cx).line.text.trim().to_string();
+        let instruction = match typed.is_empty() {
+            true => words::IMPROVE_INSTRUCTION,
+            false => typed.as_str(),
+        };
+        let label = match range {
+            Some(_) => tr("Improve selection", "Améliorer la sélection"),
+            None => tr("Improve this note", "Améliorer cette note"),
+        };
+        let said = match typed.is_empty() {
+            true => label.to_string(),
+            false => format!("{label}: {typed}"),
+        };
+        let passage = range.clone().map(|range| &base[range]);
+        let prompt = words::improve_prompt(&self.assistant_words(&path), passage, instruction);
+        self.assistant.field.update(cx, |field, cx| {
+            field.line = Line::default();
+            cx.notify();
+        });
+        self.assistant.job = Some(Job::Improve(Improve {
+            path,
+            base,
+            range,
+            answer: String::new(),
+        }));
+        self.assistant_say(Who::You, &said, cx);
+        self.assistant_say(
+            Who::Note,
+            tr("Working on a proposal…", "Proposition en cours…"),
+            cx,
+        );
+        self.assistant_run(prompt, cx);
+    }
+
+    /// Writes the agent's proposal into its note as pending changes: one undo step when a tab shows
+    /// the note, else the file itself. Two automatic revisions surround the write, as `inkuno write`
+    /// makes them: the text before (skipped when it is the latest revision), then the proposed text.
+    /// A proposal that cannot be placed is said in one line, and nothing is written.
+    fn apply_improve(&mut self, improve: Improve, cx: &mut Context<Self>) {
+        let Some(text) = words::proposal(&improve.answer) else {
+            let said = tr(
+                "The assistant proposed no change.",
+                "L'assistant n'a proposé aucun changement.",
+            );
+            return self.assistant_say(Who::Note, said, cx);
+        };
+        let proposed = words::rewritten(&improve.base, improve.range.clone(), &text);
+        let open = self
+            .panes
+            .iter()
+            .position(|pane| pane.path.as_deref() == Some(improve.path.as_path()));
+        let current = match open {
+            Some(i) => self.panes[i].editor.read(cx).text().to_string(),
+            None => match fs::read_to_string(&improve.path) {
+                Ok(text) => text,
+                Err(e) => {
+                    let what = tr(
+                        "The note could not be read:",
+                        "La note n'a pas pu être lue :",
+                    );
+                    let why = crate::lang::io_reason(&e);
+                    return self.assistant_say(Who::Note, &format!("{what} {why}"), cx);
+                }
+            },
+        };
+        let marked = match pending::propose(&improve.base, &current, &proposed) {
+            Ok(marked) => marked,
+            Err(refusal) => return self.assistant_say(Who::Note, refusal_words(refusal), cx),
+        };
+        let home = history::home_of(&improve.path, self.vault.as_deref());
+        if let Some(home) = &home {
+            let author = self.revision_author();
+            let memo = tr(
+                "before a change by the assistant",
+                "avant un changement de l'assistant",
+            );
+            if let Err(why) = auto_revision(home, &improve.path, &author, memo, &current) {
+                let what = tr(
+                    "Not written: the version before the change was not saved:",
+                    "Non écrit : la version avant le changement n'a pas été enregistrée :",
+                );
+                return self.assistant_say(Who::Note, &format!("{what} {why}"), cx);
+            }
+        }
+        match open {
+            Some(i) => {
+                if let Some(edit) = words::edit_between(&current, &marked) {
+                    self.panes[i]
+                        .editor
+                        .update(cx, |editor, cx| editor.absorb(&[edit], cx));
+                }
+            }
+            None => {
+                if let Err(e) = vault::write(&improve.path, &marked) {
+                    let why = crate::lang::io_reason(&e);
+                    return self.assistant_say(Who::Note, &why, cx);
+                }
+            }
+        }
+        // A failed save of the proposed version is a warning: the changes are written and pending.
+        if let Some(home) = &home {
+            let accepted = pending::accept_all(&marked);
+            if let Err(why) = auto_revision(
+                home,
+                &improve.path,
+                "assistant",
+                "proposed, pending",
+                &accepted,
+            ) {
+                let what = tr(
+                    "Warning: the proposed version was not saved:",
+                    "Attention : la version proposée n'a pas été enregistrée :",
+                );
+                self.assistant_say(Who::Note, &format!("{what} {why}"), cx);
+            }
+        }
+        let count = pending::areas(&marked).len();
+        self.assistant_say(Who::Note, &pending_words(count), cx);
+    }
+
     /// Stops the agent's turn. A review in progress is dropped first, so nothing is written. The
     /// agent has `STOP_GRACE` to report its end; if it has not by then, it is killed and the panel
     /// is free again. When the abort cannot be sent, the agent is killed at once.
@@ -805,7 +1066,7 @@ impl Shell {
         if self.assistant.status != Status::Working {
             return;
         }
-        self.assistant.review = None;
+        self.assistant.job = None;
         self.assistant.stopping = true;
         self.assistant_say(Who::Note, tr("Stopped.", "Arrêté."), cx);
         let aborted = self
@@ -833,7 +1094,7 @@ impl Shell {
     /// Kills the agent now: the run is over, whatever it still says, and the panel is free.
     fn assistant_kill(&mut self, cx: &mut Context<Self>) {
         self.stop_agent();
-        self.assistant.review = None;
+        self.assistant.job = None;
         self.assistant_settle(cx);
     }
 

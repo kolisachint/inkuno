@@ -81,6 +81,7 @@ impl Shell {
             (Do::AcceptChange, _) => Some(Box::new(editor::AcceptChange)),
             (Do::RejectChange, _) => Some(Box::new(editor::RejectChange)),
             (Do::CommentChange, _) => Some(Box::new(editor::CommentChange)),
+            (Do::Improve, _) => Some(Box::new(AssistantImprove)),
             (Do::Bullets, _) => Some(Box::new(editor::ListBullet)),
             (Do::Numbered, _) => Some(Box::new(editor::ListOrdered)),
             (Do::Tasks, _) => Some(Box::new(editor::ListTask)),
@@ -574,6 +575,13 @@ impl Shell {
                 groups[3].push((tr("Numbered list", "Liste numérotée"), Do::Numbered));
                 groups[3].push((tr("Task list", "Liste de tâches"), Do::Tasks));
                 groups[3].push((tr("Plain text", "Texte simple"), Do::Plain));
+            }
+            // The Assistant improves the selection (the whole note is the panel's button).
+            if !self.pane().editor.read(cx).span().is_empty() {
+                groups[6].push((
+                    tr("Improve selection", "Améliorer la sélection"),
+                    Do::Improve,
+                ));
             }
         } else if menu.target.as_deref().and_then(tag_of).is_some() {
             // A tag is neither a note nor a folder: only its notes can be listed.

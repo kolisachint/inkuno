@@ -7,7 +7,8 @@ use crate::logic::{assistant, markdown, pending};
 
 impl Editor {
     /// The change the caret is in, or the selection touches. `None` when neither is in a change.
-    fn change_at_caret(&self) -> Option<usize> {
+    /// The key context follows it: `Editor Change` while it is `Some` (`render.rs`).
+    pub(super) fn change_at_caret(&self) -> Option<usize> {
         let (start, end) = (self.sel.start, self.sel.end);
         self.pending.iter().position(|area| {
             if start == end {

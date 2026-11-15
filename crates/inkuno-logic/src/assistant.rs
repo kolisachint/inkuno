@@ -201,6 +201,119 @@ pub fn edit_between(old: &str, new: &str) -> Option<(Range<usize>, String)> {
     ))
 }
 
+/// The instruction of "Improve" when the person typed none.
+pub const IMPROVE_INSTRUCTION: &str = "Improve the writing: clearer and tighter, same meaning, same language, same Markdown structure.";
+
+/// The words that ask for an improvement of `note` (a path relative to the agent's working folder,
+/// or absolute): of `passage` when there is one, else of the whole note. The answer is read back
+/// by [`proposal`].
+pub fn improve_prompt(note: &str, passage: Option<&str>, instruction: &str) -> String {
+    let (target, given) = match passage {
+        Some(passage) => {
+            let body = if passage.ends_with('\n') {
+                passage.to_string()
+            } else {
+                format!("{passage}\n")
+            };
+            (
+                "the passage",
+                format!(
+                    "The passage, copied exactly, between two lines:\nBEGIN PASSAGE\n{body}END PASSAGE\n\n"
+                ),
+            )
+        }
+        None => ("the whole note", String::new()),
+    };
+    format!(
+        "You are the assistant inside Inkuno, a note app for Markdown.\n\
+         \n\
+         Read the file `{note}` first, for its context. Rewrite {target} as this instruction says: \
+         {instruction}\n\
+         \n\
+         {given}\
+         Answer with NOTHING but the new text of {target}, placed between a line `BEGIN TEXT` and a \
+         line `END TEXT`:\n\
+         BEGIN TEXT\n\
+         <the full new text>\n\
+         END TEXT\n\
+         \n\
+         The new text replaces {target} in full, so keep every line that stays. No code fence around \
+         it, no comment, no explanation, nothing before or after those two lines. Do not change any \
+         file. When nothing should change, answer with the single line `NO CHANGE`."
+    )
+}
+
+/// Whether `line` is the label `mark`, tolerant: surrounding whitespace, bold or backticks around
+/// it, a trailing colon, and any letter case.
+fn is_mark(line: &str, mark: &str) -> bool {
+    let text = line.trim().trim_matches(['*', '`', ' ', '\t']);
+    let text = text
+        .strip_suffix(':')
+        .unwrap_or(text)
+        .trim_end_matches(['*', '`', ' ', '\t']);
+    text.eq_ignore_ascii_case(mark)
+}
+
+/// The new text in a rewrite's answer: the lines between the first line `BEGIN TEXT` and the last
+/// line `END TEXT` (labels tolerant, see [`is_mark`]). One code fence wrapped round the block is
+/// dropped. `None` when there is no such block, when the block is empty, or when the answer is
+/// `NO CHANGE`.
+pub fn proposal(answer: &str) -> Option<String> {
+    if is_mark(answer, "NO CHANGE") {
+        return None;
+    }
+    let lines: Vec<&str> = answer.lines().collect();
+    let begin = lines.iter().position(|line| is_mark(line, "BEGIN TEXT"))?;
+    let end = lines.iter().rposition(|line| is_mark(line, "END TEXT"))?;
+    if end <= begin {
+        return None;
+    }
+    let mut inner = &lines[begin + 1..end];
+    let fenced = |line: &&str| line.trim_start().starts_with("```");
+    if inner.len() >= 2 && fenced(&inner[0]) && fenced(&inner[inner.len() - 1]) {
+        inner = &inner[1..inner.len() - 1];
+    }
+    let text = inner.join("\n");
+    let trimmed = text.trim();
+    if trimmed.is_empty() || is_mark(trimmed, "NO CHANGE") {
+        return None;
+    }
+    Some(text)
+}
+
+/// The whole text of a note once the rewrite `text` (the block of [`proposal`]) is in it. With
+/// `range`, the passage of `base` there is replaced; without, the whole note is. The block's
+/// leading and trailing line breaks go, and its line breaks take the kind of `base` (CRLF when
+/// `base` has CRLF). A passage that ended with a line break keeps one, and so does a note that ended
+/// with one.
+pub fn rewritten(base: &str, range: Option<Range<usize>>, text: &str) -> String {
+    let eol = if base.contains("\r\n") { "\r\n" } else { "\n" };
+    let body = text
+        .trim_matches(['\r', '\n'])
+        .replace("\r\n", "\n")
+        .replace('\n', eol);
+    match range {
+        None => {
+            let mut out = body;
+            if base.ends_with('\n') {
+                out.push_str(eol);
+            }
+            out
+        }
+        Some(range) => {
+            let breaks = base[range.clone()].ends_with('\n');
+            let mut out = String::with_capacity(base.len() + body.len());
+            out.push_str(&base[..range.start]);
+            out.push_str(&body);
+            if breaks {
+                out.push_str(eol);
+            }
+            out.push_str(&base[range.end..]);
+            out
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,5 +531,146 @@ mod tests {
         assert_eq!(&old[range.clone()], "é");
         assert_eq!(text, "è");
         assert!(old.is_char_boundary(range.start) && old.is_char_boundary(range.end));
+    }
+
+    #[test]
+    fn the_improve_prompt_names_the_file_the_instruction_and_the_passage() {
+        let prompt = improve_prompt("Notes/Draft.md", Some("un peu de texte"), "Make it formal.");
+        assert!(prompt.contains("`Notes/Draft.md`"));
+        assert!(prompt.contains("Make it formal."));
+        assert!(prompt.contains("BEGIN PASSAGE\nun peu de texte\nEND PASSAGE"));
+        assert!(prompt.contains("the passage"));
+        assert!(prompt.contains("BEGIN TEXT") && prompt.contains("END TEXT"));
+        assert!(prompt.contains("NO CHANGE"));
+        assert!(prompt.contains("No code fence"));
+        assert!(prompt.contains("Do not change any file."));
+    }
+
+    #[test]
+    fn the_improve_prompt_of_a_whole_note_has_no_passage_block() {
+        let prompt = improve_prompt("Plan.md", None, IMPROVE_INSTRUCTION);
+        assert!(prompt.contains("the whole note"));
+        assert!(!prompt.contains("BEGIN PASSAGE"));
+        assert!(prompt.contains(IMPROVE_INSTRUCTION));
+    }
+
+    #[test]
+    fn a_passage_ending_with_a_break_is_not_given_a_second_one() {
+        let prompt = improve_prompt("a.md", Some("one\n"), "x");
+        assert!(prompt.contains("BEGIN PASSAGE\none\nEND PASSAGE"));
+        assert!(!prompt.contains("one\n\nEND PASSAGE"));
+    }
+
+    #[test]
+    fn the_block_between_the_text_marks_is_the_proposal() {
+        assert_eq!(
+            proposal("BEGIN TEXT\nUn peu plus clair.\nEND TEXT\n"),
+            Some("Un peu plus clair.".into())
+        );
+        // Lines inside the block are kept, blank ones too; words around it are ignored.
+        assert_eq!(
+            proposal("Here it is.\nBEGIN TEXT\nfirst\n\nsecond\nEND TEXT\nThat is all."),
+            Some("first\n\nsecond".into())
+        );
+    }
+
+    #[test]
+    fn the_text_labels_are_tolerant() {
+        assert_eq!(
+            proposal("**BEGIN TEXT:**\nx\n**END TEXT**"),
+            Some("x".into())
+        );
+        assert_eq!(proposal("`begin text`\nx\n`End Text:`"), Some("x".into()));
+        assert_eq!(
+            proposal("- BEGIN TEXT\nx\n- END TEXT"),
+            None,
+            "a list mark is not a label"
+        );
+        assert_eq!(
+            proposal("  BEGIN TEXT  \nx\n  END TEXT  "),
+            Some("x".into())
+        );
+    }
+
+    #[test]
+    fn a_block_wrapped_in_one_code_fence_drops_the_fence() {
+        let answer = "BEGIN TEXT\n```markdown\n# Title\n\nBody.\n```\nEND TEXT";
+        assert_eq!(proposal(answer), Some("# Title\n\nBody.".into()));
+        // A fence inside the text, not around it, is text.
+        let inside = "BEGIN TEXT\nSee:\n```\ncode\n```\nEND TEXT";
+        assert_eq!(proposal(inside), Some("See:\n```\ncode\n```".into()));
+    }
+
+    #[test]
+    fn no_change_gives_no_proposal() {
+        assert_eq!(proposal("NO CHANGE"), None);
+        assert_eq!(proposal("  no change\n"), None);
+        assert_eq!(proposal("BEGIN TEXT\nNO CHANGE\nEND TEXT"), None);
+    }
+
+    #[test]
+    fn an_answer_without_a_block_or_with_an_empty_one_gives_no_proposal() {
+        assert_eq!(proposal("Sure, here is a better version: ..."), None);
+        assert_eq!(proposal("BEGIN TEXT\nx\n"), None, "no end mark");
+        assert_eq!(
+            proposal("END TEXT\nBEGIN TEXT\nx"),
+            None,
+            "end before begin"
+        );
+        assert_eq!(
+            proposal("BEGIN TEXT\n\n   \nEND TEXT"),
+            None,
+            "an empty block"
+        );
+        assert_eq!(proposal(""), None);
+    }
+
+    #[test]
+    fn a_passage_is_replaced_in_place_mid_line() {
+        let base = "# Plan\n\na un peu de texte b\n";
+        let range = base.find("un peu").unwrap()..base.find(" b\n").unwrap();
+        assert_eq!(
+            rewritten(base, Some(range), "Un peu plus clair."),
+            "# Plan\n\na Un peu plus clair. b\n"
+        );
+    }
+
+    #[test]
+    fn a_selection_that_ends_with_a_break_keeps_its_break() {
+        let base = "# Plan\n\nun peu de texte\nla suite\n";
+        let range = 8.."# Plan\n\nun peu de texte\n".len();
+        assert_eq!(
+            rewritten(base, Some(range), "Un peu plus clair.\n\n"),
+            "# Plan\n\nUn peu plus clair.\nla suite\n"
+        );
+    }
+
+    #[test]
+    fn a_selection_without_a_break_at_its_end_adds_none() {
+        let base = "# Plan\n\nun peu de texte\nla suite\n";
+        let range = 8.."# Plan\n\nun peu de texte".len();
+        assert_eq!(
+            rewritten(base, Some(range), "Un peu plus clair."),
+            "# Plan\n\nUn peu plus clair.\nla suite\n"
+        );
+    }
+
+    #[test]
+    fn the_whole_note_keeps_a_final_break_only_when_the_base_had_one() {
+        assert_eq!(rewritten("a\nb\n", None, "A\nB\n"), "A\nB\n");
+        assert_eq!(rewritten("a\nb", None, "A\nB\n"), "A\nB");
+        assert_eq!(rewritten("", None, "New\n"), "New");
+    }
+
+    #[test]
+    fn crlf_breaks_take_the_kind_of_the_base() {
+        let base = "a\r\nb\r\n";
+        assert_eq!(rewritten(base, None, "A\nB"), "A\r\nB\r\n");
+        assert_eq!(
+            rewritten(base, Some(0.."a\r\n".len()), "x\ny\n"),
+            "x\r\ny\r\nb\r\n"
+        );
+        // A text without CRLF gets LF, whatever the block holds.
+        assert_eq!(rewritten("a\nb\n", None, "x\r\ny"), "x\ny\n");
     }
 }

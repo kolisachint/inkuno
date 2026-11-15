@@ -99,6 +99,7 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
 | 2026-11-15 | Pending changes are CriticMarkup in block form, one area per removed and added block pair, in the note file itself, so that the note stays plain text for every other reader. A note with pending changes takes no new agent write. |
 | 2026-11-15 | The app's side of pending changes is built: a green or red wash on the added and removed lines, the marks dimmed; typing in a change is refused with a message, while the caret, the selection, copy, undo and outside changes are not; accept, reject (one change, or all) and comment on a change, each one undo step, from the palette and the right-click menu, with a hint at the note's foot. No chords yet. `app-ui.md` §17. |
 | 2026-11-15 | The first snapshot of a write (the text before) is skipped when the text is the latest saved version already: the write's JSON has `"before": null`. The second (the proposed text) is written whenever it differs from the latest. |
+| 2026-11-15 | The Assistant's proposal (Improve, `app-ui.md` §18) is bracketed the same way: two `kind: auto` revisions, the text before by the person's author setting, then the proposed text by `assistant` (note `proposed, pending`). The shell writes them itself (`shell/assistant.rs`), as the command line does. |
 | 2026-11-15 | The proposed version is the note as it would be once every change is accepted (`pending::accept_all` of the marked text). When the agent's base was older than the note, it includes the person's other edits, not only the agent's literal text. |
 | 2026-11-15 | `write` never renames the note file, even when the proposed text changes its `#` title line: the title change is pending like any other. |
 | 2026-11-15 | A failed save of the proposed version does not undo the write: the changes stay pending, `proposed` is null, and one warning goes to standard error (`cli.md`, Decisions). The first save, of the text before, still stops the write. |
@@ -108,6 +109,5 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
 ## Not built yet
 
 - The Versions side panel and the coloured inline compare.
-- Chords for accept, reject and comment on a change (the palette and the right-click menu have them; the owner decides the keys).
 - Restoring a trashed note's history when the bin holds it under another name (the undo of a trash
   and the Trash panel's restore bring it back by name).

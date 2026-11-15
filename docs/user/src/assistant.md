@@ -30,7 +30,7 @@ The panel is a tool of the right dock, next to the outline. It is hidden at firs
 From top to bottom, the panel has:
 
 - the conversation;
-- **Review this note**, and **Stop** while the agent works;
+- **Review this note**, and **Improve selection** (or **Improve this note**), and **Stop** while the agent works;
 - the prompt box.
 
 ## Asking about the note
@@ -52,6 +52,17 @@ From top to bottom, the panel has:
 
 If you edit the note while the agent works, the comments go into the text as it is when the agent ends.
 
+## Improve
+
+**Improve selection** asks the agent to rewrite the text you have selected. With nothing selected, the button says **Improve this note** and rewrites the whole note. The same action is in the command palette as **Improve selection or note**, and in the right-click menu as **Improve selection**.
+
+- The agent is asked to make the writing clearer and tighter, with the same meaning, the same language and the same Markdown structure. To ask for something else, type it in the prompt box first, such as `make it formal`. The box is then cleared, and the instruction is used for this one request.
+- The new text is not written at once. It comes back as **pending changes** in the note: you see the removed lines and the added lines, and you accept or reject them as usual (see the [Agents page](agents.md#accepting-rejecting-and-commenting)). One undo takes the whole proposal back.
+- Inkuno saves two versions around the proposal: the text before, and the proposed text. They are kept in the note's history, which `inkuno rev list` shows.
+- A note with pending changes cannot be improved yet. Accept or reject them first.
+- If you change the same lines while the agent works, nothing is proposed, and the panel asks you to ask again. Changes to other lines are kept.
+- If the agent says it has no change to make, the panel says so, and the note stays as it is.
+
 ## Stop
 
 **Stop** ends the agent's work while it is running. A review that is not finished writes nothing. If the agent has not stopped after three seconds, Inkuno ends its process, and the panel is free again.
@@ -62,7 +73,7 @@ If you edit the note while the agent works, the comments go into the text as it 
 
 ## What it does not do
 
-- It does not change your text on its own. It cannot run a program or write a file: it is started without those tools. Its findings become comments only through Inkuno.
+- It does not change your text on its own. It cannot run a program or write a file: it is started without those tools. Its findings become comments only through Inkuno, and its proposals become pending changes only through Inkuno.
 - It does not ask you before it does something. The agent has no tool that could change anything, so there is nothing to approve.
 - It stores no keys and no model choice. Those stay in hoocode's configuration.
 - It does not keep the conversation. The conversation is kept in memory only, and it is gone when Inkuno restarts.

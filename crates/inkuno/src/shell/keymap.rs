@@ -108,6 +108,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t(tr("A picture", "Une image"), tr("Shown in place of the note", "Affichée à la place de la note")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
                 p("assistant", tr("Assistant: show or hide its panel in the right dock (also a round button at the foot of the note)", "Assistant : afficher ou masquer son panneau dans le dock de droite (aussi un bouton rond en bas de la note)")),
+                p("improve", tr("Assistant: improve the selection, or the whole note; the proposal comes back as pending changes", "Assistant : améliorer la sélection, ou la note entière ; la proposition revient en changements en attente")),
                 k(&ToggleOutline, tr("Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note)", "Plan : afficher ou masquer les titres de la note dans le dock de droite (aussi dans la palette, Plan de la note)")),
                 k(&ToggleSidebar, tr("Sidebar: show or hide the side panel (the rail stays)", "Barre latérale : afficher ou masquer le panneau latéral (le rail reste)")),
                 k(&ToggleFocus, tr("Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back", "Mode focus : la note seule, bord à bord, sans barres ni panneaux ; F9 ou Échap revient")),
@@ -178,6 +179,23 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
             .collect(),
         ),
         (
+            tr("Changes in a note", "Changements d'une note"),
+            vec![
+                t(
+                    tr("Pending change", "Changement en attente"),
+                    tr(
+                        "Its added lines lie on a green wash, its removed lines on a red one; typing in it is refused. Put the caret in it, then accept or reject it",
+                        "Ses lignes ajoutées sont sur un fond vert, ses lignes supprimées sur un fond rouge ; taper dedans est refusé. Placez le curseur dedans, puis acceptez-le ou refusez-le",
+                    ),
+                ),
+                k(&editor::AcceptChange, tr("Accept the change under the caret: its removed lines go, its added lines stay", "Accepter le changement sous le curseur : ses lignes supprimées partent, ses lignes ajoutées restent")),
+                k(&editor::RejectChange, tr("Reject the change under the caret: its added lines go, its removed lines stay", "Refuser le changement sous le curseur : ses lignes ajoutées partent, ses lignes supprimées restent")),
+                k(&editor::AcceptAllChanges, tr("Accept every change of the note", "Accepter tous les changements de la note")),
+                k(&editor::RejectAllChanges, tr("Reject every change of the note", "Refuser tous les changements de la note")),
+                k(&editor::CommentChange, tr("Comment on the change under the caret: the change stays pending", "Commenter le changement sous le curseur : le changement reste en attente")),
+            ],
+        ),
+        (
             tr("Typing", "À la frappe"),
             vec![
                 t("/", tr("Components: headings, lists, panel, table, code, formula…", "Composants : titres, listes, panneau, tableau, code, formule…")),
@@ -216,7 +234,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 k(&editor::ListOrdered, tr("Selected lines: numbered list (again: plain text)", "Lignes choisies : liste numérotée (encore : texte)")),
                 k(&editor::ListTask, tr("Selected lines: task list (again: plain text)", "Lignes choisies : liste de tâches (encore : texte)")),
                 k(&editor::ListText, tr("Selected lines: plain text", "Lignes choisies : texte simple")),
-                k(&editor::ToggleTask, tr("Check / uncheck a task or a [ ] box; in a table cell, add one", "Cocher / décocher une tâche ou une case [ ] ; dans une cellule, en ajouter une")),
+                k(&editor::ToggleTask, tr("Check / uncheck a task or a [ ] box; in a table cell, add one. In a pending change the same key accepts the change instead", "Cocher / décocher une tâche ou une case [ ] ; dans une cellule, en ajouter une. Dans un changement en attente, cette touche accepte le changement")),
                 k(&editor::Bold, tr("Bold", "Gras")),
                 k(&editor::Italic, tr("Italic", "Italique")),
                 k(&editor::Underline, tr("Underline", "Souligné")),
@@ -433,6 +451,15 @@ pub(crate) fn defaults() -> Vec<keys::Bind> {
         b("tab", &Indent, e),
         b("shift-tab", &Outdent, e),
         b("secondary-enter", &ToggleTask, e),
+        // In a pending change (the editor's context is `Editor Change` then): Ctrl+Enter accepts it,
+        // Ctrl+Backspace rejects it. Listed after the `Editor` bindings, so they win there; elsewhere
+        // the keys keep their meaning above.
+        b("secondary-enter", &AcceptChange, Some("Editor && Change")),
+        b(
+            "secondary-backspace",
+            &RejectChange,
+            Some("Editor && Change"),
+        ),
         // The four direct choices have no key: the menu and the palette offer them, and the help grants them.
         b("secondary-shift-b", &ListCycle, e),
         // A table: move the row up or down, delete it; the rest via the menu, the palette or the help.

@@ -49,7 +49,12 @@ impl Render for Editor {
         let el = div()
             .size_full()
             .relative()
-            .key_context("Editor")
+            // In a pending change, the chords that accept and reject it are on (`shell/keymap.rs`).
+            .key_context(if self.change_at_caret().is_some() {
+                "Editor Change"
+            } else {
+                "Editor"
+            })
             .track_focus(&self.focus)
             .cursor(CursorStyle::IBeam);
         let el = motions!(el,

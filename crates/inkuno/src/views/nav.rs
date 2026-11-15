@@ -327,6 +327,8 @@ pub enum Do {
     AcceptChange,
     RejectChange,
     CommentChange,
+    /// The selection goes to the Assistant to be improved (its proposal comes back as changes).
+    Improve,
     /// The chosen lines as a bulleted, numbered or task list, or as text.
     Bullets,
     Numbered,

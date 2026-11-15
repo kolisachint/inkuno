@@ -78,6 +78,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Ctrl+P › assistant` | Assistant: show or hide its panel in the right dock (also a round button at the foot of the note) |
+| `Ctrl+P › improve` | Assistant: improve the selection, or the whole note; the proposal comes back as pending changes |
 | `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note) |
 | `Ctrl+B` | Sidebar: show or hide the side panel (the rail stays) |
 | `F9` | Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back |
@@ -150,6 +151,17 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Delete the table |
 | `Ctrl+Shift+Backspace` | Remove the row, or the columns taken by their grip |
 
+## Changes in a note
+
+| Keys | Action |
+|---|---|
+| Pending change | Its added lines lie on a green wash, its removed lines on a red one; typing in it is refused. Put the caret in it, then accept or reject it |
+| `Ctrl+Enter` | Accept the change under the caret: its removed lines go, its added lines stay |
+| `Ctrl+Backspace` | Reject the change under the caret: its added lines go, its removed lines stay |
+|  | Accept every change of the note |
+|  | Reject every change of the note |
+|  | Comment on the change under the caret: the change stays pending |
+
 ## Typing
 
 | Keys | Action |
@@ -190,7 +202,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Selected lines: numbered list (again: plain text) |
 |  | Selected lines: task list (again: plain text) |
 |  | Selected lines: plain text |
-| `Ctrl+Enter` | Check / uncheck a task or a \[ \] box; in a table cell, add one |
+| `Ctrl+Enter` | Check / uncheck a task or a \[ \] box; in a table cell, add one. In a pending change the same key accepts the change instead |
 | `Ctrl+Alt+B` | Bold |
 | `Ctrl+I` | Italic |
 | `Ctrl+U` | Underline |

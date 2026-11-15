@@ -94,7 +94,7 @@ mode). Keyless rows (`—`) are grips/`/`/menu-only by design (§6).
 | `Ctrl+Shift+H` | `editor::Highlight` | `› highlight` |
 | `Ctrl+Shift+K` | `editor::InlineCode` | `› inline code` |
 | `Ctrl+K` | `editor::InsertLink` | `› link` |
-| `Ctrl+Enter` | `editor::ToggleTask` | `› tick the task` |
+| `Ctrl+Enter` | `editor::ToggleTask` (outside a pending change; inside one, `editor::AcceptChange`, see below) | `› tick the task` |
 | `Ctrl+Shift+B` | `editor::ListCycle` | `›` (catalogue `Format`; help-rebindable) |
 | `Ctrl+D` | `editor::SelectNext` | `› multicursor: select the next occurrence` (alias, `crates/inkuno/src/shell/palette_open.rs:211`) |
 | `Alt+click` | add cursor (mouse) | — |
@@ -118,6 +118,23 @@ Column alignment (context `Editor`, rebindable, `Table` palette group):
 Find bar extras (context `Find`): `Enter` first match, `Tab` switch field,
 `Alt+C/W/R` case/word/regex toggles, `Ctrl+Enter` replace-all,
 `Ctrl+Shift+Enter` replace-in-vault.
+
+### Pending changes (context `Editor && Change`, rebindable)
+
+The editor's key context is `Editor Change` while the caret or the selection is in a pending change
+(`views/editor/render.rs`, `change_at_caret`); elsewhere it stays `Editor`. Two bindings use that
+context and are listed after the `Editor` ones, so they win inside a change (GPUI: the deepest
+matching context first, then the later binding):
+
+| Keys | Action | Palette |
+|---|---|---|
+| `Ctrl+Enter` | `editor::AcceptChange` | `› accept the change` (shows the chord) |
+| `Ctrl+Backspace` | `editor::RejectChange` | `› reject the change` (shows the chord) |
+
+Outside a change they keep their meaning: `Ctrl+Enter` is `ToggleTask`, `Ctrl+Backspace` deletes
+the word before the caret. `editor::AcceptAllChanges`, `editor::RejectAllChanges` and
+`editor::CommentChange` have no chord (palette and right-click menu only). Test:
+`shell/tests/pending.rs` (`ctrl_enter_…`, `ctrl_backspace_…`), which also proves the precedence.
 
 ### Tables in a note (context `Editor`, all rebindable)
 
@@ -359,6 +376,11 @@ note, with an optional line on what changed; nothing is saved when the text is t
   a 1 px hairline between neighbours, its handle overlapping both sides. The §10 item 4 gap lock is
   lifted. Tests: `window.rs` (`sheets_tile_the_window_edge_to_edge_with_a_hairline`,
   `normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline`).
+- **2026-11-15 — chords for a pending change:** `editor::AcceptChange` on `Ctrl+Enter` and
+  `editor::RejectChange` on `Ctrl+Backspace`, in the context `Editor && Change` (owner decision,
+  2026-11-15). Accept all, reject all and comment keep no chord. `Ctrl+Enter` keeps `ToggleTask`
+  outside a change, and `Ctrl+Backspace` keeps deleting a word there. The help panel lists the
+  five actions in `Changes in a note`; `shortcuts.md` is regenerated. Tests: `shell/tests/pending.rs`.
 
 ## 9. Reserved / gaps log
 
