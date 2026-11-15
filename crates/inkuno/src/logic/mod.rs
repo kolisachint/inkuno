@@ -13,6 +13,7 @@ pub use inkuno_logic::layout;
 pub use inkuno_logic::markdown;
 pub use inkuno_logic::merge;
 pub use inkuno_logic::note;
+pub use inkuno_logic::pending;
 pub use inkuno_logic::prefs;
 pub use inkuno_logic::rank;
 pub use inkuno_logic::recall;

@@ -15,6 +15,7 @@ pub mod layout;
 pub mod markdown;
 pub mod merge;
 pub mod note;
+pub mod pending;
 pub mod prefs;
 pub mod rank;
 pub mod recall;

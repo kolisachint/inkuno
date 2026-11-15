@@ -150,18 +150,26 @@ fn number_of_word(word: &str) -> Result<u32, String> {
         .ok_or_else(|| format!("`{word}` is not a revision number (1, 2, 3…)"))
 }
 
-/// The author of a new revision: `--author`, else the app's setting, else the environment.
+/// The author of a new revision: `--author`, else the person's default (`default_author`).
 fn author(opts: &Opts) -> Result<String, String> {
-    let given = match opts.values.get("--author") {
-        Some(name) => name.clone(),
-        None => {
-            let saved = Prefs::parse(&vault::load_settings()).author;
-            if saved.is_empty() {
-                revision::default_author(|key| std::env::var(key).ok())
-            } else {
-                saved
-            }
-        }
+    let Some(given) = opts.values.get("--author") else {
+        return default_author();
+    };
+    let name = revision::clean_author(given);
+    if name.is_empty() {
+        return Err("the author is empty: give --author NAME".into());
+    }
+    Ok(name)
+}
+
+/// The author a person's revisions carry when none is given: the app's author setting, else
+/// `INKUNO_AUTHOR`, else the system user name, else `unknown`.
+pub fn default_author() -> Result<String, String> {
+    let saved = Prefs::parse(&vault::load_settings()).author;
+    let given = if saved.is_empty() {
+        revision::default_author(|key| std::env::var(key).ok())
+    } else {
+        saved
     };
     let name = revision::clean_author(&given);
     if name.is_empty() {

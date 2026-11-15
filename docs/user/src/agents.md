@@ -1,6 +1,6 @@
 # Agents (command line)
 
-An agent that has a shell runs the `inkuno` command on your vault: Claude Code, Codex CLI, Gemini CLI, hoocode, or a script. It reads notes with `inkuno read`, writes them with `inkuno new`, `edit` and `append`, checks and draws a Mermaid diagram with `inkuno render`, and asks the open window to show a note with `inkuno show`. The commands follow Inkuno's rules: a taken name is refused, a rename rewrites the `[[links]]`, and nothing is deleted, because a trashed file goes to `.trash`.
+An agent that has a shell runs the `inkuno` command on your vault: Claude Code, Codex CLI, Gemini CLI, hoocode, or a script. It reads notes with `inkuno read`, writes them with `inkuno new`, `edit` and `append`, proposes a new full text with `inkuno write`, checks and draws a Mermaid diagram with `inkuno render`, and asks the open window to show a note with `inkuno show`. The commands follow Inkuno's rules: a taken name is refused, a rename rewrites the `[[links]]`, and nothing is deleted, because a trashed file goes to `.trash`.
 
 There is no server to start and no window to open. The commands work on the files of the vault, whether Inkuno is running or not. An open window sees what they write through its file watcher. Nothing leaves the computer: only `show` talks to the window, through 127.0.0.1.
 
@@ -59,6 +59,7 @@ Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set`
 | `inkuno new <title…> [--folder F] [--template T] [--text TEXT]` | a new note. Its first line is the title. The body is `--text TEXT`; `--text -` reads it from standard input. Without `--text` the note has only its title |
 | `inkuno edit <note> --old OLD --new NEW [--token T]` | replaces a passage that occurs once. `--edits JSON` takes a list of `{"old": …, "new": …}`, applied together or not at all |
 | `inkuno append <note> [--under HEADING] --text TEXT [--token T]` | adds text at the end of the note, or at the end of the section under a heading. `--text -` reads the text from standard input; without `--text` the command is refused |
+| `inkuno write <note> --author NAME --text TEXT [--token T]` | proposes the note's full new text. The changes wait in the note until you accept or reject them in Inkuno. `--text -` reads the text from standard input. See [Pending changes](#pending-changes) |
 | `inkuno move <note> [--name NEW] [--folder F]` | gives a note a new name, a new folder, or both. The `[[links]]` to it follow |
 | `inkuno trash <note>` | moves the note to `.trash`, with its saved versions. Prints the path it has there |
 | `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
@@ -133,7 +134,28 @@ A passage must be on one line, and an empty comment is refused. Newlines in the 
 
 The [Assistant](assistant.md) built into Inkuno does not run these commands. It is started without a shell, and the comments of its review are written by Inkuno itself.
 
-Pass the token from `inkuno read --json` to `edit` or `append` with `--token`. Without `--token`, an edit applies to the file as it is on disk; an empty `--token` is refused.
+Pass the token from `inkuno read --json` to `edit`, `append` or `write` with `--token`. Without `--token`, an edit applies to the file as it is on disk; an empty `--token` is refused.
+
+### Pending changes
+
+`inkuno write` does not change the note silently. It takes the full new text the agent wants and writes only the differences into the note, each one marked:
+
+```
+unchanged line
+{--
+the line it removes
+--}
+{++
+the line it adds
+++}
+unchanged line
+```
+
+- A removed block and an added block next to each other are one change. Inkuno shows the change as tinted text until you accept or reject it.
+- A note with pending changes is refused by `inkuno write` until you accept or reject them all. The command says so.
+- A write that touches lines you changed since the agent read the note is refused, and nothing is written. If you changed other lines, the agent's change is merged with yours.
+- Each write saves two automatic revisions: the note as it was before, and the proposed text. They are in the note's history (`inkuno rev list`).
+- `inkuno write` prints `N changes pending in <note>`. With `--json` it gives the path, the number of changes and the two revision numbers.
 
 Standard input is read only when a command asks for it: `--text -` or `--mermaid -`. Nothing else reads it.
 

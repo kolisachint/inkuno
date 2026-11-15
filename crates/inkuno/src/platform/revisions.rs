@@ -69,20 +69,50 @@ pub fn save(
     text: &str,
     unix: i64,
 ) -> io::Result<Saved> {
-    save_with(home, note, author, memo, text, unix, true)
+    save_as(
+        home,
+        note,
+        author,
+        memo,
+        text,
+        unix,
+        revision::Kind::Checkpoint,
+    )
 }
 
-/// `save`, with the publish route chosen: hard links, or (`use_links` false) the exclusive copy
-/// that file systems without links take. Tests force the copy route through here.
-fn save_with(
+/// `save`, with the kind of the revision chosen: a checkpoint by a person, or an `auto` snapshot
+/// taken around an agent's write. The refusal of an unchanged text is the same for both.
+pub fn save_as(
     home: &Home,
     note: &Path,
     author: &str,
     memo: Option<&str>,
     text: &str,
     unix: i64,
-    use_links: bool,
+    kind: revision::Kind,
 ) -> io::Result<Saved> {
+    let entry = Entry {
+        author,
+        memo,
+        text,
+        unix,
+        kind,
+    };
+    save_with(home, note, &entry, true)
+}
+
+/// What one save writes: its author, its optional note, its text, its time and its kind.
+struct Entry<'a> {
+    author: &'a str,
+    memo: Option<&'a str>,
+    text: &'a str,
+    unix: i64,
+    kind: revision::Kind,
+}
+
+/// `save`, with the publish route chosen: hard links, or (`use_links` false) the exclusive copy
+/// that file systems without links take. Tests force the copy route through here.
+fn save_with(home: &Home, note: &Path, entry: &Entry, use_links: bool) -> io::Result<Saved> {
     let folder = home
         .folder(note)
         .ok_or_else(|| io::Error::other("the note is not in its vault or scratch folder"))?;
@@ -102,7 +132,7 @@ fn save_with(
                 }
                 Err(e) => return Err(e),
             };
-            if last.text == text {
+            if last.text == entry.text {
                 return Ok(Saved::Unchanged { latest });
             }
         }
@@ -111,11 +141,11 @@ fn save_with(
         let rev = Revision {
             number,
             parent: latest,
-            author: author.to_string(),
-            date: revision::rfc3339(unix),
-            kind: revision::Kind::Checkpoint,
-            note: memo.map(str::to_string),
-            text: text.to_string(),
+            author: entry.author.to_string(),
+            date: revision::rfc3339(entry.unix),
+            kind: entry.kind,
+            note: entry.memo.map(str::to_string),
+            text: entry.text.to_string(),
         };
         fs::create_dir_all(&folder)?;
         match publish_with(&file, &revision::render(&rev), use_links) {
@@ -422,6 +452,33 @@ mod tests {
     }
 
     #[test]
+    fn an_auto_snapshot_is_written_with_the_auto_kind() {
+        let root = temp("auto");
+        let home = Home::Vault(root.clone());
+        let note = root.join("plan.md");
+        save(&home, &note, "ana", None, "one\n", 0).unwrap();
+        let made = save_as(
+            &home,
+            &note,
+            "ana",
+            Some("before a change by bo"),
+            "two\n",
+            0,
+            revision::Kind::Auto,
+        )
+        .unwrap();
+        assert!(matches!(made, Saved::Made { number: 2, .. }));
+        let auto = get(&home, &note, 2).unwrap();
+        assert_eq!(auto.kind, revision::Kind::Auto);
+        assert_eq!(auto.note.as_deref(), Some("before a change by bo"));
+        assert_eq!(
+            get(&home, &note, 1).unwrap().kind,
+            revision::Kind::Checkpoint
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn racing_saves_each_get_their_own_revision() {
         racing_saves(true);
     }
@@ -443,7 +500,14 @@ mod tests {
                     (0..12)
                         .map(|i| {
                             let text = format!("writer {t}, save {i}\n");
-                            match save_with(&home, &note, "ana", None, &text, 0, use_links) {
+                            let entry = Entry {
+                                author: "ana",
+                                memo: None,
+                                text: &text,
+                                unix: 0,
+                                kind: revision::Kind::Checkpoint,
+                            };
+                            match save_with(&home, &note, &entry, use_links) {
                                 Ok(Saved::Made { number, file }) => (number, file, text),
                                 other => panic!("a save failed: {other:?}"),
                             }

@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use crate::{
     lang::{date_name, time_name},
     logic::wiki::Anchor,
-    logic::{daily, markdown, markdown::Link, rank},
+    logic::{daily, markdown, markdown::Link, pending, rank, revision},
     platform::{clock, link, revisions, vault as files},
 };
 
@@ -665,6 +665,118 @@ fn append_under(text: &str, heading: &str, extra: &str) -> Result<String, String
         out.push_str(&text[end..]);
     }
     Ok(out)
+}
+
+/// The text of the saved version of `path` whose token is `token`, the newest one first.
+fn saved_text_with(
+    home: &revisions::Home,
+    path: &Path,
+    token: &str,
+) -> Result<Option<String>, String> {
+    let saved = revisions::all(home, path).map_err(disk)?;
+    Ok(saved
+        .into_iter()
+        .rev()
+        .find(|rev| vault::token(rev.text.as_bytes()) == token)
+        .map(|rev| rev.text))
+}
+
+/// Saves an automatic revision of `text`, by `author`. `None` when the text is the latest revision's.
+fn snapshot(
+    home: &revisions::Home,
+    path: &Path,
+    author: &str,
+    memo: &str,
+    text: &str,
+) -> Result<Option<u32>, String> {
+    match revisions::save_as(
+        home,
+        path,
+        author,
+        Some(memo),
+        text,
+        revisions::now(),
+        revision::Kind::Auto,
+    ) {
+        Ok(revisions::Saved::Made { number, .. }) => Ok(Some(number)),
+        Ok(revisions::Saved::Unchanged { .. }) => Ok(None),
+        Err(e) => Err(format!("{}: {}", path.display(), disk(e))),
+    }
+}
+
+/// `write`: proposes `text` as the note's new full text. The changes wait in the note as pending
+/// marks until a person accepts or rejects them. Around the write, two automatic revisions are
+/// saved: the text before (by the person's default author) and the proposed text (by `author`).
+/// Nothing is written when the proposal is refused or the first snapshot fails.
+pub fn write_note(vault: &mut Vault, args: &Value) -> Outcome {
+    let path = match vault_note(vault, args) {
+        Ok(path) => path,
+        Err(outcome) => return outcome,
+    };
+    let author = match arg_str(args, "author") {
+        Ok(author) => author.to_string(),
+        Err(message) => return Outcome::err(message),
+    };
+    let Some(proposed) = args.get("text").and_then(Value::as_str) else {
+        return Outcome::err("`text` is missing");
+    };
+    let (current, token) = match vault::read_text(&path).map_err(Outcome::err) {
+        Ok(read) => read,
+        Err(outcome) => return outcome,
+    };
+    let home = revisions::home_of(&path, Some(&vault.root))
+        .unwrap_or_else(|| revisions::Home::Vault(vault.root.clone()));
+    // The text the agent read: the file as it is, or the saved version its token names.
+    let base = match given_token(args) {
+        Err(message) => return Outcome::err(message),
+        Ok(None) => current.clone(),
+        Ok(Some(expected)) if expected == token => current.clone(),
+        Ok(Some(expected)) => match saved_text_with(&home, &path, expected) {
+            Ok(Some(text)) => text,
+            Ok(None) => {
+                return Outcome::err("the note changed since it was read; read it again and retry");
+            }
+            Err(message) => return Outcome::err(message),
+        },
+    };
+    let marked = match pending::propose(&base, &current, proposed) {
+        Ok(marked) => marked,
+        Err(refusal) => return Outcome::err(refusal.to_string()),
+    };
+    let person = match super::rev::default_author() {
+        Ok(person) => person,
+        Err(message) => return Outcome::err(message),
+    };
+    let before = match snapshot(
+        &home,
+        &path,
+        &person,
+        &format!("before a change by {author}"),
+        &current,
+    ) {
+        Ok(number) => number,
+        Err(message) => return Outcome::err(message),
+    };
+    if let Err(message) = files::write(&path, &marked).map_err(disk) {
+        return Outcome::err(message);
+    }
+    let proposed_number = match snapshot(
+        &home,
+        &path,
+        &author,
+        "proposed, pending",
+        &pending::accept_all(&marked),
+    ) {
+        Ok(number) => number,
+        Err(message) => return Outcome::err(message),
+    };
+    vault.rescan();
+    Outcome::ok(json!({
+        "path": vault::rel(&vault.root, &path),
+        "changes": pending::areas(&marked).len(),
+        "before": before,
+        "proposed": proposed_number,
+    }))
 }
 
 pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
