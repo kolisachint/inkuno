@@ -815,7 +815,7 @@ Normal 800 is the default (§10.4 lock released for this change).
       (accept, reject, comment), `shell/changes.rs` (the comment prompt and the hint), `shell/menu.rs`.
 - [x] **Test**: `shell/tests/pending.rs` (typing, paste, replace all, accept, reject, comment, an outside change,
       the hint), `inkuno-logic` `pending.rs`
-      (`touches_any`), `ui/theme.rs` (`pending_changes_show_and_read`, the pair test), `layout.rs`
+      (`refuses`, one test per boundary case), `ui/theme.rs` (`pending_changes_show_and_read`, the pair test), `layout.rs`
       (`a_line_knows_its_pending_change`), `edit.rs` (`the_span_of_a_rewrite…`), `commands.rs` (the five entries).
 
 ### 17.1 Drawing
@@ -832,15 +832,21 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ### 17.2 The read-only rule
 
-- The person cannot change a pending change. An edit whose range changes a byte of an area is refused, and nothing
-  changes: `Editor::touches_pending` (range against the cached areas, `pending::touches_any`).
-- An edit that ends where an area starts is also refused, unless its text ends a line: otherwise the line break
-  before the mark goes, or the text is glued to the mark. Typing before a change at the end of the kept line, and
-  Enter there, work; a letter typed at the start of a marker line is refused.
-- A multi-range edit (replace all, shift of several lines, a whole-text rewrite) is refused as a whole when one of
-  its ranges is refused. Replace all checks each match; renumbering that would change a change is left out.
-- Allowed: the caret and the selection enter a change; copy works; undo and redo (`restore`); an outside change
-  (`absorb`, the file watcher and the Assistant); accept, reject and comment (they go through `absorb`, not the guard).
+- The person cannot change a pending change. The one rule is `logic::pending::refuses(text, range, inserted)`:
+  `Editor::touches_pending` delegates to it entirely, and the command line uses it too (`cli.md`). It refuses an edit
+  that changes a byte of an area, marker lines included, and an edit that would leave a marker line without its own
+  line: one that ends where an area starts unless the inserted text ends a line (or the deletion takes a whole line
+  that starts a line), and one that starts where an area ends when the area has no final line break and the inserted
+  text does not start with one. So `Enter` at the edges works, a letter at the start of a marker line is refused, and
+  a letter at the end of a note whose last marker has no break is refused (`Enter` first). The unit tests of
+  `pending.rs` cover each case, CRLF included.
+- A multi-range route (restyle of several lines, cell marks, comment lines moved with a table, completion that
+  removes brackets, a table's rewrite with its comment lines) checks every range first, through
+  `Editor::touches_pending_any`, and makes none of them when one is refused. The undo step is pushed only after the
+  check, so a refusal leaves no undo step and keeps the redo.
+- Allowed: the caret and the selection enter a change; copy works; undo and redo (`Editor::restore`, the `Undo` and
+  `Redo` actions); an outside change (`absorb`, the file watcher and the Assistant); accept, reject and comment (they
+  go through `absorb`, not the guard).
 - The routes that pass the guard: `edit` and `splice` (typing, IME, delete, Enter, paste, replace one), `shift_lines`
   (Tab), `restyle` (format bar and block turns), `clear_cells`, `realign`/`align_at` and `set_table` (tables),
   `renumber`, the table branches of Enter, cut (`copy(cut)`, before the clipboard is written), replace all.
@@ -849,18 +855,24 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ### 17.3 Accept, reject, and undo
 
-- **Accept the change** / **Reject the change** act on the change the caret is in; else the first one after the caret;
-  else the first of the note. **Accept all** / **Reject all** act on every change. With no change, the message is
-  `No pending change.` and nothing changes.
+- **Accept the change** / **Reject the change** act on the change the caret is in, or the selection touches. With the
+  caret outside every change, the first press does not act: it moves the caret to the next change (after the last
+  one, the first), scrolls it into view, and says `Caret moved to the next change. Repeat to accept or reject it.`.
+  The right-click menu moves the caret into the clicked change first, so it acts on that change as before.
+  **Accept all** / **Reject all** act on every change. With no change, the message is `No pending change.` and
+  nothing changes.
 - The new text comes from `logic::pending` (`accept`, `reject`, `accept_all`, `reject_all`), turned into one splice by
   `logic::assistant::edit_between`, and applied by `absorb`: one undo step. The note becomes dirty and is saved by the
   usual debounce. The caret goes to where the change was (its start, or the start of the first change for all).
-- `restore` skips an undo step that left the text as it is, so an edit refused after its undo step was taken does not
-  leave an undo that changes nothing.
+- `Editor::restore` skips an undo step that left the text as it is, so an edit refused after its undo step was taken
+  does not leave an undo that changes nothing. A refused edit pushes no undo step at all (§17.2).
 
 ### 17.4 Comment on the change
 
 - **Comment on the change** asks for one line in the shell's prompt (`Palette::prompt`, as `Save a version` does).
+  The prompt names the change by its text (`EditorEvent::AskChangeComment(text)`), and when it answers the change is
+  found again by that exact text. An outside edit may have moved it meanwhile; if no change has the text any more,
+  nothing is written and the message `That change is gone or changed: nothing was commented.` is shown.
   The comment is written by `markdown::comment_on` on the first added line of the change, or on its first removed
   line when nothing is added: `{==passage==}{>>text<<}`. The passage is that whole line, so it must be unique in the
   note, or the reason is said and nothing changes (empty line, comment marks already there, passage not unique).

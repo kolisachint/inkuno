@@ -6,24 +6,44 @@ use super::*;
 use crate::logic::{assistant, markdown, pending};
 
 impl Editor {
-    /// The change the caret is in; else the first one after the caret; else the first of the note.
-    fn change_index(&self) -> Option<usize> {
-        let at = self.cursor();
-        self.pending
-            .iter()
-            .position(|area| area.range.start <= at && at < area.range.end)
-            .or_else(|| self.pending.iter().position(|area| area.range.start >= at))
-            .or(if self.pending.is_empty() {
-                None
+    /// The change the caret is in, or the selection touches. `None` when neither is in a change.
+    fn change_at_caret(&self) -> Option<usize> {
+        let (start, end) = (self.sel.start, self.sel.end);
+        self.pending.iter().position(|area| {
+            if start == end {
+                area.range.start <= start && start < area.range.end
             } else {
-                Some(0)
-            })
+                area.range.start < end && start < area.range.end
+            }
+        })
     }
 
     /// Says that there is no change to act on: the one message of the actions that find none.
     fn no_change(&mut self, cx: &mut Context<Self>) {
         cx.emit(EditorEvent::Notice(
             tr("No pending change.", "Aucun changement en attente.").into(),
+        ));
+    }
+
+    /// The first press of accept, reject or comment with the caret outside every change: the caret
+    /// goes to the next change (the first one, past the last), where it shows, and nothing is acted on.
+    fn go_to_next_change(&mut self, cx: &mut Context<Self>) {
+        let at = self.sel.end;
+        let next = self
+            .pending
+            .iter()
+            .map(|area| area.range.start)
+            .find(|&start| start > at)
+            .or_else(|| self.pending.first().map(|area| area.range.start));
+        if let Some(start) = next {
+            self.move_to(start, cx);
+        }
+        cx.emit(EditorEvent::Notice(
+            tr(
+                "Caret moved to the next change. Repeat to accept or reject it.",
+                "Le curseur va au changement suivant. Recommencez pour l'accepter ou le refuser.",
+            )
+            .into(),
         ));
     }
 
@@ -50,8 +70,11 @@ impl Editor {
     }
 
     fn settle_one(&mut self, cx: &mut Context<Self>, how: fn(&str, usize) -> String) {
-        let Some(index) = self.change_index() else {
+        if self.pending.is_empty() {
             return self.no_change(cx);
+        }
+        let Some(index) = self.change_at_caret() else {
+            return self.go_to_next_change(cx);
         };
         let at = self.pending[index].range.start;
         let new = how(&self.content, index);
@@ -88,20 +111,41 @@ impl Editor {
         }
     }
 
-    /// Asks the shell for the line of a comment on the change under the caret.
+    /// Asks the shell for the line of a comment on the change under the caret. The change is named
+    /// by its text, which the prompt carries back (`comment_on_change`). With the caret outside
+    /// every change, the first press only moves the caret to the next one.
     pub(super) fn ask_change_comment(&mut self, cx: &mut Context<Self>) {
-        match self.change_index() {
-            Some(index) => cx.emit(EditorEvent::AskChangeComment(index)),
-            None => self.no_change(cx),
+        if self.pending.is_empty() {
+            return self.no_change(cx);
+        }
+        match self.change_at_caret() {
+            Some(index) => {
+                let text = self.content[self.pending[index].range.clone()].to_string();
+                cx.emit(EditorEvent::AskChangeComment(text));
+            }
+            None => self.go_to_next_change(cx),
         }
     }
 
-    /// Writes `memo` as a comment on the first added line of change `index` (its first removed line
-    /// when nothing is added). The change stays pending. Refused, with the reason, when the line
-    /// cannot carry a comment: empty, or holding comment marks already.
-    pub fn comment_on_change(&mut self, index: usize, memo: &str, cx: &mut Context<Self>) {
-        let Some(area) = self.pending.get(index).cloned() else {
-            return self.no_change(cx);
+    /// Writes `memo` as a comment on the first added line of the change whose text is `change` (its
+    /// first removed line when nothing is added). The change stays pending. When no change has that
+    /// text any more (an outside edit moved or changed it), nothing is written and the person is told.
+    /// Refused, with the reason, when the line cannot carry a comment: empty, or holding comment marks.
+    pub fn comment_on_change(&mut self, change: &str, memo: &str, cx: &mut Context<Self>) {
+        let Some(area) = self
+            .pending
+            .iter()
+            .find(|area| self.content[area.range.clone()] == *change)
+            .cloned()
+        else {
+            cx.emit(EditorEvent::Notice(
+                tr(
+                    "That change is gone or changed: nothing was commented.",
+                    "Ce changement a disparu ou a changé : rien n'a été commenté.",
+                )
+                .into(),
+            ));
+            return;
         };
         let block = if area.added.is_empty() {
             area.removed.clone()

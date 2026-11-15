@@ -83,8 +83,12 @@ impl Editor {
     /// Checks or unchecks the `[ ]` box that starts at byte `at`.
     pub(super) fn flip_box(&mut self, at: usize, cx: &mut Context<Self>) {
         let done = self.content.as_bytes()[at + 1] != b' ';
+        let (range, text) = (at + 1..at + 2, if done { " " } else { "x" });
+        if self.touches_pending(&range, text) {
+            return self.refuse_pending(cx);
+        }
         self.push_undo(true);
-        self.splice(at + 1..at + 2, if done { " " } else { "x" }, cx);
+        self.splice(range, text, cx);
     }
 
     /// Checkbox under the pointer: its start. It is on the pointer's visual line,
@@ -127,8 +131,11 @@ impl Editor {
             }
             // A cell without a box gets one.
             if let Some(cell) = cell {
-                self.push_undo(true);
                 let text = if cell.is_empty() { "[ ]" } else { "[ ] " };
+                if self.touches_pending(&(cell.start..cell.start), text) {
+                    return self.refuse_pending(cx);
+                }
+                self.push_undo(true);
                 self.edit(cell.start..cell.start, text, cx);
                 return self.realign(cx);
             }
@@ -235,12 +242,20 @@ impl Editor {
                 return;
             }
             let cuts: Vec<_> = parts.iter().map(|part| this.cut(part, flag)).collect();
-            this.push_undo(true);
             // Everything already has it: the signs go, closing ones first so the bytes stay right.
             if cuts.iter().all(Option::is_some) {
-                for (open, close) in cuts.into_iter().flatten().rev() {
-                    this.splice(close, "", cx);
-                    this.splice(open, "", cx);
+                let edits: Vec<(Range<usize>, &str)> = cuts
+                    .iter()
+                    .flatten()
+                    .rev()
+                    .flat_map(|(o, c)| [(c.clone(), ""), (o.clone(), "")])
+                    .collect();
+                if this.touches_pending_any(&edits) {
+                    return this.refuse_pending(cx);
+                }
+                this.push_undo(true);
+                for (range, text) in edits {
+                    this.splice(range, text, cx);
                 }
                 return;
             }
@@ -260,18 +275,27 @@ impl Editor {
         replace: bool,
         cx: &mut Context<Self>,
     ) {
+        // Every sign goes in, or none: each is checked against the note before the first is made.
+        let mut edits: Vec<(Range<usize>, &str)> = Vec::new();
         for (part, cut) in parts.iter().zip(cuts).rev() {
             match cut {
                 Some((o, c)) if replace => {
-                    self.splice(c.clone(), close, cx);
-                    self.splice(o.clone(), open, cx);
+                    edits.push((c.clone(), close));
+                    edits.push((o.clone(), open));
                 }
                 Some(_) => {}
                 None => {
-                    self.splice(part.end..part.end, close, cx);
-                    self.splice(part.start..part.start, open, cx);
+                    edits.push((part.end..part.end, close));
+                    edits.push((part.start..part.start, open));
                 }
             }
+        }
+        if self.touches_pending_any(&edits) {
+            return self.refuse_pending(cx);
+        }
+        self.push_undo(true);
+        for (range, text) in edits {
+            self.splice(range, text, cx);
         }
         // Where the first and the last text land: each part moves by what the signs before it added.
         let (mut shift, mut moved) = (0isize, Vec::new());

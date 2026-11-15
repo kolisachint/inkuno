@@ -205,7 +205,15 @@ impl Editor {
             Choice::Name(name) => {
                 let name = name.to_string();
                 let closed = self.content[c..].starts_with("]]");
-                self.edit(start..c, &format!("{name}]]"), cx);
+                let text = format!("{name}]]");
+                // Both splices are checked first: the name and the closing brackets go, or neither.
+                if self.touches_pending(&(start..c), &text)
+                    || (closed && self.touches_pending(&(c..c + 2), ""))
+                {
+                    self.refuse_pending(cx);
+                    return true;
+                }
+                self.edit(start..c, &text, cx);
                 if closed {
                     let end = self.cursor();
                     self.splice(end..end + 2, "", cx);
@@ -213,28 +221,31 @@ impl Editor {
             }
             // The day becomes a link to its daily note, created when first opened.
             Choice::Date(_, _, date) => {
+                let text = format!("[[{}]]", crate::lang::date_name(date));
+                if self.touches_pending(&(start - 1..c), &text) {
+                    self.refuse_pending(cx);
+                    return true;
+                }
                 self.push_undo(true);
-                self.edit(
-                    start - 1..c,
-                    &format!("[[{}]]", crate::lang::date_name(date)),
-                    cx,
-                );
+                self.edit(start - 1..c, &text, cx);
             }
             Choice::Command(&(name, _, _, before, after)) => {
                 let slash = start - 1;
-                self.push_undo(true);
-                if name == "table" {
-                    self.edit(slash..c, "", cx);
-                    self.grid = Some((3, 3));
-                    self.grid_typed.clear();
-                    return true;
-                }
                 // The front matter goes at the top of the note, wherever it is asked for; if it is already there,
                 // the cursor goes to it. Either way it waits between the tag brackets.
                 if name == "meta" {
+                    let front = "---\ntags: []\naliases: []\n---\n";
+                    let adds = md::front_matter(&self.content) == 0;
+                    if self.touches_pending(&(slash..c), "")
+                        || (adds && self.touches_pending(&(0..0), front))
+                    {
+                        self.refuse_pending(cx);
+                        return true;
+                    }
+                    self.push_undo(true);
                     self.edit(slash..c, "", cx);
-                    if md::front_matter(&self.content) == 0 {
-                        self.edit(0..0, "---\ntags: []\naliases: []\n---\n", cx);
+                    if adds {
+                        self.edit(0..0, front, cx);
                     }
                     let block = &self.content[..md::front_matter(&self.content)];
                     let at = block
@@ -245,11 +256,24 @@ impl Editor {
                 }
                 // Today's date is written where it is asked for.
                 if name == "date" {
-                    self.edit(
-                        slash..c,
-                        &crate::lang::date_name(crate::platform::clock::today()),
-                        cx,
-                    );
+                    let today = crate::lang::date_name(crate::platform::clock::today());
+                    if self.touches_pending(&(slash..c), &today) {
+                        self.refuse_pending(cx);
+                        return true;
+                    }
+                    self.push_undo(true);
+                    self.edit(slash..c, &today, cx);
+                    return true;
+                }
+                if name == "table" {
+                    if self.touches_pending(&(slash..c), "") {
+                        self.refuse_pending(cx);
+                        return true;
+                    }
+                    self.push_undo(true);
+                    self.edit(slash..c, "", cx);
+                    self.grid = Some((3, 3));
+                    self.grid_typed.clear();
                     return true;
                 }
                 // A link goes in the sentence; everything else starts its own line.
@@ -262,7 +286,13 @@ impl Editor {
                 } else {
                     "\n"
                 };
-                self.edit(slash..c, &format!("{lead}{before}{after}{tail}"), cx);
+                let text = format!("{lead}{before}{after}{tail}");
+                if self.touches_pending(&(slash..c), &text) {
+                    self.refuse_pending(cx);
+                    return true;
+                }
+                self.push_undo(true);
+                self.edit(slash..c, &text, cx);
                 self.move_to(slash + lead.len() + before.len(), cx);
             }
         }

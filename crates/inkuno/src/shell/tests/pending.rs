@@ -298,3 +298,161 @@ fn the_hint_counts_the_changes_and_moves_the_caret(cx: &mut TestAppContext) {
     );
     let _ = fs::remove_dir_all(root);
 }
+
+const MOVED: &str = "Caret moved to the next change. Repeat to accept or reject it.";
+
+#[gpui::test]
+fn a_first_press_outside_a_change_only_moves_the_caret(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-first-press", TWO, cx);
+    put(&shell, cx, 0);
+    cx.dispatch_action(editor::AcceptChange);
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        TWO,
+        "nothing is accepted by the first press"
+    );
+    assert!(says(&shell, cx, MOVED), "the move is said");
+    let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
+    assert_eq!(
+        caret,
+        TWO.find("{--").unwrap(),
+        "the caret is in the first change"
+    );
+    cx.dispatch_action(editor::AcceptChange);
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        pending::accept(TWO, 0),
+        "the second press accepts it"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_first_press_after_the_last_change_wraps_to_the_first(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-wrap", TWO, cx);
+    put(&shell, cx, TWO.len());
+    cx.dispatch_action(editor::RejectChange);
+    settle(cx);
+    assert_eq!(text(&shell, cx), TWO);
+    let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
+    assert_eq!(
+        caret,
+        TWO.find("{--").unwrap(),
+        "the caret wraps to the first change"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_comment_outside_a_change_only_moves_the_caret(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-comment-first", TWO, cx);
+    put(&shell, cx, 0);
+    cx.dispatch_action(editor::CommentChange);
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        TWO,
+        "no comment box opens for the first press"
+    );
+    assert!(says(&shell, cx, MOVED));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_comment_finds_its_change_again_after_an_outside_edit_moved_it(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-comment-moved", TWO, cx);
+    put(&shell, cx, TWO.find("deux").unwrap() + 1);
+    cx.dispatch_action(editor::CommentChange);
+    settle(cx);
+    // While the prompt is open, an outside edit removes the first change: the second is now first.
+    let first = pending::areas(TWO)[0].range.clone();
+    let edit = (first, String::new());
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.absorb(std::slice::from_ref(&edit), cx))
+    });
+    settle(cx);
+    cx.simulate_input("à relire");
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    let marked = text(&shell, cx);
+    assert!(marked.contains("{==deux==}{>>à relire<<}"), "{marked}");
+    assert!(
+        !marked.contains("one"),
+        "the first change went away: {marked}"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_comment_whose_change_is_gone_changes_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-comment-gone", TWO, cx);
+    put(&shell, cx, TWO.find("deux").unwrap() + 1);
+    cx.dispatch_action(editor::CommentChange);
+    settle(cx);
+    // The outside edit takes the change away while the prompt is open.
+    let second = pending::areas(TWO)[1].range.clone();
+    let edit = (second, String::new());
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.absorb(std::slice::from_ref(&edit), cx))
+    });
+    settle(cx);
+    let before = text(&shell, cx);
+    cx.simulate_input("trop tard");
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert_eq!(text(&shell, cx), before, "nothing is commented");
+    assert!(says(
+        &shell,
+        cx,
+        "That change is gone or changed: nothing was commented."
+    ));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_style_over_lines_with_a_change_is_all_or_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-style", NOTE, cx);
+    // From the kept line into the added line: the kept word would be bold, the added one is refused.
+    let from = NOTE.find("keep").unwrap();
+    let len = NOTE.find("new").unwrap() + 1 - from;
+    put(&shell, cx, from);
+    cx.simulate_keystrokes(&"shift-right ".repeat(len));
+    cx.dispatch_action(editor::Bold);
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        NOTE,
+        "no sign is put on the kept line alone"
+    );
+    assert!(says(&shell, cx, REFUSED));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_refused_comment_takes_no_undo_step(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-undo", NOTE, cx);
+    put(&shell, cx, NOTE.find("keep").unwrap() + 4);
+    cx.simulate_input("y");
+    settle(cx);
+    let typed = NOTE.replace("keep\n", "keepy\n");
+    assert_eq!(text(&shell, cx), typed);
+    // The comment of an added line is refused: it must not be a step of the undo history.
+    put(&shell, cx, NOTE.find("new").unwrap() + 1);
+    cx.dispatch_action(editor::Comment);
+    settle(cx);
+    assert_eq!(text(&shell, cx), typed);
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        NOTE,
+        "one undo takes back the letter only"
+    );
+    let _ = fs::remove_dir_all(root);
+}

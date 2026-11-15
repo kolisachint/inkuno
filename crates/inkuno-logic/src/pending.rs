@@ -16,9 +16,10 @@
 //! line stands alone: its four strings are the only lines that count as marks. Pure: no disk here.
 //!
 //! Line breaks at the end of a text: a text may lack its final line break. A marker line that ends
-//! the whole text has no line break, and the line break written just before it is not content: it
-//! is taken off again on accept and reject. Where a line break had to be added between two lines
-//! (a content line without one, or a line that follows an unbroken line), it stays in the output.
+//! the whole text has no line break, and the line break written just before it (`\n`, or `\r\n` in
+//! a CRLF text) is not content: it is taken off again on accept and reject. Where a line break had
+//! to be added between two lines (a content line without one, or a line that follows an unbroken
+//! line), it stays in the output.
 //!
 //! Known limit: a text without a final line break that a change touches at its end gets one break
 //! more on reject, when the change also has an added block. The same marks come from the text with
@@ -225,22 +226,50 @@ pub fn area_at(text: &str, offset: usize) -> Option<usize> {
         .position(|area| area.range.start <= offset && offset < area.range.end)
 }
 
-/// Whether an edit of the bytes `range` would change any byte of an area, marker lines included.
-/// An empty range is an insertion point: inserting exactly at an area's start or end is allowed.
-pub fn touches(text: &str, range: Range<usize>) -> bool {
-    touches_any(&areas(text), range)
+/// Whether a line break starts `text`: `\n` or `\r\n`.
+fn starts_with_break(text: &str) -> bool {
+    text.starts_with('\n') || text.starts_with("\r\n")
 }
 
-/// `touches` for areas already read from the text (the editor keeps them for each version of
-/// its text): whether an edit of `range` changes a byte of any of `found`.
-pub fn touches_any(found: &[Area], range: Range<usize>) -> bool {
-    found.iter().any(|area| {
+/// Whether the edit that replaces the bytes `range` of `text` by `inserted` is refused. The one
+/// rule of the note: the editor and the command line both ask it, and nothing else decides.
+///
+/// Refused when the edit changes a byte of an area, marker lines included. An edit that only
+/// meets an area's edge is refused when it would leave a marker line without its own line:
+/// - it ends where the area starts (an insertion, or a deletion, right before it): `inserted`
+///   must end with a line break, or be empty with `range` starting a line (or the text);
+/// - it starts where the area ends: the area's last line must keep its line end, so the area
+///   must end with a line break, or `inserted` must start with one.
+///
+/// An insertion strictly inside an area is refused; an edit elsewhere is allowed.
+pub fn refuses(text: &str, range: Range<usize>, inserted: &str) -> bool {
+    if range.is_empty() && inserted.is_empty() {
+        return false;
+    }
+    areas(text).iter().any(|area| {
         let r = &area.range;
-        if range.is_empty() {
+        let changes = if range.is_empty() {
             r.start < range.start && range.start < r.end
         } else {
             range.start < r.end && r.start < range.end
+        };
+        if changes {
+            return true;
         }
+        if range.end == r.start {
+            let line_start = range.start == 0 || text[..range.start].ends_with('\n');
+            let kept = inserted.ends_with('\n') || (inserted.is_empty() && line_start);
+            if !kept {
+                return true;
+            }
+        }
+        if range.start == r.end {
+            let kept = text[r.clone()].ends_with('\n') || starts_with_break(inserted);
+            if !kept {
+                return true;
+            }
+        }
+        false
     })
 }
 
@@ -530,61 +559,149 @@ mod tests {
         assert_eq!(area_at(text, text.len()), None);
     }
 
-    #[test]
-    fn an_edit_inside_an_area_touches_it() {
-        let text = "a\n{++\nxyz\n++}\nb\n";
-        let inside = text.find("yz").unwrap();
-        assert!(touches(text, inside..inside + 1));
-        assert!(touches(text, inside..inside));
+    /// Where `needle` first occurs in `text`.
+    fn at(text: &str, needle: &str) -> usize {
+        text.find(needle).unwrap()
     }
 
     #[test]
-    fn an_edit_on_a_marker_line_touches_the_area() {
+    fn an_edit_inside_an_area_is_refused() {
         let text = "a\n{++\nxyz\n++}\nb\n";
-        let mark = text.find("++}").unwrap();
-        assert!(touches(text, mark..mark + 1));
-        let open = text.find("{++").unwrap();
-        assert!(touches(text, open..open + 1));
+        let inside = at(text, "yz");
+        assert!(refuses(text, inside..inside + 1, "q"));
+        assert!(refuses(text, inside..inside, "q"));
     }
 
     #[test]
-    fn an_insertion_at_an_area_edge_does_not_touch_it() {
+    fn an_edit_of_a_marker_line_is_refused() {
         let text = "a\n{++\nxyz\n++}\nb\n";
-        let start = text.find("{++").unwrap();
-        let end = text.find("b\n").unwrap();
-        assert!(!touches(text, start..start));
-        assert!(!touches(text, end..end));
-        assert!(!touches(text, 0..start));
-        assert!(!touches(text, end..text.len()));
+        let mark = at(text, "++}");
+        assert!(refuses(text, mark..mark + 1, "+"));
+        let open = at(text, "{++");
+        assert!(refuses(text, open..open + 1, "{"));
     }
 
     #[test]
-    fn an_edit_that_only_meets_an_area_edge_does_not_touch_it() {
+    fn a_letter_typed_at_the_start_of_the_marker_line_is_refused() {
         let text = "a\n{++\nxyz\n++}\nb\n";
-        let start = text.find("{++").unwrap();
-        assert!(!touches(text, 0..start));
-        let end = text.find("b\n").unwrap();
-        assert!(!touches(text, end..end + 1));
+        let start = at(text, "{++");
+        assert!(refuses(text, start..start, "x"));
     }
 
     #[test]
-    fn touches_any_gives_what_touches_on_the_areas_read_once() {
+    fn a_line_break_typed_at_the_start_of_the_marker_line_is_allowed() {
         let text = "a\n{++\nxyz\n++}\nb\n";
-        let found = areas(text);
-        let inside = text.find("yz").unwrap();
-        assert!(touches_any(&found, inside..inside + 1));
-        assert!(!touches_any(&found, 0..1));
-        assert!(!touches_any(&[], inside..inside + 1));
+        let start = at(text, "{++");
+        assert!(!refuses(text, start..start, "\n"));
+        assert!(!refuses(text, start..start, "\r\n"));
     }
 
     #[test]
-    fn an_insertion_in_plain_text_does_not_touch_any_area() {
-        let text = "a\n{++\nx\n++}\nb\n";
-        assert!(!touches(
-            text,
-            text.find('b').unwrap()..text.find('b').unwrap()
-        ));
-        assert!(!touches("plain\n", 2..2));
+    fn a_letter_typed_on_the_line_above_the_area_is_allowed() {
+        let text = "a\n{++\nxyz\n++}\nb\n";
+        assert!(!refuses(text, 1..1, "x"));
+    }
+
+    #[test]
+    fn a_letter_typed_after_the_area_line_break_is_allowed() {
+        let text = "a\n{++\nxyz\n++}\nb\n";
+        let after = at(text, "b\n");
+        assert!(!refuses(text, after..after, "x"));
+    }
+
+    #[test]
+    fn a_letter_typed_at_the_end_without_a_final_break_is_refused() {
+        let text = "a\n{++\nx\n++}";
+        assert!(refuses(text, text.len()..text.len(), "x"));
+        assert!(refuses(text, text.len()..text.len(), "y z"));
+    }
+
+    #[test]
+    fn a_line_break_typed_at_the_end_without_a_final_break_is_allowed() {
+        let text = "a\n{++\nx\n++}";
+        assert!(!refuses(text, text.len()..text.len(), "\n"));
+        assert!(!refuses(text, text.len()..text.len(), "\n\nfoo\n"));
+        assert!(!refuses(text, text.len()..text.len(), "\r\nfoo"));
+    }
+
+    #[test]
+    fn a_letter_typed_at_the_end_with_a_final_break_is_allowed() {
+        let text = "a\n{++\nx\n++}\n";
+        assert!(!refuses(text, text.len()..text.len(), "x"));
+    }
+
+    #[test]
+    fn a_note_that_starts_with_an_area_refuses_a_letter_at_byte_zero() {
+        let text = "{++\nx\n++}\nb\n";
+        assert!(refuses(text, 0..0, "y"));
+        assert!(!refuses(text, 0..0, "y\n"));
+    }
+
+    #[test]
+    fn deleting_the_whole_line_above_an_area_is_allowed() {
+        let text = "a\nb\n{++\nx\n++}\n";
+        let line = at(text, "b\n")..at(text, "{++");
+        assert!(!refuses(text, line, ""));
+    }
+
+    #[test]
+    fn deleting_the_break_of_the_line_above_an_area_is_refused() {
+        let text = "a\nb\n{++\nx\n++}\n";
+        let brk = at(text, "\n{++");
+        assert!(refuses(text, brk..brk + 1, ""));
+    }
+
+    #[test]
+    fn replacing_the_line_above_an_area_keeping_its_break_is_allowed() {
+        let text = "a\nb\n{++\nx\n++}\n";
+        let line = at(text, "b\n")..at(text, "{++");
+        assert!(!refuses(text, line.clone(), "c\n"));
+        assert!(refuses(text, line, "c"));
+    }
+
+    #[test]
+    fn an_edit_elsewhere_in_the_note_is_allowed() {
+        let text = "a\n{++\nxyz\n++}\nb\n";
+        assert!(!refuses(text, 0..0, "y"));
+        let b = at(text, "b\n");
+        assert!(!refuses(text, b..b + 1, "c"));
+    }
+
+    #[test]
+    fn an_edit_that_spans_an_area_is_refused() {
+        let text = "a\n{++\nxyz\n++}\nb\n";
+        assert!(refuses(text, 0..text.len(), ""));
+    }
+
+    #[test]
+    fn a_crlf_text_keeps_its_marker_lines_alone() {
+        let text = "a\r\n{++\r\nx\r\n++}\r\nb\r\n";
+        let start = at(text, "{++");
+        assert!(refuses(text, start..start, "y"));
+        assert!(!refuses(text, start..start, "y\r\n"));
+        let after = at(text, "b\r\n");
+        assert!(!refuses(text, after..after, "c"));
+        assert!(!refuses(text, 0..start, ""));
+    }
+
+    #[test]
+    fn a_crlf_text_without_a_final_break_keeps_its_line_end() {
+        let text = "a\r\n{++\r\nx\r\n++}";
+        assert!(refuses(text, text.len()..text.len(), "x"));
+        assert!(!refuses(text, text.len()..text.len(), "\r\nfoo"));
+    }
+
+    #[test]
+    fn an_empty_edit_is_never_refused() {
+        let text = "a\n{++\nxyz\n++}";
+        assert!(!refuses(text, 2..2, ""));
+        assert!(!refuses(text, text.len()..text.len(), ""));
+    }
+
+    #[test]
+    fn a_note_without_areas_refuses_nothing() {
+        assert!(!refuses("plain\n", 2..2, "x"));
+        assert!(!refuses("", 0..0, "x"));
     }
 
     #[test]

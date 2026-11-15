@@ -42,6 +42,10 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Pending changes: a renumbering or a table realign that would change a pending change is left out silently; the numbers or the alignment wait for accept or reject (`views/editor/edit.rs`, `renumber`; `table.rs`, `realign`).
 - Pending changes: copy of the whole note (`app::CopyAll`, `shell/notes.rs`) copies the marker lines as they are: the app has no reading view or export that resolves them.
 - Pending changes: a text that has no final line break gets one more break on reject when a change is at its end (`crates/inkuno-logic/src/pending.rs`, module doc).
+- Pending changes: marker lines typed by hand, or shown in a note that documents CriticMarkup, count as pending areas, also inside a code fence: expected, a fence is not scanned, or the marks are escaped (`crates/inkuno-logic/src/pending.rs`, `areas`).
+- Pending changes: `inkuno move` rewriting a `[[link]]` inside a pending area is not guarded: expected, the move refuses that rewrite, as `edit` does (`crates/inkuno/src/cli/ops.rs`, `rename_note`, `relink`).
+- Pending changes: `append --under` into a section that holds a pending area is covered only by the general rule (`crates/inkuno/src/cli/ops.rs`, `append_under`): expected, a section with a change is refused by name.
+- Pending changes: the look of the tints, of the marker dimming and of the hint is not yet checked on a real screen (`views/editor/paint.rs`, `shell/changes.rs`).
 
 - Revisions: `inkuno rev` on a vault that has no `.inkuno` folder and is not open in the app treats the note's own folder as the vault, so history can be split by folder; the app creates `.inkuno` only at the first version. Create it when a vault opens, or document it.
 - Revisions: restoring from the trash brings the history back only when the trash holds the same name; a trash entry removed by hand breaks the pairing (`platform/revisions.rs`, `restore_along`).
