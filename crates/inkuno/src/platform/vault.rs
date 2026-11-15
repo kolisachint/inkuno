@@ -411,31 +411,54 @@ fn matters(root: &Path, event: &Event) -> bool {
 }
 
 /// Whether a system event means the vault must be reread: an error (events may be lost), or a
-/// change that matters outside the app's own folders (a scratch note saved is no vault change).
-fn reread_for(root: &Path, skip: &[PathBuf], event: &notify::Result<Event>) -> bool {
+/// change that matters outside the app's own folders (a scratch note saved is no vault change) and
+/// outside the revisions (`history`, see `history_folders`: they are no vault change either).
+fn reread_for(
+    root: &Path,
+    skip: &[PathBuf],
+    history: &[PathBuf],
+    event: &notify::Result<Event>,
+) -> bool {
     match event {
         Err(_) => true,
         Ok(event) => {
-            let own = !event.paths.is_empty() && event.paths.iter().all(|p| under(p, skip));
+            let own = !event.paths.is_empty()
+                && event
+                    .paths
+                    .iter()
+                    .all(|p| under(p, skip) || under(p, history));
             matters(root, event) && !own
         }
     }
 }
 
-/// Whether a system event touches the revisions (the vault's `.inkuno/revisions`, the scratch
-/// folder's `.revisions`): `inkuno rev save` writes them from a terminal, and they are hidden, so
-/// `matters` ignores them. Such an event marks the Versions list stale, and nothing else is reread.
+/// The revision folders of the vault (`.inkuno/revisions`) and of the scratch folder (`.revisions`),
+/// each as given and as the disk spells it (canonical: on macOS `/var` is `/private/var`, and the
+/// system reports events in that spelling even when the vault was opened through a symbolic link).
+/// Built once, when the watch starts: the event callback must not touch the disk.
+fn history_folders(root: &Path) -> Vec<PathBuf> {
+    let mut folders: Vec<PathBuf> = Vec::new();
+    for folder in [
+        root.join(revision::VAULT_DIR),
+        scratch::dir().join(revision::SCRATCH_DIR),
+    ] {
+        for spelling in [real(&folder), folder] {
+            if !folders.contains(&spelling) {
+                folders.push(spelling);
+            }
+        }
+    }
+    folders
+}
+
+/// Whether a system event touches the revisions, in the `history` folders (see `history_folders`):
+/// `inkuno rev save` writes them from a terminal, and they are hidden, so `matters` ignores them.
+/// Such an event marks the Versions list stale, and nothing else is reread.
 /// An error may have lost one, so it counts too.
-fn revisions_moved(root: &Path, event: &notify::Result<Event>) -> bool {
+fn revisions_moved(history: &[PathBuf], event: &notify::Result<Event>) -> bool {
     match event {
         Err(_) => true,
-        Ok(event) => {
-            let folders = [
-                root.join(revision::VAULT_DIR),
-                scratch::dir().join(revision::SCRATCH_DIR),
-            ];
-            event.paths.iter().any(|p| under(p, &folders))
-        }
+        Ok(event) => event.paths.iter().any(|p| under(p, history)),
     }
 }
 
@@ -489,11 +512,12 @@ pub fn watch(
 ) -> Option<RecommendedWatcher> {
     let base = root.to_path_buf();
     let skip = app_folders_in(root);
+    let history_dirs = history_folders(root);
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
-        if revisions_moved(&base, &event) {
+        if revisions_moved(&history_dirs, &event) {
             history.raise();
         }
-        if reread_for(&base, &skip, &event) {
+        if reread_for(&base, &skip, &history_dirs, &event) {
             changed.raise();
         }
     })
@@ -1544,19 +1568,53 @@ mod tests {
     fn a_revision_written_from_a_terminal_only_marks_the_versions_stale() {
         use notify::{EventKind, event::CreateKind};
         let root = Path::new("/v");
+        let history = history_folders(root);
         let event =
             |path: &str| Event::new(EventKind::Create(CreateKind::File)).add_path(root.join(path));
         // `inkuno rev save` writes .inkuno/revisions/Plan.md/0002.md: the history signal, and no reread.
         let saved = event(".inkuno/revisions/Plan.md/0002.md");
-        assert!(revisions_moved(root, &Ok(saved.clone())));
+        assert!(revisions_moved(&history, &Ok(saved.clone())));
         assert!(!matters(root, &saved));
-        assert!(!reread_for(root, &[], &Ok(saved)));
+        assert!(!reread_for(root, &[], &history, &Ok(saved)));
         // A note, a hidden folder of another kind, and the vault's own bin: not revisions.
-        assert!(!revisions_moved(root, &Ok(event("Plan.md"))));
-        assert!(!revisions_moved(root, &Ok(event(".trash/a.md"))));
-        assert!(!revisions_moved(root, &Ok(event(".inkuno/trash/a.md"))));
+        assert!(!revisions_moved(&history, &Ok(event("Plan.md"))));
+        assert!(!revisions_moved(&history, &Ok(event(".trash/a.md"))));
+        assert!(!revisions_moved(&history, &Ok(event(".inkuno/trash/a.md"))));
         // An error may have lost a revision: the list is marked stale.
-        assert!(revisions_moved(root, &Err(notify::Error::generic("lost"))));
+        assert!(revisions_moved(
+            &history,
+            &Err(notify::Error::generic("lost"))
+        ));
+    }
+
+    /// The system reports a vault opened through a symbolic link under its canonical spelling
+    /// (macOS: `/private/var` for `/var`). Its revisions must be recognised in that spelling too,
+    /// and never raise a reread of the vault.
+    #[cfg(unix)]
+    #[test]
+    fn a_revision_reported_under_its_canonical_spelling_is_recognised() {
+        use notify::{EventKind, event::CreateKind};
+        let base = env::temp_dir().join(format!("inkuno-rev-link-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let vault = base.join("vault");
+        fs::create_dir_all(vault.join(revision::VAULT_DIR).join("Plan.md")).unwrap();
+        let link = base.join("link");
+        std::os::unix::fs::symlink(&vault, &link).unwrap();
+        let canonical = fs::canonicalize(&vault).unwrap();
+        // Given as the link: the folder in both spellings, once each when they are the same.
+        let history = history_folders(&link);
+        assert!(history.contains(&link.join(revision::VAULT_DIR)));
+        assert!(history.contains(&canonical.join(revision::VAULT_DIR)));
+        let created = EventKind::Create(CreateKind::File);
+        let revision_event = Event::new(created)
+            .add_path(canonical.join(revision::VAULT_DIR).join("Plan.md/0002.md"));
+        assert!(revisions_moved(&history, &Ok(revision_event.clone())));
+        assert!(!reread_for(&link, &[], &history, &Ok(revision_event)));
+        // A note reached under the canonical spelling is still a vault change, and no revision.
+        let note = Event::new(created).add_path(canonical.join("Plan.md"));
+        assert!(!revisions_moved(&history, &Ok(note.clone())));
+        assert!(reread_for(&link, &[], &history, &Ok(note)));
+        let _ = fs::remove_dir_all(&base);
     }
 
     /// A symbolic link that points back up to the vault, or a second link to an already
@@ -1788,12 +1846,13 @@ mod tests {
         let skip = app_folders_in(&root);
         let created = EventKind::Create(CreateKind::File);
         let scratch_write = Event::new(created).add_path(app.join("scratch/2026-11-14-103900.md"));
-        assert!(!reread_for(&root, &skip, &Ok(scratch_write)));
+        assert!(!reread_for(&root, &skip, &[], &Ok(scratch_write)));
         let note = Event::new(created).add_path(root.join("plan.md"));
-        assert!(reread_for(&root, &skip, &Ok(note)));
+        assert!(reread_for(&root, &skip, &[], &Ok(note)));
         assert!(reread_for(
             &root,
             &skip,
+            &[],
             &Err(notify::Error::generic("lost"))
         ));
         assert!(is_app_file(&app.join("scratch/2026-11-14-103200.md")));

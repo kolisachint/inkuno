@@ -503,12 +503,39 @@ fn ctrl_enter_outside_a_change_toggles_the_task_and_accepts_nothing(cx: &mut Tes
     let _ = fs::remove_dir_all(root);
 }
 
+/// The change of `NOTE`, markers included.
+const CHANGE: &str = "{--\nold\n--}\n{++\nnew\n++}";
+
+/// Outside a change, `secondary-backspace` (Cmd+Backspace on macOS, Ctrl+Backspace elsewhere) does
+/// not touch the pending change: on macOS it has no binding there, elsewhere it is the word key.
 #[gpui::test]
-fn ctrl_backspace_outside_a_change_deletes_the_word_as_before(cx: &mut TestAppContext) {
-    let (root, shell, cx, _config) = open_note("pending-chord-word", NOTE, cx);
+fn secondary_backspace_outside_a_change_leaves_the_change_pending(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-chord-secondary", NOTE, cx);
     put(&shell, cx, NOTE.find("keep").unwrap() + 4);
     settle(cx);
     cx.simulate_keystrokes("secondary-backspace");
+    settle(cx);
+    assert!(
+        text(&shell, cx).contains(CHANGE),
+        "the change is neither rejected nor altered"
+    );
+    assert!(!says(&shell, cx, REFUSED), "nothing is refused either");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// The word key deletes the word before the caret, outside a change, and the change stays pending.
+/// It is `alt-backspace` on macOS and `ctrl-backspace` elsewhere (`secondary-backspace` there).
+#[gpui::test]
+fn word_backspace_outside_a_change_deletes_the_word_as_before(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-chord-word", NOTE, cx);
+    put(&shell, cx, NOTE.find("keep").unwrap() + 4);
+    settle(cx);
+    let word_key = if cfg!(target_os = "macos") {
+        "alt-backspace"
+    } else {
+        "ctrl-backspace"
+    };
+    cx.simulate_keystrokes(word_key);
     settle(cx);
     assert_eq!(text(&shell, cx), NOTE.replacen("keep", "", 1));
     assert!(
