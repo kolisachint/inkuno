@@ -18,6 +18,7 @@ mod motion;
 mod outline;
 mod panel_rows;
 mod panes;
+mod pending;
 mod revisions;
 mod save_close;
 mod scratch;

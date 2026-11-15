@@ -597,7 +597,7 @@ impl Editor {
             && matches!(part, Part::Col(_) | Part::Row(_) | Part::Corner)
         {
             self.pick_part(table, part, cx);
-            return cx.emit(EditorEvent::Menu(e.position, None, false, false));
+            return cx.emit(EditorEvent::Menu(e.position, None, false, false, false));
         }
         let i = self.index_at(e.position);
         if !(self.sel.start..=self.sel.end).contains(&i) {
@@ -697,11 +697,13 @@ impl Editor {
         let commented = md::comments(&self.content[lr])
             .iter()
             .any(|(whole, ..)| (whole.start..=whole.end).contains(&col));
+        let change = self.pending.iter().any(|area| area.range.contains(&i));
         cx.emit(EditorEvent::Menu(
             at,
             link.map(|(_, link)| link),
             commented,
             keys,
+            change,
         ));
     }
 

@@ -1,0 +1,300 @@
+//! Pending changes in the note: an agent's proposed lines wait between marks until the person
+//! accepts or rejects each one. Typing in them is refused with a message; accept, reject and
+//! comment act on them, one undo step each; an outside change still lands.
+
+use super::*;
+use crate::logic::pending;
+
+/// One kept line, one change (a removed and an added line), one kept line after it.
+const NOTE: &str = "# Plan\n\nkeep\n{--\nold\n--}\n{++\nnew\n++}\nend\n";
+/// Two changes, one after the other, to act on all of them.
+const TWO: &str = "a\n{--\none\n--}\n{++\nun\n++}\nb\n{++\ndeux\n++}\nc\n";
+const REFUSED: &str = "This change is pending: accept or reject it first.";
+
+/// Lets the window draw what changed, then the tasks run.
+fn settle(cx: &mut gpui::VisualTestContext) {
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
+}
+
+/// A note with `content` open, its editor focused.
+fn open_note<'a>(
+    name: &str,
+    content: &str,
+    cx: &'a mut TestAppContext,
+) -> (
+    PathBuf,
+    Entity<Shell>,
+    &'a mut gpui::VisualTestContext,
+    std::sync::MutexGuard<'static, ()>,
+) {
+    let (root, shell, cx, config) = start(cx, name);
+    let path = root.join("Plan.md");
+    fs::write(&path, content).unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| s.open_from_nav(&path, window, cx));
+    cx.simulate_resize(size(px(1400.), px(900.)));
+    cx.run_until_parked();
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
+    settle(cx);
+    (root, shell, cx, config)
+}
+
+fn text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> String {
+    shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
+}
+
+/// Puts the caret at byte `at`.
+fn put(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
+    });
+}
+
+/// Whether the shell shows the message `what` now.
+fn says(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, what: &str) -> bool {
+    shell.read_with(cx, |s, _| s.toasts.iter().any(|t| t.text == what))
+}
+
+#[gpui::test]
+fn typing_inside_a_change_changes_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-typing", NOTE, cx);
+    // In an added line, in a removed line, and on each of the four marker lines.
+    for needle in ["new", "old", "{--", "--}", "{++", "++}"] {
+        put(&shell, cx, NOTE.find(needle).unwrap() + 1);
+        cx.simulate_input("x");
+        settle(cx);
+        assert_eq!(
+            text(&shell, cx),
+            NOTE,
+            "typing in {needle:?} changes nothing"
+        );
+    }
+    assert!(says(&shell, cx, REFUSED), "the refusal is said");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn typing_at_the_edges_of_a_change(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-edges", NOTE, cx);
+    // Before the change: at the end of the kept line, its break stays where it is.
+    put(&shell, cx, NOTE.find("{--").unwrap() - 1);
+    cx.simulate_input("x");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE.replace("keep\n", "keepx\n"));
+    // After the change: at the start of the kept line that follows it.
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE);
+    put(&shell, cx, NOTE.find("end").unwrap());
+    cx.simulate_input("x");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE.replace("end", "xend"));
+    // At the start of the first marker line, a typed letter would be glued to the mark: refused.
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    put(&shell, cx, NOTE.find("{--").unwrap());
+    cx.simulate_input("x");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE, "no letter glued to a mark");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn enter_at_the_edges_of_a_change_works(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-enter", NOTE, cx);
+    // At the end of the kept line before the change: a line break is added there.
+    put(&shell, cx, NOTE.find("{--").unwrap() - 1);
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE.replace("keep\n", "keep\n\n"));
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    // At the start of the kept line after the change: the same.
+    put(&shell, cx, NOTE.find("end").unwrap());
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE.replace("end\n", "\nend\n"));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn backspace_after_a_change_is_refused(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-backspace", NOTE, cx);
+    // At the start of the kept line after the change: the break of its last mark would go.
+    put(&shell, cx, NOTE.find("end").unwrap());
+    cx.simulate_keystrokes("backspace");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE);
+    assert!(says(&shell, cx, REFUSED));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn paste_and_cut_over_a_change_are_refused(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-cut", NOTE, cx);
+    // A selection from the kept line into the added line: it crosses the change.
+    let from = NOTE.find("keep").unwrap();
+    let len = NOTE.find("new").unwrap() + 1 - from;
+    put(&shell, cx, from);
+    cx.simulate_keystrokes(&"shift-right ".repeat(len));
+    cx.update(|_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string("Z".into())));
+    cx.simulate_keystrokes("secondary-v");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE, "paste refused");
+    cx.simulate_keystrokes("secondary-x");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE, "cut refused");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn replace_all_is_refused_when_a_match_is_in_a_change(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) =
+        open_note("pending-replace", "a one\n{++\na two\n++}\na three\n", cx);
+    cx.simulate_keystrokes("secondary-r");
+    cx.simulate_input("a");
+    cx.simulate_keystrokes("secondary-r");
+    cx.simulate_input("b");
+    cx.simulate_keystrokes("secondary-enter");
+    settle(cx);
+    assert_eq!(text(&shell, cx), "a one\n{++\na two\n++}\na three\n");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn replace_all_works_outside_the_changes(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) =
+        open_note("pending-replace-ok", "a one\n{++\nzzz\n++}\na three\n", cx);
+    cx.simulate_keystrokes("secondary-r");
+    cx.simulate_input("a");
+    cx.simulate_keystrokes("secondary-r");
+    cx.simulate_input("b");
+    cx.simulate_keystrokes("secondary-enter");
+    settle(cx);
+    assert_eq!(text(&shell, cx), "b one\n{++\nzzz\n++}\nb three\n");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn accept_keeps_the_added_lines_and_one_undo_brings_the_change_back(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-accept", NOTE, cx);
+    put(&shell, cx, NOTE.find("new").unwrap() + 1);
+    cx.dispatch_action(editor::AcceptChange);
+    settle(cx);
+    assert_eq!(text(&shell, cx), "# Plan\n\nkeep\nnew\nend\n");
+    let at = "# Plan\n\nkeep\n".len();
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).span()),
+        at..at,
+        "the caret is where the change was"
+    );
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn reject_keeps_the_removed_lines(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-reject", NOTE, cx);
+    put(&shell, cx, NOTE.find("old").unwrap());
+    cx.dispatch_action(editor::RejectChange);
+    settle(cx);
+    assert_eq!(text(&shell, cx), "# Plan\n\nkeep\nold\nend\n");
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), NOTE);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn accept_and_reject_all_are_the_logic_of_the_whole_note(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-all", TWO, cx);
+    cx.dispatch_action(editor::AcceptAllChanges);
+    settle(cx);
+    assert_eq!(text(&shell, cx), pending::accept_all(TWO));
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), TWO);
+    cx.dispatch_action(editor::RejectAllChanges);
+    settle(cx);
+    assert_eq!(text(&shell, cx), pending::reject_all(TWO));
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), TWO, "one undo step each");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn with_no_change_the_actions_change_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-none", "# Plan\n\nkeep\n", cx);
+    cx.dispatch_action(editor::AcceptChange);
+    settle(cx);
+    assert_eq!(text(&shell, cx), "# Plan\n\nkeep\n");
+    assert!(says(&shell, cx, "No pending change."));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_comment_on_a_change_is_written_and_the_change_stays_pending(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-comment", NOTE, cx);
+    put(&shell, cx, NOTE.find("new").unwrap() + 1);
+    cx.dispatch_action(editor::CommentChange);
+    settle(cx);
+    cx.simulate_input("à relire");
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    let marked = text(&shell, cx);
+    assert!(marked.contains("{==new==}{>>à relire<<}"), "{marked}");
+    assert!(pending::has_pending(&marked), "still pending");
+    assert_eq!(pending::areas(&marked).len(), 1);
+    assert_eq!(
+        pending::reject_all(&marked),
+        "# Plan\n\nkeep\nold\nend\n",
+        "rejected, the person's lines are back"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_outside_change_with_a_pending_change_still_applies(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-outside", NOTE, cx);
+    let at = NOTE.len();
+    let edit = (at..at, "{++\nlu dehors\n++}\n".to_string());
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.absorb(std::slice::from_ref(&edit), cx))
+    });
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        format!("{NOTE}{{++\nlu dehors\n++}}\n"),
+        "the outside text lands"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_hint_counts_the_changes_and_moves_the_caret(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-hint", TWO, cx);
+    assert!(
+        cx.debug_bounds("pending-hint").is_some(),
+        "the hint is drawn"
+    );
+    let at = cx.debug_bounds("pending-hint").expect("drawn").center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    settle(cx);
+    let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
+    assert_eq!(
+        caret,
+        TWO.find("{--").unwrap(),
+        "the caret goes to the first change"
+    );
+    let _ = fs::remove_dir_all(root);
+}

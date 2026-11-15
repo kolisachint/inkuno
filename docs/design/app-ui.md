@@ -800,5 +800,93 @@ Normal 800 is the default (§10.4 lock released for this change).
 ### 16.9 Known limits
 
 - The agent cannot ask before it uses a tool. hoocode's RPC mode has no approval messages (its `app-server`
-  protocol has them). Edits by the assistant wait for the pending-change flow (`cli.md`, planned).
+  protocol has them). Edits by the assistant wait for the pending-change flow, built 2026-11-15 (§17).
 - The prompt box is one field without newlines.
+
+## 17. Pending changes (built 2026-11-15)
+
+> Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The marks are in the note file (`logic/pending.rs`,
+> CriticMarkup in block form); this section is what the editor does with them. The owner decided the
+> no key is bound (§17.5).
+
+- [x] **Propose**, **User approves**: the flow of `revisions.md` (Decisions, 2026-11-14 and 2026-11-15).
+- [x] **Implement**: `views/editor/layout.rs` (`Pend`, `pend_of`), `paint.rs` (the wash), `text_runs` (dim and
+      strike), `ui/theme.rs` (`added`, `removed`), `views/editor/edit.rs` (the guard), `views/editor/changes.rs`
+      (accept, reject, comment), `shell/changes.rs` (the comment prompt and the hint), `shell/menu.rs`.
+- [x] **Test**: `shell/tests/pending.rs` (typing, paste, replace all, accept, reject, comment, an outside change,
+      the hint), `inkuno-logic` `pending.rs`
+      (`touches_any`), `ui/theme.rs` (`pending_changes_show_and_read`, the pair test), `layout.rs`
+      (`a_line_knows_its_pending_change`), `edit.rs` (`the_span_of_a_rewrite…`), `commands.rs` (the five entries).
+
+### 17.1 Drawing
+
+- An **added** line lies on the `added` wash (a green, quiet tint) across the page width, its text as it is.
+- A **removed** line lies on the `removed` wash (red), its text dimmed to `soft` and struck through.
+- The four **marker** lines are dimmed (`dim`). They stay real lines: no line is hidden and no line changes height.
+  They are not drawn smaller (the brief asked for it; the size would change the line geometry, so it is left out).
+- The washes are theme tokens (`Theme::added`, `Theme::removed`), derived as `highlight` is: the strongest step
+  from 22 % down that keeps the text at 4.5:1 on it. They are in the contrast tests of every theme and in both looks.
+- The areas are read once per text change (`Editor::pending`, set in `changed` and `load`), never per frame. Each
+  line's state is part of its styling cache key, so a changed area restyles its lines.
+- Tables and figures inside a change are drawn without the wash (grid rows keep their own paint).
+
+### 17.2 The read-only rule
+
+- The person cannot change a pending change. An edit whose range changes a byte of an area is refused, and nothing
+  changes: `Editor::touches_pending` (range against the cached areas, `pending::touches_any`).
+- An edit that ends where an area starts is also refused, unless its text ends a line: otherwise the line break
+  before the mark goes, or the text is glued to the mark. Typing before a change at the end of the kept line, and
+  Enter there, work; a letter typed at the start of a marker line is refused.
+- A multi-range edit (replace all, shift of several lines, a whole-text rewrite) is refused as a whole when one of
+  its ranges is refused. Replace all checks each match; renumbering that would change a change is left out.
+- Allowed: the caret and the selection enter a change; copy works; undo and redo (`restore`); an outside change
+  (`absorb`, the file watcher and the Assistant); accept, reject and comment (they go through `absorb`, not the guard).
+- The routes that pass the guard: `edit` and `splice` (typing, IME, delete, Enter, paste, replace one), `shift_lines`
+  (Tab), `restyle` (format bar and block turns), `clear_cells`, `realign`/`align_at` and `set_table` (tables),
+  `renumber`, the table branches of Enter, cut (`copy(cut)`, before the clipboard is written), replace all.
+- A refusal emits `EditorEvent::Notice` with `This change is pending: accept or reject it first.`. The shell shows it
+  once while it is on screen (`shell/notes.rs`).
+
+### 17.3 Accept, reject, and undo
+
+- **Accept the change** / **Reject the change** act on the change the caret is in; else the first one after the caret;
+  else the first of the note. **Accept all** / **Reject all** act on every change. With no change, the message is
+  `No pending change.` and nothing changes.
+- The new text comes from `logic::pending` (`accept`, `reject`, `accept_all`, `reject_all`), turned into one splice by
+  `logic::assistant::edit_between`, and applied by `absorb`: one undo step. The note becomes dirty and is saved by the
+  usual debounce. The caret goes to where the change was (its start, or the start of the first change for all).
+- `restore` skips an undo step that left the text as it is, so an edit refused after its undo step was taken does not
+  leave an undo that changes nothing.
+
+### 17.4 Comment on the change
+
+- **Comment on the change** asks for one line in the shell's prompt (`Palette::prompt`, as `Save a version` does).
+  The comment is written by `markdown::comment_on` on the first added line of the change, or on its first removed
+  line when nothing is added: `{==passage==}{>>text<<}`. The passage is that whole line, so it must be unique in the
+  note, or the reason is said and nothing changes (empty line, comment marks already there, passage not unique).
+- The change stays pending. One undo step, through `absorb`.
+
+### 17.5 Where the actions are
+
+- Declared in `views/editor/mod.rs` (`AcceptChange`, `RejectChange`, `AcceptAllChanges`, `RejectAllChanges`,
+  `CommentChange`), handled in `views/editor/render.rs`.
+- Palette: five entries in `inkuno-logic/src/commands.rs` (group Note; icons `check.svg`, `close.svg`,
+  `c-comment.svg`). No default chord: chords need an owner decision. The shortcuts page is unchanged.
+- Right-click menu: `EditorEvent::Menu` carries whether the click is inside a change; then the menu offers the three
+  actions first, on the change under the pointer (`shell/menu.rs`, `views/nav.rs` `Do`).
+
+### 17.6 The hint
+
+- While the note has changes, a quiet pill at the note's foot, left of the corner buttons: `2 changes pending`
+  (`1 change pending`). A click moves the caret to the first change and focuses the note. Not drawn in focus mode.
+  It is drawn over the text like the corner buttons, so it moves no line.
+
+### 17.7 Known limits
+
+- No chords for the five actions.
+- Copy of the whole note (`app::CopyAll`) copies the marker lines as they are: the app has no reading view or export
+  that resolves them.
+- A change at the very end of a text without a final line break gets one break more on reject (the limit of
+  `logic/pending.rs`).
+- A rewrite that would change a change is left out without a message (renumbering): the numbers stay until the
+  change is accepted or rejected.

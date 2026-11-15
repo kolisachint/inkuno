@@ -4,6 +4,8 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Done in the November cleanup
 
+- Pending changes in the app (2026-11-15, `app-ui.md` §17): an added line lies on a green wash, a removed one on a red wash, struck through; typing in a change is refused with a message; accept, reject (one change or all) and comment on a change are one undo step each, from the palette and the right-click menu; a hint at the note's foot counts them. `inkuno write` writes the marks (2026-11-15, `cli.md`). Tests: `shell/tests/pending.rs`, `inkuno-logic` `pending.rs`, `ui/theme.rs`.
+
 - The November trim slices (canvas, tables, obsidian, chrome, sync, deps) are all merged into main.
 - Root `inkuno.ico`, the git-sync illustration and the README save-as-PDF anchor are gone.
 - `ReplaceInVault`, `--capture`/`vault::capture` and the `pane.tool` machinery are cut.
@@ -33,6 +35,13 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Screenshots regeneration.
 
 ## Follow-ups
+
+- Pending changes: no chords for accept, reject, accept all, reject all or comment on a change; the owner decides the keys (`views/editor/mod.rs`, `actions!`).
+- Pending changes: the marker lines are dimmed but not drawn smaller, as the brief asked: a smaller size changes the line geometry (`views/editor/layout.rs`, `text_runs`).
+- Pending changes: tables and figures inside a change get no wash; only plain text lines do (`views/editor/paint.rs`, `Pend::Plain` on grid rows).
+- Pending changes: a renumbering or a table realign that would change a pending change is left out silently; the numbers or the alignment wait for accept or reject (`views/editor/edit.rs`, `renumber`; `table.rs`, `realign`).
+- Pending changes: copy of the whole note (`app::CopyAll`, `shell/notes.rs`) copies the marker lines as they are: the app has no reading view or export that resolves them.
+- Pending changes: a text that has no final line break gets one more break on reject when a change is at its end (`crates/inkuno-logic/src/pending.rs`, module doc).
 
 - Revisions: `inkuno rev` on a vault that has no `.inkuno` folder and is not open in the app treats the note's own folder as the vault, so history can be split by folder; the app creates `.inkuno` only at the first version. Create it when a vault opens, or document it.
 - Revisions: restoring from the trash brings the history back only when the trash holds the same name; a trash entry removed by hand breaks the pairing (`platform/revisions.rs`, `restore_along`).

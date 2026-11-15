@@ -324,6 +324,13 @@ impl Editor {
         let Some(first) = hits.first().map(|(hit, _)| hit.start) else {
             return;
         };
+        // One multi-range edit: a match inside a pending change refuses the whole replacement.
+        if hits
+            .iter()
+            .any(|(hit, with)| self.touches_pending(hit, with))
+        {
+            return self.refuse_pending(cx);
+        }
         let mut text = String::with_capacity(self.content.len());
         let mut done = 0;
         for (hit, with) in &hits {
@@ -334,7 +341,8 @@ impl Editor {
         text.push_str(&self.content[done..]);
         let grown = text.len() as isize - self.content.len() as isize;
         self.last_edit = None;
-        self.splice(0..self.content.len(), &text, cx);
+        // Checked match by match above: the whole note is rewritten, its pending changes untouched.
+        self.splice_now(0..self.content.len(), &text, cx);
         if let Some(span) = self.find.as_mut().and_then(|find| find.span.as_mut()) {
             span.end = span.end.saturating_add_signed(grown);
         }

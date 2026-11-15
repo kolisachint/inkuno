@@ -907,6 +907,10 @@ impl Shell {
         // the docks are hidden). It sits beside the comments bubble, which keeps its place on the left.
         let assistant_btn = (!self.focus_mode).then(|| self.assistant_toggle(cx));
         let corner = assistant_btn.is_some() as usize + talk.is_some() as usize;
+        // The pending changes of the note, said quietly at its foot (none in focus mode).
+        let changes = self.pane().editor.read(cx).pending_changes();
+        let hint =
+            (changes > 0 && !self.focus_mode).then(|| self.pending_hint(changes, corner, cx));
         // The list page closed with input in its filter or one of its cells: nothing
         // receives it anymore, it goes back to the note.
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {
@@ -1142,6 +1146,7 @@ impl Shell {
                     .children(empty)
                     .children(talk)
                     .children(assistant_btn)
+                    .children(hint)
             }
         };
         // While a tab or a file from the tree is dragged, the area that would receive it is tinted:

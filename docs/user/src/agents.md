@@ -159,6 +159,16 @@ unchanged line
 
 Standard input is read only when a command asks for it: `--text -` or `--mermaid -`. Nothing else reads it.
 
+### Accepting, rejecting and commenting
+
+In the note, the lines the agent adds have a green background. The lines it removes have a red background, and they are struck through. The marker lines are dimmed. The note's foot says how many changes are pending. A click there takes you to the first one.
+
+- You cannot type in a pending change. Typing, `Backspace`, paste, cut and replace on its lines are refused, with the message *This change is pending: accept or reject it first.* You can still select and copy. Typing and `Enter` just before or just after the change work.
+- Put the caret in a change. Then, in the command palette (`F10`) or the right-click menu, choose **Accept the change** or **Reject the change**. Accept keeps the added lines and drops the removed ones. Reject does the reverse.
+- **Accept all changes** and **Reject all changes** do this for the whole note.
+- **Comment on the change** asks for one line. It writes the line as a comment on the first added line, and the change stays pending.
+- Each of these is one step for `Ctrl + Z`. There is no key for them yet.
+
 ## What it will not do
 
 - Leave the vault. An absolute path, `..`, or a link that steps outside is refused. Hidden folders are not listed or reached, and a link into one is refused too; `.trash` is reached only through `restore`. The one exception is `comment --file`, which reaches only the file it names.

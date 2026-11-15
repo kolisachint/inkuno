@@ -289,6 +289,8 @@ pub(super) struct Row {
     pub(super) grid: Option<Rc<TableRow>>,
     /// The figure or the picture of the line cannot be read: what is said under it, in place of the picture.
     pub(super) broken: Option<&'static str>,
+    /// Its place in a pending change: the wash of an added or removed line is drawn behind it.
+    pub(super) pend: Pend,
 }
 
 impl Row {
@@ -537,9 +539,39 @@ fn failed(kept: &Figures, key: u64) -> bool {
     kept.get(&key).is_some_and(|(_, drawing)| drawing.is_none())
 }
 
+/// Where a line of the note stands in a pending change (`logic::pending`): an added or a removed
+/// line, one of the four marker lines, or none of them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Pend {
+    #[default]
+    Plain,
+    Added,
+    Removed,
+    /// A marker line (`{++`, `++}`, `{--`, `--}`): it steps back, dimmed.
+    Mark,
+}
+
+/// The pending state of the line that starts at byte `line`, from the areas of the note.
+pub(super) fn pend_of(found: &[crate::logic::pending::Area], line: usize) -> Pend {
+    for area in found {
+        if area.range.start <= line && line < area.range.end {
+            return if area.removed.contains(&line) {
+                Pend::Removed
+            } else if area.added.contains(&line) {
+                Pend::Added
+            } else {
+                Pend::Mark
+            };
+        }
+    }
+    Pend::Plain
+}
+
 /// What, in a line's style, comes from its nature rather than its text.
 pub struct RunStyle {
     pub heading: bool,
+    /// Pending change the line belongs to: a removed line is dimmed and struck through.
+    pub pending: Pend,
     /// The text is `soft` (a level 6 heading).
     pub soft: bool,
     pub italic: bool,
@@ -565,7 +597,9 @@ pub fn text_runs(
         while j < flags.len() && flags[j] == f && marked(j) == m {
             j += 1;
         }
-        let color = if f & md::QUIET != 0 {
+        let color = if style.pending == Pend::Mark {
+            t.dim
+        } else if style.pending == Pend::Removed || f & md::QUIET != 0 {
             t.soft
         } else if f & md::DIM != 0 {
             t.dim
@@ -624,10 +658,12 @@ pub fn text_runs(
                 // a bit of underline in the margin if the underline changes style
                 // right at a wrap.
                 underline,
-                strikethrough: (f & md::STRIKE != 0).then_some(StrikethroughStyle {
-                    thickness: px(1.),
-                    color: Some(color),
-                }),
+                strikethrough: (f & md::STRIKE != 0 || style.pending == Pend::Removed).then_some(
+                    StrikethroughStyle {
+                        thickness: px(1.),
+                        color: Some(color),
+                    },
+                ),
             }
         };
         if (code || slanted)
@@ -1357,6 +1393,7 @@ impl Editor {
                     let (pad, height) =
                         geom.metrics(rank + rows.len() - first_new, false, grid::line_height(&t));
                     rows.push(Row {
+                        pend: Pend::Plain,
                         live: false,
                         start: offset,
                         len: line.len(),
@@ -1491,6 +1528,7 @@ impl Editor {
                         for (k, &(at, text)) in block.iter().enumerate() {
                             let (pad, height) = geom.metrics(k, k + 1 == n, lh);
                             rows.push(Row {
+                                pend: Pend::Plain,
                                 live: false,
                                 start: at,
                                 len: text.len(),
@@ -1575,6 +1613,7 @@ impl Editor {
                 // Typora-style: only the clicked or edited line shows its source (its markers).
                 // A plain cursor move (keyboard, search) does not reveal: it leaves `revealed` alone.
                 let live = self.revealed == Some(offset);
+                let pend = pend_of(&self.pending, offset);
                 let composed = marked
                     .clone()
                     .filter(|m| m.start <= offset + line.len() && m.end >= offset);
@@ -1595,6 +1634,7 @@ impl Editor {
                             header,
                             tinted,
                             foot,
+                            pend,
                         ),
                     )
                         .hash(&mut hasher);
@@ -1756,6 +1796,7 @@ impl Editor {
                             |i: usize| composed.as_ref().is_some_and(|m| m.contains(&(offset + i)));
 
                         let style = RunStyle {
+                            pending: pend,
                             heading: matches!(kind, Kind::Heading(_)),
                             soft: kind == Kind::Heading(6),
                             italic: kind == Kind::Quote && !tinted,
@@ -1784,6 +1825,7 @@ impl Editor {
                                     .and_then(|lines| lines.into_iter().next())
                             };
                         let marker_style = RunStyle {
+                            pending: pend,
                             heading: false,
                             soft: false,
                             italic: false,
@@ -2002,6 +2044,7 @@ impl Editor {
                     dx: px(0.),
                     grid: grid_row,
                     broken,
+                    pend,
                 };
                 let height = row.height + row.image_height() + row.gap;
                 rows.push(Row { height, ..row });
@@ -2372,6 +2415,21 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_knows_its_pending_change() {
+        let text = "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n";
+        let found = crate::logic::pending::areas(text);
+        let at = |needle: &str| pend_of(&found, text.find(needle).unwrap());
+        assert_eq!(at("a\n"), Pend::Plain);
+        assert_eq!(at("{--"), Pend::Mark);
+        assert_eq!(at("old"), Pend::Removed);
+        assert_eq!(at("--}"), Pend::Mark);
+        assert_eq!(at("{++"), Pend::Mark);
+        assert_eq!(at("new"), Pend::Added);
+        assert_eq!(at("++}"), Pend::Mark);
+        assert_eq!(at("b\n"), Pend::Plain);
+    }
     use crate::logic::prefs::Prefs;
     use gpui::WindowAppearance;
 
@@ -2395,6 +2453,7 @@ mod tests {
 
     fn plain() -> RunStyle {
         RunStyle {
+            pending: Pend::Plain,
             heading: false,
             soft: false,
             italic: false,

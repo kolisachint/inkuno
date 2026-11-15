@@ -14,6 +14,10 @@ impl Editor {
         if self.sel.is_empty() {
             return;
         }
+        // A cut over a pending change is refused before anything reaches the clipboard.
+        if cut && self.touches_pending(&self.sel.clone(), "") {
+            return self.refuse_pending(cx);
+        }
         let text = self
             .cells_text()
             .unwrap_or_else(|| self.content[self.sel.clone()].to_string());

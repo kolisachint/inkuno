@@ -276,6 +276,8 @@ pub struct Menu {
     pub text: Option<Option<Link>>,
     /// This right click in the note targets a comment.
     pub commented: bool,
+    /// This right click in the note is inside a pending change (its gestures are offered).
+    pub change: bool,
     /// Opened by a block's handle: the block's gestures.
     pub block: bool,
     /// Right click on a tab: what to close.
@@ -321,6 +323,10 @@ pub enum Do {
     Code,
     Link,
     Comment,
+    /// The pending change under the pointer: accepted, rejected, or commented.
+    AcceptChange,
+    RejectChange,
+    CommentChange,
     /// The chosen lines as a bulleted, numbered or task list, or as text.
     Bullets,
     Numbered,
@@ -366,6 +372,9 @@ impl Do {
             Do::Code => of(cx, &editor::InlineCode),
             Do::Link => of(cx, &editor::InsertLink),
             Do::Comment => of(cx, &editor::Comment),
+            Do::AcceptChange => of(cx, &editor::AcceptChange),
+            Do::RejectChange => of(cx, &editor::RejectChange),
+            Do::CommentChange => of(cx, &editor::CommentChange),
             Do::Bullets => of(cx, &editor::ListBullet),
             Do::Numbered => of(cx, &editor::ListOrdered),
             Do::Tasks => of(cx, &editor::ListTask),
