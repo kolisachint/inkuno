@@ -652,6 +652,12 @@ impl Nav {
         if self.mode == mode {
             return;
         }
+        // The selection is shared by the panels: a version chosen in the Versions panel is not a
+        // row of the tree, and a tree row is not a version. Entering or leaving the panel drops it.
+        if self.mode == Mode::Versions || mode == Mode::Versions {
+            self.sel = None;
+            self.marked.clear();
+        }
         let mut view = self.parked.remove(&mode).unwrap_or_else(|| View {
             mode,
             ..View::default()

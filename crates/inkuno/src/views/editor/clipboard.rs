@@ -32,7 +32,12 @@ impl Editor {
         }
     }
 
+    /// Paste: text, a picture (saved next to the note first), or table cells. Refused first in a
+    /// read-only note: a picture is not written to the vault for a comparison.
     pub(super) fn paste(&mut self, cx: &mut Context<Self>) {
+        if self.readonly {
+            return self.refuse_pending(cx);
+        }
         let Some(item) = cx.read_from_clipboard() else {
             return;
         };

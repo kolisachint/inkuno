@@ -262,6 +262,38 @@ pub fn all(home: &Home, note: &Path) -> io::Result<Vec<Revision>> {
     Ok(found)
 }
 
+/// One version of a note's history as the Versions panel lists it: a readable revision, or the
+/// number of a revision file that cannot be read, with why.
+pub type Listed = Result<Revision, (u32, io::Error)>;
+
+/// Every revision file of `note`, oldest first, each read on its own: one that cannot be read is
+/// listed with its number, the others are still there (`all` stops at the first one). An error
+/// only when the history folder itself cannot be listed.
+pub fn listed(home: &Home, note: &Path) -> io::Result<Vec<Listed>> {
+    let Some(folder) = home.folder(note) else {
+        return Ok(Vec::new());
+    };
+    let mut numbers = numbers(&folder)?;
+    numbers.sort_unstable();
+    Ok(numbers
+        .into_iter()
+        .map(|number| read(&folder.join(revision::file_name(number))).map_err(|e| (number, e)))
+        .collect())
+}
+
+/// Whether `path` lies in the app's history: a vault's revisions or their bin (`.inkuno/revisions`,
+/// `.inkuno/trash`), or the scratch folder's (`.revisions`, its bin included). That history is the
+/// app's own record: no file gesture moves, renames, copies or trashes what is in it.
+pub fn holds_history(path: &Path, vault: Option<&Path>) -> bool {
+    if path.starts_with(scratch::dir().join(revision::SCRATCH_DIR)) {
+        return true;
+    }
+    vault.is_some_and(|root| {
+        path.starts_with(root.join(revision::VAULT_DIR))
+            || path.starts_with(revision::vault_bin(root))
+    })
+}
+
 /// The latest revision of `note`, `None` when it has none yet.
 pub fn latest(home: &Home, note: &Path) -> io::Result<Option<Revision>> {
     let Some(folder) = home.folder(note) else {

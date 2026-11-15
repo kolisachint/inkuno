@@ -838,7 +838,11 @@ impl Shell {
                     true => self.nav.sel.as_ref() == Some(&row.path),
                     false => marked.contains(&row.path),
                 };
-                let current = self.pane().displayed_path() == Some(&row.path);
+                // In the Versions panel, the version the shown comparison compares is the current one.
+                let current = match self.nav.mode {
+                    Mode::Versions => self.version_current(&row.path),
+                    _ => self.pane().displayed_path() == Some(&row.path),
+                };
                 // In the recent list, the note's folder serves as detail.
                 let detail = match (&self.vault, row.path.parent()) {
                     // A version: the moment it was saved, to the minute.
@@ -870,11 +874,8 @@ impl Shell {
                 let said = closed.map(|_| detail.clone());
                 let foldable =
                     !matches!(self.nav.mode, Mode::Recent | Mode::Scratch | Mode::Versions);
-                // An automatic version is drawn quieter than a person's.
-                let quiet = self.nav.mode == Mode::Versions
-                    && self
-                        .version_of(&row.path)
-                        .is_some_and(|v| v.rev.kind == crate::logic::revision::Kind::Auto);
+                // An automatic version, and one that cannot be read, are drawn quieter than a person's.
+                let quiet = self.nav.mode == Mode::Versions && self.version_quiet(&row.path);
                 let chevron = match row.dir {
                     Some(true) => "chevron-down.svg",
                     Some(false) => "chevron-right.svg",

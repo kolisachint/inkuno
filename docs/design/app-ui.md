@@ -1022,8 +1022,12 @@ Normal 800 is the default (§10.4 lock released for this change).
       alias `history`), `views/palette.rs` (`offered`), `shell/keymap.rs` (the help line).
 - [x] **Test**: `shell/tests/versions.rs` (the palette, newest first and the auto mark, the three empty states, the tab switch and the
       save, Enter, the read-only rules, not dirty and nothing written, equal texts, marks refused, one tab per version, the row
-      menu and the copy, the menu cannot trash a version), `inkuno-logic` `revision.rs` (row name, date, the compare and its
-      refusals), `commands.rs`, `views/palette.rs` (`history`), `views/nav.rs` (the saved word `versions`).
+      menu and the copy, the menu cannot trash a version; the fix round: a version chosen in the panel is not the tree's selection,
+      every file gesture is refused on a history file, one unreadable version among three, a folder link and a wiki link followed
+      from a comparison, a note loaded into a comparison, a pasted image, the saved layout, the panel following the comparison, a
+      revision written from a terminal), `inkuno-logic` `revision.rs` (row name, date and its hand-edited cases, the compare and its
+      refusals), `platform/vault.rs` (a revision event reaches the history signal only; the real watcher does the same on disk),
+      `commands.rs`, `views/palette.rs` (`history`), `views/nav.rs` (the saved word `versions`).
 
 ### 19.1 The panel
 
@@ -1032,13 +1036,23 @@ Normal 800 is the default (§10.4 lock released for this change).
 - Rows: the versions of the active tab's note, newest first. A row reads `#12 · author`, then `· auto` for an automatic version,
   then `· <note>` when it has one. On the right, the date and time, UTC to the minute, as `inkuno rev list` prints them. An
   automatic version's name is drawn in the quiet colour.
-- The list is read from disk when the panel is shown, after **Save a version**, after an Assistant proposal (Review or Improve), and
-  when the note of the active tab changes. It is cached in `Shell::versions` and keyed by the note's path: nothing is read per frame.
+- The list is read from disk when the panel is shown, after **Save a version**, after an Assistant proposal (Review or Improve), when
+  the note of the active tab changes, and when a revision is written from outside the app (`inkuno rev save`, another window): the
+  vault's watcher reports the `.inkuno/revisions` folder on its own signal, which only marks the list stale and redraws the panel
+  (`versions_moved`). Nothing else is reread for it: no note reload, no tree refresh, no link index. It is cached in
+  `Shell::versions` and keyed by the note's path; each row finds its version by a lookup, not a scan, so nothing is read per frame.
+- While a comparison is the shown tab, the panel lists the versions of the note that comparison belongs to, and the row of the
+  compared version is marked as the current one (the same mark a shown note gets in the tree). Enter on another row opens another
+  comparison.
+- A version whose file cannot be read is not hidden with the others: it is one quiet row, `#7 · cannot be read`. Enter on it opens
+  nothing and says why: **#7 · this version cannot be read, so it cannot be compared.** The other versions still list, compare and
+  copy.
 - Empty states, in the panel's quiet text:
   - no note in the tab: **No note is open.**
   - a note outside the vault and the scratch folder: **This note has no history.**
   - no version yet: **No version yet. Save one with** the chord in force (`Ctrl+Alt+S`).
   - a history that cannot be read: the reason, not an empty list.
+  - a history whose folder is readable but whose files are not: one quiet row per unreadable file (above), not a message.
 - Keys: Up and Down move, Enter compares, Escape returns to the note, as in the other panels.
 
 ### 19.2 The compare
@@ -1055,8 +1069,21 @@ Normal 800 is the default (§10.4 lock released for this change).
     them first.**
 - Opening the same version again brings its tab to the front. When the note has changed since, that tab's text is replaced by the new
   compare.
+- The compare reads the note's text from the tab that shows the note (its unsaved edits included), or from the file when no tab shows
+  it: never from the comparison tab itself, whose text holds the marks.
+- A comparison is never a note and never a list page. Every route that loads a note or a list into the active tab takes a tab of its
+  own when that tab is a comparison (decision of the fix round). Checked, route by route: `Shell::open` and `fresh_tab`, through
+  `spare_tab`, which refuses a comparison (`open_note`, the palette's note, the daily note through `open_wiki`, the wiki link, the
+  reopen of a tab, the restored layout, a tree drop, Ctrl+N through `new_scratch`, `new_note_in` for a note of the tree);
+  `open_listing`, which takes a tab when the active one is a comparison (the folder link, the list of a folder, the tree's list gesture,
+  a folder dropped on a pane); `open_wiki`'s "create the note" branch, which goes through `fresh_tab`; `preview_note`, which uses a
+  preview tab or `fresh_tab`, never the comparison; `reload` and `restore_panes`, which only touch the note they hold. The vault's
+  opening (`library.rs`) and a file's deletion (`files.rs`) call `new_note` on their own tab; the second line below covers them.
+  The second line of defence: `load_note` and `new_note` clear the tab's `compare`, and `Editor::load` clears the read-only flag, so a
+  load that gets past the routes makes the tab an editable note, not a comparison with a note's text.
 - The tab is read-only. The caret, the selection, copy, find and scrolling work. Typing, paste, cut, Enter, Tab, Delete, the format
-  bar, the table and block gestures, find-and-replace, accept, reject, comment, undo and Save a version change nothing. Each refusal
+  bar, the table and block gestures, find-and-replace, accept, reject, comment, undo and Save a version change nothing. Paste is
+  refused first, before the clipboard's picture is written to the vault: no file appears for it. Each refusal
   says **This is a comparison: it cannot be changed.** once (Save a version says it cannot be saved as a version). The editor's
   `readonly` flag does this: `touches_pending` refuses every edit of a read-only note, and the change actions refuse before they act
   (§17.2, §17.3).
@@ -1068,15 +1095,23 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 - **Compare with the note now** (the default: Enter does the same) and **Copy this version's text**.
 - No other gesture applies to a version: the tree's trash, rename, move and duplicate act on nothing, since a version is history.
+- The history is never a target of a file gesture, whatever the panel shows. `menu_do` refuses, at its top, any target under a history
+  folder: the vault's `.inkuno/revisions` and its bin `.inkuno/trash`, and the scratch folder's `.revisions` (bin included), named by
+  `logic::revision` and `platform::revisions::holds_history`. The refusal says **The history of the notes is kept by the app: nothing
+  is done to it.** The selection is also cleared when the Versions panel is entered or left (`Nav::activate`): a version chosen in the
+  panel is not the tree's selection, so Delete, F2 and Ctrl+D of the tree find nothing to act on.
 - Restore is not built. It is a follow-up (`backlog.md`): a restore would be a proposal through the pending flow.
 
 ### 19.4 Known limits
 
 - Line-level compare only: a changed line is one removed line and one added line. No word-level tint.
 - Tables and figures inside a change get no wash, as in §17.7.
-- The panel follows the note of the active tab. While a comparison tab is active, the panel says **No note is open.**; it does not
-  follow the compared note.
-- The layout file marks no tab as shown while a comparison is shown (the comparison is not saved): the next start shows the first tab.
+- **Copy all** on a comparison copies the text with its marks (`{--`, `{++`): the app has no reading view that resolves them. The
+  same holds for a copy of the whole note with pending changes (`backlog.md`).
+- The layout file does not save a comparison (it has no note). While one is shown, the group's `*` mark goes to the note it compares
+  when that note is a tab of the group, else to the nearest tab that holds a note (the left one on a tie), so the next start shows
+  the note the person was on.
+- The list reads every version's full text on the window's thread (`backlog.md`): a long history takes a moment to show.
 - A date is the stored UTC time: the local time of a past version needs a conversion that is not built (`platform/clock.rs` gives the
   local time of now only).
 - No restore (§19.3).

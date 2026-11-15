@@ -80,6 +80,27 @@ impl Shell {
     // thus looked at less often (5,000 notes: every 5 s, or 100 s for the check).
     // Tests install no watcher: their clock is simulated.
     pub(super) fn watch(&mut self, cx: &mut Context<Self>) {
+        // A revision written (`inkuno rev save`, another window) marks the Versions list stale and
+        // redraws: nothing else is reread, the vault's files did not change.
+        let history = Arc::new(vault::Signal::default());
+        let revisions = history.clone();
+        cx.spawn(async move |this, cx| {
+            loop {
+                let raised = revisions
+                    .wait(cx.background_executor().timer(Duration::from_secs(2)))
+                    .await;
+                // Each wake asks the shell whether it is still there: a closed window ends the task.
+                let alive = this.update(cx, |this, cx| {
+                    if raised {
+                        this.versions_moved(cx);
+                    }
+                });
+                if alive.is_err() {
+                    return;
+                }
+            }
+        })
+        .detach();
         cx.spawn(async move |this, cx| {
             let changed = Arc::new(vault::Signal::default());
             let mut watched: Option<(PathBuf, Option<notify::RecommendedWatcher>)> = None;
@@ -111,7 +132,7 @@ impl Shell {
                     let watcher = if cfg!(test) {
                         None
                     } else {
-                        vault::watch(&root, changed.clone())
+                        vault::watch(&root, changed.clone(), history.clone())
                     };
                     watched = Some((root.clone(), watcher));
                     next_check = Instant::now();

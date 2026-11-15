@@ -608,6 +608,10 @@ impl Shell {
     /// what opens next takes its place instead of a tab of its own, and an emptied note's file goes.
     pub(super) fn spare_tab(&self, cx: &App) -> bool {
         let pane = self.pane();
+        // A comparison is a tab of its own: what opens next never takes its place.
+        if pane.compare.is_some() {
+            return false;
+        }
         pane.preview
             || (pane.path.is_none() || pane.fresh)
                 && pane.file.is_none()
@@ -971,6 +975,7 @@ impl Shell {
     pub(super) fn panes_state(&self) -> String {
         let mut state = format!("v3 {}\n", self.layout.write());
         for group in &self.groups {
+            let marked = self.saved_shown(group);
             let tabs: Vec<String> = group
                 .tabs
                 .iter()
@@ -979,7 +984,7 @@ impl Shell {
                     let path = pane.displayed_path()?.display().to_string();
                     Some(format!(
                         "{}{path}",
-                        if tab == group.shown { "*" } else { "" }
+                        if Some(tab) == marked { "*" } else { "" }
                     ))
                 })
                 .collect();
@@ -987,6 +992,33 @@ impl Shell {
             state.push('\n');
         }
         state
+    }
+
+    /// The tab of `group` that the saved layout marks as shown (`*`). A comparison has no note, so it
+    /// is not saved: while one is shown, the note it compares is marked if it is a tab of the group,
+    /// else the nearest tab that holds a note (the left one on a tie). `None` when no tab is saved.
+    fn saved_shown(&self, group: &Group) -> Option<usize> {
+        let shown = group.shown;
+        let Some(compare) = self.panes[shown].compare.as_ref() else {
+            return Some(shown);
+        };
+        let saved = |tab: &usize| self.panes[*tab].displayed_path().is_some();
+        if let Some(tab) = group
+            .tabs
+            .iter()
+            .copied()
+            .find(|tab| self.panes[*tab].path.as_ref() == Some(&compare.note) && saved(tab))
+        {
+            return Some(tab);
+        }
+        let at = group.tabs.iter().position(|tab| *tab == shown)?;
+        group
+            .tabs
+            .iter()
+            .enumerate()
+            .filter(|(_, tab)| saved(tab))
+            .min_by_key(|(i, _)| (i.abs_diff(at), *i > at))
+            .map(|(_, tab)| *tab)
     }
 
     /// Does `act` in pane `pane`, as if it were the active one, then goes back to the active one.

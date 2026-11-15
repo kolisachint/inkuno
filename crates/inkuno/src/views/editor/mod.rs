@@ -541,9 +541,11 @@ impl Editor {
         self.readonly
     }
 
-    /// Replaces the whole content (note change); cursor at byte `cursor`.
+    /// Replaces the whole content (note change); cursor at byte `cursor`. The text is editable after
+    /// it: a comparison sets its read-only flag again once it is loaded.
     pub fn load(&mut self, text: String, cursor: usize, cx: &mut Context<Self>) {
         let cursor = cursor.min(text.len());
+        self.readonly = false;
         self.version += 1;
         self.revision += 1;
         self.epoch += 1;
