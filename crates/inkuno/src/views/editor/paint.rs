@@ -267,7 +267,8 @@ impl Editor {
             window.with_content_mask(mask, |window| {
                 // In a table, the header background goes under the selection.
                 let table_top = point(o.x - row.dx, top);
-                if let Some(grid) = &row.grid {
+                // In a pending change the header keeps the wash, not its own band.
+                if let (Some(grid), None) = (&row.grid, wash) {
                     // The table ends here when nothing but dash lines follows.
                     let ends = self.rows[i + 1..]
                         .iter()

@@ -10,6 +10,8 @@ const NOTE: &str = "# Plan\n\nkeep\n{--\nold\n--}\n{++\nnew\n++}\nend\n";
 /// Two changes, one after the other, to act on all of them.
 const TWO: &str = "a\n{--\none\n--}\n{++\nun\n++}\nb\n{++\ndeux\n++}\nc\n";
 const REFUSED: &str = "This change is pending: accept or reject it first.";
+/// A table inside an added change, its columns not yet aligned.
+const TABLE_CHANGE: &str = "keep\n{++\n| a | bbbb |\n|---|---|\n| 1 | 2 |\n++}\nend\n";
 
 /// Lets the window draw what changed, then the tasks run.
 fn settle(cx: &mut gpui::VisualTestContext) {
@@ -542,5 +544,45 @@ fn word_backspace_outside_a_change_deletes_the_word_as_before(cx: &mut TestAppCo
         text(&shell, cx).contains("{++\nnew\n++}"),
         "the change stays pending"
     );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_renumbering_above_a_change_leaves_the_change_and_the_list_below_alone(
+    cx: &mut TestAppContext,
+) {
+    let note = "1. one\n2. two\n{--\nold\n--}\n5. three\n6. four\n";
+    let (root, shell, cx, _config) = open_note("pending-list-above", note, cx);
+    // Enter at the end of the first item inserts an item: the list above is renumbered, and only it.
+    put(&shell, cx, note.find("one").unwrap() + 3);
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        "1. one\n2. \n3. two\n{--\nold\n--}\n5. three\n6. four\n",
+        "the list above is renumbered, the change and the list below are not"
+    );
+    let notices = shell.read_with(cx, |s, _| {
+        s.toasts
+            .iter()
+            .filter(|t| t.text.contains("keeps its numbers") || t.text.contains("not realigned"))
+            .count()
+    });
+    assert_eq!(notices, 0, "no notice is shown");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn typing_in_a_table_inside_a_change_is_refused(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-table-typing", TABLE_CHANGE, cx);
+    put(&shell, cx, TABLE_CHANGE.find("| 1").unwrap() + 2);
+    cx.simulate_input("x");
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        TABLE_CHANGE,
+        "the table text is unchanged"
+    );
+    assert!(says(&shell, cx, REFUSED), "the refusal is said");
     let _ = fs::remove_dir_all(root);
 }
