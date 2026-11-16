@@ -280,3 +280,79 @@ fn failed_close_in_a_read_only_or_vanished_directory(cx: &mut TestAppContext) {
     assert_eq!(fs::read_to_string(path).unwrap(), "original changé");
     let _ = fs::remove_dir_all(root);
 }
+
+/// Whether the shell shows the notice of a rename refused for a link in a pending change.
+fn link_notice_shown(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> bool {
+    let notice =
+        "A note that links here has a pending change on that link: accept or reject it first.";
+    shell.read_with(cx, |s, _| s.toasts.iter().any(|t| t.text == notice))
+}
+
+#[gpui::test]
+fn a_rename_that_would_rewrite_a_link_in_a_pending_change_is_refused(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "rename-pending-link");
+    let alpha = root.join("Alpha.md");
+    let link = root.join("Link.md");
+    fs::write(&alpha, "# Alpha\n\ntext\n").unwrap();
+    let linking = "keep\n{++\nsee [[Alpha]]\n++}\n";
+    fs::write(&link, linking).unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::Rename, Some(alpha.clone()), window, cx)
+    });
+    cx.run_until_parked();
+    cx.simulate_input("2");
+    cx.simulate_keystrokes("enter");
+    // Nothing is renamed, and the linking note keeps its text.
+    assert!(alpha.exists() && !root.join("Alpha2.md").exists());
+    assert_eq!(fs::read_to_string(&link).unwrap(), linking);
+    assert!(link_notice_shown(&shell, cx));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_rename_that_only_rewrites_a_link_outside_the_change_goes_through(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "rename-outside-link");
+    let alpha = root.join("Alpha.md");
+    let link = root.join("Link.md");
+    fs::write(&alpha, "# Alpha\n\ntext\n").unwrap();
+    fs::write(&link, "see [[Alpha]]\n{++\nnew\n++}\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::Rename, Some(alpha.clone()), window, cx)
+    });
+    cx.run_until_parked();
+    cx.simulate_input("2");
+    cx.simulate_keystrokes("enter");
+    assert!(root.join("Alpha2.md").exists() && !alpha.exists());
+    assert_eq!(
+        fs::read_to_string(&link).unwrap(),
+        "see [[Alpha2]]\n{++\nnew\n++}\n"
+    );
+    assert!(!link_notice_shown(&shell, cx));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_title_change_that_would_rewrite_a_link_in_a_pending_change_is_refused(
+    cx: &mut TestAppContext,
+) {
+    let (root, shell, cx, _config) = start(cx, "title-pending-link");
+    let alpha = root.join("Alpha.md");
+    let link = root.join("Link.md");
+    fs::write(&alpha, "# Alpha\n\noriginal").unwrap();
+    let linking = "keep\n{++\nsee [[Alpha]]\n++}\n";
+    fs::write(&link, linking).unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &alpha);
+    cx.simulate_keystrokes("secondary-a");
+    cx.simulate_input("# Renamed\n\noriginal");
+    shell.update(cx, |s, cx| s.flush(cx));
+    // The file keeps its name and text, the linking note keeps its change, and the note stays dirty.
+    assert_eq!(fs::read_to_string(&alpha).unwrap(), "# Alpha\n\noriginal");
+    assert!(!root.join("Renamed.md").exists());
+    assert_eq!(fs::read_to_string(&link).unwrap(), linking);
+    assert!(shell.read_with(cx, |s, _| s.pane().dirty));
+    assert!(link_notice_shown(&shell, cx));
+    let _ = fs::remove_dir_all(root);
+}

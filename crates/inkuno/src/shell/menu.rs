@@ -209,6 +209,21 @@ impl Shell {
                         }
                         this.flush(cx);
                         let image = vault::is_image(&path) || vault::is_attachment(&path);
+                        // The links follow the rename: a rename that would rewrite a link inside a
+                        // pending change of a linking note is refused before anything moves.
+                        if !is_dir {
+                            let (old, new) = if image {
+                                let extension =
+                                    path.extension().unwrap_or_default().to_string_lossy();
+                                let to = path.with_file_name(format!("{name}.{extension}"));
+                                (vault::image_name(&path), vault::image_name(&to))
+                            } else {
+                                (current.clone(), name.clone())
+                            };
+                            if this.links_pending(&path, &old, &new, None, cx) {
+                                return;
+                            }
+                        }
                         let renamed = if is_dir {
                             let to = path.with_file_name(&name);
                             vault::rename(&path, &to).map(|()| to)

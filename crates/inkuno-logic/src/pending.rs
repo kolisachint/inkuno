@@ -31,6 +31,7 @@
 use std::fmt;
 use std::ops::Range;
 
+use crate::assistant;
 use crate::merge;
 
 const OPEN_DEL: &str = "{--";
@@ -303,35 +304,95 @@ fn starts_with_break(text: &str) -> bool {
 ///   must end with a line break, or `inserted` must start with one.
 ///
 /// An insertion strictly inside an area is refused; an edit elsewhere is allowed.
+///
+/// Also refused when the edit would change the note's set of areas: a fence opener typed above an
+/// area, or a closing fence line deleted above it, hides the area (its marks become plain text),
+/// and a new mark pair typed in a note that has areas makes a new one. An edit that keeps every area
+/// as it was (the same areas, in order, with the same lines) is allowed.
 pub fn refuses(text: &str, range: Range<usize>, inserted: &str) -> bool {
     if range.is_empty() && inserted.is_empty() {
         return false;
     }
-    areas(text).iter().any(|area| {
-        let r = &area.range;
-        let changes = if range.is_empty() {
-            r.start < range.start && range.start < r.end
-        } else {
-            range.start < r.end && r.start < range.end
-        };
-        if changes {
+    let before = areas(text);
+    if before
+        .iter()
+        .any(|area| edge_refused(text, area, &range, inserted))
+    {
+        return true;
+    }
+    if before.is_empty() {
+        return false;
+    }
+    let edited = format!("{}{}{}", &text[..range.start], inserted, &text[range.end..]);
+    !same_areas(text, &before, &edited)
+}
+
+/// Whether the edit that replaces `range` of `text` by `inserted` changes the bytes of `area`, or
+/// meets its edge in a way that would leave a marker line without its own line.
+fn edge_refused(text: &str, area: &Area, range: &Range<usize>, inserted: &str) -> bool {
+    let r = &area.range;
+    let changes = if range.is_empty() {
+        r.start < range.start && range.start < r.end
+    } else {
+        range.start < r.end && r.start < range.end
+    };
+    if changes {
+        return true;
+    }
+    if range.end == r.start {
+        let line_start = range.start == 0 || text[..range.start].ends_with('\n');
+        let kept = inserted.ends_with('\n') || (inserted.is_empty() && line_start);
+        if !kept {
             return true;
         }
-        if range.end == r.start {
-            let line_start = range.start == 0 || text[..range.start].ends_with('\n');
-            let kept = inserted.ends_with('\n') || (inserted.is_empty() && line_start);
-            if !kept {
-                return true;
-            }
+    }
+    if range.start == r.end {
+        let kept = text[r.clone()].ends_with('\n') || starts_with_break(inserted);
+        if !kept {
+            return true;
         }
-        if range.start == r.end {
-            let kept = text[r.clone()].ends_with('\n') || starts_with_break(inserted);
-            if !kept {
-                return true;
-            }
+    }
+    false
+}
+
+/// Whether `edited` has the areas of `text`, in order: as many, and each with the same whole text,
+/// removed lines and added lines. A line break at the end of a text does not count: an area that
+/// ends the text takes its break in or out when a line is typed after it.
+fn same_areas(text: &str, before: &[Area], edited: &str) -> bool {
+    let after = areas(edited);
+    before.len() == after.len()
+        && before.iter().zip(&after).all(|(old, new)| {
+            bare(&text[old.range.clone()]) == bare(&edited[new.range.clone()])
+                && bare(&text[old.removed.clone()]) == bare(&edited[new.removed.clone()])
+                && bare(&text[old.added.clone()]) == bare(&edited[new.added.clone()])
+        })
+}
+
+/// Whether rewriting a note's text from `text` into `fresh` (its links renamed) changes a pending
+/// change. Each changed line is one splice, checked with `refuses` as an edit is. So a link outside
+/// every area does not count, however many links lie around the areas. A text whose line count
+/// changed is one splice. The command line and the app both ask it before they rename a note.
+pub fn rewrite_refused(text: &str, fresh: &str) -> bool {
+    if !has_pending(text) {
+        return false;
+    }
+    let before: Vec<&str> = text.split_inclusive('\n').collect();
+    let after: Vec<&str> = fresh.split_inclusive('\n').collect();
+    if before.len() != after.len() {
+        return assistant::edit_between(text, fresh)
+            .is_some_and(|(range, inserted)| refuses(text, range, &inserted));
+    }
+    let mut at = 0;
+    for (old, new) in before.iter().zip(&after) {
+        if old != new
+            && let Some((range, inserted)) = assistant::edit_between(old, new)
+            && refuses(text, at + range.start..at + range.end, &inserted)
+        {
+            return true;
         }
-        false
-    })
+        at += old.len();
+    }
+    false
 }
 
 /// `text` with area `index` replaced by `keep` (a range of the text): the area's marker lines and
@@ -846,6 +907,57 @@ mod tests {
     fn a_note_without_areas_refuses_nothing() {
         assert!(!refuses("plain\n", 2..2, "x"));
         assert!(!refuses("", 0..0, "x"));
+    }
+
+    #[test]
+    fn a_fence_opener_typed_above_an_area_is_refused() {
+        let text = "a\n{--\nold\n--}\n";
+        assert!(refuses(text, 2..2, "```\n"));
+    }
+
+    #[test]
+    fn deleting_a_closing_fence_line_above_an_area_is_refused() {
+        let text = "```\ncode\n```\n{--\nold\n--}\n";
+        let closer = at(text, "```\n{");
+        assert!(refuses(text, closer..closer + 4, ""));
+    }
+
+    #[test]
+    fn typing_a_fence_opener_and_its_closer_above_an_area_is_allowed() {
+        let text = "a\n{--\nold\n--}\n";
+        assert!(!refuses(text, 2..2, "```\n```\n"));
+    }
+
+    #[test]
+    fn a_new_mark_pair_typed_above_an_area_is_refused() {
+        let text = "a\n{++\nx\n++}\n";
+        assert!(refuses(text, 2..2, "{--\nold\n--}\n"));
+    }
+
+    #[test]
+    fn a_fence_opener_typed_below_the_last_area_is_allowed() {
+        let text = "a\n{++\nx\n++}\nb\n";
+        assert!(!refuses(text, text.len()..text.len(), "```\n"));
+    }
+
+    #[test]
+    fn ordinary_edits_above_between_and_below_areas_are_allowed() {
+        let text = "a\n{++\nx\n++}\nmid\n{--\nold\n--}\nb\n";
+        assert!(!refuses(text, 0..0, "y"));
+        let mid = at(text, "mid") + 1;
+        assert!(!refuses(text, mid..mid, "q"));
+        let below = at(text, "b\n") + 1;
+        assert!(!refuses(text, below..below, "z"));
+    }
+
+    #[test]
+    fn a_rewritten_link_inside_an_area_is_refused_and_one_outside_is_not() {
+        let text = "[[Old]] x\n{++\n[[Old]]\n++}\n";
+        let outside = "[[New]] x\n{++\n[[Old]]\n++}\n";
+        let inside = "[[Old]] x\n{++\n[[New]]\n++}\n";
+        assert!(!rewrite_refused(text, outside));
+        assert!(rewrite_refused(text, inside));
+        assert!(!rewrite_refused("[[Old]]\n", "[[New]]\n"));
     }
 
     #[test]
