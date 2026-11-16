@@ -59,8 +59,8 @@ Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set`
 | `inkuno new <title…> [--folder F] [--template T] [--text TEXT]` | a new note. Its first line is the title. The body is `--text TEXT`; `--text -` reads it from standard input. Without `--text` the note has only its title |
 | `inkuno edit <note> --old OLD --new NEW [--token T]` | replaces a passage that occurs once. `--edits JSON` takes a list of `{"old": …, "new": …}`, applied together or not at all |
 | `inkuno append <note> [--under HEADING] --text TEXT [--token T]` | adds text at the end of the note, or at the end of the section under a heading. `--text -` reads the text from standard input; without `--text` the command is refused |
-| `inkuno write <note> --author NAME --text TEXT --token T` | proposes the note's full new text. The changes wait in the note until you accept or reject them in Inkuno. `--token` is required. `--text -` reads the text from standard input. See [Pending changes](#pending-changes) |
-| `inkuno move <note> [--name NEW] [--folder F]` | gives a note a new name, a new folder, or both. The `[[links]]` to it follow |
+| `inkuno write <note> --author NAME --text TEXT --token T [--replace]` | proposes the note's full new text. The changes wait in the note until you accept or reject them in Inkuno. `--token` is required. `--text -` reads the text from standard input. See [Pending changes](#pending-changes) |
+| `inkuno move <note> [--name NEW] [--folder F]` | gives a note a new name, a new folder, or both. The `[[links]]` to it follow. If a `[[link]]` sits in a pending change of another note, the move is refused and nothing moves: accept or reject that note's changes first |
 | `inkuno trash <note>` | moves the note to `.trash`, with its saved versions. Prints the path it has there |
 | `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
 | `inkuno daily [--date YYYY-MM-DD] [--append TEXT]` | today's daily note, or the one of the date. `--append` adds a paragraph |
@@ -160,6 +160,7 @@ inkuno write Plan --author claude --text - --token 3f9a… < new-plan.md
 
 - A removed block and an added block next to each other are one change. Inkuno shows the change as tinted text until you accept or reject it.
 - A note with pending changes is refused by `inkuno write` until you accept or reject them all. The command says so. An empty text is refused too.
+- `inkuno write --replace` lets an agent take back its own last proposal and write a new one in its place, for a note whose pending changes are still that proposal: you accepted some of its changes (they stay), but you rejected, typed in or commented on none of them. Otherwise the command is refused, and you decide the changes first.
 - A write that touches lines you changed since the agent read the note is refused, and nothing is written. If you changed other lines, the agent's change is merged with yours.
 - The proposed version is the note as it would be once every change is accepted. When the agent's base was older than the note, it holds your other edits too, not only the agent's literal text.
 - Each write saves two automatic revisions: the note as it was before, and the proposed text. The first is skipped when the text is the latest saved version already (`"before": null` in the JSON). They are in the note's history (`inkuno rev list`).
