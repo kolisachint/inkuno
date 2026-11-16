@@ -311,7 +311,10 @@ pub fn headers(home: &Home, note: &Path) -> io::Result<Vec<Listed>> {
 /// Reads the front matter of one revision file, line by line up to its closing `---`: the text of
 /// the revision is not read.
 pub fn read_header(file: &Path) -> io::Result<Header> {
-    let mut reader = io::BufReader::new(fs::File::open(file)?);
+    // At most the limit and one byte more are read: a line that runs past the limit is cut there,
+    // and the cut head has no closing line, so it is an unreadable header.
+    let capped = io::Read::take(fs::File::open(file)?, HEADER_LIMIT as u64 + 1);
+    let mut reader = io::BufReader::new(capped);
     let mut head = String::new();
     let mut line = String::new();
     loop {
@@ -614,6 +617,26 @@ mod tests {
         // The text of the readable one is read on its own, when asked; the unreadable text is an error.
         assert_eq!(get(&home, &note, 1).unwrap().text, "one\n");
         assert!(get(&home, &note, 2).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_header_line_longer_than_the_limit_is_an_unreadable_row() {
+        let root = temp("long_header");
+        let home = Home::Vault(root.clone());
+        let note = root.join("plan.md");
+        save(&home, &note, "ana", None, "one\n", 0).unwrap();
+        let folder = root.join(".inkuno/revisions/plan.md");
+        // A first line with no line break, longer than the limit: the header is cut and never closes.
+        let long = "x".repeat(HEADER_LIMIT * 2);
+        fs::write(folder.join("0002.md"), format!("---\n{long}")).unwrap();
+
+        let listed = headers(&home, &note).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert!(listed[0].is_ok());
+        let (number, why) = listed[1].as_ref().unwrap_err();
+        assert_eq!(*number, 2);
+        assert_eq!(why.kind(), io::ErrorKind::InvalidData);
         let _ = fs::remove_dir_all(root);
     }
 

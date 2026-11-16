@@ -342,6 +342,58 @@ impl Shell {
         showing(&self.panes[self.active])
     }
 
+    /// The check before the note (or image) at `moved` is renamed from `old` to `new`: when a link
+    /// rewrite would change a pending change of a linking note, nothing may be renamed, and a notice
+    /// says so. True then. `text` is the text `moved` is about to hold, when it is not on disk yet;
+    /// a linking note is read from disk, as `relink` reads it. Shares the per-line check with the
+    /// command line (`pending::rewrite_refused`).
+    pub(super) fn links_pending(
+        &mut self,
+        moved: &Path,
+        old: &str,
+        new: &str,
+        text: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        // The renamed note bears `new` already, as `relink_set` expects.
+        let notes: Vec<Note> = self
+            .notes
+            .iter()
+            .map(|note| {
+                let mut note = note.clone();
+                if note.path == moved {
+                    note.name = new.to_string();
+                }
+                note
+            })
+            .collect();
+        let Some(targets) = logic::wiki::relink_set(&notes, old, new) else {
+            return false;
+        };
+        let refused = targets.iter().any(|note| {
+            let current = match text {
+                Some(text) if note.path == moved => text.to_string(),
+                _ => match fs::read_to_string(&note.path) {
+                    Ok(text) => text,
+                    Err(_) => return false,
+                },
+            };
+            markdown::relink(&current, old, new)
+                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
+        });
+        if refused {
+            self.say(
+                Tone::Failed,
+                tr(
+                    "A note that links here has a pending change on that link: accept or reject it first.",
+                    "Une note qui pointe ici a un changement en attente sur ce lien : acceptez-le ou refusez-le d'abord.",
+                ),
+                cx,
+            );
+        }
+        refused
+    }
+
     /// A heading of the note was renamed (the same headings but one, which reads differently): the links
     /// of the other notes that point at it, `[[Note#old]]` and `![[Note#old]]`, now point at the new one.
     // ponytail: synchronous rewrite, limited to the notes the index says link to this one, like `relink`;
@@ -488,6 +540,21 @@ impl Shell {
         // A `#` title added or changed at the top: the file now bears its name.
         if vault::h1_of(&content).is_some_and(|h1| self.pane().h1.as_ref() != Some(&h1)) {
             self.pane_mut().synced = true;
+        }
+        // A title that renames the file (as `vault::save` decides it) is refused, with nothing
+        // written, when the links to the old name would change a pending change.
+        if let Some(current) = self.pane().path.clone()
+            && self.pane().synced
+        {
+            let title = vault::title_of(&content);
+            let old = vault::stem(&current);
+            let renamed = current.with_file_name(format!("{title}.md"));
+            if old != title
+                && !renamed.exists()
+                && self.links_pending(&current, &old, &title, Some(&content), cx)
+            {
+                return false;
+            }
         }
         let dir = self.pane().new_dir.as_deref().unwrap_or(&root);
         match vault::save(

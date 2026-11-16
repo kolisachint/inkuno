@@ -155,21 +155,17 @@ mod tests {
     }
 
     #[test]
-    fn the_local_time_is_the_systems_for_a_fixed_time() {
-        // `date` renders the system's local time of the same instant: the zone is not read here.
+    fn a_minute_later_is_the_next_local_minute_and_the_date_follows() {
+        // No process call (`date` differs between systems): the local fields of two instants a
+        // minute apart are one minute apart, and the date line is built from the same fields.
         let unix = 1_709_208_000_i64;
-        let (year, month, day, hour, minute) = local(unix);
+        let minute_of_day = |(_, _, _, h, m): (i32, u32, u32, u32, u32)| i64::from(h * 60 + m);
+        let step = (minute_of_day(local(unix + 60)) - minute_of_day(local(unix))).rem_euclid(1440);
+        assert_eq!(step, 1);
+        let (year, month, day, hour, minute) = local(unix + 60);
         let mine = format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}");
-        #[cfg(unix)]
-        if let Ok(out) = std::process::Command::new("date")
-            .args(["-d", &format!("@{unix}"), "+%F %R"])
-            .output()
-        {
-            let system = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            assert_eq!(system, mine);
-        }
         assert_eq!(
-            crate::logic::revision::local_date(&crate::logic::revision::rfc3339(unix), local),
+            crate::logic::revision::local_date(&crate::logic::revision::rfc3339(unix + 60), local),
             mine
         );
     }

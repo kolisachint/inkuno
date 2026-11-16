@@ -730,15 +730,7 @@ fn snapshot(
     memo: &str,
     text: &str,
 ) -> Result<Option<u32>, String> {
-    match revisions::save_as(
-        home,
-        path,
-        author,
-        Some(memo),
-        text,
-        revisions::now(),
-        revision::Kind::Auto,
-    ) {
+    match revisions::save_auto(home, path, author, memo, text) {
         Ok(revisions::Saved::Made { number, .. }) => Ok(Some(number)),
         Ok(revisions::Saved::Unchanged { .. }) => Ok(None),
         Err(e) => Err(format!("{}: {}", path.display(), disk(e))),

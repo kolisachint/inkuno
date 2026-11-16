@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     logic::note::Note,
-    logic::{assistant, markdown, pending, rank, wiki},
+    logic::{markdown, pending, rank, wiki},
     platform::vault,
 };
 
@@ -319,33 +319,6 @@ fn disk_kind(kind: io::ErrorKind) -> String {
     disk(io::Error::new(kind, ""))
 }
 
-/// Whether rewriting a note's text from `text` into `fresh` changes a pending change. Each changed
-/// line is one splice, checked with `pending::refuses` as `guard_pending` checks an edit. So a link
-/// outside every area does not count, however many links lie around the areas. A text whose line
-/// count changed is one splice.
-fn rewrites_pending(text: &str, fresh: &str) -> bool {
-    if !pending::has_pending(text) {
-        return false;
-    }
-    let before: Vec<&str> = text.split_inclusive('\n').collect();
-    let after: Vec<&str> = fresh.split_inclusive('\n').collect();
-    if before.len() != after.len() {
-        return assistant::edit_between(text, fresh)
-            .is_some_and(|(range, inserted)| pending::refuses(text, range, &inserted));
-    }
-    let mut at = 0;
-    for (old, new) in before.iter().zip(&after) {
-        if old != new
-            && let Some((range, inserted)) = assistant::edit_between(old, new)
-            && pending::refuses(text, at + range.start..at + range.end, &inserted)
-        {
-            return true;
-        }
-        at += old.len();
-    }
-    false
-}
-
 /// The check before `old` is renamed `new` (a file move, or a title change of `moved`): nothing may
 /// be moved or written when a link rewrite would change a pending change of a linking note. `Err`
 /// names the first such note, by its path in the vault. `moved` is the note's file as it is now, and
@@ -383,7 +356,7 @@ pub fn check_links_before_move(
         let Some(fresh) = markdown::relink(&text, old, new) else {
             continue;
         };
-        if rewrites_pending(&text, &fresh) {
+        if pending::rewrite_refused(&text, &fresh) {
             return Err(format!(
                 "`{}` has a pending change that links to `{old}`: accept or reject its pending changes in Inkuno first",
                 rel(&vault.root, &note.path)

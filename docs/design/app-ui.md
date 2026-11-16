@@ -917,6 +917,9 @@ Normal 800 is the default (§10.4 lock released for this change).
   `logic/pending.rs`).
 - A rewrite that would change a change is left out without a message (renumbering): the numbers stay until the
   change is accepted or rejected.
+- Rename rule: a rename or a title change that would rewrite a `[[link]]` inside a pending change of a linking note
+  is refused before the file moves or is written, with a notice; the check is `pending::rewrite_refused`, as in
+  `cli.md`. Links outside every change follow the rename as before.
 
 ## 18. Assistant v2: proposals through pending changes (built 2026-11-15)
 
