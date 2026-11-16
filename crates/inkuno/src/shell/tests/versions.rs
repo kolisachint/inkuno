@@ -8,31 +8,31 @@ use crate::logic::revision::Kind;
 use crate::platform::revisions::{self as history, Home};
 
 /// The notice of every change refused in a comparison.
-const COMPARISON: &str = "This is a comparison: it cannot be changed.";
+pub(super) const COMPARISON: &str = "This is a comparison: it cannot be changed.";
 /// The notice of a comparison refused for pending changes.
 const PENDING: &str =
     "This version or the note holds pending changes: accept or reject them first.";
 
-fn open(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, path: &Path) {
+pub(super) fn open(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, path: &Path) {
     shell.update_in(cx, |s, window, cx| s.open_from_nav(path, window, cx));
     cx.run_until_parked();
 }
 
 /// Lets the debounced write happen, and the window draw what changed.
-fn settle(cx: &mut gpui::VisualTestContext) {
+pub(super) fn settle(cx: &mut gpui::VisualTestContext) {
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.run_until_parked();
     frame(cx);
 }
 
 /// Draws the window once more, so that the panel's rows follow the tab.
-fn frame(cx: &mut gpui::VisualTestContext) {
+pub(super) fn frame(cx: &mut gpui::VisualTestContext) {
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
 }
 
 /// `Ctrl+Alt+S`, then the line on what changed (`memo`, empty to skip), then Enter.
-fn save_version(cx: &mut gpui::VisualTestContext, memo: &str) {
+pub(super) fn save_version(cx: &mut gpui::VisualTestContext, memo: &str) {
     cx.simulate_keystrokes("secondary-alt-s");
     cx.run_until_parked();
     if !memo.is_empty() {
@@ -42,7 +42,7 @@ fn save_version(cx: &mut gpui::VisualTestContext, memo: &str) {
     cx.run_until_parked();
 }
 
-fn show_versions(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
+pub(super) fn show_versions(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
     shell.update_in(cx, |s, window, cx| {
         s.show_nav(Mode::Versions, false, window, cx)
     });
@@ -50,31 +50,35 @@ fn show_versions(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
 }
 
 /// The panel's row names, newest first.
-fn names(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> Vec<String> {
+pub(super) fn names(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> Vec<String> {
     shell.read_with(cx, |s, _| {
         s.nav_rows().into_iter().map(|r| r.name).collect()
     })
 }
 
 /// The file of the panel's row `ix`.
-fn row_path(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, ix: usize) -> PathBuf {
+pub(super) fn row_path(
+    shell: &Entity<Shell>,
+    cx: &mut gpui::VisualTestContext,
+    ix: usize,
+) -> PathBuf {
     shell.read_with(cx, |s, _| s.nav_rows()[ix].path.clone())
 }
 
 /// The text of the active tab's editor.
-fn text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> String {
+pub(super) fn text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> String {
     shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
 }
 
 /// How many tabs of the window are comparisons.
-fn compares(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> usize {
+pub(super) fn compares(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> usize {
     shell.read_with(cx, |s, _| {
         s.panes.iter().filter(|p| p.compare.is_some()).count()
     })
 }
 
 /// The tab that is a comparison.
-fn compare_tab(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> usize {
+pub(super) fn compare_tab(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> usize {
     shell.read_with(cx, |s, _| {
         s.panes
             .iter()
@@ -84,7 +88,7 @@ fn compare_tab(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> usize
 }
 
 /// Every file under `dir`, to see that nothing was written there.
-fn files_under(dir: &Path) -> Vec<PathBuf> {
+pub(super) fn files_under(dir: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let mut todo = vec![dir.to_path_buf()];
     while let Some(folder) = todo.pop() {
@@ -105,14 +109,14 @@ fn files_under(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Puts the caret at byte `at`.
-fn put(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
+pub(super) fn put(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
     shell.update(cx, |s, cx| {
         s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
     });
 }
 
 /// Whether the shell shows the message `what` now.
-fn says(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, what: &str) -> bool {
+pub(super) fn says(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, what: &str) -> bool {
     shell.read_with(cx, |s, _| s.toasts.iter().any(|t| t.text == what))
 }
 
