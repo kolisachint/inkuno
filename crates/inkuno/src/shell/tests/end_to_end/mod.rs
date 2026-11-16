@@ -1,6 +1,7 @@
 //! The whole app driven by simulated keystrokes, chapter by chapter. The chapters run in order,
 //! as one session: each starts from the vault, panel and settings the previous one left.
 
+mod assistant_versions;
 mod blocks;
 mod cursors_comments;
 mod dates_lists;
@@ -104,5 +105,6 @@ fn end_to_end(cx: &mut TestAppContext) {
     find_mouse::run(&j, cx);
     footnotes::run(&j, cx);
     history_panes::run(&j, cx);
+    assistant_versions::run(&j, cx);
     fs::remove_dir_all(&j.root).unwrap();
 }

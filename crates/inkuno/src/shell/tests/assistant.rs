@@ -10,7 +10,7 @@ use crate::shell::assistant::{Status, Who};
 use std::{ops::Range, time::Duration};
 
 /// Lets the window draw what changed (bounds are read from the last frame), then the tasks run.
-fn settle(cx: &mut gpui::VisualTestContext) {
+pub(super) fn settle(cx: &mut gpui::VisualTestContext) {
     for _ in 0..3 {
         cx.update(|window, _| window.refresh());
         cx.run_until_parked();
@@ -53,7 +53,7 @@ fn note_with<'a>(
 }
 
 /// Clicks the round button, where it is drawn now.
-fn click_button(cx: &mut gpui::VisualTestContext) {
+pub(super) fn click_button(cx: &mut gpui::VisualTestContext) {
     let at = cx
         .debug_bounds("assistant-toggle")
         .expect("the round button is drawn")
@@ -62,7 +62,10 @@ fn click_button(cx: &mut gpui::VisualTestContext) {
     settle(cx);
 }
 
-fn entries(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> Vec<(Who, String)> {
+pub(super) fn entries(
+    shell: &Entity<Shell>,
+    cx: &mut gpui::VisualTestContext,
+) -> Vec<(Who, String)> {
     shell.read_with(cx, |s, _| {
         s.assistant
             .entries
@@ -156,27 +159,27 @@ fn opening_the_assistant_keeps_the_outline_shown(cx: &mut TestAppContext) {
 }
 
 /// Feeds the agent's events to the panel, as its reader thread's signal does.
-fn feed(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, events: Vec<Event>) {
+pub(super) fn feed(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, events: Vec<Event>) {
     shell.update_in(cx, |s, window, cx| s.assistant_events(events, window, cx));
     settle(cx);
 }
 
-fn status(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> Status {
+pub(super) fn status(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> Status {
     shell.read_with(cx, |s, _| s.assistant.status)
 }
 
 /// The prompts the agent was sent, in order.
-fn sent(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> Vec<String> {
+pub(super) fn sent(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> Vec<String> {
     shell.read_with(cx, |s, _| s.assistant.sent.clone())
 }
 
 /// The text of the note in the active tab.
-fn editor_text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> String {
+pub(super) fn editor_text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> String {
     shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
 }
 
 /// Gives the keys to the note, as a click in it would.
-fn focus_note(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
+pub(super) fn focus_note(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
     shell.update_in(cx, |s, window, cx| {
         window.focus(&s.pane().editor.focus_handle(cx))
     });
@@ -184,7 +187,7 @@ fn focus_note(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
 }
 
 /// Clicks "Review this note", where it is drawn now.
-fn click_review(cx: &mut gpui::VisualTestContext) {
+pub(super) fn click_review(cx: &mut gpui::VisualTestContext) {
     let at = cx
         .debug_bounds("assistant-review")
         .expect("the review button is drawn")
@@ -194,7 +197,7 @@ fn click_review(cx: &mut gpui::VisualTestContext) {
 }
 
 /// The answer of a review that finds one comment, and one passage that is not in the note.
-const ONE_FINDING_AND_ONE_MISS: &str = "PASSAGE: un peu de texte\nCOMMENT: Trop court.\n\
+pub(super) const ONE_FINDING_AND_ONE_MISS: &str = "PASSAGE: un peu de texte\nCOMMENT: Trop court.\n\
     PASSAGE: absent du texte\nCOMMENT: Rien.\n";
 
 #[gpui::test]
@@ -793,7 +796,7 @@ fn stop_without_an_agent_to_abort_frees_the_panel_at_once(cx: &mut TestAppContex
 }
 
 /// Clicks "Improve selection" or "Improve this note", where it is drawn now.
-fn click_improve(cx: &mut gpui::VisualTestContext) {
+pub(super) fn click_improve(cx: &mut gpui::VisualTestContext) {
     let at = cx
         .debug_bounds("assistant-improve")
         .expect("the improve button is drawn")
@@ -804,7 +807,7 @@ fn click_improve(cx: &mut gpui::VisualTestContext) {
 
 /// Selects the bytes `range` of the note: the caret goes to its start, then Shift+Right to its end.
 /// The text is ASCII in the tests that use it.
-fn select(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, range: Range<usize>) {
+pub(super) fn select(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, range: Range<usize>) {
     shell.update(cx, |s, cx| {
         s.pane()
             .editor
@@ -816,7 +819,7 @@ fn select(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, range: Range<
 }
 
 /// Puts the caret at byte `at` of the note, and gives the note the keys.
-fn caret(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
+pub(super) fn caret(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
     shell.update(cx, |s, cx| {
         s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
     });
@@ -824,7 +827,7 @@ fn caret(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
 }
 
 /// The answer of a rewrite of "un peu de texte" into "Un peu plus clair.".
-const CLEARER: &str = "BEGIN TEXT\nUn peu plus clair.\nEND TEXT\n";
+pub(super) const CLEARER: &str = "BEGIN TEXT\nUn peu plus clair.\nEND TEXT\n";
 
 #[gpui::test]
 fn improve_a_selection_sends_the_passage_and_shows_no_answer(cx: &mut TestAppContext) {

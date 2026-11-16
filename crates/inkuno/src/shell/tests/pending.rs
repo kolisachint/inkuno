@@ -9,12 +9,12 @@ use crate::logic::pending;
 const NOTE: &str = "# Plan\n\nkeep\n{--\nold\n--}\n{++\nnew\n++}\nend\n";
 /// Two changes, one after the other, to act on all of them.
 const TWO: &str = "a\n{--\none\n--}\n{++\nun\n++}\nb\n{++\ndeux\n++}\nc\n";
-const REFUSED: &str = "This change is pending: accept or reject it first.";
+pub(super) const REFUSED: &str = "This change is pending: accept or reject it first.";
 /// A table inside an added change, its columns not yet aligned.
 const TABLE_CHANGE: &str = "keep\n{++\n| a | bbbb |\n|---|---|\n| 1 | 2 |\n++}\nend\n";
 
 /// Lets the window draw what changed, then the tasks run.
-fn settle(cx: &mut gpui::VisualTestContext) {
+pub(super) fn settle(cx: &mut gpui::VisualTestContext) {
     for _ in 0..3 {
         cx.update(|window, _| window.refresh());
         cx.run_until_parked();
@@ -46,19 +46,19 @@ fn open_note<'a>(
     (root, shell, cx, config)
 }
 
-fn text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> String {
+pub(super) fn text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> String {
     shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
 }
 
 /// Puts the caret at byte `at`.
-fn put(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
+pub(super) fn put(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, at: usize) {
     shell.update(cx, |s, cx| {
         s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
     });
 }
 
 /// Whether the shell shows the message `what` now.
-fn says(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, what: &str) -> bool {
+pub(super) fn says(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, what: &str) -> bool {
     shell.read_with(cx, |s, _| s.toasts.iter().any(|t| t.text == what))
 }
 
