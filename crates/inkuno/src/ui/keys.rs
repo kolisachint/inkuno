@@ -5,7 +5,7 @@ use crate::lang::fold;
 use crate::lang::tr;
 use gpui::{Action, App, Keystroke};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Shortcut key, as displayed: Cmd on macOS, Ctrl elsewhere.
 pub const MOD: &str = if cfg!(target_os = "macos") {
@@ -186,15 +186,58 @@ pub fn show(keys: &str) -> String {
     parts.join("+")
 }
 
+/// The names of a context: `Editor && Change` is `Editor` and `Change`. Blank names are ignored.
+fn names(context: &str) -> BTreeSet<&str> {
+    context
+        .split("&&")
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
+/// Whether one context's names are all in the other's (equal ones too): `Editor` and
+/// `Editor && Change`. A context with no name is in none.
+fn nested(a: &str, b: &str) -> bool {
+    let (a, b) = (names(a), names(b));
+    !a.is_empty() && !b.is_empty() && (a.is_subset(&b) || b.is_subset(&a))
+}
+
 /// Two contexts where the same keystroke can arrive. A binding with no context, or of "Shell"
 /// which encloses everything, meets all others; views do not meet each other (a table's
-/// arrows and a diagram's), except an input field with the view that carries it.
+/// arrows and a diagram's), except an input field with the view that carries it. Contexts
+/// made of names joined by `&&` meet when one's names are all in the other's: a change's
+/// `Editor && Change` meets `Editor`, not `Sheet`.
 pub fn meets(a: Option<&str>, b: Option<&str>) -> bool {
     let everywhere = |c: Option<&str>| matches!(c, None | Some("Shell"));
     let field = |a: Option<&str>, b: Option<&str>| {
         a == Some("Line") && matches!(b, Some("Sheet" | "Palette"))
     };
-    everywhere(a) || everywhere(b) || a == b || field(a, b) || field(b, a)
+    let within = matches!((a, b), (Some(a), Some(b)) if nested(a, b));
+    everywhere(a) || everywhere(b) || a == b || within || field(a, b) || field(b, a)
+}
+
+/// A place where a binding holds: action, keys, context.
+type Place<'a> = (&'a str, &'a str, Option<&'a str>);
+
+/// Whether two places clash: same keys, contexts that meet. The one exception is the
+/// defaults' own overlap: two default bindings with the same keys where one context is
+/// narrower than the other (`Editor` and `Editor && Change`). The narrower one wins inside
+/// its context, so both stay and neither is reported. A person's choice is never exempt,
+/// except when it is the default itself (same action, keys and context as in `defaults`).
+fn collide(defaults: &[Bind], a: Place, b: Place) -> bool {
+    if a.1 != b.1 || !meets(a.2, b.2) {
+        return false;
+    }
+    let is_default = |p: Place| {
+        defaults
+            .iter()
+            .any(|d| d.action == p.0 && d.keys == p.1 && d.context == p.2)
+    };
+    let narrower = match (a.2, b.2) {
+        (Some(x), Some(y)) => nested(x, y) && names(x) != names(y),
+        _ => false,
+    };
+    !(narrower && is_default(a) && is_default(b))
 }
 
 fn contexts(defaults: &[Bind], action: &str) -> Vec<Option<&'static str>> {
@@ -212,9 +255,9 @@ fn contexts(defaults: &[Bind], action: &str) -> Vec<Option<&'static str>> {
 /// context, the last binding wins). A choice wins over a changeable action (`open`)
 /// that has the same keys by default: it is left without a shortcut. A choice for an
 /// action the defaults leave unbound still applies: appended last, everywhere, so the
-/// same last-wins rule gives it the keys.
+/// same last-wins rule gives it the keys. The defaults' own overlap is kept (see `collide`).
 pub fn effective(defaults: &[Bind], changes: &Changes, open: &dyn Fn(&str) -> bool) -> Vec<Bind> {
-    let taken: Vec<(&str, Option<&'static str>)> = changes
+    let taken: Vec<(&str, &str, Option<&'static str>)> = changes
         .iter()
         .filter(|(_, keys)| !keys.is_empty())
         .flat_map(|(action, keys)| {
@@ -222,7 +265,8 @@ pub fn effective(defaults: &[Bind], changes: &Changes, open: &dyn Fn(&str) -> bo
             if at.is_empty() {
                 at.push(None);
             }
-            at.into_iter().map(move |context| (keys.as_str(), context))
+            at.into_iter()
+                .map(move |context| (action.as_str(), keys.as_str(), context))
         })
         .collect();
     let mut out: Vec<Bind> = Vec::with_capacity(defaults.len());
@@ -241,9 +285,13 @@ pub fn effective(defaults: &[Bind], changes: &Changes, open: &dyn Fn(&str) -> bo
             }
             None => {
                 let lost = open(bind.action)
-                    && taken
-                        .iter()
-                        .any(|(keys, context)| *keys == bind.keys && meets(*context, bind.context));
+                    && taken.iter().any(|&(action, keys, context)| {
+                        let (other, here) = (
+                            (action, keys, context),
+                            (bind.action, bind.keys.as_str(), bind.context),
+                        );
+                        collide(defaults, other, here)
+                    });
                 if !lost {
                     out.push(bind.clone());
                 }
@@ -303,9 +351,11 @@ pub fn clashes(bound: &[Bind], defaults: &[Bind], action: &str, keys: &str) -> V
     }
     let mut found = Vec::new();
     for bind in bound {
-        if bind.keys == keys
-            && bind.action != action
-            && at.iter().any(|context| meets(*context, bind.context))
+        let here = (bind.action, bind.keys.as_str(), bind.context);
+        if bind.action != action
+            && at
+                .iter()
+                .any(|context| collide(defaults, (action, keys, *context), here))
             && !found.contains(&bind.action)
         {
             found.push(bind.action);
@@ -349,14 +399,15 @@ pub fn read(text: &str, defaults: &[Bind], open: &dyn Fn(&str) -> bool) -> (Chan
             let keys = canon(keys).filter(|keys| refusal(keys).is_none())?;
             // Taken by another choice in the file, or by a binding that cannot change.
             let at = contexts(defaults, action);
-            let crosses = |other: &str| {
-                contexts(defaults, other)
-                    .iter()
-                    .any(|a| at.iter().any(|b| meets(*a, *b)))
+            let crosses = |other: &str, theirs: &str| {
+                contexts(defaults, other).iter().any(|a| {
+                    at.iter()
+                        .any(|b| collide(defaults, (other, theirs, *a), (action, &keys, *b)))
+                })
             };
             let chosen = changes
                 .iter()
-                .any(|(other, theirs)| other != action && *theirs == keys && crosses(other));
+                .any(|(other, theirs)| other != action && crosses(other, theirs));
             let fixed = clashes(defaults, defaults, action, &keys)
                 .into_iter()
                 .any(|other| !open(other));
@@ -1060,5 +1111,123 @@ mod tests {
         assert!(changes.is_empty() && faults.len() == 1);
         let (changes, faults) = read(&legacy_lines(""), &base(), &open);
         assert!(changes.is_empty() && faults.len() == 1);
+    }
+
+    /// `base()` plus the pending-change chords, as the defaults hold them: the accept chord
+    /// shares `secondary-enter` with `Editor`'s `ToggleTask`, the deliberate overlap.
+    fn with_chords() -> Vec<Bind> {
+        let mut binds = base();
+        binds.push(b("secondary-enter", "editor::ToggleTask", Some("Editor")));
+        binds.push(b(
+            "secondary-enter",
+            "editor::AcceptChange",
+            Some("Editor && Change"),
+        ));
+        binds.push(b(
+            "secondary-backspace",
+            "editor::RejectChange",
+            Some("Editor && Change"),
+        ));
+        binds
+    }
+
+    #[test]
+    fn a_change_context_meets_its_editor_only() {
+        let change = Some("Editor && Change");
+        assert!(meets(change, Some("Editor")) && meets(Some("Editor"), change));
+        assert!(meets(Some("Change && Editor"), change) && meets(None, change));
+        assert!(!meets(change, Some("Sheet")) && !meets(Some("Sheet"), change));
+        assert!(!meets(change, Some("Find")) && !meets(Some("Change"), Some("Editor")));
+    }
+
+    #[test]
+    fn a_rebinding_to_a_change_chord_is_a_clash() {
+        let defaults = with_chords();
+        // An Editor action moved onto the accept chord: the chords' actions are named, in
+        // the same way as two Editor actions are.
+        assert_eq!(
+            clashes(&defaults, &defaults, "editor::Find", "secondary-enter"),
+            ["editor::ToggleTask", "editor::AcceptChange"]
+        );
+        assert_eq!(
+            clashes(&defaults, &defaults, "editor::Next", "secondary-backspace"),
+            ["editor::RejectChange"]
+        );
+        assert_eq!(
+            clash(&defaults, &defaults, "editor::Find", "secondary-d"),
+            Some("editor::Next")
+        );
+    }
+
+    #[test]
+    fn the_untouched_defaults_report_no_clash() {
+        let defaults = with_chords();
+        assert!(
+            clashes(
+                &defaults,
+                &defaults,
+                "editor::ToggleTask",
+                "secondary-enter"
+            )
+            .is_empty()
+        );
+        assert!(
+            clashes(
+                &defaults,
+                &defaults,
+                "editor::AcceptChange",
+                "secondary-enter"
+            )
+            .is_empty()
+        );
+        assert!(
+            clashes(
+                &defaults,
+                &defaults,
+                "editor::RejectChange",
+                "secondary-backspace"
+            )
+            .is_empty()
+        );
+        // Nothing is stripped, and an unrelated choice keeps both chords.
+        assert_eq!(effective(&defaults, &Changes::new(), &open), defaults);
+        let mut changes = Changes::new();
+        changes.insert("app::Help".into(), "f9".into());
+        let now = effective(&defaults, &changes, &open);
+        assert_eq!(
+            of(&now, "editor::ToggleTask"),
+            [("secondary-enter", Some("Editor"))]
+        );
+        assert_eq!(
+            of(&now, "editor::AcceptChange"),
+            [("secondary-enter", Some("Editor && Change"))]
+        );
+        // A person's choice of the default keys for the Editor action keeps the accept chord.
+        let mut changes = Changes::new();
+        changes.insert("editor::ToggleTask".into(), "secondary-enter".into());
+        let now = effective(&defaults, &changes, &open);
+        assert_eq!(
+            of(&now, "editor::AcceptChange"),
+            [("secondary-enter", Some("Editor && Change"))]
+        );
+        assert!(read(&write(&changes), &defaults, &open).1.is_empty());
+    }
+
+    #[test]
+    fn a_choice_of_an_editor_key_takes_the_chord_in_effect() {
+        // The choice wins over the changeable chords that hold the same keys, as it does
+        // over two Editor actions.
+        let mut changes = Changes::new();
+        changes.insert("editor::Find".into(), "secondary-enter".into());
+        let now = effective(&with_chords(), &changes, &open);
+        assert_eq!(
+            of(&now, "editor::Find"),
+            [
+                ("secondary-enter", Some("Editor")),
+                ("secondary-enter", Some("Find"))
+            ]
+        );
+        assert!(of(&now, "editor::ToggleTask").is_empty());
+        assert!(of(&now, "editor::AcceptChange").is_empty());
     }
 }
