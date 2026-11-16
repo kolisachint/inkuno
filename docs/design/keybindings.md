@@ -279,7 +279,9 @@ note, with an optional line on what changed; nothing is saved when the text is t
   text (`Types`); bare `Esc` belongs to the panel (`Panel`); unreadable stays
   unreadable. `system()` flags OS-kept chords as warnings.
 - `clashes()` (`:203`): who already has these keys where this action applies
-  (`meets()` contexts). The panel offers Replace (takes them) or keeping both
+  (`meets()` contexts; `Editor` meets `Editor && Change`, so a rebinding to the accept chord is a
+  clash, while the defaults' own `Editor`/`Editor && Change` overlap on `Ctrl+Enter` is not, see
+  `collide()`). The panel offers Replace (takes them) or keeping both
   when contexts never meet.
 - `effective()` (`:153`): a choice replaces the default in EACH of the action's
   contexts, at the place it held (equal context: last wins); a choice wins over

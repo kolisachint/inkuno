@@ -328,17 +328,37 @@ fn app_folders() -> [PathBuf; 2] {
     [config_dir().join("inkuno"), scratch::dir()]
 }
 
-/// The app's own folders that lie inside `root`, as paths under `root` (the walks compare them
-/// with the paths they visit, which start from `root` as given).
+/// The app's own folders that lie inside `root`, each as given and as the disk spells it (the same
+/// two spellings as `history_folders`: the walks compare them with the paths they visit, which
+/// start from `root` as given, and the watch with the events, which the system reports canonical).
 fn app_folders_in(root: &Path) -> Vec<PathBuf> {
     let real_root = real(root);
-    app_folders()
-        .iter()
-        .filter_map(|app| {
-            let rel = real(app).strip_prefix(&real_root).ok()?.to_path_buf();
-            (!rel.as_os_str().is_empty()).then(|| root.join(rel))
-        })
-        .collect()
+    let mut folders: Vec<PathBuf> = Vec::new();
+    for app in app_folders() {
+        let Ok(rel) = real(&app).strip_prefix(&real_root).map(Path::to_path_buf) else {
+            continue;
+        };
+        if rel.as_os_str().is_empty() {
+            continue;
+        }
+        for spelling in [root.join(&rel), real_root.join(&rel)] {
+            if !folders.contains(&spelling) {
+                folders.push(spelling);
+            }
+        }
+    }
+    folders
+}
+
+/// The vault's root as given and as the disk spells it, once each when they are the same. Built
+/// once, when the watch starts (see `history_folders`): the events carry the canonical spelling.
+fn watch_roots(root: &Path) -> Vec<PathBuf> {
+    let mut roots = vec![root.to_path_buf()];
+    let canonical = real(root);
+    if !roots.contains(&canonical) {
+        roots.push(canonical);
+    }
+    roots
 }
 
 /// Whether `path` is one of the app's own files, scratch notes included.
@@ -399,12 +419,15 @@ pub fn fingerprint(root: &Path) -> u64 {
 }
 
 /// A vault change worth rereading the disk for: not a mere read,
-/// and not a hidden file or folder (`.trash`, `.git`…).
-fn matters(root: &Path, event: &Event) -> bool {
+/// and not a hidden file or folder (`.trash`, `.git`…). `roots` are the vault's root in each
+/// spelling (see `watch_roots`): an event may carry either one.
+fn matters(roots: &[PathBuf], event: &Event) -> bool {
     let hidden = |path: &PathBuf| {
-        path.strip_prefix(root).is_ok_and(|rel| {
-            rel.components()
-                .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+        roots.iter().any(|root| {
+            path.strip_prefix(root).is_ok_and(|rel| {
+                rel.components()
+                    .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+            })
         })
     };
     !event.kind.is_access() && (event.paths.is_empty() || !event.paths.iter().all(hidden))
@@ -414,7 +437,7 @@ fn matters(root: &Path, event: &Event) -> bool {
 /// change that matters outside the app's own folders (a scratch note saved is no vault change) and
 /// outside the revisions (`history`, see `history_folders`: they are no vault change either).
 fn reread_for(
-    root: &Path,
+    roots: &[PathBuf],
     skip: &[PathBuf],
     history: &[PathBuf],
     event: &notify::Result<Event>,
@@ -427,7 +450,7 @@ fn reread_for(
                     .paths
                     .iter()
                     .all(|p| under(p, skip) || under(p, history));
-            matters(root, event) && !own
+            matters(roots, event) && !own
         }
     }
 }
@@ -510,14 +533,14 @@ pub fn watch(
     changed: Arc<Signal>,
     history: Arc<Signal>,
 ) -> Option<RecommendedWatcher> {
-    let base = root.to_path_buf();
+    let roots = watch_roots(root);
     let skip = app_folders_in(root);
     let history_dirs = history_folders(root);
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
         if revisions_moved(&history_dirs, &event) {
             history.raise();
         }
-        if reread_for(&base, &skip, &history_dirs, &event) {
+        if reread_for(&roots, &skip, &history_dirs, &event) {
             changed.raise();
         }
     })
@@ -1544,23 +1567,24 @@ mod tests {
             event::{AccessKind, CreateKind},
         };
         let root = Path::new("/v");
+        let roots = watch_roots(root);
         let event = |kind, path: &str| Event::new(kind).add_path(root.join(path));
         let created = EventKind::Create(CreateKind::File);
-        assert!(matters(root, &event(created, "a.md")));
-        assert!(matters(root, &event(created, "dossier/a.md")));
-        assert!(!matters(root, &event(created, ".trash/a.md")));
+        assert!(matters(&roots, &event(created, "a.md")));
+        assert!(matters(&roots, &event(created, "dossier/a.md")));
+        assert!(!matters(&roots, &event(created, ".trash/a.md")));
 
-        assert!(!matters(root, &event(created, ".git/objects/ab")));
+        assert!(!matters(&roots, &event(created, ".git/objects/ab")));
         assert!(!matters(
-            root,
+            &roots,
             &event(EventKind::Access(AccessKind::Read), "a.md")
         ));
         // Outside the vault or without a path: when in doubt, reread.
         assert!(matters(
-            root,
+            &roots,
             &Event::new(created).add_path("/ailleurs/.x".into())
         ));
-        assert!(matters(root, &Event::new(created)));
+        assert!(matters(&roots, &Event::new(created)));
     }
 
     /// A revision event is for the Versions list only: no reread of the vault.
@@ -1568,14 +1592,15 @@ mod tests {
     fn a_revision_written_from_a_terminal_only_marks_the_versions_stale() {
         use notify::{EventKind, event::CreateKind};
         let root = Path::new("/v");
+        let roots = watch_roots(root);
         let history = history_folders(root);
         let event =
             |path: &str| Event::new(EventKind::Create(CreateKind::File)).add_path(root.join(path));
         // `inkuno rev save` writes .inkuno/revisions/Plan.md/0002.md: the history signal, and no reread.
         let saved = event(".inkuno/revisions/Plan.md/0002.md");
         assert!(revisions_moved(&history, &Ok(saved.clone())));
-        assert!(!matters(root, &saved));
-        assert!(!reread_for(root, &[], &history, &Ok(saved)));
+        assert!(!matters(&roots, &saved));
+        assert!(!reread_for(&watch_roots(root), &[], &history, &Ok(saved)));
         // A note, a hidden folder of another kind, and the vault's own bin: not revisions.
         assert!(!revisions_moved(&history, &Ok(event("Plan.md"))));
         assert!(!revisions_moved(&history, &Ok(event(".trash/a.md"))));
@@ -1609,11 +1634,16 @@ mod tests {
         let revision_event = Event::new(created)
             .add_path(canonical.join(revision::VAULT_DIR).join("Plan.md/0002.md"));
         assert!(revisions_moved(&history, &Ok(revision_event.clone())));
-        assert!(!reread_for(&link, &[], &history, &Ok(revision_event)));
+        assert!(!reread_for(
+            &watch_roots(&link),
+            &[],
+            &history,
+            &Ok(revision_event)
+        ));
         // A note reached under the canonical spelling is still a vault change, and no revision.
         let note = Event::new(created).add_path(canonical.join("Plan.md"));
         assert!(!revisions_moved(&history, &Ok(note.clone())));
-        assert!(reread_for(&link, &[], &history, &Ok(note)));
+        assert!(reread_for(&watch_roots(&link), &[], &history, &Ok(note)));
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -1846,11 +1876,16 @@ mod tests {
         let skip = app_folders_in(&root);
         let created = EventKind::Create(CreateKind::File);
         let scratch_write = Event::new(created).add_path(app.join("scratch/2026-11-14-103900.md"));
-        assert!(!reread_for(&root, &skip, &[], &Ok(scratch_write)));
+        assert!(!reread_for(
+            &watch_roots(&root),
+            &skip,
+            &[],
+            &Ok(scratch_write)
+        ));
         let note = Event::new(created).add_path(root.join("plan.md"));
-        assert!(reread_for(&root, &skip, &[], &Ok(note)));
+        assert!(reread_for(&watch_roots(&root), &skip, &[], &Ok(note)));
         assert!(reread_for(
-            &root,
+            &watch_roots(&root),
             &skip,
             &[],
             &Err(notify::Error::generic("lost"))
@@ -1858,6 +1893,43 @@ mod tests {
         assert!(is_app_file(&app.join("scratch/2026-11-14-103200.md")));
         assert!(!is_app_file(&root.join("plan.md")));
         let _ = fs::remove_dir_all(root);
+    }
+
+    /// A vault opened through a symbolic link: the system reports its events under the canonical
+    /// spelling. A change in a hidden folder, or in the app's own folder, is no reread in either
+    /// spelling; a note is a reread in both.
+    #[cfg(unix)]
+    #[test]
+    fn a_vault_opened_through_a_link_skips_its_hidden_and_own_folders_in_either_spelling() {
+        use notify::{EventKind, event::CreateKind};
+        let base = env::temp_dir().join(format!("inkuno-spelling-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let vault = base.join("vault");
+        let scratch_dir = vault.join("Application Support/inkuno/scratch");
+        fs::create_dir_all(vault.join(".git")).unwrap();
+        fs::create_dir_all(&scratch_dir).unwrap();
+        crate::platform::scratch::isolate(scratch_dir.clone());
+        let link = base.join("link");
+        std::os::unix::fs::symlink(&vault, &link).unwrap();
+        let canonical = fs::canonicalize(&vault).unwrap();
+        let roots = watch_roots(&link);
+        let skip = app_folders_in(&link);
+        // The app's folder in both spellings: the one the walks use, and the one events carry.
+        assert!(skip.contains(&link.join("Application Support/inkuno/scratch")));
+        assert!(skip.contains(&canonical.join("Application Support/inkuno/scratch")));
+        let created = EventKind::Create(CreateKind::File);
+        let at =
+            |path: PathBuf| -> notify::Result<Event> { Ok(Event::new(created).add_path(path)) };
+        for folder in [&link, &canonical] {
+            let hidden = folder.join(".git/objects/ab");
+            assert!(!reread_for(&roots, &skip, &[], &at(hidden)));
+            let scratch_note =
+                folder.join("Application Support/inkuno/scratch/2026-11-16-101000.md");
+            assert!(!reread_for(&roots, &skip, &[], &at(scratch_note)));
+            let note = folder.join("plan.md");
+            assert!(reread_for(&roots, &skip, &[], &at(note)));
+        }
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

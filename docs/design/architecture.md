@@ -114,7 +114,8 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 - **Vault** (`platform/vault.rs`): the note list, its tags and its text are indexed off the UI
   thread when the vault opens, then kept up to date on each save. Changes made elsewhere are
   reported by the `notify` crate; the vault is also rechecked on a slow timer, which becomes the
-  only mechanism when watching is not possible.
+  only mechanism when watching is not possible. The watch knows the vault's root and its app
+  folders in both spellings (as given, and canonical as the events carry them), built once at start.
 - **Palette**: name matches first, then notes whose text contains every word. Names and texts are
   folded and lowered once, when the vault is read, not on each keystroke.
 - **Navigation** (`views/nav.rs`, `shell/sidebar.rs`): the tree is rebuilt from the paths of the
