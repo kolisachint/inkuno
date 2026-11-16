@@ -5,14 +5,14 @@
 
 use std::{
     fs,
-    io::{self, Write},
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use super::scratch;
-use crate::logic::revision::{self, Revision};
+use crate::logic::revision::{self, Header, Revision};
 
 /// Where a note lives, which decides where its history is kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,6 +99,27 @@ pub fn save_as(
         kind,
     };
     save_with(home, note, &entry, true)
+}
+
+/// An automatic revision of `text` by `author`, with `memo`, at the time now: the one `inkuno write`
+/// saves around an agent's write, and the app saves around a proposal or a restore. Refused (no
+/// file) when the text is the latest revision's already.
+pub fn save_auto(
+    home: &Home,
+    path: &Path,
+    author: &str,
+    memo: &str,
+    text: &str,
+) -> io::Result<Saved> {
+    save_as(
+        home,
+        path,
+        author,
+        Some(memo),
+        text,
+        now(),
+        revision::Kind::Auto,
+    )
 }
 
 /// What one save writes: its author, its optional note, its text, its time and its kind.
@@ -262,14 +283,18 @@ pub fn all(home: &Home, note: &Path) -> io::Result<Vec<Revision>> {
     Ok(found)
 }
 
-/// One version of a note's history as the Versions panel lists it: a readable revision, or the
-/// number of a revision file that cannot be read, with why.
-pub type Listed = Result<Revision, (u32, io::Error)>;
+/// One version of a note's history as the Versions panel lists it: the front matter of a readable
+/// revision, or the number of a revision file that cannot be read, with why.
+pub type Listed = Result<Header, (u32, io::Error)>;
 
-/// Every revision file of `note`, oldest first, each read on its own: one that cannot be read is
-/// listed with its number, the others are still there (`all` stops at the first one). An error
-/// only when the history folder itself cannot be listed.
-pub fn listed(home: &Home, note: &Path) -> io::Result<Vec<Listed>> {
+/// The most a header may take on disk: a revision's front matter is a few lines, so a file that has
+/// no closing line within this many bytes is not read further.
+const HEADER_LIMIT: usize = 16 * 1024;
+
+/// Every revision file of `note`, oldest first, each one's header only (`get` reads a text). Each
+/// file is read on its own: one that cannot be read is listed with its number, the others are still
+/// there. An error only when the history folder itself cannot be listed.
+pub fn headers(home: &Home, note: &Path) -> io::Result<Vec<Listed>> {
     let Some(folder) = home.folder(note) else {
         return Ok(Vec::new());
     };
@@ -277,8 +302,37 @@ pub fn listed(home: &Home, note: &Path) -> io::Result<Vec<Listed>> {
     numbers.sort_unstable();
     Ok(numbers
         .into_iter()
-        .map(|number| read(&folder.join(revision::file_name(number))).map_err(|e| (number, e)))
+        .map(|number| {
+            read_header(&folder.join(revision::file_name(number))).map_err(|e| (number, e))
+        })
         .collect())
+}
+
+/// Reads the front matter of one revision file, line by line up to its closing `---`: the text of
+/// the revision is not read.
+pub fn read_header(file: &Path) -> io::Result<Header> {
+    let mut reader = io::BufReader::new(fs::File::open(file)?);
+    let mut head = String::new();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        head += &line;
+        // The first line opens the header; a later `---` line closes it.
+        let closes = head.len() > line.len() && line.trim_end_matches(['\r', '\n']) == "---";
+        if closes || head.len() > HEADER_LIMIT {
+            break;
+        }
+    }
+    let (header, _) = revision::parse_header(&head).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{}: {e}", file.display()),
+        )
+    })?;
+    Ok(header)
 }
 
 /// Whether `path` lies in the app's history: a vault's revisions or their bin (`.inkuno/revisions`,
@@ -508,6 +562,72 @@ mod tests {
             revision::Kind::Checkpoint
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn save_auto_writes_an_automatic_revision_and_refuses_an_unchanged_text() {
+        let root = temp("save-auto");
+        let home = Home::Vault(root.clone());
+        let note = root.join("plan.md");
+        assert!(matches!(
+            save_auto(&home, &note, "ana", "before restoring version 1", "one\n").unwrap(),
+            Saved::Made { number: 1, .. }
+        ));
+        assert_eq!(
+            save_auto(&home, &note, "ana", "before restoring version 1", "one\n").unwrap(),
+            Saved::Unchanged { latest: 1 }
+        );
+        let made = get(&home, &note, 1).unwrap();
+        assert_eq!(made.kind, revision::Kind::Auto);
+        assert_eq!(made.author, "ana");
+        assert_eq!(made.note.as_deref(), Some("before restoring version 1"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn headers_are_listed_without_the_texts_and_a_broken_file_is_its_own_row() {
+        let root = temp("headers");
+        let home = Home::Vault(root.clone());
+        let note = root.join("plan.md");
+        save(&home, &note, "ana", Some("first"), "one\n", 0).unwrap();
+        save(&home, &note, "bo", None, "two\n", 0).unwrap();
+        save(&home, &note, "ana", None, "three\n", 0).unwrap();
+        let folder = root.join(".inkuno/revisions/plan.md");
+        // The second file has a text that is not UTF-8: its header still reads, its text does not.
+        let mut bytes = render_text(2, "bo", "two\n").into_bytes();
+        bytes.truncate(bytes.len() - 4);
+        bytes.extend_from_slice(&[0xff, 0xfe, b'\n']);
+        fs::write(folder.join("0002.md"), bytes).unwrap();
+        // The third file's header is broken: it is listed with its number and the reason.
+        fs::write(folder.join("0003.md"), "---\nauthor: ana\n---\nthree\n").unwrap();
+
+        let listed = headers(&home, &note).unwrap();
+        assert_eq!(listed.len(), 3);
+        let first = listed[0].as_ref().unwrap();
+        assert_eq!((first.number, first.author.as_str()), (1, "ana"));
+        assert_eq!(first.note.as_deref(), Some("first"));
+        let second = listed[1].as_ref().unwrap();
+        assert_eq!((second.number, second.author.as_str()), (2, "bo"));
+        let (number, why) = listed[2].as_ref().unwrap_err();
+        assert_eq!(*number, 3);
+        assert_eq!(why.kind(), io::ErrorKind::InvalidData);
+        // The text of the readable one is read on its own, when asked; the unreadable text is an error.
+        assert_eq!(get(&home, &note, 1).unwrap().text, "one\n");
+        assert!(get(&home, &note, 2).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// The file of revision `number` as `save` writes it, for a test that rewrites its bytes.
+    fn render_text(number: u32, author: &str, text: &str) -> String {
+        revision::render(&Revision {
+            number,
+            parent: number.checked_sub(1).filter(|n| *n >= 1),
+            author: author.into(),
+            date: "1970-01-01T00:00:00Z".into(),
+            kind: revision::Kind::Checkpoint,
+            note: None,
+            text: text.into(),
+        })
     }
 
     #[test]

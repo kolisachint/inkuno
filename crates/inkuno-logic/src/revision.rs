@@ -111,9 +111,57 @@ pub fn render(rev: &Revision) -> String {
     out
 }
 
+/// The front matter of a revision: every field of `Revision` but the text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Header {
+    pub number: u32,
+    pub parent: Option<u32>,
+    pub author: String,
+    pub date: String,
+    pub kind: Kind,
+    pub note: Option<String>,
+}
+
+impl Header {
+    /// The revision this header belongs to, with its text.
+    pub fn with_text(self, text: String) -> Revision {
+        Revision {
+            number: self.number,
+            parent: self.parent,
+            author: self.author,
+            date: self.date,
+            kind: self.kind,
+            note: self.note,
+            text,
+        }
+    }
+}
+
+impl Revision {
+    /// The front matter of this revision, without its text.
+    pub fn head(&self) -> Header {
+        Header {
+            number: self.number,
+            parent: self.parent,
+            author: self.author.clone(),
+            date: self.date.clone(),
+            kind: self.kind,
+            note: self.note.clone(),
+        }
+    }
+}
+
 /// Reads a revision file. Unknown front matter keys are ignored; `author` and `date` default when
 /// missing, `kind` to a checkpoint. The text is everything after the closing `---` line.
 pub fn parse(file: &str) -> Result<Revision, Error> {
+    let (head, at) = parse_header(file)?;
+    Ok(head.with_text(file[at..].to_string()))
+}
+
+/// Reads the front matter at the start of a revision file, and the byte where its text starts (the
+/// line after the closing `---`). Only the head of a file is needed: the text is not looked at, so
+/// a file cut after its header reads the same.
+pub fn parse_header(file: &str) -> Result<(Header, usize), Error> {
     let mut lines = file.split_inclusive('\n');
     let open = lines.next().ok_or(Error::NoHeader)?;
     if bare(open) != FENCE {
@@ -160,15 +208,15 @@ pub fn parse(file: &str) -> Result<Revision, Error> {
         .unwrap_or_else(|| "unknown".to_string());
     let date = get("date").map(decode).unwrap_or_default();
     let note = get("note").map(decode).filter(|n| !n.is_empty());
-    Ok(Revision {
+    let head = Header {
         number,
         parent,
         author,
         date,
         kind,
         note,
-        text: file[offset..].to_string(),
-    })
+    };
+    Ok((head, offset))
 }
 
 /// A line without its line ending (`\n` or `\r\n`).
@@ -430,7 +478,7 @@ pub fn diff(
 /// What the Versions panel shows of a version on its row: `#12 · sachin`, then `· <auto>` for an
 /// automatic version (`auto` is the word for it, translated by the caller) and `· <note>` when it
 /// has one.
-pub fn row_name(rev: &Revision, auto: &str) -> String {
+pub fn row_name(rev: &Header, auto: &str) -> String {
     let mut name = format!("#{} · {}", rev.number, rev.author);
     if rev.kind == Kind::Auto {
         name += &format!(" · {auto}");
@@ -441,13 +489,15 @@ pub fn row_name(rev: &Revision, auto: &str) -> String {
     name
 }
 
-/// A version's date as the panel shows it: `2026-11-14 10:32`, the UTC time `rev list` prints, to the
-/// minute. A date that is not RFC 3339 (hand-edited, short, or with a character that is not ASCII
-/// where the minute is) is shown as it is.
-pub fn short_date(date: &str) -> String {
-    let parts = date.strip_suffix('Z').and_then(|d| d.split_once('T'));
-    match parts.and_then(|(day, time)| Some((day, time.get(..5)?))) {
-        Some((day, minute)) => format!("{day} {minute}"),
+/// A version's date as the Versions panel shows it, in local time to the minute: `2026-11-14 11:32`.
+/// `local` gives the local (year, month, day, hour, minute) of a Unix time. A date that is not
+/// RFC 3339 UTC (hand-edited, short, or with a character that is not a digit) is shown as it is.
+pub fn local_date(date: &str, local: impl Fn(i64) -> (i32, u32, u32, u32, u32)) -> String {
+    match unix_of(date) {
+        Some(unix) => {
+            let (year, month, day, hour, minute) = local(unix);
+            format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}")
+        }
         None => date.to_string(),
     }
 }
@@ -507,6 +557,68 @@ fn civil(days: i64) -> (i64, u32, u32) {
     let month = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
     let year = yoe + era * 400 + i64::from(month <= 2);
     (year, month, day)
+}
+
+/// The civil date (year, month, day) of a day count since 1970-01-01: the inverse of `civil`.
+fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = i64::from(if month > 2 { month - 3 } else { month + 9 });
+    let doy = (153 * mp + 2) / 5 + i64::from(day) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// The fields of a Unix time in UTC: year, month, day, hour, minute. The same fields `clock::local`
+/// gives, for a platform that has no local time.
+pub fn utc_parts(unix: i64) -> (i32, u32, u32, u32, u32) {
+    let (year, month, day) = civil(unix.div_euclid(86_400));
+    let rest = unix.rem_euclid(86_400);
+    (
+        year as i32,
+        month,
+        day,
+        (rest / 3600) as u32,
+        (rest % 3600 / 60) as u32,
+    )
+}
+
+/// A date as RFC 3339 UTC (`2026-11-14T10:32:00Z`, the seconds optional) read back as Unix seconds.
+/// `None` for any other text, or a date that is not a day of the calendar.
+pub fn unix_of(date: &str) -> Option<i64> {
+    fn digits(text: &str, len: usize) -> Option<i64> {
+        (text.len() == len && text.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| text.parse().ok())
+            .flatten()
+    }
+    let (day, time) = date.strip_suffix('Z')?.split_once('T')?;
+    let mut parts = day.split('-');
+    let (year, month, mday) = (
+        digits(parts.next()?, 4)?,
+        digits(parts.next()?, 2)?,
+        digits(parts.next()?, 2)?,
+    );
+    if parts.next().is_some() || !(1..=12).contains(&month) || !(1..=31).contains(&mday) {
+        return None;
+    }
+    let mut clock = time.split(':');
+    let hour = digits(clock.next()?, 2)?;
+    let minute = digits(clock.next()?, 2)?;
+    let second = match clock.next() {
+        Some(text) => digits(text, 2)?,
+        None => 0,
+    };
+    if clock.next().is_some() || hour > 23 || minute > 59 || second > 59 {
+        return None;
+    }
+    let (month, mday) = (month as u32, mday as u32);
+    let days = days_from_civil(year, month, mday);
+    // A day the calendar does not have (30 February) reads back as another day: refused.
+    if civil(days) != (year, month, mday) {
+        return None;
+    }
+    Some(days * 86_400 + hour * 3600 + minute * 60 + second)
 }
 
 /// A Unix time as UTC RFC 3339 to the second: `2026-11-14T10:32:00Z`.
@@ -691,6 +803,53 @@ mod tests {
         assert_eq!(
             parse("---\nrevision: 1\nkind: manual\n---\n"),
             Err(Error::Field("kind"))
+        );
+    }
+
+    #[test]
+    fn a_header_is_read_without_the_text_and_says_where_it_ends() {
+        let file = render(&Revision {
+            note: Some("kept: local".into()),
+            kind: Kind::Auto,
+            ..rev(4, "# Plan\n---\nnot a closing line\n")
+        });
+        let (head, at) = parse_header(&file).unwrap();
+        let expected = Header {
+            kind: Kind::Auto,
+            note: Some("kept: local".into()),
+            ..rev(4, "").head()
+        };
+        assert_eq!(head, expected);
+        assert_eq!(&file[at..], "# Plan\n---\nnot a closing line\n");
+        // The header alone, cut after its closing line, reads the same.
+        let cut = &file[..at];
+        assert_eq!(parse_header(cut).unwrap().0, head);
+        // A cut inside the header is not a revision.
+        assert_eq!(
+            parse_header(&file[..file.find("kind:").unwrap()]).unwrap_err(),
+            Error::Unclosed
+        );
+    }
+
+    #[test]
+    fn a_broken_header_is_reported_by_its_field() {
+        assert_eq!(parse_header("").unwrap_err(), Error::NoHeader);
+        assert_eq!(parse_header("# Plan\n").unwrap_err(), Error::NoHeader);
+        assert_eq!(
+            parse_header("---\nrevision: 2\nauthor: ana\n").unwrap_err(),
+            Error::Unclosed
+        );
+        assert_eq!(
+            parse_header("---\nauthor: ana\n---\n").unwrap_err(),
+            Error::Field("revision")
+        );
+        assert_eq!(
+            parse_header("---\nrevision: 2\nkind: draft\n---\n").unwrap_err(),
+            Error::Field("kind")
+        );
+        assert_eq!(
+            parse_header("---\nrevision: 2\nparent: 0\n---\n").unwrap_err(),
+            Error::Field("parent")
         );
     }
 
@@ -887,42 +1046,88 @@ mod tests {
 
     #[test]
     fn a_row_says_the_number_the_author_the_kind_and_the_note() {
-        assert_eq!(row_name(&rev(12, "x"), "auto"), "#12 · sachin");
+        assert_eq!(row_name(&rev(12, "x").head(), "auto"), "#12 · sachin");
         let auto = Revision {
             kind: Kind::Auto,
             note: Some("proposed, pending".into()),
             ..rev(3, "x")
         };
         assert_eq!(
-            row_name(&auto, "auto"),
+            row_name(&auto.head(), "auto"),
             "#3 · sachin · auto · proposed, pending"
         );
         // The word of the automatic kind is the caller's: here a French one.
         assert_eq!(
-            row_name(&auto, "auto FR"),
+            row_name(&auto.head(), "auto FR"),
             "#3 · sachin · auto FR · proposed, pending"
         );
         let empty = Revision {
             note: Some(String::new()),
             ..rev(4, "x")
         };
-        assert_eq!(row_name(&empty, "auto"), "#4 · sachin");
+        assert_eq!(row_name(&empty.head(), "auto"), "#4 · sachin");
+    }
+
+    /// The local time of the test: one hour after UTC, whatever the machine's zone.
+    fn plus_one_hour(unix: i64) -> (i32, u32, u32, u32, u32) {
+        utc_parts(unix + 3600)
     }
 
     #[test]
-    fn a_date_is_shown_to_the_minute_as_rev_list_gives_it() {
-        assert_eq!(short_date("2026-11-14T10:32:00Z"), "2026-11-14 10:32");
-        assert_eq!(short_date("not a date"), "not a date");
+    fn a_date_is_shown_in_local_time_to_the_minute() {
+        assert_eq!(
+            local_date("2026-11-14T23:30:00Z", plus_one_hour),
+            "2026-11-15 00:30"
+        );
+        assert_eq!(
+            local_date("2026-11-14T10:32:00Z", utc_parts),
+            "2026-11-14 10:32"
+        );
+        assert_eq!(local_date("not a date", utc_parts), "not a date");
     }
 
-    /// A date with a character that is not ASCII where the minute is, or empty or short, is shown as it is.
+    /// A date that is not RFC 3339 UTC (a character that is not a digit, empty, short, or a day
+    /// the calendar does not have) is shown as it is, and never panics.
     #[test]
-    fn a_hand_edited_date_never_panics_and_is_shown_as_it_is() {
-        // A non-ASCII character where the minute is: the cut would split it.
-        assert_eq!(short_date("2026-11-14T10:3éZ"), "2026-11-14T10:3éZ");
-        // An empty date, and a short time.
-        assert_eq!(short_date(""), "");
-        assert_eq!(short_date("2026-11-14T1Z"), "2026-11-14T1Z");
+    fn a_hand_edited_date_is_shown_as_it_is() {
+        assert_eq!(
+            local_date("2026-11-14T10:3éZ", utc_parts),
+            "2026-11-14T10:3éZ"
+        );
+        assert_eq!(local_date("", utc_parts), "");
+        assert_eq!(local_date("2026-11-14T1Z", utc_parts), "2026-11-14T1Z");
+        assert_eq!(
+            local_date("2026-02-30T10:00:00Z", utc_parts),
+            "2026-02-30T10:00:00Z"
+        );
+    }
+
+    #[test]
+    fn a_date_reads_back_as_unix_seconds() {
+        assert_eq!(unix_of("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(unix_of("1969-12-31T23:59:59Z"), Some(-1));
+        assert_eq!(unix_of("2024-02-29T12:00:00Z"), Some(1_709_208_000));
+        assert_eq!(unix_of("2024-02-29T12:00Z"), Some(1_709_208_000));
+        for unix in [0, 951_782_400, 1_709_208_000, 1_700_000_000, -86_401] {
+            assert_eq!(unix_of(&rfc3339(unix)), Some(unix), "{}", rfc3339(unix));
+        }
+        assert_eq!(unix_of("2026-11-14 10:32:00Z"), None);
+        assert_eq!(unix_of("2026-11-14T10:32:00"), None);
+        assert_eq!(unix_of("2026-13-01T00:00:00Z"), None);
+    }
+
+    /// The civil fields of fixed Unix times, leap days included.
+    #[test]
+    fn utc_fields_follow_the_calendar_with_leap_days() {
+        assert_eq!(utc_parts(0), (1970, 1, 1, 0, 0));
+        // 2000 is a leap year (divisible by 400): its 29th of February exists.
+        assert_eq!(utc_parts(951_782_400), (2000, 2, 29, 0, 0));
+        assert_eq!(utc_parts(951_868_800), (2000, 3, 1, 0, 0));
+        // 2024-02-29 12:00 UTC.
+        assert_eq!(utc_parts(1_709_208_000), (2024, 2, 29, 12, 0));
+        // 2100 is not a leap year: the day after 28 February is 1 March.
+        assert_eq!(utc_parts(4_107_542_400), (2100, 3, 1, 0, 0));
+        assert_eq!(utc_parts(-1), (1969, 12, 31, 23, 59));
     }
 
     #[test]

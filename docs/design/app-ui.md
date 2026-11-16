@@ -1007,7 +1007,7 @@ Normal 800 is the default (§10.4 lock released for this change).
 - The default instruction is English. The prompt asks for the answer in the note's language (§18.2).
 - The passage of a selection that holds a table or a figure is not special-cased.
 
-## 19. Versions panel and compare (built 2026-11-15)
+## 19. Versions panel, compare and restore (built 2026-11-15; restore 2026-11-16)
 
 > Status: built, on the owner's brief of 2026-11-15 (`revisions.md`, Decisions). The code is the ground truth for names.
 > The panel lists the saved versions of a note; a compare shows one of them against the note as it is now.
@@ -1034,13 +1034,19 @@ Normal 800 is the default (§10.4 lock released for this change).
 - `app::ShowVersions`, palette entry **Versions of the note** (group Go; `history` finds it too). No chord and no rail button, as
   the Scratch panel. It lives in the left dock, hidden by default; an older layout file names no `versions`, and nothing changes.
 - Rows: the versions of the active tab's note, newest first. A row reads `#12 · author`, then `· auto` for an automatic version,
-  then `· <note>` when it has one. On the right, the date and time, UTC to the minute, as `inkuno rev list` prints them. An
-  automatic version's name is drawn in the quiet colour.
+  then `· <note>` when it has one. On the right, the date and time in local time, to the minute (`logic::revision::local_date`,
+  `platform::clock::local`: the platform's own zone rules, no zone read by hand). The stored time is UTC. An automatic version's
+  name is drawn in the quiet colour.
 - The list is read from disk when the panel is shown, after **Save a version**, after an Assistant proposal (Review or Improve), when
   the note of the active tab changes, and when a revision is written from outside the app (`inkuno rev save`, another window): the
   vault's watcher reports the `.inkuno/revisions` folder on its own signal, which only marks the list stale and redraws the panel
   (`versions_moved`). Nothing else is reread for it: no note reload, no tree refresh, no link index. It is cached in
   `Shell::versions` and keyed by the note's path; each row finds its version by a lookup, not a scan, so nothing is read per frame.
+- The list reads each version's **header only** (`platform::revisions::headers`, `read_header`): the front matter up to its closing
+  `---`, line by line, never the text. A version's text is read on demand, by a compare, a copy or a restore (`platform::revisions::get`);
+  a long history therefore lists at once. A header that cannot be read is the unreadable row (above); a text that cannot be read
+  when a compare, a copy or a restore needs it says `#7 · this version cannot be read, so it cannot be compared.` (or copied,
+  or restored), the same words the row gives.
 - While a comparison is the shown tab, the panel lists the versions of the note that comparison belongs to, and the row of the
   compared version is marked as the current one (the same mark a shown note gets in the tree). Enter on another row opens another
   comparison.
@@ -1093,14 +1099,27 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ### 19.3 The row menu
 
-- **Compare with the note now** (the default: Enter does the same) and **Copy this version's text**.
+- **Compare with the note now** (the default: Enter does the same), **Copy this version's text**, and **Restore this version** (last).
+- **Restore this version** is offered only when the row's header can be read: a version with no readable text has no restore.
 - No other gesture applies to a version: the tree's trash, rename, move and duplicate act on nothing, since a version is history.
 - The history is never a target of a file gesture, whatever the panel shows. `menu_do` refuses, at its top, any target under a history
   folder: the vault's `.inkuno/revisions` and its bin `.inkuno/trash`, and the scratch folder's `.revisions` (bin included), named by
   `logic::revision` and `platform::revisions::holds_history`. The refusal says **The history of the notes is kept by the app: nothing
   is done to it.** The selection is also cleared when the Versions panel is entered or left (`Nav::activate`): a version chosen in the
   panel is not the tree's selection, so Delete, F2 and Ctrl+D of the tree find nothing to act on.
-- Restore is not built. It is a follow-up (`backlog.md`): a restore would be a proposal through the pending flow.
+- **Restore this version** (built 2026-11-16) proposes the version's text as the note's new text, through the pending flow, as an
+  Assistant proposal lands (§18.5). It is `Shell::restore_version` in `shell/versions.rs`:
+  - the note is the active tab's, read as it is in the editor now (its unsaved edits included). A comparison tab, or a read-only
+    tab, is refused with **This is a comparison: it cannot be changed.**;
+  - `pending::propose(current, current, version)`: a note with pending changes is refused with **Accept or reject the pending
+    changes first.** (as Improve says it); a note that is this version already says **The note is this version already.** and
+    changes nothing;
+  - on success, one undo step (`Shell::absorb_marked`, shared with Improve) and two `kind: auto` revisions, as an agent's write
+    leaves them (`revisions.md`, 2026-11-16): the text before, by the person's author, memo `before restoring version N`; the
+    restored text with its changes accepted, by the same author, memo `version N restored, pending`. A failed save of the text
+    before stops the restore with one line; a failed save of the restored text is a warning, the changes stay pending;
+  - then the count line: **N changes are pending in the note: accept or reject them there.** The person accepts or rejects each
+    change as usual.
 
 ### 19.4 Known limits
 
@@ -1111,7 +1130,6 @@ Normal 800 is the default (§10.4 lock released for this change).
 - The layout file does not save a comparison (it has no note). While one is shown, the group's `*` mark goes to the note it compares
   when that note is a tab of the group, else to the nearest tab that holds a note (the left one on a tie), so the next start shows
   the note the person was on.
-- The list reads every version's full text on the window's thread (`backlog.md`): a long history takes a moment to show.
-- A date is the stored UTC time: the local time of a past version needs a conversion that is not built (`platform/clock.rs` gives the
-  local time of now only).
-- No restore (§19.3).
+- A date is local time from the platform's zone rules on unix. On Windows no local-time call is made yet, so the date is UTC there
+  (`platform/clock.rs`, `local`).
+- A restore needs the note in a tab that is not a comparison (§19.3); the note of a comparison is not restored from its panel.

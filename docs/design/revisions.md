@@ -92,7 +92,8 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
 - **Versions of the note** (palette; `history` finds it too) opens the Versions panel: the versions of the active note, newest first,
   each as `#12 · author`, with its line and its date. Enter or a click compares a version with the note as it is now, in a read-only
   tab; the difference is drawn as pending changes (green added, red removed). The row menu copies a version's text. Design and
-  limits: `app-ui.md` §19.
+  limits: `app-ui.md` §19. **Restore this version** (the row menu's last entry) proposes the version's text as the note's new
+  text, as pending changes, and saves two `kind: auto` revisions around it (see Decisions, 2026-11-16).
 
 ## Decisions
 
@@ -114,9 +115,11 @@ inkuno rev diff <note> [<a>] [<b>] [--format unified|critic]
 | 2026-11-14 | The command line replaces the MCP server, and the server is removed: done, see [cli.md](cli.md). |
 | 2026-11-14 | An in-app agent talks over a local socket with the same command line as version 2 (planned). |
 | 2026-11-15 | The Versions panel lists the active note's versions, newest first, and a compare shows one against the note now, in a read-only tab with no file: its text is the version's with the difference as pending changes (`pending::propose`), a snapshot, never saved, not restored at the next start. No restore yet; a restore would be a proposal through the pending flow (`app-ui.md` §19). |
+| 2026-11-16 | A restore of a version is a proposal through the pending flow, as an Assistant proposal lands: `pending::propose(current, current, version)`, one undo step, and two `kind: auto` revisions around it, by the person's author: the text before (memo `before restoring version N`), then the restored text with its changes accepted (memo `version N restored, pending`). It needs the note in its tab (not a comparison) and no pending changes in it. |
+| 2026-11-16 | The Versions panel reads each version's header only (the front matter, line by line up to its closing `---`); a version's text is read when a compare, a copy or a restore needs it. A header that cannot be read is its own row, as before. |
+| 2026-11-16 | The panel shows each version's date in local time, to the minute (the platform's zone rules). The stored time stays UTC: the file and `rev list` do not change. |
 
 ## Not built yet
 
-- Restoring a version (through the pending flow, as a proposal).
 - Restoring a trashed note's history when the bin holds it under another name (the undo of a trash
   and the Trash panel's restore bring it back by name).

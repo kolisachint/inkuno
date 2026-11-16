@@ -13,6 +13,42 @@ pub fn today() -> (i32, u32, u32) {
     (tm.tm_year + 1900, tm.tm_mon as u32 + 1, tm.tm_mday as u32)
 }
 
+/// The local date and time of a Unix time: year, month, day, hour, minute. The platform's own zone
+/// rules are used (no time zone is read by hand, and `TZ` is not needed). Where the platform gives no
+/// local time here, the UTC fields of the same time are returned.
+#[cfg(unix)]
+pub fn local(unix: i64) -> (i32, u32, u32, u32, u32) {
+    // SAFETY: `localtime_r` reads the time it is given and writes only into `tm`, which is ours. A
+    // null result (a time the system cannot convert) is checked and falls back to UTC.
+    let tm = unsafe {
+        let at = unix as libc::time_t;
+        let mut tm: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&at, &mut tm).is_null() {
+            return utc(unix);
+        }
+        tm
+    };
+    (
+        tm.tm_year + 1900,
+        tm.tm_mon as u32 + 1,
+        tm.tm_mday as u32,
+        tm.tm_hour as u32,
+        tm.tm_min as u32,
+    )
+}
+
+/// The local date and time of a Unix time. No platform call of local time is made on this system
+/// yet, so the UTC fields of the same time are returned.
+#[cfg(not(unix))]
+pub fn local(unix: i64) -> (i32, u32, u32, u32, u32) {
+    utc(unix)
+}
+
+/// The UTC fields of a Unix time, in the order of `local`: the pure calendar, no platform call.
+pub fn utc(unix: i64) -> (i32, u32, u32, u32, u32) {
+    crate::logic::revision::utc_parts(unix)
+}
+
 /// Local time, `09:05`: hours and minutes.
 pub fn clock() -> (u32, u32) {
     let (hour, minute, _) = hms();
@@ -99,5 +135,49 @@ mod tests {
             let system = String::from_utf8_lossy(&out.stdout).trim().to_string();
             assert!(system == date_name((year, month, day)) || system == date_name(today()));
         }
+    }
+
+    #[test]
+    fn the_local_time_of_now_is_today_and_the_clock() {
+        // Read around the other reads, so that a minute or a midnight between them is no failure.
+        let now = crate::platform::revisions::now();
+        let before = local(now);
+        let (year, month, day) = today();
+        let (hour, minute) = clock();
+        let after = local(crate::platform::revisions::now());
+        let same_day = |(y, m, d, _, _): (i32, u32, u32, u32, u32)| (y, m, d) == (year, month, day);
+        let same_minute = |(_, _, _, h, mi): (i32, u32, u32, u32, u32)| (h, mi) == (hour, minute);
+        assert!(same_day(before) || same_day(after), "{before:?} {after:?}");
+        assert!(
+            same_minute(before) || same_minute(after),
+            "{before:?} {after:?}"
+        );
+    }
+
+    #[test]
+    fn the_local_time_is_the_systems_for_a_fixed_time() {
+        // `date` renders the system's local time of the same instant: the zone is not read here.
+        let unix = 1_709_208_000_i64;
+        let (year, month, day, hour, minute) = local(unix);
+        let mine = format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}");
+        #[cfg(unix)]
+        if let Ok(out) = std::process::Command::new("date")
+            .args(["-d", &format!("@{unix}"), "+%F %R"])
+            .output()
+        {
+            let system = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            assert_eq!(system, mine);
+        }
+        assert_eq!(
+            crate::logic::revision::local_date(&crate::logic::revision::rfc3339(unix), local),
+            mine
+        );
+    }
+
+    #[test]
+    fn the_utc_fallback_follows_the_calendar() {
+        // 2024 is a leap year: its 29th of February is a day of its own.
+        assert_eq!(utc(1_709_208_000), (2024, 2, 29, 12, 0));
+        assert_eq!(utc(1_709_251_200), (2024, 3, 1, 0, 0));
     }
 }
