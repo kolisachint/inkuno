@@ -5,7 +5,7 @@
 //! state, the panel and the process side (the child process is `platform::assistant`).
 
 use super::*;
-use crate::logic::{assistant as words, pending, revision};
+use crate::logic::{assistant as words, pending};
 use crate::platform::assistant::{Agent, Event};
 use crate::platform::revisions::{self as history, Home};
 use crate::platform::vault::Signal;
@@ -219,28 +219,21 @@ fn review_summary(placed: usize, skipped: usize) -> String {
 
 /// Saves an automatic revision of `text` for the note at `path`, as `inkuno write` does around a
 /// write. Nothing is saved when the text is the latest revision's already. The error names the note.
-fn auto_revision(
+/// The versions panel's restore saves its two around its proposal the same way.
+pub(super) fn auto_revision(
     home: &Home,
     path: &Path,
     author: &str,
     memo: &str,
     text: &str,
 ) -> Result<(), String> {
-    history::save_as(
-        home,
-        path,
-        author,
-        Some(memo),
-        text,
-        history::now(),
-        revision::Kind::Auto,
-    )
-    .map(|_| ())
-    .map_err(|e| format!("{}: {}", path.display(), crate::lang::io_reason(&e)))
+    history::save_auto(home, path, author, memo, text)
+        .map(|_| ())
+        .map_err(|e| format!("{}: {}", path.display(), crate::lang::io_reason(&e)))
 }
 
 /// The line that says why a proposal was not written, in the person's words.
-fn refusal_words(refusal: pending::Refusal) -> &'static str {
+pub(super) fn refusal_words(refusal: pending::Refusal) -> &'static str {
     match refusal {
         pending::Refusal::NothingChanged => tr(
             "The assistant proposed no change.",
@@ -262,7 +255,7 @@ fn refusal_words(refusal: pending::Refusal) -> &'static str {
 }
 
 /// The line that counts the pending changes of the note after a proposal.
-fn pending_words(count: usize) -> String {
+pub(super) fn pending_words(count: usize) -> String {
     match count {
         1 => tr(
             "1 change is pending in the note: accept or reject it there.",
@@ -998,6 +991,23 @@ impl Shell {
         self.clear_box_if_started(cx);
     }
 
+    /// Puts `marked` (the text with its pending changes) in tab `pane`, whose text is `current`: one
+    /// undo step. Nothing changes when the two texts are the same. Shared by Improve and the restore
+    /// of a version (`shell/versions.rs`).
+    pub(super) fn absorb_marked(
+        &mut self,
+        pane: usize,
+        current: &str,
+        marked: &str,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(edit) = words::edit_between(current, marked) {
+            self.panes[pane]
+                .editor
+                .update(cx, |editor, cx| editor.absorb(&[edit], cx));
+        }
+    }
+
     /// Writes the agent's proposal into its note as pending changes: one undo step when a tab shows
     /// the note, else the file itself. Two automatic revisions surround the write, as `inkuno write`
     /// makes them: the text before (skipped when it is the latest revision), then the proposed text.
@@ -1055,13 +1065,7 @@ impl Shell {
             }
         }
         match open {
-            Some(i) => {
-                if let Some(edit) = words::edit_between(&current, &marked) {
-                    self.panes[i]
-                        .editor
-                        .update(cx, |editor, cx| editor.absorb(&[edit], cx));
-                }
-            }
+            Some(i) => self.absorb_marked(i, &current, &marked, cx),
             None => {
                 if let Err(e) = vault::write(&improve.path, &marked) {
                     let what = tr(

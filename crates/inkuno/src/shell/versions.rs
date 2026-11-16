@@ -1,19 +1,24 @@
 //! The Versions panel and the compare (`app-ui.md` §19): the saved versions of the note of the active
 //! tab (or of the note a compare belongs to), newest first, and a compare of one of them with the note
 //! as it is now. The compare opens in a read-only tab of its own, where the difference is drawn as
-//! pending changes (`logic::revision::compare`).
+//! pending changes (`logic::revision::compare`). A restore proposes a version's text through the
+//! pending flow, as an Assistant proposal lands (`app-ui.md` §19.3).
+//!
+//! The list reads each version's header only. A version's text is read when a compare, a copy or a
+//! restore needs it (`platform::revisions::get`).
 
 use super::*;
-use crate::logic::revision::{self, CompareError, Kind, Revision};
+use crate::logic::pending;
+use crate::logic::revision::{self, CompareError, Header, Kind, Revision};
 use crate::platform::revisions::{self as history, Listed};
 use std::collections::HashMap;
 
-/// A version of the panel: the file it is saved in (its row's key), its number, and the revision, or
-/// `None` when its file cannot be read (the row says so, and cannot be compared).
+/// A version of the panel: the file it is saved in (its row's key), its number, and its front matter,
+/// or `None` when its file cannot be read (the row says so, and cannot be compared, copied or restored).
 pub(super) struct Version {
     pub(super) path: PathBuf,
     pub(super) number: u32,
-    pub(super) rev: Option<Revision>,
+    pub(super) head: Option<Header>,
 }
 
 /// The panel's list: the versions of the note of the active tab, newest first, and what the panel
@@ -87,7 +92,7 @@ impl Shell {
                 "Cette note n'a pas d'historique.",
             ));
         };
-        let revs = match history::listed(&home, &path) {
+        let revs = match history::headers(&home, &path) {
             Ok(revs) => revs,
             Err(e) => {
                 return said(&format!(
@@ -128,7 +133,7 @@ impl Shell {
                 Some(Version {
                     path: file,
                     number,
-                    rev: listed.ok(),
+                    head: listed.ok(),
                 })
             })
             .collect();
@@ -155,8 +160,8 @@ impl Shell {
             .iter()
             .map(|item| nav::Row {
                 path: item.path.clone(),
-                name: match &item.rev {
-                    Some(rev) => revision::row_name(rev, tr("auto", "auto")),
+                name: match &item.head {
+                    Some(head) => revision::row_name(head, tr("auto", "auto")),
                     None => format!("#{} · {}", item.number, tr("cannot be read", "illisible")),
                 },
                 depth: 0,
@@ -173,8 +178,11 @@ impl Shell {
 
     /// Whether a panel row is drawn quietly: an automatic version, or one that cannot be read.
     pub(super) fn version_quiet(&self, path: &Path) -> bool {
-        self.version_of(path)
-            .is_some_and(|item| item.rev.as_ref().is_none_or(|rev| rev.kind == Kind::Auto))
+        self.version_of(path).is_some_and(|item| {
+            item.head
+                .as_ref()
+                .is_none_or(|head| head.kind == Kind::Auto)
+        })
     }
 
     /// Whether a panel row is the version the shown comparison compares: the one marked as current.
@@ -222,17 +230,15 @@ impl Shell {
         let Some(item) = self.version_of(path) else {
             return;
         };
-        let (number, rev) = (item.number, item.rev.clone());
-        let Some(note) = self.versions.as_ref().and_then(|list| list.note.clone()) else {
+        let number = item.number;
+        let Some(note) = self.list_note() else {
             return;
         };
-        let Some(rev) = rev else {
-            let said = format!(
-                "#{number} · {}",
-                tr(
-                    "this version cannot be read, so it cannot be compared.",
-                    "cette version ne peut pas être lue, elle ne peut pas être comparée."
-                )
+        let Some(rev) = self.readable_version(&note, number) else {
+            let said = cannot_read(
+                number,
+                "this version cannot be read, so it cannot be compared.",
+                "cette version ne peut pas être lue, elle ne peut pas être comparée.",
             );
             return self.say(Tone::Failed, said, cx);
         };
@@ -250,12 +256,11 @@ impl Shell {
             Ok(text) => text,
             Err(CompareError::Unchanged) => {
                 let said = format!(
-                    "{} {}.",
+                    "{} {number}.",
                     tr(
                         "Nothing changed since version",
                         "Rien n'a changé depuis la version"
                     ),
-                    rev.number
                 );
                 return self.say(Tone::Info, said, cx);
             }
@@ -271,15 +276,14 @@ impl Shell {
             }
         };
         let title = format!(
-            "{} · #{} ↔ {}",
+            "{} · #{number} ↔ {}",
             vault::stem(&note),
-            rev.number,
             tr("now", "maintenant")
         );
         let shown = self.panes.iter().position(|pane| {
             pane.compare
                 .as_ref()
-                .is_some_and(|c| c.note == note && c.number == rev.number)
+                .is_some_and(|c| c.note == note && c.number == number)
         });
         let tab = match shown {
             Some(tab) => tab,
@@ -291,7 +295,7 @@ impl Shell {
         let pane = &mut self.panes[tab];
         pane.compare = Some(Compare {
             note,
-            number: rev.number,
+            number,
             title,
         });
         pane.editor.update(cx, |editor, cx| {
@@ -304,8 +308,20 @@ impl Shell {
         cx.notify();
     }
 
+    /// The note the list is of, `None` when the tab shows none.
+    fn list_note(&self) -> Option<PathBuf> {
+        self.versions.as_ref().and_then(|list| list.note.clone())
+    }
+
+    /// The text of version `number` of `note`, read now from its file. `None` when the file cannot be
+    /// read, or the note has no history. A version whose header was unreadable is not read at all.
+    fn readable_version(&self, note: &Path, number: u32) -> Option<Revision> {
+        let home = history::home_of(note, self.vault.as_deref())?;
+        history::get(&home, note, number).ok()
+    }
+
     /// A gesture on a version of the panel (its menu, or a key the panel has): compared with the note
-    /// now, or its text copied. A version is history: no other gesture applies to it.
+    /// now, its text copied, or restored. A version is history: no other gesture applies to it.
     pub(super) fn version_do(
         &mut self,
         what: nav::Do,
@@ -315,22 +331,138 @@ impl Shell {
     ) {
         match what {
             nav::Do::Open | nav::Do::CompareVersion => self.compare_version(path, window, cx),
-            nav::Do::CopyVersion => {
-                if let Some(rev) = self.version_of(path).and_then(|item| item.rev.as_ref()) {
-                    let text = rev.text.clone();
-                    cx.write_to_clipboard(ClipboardItem::new_string(text));
-                }
-            }
+            nav::Do::CopyVersion => self.copy_version(path, cx),
+            nav::Do::RestoreVersion => self.restore_version(path, cx),
             _ => {}
         }
         cx.notify();
     }
 
-    /// The date a panel row shows on its right: the version's, to the minute.
+    /// Copies the text of a version to the clipboard. An unreadable one says why, and copies nothing.
+    fn copy_version(&mut self, path: &Path, cx: &mut Context<Self>) {
+        let Some(item) = self.version_of(path) else {
+            return;
+        };
+        let number = item.number;
+        let text = self
+            .list_note()
+            .and_then(|note| self.readable_version(&note, number));
+        match text {
+            Some(rev) => cx.write_to_clipboard(ClipboardItem::new_string(rev.text)),
+            None => {
+                let said = cannot_read(
+                    number,
+                    "this version cannot be read, so it cannot be copied.",
+                    "cette version ne peut pas être lue, elle ne peut pas être copiée.",
+                );
+                self.say(Tone::Failed, said, cx);
+            }
+        }
+    }
+
+    /// The menu's restore of a version: its text is proposed as the note's new text, as pending
+    /// changes, the way an Assistant proposal lands (`app-ui.md` §18.5, §19.3). The note is the active
+    /// tab's, read as it is in the editor now; the change is one undo step, and two automatic
+    /// revisions surround it: the text before (by the person's author), then the restored text with
+    /// its changes accepted. A refusal changes nothing.
+    fn restore_version(&mut self, path: &Path, cx: &mut Context<Self>) {
+        let Some(item) = self.version_of(path) else {
+            return;
+        };
+        let number = item.number;
+        let Some(note) = self.list_note() else {
+            return;
+        };
+        let active = self.active;
+        let pane = &self.panes[active];
+        if pane.compare.is_some() || pane.editor.read(cx).is_readonly() {
+            return self.say(
+                Tone::Info,
+                tr(
+                    "This is a comparison: it cannot be changed.",
+                    "Ceci est une comparaison : elle ne peut pas être modifiée.",
+                ),
+                cx,
+            );
+        }
+        if pane.path.as_deref() != Some(note.as_path()) {
+            return self.say(
+                Tone::Info,
+                tr(
+                    "Open the note to restore this version.",
+                    "Ouvrez la note pour restaurer cette version.",
+                ),
+                cx,
+            );
+        }
+        let Some(rev) = self.readable_version(&note, number) else {
+            let said = cannot_read(
+                number,
+                "this version cannot be read, so it cannot be restored.",
+                "cette version ne peut pas être lue, elle ne peut pas être restaurée.",
+            );
+            return self.say(Tone::Failed, said, cx);
+        };
+        let current = pane.editor.read(cx).text().to_string();
+        let marked = match pending::propose(&current, &current, &rev.text) {
+            Ok(marked) => marked,
+            Err(pending::Refusal::NothingChanged) => {
+                let said = tr(
+                    "The note is this version already.",
+                    "La note est déjà cette version.",
+                );
+                return self.say(Tone::Info, said, cx);
+            }
+            Err(refusal) => {
+                let said = super::assistant::refusal_words(refusal);
+                return self.say(Tone::Info, said, cx);
+            }
+        };
+        // The panel's two revisions are new: its list is read again when it is drawn.
+        self.versions_stale = true;
+        let home = history::home_of(&note, self.vault.as_deref());
+        let author = self.revision_author();
+        if let Some(home) = &home {
+            let memo = format!("before restoring version {number}");
+            if let Err(why) = super::assistant::auto_revision(home, &note, &author, &memo, &current)
+            {
+                let what = tr(
+                    "Not written: the version before the restore was not saved:",
+                    "Non écrit : la version avant la restauration n'a pas été enregistrée :",
+                );
+                return self.say(Tone::Failed, format!("{what} {why}"), cx);
+            }
+        }
+        self.absorb_marked(active, &current, &marked, cx);
+        // As for a proposal, a failed save of the restored version is a warning: the changes stay pending.
+        if let Some(home) = &home {
+            let memo = format!("version {number} restored, pending");
+            let accepted = pending::accept_all(&marked);
+            if let Err(why) =
+                super::assistant::auto_revision(home, &note, &author, &memo, &accepted)
+            {
+                let what = tr(
+                    "Warning: the restored version was not saved:",
+                    "Attention : la version restaurée n'a pas été enregistrée :",
+                );
+                self.say(Tone::Failed, format!("{what} {why}"), cx);
+            }
+        }
+        let count = pending::areas(&marked).len();
+        self.say(Tone::Info, super::assistant::pending_words(count), cx);
+    }
+
+    /// The date a panel row shows on its right: the version's, in local time, to the minute.
     pub(super) fn version_date(&self, path: &Path) -> String {
         self.version_of(path)
-            .and_then(|item| item.rev.as_ref())
-            .map(|rev| revision::short_date(&rev.date))
+            .and_then(|item| item.head.as_ref())
+            .map(|head| revision::local_date(&head.date, platform::clock::local))
             .unwrap_or_default()
     }
+}
+
+/// The line of a version whose text cannot be read, for the action that needed it: `action` is the
+/// English line and `action_fr` its French one.
+fn cannot_read(number: u32, action: &'static str, action_fr: &'static str) -> String {
+    format!("#{number} · {}", tr(action, action_fr))
 }

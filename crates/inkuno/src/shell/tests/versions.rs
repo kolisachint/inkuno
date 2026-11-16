@@ -505,7 +505,7 @@ fn the_row_menu_copies_the_text_and_cannot_trash_a_version(cx: &mut TestAppConte
     show_versions(&shell, cx);
     let path = row_path(&shell, cx, 0);
 
-    // The menu of a version: its compare first, then its copy.
+    // The menu of a version: its compare first, then its copy, then its restore.
     shell.update_in(cx, |s, _, cx| {
         s.menu = Some(nav::Menu {
             target: Some(path.clone()),
@@ -515,7 +515,8 @@ fn the_row_menu_copies_the_text_and_cannot_trash_a_version(cx: &mut TestAppConte
         let actions: Vec<&nav::Do> = groups.iter().flatten().map(|(_, what)| what).collect();
         assert!(matches!(actions[0], nav::Do::CompareVersion));
         assert!(matches!(actions[1], nav::Do::CopyVersion));
-        assert_eq!(actions.len(), 2);
+        assert!(matches!(actions[2], nav::Do::RestoreVersion));
+        assert_eq!(actions.len(), 3);
     });
 
     shell.update_in(cx, |s, window, cx| {
@@ -861,5 +862,175 @@ fn a_revision_written_from_a_terminal_reaches_the_open_panel(cx: &mut TestAppCon
     let names = names(&shell, cx);
     assert_eq!(names.len(), 2, "{names:?}");
     assert!(names[0].starts_with("#2 · bo"), "{names:?}");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Restores version `number` from the panel's menu, as the person does: the panel shown, the row's
+/// menu's own action, then the settling of the write.
+fn restore_from_the_menu(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, number: u32) {
+    show_versions(shell, cx);
+    let rows = names(shell, cx);
+    let prefix = format!("#{number} · ");
+    let ix = rows
+        .iter()
+        .position(|row| row.starts_with(&prefix))
+        .expect("the version is listed");
+    let path = row_path(shell, cx, ix);
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::RestoreVersion, Some(path), window, cx)
+    });
+    settle(cx);
+}
+
+/// The history of `Plan.md` under `root`, oldest first.
+fn history_of(root: &Path) -> Vec<crate::logic::revision::Revision> {
+    history::all(&Home::Vault(root.to_path_buf()), &root.join("Plan.md")).unwrap()
+}
+
+#[gpui::test]
+fn a_restore_proposes_the_version_as_pending_changes_in_one_undo_step(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) =
+        one_version_then_edit(cx, "versions-restore", "# Plan\none\n", "# Plan\ntwo\n");
+    restore_from_the_menu(&shell, cx, 1);
+    let now = text(&shell, cx);
+    assert_eq!(
+        crate::logic::pending::accept_all(&now),
+        "# Plan\none\n",
+        "accepting every change gives the version"
+    );
+    assert_eq!(
+        crate::logic::pending::reject_all(&now),
+        "# Plan\ntwo\n",
+        "rejecting every change gives the note as it was"
+    );
+    assert_eq!(crate::logic::pending::areas(&now).len(), 1);
+    // One undo takes the whole restore back.
+    shell.update_in(cx, |s, window, cx| {
+        let at = s.active;
+        s.focus_pane(at, window, cx)
+    });
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(text(&shell, cx), "# Plan\ntwo\n", "one undo takes it back");
+    // Two automatic revisions surround the restore, by the person's author.
+    let me = shell.read_with(cx, |s, _| s.revision_author());
+    let found = history_of(&root);
+    assert_eq!(
+        found.iter().map(|rev| rev.kind).collect::<Vec<_>>(),
+        [Kind::Checkpoint, Kind::Auto, Kind::Auto]
+    );
+    assert_eq!(found[1].note.as_deref(), Some("before restoring version 1"));
+    assert_eq!(found[1].author, me);
+    assert_eq!(found[1].text, "# Plan\ntwo\n", "the text before");
+    assert_eq!(
+        found[2].note.as_deref(),
+        Some("version 1 restored, pending")
+    );
+    assert_eq!(found[2].author, me);
+    assert_eq!(
+        found[2].text, "# Plan\none\n",
+        "the restored text, accepted"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn restoring_the_text_the_note_already_has_says_so_and_changes_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-restore-same",
+        "# Plan\none\n",
+        "# Plan\none\n",
+    );
+    restore_from_the_menu(&shell, cx, 1);
+    assert!(says(&shell, cx, "The note is this version already."));
+    assert_eq!(text(&shell, cx), "# Plan\none\n");
+    assert_eq!(history_of(&root).len(), 1, "no revision is added");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_restore_is_refused_while_the_note_has_pending_changes(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-restore-pending",
+        "# Plan\none\n",
+        "# Plan\ntwo\n",
+    );
+    restore_from_the_menu(&shell, cx, 1);
+    let once = text(&shell, cx);
+    // The second restore is of the same version, from its row: the note holds changes now.
+    restore_from_the_menu(&shell, cx, 1);
+    assert!(says(
+        &shell,
+        cx,
+        "Accept or reject the pending changes first."
+    ));
+    assert_eq!(text(&shell, cx), once, "the note is not changed");
+    assert_eq!(history_of(&root).len(), 3, "no revision is added");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_restore_is_refused_in_a_comparison(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-restore-compare",
+        "# Plan\none\n",
+        "# Plan\ntwo\n",
+    );
+    compare_first_by_keys(&shell, cx);
+    assert_eq!(compares(&shell, cx), 1);
+    let path = row_path(&shell, cx, 0);
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::RestoreVersion, Some(path), window, cx)
+    });
+    settle(cx);
+    assert!(says(&shell, cx, COMPARISON));
+    assert_eq!(compares(&shell, cx), 1);
+    assert_eq!(history_of(&root).len(), 1, "no revision is added");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_unreadable_version_has_no_restore_entry(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = one_version_then_edit(
+        cx,
+        "versions-restore-unreadable",
+        "# Plan\none\n",
+        "# Plan\ntwo\n",
+    );
+    let file = root.join(".inkuno/revisions/Plan.md/0001.md");
+    fs::write(&file, "garbage, not a revision\n").unwrap();
+    show_versions(&shell, cx);
+    assert_eq!(names(&shell, cx), ["#1 · cannot be read"]);
+    let path = row_path(&shell, cx, 0);
+    shell.update_in(cx, |s, _, cx| {
+        s.menu = Some(nav::Menu {
+            target: Some(path.clone()),
+            ..Default::default()
+        });
+        let groups = s.menu_groups(cx);
+        let actions: Vec<&nav::Do> = groups.iter().flatten().map(|(_, what)| what).collect();
+        assert!(matches!(actions[0], nav::Do::CompareVersion));
+        assert!(matches!(actions[1], nav::Do::CopyVersion));
+        assert_eq!(actions.len(), 2, "no restore of a version with no text");
+    });
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_version_is_dated_in_local_time_to_the_minute(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) =
+        one_version_then_edit(cx, "versions-local-date", "# Plan\none\n", "# Plan\none\n");
+    show_versions(&shell, cx);
+    let path = row_path(&shell, cx, 0);
+    // The stored time is UTC; the row shows the local time of the same instant, built with the
+    // platform's own conversion, so the test does not depend on the machine's zone.
+    let rev = history::get(&Home::Vault(root.clone()), &root.join("Plan.md"), 1).unwrap();
+    let unix = crate::logic::revision::unix_of(&rev.date).unwrap();
+    let (year, month, day, hour, minute) = crate::platform::clock::local(unix);
+    let expected = format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}");
+    assert_eq!(shell.read_with(cx, |s, _| s.version_date(&path)), expected);
     let _ = fs::remove_dir_all(root);
 }

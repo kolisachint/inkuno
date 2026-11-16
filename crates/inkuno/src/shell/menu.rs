@@ -475,7 +475,8 @@ impl Shell {
         let mut groups: Vec<Vec<(&'static str, Do)>> = vec![Vec::new(); 7];
         let scratch =
             menu.tab.is_none() && menu.target.as_deref().is_some_and(platform::scratch::holds);
-        // A version of the panel: compared with the note now, or its text copied.
+        // A version of the panel: compared with the note now, its text copied, or restored. A version
+        // whose file cannot be read has no restore: there is no text to propose.
         let version =
             self.nav.mode == Mode::Versions && menu.tab.is_none() && menu.target.is_some();
         if version {
@@ -493,6 +494,17 @@ impl Shell {
                 ),
                 Do::CopyVersion,
             ));
+            let readable = menu
+                .target
+                .as_ref()
+                .and_then(|path| self.version_of(path))
+                .is_some_and(|item| item.head.is_some());
+            if readable {
+                groups[1].push((
+                    tr("Restore this version", "Restaurer cette version"),
+                    Do::RestoreVersion,
+                ));
+            }
         } else if scratch {
             groups[0].push((tr("Open", "Ouvrir"), Do::Open));
             groups[0].push((tr("Open to the side", "Ouvrir à côté"), Do::OpenAside));

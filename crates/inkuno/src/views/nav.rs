@@ -312,6 +312,8 @@ pub enum Do {
     CompareVersion,
     /// A version of the panel: its text copied to the clipboard.
     CopyVersion,
+    /// A version of the panel: its text proposed as the note's new text, as pending changes.
+    RestoreVersion,
     CopyLink,
     CopyPath,
     CopyRelative,
