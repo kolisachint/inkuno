@@ -4,6 +4,8 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Done in the November cleanup
 
+- Backlog round for 0.0.9 (2026-11-16). Pending changes: a mark inside a code fence is plain text, and a proposal that changes a fenced block marks the whole block; a proposal keeps the note's own final line break, so reject is exact; an edit that would hide or create a change is refused; marker lines are drawn at 0.8 size and a table in a change carries the wash; a renumbering or realign never crosses a change (`app-ui.md` §17). Command line: `inkuno write --replace` lets an agent replace its own last proposal; a move, rename or title change that would rewrite a `[[link]]` inside a pending change is refused, in the app too (`cli.md`). Versions: **Restore this version** in a row's menu proposes the version as pending changes; the list reads headers only; dates are local time (`app-ui.md` §19, `revisions.md`). Keys: a rebinding is checked against the accept and reject chords (`keybindings.md`). Watcher: own and hidden folders are known in both spellings of the vault path (`architecture.md`). One helper saves an automatic version (`revisions::save_auto`). An `end_to_end` chapter walks the Assistant, pending changes and the Versions panel (`shell/tests/end_to_end/assistant_versions.rs`). The owner tried 0.0.8 on macOS with a real hoocode and on a real screen on 2026-11-16: the Assistant (Improve included), the washes, the chords, the Versions rows and the compare work as designed.
+
 - Versions panel and compare (2026-11-15, `app-ui.md` §19): **Versions of the note** in the palette (`history` finds it too) lists the active note's versions, newest first; Enter or a click compares one with the note now, in a read-only tab, the difference drawn as pending changes; the row menu copies a version's text. Tests: `shell/tests/versions.rs`, `inkuno-logic` `revision.rs`, `commands.rs`, `views/palette.rs`.
 
 - Assistant v2 (2026-11-15, `app-ui.md` §18): **Improve selection** / **Improve this note** (the panel's button, the palette, the right-click menu) sends the passage, or the note, with an instruction; the answer comes back as pending changes, one undo step, with two `kind: auto` revisions as `inkuno write` makes them. Chords: `Ctrl+Enter` accepts and `Ctrl+Backspace` rejects a pending change (`keybindings.md`, `app-ui.md` §17.5). Tests: `shell/tests/assistant.rs`, `shell/tests/pending.rs`, `inkuno-logic` `assistant.rs`, `commands.rs`.
@@ -40,24 +42,22 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 
 ## Follow-ups
 
-- Pending changes: the marker lines are dimmed but not drawn smaller, as the brief asked: a smaller size changes the line geometry (`views/editor/layout.rs`, `text_runs`).
-- Pending changes: tables and figures inside a change get no wash; only plain text lines do (`views/editor/paint.rs`, `Pend::Plain` on grid rows).
-- Pending changes: a renumbering or a table realign that would change a pending change is left out silently; the numbers or the alignment wait for accept or reject (`views/editor/edit.rs`, `renumber`; `table.rs`, `realign`).
+- Pending changes: the 0.8 marker lines and the wash on a table are not yet seen on a real screen (`views/editor/layout.rs`, `MARK_SCALE`; `views/editor/paint.rs`).
+- Pending changes: a code fence cannot be opened above a pending change by typing its first line alone (the edit would hide the change, so it is refused): expected, the message says why, or the fence is allowed once it is closed (`crates/inkuno-logic/src/pending.rs`, `refuses`, `same_areas`).
+- Pending changes: a change typed by hand whose added lines open a fence and do not close it hides the changes after it once accepted; a proposal never writes one (`pending.rs`, `areas`).
+- Pending changes: a fence inside a quote or a list item (`> ```) is not seen as a fence, so a proposal may write marks inside it; accept and reject stay exact (`pending.rs`, `fence_opens`).
+- Pending changes: a title change refused because of a link in another note's pending change leaves the note unsaved, and the notice may come back at each save: expected, the text is saved and only the file's rename waits (`crates/inkuno/src/shell/notes.rs`, `flush_one`, `links_pending`).
+- `inkuno write --replace`: a proposal cannot be withdrawn (the person's own text is "nothing changed"), and when the first write's proposed version could not be saved the agent cannot replace it (`crates/inkuno/src/cli/ops.rs`, `own_last_proposal`).
+- Keys: a `keybindings.json` line that takes the keys of the accept or reject chord leaves the chord without keys and says nothing at launch; the help panel asks first (`crates/inkuno/src/ui/keys.rs`, `read`).
+- Versions: dates are UTC on Windows, which has no local-time call yet (`crates/inkuno/src/platform/clock.rs`, `local`).
+- Versions: a restore saves its "before" version from the editor's text; an outside write not yet merged is in no version (`crates/inkuno/src/shell/versions.rs`, `restore_version`).
 - Pending changes: copy of the whole note (`app::CopyAll`, `shell/notes.rs`) copies the marker lines as they are: the app has no reading view or export that resolves them.
-- Pending changes: a text that has no final line break gets one more break on reject when a change is at its end (`crates/inkuno-logic/src/pending.rs`, module doc).
-- Pending changes: marker lines typed by hand, or shown in a note that documents CriticMarkup, count as pending areas, also inside a code fence: expected, a fence is not scanned, or the marks are escaped (`crates/inkuno-logic/src/pending.rs`, `areas`).
-- Pending changes: `inkuno move` rewriting a `[[link]]` inside a pending area is not guarded: expected, the move refuses that rewrite, as `edit` does (`crates/inkuno/src/cli/ops.rs`, `rename_note`, `relink`).
 - Pending changes: `append --under` into a section that holds a pending area is covered only by the general rule (`crates/inkuno/src/cli/ops.rs`, `append_under`): expected, a section with a change is refused by name.
-- Pending changes: the look of the tints, of the marker dimming and of the hint is not yet checked on a real screen (`views/editor/paint.rs`, `shell/changes.rs`).
 
 - Revisions: `inkuno rev` on a vault that has no `.inkuno` folder and is not open in the app treats the note's own folder as the vault, so history can be split by folder; the app creates `.inkuno` only at the first version. Create it when a vault opens, or document it.
 - Revisions: restoring from the trash brings the history back only when the trash holds the same name; a trash entry removed by hand breaks the pairing (`platform/revisions.rs`, `restore_along`).
 - Revisions: `Keep in vault` still deletes the scratch copy once the vault note is written (a move, not a loss).
-- Versions: restore a version through the pending flow: a proposal of the old text, its changes pending, with the two `kind: auto` revisions `inkuno write` makes (`docs/design/revisions.md`, `app-ui.md` §19.3).
 - Versions: a word-level compare; today a changed line is one removed and one added line (`crates/inkuno-logic/src/pending.rs`, `propose`).
-- Versions: the list reads every version's full text on the window's thread: headers first, the text only when a compare needs it, for long histories (`crates/inkuno/src/shell/versions.rs`, `read_versions`; `crates/inkuno/src/platform/revisions.rs`, `listed`).
-- Versions: a version's date is the stored UTC time; the local time needs a conversion from a Unix time (`crates/inkuno/src/platform/clock.rs` gives the local time of now only).
-- Versions: the quiet colour of the automatic rows and the washes of a compare are not yet checked on a real screen (`crates/inkuno/src/shell/sidebar.rs`, `render_rows`).
 - `Ctrl+Alt+S` is not tried on macOS or on a desktop that keeps it; the screen was not run here.
 
 - Help-panel shortcut changes are saved to the `keys` file (`crates/inkuno/src/shell/help.rs:227`), but once `keybindings.json` exists it wins at launch and nothing reads `keys` again: they are lost at the next start.
@@ -95,9 +95,7 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Assistant on Windows: only `name` and `name.exe` are looked up on `PATH`; `.cmd` and `.bat` are not (`crates/inkuno/src/platform/assistant.rs`, `find_in`): expected, the shims are found too, or the limit is written down.
 - Assistant Improve: a whole-note improvement sends the whole note and gets all of it back: a very long note is slow (`crates/inkuno/src/shell/assistant.rs`, `assistant_improve`; `crates/inkuno-logic/src/assistant.rs`, `rewritten`): expected, a selection of the note, or a limit with a message.
 - Assistant Improve: the proposal block ends at the last `END TEXT` line, so commentary after the block that holds that line is taken in (`crates/inkuno-logic/src/assistant.rs`, `proposal`): expected, the block is checked against the passage's own lines, or the answer is refused.
-- Assistant Improve: the shell repeats the command line's automatic snapshot (`crates/inkuno/src/cli/ops.rs`, `snapshot`): expected, one helper on `platform/revisions.rs`, which both can use.
 - Assistant Improve: the right-click entry **Improve selection** has no test; the button and the palette do (`crates/inkuno/src/shell/menu.rs`).
-- Keys: `ui::keys::meets` treats `Editor && Change` as apart from `Editor`, so a user's rebinding of `Ctrl+Enter` in the editor is not checked against the accept chord (`crates/inkuno/src/ui/keys.rs`, `meets`): expected, the check knows the change context.
 - Assistant: prompts are written to the agent on the window's thread (`crates/inkuno/src/shell/assistant.rs`, `assistant_run`): expected, a writer thread takes them if prompts grow.
 - Assistant: the agent may still read any file it is pointed at, since `Read` is not limited to the vault: expected, an allow-list of tools and a folder limit, to be looked at with hoocode.
 - Assistant: the shell's tests start no process, so the non-test path of `assistant_run` that starts the agent (`start_agent`) has no test there: expected, the process is tested in `platform/assistant.rs`, and a shell test with a fake agent program.
