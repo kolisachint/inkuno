@@ -1952,6 +1952,24 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    /// Waits until neither signal has been raised for 500 ms (5 s at most), then clears both.
+    fn drain_events(changed: &Signal, history: &Signal) {
+        let start = std::time::Instant::now();
+        let mut quiet_since = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(5) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            // Non-short-circuit `|`: both signals are taken on every poll.
+            if changed.take() | history.take() {
+                quiet_since = std::time::Instant::now();
+            }
+            if quiet_since.elapsed() >= std::time::Duration::from_millis(500) {
+                break;
+            }
+        }
+        changed.take();
+        history.take();
+    }
+
     /// On disk: a revision written in the history folder raises the history signal, not the vault's.
     #[test]
     fn watcher_reports_a_revision_to_the_history_signal_only() {
@@ -1964,6 +1982,9 @@ mod tests {
         let history = Arc::new(Signal::default());
         let _watcher = watch(&root, changed.clone(), history.clone())
             .expect("the system must be able to watch a folder");
+        // FSEvents can still report the folders' creation (events from before the stream started, `root`
+        // itself included): drain them, so only the revision's events are counted.
+        drain_events(&changed, &history);
         // `inkuno rev save` writes a revision file from a terminal.
         fs::write(folder.join("0001.md"), "x").unwrap();
         let start = std::time::Instant::now();
