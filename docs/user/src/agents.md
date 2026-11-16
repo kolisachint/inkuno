@@ -173,9 +173,10 @@ Standard input is read only when a command asks for it: `--text -` or `--mermaid
 
 ### Accepting, rejecting and commenting
 
-In the note, the lines the agent adds have a green background. The lines it removes have a red background, and they are struck through. The marker lines are dimmed. The note's foot says how many changes are pending. A click there takes you to the first one.
+In the note, the lines the agent adds have a green background. The lines it removes have a red background, and they are struck through. Tables and figures in a change get the same background. The marker lines are dimmed and smaller. The note's foot says how many changes are pending. A click there takes you to the first one.
 
 - You cannot type in a pending change. Typing, `Backspace`, paste, cut and replace on its lines are refused, with the message *This change is pending: accept or reject it first.* You can still select and copy.
+- A numbered list or a table is not renumbered or realigned across a change. Typing in the table of a change is refused, like any change.
 - At the edges of a change, what works: `Enter` just before the change and just after it (a line break is added there). Typing a letter on the kept line above the change, or at the start of the kept line below it, works too. A letter cannot go at the start of the change's first marker line, nor at the end of the note when its last marker line has no line break after it (press `Enter` first). `Backspace` at the start of the kept line below a change is refused, because it would remove the break of the marker line.
 - Put the caret in a change. Then, in the command palette (`F10`) or the right-click menu, choose **Accept the change** or **Reject the change**. Accept keeps the added lines and drops the removed ones. Reject does the reverse. With the caret outside every change, the first press of **Accept the change**, **Reject the change** or **Comment on the change** only moves the caret to the next change (after the last one, back to the first), and a message says so. Press again to act on it. The right-click menu acts on the change under the pointer.
 - **Accept all changes** and **Reject all changes** do this for the whole note.

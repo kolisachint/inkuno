@@ -551,6 +551,9 @@ pub enum Pend {
     Mark,
 }
 
+/// Size of a marker line's text, as a share of the body text.
+const MARK_SCALE: f32 = 0.8;
+
 /// The pending state of the line that starts at byte `line`, from the areas of the note.
 pub(super) fn pend_of(found: &[crate::logic::pending::Area], line: usize) -> Pend {
     for area in found {
@@ -1393,7 +1396,7 @@ impl Editor {
                     let (pad, height) =
                         geom.metrics(rank + rows.len() - first_new, false, grid::line_height(&t));
                     rows.push(Row {
-                        pend: Pend::Plain,
+                        pend: pend_of(&self.pending, offset),
                         live: false,
                         start: offset,
                         len: line.len(),
@@ -1528,7 +1531,7 @@ impl Editor {
                         for (k, &(at, text)) in block.iter().enumerate() {
                             let (pad, height) = geom.metrics(k, k + 1 == n, lh);
                             rows.push(Row {
-                                pend: Pend::Plain,
+                                pend: pend_of(&self.pending, at),
                                 live: false,
                                 start: at,
                                 len: text.len(),
@@ -1602,6 +1605,13 @@ impl Editor {
                 };
                 // The sizes above hold for a 16 px body text.
                 let font_size = font_size * (t.size / 16.);
+                // A marker line is drawn smaller, so that a change takes less room.
+                let pend = pend_of(&self.pending, offset);
+                let font_size = if pend == Pend::Mark {
+                    font_size * MARK_SCALE
+                } else {
+                    font_size
+                };
                 let pad = if offset == 0 {
                     px(0.)
                 } else {
@@ -1613,7 +1623,6 @@ impl Editor {
                 // Typora-style: only the clicked or edited line shows its source (its markers).
                 // A plain cursor move (keyboard, search) does not reveal: it leaves `revealed` alone.
                 let live = self.revealed == Some(offset);
-                let pend = pend_of(&self.pending, offset);
                 let composed = marked
                     .clone()
                     .filter(|m| m.start <= offset + line.len() && m.end >= offset);
@@ -2906,6 +2915,108 @@ mod tests {
         assert_eq!(
             editor.read_with(cx, |e, _| displayed(e, at[2]).0),
             "See a here.".to_string()
+        );
+    }
+
+    #[gpui::test]
+    fn marker_lines_are_drawn_smaller_and_the_lines_below_keep_their_place(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let body = theme.size;
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        let text = "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n".to_string();
+        let at = starts(&text);
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            let _ = cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        draw(cx);
+        // Height, line height and font size of the row that starts at `start`.
+        let metrics = |cx: &mut gpui::VisualTestContext, start: usize| {
+            editor.read_with(cx, |e, _| {
+                let r = e.rows.iter().find(|r| r.start == start).unwrap();
+                let font = r.shaped.line.as_ref().unwrap().font_size();
+                (f32::from(r.height), f32::from(r.lh), f32::from(font))
+            })
+        };
+        let (body_h, body_lh, body_font) = metrics(cx, at[0]);
+        assert_eq!(body_font, body);
+        assert_eq!(body_lh, (body * 1.7).round());
+        assert_eq!(body_h, body_lh);
+        // A marker line is 0.8 of a body line, to a pixel of rounding.
+        for line in [1, 3, 4, 6] {
+            let (h, lh, font) = metrics(cx, at[line]);
+            assert!(
+                (font - body * 0.8).abs() < 0.01,
+                "marker {line} font {font}"
+            );
+            assert!(
+                (lh - body_lh * 0.8).abs() <= 1.0,
+                "marker {line} line height {lh}"
+            );
+            assert_eq!(h, lh, "marker {line} has no room of its own");
+        }
+        // A changed text line is drawn at the body size.
+        assert_eq!(metrics(cx, at[2]).2, body);
+        // The caret goes onto a marker line, and the lines below sit at the sum of the rows above.
+        editor.update(cx, |e, cx| e.move_to(at[1] + 2, cx));
+        assert_eq!(editor.read_with(cx, |e, _| e.caret()), at[1] + 2);
+        let rows = editor.read_with(cx, |e, _| {
+            e.rows
+                .iter()
+                .map(|r| (f32::from(r.y), f32::from(r.height)))
+                .collect::<Vec<_>>()
+        });
+        let mut above = 0.;
+        for (k, (y, height)) in rows.iter().enumerate() {
+            assert!(
+                (y - above).abs() < 0.01,
+                "row {k} starts at {y}, not {above}"
+            );
+            above += height;
+        }
+    }
+
+    #[gpui::test]
+    fn a_table_and_a_figure_inside_a_change_carry_its_wash(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        let text = "{++\n| x | y |\n|---|---|\n| 1 | 2 |\n++}\n{--\n$$\nx^2\n$$\n--}\n| k |\n|---|\n| v |\n"
+            .to_string();
+        let at = starts(&text);
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        // The pending state of the rows whose line starts in `from..to`.
+        let pends = |cx: &mut gpui::VisualTestContext, from: usize, to: usize| {
+            editor.read_with(cx, |e, _| {
+                e.rows
+                    .iter()
+                    .filter(|r| (from..to).contains(&r.start))
+                    .map(|r| r.pend)
+                    .collect::<Vec<_>>()
+            })
+        };
+        let added = pends(cx, at[1], at[4]);
+        assert!(
+            added.len() >= 3 && added.iter().all(|p| *p == Pend::Added),
+            "{added:?}"
+        );
+        let removed = pends(cx, at[6], at[9]);
+        assert!(
+            removed.len() >= 3 && removed.iter().all(|p| *p == Pend::Removed),
+            "{removed:?}"
+        );
+        let kept = pends(cx, at[10], text.len());
+        assert!(
+            kept.len() >= 3 && kept.iter().all(|p| *p == Pend::Plain),
+            "{kept:?}"
         );
     }
 }

@@ -620,6 +620,8 @@ impl Editor {
         // At the furthest, just before the `|` that closes the cell.
         let (start, end) = (md::cells(new)[col].start, md::bars(new)[col + 1]);
         let cursor = at + (start + c.saturating_sub(old)).min(end);
+        // The edit that led here was refused and said so already; a mark line ends a table, so a
+        // realign never crosses a change from kept text.
         if self.touches_pending(&range, &text) {
             return;
         }

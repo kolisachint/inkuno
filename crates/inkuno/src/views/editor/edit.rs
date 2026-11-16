@@ -247,6 +247,8 @@ impl Editor {
     pub(super) fn renumber(&mut self, cx: &mut Context<Self>) {
         if let Some((text, cursor)) = md::renumber(&self.content, self.cursor()) {
             // Renumbering that would change a pending change is left out: the change stays as it is.
+            // The edit that led here was refused and said so already; a mark line ends a list, so a
+            // renumbering never crosses a change from kept text.
             let span = changed_span(&self.content, &text);
             let inserted = &text[span.start..text.len() - (self.content.len() - span.end)];
             if self.touches_pending(&span, inserted) {

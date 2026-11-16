@@ -823,13 +823,16 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 - An **added** line lies on the `added` wash (a green, quiet tint) across the page width, its text as it is.
 - A **removed** line lies on the `removed` wash (red), its text dimmed to `soft` and struck through.
-- The four **marker** lines are dimmed (`dim`). They stay real lines: no line is hidden and no line changes height.
-  They are not drawn smaller (the brief asked for it; the size would change the line geometry, so it is left out).
+- The four **marker** lines are dimmed (`dim`) and drawn at 0.8 of the body size, their rows 0.8 of a body row
+  too (rounded to a pixel). They stay real lines: no line is hidden, and a change takes less room. Each row has its
+  own size, as a heading does (`layout.rs`, `MARK_SCALE`), so the caret, the hit test and the scroll follow it.
 - The washes are theme tokens (`Theme::added`, `Theme::removed`), derived as `highlight` is: the strongest step
   from 22 % down that keeps the text at 4.5:1 on it. They are in the contrast tests of every theme and in both looks.
 - The areas are read once per text change (`Editor::pending`, set in `changed` and `load`), never per frame. Each
   line's state is part of its styling cache key, so a changed area restyles its lines.
-- Tables and figures inside a change are drawn without the wash (grid rows keep their own paint).
+- Tables and figures inside a change carry the same wash as its text lines, behind the whole block: a table's rows
+  take the state of their source lines, and a table's header keeps the wash instead of its own band. A removed table
+  or figure is not struck through.
 
 ### 17.2 The read-only rule
 
@@ -853,6 +856,9 @@ Normal 800 is the default (§10.4 lock released for this change).
   `renumber`, the table branches of Enter, cut (`copy(cut)`, before the clipboard is written), replace all.
 - A refusal emits `EditorEvent::Notice` with `This change is pending: accept or reject it first.`. The shell shows it
   once while it is on screen (`shell/notes.rs`).
+- A renumbering or a table realign that would change a pending change is left out, silently: the edit that led
+  there was refused and said so already. A mark line ends a list or a table, so a renumbering or a realign never
+  crosses a change from kept text.
 
 ### 17.3 Accept, reject, and undo
 
