@@ -13,17 +13,20 @@
 //! ```
 //!
 //! One area is an optional removed block followed at once by an optional added block. A marker
-//! line stands alone: its four strings are the only lines that count as marks. Pure: no disk here.
+//! line stands alone: its four strings are the only lines that count as marks, and only outside a
+//! code fence (see below). Pure: no disk here.
 //!
-//! Line breaks at the end of a text: a text may lack its final line break. A marker line that ends
-//! the whole text has no line break, and the line break written just before it (`\n`, or `\r\n` in
-//! a CRLF text) is not content: it is taken off again on accept and reject. Where a line break had
-//! to be added between two lines (a content line without one, or a line that follows an unbroken
-//! line), it stays in the output.
+//! Line breaks at the end of a text: a text may lack its final line break. When an area ends the
+//! text, the line break just before its close mark (`\n`, or `\r\n` in a CRLF text) is not content
+//! on either side: accept and reject take it off. So a reject gives back the note's text exactly,
+//! and so does an accept of the agent's text. Where a line break had to be added between two lines,
+//! it stays in the output. `propose` first gives the agent's text the note's final line break: it
+//! adds one when the note has one, and takes one off when the note has none.
 //!
-//! Known limit: a text without a final line break that a change touches at its end gets one break
-//! more on reject, when the change also has an added block. The same marks come from the text with
-//! that break, so the two cannot be told apart. Accept is exact in every case.
+//! Code fences: a fenced code block opens at a line of three or more backticks or tildes, and
+//! closes at a line of the same character, at least as many. A mark line inside a fence is plain
+//! text and starts no area. `propose` never puts a mark line inside a block: a change inside a fence
+//! grows to the whole fenced block, and its marks stand outside the fence.
 
 use std::fmt;
 use std::ops::Range;
@@ -165,14 +168,16 @@ fn area_from(text: &str, rows: &[Row], at: usize) -> Option<(Area, usize)> {
     let first = del.or(add)?.0;
     let start = rows[first].start;
     let end = rows[next - 1].end;
+    // The area ends the text when its last mark has no line break.
+    let ends_text = !rows[next - 1].broken;
     let side = |block: Option<(usize, usize)>, empty_at: usize| -> Range<usize> {
         match block {
             None => empty_at..empty_at,
             Some((open, close)) => {
                 let from = rows[open].end;
                 let mut to = rows[close].start;
-                // The close marker ends the text: the line break before it is not content.
-                if !rows[close].broken && to > from {
+                // The area ends the text: the line break before a close mark is not content.
+                if ends_text && to > from {
                     let bytes = text.as_bytes();
                     if to - from >= 2 && &bytes[to - 2..to] == b"\r\n" {
                         to -= 2;
@@ -192,18 +197,31 @@ fn area_from(text: &str, rows: &[Row], at: usize) -> Option<(Area, usize)> {
     Some((area, next))
 }
 
-/// Every pending area of `text`, in order. An unclosed or malformed mark is plain text.
+/// Every pending area of `text`, in order. An unclosed or malformed mark is plain text, and so is a
+/// mark inside a code fence.
 pub fn areas(text: &str) -> Vec<Area> {
     let rows = rows(text);
     let mut found = Vec::new();
+    // The code fence that is open, if any. Only the rows outside areas move it.
+    let mut fence: Option<(char, usize)> = None;
     let mut at = 0;
     while at < rows.len() {
+        if let Some(open) = fence {
+            if fence_closes(rows[at].body, open) {
+                fence = None;
+            }
+            at += 1;
+            continue;
+        }
         match area_from(text, &rows, at) {
             Some((area, next)) => {
                 found.push(area);
                 at = next;
             }
-            None => at += 1,
+            None => {
+                fence = fence_opens(rows[at].body);
+                at += 1;
+            }
         }
     }
     found
@@ -214,9 +232,52 @@ pub fn has_pending(text: &str) -> bool {
     !areas(text).is_empty()
 }
 
-/// Whether a line of `text` is one of the four marks.
+/// The character and length of the code fence that `body` opens, if it opens one: three or more
+/// backticks or tildes after up to three spaces. A backtick fence's info string holds no backtick.
+fn fence_opens(body: &str) -> Option<(char, usize)> {
+    let rest = body.trim_start_matches(' ');
+    if body.len() - rest.len() > 3 {
+        return None;
+    }
+    let ch = rest.chars().next().filter(|c| *c == '`' || *c == '~')?;
+    let len = rest.chars().take_while(|c| *c == ch).count();
+    if len < 3 || (ch == '`' && rest[len..].contains('`')) {
+        return None;
+    }
+    Some((ch, len))
+}
+
+/// Whether `body` closes the fence `open`: up to three spaces, then only its character, at least as
+/// many as it opened with, then spaces and tabs.
+fn fence_closes(body: &str, open: (char, usize)) -> bool {
+    let rest = body.trim_start_matches(' ');
+    if body.len() - rest.len() > 3 {
+        return false;
+    }
+    let (ch, len) = open;
+    let rest = rest.trim_end_matches([' ', '\t']);
+    rest.len() >= len && rest.chars().all(|c| c == ch)
+}
+
+/// Whether a line of `text` outside a code fence is one of the four marks.
 fn holds_marks(text: &str) -> bool {
-    rows(text).iter().any(|row| is_mark(row.body))
+    let mut fence: Option<(char, usize)> = None;
+    for row in rows(text) {
+        match fence {
+            Some(open) => {
+                if fence_closes(row.body, open) {
+                    fence = None;
+                }
+            }
+            None => {
+                if is_mark(row.body) {
+                    return true;
+                }
+                fence = fence_opens(row.body);
+            }
+        }
+    }
+    false
 }
 
 /// The index of the area whose range contains byte `offset`.
@@ -364,6 +425,14 @@ pub fn propose(base: &str, current: &str, proposed: &str) -> Result<String, Refu
     if holds_marks(current) || holds_marks(proposed) {
         return Err(Refusal::HoldsMarks);
     }
+    // The marks and the added breaks use the note's own line break: CRLF if the text has one.
+    let eol = if current.contains("\r\n") || proposed.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let normal = final_break_as(current, proposed, eol);
+    let proposed = normal.as_str();
     if proposed == base {
         return Err(Refusal::NothingChanged);
     }
@@ -391,30 +460,64 @@ pub fn propose(base: &str, current: &str, proposed: &str) -> Result<String, Refu
             .map(|h| h.side.len() as isize - h.base.len() as isize)
             .sum()
     };
-    // The marks and the added breaks use the note's own line break: CRLF if the text has one.
-    let eol = if c.iter().chain(p.iter()).any(|line| line.ends_with("\r\n")) {
-        "\r\n"
-    } else {
-        "\n"
-    };
-    let mut out = String::new();
+    // `m` is `current` with every agent hunk applied: the merged text. Each hunk is placed in
+    // `current` (`cr`) and in `m` (`mr`).
+    let mut m: Vec<&str> = Vec::new();
+    let mut placed: Vec<(Range<usize>, Range<usize>)> = Vec::new();
     let mut at = 0;
-    for (k, a) in agent.iter().enumerate() {
+    for a in &agent {
         let cs = (a.base.start as isize + shift(a.base.start)) as usize;
         let ce = cs + a.base.len();
-        for line in &c[at..cs] {
-            out.push_str(line);
-        }
+        m.extend_from_slice(&c[at..cs]);
+        let ms = m.len();
+        m.extend_from_slice(&p[a.side.clone()]);
+        placed.push((cs..ce, ms..m.len()));
         at = ce;
-        let removed = &c[cs..ce];
-        let added = &p[a.side.clone()];
+    }
+    m.extend_from_slice(&c[at..]);
+    // The cuts: where `current` and `m` are in step. Every position of an unchanged run is one, and
+    // so are the two ends of the text.
+    let mut cuts: Vec<(usize, usize)> = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    for (cr, mr) in &placed {
+        for t in 0..=(cr.start - i) {
+            cuts.push((i + t, j + t));
+        }
+        (i, j) = (cr.end, mr.end);
+    }
+    for t in 0..=(c.len() - i) {
+        cuts.push((i + t, j + t));
+    }
+    cuts.dedup();
+    // A cut is clean where neither text is inside a code fence. Every area lies between two clean
+    // cuts, so no area starts or ends inside a fence.
+    let (inside_c, inside_m) = (fence_positions(&c), fence_positions(&m));
+    let clean: Vec<(usize, usize)> = cuts
+        .into_iter()
+        .filter(|&(i, j)| {
+            (i == 0 && j == 0) || (i == c.len() && j == m.len()) || (!inside_c[i] && !inside_m[j])
+        })
+        .collect();
+    let mut out = String::new();
+    for pair in clean.windows(2) {
+        let ((i, j), (i2, j2)) = (pair[0], pair[1]);
+        let (removed, added) = (&c[i..i2], &m[j..j2]);
+        if removed == added {
+            for line in removed {
+                out.push_str(line);
+            }
+            continue;
+        }
+        if removed.iter().chain(added).any(|line| is_mark(bare(line))) {
+            return Err(Refusal::HoldsMarks);
+        }
         // This area ends the text when nothing of `current` follows it.
-        let ends = k + 1 == agent.len() && ce == c.len();
+        let ends = i2 == c.len();
         let omit = ends
             && if added.is_empty() {
-                !current.ends_with('\n')
+                !ends_broken(removed)
             } else {
-                !proposed.ends_with('\n')
+                !ends_broken(added)
             };
         if !removed.is_empty() {
             start_line(&mut out, eol);
@@ -431,10 +534,51 @@ pub fn propose(base: &str, current: &str, proposed: &str) -> Result<String, Refu
             out.push_str(&block(OPEN_ADD, added, CLOSE_ADD, omit, eol));
         }
     }
-    for line in &c[at..] {
-        out.push_str(line);
-    }
     Ok(out)
+}
+
+/// Whether the last line of `lines` has its line break.
+fn ends_broken(lines: &[&str]) -> bool {
+    lines.last().is_some_and(|line| line.ends_with('\n'))
+}
+
+/// `proposed` with its final line break as `current` has it: one added (`eol`) when `current` has
+/// one, one taken off when it has none. An empty text has no final break to change, and an empty
+/// `current` keeps `proposed` as given.
+fn final_break_as(current: &str, proposed: &str, eol: &str) -> String {
+    if current.is_empty()
+        || proposed.is_empty()
+        || current.ends_with('\n') == proposed.ends_with('\n')
+    {
+        return proposed.to_string();
+    }
+    if current.ends_with('\n') {
+        format!("{proposed}{eol}")
+    } else {
+        let cut = proposed
+            .strip_suffix("\r\n")
+            .or_else(|| proposed.strip_suffix('\n'));
+        cut.unwrap_or(proposed).to_string()
+    }
+}
+
+/// For each position before a line of `lines`, and after the last, whether it is inside an open
+/// code fence of the text. A position after an opening line is inside; one after the closing line
+/// is outside.
+fn fence_positions(lines: &[&str]) -> Vec<bool> {
+    let mut inside = Vec::with_capacity(lines.len() + 1);
+    let mut fence: Option<(char, usize)> = None;
+    for line in lines {
+        inside.push(fence.is_some());
+        let body = bare(line);
+        fence = match fence {
+            Some(open) if fence_closes(body, open) => None,
+            Some(open) => Some(open),
+            None => fence_opens(body),
+        };
+    }
+    inside.push(fence.is_some());
+    inside
 }
 
 #[cfg(test)]
@@ -814,26 +958,22 @@ mod tests {
     }
 
     #[test]
-    fn a_deletion_at_the_end_of_a_text_without_final_break_is_known_to_gain_a_break() {
-        // Format limit: "a\nb" and "a\nb\n" changed the same way give the same marks, so reject
-        // cannot tell them apart. Accept is exact; reject keeps the text plus its last break.
+    fn a_deletion_at_the_end_of_a_text_without_final_break_is_exact_both_ways() {
         let marked = propose("a\nb", "a\nb", "a").unwrap();
-        assert_eq!(accept_all(&marked), "a");
-        assert_eq!(reject_all(&marked), "a\nb\n");
+        both_ways(&marked, "a\nb", "a");
     }
 
     #[test]
     fn invariants_hold_for_an_added_last_line_without_break() {
+        // The agent's text lacks the final break, but the note has one: the text gets it.
         let marked = propose("a\n", "a\n", "a\nb").unwrap();
-        both_ways(&marked, "a\n", "a\nb");
+        both_ways(&marked, "a\n", "a\nb\n");
     }
 
     #[test]
-    fn a_text_with_no_line_break_gains_one_on_reject_when_changed_at_its_end() {
-        // The same format limit as above: accept is exact, reject adds the last break.
+    fn a_text_without_a_final_break_is_exact_both_ways_when_changed_at_its_end() {
         let marked = propose("one", "one", "two").unwrap();
-        assert_eq!(accept_all(&marked), "two");
-        assert_eq!(reject_all(&marked), "one\n");
+        both_ways(&marked, "one", "two");
     }
 
     #[test]
@@ -856,5 +996,179 @@ mod tests {
         let proposed = "l1\nl2\nl3\nL4!\n";
         let marked = propose(base, current, proposed).unwrap();
         both_ways(&marked, current, "L1!\nl2\nl3\nL4!\n");
+    }
+
+    #[test]
+    fn marks_inside_a_backtick_fence_are_plain_text() {
+        let text = "a\n```\n{++\nx\n++}\n```\nb\n";
+        assert!(areas(text).is_empty());
+        assert!(!has_pending(text));
+        let x = at(text, "x\n");
+        assert!(!refuses(text, x..x + 1, "y"));
+    }
+
+    #[test]
+    fn marks_inside_a_tilde_fence_are_plain_text() {
+        let text = "a\n~~~\n{--\nold\n--}\n~~~\nb\n";
+        assert!(areas(text).is_empty());
+        assert!(!has_pending(text));
+        let old = at(text, "old");
+        assert!(!refuses(text, old..old + 1, "o"));
+    }
+
+    #[test]
+    fn a_real_area_before_and_after_a_fence_is_found_and_the_fence_is_not() {
+        let text = "{++\nA\n++}\n```\n{--\nx\n--}\n```\n{--\nB\n--}\n";
+        let found = areas(text);
+        assert_eq!(found.len(), 2);
+        assert_eq!(&text[found[0].added.clone()], "A\n");
+        assert_eq!(&text[found[1].removed.clone()], "B\n");
+        assert_eq!(found[1].range.end, text.len());
+    }
+
+    #[test]
+    fn a_mark_like_line_in_a_fence_that_is_never_closed_is_not_an_area() {
+        let text = "a\n```\n{++\nx\n++}\n";
+        assert!(areas(text).is_empty());
+        assert!(!has_pending(text));
+    }
+
+    #[test]
+    fn propose_succeeds_when_the_note_documents_the_marks_in_a_fence_and_the_change_is_elsewhere() {
+        let base = "intro\n```\n{--\nold\n--}\n```\nend\n";
+        let proposed = "Intro\n```\n{--\nold\n--}\n```\nend\n";
+        let marked = propose(base, base, proposed).unwrap();
+        assert_eq!(areas(&marked).len(), 1);
+        both_ways(&marked, base, proposed);
+    }
+
+    #[test]
+    fn a_change_inside_a_fence_is_one_area_around_the_whole_block() {
+        let base = "a\n```\nold\n```\nb\n";
+        let proposed = "a\n```\nnew\n```\nb\n";
+        let marked = propose(base, base, proposed).unwrap();
+        assert_eq!(
+            marked,
+            "a\n{--\n```\nold\n```\n--}\n{++\n```\nnew\n```\n++}\nb\n"
+        );
+        assert_eq!(areas(&marked).len(), 1);
+        both_ways(&marked, base, proposed);
+    }
+
+    #[test]
+    fn after_accepting_an_earlier_area_a_later_fence_area_is_still_found() {
+        let base = "x\n```\nold\n```\nb\nq\n";
+        let proposed = "X\n```\nnew\n```\nb\nq\n";
+        let marked = propose(base, base, proposed).unwrap();
+        assert_eq!(areas(&marked).len(), 2);
+        let once = accept(&marked, 0);
+        assert_eq!(areas(&once).len(), 1);
+        assert_eq!(accept(&once, 0), accept_all(&marked));
+        both_ways(&marked, base, proposed);
+    }
+
+    #[test]
+    fn a_new_fenced_block_is_one_added_area() {
+        let base = "a\nb\n";
+        let proposed = "a\n```\ncode\n```\nb\n";
+        let marked = propose(base, base, proposed).unwrap();
+        assert_eq!(marked, "a\n{++\n```\ncode\n```\n++}\nb\n");
+        assert_eq!(areas(&marked).len(), 1);
+        both_ways(&marked, base, proposed);
+    }
+
+    #[test]
+    fn a_removed_fenced_block_is_one_removed_area() {
+        let base = "a\n```\ncode\n```\nb\n";
+        let proposed = "a\nb\n";
+        let marked = propose(base, base, proposed).unwrap();
+        assert_eq!(marked, "a\n{--\n```\ncode\n```\n--}\nb\n");
+        assert_eq!(areas(&marked).len(), 1);
+        both_ways(&marked, base, proposed);
+    }
+
+    #[test]
+    fn changes_to_two_fenced_blocks_are_two_areas() {
+        let base = "```\n1\n```\nmid\n```\n2\n```\n";
+        let proposed = "```\n1b\n```\nmid\n```\n2b\n```\n";
+        let marked = propose(base, base, proposed).unwrap();
+        assert_eq!(areas(&marked).len(), 2);
+        both_ways(&marked, base, proposed);
+    }
+
+    #[test]
+    fn a_changed_fenced_block_holding_a_mark_line_is_refused() {
+        let base = "a\n```\n{++\nx\n++}\n```\nb\n";
+        let proposed = "a\n```\n{++\ny\n++}\n```\nb\n";
+        assert_eq!(propose(base, base, proposed), Err(Refusal::HoldsMarks));
+    }
+
+    #[test]
+    fn a_new_fenced_block_documenting_marks_is_refused() {
+        assert_eq!(
+            propose("a\n", "a\n", "a\n```\n{--\n```\n"),
+            Err(Refusal::HoldsMarks)
+        );
+    }
+
+    #[test]
+    fn a_proposal_that_differs_only_by_the_final_break_is_nothing_changed() {
+        assert_eq!(
+            propose("a\nb\n", "a\nb\n", "a\nb"),
+            Err(Refusal::NothingChanged)
+        );
+        assert_eq!(
+            propose("a\nb", "a\nb", "a\nb\n"),
+            Err(Refusal::NothingChanged)
+        );
+        assert_eq!(
+            propose("a\r\nb\r\n", "a\r\nb\r\n", "a\r\nb"),
+            Err(Refusal::NothingChanged)
+        );
+    }
+
+    #[test]
+    fn an_empty_note_takes_the_proposed_text_with_or_without_a_final_break() {
+        both_ways(&propose("", "", "x").unwrap(), "", "x");
+        both_ways(&propose("", "", "x\n").unwrap(), "", "x\n");
+    }
+
+    /// `text` with its final line break as `current` has it: the expected accept of a proposal.
+    fn brought_to(current: &str, text: &str, eol: &str) -> String {
+        let cut = text
+            .strip_suffix("\r\n")
+            .or_else(|| text.strip_suffix('\n'))
+            .unwrap_or(text);
+        if current.ends_with('\n') {
+            format!("{cut}{eol}")
+        } else {
+            cut.to_string()
+        }
+    }
+
+    #[test]
+    fn the_final_line_break_is_exact_in_every_case() {
+        for eol in ["\n", "\r\n"] {
+            let tail = |broken: bool| if broken { eol } else { "" };
+            for current_broken in [true, false] {
+                for proposed_broken in [true, false] {
+                    let current = format!("a{eol}b{}", tail(current_broken));
+                    let changes = [
+                        format!("a{eol}B{}", tail(proposed_broken)),
+                        format!("a{}", tail(proposed_broken)),
+                        format!("a{eol}b{eol}c{}", tail(proposed_broken)),
+                    ];
+                    for proposed in changes {
+                        let marked = propose(&current, &current, &proposed).unwrap();
+                        assert_eq!(reject_all(&marked), current, "reject of {marked:?}");
+                        assert_eq!(
+                            accept_all(&marked),
+                            brought_to(&current, &proposed, eol),
+                            "accept of {marked:?}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }
