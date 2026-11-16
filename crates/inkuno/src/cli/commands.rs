@@ -563,7 +563,7 @@ fn write(args: &[String]) -> i32 {
         "write",
         args,
         &["--author", "--text", "--token"],
-        &[],
+        &["--replace"],
         (1, 1, "a note"),
     ) {
         Ok(opts) => opts,
@@ -596,6 +596,9 @@ fn write(args: &[String]) -> i32 {
     tool["note"] = json!(opts.words[0]);
     tool["author"] = json!(author);
     tool["text"] = json!(proposed);
+    if opts.switches.contains("--replace") {
+        tool["replace"] = json!(true);
+    }
     let result = on_vault(&opts, |vault| ops::write_note(vault, &tool));
     // The write stood, but its version could not be saved: said on standard error.
     if let Ok(outcome) = &result
@@ -971,26 +974,35 @@ example:
 ";
 
 const WRITE_HELP: &str = "\
-inkuno write <note> --author NAME (--text TEXT | --text -) --token T
+inkuno write <note> --author NAME (--text TEXT | --text -) --token T [--replace]
     proposes the note's full new text. Each change is written into the note as a pending mark
     ({--removed lines--} then {++added lines++}) until a person accepts or rejects it in Inkuno.
     Refused while the note has pending changes, and when the text is empty.
+    --replace takes back the agent's own last proposal and writes the new one in its place. It
+    is refused unless the pending changes are that proposal as it was left: the same author,
+    nothing rejected, typed or commented. Accepted changes stay. Without pending changes it is a
+    plain write. The text is the full note, without marks; the same text as the person's is refused.
     --token is required: the token of read --json, which says which text the agent read. A token
-    of a saved version merges; a note changed in the same lines is refused.
+    of a saved version merges; a note changed in the same lines is refused. With --replace the
+    token must be the note's current one.
     Each write saves two automatic revisions: the text before, and the proposed text. If the
     proposed version cannot be saved, the write stands and a warning goes to standard error.
-    Prints `N changes pending in <note>`; --json: the path, the count and the two revisions
+    Prints `N changes pending in <note>`; --json: the path, the count and the two revisions,
+    and `replaced: true` after a replacement
 
 example:
   inkuno read Plan --json
   inkuno write Plan --author claude --text - --token 3f9a1c < new-plan.md
+  inkuno write Plan --author claude --text - --token 7b2d4e --replace < revised-plan.md
 ";
 
 const MOVE_HELP: &str = "\
 inkuno move <note> [--name NEW] [--folder F]
     gives a note (or a diagram, picture or attachment) a new name, a new folder, or both.
     The [[links]] to it are rewritten, unless another note still has the old name: then
-    links_left says so and nothing is rewritten. A taken name is refused.
+    links_left says so and nothing is rewritten. A taken name is refused. A link inside a
+    pending change of another note is not rewritten: the move is refused, nothing is moved or
+    written, and the message names that note. Accept or reject its pending changes first.
     prints the new path, then `links rewritten: N` when links were rewritten, and a line
     when another note kept the old name; --json: the result as JSON
 

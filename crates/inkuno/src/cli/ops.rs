@@ -525,6 +525,16 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
     if let Err(message) = guard_pending(&text, &next) {
         return Outcome::err(message);
     }
+    // A title change renames the note and rewrites its links: refused before anything is written
+    // when a linking note has a pending change in the lines a link rewrite would change.
+    if let Some(title) = planned_title(&path, &text, &next) {
+        let old = files::stem(&path);
+        if let Err(message) =
+            vault::check_links_before_move(vault, &path, &old, &title, Some(next.as_str()))
+        {
+            return Outcome::err(message);
+        }
+    }
     if let Err(message) = files::write(&path, &next).map_err(disk) {
         return Outcome::err(message);
     }
@@ -560,6 +570,17 @@ fn given_token(args: &Value) -> Result<Option<&str>, String> {
         Some("") => Err("`token` is empty; pass the token that `read --json` gives".into()),
         Some(token) => Ok(Some(token)),
     }
+}
+
+/// The title `follow_title` renames the note to, when the change of `before` into `after` renames it:
+/// the same test as `follow_title`, read first so the check can run before anything is written.
+fn planned_title(path: &Path, before: &str, after: &str) -> Option<String> {
+    let was = files::h1_of(before);
+    let title = files::h1_of(after).filter(|title| was.as_ref() != Some(title))?;
+    if title == files::stem(path) || path.with_file_name(format!("{title}.md")).exists() {
+        return None;
+    }
+    Some(title)
 }
 
 /// A changed `# title` renames the file and the links, unless the new name is taken:
@@ -727,11 +748,19 @@ fn snapshot(
 /// Saves one automatic revision: `snapshot`, or a stand-in in tests.
 type Save = fn(&revisions::Home, &Path, &str, &str, &str) -> Result<Option<u32>, String>;
 
+/// The memo of the automatic revision of a proposed text: `own_last_proposal` looks for it.
+const PROPOSED_MEMO: &str = "proposed, pending";
+
+/// The sentence the command line adds to a refused `write` with pending changes.
+const REPLACE_HINT: &str = "An agent replaces its own last proposal with --replace.";
+
 /// `write`: proposes `text` as the note's new full text. The changes wait in the note as pending
 /// marks until a person accepts or rejects them. Around the write, two automatic revisions are
 /// saved: the text before (by the person's default author) and the proposed text (by `author`).
 /// Nothing is written when the proposal is refused or the first snapshot fails. A failed save of
 /// the proposed text does not undo the write: it is a warning, and its revision is null.
+/// With `replace` (JSON `true`), a note whose pending changes are the agent's last proposal, as it
+/// left it, gets the new proposal in their place: see `write_note_saving`.
 pub fn write_note(vault: &mut Vault, args: &Value) -> Outcome {
     write_note_saving(vault, args, snapshot)
 }
@@ -752,6 +781,10 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
     if proposed.trim().is_empty() {
         return Outcome::err("the text is empty");
     }
+    let replace = args
+        .get("replace")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let (current, token) = match vault::read_text(&path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
@@ -776,9 +809,35 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
             Err(message) => return Outcome::err(message),
         },
     };
-    let marked = match pending::propose(&base, &current, proposed) {
-        Ok(marked) => marked,
-        Err(refusal) => return Outcome::err(refusal.to_string()),
+    // `--replace` takes back the agent's own last proposal, and writes the new one on the person's
+    // text. Without pending changes it is a plain write.
+    let replacing = replace && pending::has_pending(&current);
+    let (kept, marked) = if replacing {
+        if base != current {
+            return Outcome::err("the note changed since it was read; read it again and retry");
+        }
+        match own_last_proposal(&home, &path, &author, &current) {
+            Ok(true) => {}
+            Ok(false) => {
+                return Outcome::err(
+                    "the pending changes are not your last proposal as you left it: a person decides them first",
+                );
+            }
+            Err(message) => return Outcome::err(message),
+        }
+        let kept = pending::reject_all(&current);
+        match pending::propose(&kept, &kept, proposed) {
+            Ok(marked) => (kept, marked),
+            Err(refusal) => return Outcome::err(refusal.to_string()),
+        }
+    } else {
+        match pending::propose(&base, &current, proposed) {
+            Ok(marked) => (current.clone(), marked),
+            Err(refusal @ pending::Refusal::AlreadyPending) => {
+                return Outcome::err(format!("{refusal}. {REPLACE_HINT}"));
+            }
+            Err(refusal) => return Outcome::err(refusal.to_string()),
+        }
     };
     let person = match super::rev::default_author() {
         Ok(person) => person,
@@ -789,7 +848,7 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
         &path,
         &person,
         &format!("before a change by {author}"),
-        &current,
+        &kept,
     ) {
         Ok(number) => number,
         Err(message) => return Outcome::err(message),
@@ -803,7 +862,7 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
         &home,
         &path,
         &author,
-        "proposed, pending",
+        PROPOSED_MEMO,
         &pending::accept_all(&marked),
     ) {
         Ok(number) => (number, None),
@@ -824,7 +883,28 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
     if let Some(warning) = warning {
         result["warning"] = json!(warning);
     }
+    if replacing {
+        result["replaced"] = json!(true);
+    }
     Outcome::ok(result)
+}
+
+/// Whether the pending changes of `current` are the agent's last proposal as it left it: the latest
+/// revision is its automatic proposed version, by `author`, and the text is what accepting every
+/// change gives. A change the person rejected, typed or commented makes it false; accepted ones do not.
+fn own_last_proposal(
+    home: &revisions::Home,
+    path: &Path,
+    author: &str,
+    current: &str,
+) -> Result<bool, String> {
+    let latest = revisions::latest(home, path).map_err(disk)?;
+    Ok(latest.is_some_and(|rev| {
+        rev.kind == revision::Kind::Auto
+            && rev.author == author
+            && rev.note.as_deref() == Some(PROPOSED_MEMO)
+            && rev.text == pending::accept_all(current)
+    }))
 }
 
 pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
@@ -891,6 +971,25 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
             vault::rel(&vault.root, &dest)
         ));
     }
+    let new_stem = files::stem(&dest);
+    let (old_link, new_link) = if image || !dest.extension().is_some_and(|e| e == "md") {
+        (
+            old_file,
+            dest.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or(new_stem.clone()),
+        )
+    } else {
+        (old_stem.clone(), new_stem.clone())
+    };
+    // Links are rewritten after the move, so a refusal is decided before it: no linking note may
+    // have a pending change in the lines a rewrite would change.
+    if old_link != new_link
+        && let Err(message) =
+            vault::check_links_before_move(vault, &path, &old_link, &new_link, None)
+    {
+        return Outcome::err(message);
+    }
     if dest != path {
         if let Err(message) = fs::create_dir_all(&dir).map_err(disk) {
             return Outcome::err(message);
@@ -903,17 +1002,6 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
             return Outcome::err(disk(error));
         }
     }
-    let new_stem = files::stem(&dest);
-    let (old_link, new_link) = if image || !dest.extension().is_some_and(|e| e == "md") {
-        (
-            old_file,
-            dest.file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or(new_stem.clone()),
-        )
-    } else {
-        (old_stem.clone(), new_stem.clone())
-    };
     // A note whose title was its name keeps the title in step.
     if dest.extension().is_some_and(|e| e == "md")
         && old_stem != new_stem
