@@ -45,6 +45,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     the_chords_decide_the_change_under_the_caret(j, cx);
     improving_the_whole_note_then_accept_all_and_reject_all(j, cx);
     the_versions_panel_lists_the_saves_and_compares_one(j, cx);
+    restore_a_version_on_the_note_as_pending_changes(j, cx);
 }
 
 /// Opens `name` with `content` in the only tab, its editor given the keys.
@@ -451,4 +452,108 @@ fn the_versions_panel_lists_the_saves_and_compares_one(
         cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
         Some(SECOND_SAVE)
     );
+}
+
+/// Walk 5: a version restored from the panel's menu, on the note's own tab, comes back as pending
+/// changes; accepted, the note is that version's text, and the list gains the two automatic versions
+/// on top; restoring the text the note already has says so; one undo takes the restore back.
+fn restore_a_version_on_the_note_as_pending_changes(j: &Journey, cx: &mut gpui::VisualTestContext) {
+    let shell = &j.shell;
+    let journal = j.root.join("Journal.md");
+    let note = shell.read_with(cx, |s, _| {
+        s.panes
+            .iter()
+            .position(|p| p.compare.is_none() && p.path.as_deref() == Some(journal.as_path()))
+            .expect("the note's tab is open")
+    });
+    let compare = vers::compare_tab(shell, cx);
+    shell.update_in(cx, |s, window, cx| s.focus_pane(note, window, cx));
+    vers::show_versions(shell, cx);
+    let before = vers::names(shell, cx);
+    assert_eq!(before.len(), 4);
+    // Version 2 is the third row, the note has its own text now.
+    let second = vers::row_path(shell, cx, 2);
+
+    // A comparison refuses the restore, whatever the list shows.
+    shell.update_in(cx, |s, window, cx| s.focus_pane(compare, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::RestoreVersion, Some(second.clone()), window, cx)
+    });
+    vers::settle(cx);
+    assert!(vers::says(shell, cx, vers::COMPARISON));
+    assert_eq!(
+        shell.read_with(cx, |s, _| s
+            .panes
+            .iter()
+            .filter(|p| p.compare.is_some())
+            .count()),
+        1
+    );
+
+    // The note's own tab: the row's menu, Restore this version.
+    shell.update_in(cx, |s, window, cx| s.focus_pane(note, window, cx));
+    vers::show_versions(shell, cx);
+    restore_from_row_menu(cx, &before[2]);
+    assert_eq!(j.text(cx), RESTORED_PENDING);
+    assert_eq!(pending_count(shell, cx), 1);
+
+    // Accepted, the note is exactly that version's text.
+    palette(shell, cx, "accept all", 1);
+    assert_eq!(j.text(cx), SECOND_SAVE);
+    assert_eq!(pending_count(shell, cx), 0);
+
+    // The list: the two automatic versions on top, the four before them unchanged.
+    vers::frame(cx);
+    let me = shell.read_with(cx, |s, _| s.revision_author());
+    let rows = vers::names(shell, cx);
+    assert_eq!(rows.len(), 6);
+    assert_eq!(
+        rows[0],
+        format!("#6 · {me} · auto · version 2 restored, pending")
+    );
+    assert_eq!(
+        rows[1],
+        format!("#5 · {me} · auto · before restoring version 2")
+    );
+    assert_eq!(rows[2..], before[..]);
+
+    // Restoring the text the note already has changes nothing.
+    let same = rows.iter().position(|r| r.starts_with("#2 · ")).unwrap();
+    restore_from_row_menu(cx, &rows[same]);
+    assert!(vers::says(shell, cx, "The note is this version already."));
+    assert_eq!(j.text(cx), SECOND_SAVE);
+    assert_eq!(vers::names(shell, cx).len(), 6);
+
+    // One undo takes the accepting back, a second one the restore.
+    asst::focus_note(shell, cx);
+    cx.simulate_keystrokes("secondary-z");
+    asst::settle(cx);
+    assert_eq!(j.text(cx), RESTORED_PENDING);
+    cx.simulate_keystrokes("secondary-z");
+    asst::settle(cx);
+    assert_eq!(j.text(cx), UNSAVED);
+    assert_eq!(pending_count(shell, cx), 0);
+}
+
+/// The text of the note when version 2 is restored: its one removed line pending.
+const RESTORED_PENDING: &str =
+    "# Journal\n\npremier jet\ndeuxième ligne\n{--\ntroisième ligne\n--}\n";
+
+/// Right-click on the panel row named `name`, then its menu's "Restore this version".
+fn restore_from_row_menu(cx: &mut gpui::VisualTestContext, name: &str) {
+    vers::frame(cx);
+    let row = cx
+        .debug_bounds(leak(format!("nav-row-{name}")))
+        .expect("the version is listed")
+        .center();
+    right_click(cx, row);
+    let entry = cx
+        .debug_bounds(leak(format!(
+            "menu-entry-{}",
+            tr("Restore this version", "Restaurer cette version")
+        )))
+        .expect("the row menu offers the restore")
+        .center();
+    cx.simulate_click(entry, gpui::Modifiers::none());
+    vers::settle(cx);
 }
