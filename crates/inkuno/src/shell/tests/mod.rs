@@ -25,6 +25,7 @@ mod relative_links;
 mod revisions;
 mod save_close;
 mod scratch;
+mod settings_tab;
 mod shortcuts_page;
 mod tabs;
 mod versions;

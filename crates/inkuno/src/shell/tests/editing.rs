@@ -76,8 +76,17 @@ fn commands_are_found(cx: &mut TestAppContext) {
         .expect("the command is shown")
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
-    assert!(shell.read_with(cx, |s, _| s.palette.is_none() && s.help.open));
-    shell.update_in(cx, |s, window, cx| s.set_help(false, window, cx));
+    assert!(shell.read_with(cx, |s, _| s.palette.is_none()));
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.settings_section()),
+        Some(Section::Shortcuts)
+    );
+    // The Settings tab goes: the note is in front again.
+    shell.update_in(cx, |s, window, cx| {
+        if let Some(tab) = s.panes.iter().position(|pane| pane.settings.is_some()) {
+            s.close_tab(tab, window, cx);
+        }
+    });
 
     // In the notes palette, a leading ">" switches to commands, and is erased; without it, a command
     // is found too, but Enter still creates the note of that name.

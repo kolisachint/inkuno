@@ -11,9 +11,9 @@ const HEAD: &str = "# Keyboard shortcuts
 <!-- Written by the test `shortcuts_page_is_current` from `help_sections` (crates/inkuno/src/shell/keymap.rs).
      Do not edit by hand: run `make docs`. -->
 
-Every line of the help panel (`F1`), with the default keys of Linux and Windows. On macOS, read `Cmd` for `Ctrl`, and `Alt` for `Ctrl` when moving by word. Moving between panes is `Cmd + Alt + arrows`, and back and forward are `Cmd + [` and `Cmd + ]`.
+Every line of the Shortcuts page of Settings (`F1`), with the default keys of Linux and Windows. On macOS, read `Cmd` for `Ctrl`, and `Alt` for `Ctrl` when moving by word. Moving between panes is `Cmd + Alt + arrows`, and back and forward are `Cmd + [` and `Cmd + ]`.
 
-`Ctrl+P › word` means: open the palette and type that word. A line without keys has no default shortcut. Any line that names an action can be given keys in the help panel: see [Changing a shortcut](settings.md#changing-a-shortcut).
+`Ctrl+P › word` means: open the palette and type that word. A line without keys has no default shortcut. Any line that names an action can be given keys on the Shortcuts page: see [Changing a shortcut](settings.md#changing-a-shortcut).
 ";
 
 /// Text of a table cell: the Markdown signs are escaped, so the line reads as the panel shows it.

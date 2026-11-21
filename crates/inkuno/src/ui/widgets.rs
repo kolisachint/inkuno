@@ -68,15 +68,19 @@ pub fn keycaps(keys: &str, t: Theme, on: bool) -> Div {
         .into_iter()
         .map(|key| {
             div()
+                .flex_none()
+                .h(t.px(18.))
                 .min_w(t.px(20.))
                 .px(t.px(6.))
                 .rounded(t.small())
                 .flex()
+                .items_center()
                 .justify_center()
+                .whitespace_nowrap()
                 .bg(if on { t.panel.opacity(0.7) } else { t.code_bg })
                 .text_size(t.px(11.5))
                 .text_color(if on { t.text } else { t.soft })
-                .child(key)
+                .child(div().flex_none().whitespace_nowrap().child(key))
         });
     div().flex().items_center().gap(t.px(3.)).children(caps)
 }

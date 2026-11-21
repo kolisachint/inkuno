@@ -42,6 +42,7 @@ actions!(
         OpenVault,
         CopyAll,
         ToggleHelp,
+        OpenSettings,
         ToggleAssistant,
         AssistantImprove,
         ToggleOutline,

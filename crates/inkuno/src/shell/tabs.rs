@@ -44,6 +44,10 @@ impl Shell {
         if let Some(compare) = &pane.compare {
             return compare.title.clone();
         }
+        // The Settings tab is named by what it is.
+        if pane.settings.is_some() {
+            return tr("Settings", "Réglages").to_string();
+        }
         if let Some(listing) = &pane.listing {
             return match nav::tag_of(&listing.of) {
                 Some(tag) => format!("#{tag}"),

@@ -408,8 +408,12 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &ZoomReset, window, cx| this.resize_text(None, window, cx)),
             )
+            // F1 and Ctrl+/: the Settings tab on its shortcuts page.
             .on_action(cx.listener(|this, _: &ToggleHelp, window, cx| {
-                this.set_help(!this.help.open, window, cx)
+                this.open_settings(Section::Shortcuts, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
+                this.open_settings(Section::Appearance, window, cx)
             }))
             .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
                 this.toggle_assistant(window, cx)
@@ -456,9 +460,7 @@ impl Render for Shell {
                 this.file_do(nav::Do::MoveTo, window, cx)
             }))
             .on_action(cx.listener(|this, _: &CloseHelp, window, cx| {
-                if this.help.open {
-                    this.set_help(false, window, cx)
-                } else if this.pane().figure.is_some() {
+                if this.pane().figure.is_some() {
                     // A figure over the note (magnifier): Escape closes it, back to the note.
                     this.pane_mut().figure = None;
                     window.focus(&this.pane().editor.focus_handle(cx));
@@ -472,10 +474,7 @@ impl Render for Shell {
             .child(body)
             .when(title_bar, |d| d.child(pill))
             .children(self.render_menu(window, cx))
-            .children(self.render_icons(window, cx))
-            .when(self.help.open, |d| {
-                d.child(self.render_help(window.viewport_size().height < px(420.), cx))
-            });
+            .children(self.render_icons(window, cx));
 
         // The transparent margin carries the shadow and serves as resize handle.
         div()
@@ -1124,6 +1123,7 @@ impl Shell {
         let free_top = self.pane().figure.is_none()
             && (listing.is_some() || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
+            _ if self.pane().settings.is_some() => note.child(self.render_settings(cx)),
             _ if listing.is_some() => note.children(listing),
             _ if let Some(figure) = self.pane().figure.clone() => {
                 figure.update(cx, |figure, _| figure.sync(t));

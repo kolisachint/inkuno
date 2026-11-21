@@ -82,6 +82,9 @@ pub(super) struct Pane {
     /// A comparison tab (`versions.rs`): a read-only text of a version against the note now. It has no
     /// file: it is never saved, restored, kept in the recent notes, nor asked about when closed.
     pub(super) compare: Option<super::versions::Compare>,
+    /// The Settings tab (`settings_tab.rs`): its pages in place of the note. It has no file, and no
+    /// note is ever typed into it.
+    pub(super) settings: Option<super::settings_tab::SettingsTab>,
 }
 
 /// A pane of the window: its tabs, left to right (indices in `Shell::panes`), and the one it shows.
@@ -218,6 +221,7 @@ impl Shell {
             peek: false,
             scratch: false,
             compare: None,
+            settings: None,
         }
     }
 
@@ -235,6 +239,10 @@ impl Shell {
         self.show_active(cx);
         if let Some(figure) = &self.pane().figure {
             window.focus(&figure.focus_handle(cx));
+            return cx.notify();
+        }
+        if let Some(focus) = self.settings_focus(cx) {
+            window.focus(&focus);
             return cx.notify();
         }
         match (
@@ -263,6 +271,10 @@ impl Shell {
         };
         file || pane.zone.is_focused(window)
             || pane.editor.focus_handle(cx).is_focused(window)
+            || pane
+                .settings
+                .as_ref()
+                .is_some_and(|page| page.focus.is_focused(window))
             || pane
                 .figure
                 .as_ref()
@@ -609,7 +621,7 @@ impl Shell {
     pub(super) fn spare_tab(&self, cx: &App) -> bool {
         let pane = self.pane();
         // A comparison is a tab of its own: what opens next never takes its place.
-        if pane.compare.is_some() {
+        if pane.compare.is_some() || pane.settings.is_some() {
             return false;
         }
         pane.preview
