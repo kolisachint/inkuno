@@ -66,6 +66,7 @@ impl Editor {
     pub(super) fn move_to(&mut self, to: usize, cx: &mut Context<Self>) {
         self.bar.swatches = false;
         self.bar.open = false;
+        self.toolbar_text = false;
         self.sel = to..to;
         self.reversed = false;
         self.goal_x = None;
@@ -75,6 +76,7 @@ impl Editor {
     }
 
     pub(super) fn select_to(&mut self, to: usize, cx: &mut Context<Self>) {
+        self.toolbar_off = false;
         if self.reversed {
             self.sel.start = to
         } else {

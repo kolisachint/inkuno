@@ -838,6 +838,7 @@ impl Editor {
 
     pub(super) fn mouse_up(&mut self, e: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.selecting = false;
+        self.toolbar_off = false;
         self.drop_block(cx);
         if let Some(moving) = self.moving.take() {
             self.drop_part(moving, cx);
@@ -862,6 +863,7 @@ impl Editor {
             *self.table_x.entry(range.start).or_default() -= dx;
         }
         self.scroll_y -= dy;
+        self.toolbar_off = true;
         cx.notify();
     }
 }

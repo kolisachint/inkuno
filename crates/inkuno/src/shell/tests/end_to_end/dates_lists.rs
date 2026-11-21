@@ -11,11 +11,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     j.load(cx, "", 0);
     cx.simulate_input("voir @dem");
     cx.simulate_keystrokes("enter");
-    assert_eq!(text(cx), format!("voir [[{tomorrow}]]"));
+    // The day is a Markdown link to its daily note, at the vault root from a note there.
+    let (_, month, day) = markdown::day_of(markdown::day_number(today()) + 1);
+    let label = format!("Tomorrow, {day} {}", markdown::MONTHS[month as usize - 1].0);
+    assert_eq!(text(cx), format!("voir [{label}]({tomorrow}.md)"));
     j.load(cx, "", 0);
     cx.simulate_input("@2026-11-02");
     cx.simulate_keystrokes("enter");
-    assert_eq!(text(cx), "[[2026-11-02]]");
+    assert_eq!(text(cx), "[2026-11-02](2026-11-02.md)");
     j.load(cx, "", 0);
     cx.simulate_input("a@dem");
     cx.simulate_keystrokes("enter");

@@ -136,7 +136,9 @@ fn the_palette_and_the_menu_keep_their_rows(cx: &mut TestAppContext) {
                 "{menu:?} in {width}"
             );
             let entry = bounds_of(cx, leak(format!("menu-entry-{}", tr("Rename", "Renommer"))));
-            assert!((entry.size.height - t.px(30.)).abs() < px(0.5), "{entry:?}");
+            // A menu row is 30 px, 32 px in Quiet (`ui::widgets::menu_row`).
+            let row = if t.quiet { 32. } else { 30. };
+            assert!((entry.size.height - t.px(row)).abs() < px(0.5), "{entry:?}");
             shell.update(cx, |s, cx| {
                 s.menu = None;
                 cx.notify();

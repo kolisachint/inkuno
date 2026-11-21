@@ -150,6 +150,10 @@ pub struct Theme {
     pub ring: Hsla,
     /// Quiet's alert tints (NOTE, TIP, IMPORTANT, WARNING, CAUTION), legible on their fill; `None` elsewhere.
     pub alerts: Option<[Hsla; 5]>,
+    /// The fill of a menu or the palette: the raised panel of Quiet, `bg` elsewhere.
+    pub popover: Hsla,
+    /// The red of destructive items (move to the trash, delete) in Quiet; the accent elsewhere.
+    pub caution: Hsla,
     /// Lines that are not text but must be seen (3:1): graph edges, diagram strokes.
     pub line: Hsla,
     /// The surface of a hovered button or row: a little of the text over what is under it, so that it
@@ -470,6 +474,9 @@ struct Extras {
     ring_alpha: f32,
     /// The five alert tints, NOTE to CAUTION.
     alerts: [u32; 5],
+    /// The fill of menus and the palette, and the red of destructive items.
+    popover: u32,
+    caution: u32,
 }
 
 /// The Quiet extras of the theme `name`, if it is one of the Quiet themes.
@@ -492,6 +499,8 @@ fn quiet_extras(name: &str) -> Option<Extras> {
             table_alpha: 0.09,
             ring_alpha: 0.08,
             alerts: [0x2f6fd6, 0x2f8a57, 0x7c4dd6, 0xa8650a, 0xc93a3a],
+            popover: 0xfafafa,
+            caution: 0xc93a3a,
         }),
         "Quiet Dark" => Some(Extras {
             link: 0x8ab4f8,
@@ -510,6 +519,8 @@ fn quiet_extras(name: &str) -> Option<Extras> {
             table_alpha: 0.09,
             ring_alpha: 0.08,
             alerts: [0x6ea6ff, 0x58c48a, 0xa98bff, 0xe0a23c, 0xff7b72],
+            popover: 0x2a2a2c,
+            caution: 0xff7b72,
         }),
         _ => None,
     }
@@ -644,8 +655,14 @@ impl Theme {
             }
             None => (border, code_bg, soft, code_bg, code_bg, border, None),
         };
+        let (popover, caution) = match &quiet {
+            Some(extras) => (Hsla::from(rgb(extras.popover)), Hsla::from(rgb(extras.caution))),
+            None => (bg, accent_read),
+        };
         Self {
             quiet: quiet.is_some(),
+            popover,
+            caution,
             todo_box,
             quote_bar,
             dots,
@@ -726,6 +743,17 @@ impl Theme {
             blur_radius: self.px(6.),
             spread_radius: px(0.),
         }]
+    }
+
+    /// Quiet's menu shadows: 0 1 3 at 5 % and 0 8 24 at 10 %, under a popover.
+    pub fn popover_shadow(&self) -> Vec<BoxShadow> {
+        let shadow = |y: f32, blur: f32, alpha: f32| BoxShadow {
+            color: hsla(0., 0., 0., alpha),
+            offset: point(px(0.), px(y)),
+            blur_radius: px(blur),
+            spread_radius: px(0.),
+        };
+        vec![shadow(1., 3., 0.05), shadow(8., 24., 0.10)]
     }
 
     /// What covers the page: palette, menus, help, toasts.

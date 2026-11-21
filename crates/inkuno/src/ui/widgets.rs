@@ -1,8 +1,8 @@
 //! Small widgets shared by the views: icon buttons, tooltips, and the window-drag handle.
 
 use gpui::{
-    AnyView, App, Context, Div, InteractiveElement, MouseButton, SharedString, Stateful, Window,
-    div, prelude::*, svg,
+    AnyView, App, Context, Div, InteractiveElement, MouseButton, SharedString, Stateful,
+    Window, div, prelude::*, svg,
 };
 
 use crate::ui::theme::Theme;
@@ -135,6 +135,29 @@ pub fn floating(t: Theme) -> Div {
         .border_1()
         .border_color(t.border)
         .shadow(t.floating())
+}
+
+/// A menu or the palette in Quiet: the raised `popover` fill, a 1 px line of the text at 8 %, the sheet radius
+/// and two shadows (0 1 3 at 5 %, 0 8 24 at 10 %). Other themes keep `floating`.
+pub fn popover(t: Theme) -> Div {
+    if !t.quiet {
+        return floating(t);
+    }
+    div()
+        .bg(t.popover)
+        .rounded(t.sheet())
+        .border_1()
+        .border_color(t.text.opacity(0.08))
+        .shadow(t.popover_shadow())
+}
+
+/// A row of a menu: 32 px with a 5 px side margin, 8 px padding and a 6 px radius in Quiet; the
+/// interface's 30 px row with 6 px margin elsewhere. The hover and the selection are the caller's.
+pub fn menu_row(t: Theme) -> Div {
+    if !t.quiet {
+        return div().h(t.px(30.)).mx(t.px(6.)).px_2().rounded(t.small()).flex_none();
+    }
+    div().h(t.px(32.)).mx(t.px(5.)).px(t.px(8.)).rounded(t.small()).flex_none()
 }
 
 /// The tint of what is open (a pill, the open row of the panel): the accent at 10 %, quieter than the selection.
