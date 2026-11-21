@@ -55,13 +55,14 @@ A **Typora-inspired, document-first writing app**:
 - **UI / body / headings:** Inter (variable if available, else regular/medium/
   semibold cuts).
 - **Code:** JetBrains Mono.
-- **Current state (Inkuno):** the bundled fonts are **IBM Plex Sans + IBM Plex Mono**
-  (`crates/inkuno/src/ui/assets.rs:16`), exposed as `sans()` (`crates/inkuno/src/ui/assets.rs:38`) and
-  `mono()` (`crates/inkuno/src/ui/assets.rs:42`), overridable from prefs
-  (`crates/inkuno/src/ui/assets.rs:70`). → **RESKIN**: swap the bundled families to
-  Inter + JetBrains Mono; the override mechanism stays.
-- Fallback chain must cover CJK (current code notes Plex has no CJK glyphs,
-  `crates/inkuno/src/ui/assets.rs:46`).
+- **Current state (Inkuno): done.** The bundled faces are **Inter + JetBrains Mono**
+  (`FONT_FILES`, `crates/inkuno/src/ui/assets.rs:26`), exposed as `sans()` (`crates/inkuno/src/ui/assets.rs:39`) and
+  `mono()` (`crates/inkuno/src/ui/assets.rs:43`), overridable from prefs
+  (`apply_fonts`, `crates/inkuno/src/ui/assets.rs:67`). IBM Plex Sans and Plex Mono are no
+  longer bundled; they stay last in the `apply_fonts` fallback for people who have them
+  installed. Plex Serif ships but nothing draws with it (see `typography.md` §2, §5).
+- Fallback chain must cover CJK: the app's faces have no CJK glyphs, so
+  `needs_system_font` (`crates/inkuno/src/ui/assets.rs:49`) sends those characters to a system font.
 
 ### Sizes (target, px at scale 1)
 
@@ -174,7 +175,7 @@ implement what it says. Current preference keys (all in `crates/inkuno-logic/src
 | Key | Today | User's choice |
 |-----|-------|---------------|
 | `theme` | theme name, else system (`crates/inkuno/src/ui/theme.rs:134`) | TBD — pick default (sepia? light?) |
-| `font` / `mono` | family names, default Plex (`crates/inkuno-logic/src/prefs.rs:7-8`, `crates/inkuno/src/ui/assets.rs:70`) | TBD — Inter / JetBrains Mono (see §3) |
+| `font` / `mono` | family names, default Inter / JetBrains Mono (`crates/inkuno-logic/src/prefs.rs:7-8`, `crates/inkuno/src/ui/assets.rs:67`) | Inter / JetBrains Mono, landed (see §3) |
 | `size` | body px, default 16 (`crates/inkuno-logic/src/prefs.rs:24`) | 16 (confirm) |
 | `page` | narrow/normal/wide/full (`crates/inkuno-logic/src/prefs.rs:53`) | Normal = 800 px (landed 2026-11-08, see §3) |
 | `wide` | wide-table behavior (`crates/inkuno-logic/src/prefs.rs:53`) | TBD |
@@ -581,19 +582,16 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 
 ### What landed (no behavior change)
 
-- Inter Variable (upright + italic) + JetBrains Mono Variable (upright +
-  italic) bundled under `crates/inkuno/assets/fonts/` with OFL notices
-  (`LICENSE-Inter.txt`, `LICENSE-JetBrains-Mono.txt`); proof + sources in
-  `typography.md` §3.
-- Staged in code as `INTER_FILES` / `JETBRAINS_MONO_FILES`
-  (`crates/inkuno/src/ui/assets.rs:326-343`), **not** in `FONT_FILES` (`crates/inkuno/src/ui/assets.rs:22`)
-  — Plex stays the bundled default; `apply_fonts` (`crates/inkuno/src/ui/assets.rs:62-67`)
-  already prefers an installed Inter / JetBrains Mono.
-- Bundling test `north_star_fonts_are_bundled` (`crates/inkuno/src/ui/assets.rs:355`);
-  `cargo check` clean for `assets.rs` (see Q3 note on unrelated tree reds).
-- Blockers for activating the staged fonts: gpui 0.2 cannot embolden a
-  variable font (`crates/inkuno/src/ui/assets.rs:10-12`); weight/size tokens live in
-  `theme.rs` (tabs crew) — see `typography.md` §3.
+- Inter (four static cuts: regular, italic, bold, bold italic) and JetBrains Mono
+  (variable regulars, static bold and bold italic) bundled under
+  `crates/inkuno/assets/fonts/` with OFL notices (`LICENSE-Inter.txt`,
+  `LICENSE-JetBrains-Mono.txt`); the bundling record is `typography.md` §3 (historical).
+- Wired in `FONT_FILES` (`crates/inkuno/src/ui/assets.rs:26`) and now the default families.
+  The staging split (`INTER_FILES` / `JETBRAINS_MONO_FILES`) is gone.
+- Bundling test: `bundled_fonts_are_real_fonts` (`crates/inkuno/src/ui/assets.rs:518`).
+- Former blockers, now resolved: gpui 0.2 cannot embolden a variable font, so the
+  bolds ship as static cuts (Q2 below). The weight/size tokens in `theme.rs` (tabs crew)
+  are a separate follow-up.
 
 ### 800 px landing (option (a), landed 2026-11-08)
 
@@ -614,8 +612,8 @@ Normal 800 is the default (§10.4 lock released for this change).
 - **Q1. 800 px: adjust Normal 720 → 800, or keep Normal and add 800 as the
   new default width?** → decided 2026-11-08: ADJUST (option (a)), landed.
 - **Q2. Bold story for variable fonts:** ship static bold cuts next to the
-  variables, or wait for a gpui upgrade with synthetic bold? (Blocks
-  activating the staged fonts.)
+  variables, or wait for a gpui upgrade with synthetic bold? → answered: static bold
+  cuts ship next to the variables, and the fonts are live (see "What landed" above).
 - **Q3. Note:** at the time of writing, `cargo test` could not run green
   tree-wide because `crates/inkuno/src/shell/sidebar.rs` (tabs crew) has a non-exhaustive
   `Mode::Outline` match (E0004 at `sidebar.rs:146`) — unrelated to this step;

@@ -16,7 +16,7 @@ On macOS and Windows, the system title bar is used. On macOS, `Ctrl+Shift+S` hid
 
 ## Fonts
 
-IBM Plex Sans, Plex Mono and Plex Serif (page titles) are built into the app. Ideograms and emoji come from a font of your system. See [Fonts](settings.md#fonts).
+Inter (text and titles) and JetBrains Mono (code) are built into the app. Ideograms and emoji come from a font of your system. See [Fonts](settings.md#fonts).
 
 ## Accessibility
 
