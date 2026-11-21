@@ -22,7 +22,7 @@ pub fn on_enter(line: &str, col: usize, in_code: bool) -> Enter {
         let keep = if col >= indent.len() { indent } else { "" };
         return Enter::Insert(format!("\n{keep}"));
     }
-    if line[marker..].trim().is_empty() {
+    if line[item_prefix(line)..].trim().is_empty() {
         return Enter::Clear;
     }
     let m = &line[indent.len()..marker];
@@ -31,7 +31,9 @@ pub fn on_enter(line: &str, col: usize, in_code: bool) -> Enter {
         Kind::Ordered => {
             let digits = m.len() - 2;
             let n: u64 = m[..digits].parse().unwrap_or(0);
-            format!("{}{}", n + 1, &m[digits..])
+            // An ordered task goes on as an unchecked one.
+            let boxed = if task_box(line).is_some() { "[ ] " } else { "" };
+            format!("{}{}{boxed}", n + 1, &m[digits..])
         }
         _ => m.to_string(),
     };
@@ -242,4 +244,131 @@ pub fn renumber(text: &str, cursor: usize) -> Option<(String, usize)> {
         }
     }
     changed.then(|| (out.join("\n"), new_cursor.max(0) as usize))
+}
+
+/// Width of the leading whitespace of `line`, in columns: a tab is four, as in the usual editors.
+pub fn indent_columns(line: &str) -> usize {
+    line.bytes()
+        .take_while(|&b| b == b' ' || b == b'\t')
+        .map(|b| if b == b'\t' { 4 } else { 1 })
+        .sum()
+}
+
+/// Nesting level of a list item indented by `indent` columns, from the lines above it (nearest
+/// first): the number of distinct smaller indents among the items it follows. Blank lines and
+/// indented lines (the continuations of an item) are passed over; any other unindented line ends
+/// the list, so that the items above it do not count.
+pub fn list_depth<'a>(indent: usize, above: impl IntoIterator<Item = &'a str>) -> usize {
+    // Nothing is less indented than column 0: a top-level item need not look above.
+    if indent == 0 {
+        return 0;
+    }
+    let mut levels: Vec<usize> = Vec::new();
+    for line in above {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let columns = indent_columns(line);
+        if matches!(
+            classify(line, false).0,
+            Kind::Bullet | Kind::Ordered | Kind::Task(_)
+        ) {
+            if columns < indent && !levels.contains(&columns) {
+                levels.push(columns);
+            }
+        } else if columns == 0 {
+            break;
+        }
+    }
+    levels.len()
+}
+
+/// The checkbox of a task line: the byte where its `[` is, and whether it is checked. A bullet
+/// task's box ends its marker (`- [ ] `); an ordered task (`1. [ ] `, `1) [x] `) has its box after
+/// the number, which its marker does not cover. Other lines: `None`.
+pub fn task_box(line: &str) -> Option<(usize, bool)> {
+    let (kind, marker) = classify(line, false);
+    match kind {
+        Kind::Task(done) => Some((marker - 4, done)),
+        Kind::Ordered => match line.get(marker..marker + 4)? {
+            "[ ] " => Some((marker, false)),
+            "[x] " | "[X] " => Some((marker, true)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Where the source prefix of a list item ends: its marker and, for an ordered task, its box.
+/// Other lines: their marker.
+pub fn item_prefix(line: &str) -> usize {
+    match task_box(line) {
+        Some((at, _)) => at + 4,
+        None => classify(line, false).1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn depth_follows_the_indents_above() {
+        // Two spaces under a bullet, then four.
+        assert_eq!(list_depth(2, ["- a"]), 1);
+        assert_eq!(list_depth(4, ["  - b", "- a"]), 2);
+        // Three spaces under `1. `: the number's width, not a level of its own.
+        assert_eq!(list_depth(3, ["1. a"]), 1);
+        assert_eq!(list_depth(6, ["   - b", "1. a"]), 2);
+        // Four spaces, and a tab (four columns) for a level.
+        assert_eq!(list_depth(4, ["- a"]), 1);
+        assert_eq!(indent_columns("\t\t- c"), 8);
+        assert_eq!(list_depth(indent_columns("\t- b"), ["- a"]), 1);
+        assert_eq!(list_depth(indent_columns("\t\t- c"), ["\t- b", "- a"]), 2);
+        // Siblings do not add a level, and a top-level item has none.
+        assert_eq!(list_depth(3, ["   - c", "   - b", "1. a"]), 1);
+        assert_eq!(list_depth(0, ["- a"]), 0);
+    }
+
+    #[test]
+    fn depth_stops_at_a_line_that_ends_the_list() {
+        // Blank lines and the continuations of an item belong to the list.
+        assert_eq!(list_depth(4, ["", "  continued", "- a"]), 1);
+        // An unindented paragraph ends it: the items above do not count.
+        assert_eq!(list_depth(2, ["Intro", "- a"]), 0);
+        assert_eq!(list_depth(2, ["# Title", "- a"]), 0);
+    }
+
+    #[test]
+    fn task_boxes_and_prefixes() {
+        assert_eq!(task_box("- [ ] a"), Some((2, false)));
+        assert_eq!(task_box("  - [x] a"), Some((4, true)));
+        assert_eq!(task_box("1. [ ] a"), Some((3, false)));
+        assert_eq!(task_box("10) [X] a"), Some((4, true)));
+        assert_eq!(task_box("1. a"), None);
+        assert_eq!(task_box("- a"), None);
+        // An ordered task's prefix runs over its box; the others end at their marker.
+        assert_eq!(item_prefix("- [ ] a"), 6);
+        assert_eq!(item_prefix("1. [ ] a"), 7);
+        assert_eq!(item_prefix("1. a"), 3);
+        assert_eq!(item_prefix("  - a"), 4);
+        assert_eq!(item_prefix("para"), 0);
+    }
+
+    #[test]
+    fn enter_carries_an_ordered_task_on() {
+        assert_eq!(
+            on_enter("1. [ ] a", 8, false),
+            Enter::Insert("\n2. [ ] ".to_string())
+        );
+        assert_eq!(
+            on_enter("1. [x] a", 8, false),
+            Enter::Insert("\n2. [ ] ".to_string())
+        );
+        assert_eq!(on_enter("1. [ ] ", 7, false), Enter::Clear);
+        assert_eq!(
+            on_enter("1. a", 4, false),
+            Enter::Insert("\n2. ".to_string())
+        );
+    }
 }

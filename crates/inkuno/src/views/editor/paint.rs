@@ -443,30 +443,76 @@ impl Editor {
                 }
                 if let Some(grid) = &row.grid {
                     grid.paint_front(table_top, row.height - row.gap, row.lh, &t, window, cx);
-                } else if let Some(line) = &row.shaped.line {
+                } else {
+                    // The lead is drawn even on an empty line: a list item's bullet or box is there.
                     let lead = row.shaped.lead.as_ref();
                     if let Some(lead) = lead {
-                        lead.line
-                            .paint(
-                                point(o.x - row.dx, text_top + lead.dy),
-                                row.lh,
-                                TextAlign::Left,
-                                None,
-                                window,
-                                cx,
-                            )
-                            .ok();
+                        let left = o.x - row.dx;
+                        if let Some(glyph) = &lead.line {
+                            glyph
+                                .paint(
+                                    point(left + lead.dx, text_top + lead.dy),
+                                    row.lh,
+                                    TextAlign::Left,
+                                    None,
+                                    window,
+                                    cx,
+                                )
+                                .ok();
+                        }
+                        if let Some(check) = &lead.check {
+                            let side = check.x.end - check.x.start;
+                            // Centered on the x-height of the first line (about a tenth of an em below the middle).
+                            let mid = text_top + row.lh * 0.5 + px(t.size * 0.1);
+                            let bounds = Bounds::new(
+                                point(left + check.x.start, mid - side / 2.),
+                                size(side, side),
+                            );
+                            let edge = px(t.size * 0.09375);
+                            if check.done {
+                                window.paint_quad(quad(
+                                    bounds,
+                                    px(3.),
+                                    t.accent,
+                                    edge,
+                                    t.accent,
+                                    BorderStyle::default(),
+                                ));
+                                // A check mark in two strokes, centered in the box.
+                                let at = |x: f32, y: f32| {
+                                    point(bounds.origin.x + side * x, bounds.origin.y + side * y)
+                                };
+                                let mut mark = gpui::PathBuilder::stroke(edge * 1.3);
+                                mark.move_to(at(0.24, 0.52));
+                                mark.line_to(at(0.43, 0.7));
+                                mark.line_to(at(0.77, 0.3));
+                                if let Ok(path) = mark.build() {
+                                    window.paint_path(path, gpui::white());
+                                }
+                            } else {
+                                window.paint_quad(quad(
+                                    bounds,
+                                    px(3.),
+                                    Hsla::transparent_black(),
+                                    edge,
+                                    t.soft,
+                                    BorderStyle::default(),
+                                ));
+                            }
+                        }
                     }
-                    let at = lead.map_or(px(0.), |l| l.width);
-                    line.paint(
-                        point(o.x - row.dx + at, text_top),
-                        row.lh,
-                        TextAlign::Left,
-                        None,
-                        window,
-                        cx,
-                    )
-                    .ok();
+                    if let Some(line) = &row.shaped.line {
+                        let at = lead.map_or(px(0.), |l| l.width);
+                        line.paint(
+                            point(o.x - row.dx + at, text_top),
+                            row.lh,
+                            TextAlign::Left,
+                            None,
+                            window,
+                            cx,
+                        )
+                        .ok();
+                    }
                 }
                 if focused && sel.is_empty() && has_cursor {
                     let p = row.pos(cursor - row.start);

@@ -557,7 +557,12 @@ impl Editor {
         if !e.modifiers.secondary()
             && let Some(at) = self.checkbox_at(e.position)
         {
-            return self.flip_box(at, cx);
+            // The box is toggled where it is drawn: the edit would show the line's source, so the
+            // line keeps the reveal it had.
+            let revealed = self.revealed;
+            self.flip_box(at, cx);
+            self.revealed = revealed;
+            return;
         }
         let (kind, marker) = md::classify(line, self.in_code(lr.start));
         if matches!(kind, Kind::Task(_)) && col + 4 >= marker && col < marker {
