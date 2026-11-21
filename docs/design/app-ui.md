@@ -1282,5 +1282,6 @@ Already at or above target, unchanged: body and secondary text, the five syntax 
 ### 22.5 Status
 
 - Built: P1 (title band, tabs), P5 (menus, palette, slash menu), P6 (links), P7 (comments as `passage<!-- comment: text -->`; pending changes beside the note in `.inkuno/pending`), P8 (empty page, dark pass, these docs).
-- Not yet merged when this section was written: P2 (sidebar), P3 (right panel), P4 (Settings tab). The user guide describes them as the prototype specifies; `shortcuts.md` is regenerated from the help text when they land.
+- P4 (Settings tab: Ctrl+, opens Appearance, Editor, Files, Shortcuts, About; F1 opens Shortcuts; the help overlay is gone) is merged.
+- Not yet merged when this section was written: P2 (sidebar) and P3 (right panel). The user guide describes them as the prototype specifies, and the lines that depend on them are listed in the P8 report.
 - Open questions of the prototype (Q1 to Q3) are answered as in its log. The gap in §20.4 (sidebar and title bar both hidden) is still open in backlog W1.
