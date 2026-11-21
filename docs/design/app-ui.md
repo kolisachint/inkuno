@@ -26,6 +26,10 @@ Rules of the flow:
 3. Every claim about *what Inkuno/the app does today* cites a `file:line`.
    Anything unverified is marked **TBD** — never invented.
 4. The user may edit any section at any time, especially §6 (preferences).
+5. Every editor or Markdown rendering change runs `scripts/visual-check.sh`, and its
+   screenshots are looked at before the change is called done. Unit tests do not show
+   how text is drawn (`docs/workflow.md`, "Visual check"; `CONTRIBUTING.md:48`).
+   Owner instruction, 2026-11-21.
 
 ## 2. Product vision
 
@@ -1140,3 +1144,47 @@ Normal 800 is the default (§10.4 lock released for this change).
 - A date is local time from the platform's zone rules on unix. On Windows no local-time call is made yet, so the date is UTC there
   (`platform/clock.rs`, `local`).
 - A restore needs the note in a tab that is not a comparison (§19.3); the note of a comparison is not restored from its panel.
+
+## 20. Window chrome: unified sidebar (APPROVED by owner 2026-11-21; NOT built)
+
+Owner decisions, 2026-11-21 (answered in chat; these are owner approvals):
+
+- **Direction: "A — Unified sidebar (Notes/Finder style)"**: APPROVED by owner 2026-11-21. Visual reference: artifact "Inkuno Chrome Options", https://claude.ai/artifact/WEnF3NT2oTgiyY56snn4g3, option A.
+- **macOS traffic lights with the title bar hidden**: always hidden, as today (`crates/inkuno/src/platform/mac_chrome.rs`), with the overlap and the header misalignment fixed by the layout below. APPROVED by owner 2026-11-21.
+- **IBM Plex Serif SemiBold**: kept bundled for now, unused (`app-ui.md` §3, line 63 today). The decision is deferred. APPROVED by owner 2026-11-21 as a deferral.
+
+### 20.1 The layout (APPROVED)
+
+- **No separate 40px icon rail.** Today the rail is `RAIL: f32 = 40.` (`crates/inkuno/src/views/nav.rs:55`), drawn in `crates/inkuno/src/shell/sidebar.rs` from about line 1211 (the commands logo `nav-commands` at 1226, `rail-logo` at 1241, buttons `nav-tree` 1265, `nav-search` 1280, `nav-new` 1294, `rail-sidebar` 1326, `rail-titlebar` 1342).
+- **Left sidebar** runs full height. Its top 38px band holds the macOS traffic lights and, right-aligned in that band, the sidebar toggle and search. Below the band: the nav sections (Files tree, Tags).
+- **Right sidebar** mirrors it: the same background token, the same 38px top band (holding the Outline/Assistant switcher), the same header style, a 1px border.
+- **Sidebar hidden**: a 38px strip spans the editor. It holds the lights, then the toggle, then the note title, centred.
+- **Title bar hidden**: the band collapses to 12px of padding.
+
+### 20.2 Problems it fixes (from code reading, 2026-11-21)
+
+- The lights overlap the rail logo when the panel is collapsed. `TRAFFIC_ROOM = 78.` (`crates/inkuno/src/shell/render.rs:23`) reserves the room; `traffic_pad` (`crates/inkuno/src/shell/tabs.rs:170-180`) pads the tabs, the pane and the first dock header but not the rail; the rail top is at `crates/inkuno/src/shell/sidebar.rs:1211-1228`.
+- With the title bar hidden, content runs to the top edge, and the right dock header does not line up with the left one.
+
+### 20.3 Implementation checklist (NOT started; the next step after this doc)
+
+- [ ] Remove the 40px rail (`views/nav.rs:55`) and its column in `shell/sidebar.rs`. Where each rail action goes: TBD. Owner to place the commands logo and the new-note button; the tree, search and the two sidebar toggles follow §20.1. Check every rail action still has a route (palette, chord or the band).
+- [ ] Band height token: 38px, one theme token for both sidebars. Today's top row is `STRIP: f32 = 40.` (`crates/inkuno/src/shell/render.rs:25`). Token name: TBD.
+- [ ] Mirrored right band: the same background token, the 38px band with the Outline/Assistant switcher, the same header style, a 1px border.
+- [ ] Hidden-sidebar strip: a 38px strip across the editor, holding the lights, the toggle and the centred note title.
+- [ ] Title-bar-hidden state: the band collapses to 12px of padding; the macOS lights stay hidden (decision 2).
+- [ ] Linux client-decoration pill: place it in the new band. Today it is added after the body when the title bar is shown (`crates/inkuno/src/shell/render.rs:469`); exact placement: TBD.
+- [ ] Remove `traffic_pad` (`crates/inkuno/src/shell/tabs.rs:170-180`) or re-derive it from the band. Check that the tabs, the pane and the dock headers line up on both sides.
+- [ ] Tests: `crates/inkuno/src/shell/tests/window.rs` for the band states (sidebar open, collapsed, hidden strip, title bar hidden, both docks). Then the visual check (`app-ui.md` §1 rule 5) on Linux with screenshots of each state.
+- [ ] Layout file: save the new states. Key names: TBD.
+- [ ] Update §4 and §12.1 to point here once built.
+
+### 20.4 Open (TBD)
+
+- Where the rail actions go (§20.3, first item).
+- Whether the band token is also the title-bar strip's height. TBD.
+
+## 21. Lists and the visual check
+
+- **Lists: the north star is GitHub + Typora** (APPROVED by owner 2026-11-21). The reference table and Inkuno's PROPOSED target are in `docs/design/markdown_renderer.md` §10. The colour and nesting of list markers follow the owner's pick there.
+- **Visual check findings, 2026-11-21**, from `scripts/visual-check.sh` (screenshots confirmed by the owner): the list markers, `~~~` fences, 4-space indented code and table cells. They are in `docs/backlog.md`, Follow-ups (a) to (d); the chrome direction is in §20 and (e) in the backlog.
