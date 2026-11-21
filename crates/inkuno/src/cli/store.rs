@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     logic::note::Note,
     logic::{pending, rank, wiki},
-    platform::vault,
+    platform::{revisions, sidecar, vault},
 };
 
 use super::outcome::disk;
@@ -298,6 +298,34 @@ pub fn read_text(path: &Path) -> Result<(String, String), String> {
     let text = fs::read_to_string(path).map_err(disk)?;
     let token = token(text.as_bytes());
     Ok((text, token))
+}
+
+/// The home of a note: its vault or scratch folder; a file outside both keeps its changes in the
+/// `.inkuno` folder of its own folder.
+fn home_for(root: Option<&Path>, path: &Path) -> revisions::Home {
+    revisions::home_of(path, root).unwrap_or_else(|| {
+        revisions::Home::Vault(path.parent().unwrap_or(Path::new("")).to_path_buf())
+    })
+}
+
+/// The note's text as the editor shows it (its pending changes marked, the comments in the new
+/// form), and its token. The token is of this text: `write` checks it.
+pub fn read_shown(root: Option<&Path>, path: &Path) -> Result<(String, String), String> {
+    let (disk, _) = read_text(path)?;
+    let shown = sidecar::display(Some(&home_for(root, path)), path, &disk);
+    let token = token(shown.as_bytes());
+    Ok((shown, token))
+}
+
+/// Writes the note's text as the editor shows it: the file gets its own text, and the pending
+/// changes go beside it (`sidecar`).
+pub fn write_shown(
+    root: Option<&Path>,
+    path: &Path,
+    shown: &str,
+    author: &str,
+) -> Result<(), String> {
+    sidecar::save(Some(&home_for(root, path)), path, shown, author).map_err(disk)
 }
 
 /// A file of this name, ignoring case, already in `dir`.

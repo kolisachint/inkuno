@@ -6,6 +6,7 @@ pub mod link;
 pub mod mac_chrome;
 pub mod revisions;
 pub mod scratch;
+pub mod sidecar;
 pub mod vault;
 
 use std::{ffi::OsStr, fs, process::Command};

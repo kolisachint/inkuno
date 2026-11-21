@@ -493,7 +493,11 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
         .map(|i| root.join(format!("Une note au titre très très long numéro {i}.md")))
         .collect();
     for note in &notes {
-        fs::write(note, "# Titre\n\nUn {==mot==}{>>remarque<<} et du texte.\n").unwrap();
+        fs::write(
+            note,
+            "# Titre\n\nUn mot<!-- comment: remarque --> et du texte.\n",
+        )
+        .unwrap();
     }
     let (shell, cx) = cx.add_window_view(|window, cx| {
         let mut shell = Shell::new(Some(root.clone()), vec![notes[0].clone()], window, cx);
@@ -564,7 +568,11 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
     cx.update(bind_keys);
     cx.update(init_fonts);
     let (one, two) = (root.join("Une.md"), root.join("Deux.md"));
-    fs::write(&one, "# Titre\n\nUn {==mot==}{>>remarque<<} et du texte.\n").unwrap();
+    fs::write(
+        &one,
+        "# Titre\n\nUn mot<!-- comment: remarque --> et du texte.\n",
+    )
+    .unwrap();
     fs::write(&two, "# Autre\n\nTexte\n").unwrap();
     let (shell, cx) = cx.add_window_view(|window, cx| {
         let mut shell = Shell::new(Some(root.clone()), vec![one.clone()], window, cx);
@@ -791,7 +799,7 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "scale");
     fs::write(
         root.join("Alpha.md"),
-        "# Alpha\n\nUn {==mot==}{>>remarque<<} et beaucoup de mots pour un long compteur.\n",
+        "# Alpha\n\nUn mot<!-- comment: remarque --> et beaucoup de mots pour un long compteur.\n",
     )
     .unwrap();
     shell.update(cx, |s, cx| {

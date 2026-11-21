@@ -837,7 +837,12 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u32]) -> Ve
         .map(|(r, _)| r.start + 2..r.end - 1)
         .collect();
     let image = md::image(line).map(|(r, _)| r);
-    let comments: Vec<Range<usize>> = md::comments(line).into_iter().map(|(w, ..)| w).collect();
+    // The earlier CriticMarkup comments show their source; the new form hides its marker (`DIM`).
+    let comments: Vec<Range<usize>> = md::comments(line)
+        .into_iter()
+        .map(|(w, ..)| w)
+        .filter(|w| !md::is_html_comment(&line[w.clone()]))
+        .collect();
     let callout = md::callout(line);
     let addressed = |i: usize| urls.iter().any(|r| r.contains(&i));
     let kept = |i: usize| {
@@ -3029,6 +3034,8 @@ mod tests {
         assert_eq!(hidden("a #tag b"), Vec::<&str>::new());
         assert_eq!(hidden("![a](p.png)"), Vec::<&str>::new());
         assert_eq!(hidden("a {==t==}{>>c<<} b"), Vec::<&str>::new());
+        // The new comment: its marker is hidden off the live line, its passage stays.
+        assert_eq!(hidden("a t<!-- comment: c --> b"), ["<!-- comment: c -->"]);
         assert_eq!(hidden("> [!NOTE] hi"), ["> "]);
         // An inline checkbox is not a block marker: it stays.
         assert_eq!(hidden("do [ ] it"), Vec::<&str>::new());

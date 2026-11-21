@@ -89,7 +89,7 @@ fn md_table_scale(cx: &mut TestAppContext) {
         let file = root.join(format!("t{n}.md"));
         // `INKUNO_COMMENTS=1`: comments under the table, which each keystroke in it must keep up with.
         let notes = if std::env::var("INKUNO_COMMENTS").is_ok() {
-            "\n{>>Row \"0\": a<<}\n\n{>>Column \"id\": b<<}\n\n{>>Table: c<<}\n"
+            "\n<!-- comment: Row \"0\": a -->\n\n<!-- comment: Column \"id\": b -->\n\n<!-- comment: Table: c -->\n"
         } else {
             ""
         };
@@ -630,7 +630,7 @@ fn comments_frame(cx: &mut TestAppContext) {
     let _config = isolated_config(&root);
     let note = root.join("Cent.md");
     let lines: String = (0..100)
-        .map(|i| format!("Ligne {i} avec {{==un passage==}}{{>>commentaire {i}<<}} au milieu.\n"))
+        .map(|i| format!("Ligne {i} avec un passage<!-- comment: commentaire {i} --> au milieu.\n"))
         .collect();
     fs::write(&note, format!("# Cent\n\n{lines}")).unwrap();
     cx.update(bind_keys);

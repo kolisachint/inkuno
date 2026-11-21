@@ -64,7 +64,7 @@ Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set`
 | `inkuno trash <note>` | moves the note to `.trash`, with its saved versions. Prints the path it has there |
 | `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
 | `inkuno daily [--date YYYY-MM-DD] [--append TEXT]` | today's daily note, or the one of the date. `--append` adds a paragraph |
-| `inkuno comment <note> --passage P --text C` | wraps one passage in a comment: `{==P==}{>>C<<}`. The passage must occur once. `--text -` reads the comment from standard input |
+| `inkuno comment <note> --passage P --text C` | adds a comment after one passage: `P<!-- comment: C -->`, which GitHub hides. The passage must occur once. `--text -` reads the comment from standard input |
 | `inkuno comment --file PATH --passage P --text C` | the same, on a Markdown file named by its path, with no vault. `PATH` must exist and end in `.md`. `--file` replaces the note name; giving both, or neither, is a usage error |
 | **Diagrams** | |
 | `inkuno render [<file>] [--note N --block K] [--mermaid SRC] [--theme light\|dark] [--width W] --out FILE.png` | a PNG of an SVG file of the vault, of the `K`-th Mermaid block of a note (1 is the first), or of a Mermaid source. `--mermaid -` reads the source from standard input |
@@ -138,7 +138,7 @@ Pass the token from `inkuno read --json` to `edit`, `append` or `write` with `--
 
 ### Pending changes
 
-`inkuno write` does not change the note silently. It takes the full new text the agent wants and writes only the differences into the note, each one marked:
+`inkuno write` does not change the note silently. It takes the full new text the agent wants and keeps only the differences as pending changes. They are kept beside the note, in `.inkuno/pending`, so the file stays plain Markdown. Inkuno shows them marked, and `read` returns the text as shown:
 
 ```
 unchanged line

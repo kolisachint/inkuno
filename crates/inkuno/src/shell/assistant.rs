@@ -1067,7 +1067,10 @@ impl Shell {
         match open {
             Some(i) => self.absorb_marked(i, &current, &marked, cx),
             None => {
-                if let Err(e) = vault::write(&improve.path, &marked) {
+                // The file keeps the note's own text; the proposal's changes wait beside it.
+                if let Err(e) =
+                    platform::sidecar::save(home.as_ref(), &improve.path, &marked, "assistant")
+                {
                     let what = tr(
                         "Not written: the proposal was not saved:",
                         "Non écrit : la proposition n'a pas été enregistrée :",

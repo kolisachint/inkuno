@@ -259,7 +259,7 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         Ok(note) => note,
         Err(outcome) => return outcome,
     };
-    let (text, token) = match vault::read_text(&note.path) {
+    let (text, token) = match vault::read_shown(Some(&vault.root), &note.path) {
         Ok(read) => read,
         Err(message) => return Outcome::err(message),
     };
@@ -485,7 +485,7 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(path) => path,
         Err(outcome) => return outcome,
     };
-    let (text, token) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (text, token) = match vault::read_shown(Some(&vault.root), &path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
@@ -534,7 +534,7 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
             return Outcome::err(message);
         }
     }
-    if let Err(message) = files::write(&path, &next).map_err(disk) {
+    if let Err(message) = vault::write_shown(Some(&vault.root), &path, &next, "") {
         return Outcome::err(message);
     }
     let (path, renamed, reason, rewritten) = follow_title(vault, &path, &text, &next);
@@ -632,7 +632,7 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(text) => text,
         Err(message) => return Outcome::err(message),
     };
-    let (body, token) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (body, token) = match vault::read_shown(Some(&vault.root), &path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
@@ -661,7 +661,7 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
     if let Err(message) = guard_pending(&body, &next) {
         return Outcome::err(message);
     }
-    if let Err(message) = files::write(&path, &next).map_err(disk) {
+    if let Err(message) = vault::write_shown(Some(&vault.root), &path, &next, "") {
         return Outcome::err(message);
     }
     vault.rescan();
@@ -776,7 +776,7 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
         .get("replace")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let (current, token) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (current, token) = match vault::read_shown(Some(&vault.root), &path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
@@ -844,7 +844,7 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
         Ok(number) => number,
         Err(message) => return Outcome::err(message),
     };
-    if let Err(message) = files::write(&path, &marked).map_err(disk) {
+    if let Err(message) = vault::write_shown(Some(&vault.root), &path, &marked, &author) {
         return Outcome::err(message);
     }
     // The write stands even when the proposed version cannot be saved: that is a warning, and the
@@ -1181,7 +1181,7 @@ pub fn add_comment(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(pair) => pair,
         Err(message) => return Outcome::err(message),
     };
-    let token = match annotate(&path, &passage, &comment) {
+    let token = match annotate(Some(&vault.root), &path, &passage, &comment) {
         Ok(token) => token,
         Err(message) => return Outcome::err(message),
     };
@@ -1203,7 +1203,7 @@ pub fn add_comment_file(args: &Value) -> Outcome {
         Ok(pair) => pair,
         Err(message) => return Outcome::err(message),
     };
-    match annotate(&path, &passage, &comment) {
+    match annotate(None, &path, &passage, &comment) {
         Ok(token) => Outcome::ok(json!({"path": path.display().to_string(), "token": token})),
         Err(message) => Outcome::err(message),
     }
@@ -1219,11 +1219,16 @@ fn comment_args(args: &Value) -> Result<(String, String), String> {
 
 /// The read–annotate–write step both `comment` paths share: the text is read, the passage is
 /// wrapped, and the result is written atomically. Returns the token of the new text.
-fn annotate(path: &Path, passage: &str, comment: &str) -> Result<String, String> {
-    let (text, _) = vault::read_text(path)?;
+fn annotate(
+    root: Option<&Path>,
+    path: &Path,
+    passage: &str,
+    comment: &str,
+) -> Result<String, String> {
+    let (text, _) = vault::read_shown(root, path)?;
     let next = markdown::comment_on(&text, passage, comment)?;
     guard_pending(&text, &next)?;
-    files::write(path, &next).map_err(disk)?;
+    vault::write_shown(root, path, &next, "")?;
     Ok(vault::token(next.as_bytes()))
 }
 
@@ -1349,8 +1354,17 @@ mod tests {
             "{warning}"
         );
         assert!(!warning.contains('\n'), "{warning}");
+        // The file keeps its own text; the proposed change waits beside it, in `.inkuno`.
         let text = fs::read_to_string(dir.join("Plan.md")).unwrap();
-        assert!(text.contains("{++\n\nTwo.\n++}"), "{text}");
+        assert_eq!(text, "# Plan\n", "{text}");
+        let kept = crate::platform::sidecar::read(
+            &crate::platform::revisions::Home::Vault(dir.clone()),
+            &dir.join("Plan.md"),
+        );
+        assert!(
+            kept.iter().any(|change| change.new.contains("Two.")),
+            "{kept:?}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

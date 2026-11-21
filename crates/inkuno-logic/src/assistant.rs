@@ -446,23 +446,26 @@ mod tests {
         assert_eq!(as_written.placed, 1);
         assert_eq!(
             as_written.text,
-            "say {==\"quoted words\"==}{>>as written<<} now\n"
+            "say \"quoted words\"<!-- comment: as written --> now\n"
         );
         // The note has none: the passage without its quotes is placed.
         let bare = place("say quoted words now\n", &quoted);
         assert_eq!(bare.placed, 1);
-        assert_eq!(bare.text, "say {==quoted words==}{>>as written<<} now\n");
+        assert_eq!(
+            bare.text,
+            "say quoted words<!-- comment: as written --> now\n"
+        );
         // Both are in the note: the one as written wins.
         let both = place("\"quoted words\" and quoted words\n", &quoted);
         assert_eq!(
             both.text,
-            "{==\"quoted words\"==}{>>as written<<} and quoted words\n"
+            "\"quoted words\"<!-- comment: as written --> and quoted words\n"
         );
         // Backticks follow the same rule.
         let code = place("run `ls` now\n", &[pair("`ls`", "a command")]);
-        assert_eq!(code.text, "run {==`ls`==}{>>a command<<} now\n");
+        assert_eq!(code.text, "run `ls`<!-- comment: a command --> now\n");
         let plain = place("run ls now\n", &[pair("`ls`", "a command")]);
-        assert_eq!(plain.text, "run {==ls==}{>>a command<<} now\n");
+        assert_eq!(plain.text, "run ls<!-- comment: a command --> now\n");
         // Neither form is in the note: the finding is left out.
         let missing = place("nothing here\n", &quoted);
         assert_eq!((missing.placed, missing.skipped), (0, 1));
@@ -527,14 +530,14 @@ mod tests {
         assert_eq!(placed.skipped, 2);
         assert_eq!(
             placed.text,
-            "# T\n\n{==the cache is cleared daily==}{>>Daily when?<<}\n\
-             {==ships in March==}{>>Which year?<<}\nalpha and alpha\n"
+            "# T\n\nthe cache is cleared daily<!-- comment: Daily when? -->\n\
+             ships in March<!-- comment: Which year? -->\nalpha and alpha\n"
         );
     }
 
     #[test]
     fn a_passage_inside_a_comment_already_there_is_left_out() {
-        let text = "{==alpha==}{>>first<<} beta\n";
+        let text = "alpha<!-- comment: first --> beta\n";
         let placed = place(text, &[pair("alpha", "again")]);
         assert_eq!(placed.placed, 0);
         assert_eq!(placed.skipped, 1);

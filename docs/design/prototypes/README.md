@@ -120,7 +120,7 @@ tests green except the two sandbox-as-root tests, screenshots against `v2.html`)
 | P4 | Settings tab with Appearance, Editor, Files, Shortcuts (F1), About | new `views/settings*`, `shell/settings.rs`, `shell/help.rs` | |
 | P5 | Menus and palette in the Quiet popover; snippets in search; slash menu with the icon grid; selection toolbar with Comment | `views/palette.rs`, `views/editor/completion.rs`, new toolbar | |
 | P6 | Links: `[[`/`@` pickers write relative links; relative links clickable with hidden brackets | `views/editor/completion.rs`, `links.rs`, `layout.rs` | |
-| P7 | Comments syntax (Q1) and pending changes beside the file (Q2) | `inkuno-logic` markdown + pending, `views/editor/changes.rs` | |
+| P7 | Comments syntax (Q1) and pending changes beside the file (Q2) | `inkuno-logic` markdown + pending, `views/editor/changes.rs` | built 2026-11-21 (see below) |
 | P8 | Empty pane cards, dark-mode pass, docs (`app-ui.md`, user guide) | `shell/render.rs`, `docs/` | |
 
 ### Build notes (2026-11-21)
@@ -129,3 +129,16 @@ tests green except the two sandbox-as-root tests, screenshots against `v2.html`)
   (`2026-11-21.md`); the prototype's `Daily/` folder was illustrative only. `/date` left the slash
   menu (it wrote `@date`); the `@` picker writes a relative link instead.
 - **P6 (merged 107e989):** folder renames do not rewrite relative links yet.
+
+### P7 as built (2026-11-21)
+
+- **Q1 comments:** `passage<!-- comment: text -->`. The passage is the text from the start of the line, the table
+  cell or the previous comment up to the marker, trimmed (so a comment narrows nothing: a passage in the middle of a
+  line covers the text before it on that line). Read: both forms. Written: the new form only. A note with
+  CriticMarkup comments is rewritten to the new form on its next save (or the next `inkuno comment`/`write`). The
+  marker and its text are hidden off the live line and shown dimmed on it. A `-->` in a comment is written `-- >`.
+- **Q2 pending changes:** `.inkuno/pending/<note>.json`, beside the note; the file is clean. Accept writes the new text
+  into the note, reject drops the entry. Autosave, undo, external-change merge and copy (no mark is copied) work on
+  the composed text as before.
+- Not yet: a move or trash of a note leaves its pending list behind in `.inkuno/pending` (a rename by its title
+  moves it); a note outside the vault and the scratch folder keeps its list beside its own file's folder.

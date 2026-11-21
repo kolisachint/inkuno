@@ -13,8 +13,7 @@ const REVIEW: &str = "# Revue\n\nun peu de texte\nla fin du texte\n";
 /// The agent's answer: two findings, one comment each.
 const TWO_FINDINGS: &str = "PASSAGE: un peu de texte\nCOMMENT: Trop court.\n\
     PASSAGE: la fin du texte\nCOMMENT: Conclure.\n";
-const REVIEWED: &str =
-    "# Revue\n\n{==un peu de texte==}{>>Trop court.<<}\n{==la fin du texte==}{>>Conclure.<<}\n";
+const REVIEWED: &str = "# Revue\n\nun peu de texte<!-- comment: Trop court. -->\nla fin du texte<!-- comment: Conclure. -->\n";
 
 /// The note of the chords: a passage to improve, a kept line, then a task line outside the passage.
 const CHORD: &str = "# Plan\n\nun peu de texte\nentre les deux\nla fin du texte\n- [ ] lait\n";
