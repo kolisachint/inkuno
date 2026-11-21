@@ -253,25 +253,9 @@ fn block_mark(line: &str) -> Option<Range<usize>> {
         .then_some(caret..end)
 }
 
-/// Lines of `text` outside code blocks: (start, text).
-fn lines(text: &str) -> Vec<(usize, &str)> {
-    let fences = text.lines().filter(|l| markdown::is_fence(l)).count();
-    let (mut seen, mut in_code, mut at, mut out) = (0, false, 0, Vec::new());
-    for line in text.split('\n') {
-        if markdown::is_fence(line) {
-            seen += 1;
-            in_code = !in_code && seen < fences;
-        } else if !in_code {
-            out.push((at, line));
-        }
-        at += line.len() + 1;
-    }
-    out
-}
-
 /// The ids of the blocks of the text, in order, to offer after `^`.
 pub fn block_ids(text: &str) -> Vec<&str> {
-    lines(&text[markdown::front_matter(text)..])
+    markdown::prose_lines(&text[markdown::front_matter(text)..])
         .into_iter()
         .filter_map(|(_, l)| block_mark(l).map(|r| &l[r.start + 1..r.end]))
         .collect()
@@ -297,7 +281,7 @@ fn find(text: &str, anchor: &Anchor) -> Option<Range<usize>> {
             Some(start..end)
         }
         Anchor::Block(id) => {
-            let all = lines(&text[meta..]);
+            let all = markdown::prose_lines(&text[meta..]);
             let at = all
                 .iter()
                 .position(|(_, l)| block_mark(l).is_some_and(|r| &l[r.start + 1..r.end] == id))?;
@@ -360,19 +344,15 @@ fn rewrite(
     change: impl Fn(&str, Option<&str>) -> Option<(String, Option<String>)>,
 ) -> (String, usize) {
     let (mut out, mut count) = (String::with_capacity(text.len()), 0);
-    let fences = text.lines().filter(|l| markdown::is_fence(l)).count();
-    let (mut seen, mut in_code) = (0, false);
+    let blocks = markdown::blocks(text);
+    let mut at = 0;
     for (n, line) in text.split('\n').enumerate() {
         if n > 0 {
             out.push('\n');
         }
-        if markdown::is_fence(line) {
-            seen += 1;
-            in_code = !in_code && seen < fences;
-            out.push_str(line);
-            continue;
-        }
-        if in_code {
+        let start = at;
+        at += line.len() + 1;
+        if markdown::is_fence(line) || markdown::open_at(&blocks, start).is_some() {
             out.push_str(line);
             continue;
         }
@@ -552,6 +532,9 @@ mod embed_tests {
             None
         );
         assert_eq!(block_ids("un ^a\n```\nx ^b\n```\n^c"), ["a", "c"]);
+        // A tilde line in a backtick block is code, and a backtick line in a tilde block too.
+        assert_eq!(block_ids("```md\n~~~\nx ^a\n~~~\n```\nz ^b"), ["b"]);
+        assert_eq!(block_ids("~~~\nx ^a\n```\n~~~\nz ^b"), ["b"]);
         // Line endings and accents.
         assert_eq!(
             section("# É\r\n\r\ntexte ^é1\r\n", &Anchor::Heading("é".into())).unwrap(),
@@ -586,6 +569,17 @@ mod embed_tests {
                 "`[[N#Un]]` ![[ N #Z|x]]\n```\n![[N#Un]]\n```\n".to_string(),
                 1
             )
+        );
+        // A tilde line inside a backtick block is code, and the block goes on to its own closing fence.
+        let mixed = "```md\n~~~\n![[N#Un]]\n~~~\n```\n![[N#Un]]\n";
+        assert_eq!(
+            rename_heading(mixed, "N", "Un", "Z"),
+            ("```md\n~~~\n![[N#Un]]\n~~~\n```\n![[N#Z]]\n".to_string(), 1)
+        );
+        let tilde = "~~~\n![[N#Un]]\n```\n~~~\n![[N#Un]]";
+        assert_eq!(
+            rename_heading(tilde, "N", "Un", "Z"),
+            ("~~~\n![[N#Un]]\n```\n~~~\n![[N#Z]]".to_string(), 1)
         );
     }
 }

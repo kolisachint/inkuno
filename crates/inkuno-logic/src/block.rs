@@ -49,9 +49,9 @@ fn extent(text: &str, lines: &[(usize, usize)], i: usize) -> usize {
     let last = lines.len() - 1;
     let line = at(i);
     // A block opened and never closed runs to the end of the note.
-    if md::is_fence(line) {
+    if let Some((fence, _)) = md::fence_of(line) {
         return (i + 1..=last)
-            .find(|&k| md::is_fence(at(k)))
+            .find(|&k| md::closes(at(k), fence))
             .unwrap_or(last);
     }
     if line.trim() == "$$" {
@@ -293,7 +293,9 @@ fn bare(line: &str) -> &str {
 /// becoming something else; a list is born from each line, numbered from 1.
 pub fn turned(piece: &str, turn: Turn) -> String {
     let lines: Vec<&str> = piece.split('\n').collect();
-    let fenced = lines.len() >= 2 && md::is_fence(lines[0]) && md::is_fence(lines[lines.len() - 1]);
+    let fenced = lines.len() >= 2
+        && md::fence_of(lines[0])
+            .is_some_and(|(fence, _)| md::closes(lines[lines.len() - 1], fence));
     let inner: Vec<&str> = if fenced {
         lines[1..lines.len() - 1].to_vec()
     } else {
@@ -421,6 +423,22 @@ mod tests {
     }
 
     #[test]
+    fn a_block_closes_only_with_its_own_fence() {
+        // A tilde line inside a backtick block is code, and the block goes on to its own closing fence.
+        let mixed = "```md\n~~~\n[[Secret]]\n~~~\n```\n\nAprès";
+        assert_eq!(
+            named(mixed, &blocks(mixed)),
+            ["```md\n~~~\n[[Secret]]\n~~~\n```", "Après"]
+        );
+        // A block of tildes alone, and a backtick line inside it.
+        let tilde = "~~~\ncode\n```\n~~~\n\nAprès";
+        assert_eq!(
+            named(tilde, &blocks(tilde)),
+            ["~~~\ncode\n```\n~~~", "Après"]
+        );
+    }
+
+    #[test]
     fn finds_the_block_of_a_line() {
         let top = blocks(NOTE);
         let line = |needle: &str| NOTE.find(needle).unwrap();
@@ -519,6 +537,15 @@ mod tests {
         assert_eq!(turned("a\nb", Turn::Code), "```\na\nb\n```");
         assert_eq!(turned("```\na\n```", Turn::Text), "a");
         assert_eq!(turned("```\na\n```", Turn::Code), "```\na\n```");
+    }
+
+    #[test]
+    fn turns_only_a_block_closed_by_its_own_fence() {
+        // A tilde line inside a backtick block is code: the block is still fenced.
+        assert_eq!(turned("```md\n~~~\nx\n~~~\n```", Turn::Text), "~~~\nx\n~~~");
+        assert_eq!(turned("~~~\na\n~~~", Turn::Text), "a");
+        // A backtick line does not close a tilde block: it is wrapped as text, not unwrapped.
+        assert_eq!(turned("~~~\na\n```", Turn::Text), "~~~\na\n```");
     }
 
     #[test]
