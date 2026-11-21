@@ -936,7 +936,7 @@ impl Shell {
                     .flex_1()
                     .truncate()
                     .pl(indent)
-                    .child(row.label),
+                    .child(crate::logic::rank::plain_line(&row.label)),
             )
             .into_any_element()
     }

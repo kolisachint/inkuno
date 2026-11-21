@@ -87,9 +87,10 @@ impl Shell {
         let (at, inside, passage) = (card.at, card.inside, card.passage.clone());
         let group = format!("comment-{i}");
         // Where it is, in a table, and the passage it is on (or that place, for a comment on a row).
+        // The passage as it reads: its block and inline markers go, as in the outline.
         let quote = match card.noted.is_empty() {
             true => card.scope.clone(),
-            false => card.noted.clone(),
+            false => crate::logic::rank::plain_line(&card.noted),
         };
         let said = match card.said.is_empty() {
             true => tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string(),

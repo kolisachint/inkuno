@@ -3078,6 +3078,10 @@ mod tests {
         assert_eq!(hidden("a {==t==}{>>c<<} b"), Vec::<&str>::new());
         // The new comment: its marker is hidden off the live line, its passage stays.
         assert_eq!(hidden("a t<!-- comment: c --> b"), ["<!-- comment: c -->"]);
+        // Headings and tasks carry it too: off the live line the marker is hidden whatever the line is.
+        assert!(hidden("## Tasks<!-- comment: Split this? -->").contains(&"<!-- comment: Split this? -->"));
+        assert!(hidden("- [ ] Settings page<!-- comment: Add it. -->").contains(&"<!-- comment: Add it. -->"));
+        assert!(!hidden("## Tasks<!-- comment: Split this? -->").contains(&"Tasks"));
         assert_eq!(hidden("> [!NOTE] hi"), ["> "]);
         // An inline checkbox is not a block marker: it stays.
         assert_eq!(hidden("do [ ] it"), Vec::<&str>::new());
