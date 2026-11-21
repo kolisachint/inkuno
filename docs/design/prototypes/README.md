@@ -122,3 +122,10 @@ tests green except the two sandbox-as-root tests, screenshots against `v2.html`)
 | P6 | Links: `[[`/`@` pickers write relative links; relative links clickable with hidden brackets | `views/editor/completion.rs`, `links.rs`, `layout.rs` | |
 | P7 | Comments syntax (Q1) and pending changes beside the file (Q2) | `inkuno-logic` markdown + pending, `views/editor/changes.rs` | |
 | P8 | Empty pane cards, dark-mode pass, docs (`app-ui.md`, user guide) | `shell/render.rs`, `docs/` | |
+
+### Build notes (2026-11-21)
+
+- **P5 (merged 7513c73):** daily notes stay where the app keeps them, at the vault root
+  (`2026-11-21.md`); the prototype's `Daily/` folder was illustrative only. `/date` left the slash
+  menu (it wrote `@date`); the `@` picker writes a relative link instead.
+- **P6 (merged 107e989):** folder renames do not rewrite relative links yet.
