@@ -180,6 +180,8 @@ fn the_lights_room_is_only_in_the_band_at_the_top_left(cx: &mut TestAppContext) 
 #[gpui::test]
 fn every_former_rail_action_is_still_a_button(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "rail-actions");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     fs::write(root.join("A.md"), "# A\n\nun\n").unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     shell.update_in(cx, |s, window, cx| {

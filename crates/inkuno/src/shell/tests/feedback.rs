@@ -359,6 +359,8 @@ fn a_long_list_page_draws_the_rows_in_view(cx: &mut TestAppContext) {
 #[gpui::test]
 fn an_empty_panel_says_so(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "empty-panel");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     shell.update(cx, |s, cx| {
         s.nav.panel = nav::Panel::Split;
         cx.notify();
@@ -406,6 +408,8 @@ fn a_panel_with_notes_says_nothing(cx: &mut TestAppContext) {
         let root = root.clone();
         |window, cx| Shell::new(Some(root), vec![], window, cx)
     });
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     shell.update(cx, |s, cx| {
         s.nav.panel = nav::Panel::Split;
         s.nav.show_alone(nav::Mode::Tree);

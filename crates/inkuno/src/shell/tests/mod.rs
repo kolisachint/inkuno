@@ -27,6 +27,7 @@ mod save_close;
 mod scratch;
 mod settings_tab;
 mod shortcuts_page;
+mod sidebar;
 mod tabs;
 mod versions;
 mod window;
@@ -264,6 +265,16 @@ pub(super) fn start<'a>(
     });
     cx.run_until_parked();
     (root, shell, cx, config)
+}
+
+/// Pins a shell to Inkuno Light: the tests of Inkuno's own chrome. Quiet (the default) has its own
+/// sidebar (search and today rows, the notes header, the scratch section, settings), see `sidebar`.
+pub(super) fn pin_inkuno(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
+    shell.update_in(cx, |s, window, cx| {
+        s.prefs.theme = "Inkuno Light".into();
+        s.restyle(window, cx);
+    });
+    cx.run_until_parked();
 }
 
 /// Selectors are `&'static str`: the few built by the tests are leaked.

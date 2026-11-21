@@ -112,6 +112,12 @@ impl Mode {
     pub fn named(name: &str) -> Option<Mode> {
         Mode::ALL.into_iter().find(|m| m.name() == name)
     }
+
+    /// Tools the left sidebar never shows: their views live in the right dock. (P3 moves versions
+    /// right; until then the palette and the keys reach them there.)
+    pub fn left_banned(self) -> bool {
+        matches!(self, Mode::Outline | Mode::Versions | Mode::Assistant)
+    }
 }
 
 /// Where a tool's list stands. The active tool's view lives in `Nav` itself, where every gesture
@@ -501,11 +507,8 @@ pub struct Layout {
 /// there, or names a right dock without it, gets it back on the right.
 pub fn read_layout(saved: &str) -> Layout {
     let mut words = saved.split_whitespace();
-    let mode = words
-        .next()
-        .and_then(Mode::named)
-        .filter(|m| *m != Mode::Assistant)
-        .unwrap_or_default();
+    let first = words.next().and_then(Mode::named);
+    let mode = first.filter(|m| !m.left_banned()).unwrap_or_default();
     // Then, in any order, what an older file does not have: the right dock.
     let (positional, keyed): (Vec<&str>, Vec<&str>) = words.partition(|w| !w.contains('='));
     let key = |name: &str| {
@@ -526,9 +529,15 @@ pub fn read_layout(saved: &str) -> Layout {
         }
         tools
     };
-    // A tool on both sides stays on the left, where it always was.
-    let mut left_shown = list("left");
-    left_shown.retain(|m| *m != Mode::Assistant);
+    // A tool on both sides stays on the left, where it always was. The tools the left sidebar no
+    // longer shows (`Mode::left_banned`) move to the right dock, shown there.
+    let named = list("left");
+    let moved: Vec<Mode> = first
+        .filter(|m| m.left_banned())
+        .into_iter()
+        .chain(named.iter().copied().filter(|m| m.left_banned()))
+        .collect();
+    let mut left_shown: Vec<Mode> = named.into_iter().filter(|m| !m.left_banned()).collect();
     if !left_shown.contains(&mode) {
         left_shown.insert(0, mode);
     }
@@ -544,10 +553,20 @@ pub fn read_layout(saved: &str) -> Layout {
     if !right.contains(&Mode::Assistant) {
         right.push(Mode::Assistant);
     }
-    let right_shown = list("show")
+    for tool in &moved {
+        if !right.contains(tool) {
+            right.push(*tool);
+        }
+    }
+    let mut right_shown: Vec<Mode> = list("show")
         .into_iter()
         .filter(|m| right.contains(m))
         .collect();
+    for tool in moved {
+        if !right_shown.contains(&tool) {
+            right_shown.push(tool);
+        }
+    }
     let folded = list("fold").into_iter().collect();
     let mut words = positional.into_iter();
     Layout {
@@ -883,9 +902,12 @@ mod tests {
         assert!(Mode::ALL.contains(&Mode::Versions));
         let older = read_layout("tree split 410\n");
         assert_eq!(older.left_shown, [Mode::Tree]);
+        // Named on the left, it moves to the right dock (P2): the left keeps the tree.
         let shown = read_layout("versions split 410\n");
-        assert_eq!(shown.mode, Mode::Versions);
-        assert_eq!(shown.left_shown, [Mode::Versions]);
+        assert_eq!(shown.mode, Mode::Tree);
+        assert_eq!(shown.left_shown, [Mode::Tree]);
+        assert!(shown.right.contains(&Mode::Versions));
+        assert_eq!(shown.right_shown, [Mode::Versions]);
     }
 
     #[test]

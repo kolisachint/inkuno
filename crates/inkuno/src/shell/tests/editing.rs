@@ -15,6 +15,8 @@ fn commands_are_found(cx: &mut TestAppContext) {
         let root = root.clone();
         |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
     });
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     cx.run_until_parked();
     let text = |cx: &mut gpui::VisualTestContext| {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
