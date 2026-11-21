@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ui::assets::ICON_SET;
+use crate::ui::widgets;
 use crate::views::nav::*;
 use crate::{
     lang::tr,
@@ -715,6 +716,23 @@ impl Shell {
         groups
     }
 
+    /// The label colour of a menu entry that is not the default: deleting is the caution red in Quiet,
+    /// and the trash is the accent in the other themes (which keep their colours otherwise).
+    pub(super) fn ink_of(what: &Do, t: Theme) -> Option<gpui::Hsla> {
+        let gone = matches!(
+            what,
+            Do::Trash
+                | Do::DeleteScratch
+                | Do::Block(editor::BlockOp::Delete)
+                | Do::Table(editor::TableOp::DeleteRow | editor::TableOp::DeleteCol | editor::TableOp::DeleteTable)
+        );
+        match () {
+            _ if gone && t.quiet => Some(t.caution),
+            _ if matches!(what, Do::Trash) => Some(t.accent),
+            _ => None,
+        }
+    }
+
     /// Context menu, over the whole window: a click elsewhere closes it.
     pub(super) fn render_menu(
         &self,
@@ -730,19 +748,15 @@ impl Shell {
         let entry = |i: usize, (label, what): (&'static str, Do), cx: &mut Context<Self>| {
             let target = target.clone();
             let on = chosen == Some(i);
-            div()
+            widgets::menu_row(t)
                 .id(label)
                 .debug_selector(move || format!("menu-entry-{label}"))
-                .h(t.px(30.))
-                .mx(t.px(6.))
-                .px_2()
                 .flex()
                 .items_center()
-                .rounded(t.small())
                 .cursor_pointer()
                 .hover(|s| s.bg(t.hover))
                 .when(on, |d| d.bg(t.selection))
-                .when(matches!(what, Do::Trash), |d| d.text_color(t.accent))
+                .when_some(Self::ink_of(&what, t), |d, color| d.text_color(color))
                 // The whole label, then its shortcut, dimmer, pinned to the right: the
                 // menu takes the width they need.
                 .child(
@@ -807,7 +821,7 @@ impl Shell {
                         .position(at)
                         .snap_to_window_with_margin(t.px(8.))
                         .child(
-                            crate::ui::widgets::floating(t)
+                            widgets::popover(t)
                                 .debug_selector(|| "menu".into())
                                 .track_focus(&self.menu_focus)
                                 .key_context("Menu")
@@ -830,7 +844,7 @@ impl Shell {
                                 .max_w(room.width)
                                 .max_h(room.height)
                                 .overflow_y_scroll()
-                                .py(t.px(6.))
+                                .py(t.px(if t.quiet { 5. } else { 6. }))
                                 .text_size(t.px(13.))
                                 .children(rows)
                                 .with_animation(

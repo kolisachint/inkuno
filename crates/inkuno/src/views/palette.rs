@@ -817,6 +817,7 @@ impl Render for Palette {
                 let header = grouped && (i == first || !same(i.checked_sub(1).and_then(|p| self.items.get(p))));
                 return self.command_row(i, n, header, cx);
             }
+            let mut hit = None;
             let (label, detail) = match item {
                 Item::Note(n) => {
                     let e = &self.entries[*n];
@@ -832,6 +833,10 @@ impl Render for Palette {
                     let e = &self.entries[*n];
                     let word = self.query.text.trim().to_lowercase();
                     let word = word.split_whitespace().next().unwrap_or_default().to_string();
+                    // Quiet shows the line under the name, with the word marked (below).
+                    if t.quiet {
+                        hit = rank::snippet_line(&e.body, &e.lower, &word);
+                    }
                     (e.name.clone(), snippet(&e.body, &e.lower, &word))
                 }
                 Item::Create => (
@@ -861,22 +866,52 @@ impl Render for Palette {
                 _ => None,
             };
             let soft = |d: gpui::Div| d.text_size(t.px(12.)).text_color(t.soft);
+            // Quiet's full-text match is two lines: the name, then the matching line with the word marked.
+            let two = t.quiet && hit.is_some();
             div()
                 .debug_selector(move || format!("palette-item-{i}"))
                 .mx(t.px(6.))
                 .px_3()
-                .h(t.px(ROW))
+                .h(t.px(if two { 48. } else { ROW }))
                 .rounded(t.large())
                 .flex()
-                .items_center()
-                .justify_between()
+                .when(two, |d| d.flex_col().justify_center().items_start())
+                .when(!two, |d| d.items_center().justify_between())
                 .gap_3()
                 .cursor_pointer()
                 .when(i == self.selected, |d| d.bg(t.selection))
                 .when(i != self.selected, |d| d.hover(|s| s.bg(t.hover)))
                 // A note: its name, its folder after it, and on the right how long ago it was written. With a
                 // text excerpt, the name keeps its place and the excerpt is shortened.
-                .when(note, |d| {
+                .when(two, |d| {
+                    let (line, range) = hit.take().unwrap_or((String::new(), 0..0));
+                    // The matching word is marked with the accent at 22 %, the rest of the line is soft.
+                    let before = line.get(..range.start).unwrap_or_default().to_string();
+                    let rest = line.get(range.start..).unwrap_or_default();
+                    let word = rest.get(..range.len()).unwrap_or(rest).to_string();
+                    let after = rest.get(word.len()..).unwrap_or_default().to_string();
+                    d.child(div().max_w_full().truncate().child(label.clone())).child(
+                        div()
+                            .flex()
+                            .w_full()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_size(t.px(12.))
+                            .text_color(t.soft)
+                            .child(div().flex_none().child(before))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .rounded(t.px(2.))
+                                    .bg(t.accent.opacity(0.22))
+                                    .text_color(t.text)
+                                    .child(word),
+                            )
+                            .child(div().flex_none().child(after)),
+                    )
+                })
+                .when(!two && note, |d| {
                     d.child(
                         div()
                             .flex_1()
@@ -888,7 +923,7 @@ impl Render for Palette {
                             .child(soft(div()).debug_selector(move || format!("palette-folder-{i}")).truncate().flex_none().max_w(gpui::relative(0.4)).child(detail.clone())),
                     )
                 })
-                .when(!note, |d| {
+                .when(!note && !two, |d| {
                     d.child(
                         div()
                             .truncate()
@@ -985,7 +1020,7 @@ impl Render for Palette {
         .justify_center()
         .items_start()
         .child(
-            crate::ui::widgets::floating(t)
+            crate::ui::widgets::popover(t)
                 .debug_selector(|| "palette-panel".into())
                 .mt(self.top)
                 .w(t.px(560.))

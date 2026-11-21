@@ -205,6 +205,14 @@ impl AssetSource for Assets {
             "diagram.svg" => {
                 r#"<rect x="2.5" y="2.5" width="5" height="4.5" rx="1"/><circle cx="11" cy="11" r="2.5"/><path d="M7 4.8H10.5V8.5M5 7V11H8.5"/>"#
             }
+            // Project artwork (not Nucleo): the slash menu's quote, divider, formula and date icons.
+            "quote.svg" => r#"<path d="M3 5.5H6.5V9L4.5 12M9 5.5H12.5V9L10.5 12"/>"#,
+            "rule.svg" => r#"<path d="M2.5 8H13.5"/>"#,
+            "comment.svg" => r#"<path d="M3 4.5A1.5 1.5 0 0 1 4.5 3H11.5A1.5 1.5 0 0 1 13 4.5V9.5A1.5 1.5 0 0 1 11.5 11H7.5L5 13V11H4.5A1.5 1.5 0 0 1 3 9.5Z"/>"#,
+            "math.svg" => r#"<path d="M12.5 3.5H3.5L8 8.2L3.5 12.5H12.5"/>"#,
+            "calendar.svg" => {
+                r#"<rect x="2.5" y="3.5" width="11" height="10" rx="1.2"/><path d="M2.5 6.5H13.5M5.5 2V4.5M10.5 2V4.5"/>"#
+            }
             "chevron-right.svg" => r#"<path d="M6.5 4.5L10 8L6.5 11.5"/>"#,
             "chevron-left.svg" => r#"<path d="M9.5 4.5L6 8L9.5 11.5"/>"#,
             "chevron-down.svg" => r#"<path d="M4.5 6.5L8 10L11.5 6.5"/>"#,
