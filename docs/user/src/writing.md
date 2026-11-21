@@ -1,6 +1,6 @@
 # Writing notes
 
-What you type is what is saved. Inkuno only changes how it looks. Off the line you are editing, Markdown markers are hidden: a list marker is drawn as a bullet, a number or a checkbox, and the line you edit shows its Markdown. The file on disk is always plain Markdown.
+What you type is what is saved. Inkuno only changes how it looks. Off the line you are editing, Markdown markers are hidden: a list marker is drawn as a bullet, a number or a checkbox, and the line you edit shows its Markdown. The file on disk is always plain Markdown: [CommonMark](https://spec.commonmark.org/0.31.2/) with [GitHub's extensions](https://github.github.com/gfm/) (tables, task lists, strikethrough, autolinks), so a note reads the same on github.com.
 
 ## Markdown
 

@@ -15,8 +15,8 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 ## Why Inkuno
 
 - **Fast.** The window opens in about 75 ms. A keystroke costs about a millisecond, even in a note of 5,000 lines. [Figures](docs/user/src/performance.md)
-- **Plain files.** One `.md` file per note, in an ordinary folder. Sync it with git, Syncthing or a cloud folder. An existing folder of Markdown notes works as is.
-- **Styled as you type.** Headings grow, bold and italics render, markers stay visible but dimmed. The file on disk stays plain Markdown.
+- **Plain files.** One `.md` file per note, in an ordinary folder. Sync it with git, Syncthing or a cloud folder. An existing folder of Markdown notes works as is. Inkuno writes [CommonMark](https://spec.commonmark.org/0.31.2/) and [GitHub Flavored Markdown](https://github.github.com/gfm/) only, so every note reads the same on github.com.
+- **Styled as you type.** Headings grow, bold and italics render, and the line you are editing shows its Markdown. The file on disk stays plain Markdown.
 - **Tables.** Cells wrap, `Tab` moves between them, and pasting from a spreadsheet works.
 - **Linked notes.** `[[Links]]`, tags and daily notes. The tree follows the active file, including diagrams, pictures and tables.
 - **More than notes.** List pages and Mermaid diagrams in notes.
