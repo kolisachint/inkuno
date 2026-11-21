@@ -133,7 +133,11 @@ impl Nesting {
         match quoted {
             Some(q) => {
                 self.quote = q.depth;
-                self.open = !blank && matches!(q.inner, Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_));
+                self.open = !blank
+                    && matches!(
+                        q.inner,
+                        Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_)
+                    );
             }
             // A paragraph line after a quoted paragraph is its lazy continuation: it stays in the quote.
             None if !blank && self.open && md::classify(line, false).0 == Kind::Para => {}

@@ -25,9 +25,9 @@ mod toasts;
 mod versions;
 
 use help::*;
-use settings_tab::*;
 use keymap::*;
 use pane::*;
+use settings_tab::*;
 use toasts::*;
 
 use crate::actions::*;

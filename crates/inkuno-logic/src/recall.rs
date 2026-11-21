@@ -31,7 +31,9 @@ pub fn first_line(body: &str) -> String {
         .filter(|line| {
             !line.is_empty()
                 && !line.starts_with('#')
-                && !line.chars().all(|c| matches!(c, '-' | '*' | '_' | '=' | '~' | '`' | ' '))
+                && !line
+                    .chars()
+                    .all(|c| matches!(c, '-' | '*' | '_' | '=' | '~' | '`' | ' '))
         })
         .map(|line| {
             let line = line.trim_start_matches(['>', ' ', '\t']);

@@ -259,7 +259,8 @@ impl Shell {
                                 } else {
                                     (current.clone(), name)
                                 };
-                                let moved = (!image && !is_dir).then_some((path.as_path(), to.as_path()));
+                                let moved =
+                                    (!image && !is_dir).then_some((path.as_path(), to.as_path()));
                                 if !is_dir && this.relink(&old, &new, moved, cx) {
                                     this.reload(cx);
                                 }
@@ -578,7 +579,10 @@ impl Shell {
             groups[2].push((tr("Comment", "Commenter"), Do::Comment));
             groups[3].push((BlockOp::Delete.label(), Do::Block(BlockOp::Delete)));
         } else if let Some(link) = &menu.text {
-            let web = matches!(link, Some(Link::Url(_) | Link::Note { .. } | Link::Heading(_)));
+            let web = matches!(
+                link,
+                Some(Link::Url(_) | Link::Note { .. } | Link::Heading(_))
+            );
             // Inside a pending change: its gestures, on the change under the pointer.
             if menu.change {
                 groups[0].push((
@@ -724,7 +728,11 @@ impl Shell {
             Do::Trash
                 | Do::DeleteScratch
                 | Do::Block(editor::BlockOp::Delete)
-                | Do::Table(editor::TableOp::DeleteRow | editor::TableOp::DeleteCol | editor::TableOp::DeleteTable)
+                | Do::Table(
+                    editor::TableOp::DeleteRow
+                        | editor::TableOp::DeleteCol
+                        | editor::TableOp::DeleteTable
+                )
         );
         match () {
             _ if gone && t.quiet => Some(t.caution),

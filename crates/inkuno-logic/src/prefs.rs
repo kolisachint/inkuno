@@ -86,7 +86,11 @@ impl Prefs {
     pub fn to_text(&self) -> String {
         let mut text = format!(
             "prefs={}\ntheme={}\nfont={}\nmono={}\nsize={}\n",
-            Self::VERSION, self.theme, self.font, self.mono, self.size
+            Self::VERSION,
+            self.theme,
+            self.font,
+            self.mono,
+            self.size
         );
         for (key, value) in [
             ("page", &self.page),

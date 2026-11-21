@@ -227,7 +227,11 @@ impl Render for Shell {
         };
 
         // Focus mode in Quiet: the note's sheet runs to the window's edges, so the ground is its colour.
-        let ground = if self.focus_mode && t.quiet { t.bg } else { t.ground };
+        let ground = if self.focus_mode && t.quiet {
+            t.bg
+        } else {
+            t.ground
+        };
         let content = div()
             .size_full()
             .relative()
@@ -279,9 +283,11 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &ShowOutlineView, window, cx| {
                 this.show_view(Mode::Outline, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &ShowCommentsView, window, cx| {
-                this.show_comments(window, cx)
-            }))
+            .on_action(
+                cx.listener(|this, _: &ShowCommentsView, window, cx| {
+                    this.show_comments(window, cx)
+                }),
+            )
             .on_action(cx.listener(|this, _: &ShowAssistantView, window, cx| {
                 this.show_view(Mode::Assistant, window, cx)
             }))
@@ -485,7 +491,9 @@ impl Render for Shell {
             .key_context("Shell")
             .child(body)
             .when(title_bar, |d| d.child(pill))
-            .when(title_bar && self.band_shown(), |d| d.child(self.render_right_toggle(cx)))
+            .when(title_bar && self.band_shown(), |d| {
+                d.child(self.render_right_toggle(cx))
+            })
             .children(self.render_menu(window, cx))
             .children(self.render_icons(window, cx));
 
@@ -832,7 +840,10 @@ impl Shell {
         } else {
             (
                 Box::new(NewScratch) as Box<dyn gpui::Action>,
-                tr("a scratch note, kept outside the vault", "un brouillon, hors du coffre"),
+                tr(
+                    "a scratch note, kept outside the vault",
+                    "un brouillon, hors du coffre",
+                ),
             )
         };
         let new_keys = keys::of(cx, new.as_ref());
@@ -841,7 +852,9 @@ impl Shell {
                 ("empty-key", 1),
                 "plus.svg",
                 tr("New note", "Nouvelle note").into(),
-                format!("{what} · {new_keys}").trim_end_matches(" · ").to_string(),
+                format!("{what} · {new_keys}")
+                    .trim_end_matches(" · ")
+                    .to_string(),
                 2,
             )
             .on_click(move |_, window, cx| window.dispatch_action(new.boxed_clone(), cx))
@@ -855,7 +868,10 @@ impl Shell {
                 tr("Search", "Rechercher").into(),
                 format!(
                     "{} · {search_keys}",
-                    tr("find a note or run a command", "trouver une note ou lancer une commande")
+                    tr(
+                        "find a note or run a command",
+                        "trouver une note ou lancer une commande"
+                    )
                 )
                 .trim_end_matches(" · ")
                 .to_string(),
@@ -871,10 +887,14 @@ impl Shell {
         };
         let again = (!recalled.is_empty()).then(|| {
             let cards = recalled.into_iter().enumerate().map(|(i, note)| {
-                card(("empty-recall", i), "note.svg", note.name.clone(), note.line.clone(), 1)
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.open(&note.path, window, cx)
-                    }))
+                card(
+                    ("empty-recall", i),
+                    "note.svg",
+                    note.name.clone(),
+                    note.line.clone(),
+                    1,
+                )
+                .on_click(cx.listener(move |this, _, window, cx| this.open(&note.path, window, cx)))
             });
             div()
                 .flex()
@@ -1060,35 +1080,36 @@ impl Shell {
         // Comments of the note: one card each, in the Comments view of the right panel (`shell/comments.rs`).
         // ponytail: the note is reread on every render (a search for `{==`); keep the
         // list from one version of the text to the next if very long notes suffer from it.
-        let said: Vec<comments::Card> = match self.pane().file.is_none() && self.pane().listing.is_none() {
-            true => {
-                let text = self.pane().editor.read(cx).text().to_string();
-                markdown::all_comments(&text)
-                    .into_iter()
-                    .map(|n| {
-                        // The CriticMarkup form starts its passage after `{==`; the HTML form starts it at the whole.
-                        let from = match text[n.at..].starts_with("{==") {
-                            true => n.at + 3,
-                            false => n.at,
-                        };
-                        let passage = match n.noted.is_empty() {
-                            true => n.at..n.end,
-                            false => from..from + n.noted.len(),
-                        };
-                        comments::Card {
-                            noted: n.noted.into(),
-                            said: n.said.into(),
-                            at: n.at,
-                            inside: n.inside,
-                            end: n.end,
-                            scope: n.scope,
-                            passage,
-                        }
-                    })
-                    .collect()
-            }
-            false => Vec::new(),
-        };
+        let said: Vec<comments::Card> =
+            match self.pane().file.is_none() && self.pane().listing.is_none() {
+                true => {
+                    let text = self.pane().editor.read(cx).text().to_string();
+                    markdown::all_comments(&text)
+                        .into_iter()
+                        .map(|n| {
+                            // The CriticMarkup form starts its passage after `{==`; the HTML form starts it at the whole.
+                            let from = match text[n.at..].starts_with("{==") {
+                                true => n.at + 3,
+                                false => n.at,
+                            };
+                            let passage = match n.noted.is_empty() {
+                                true => n.at..n.end,
+                                false => from..from + n.noted.len(),
+                            };
+                            comments::Card {
+                                noted: n.noted.into(),
+                                said: n.said.into(),
+                                at: n.at,
+                                inside: n.inside,
+                                end: n.end,
+                                scope: n.scope,
+                                passage,
+                            }
+                        })
+                        .collect()
+                }
+                false => Vec::new(),
+            };
         if active {
             self.comment_cards = said.clone();
         }

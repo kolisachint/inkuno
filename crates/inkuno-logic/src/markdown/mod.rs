@@ -39,7 +39,10 @@ pub enum Link {
     /// `[text](path)`, `[text](path#anchor)`: a note of the vault, by its path as written
     /// (percent-decoded), relative to the folder of the linking note, or to the vault root for a
     /// leading `/`. An anchor is a heading, as written.
-    Note { path: String, anchor: Option<String> },
+    Note {
+        path: String,
+        anchor: Option<String>,
+    },
     /// `[text](#heading)`: a heading of the same note.
     Heading(String),
     Tag(String),
@@ -247,7 +250,11 @@ pub fn quote(line: &str) -> Option<Quoted> {
         if line[at..].starts_with(' ') {
             at += 1;
         }
-        let gap = line[at..].bytes().take(3).take_while(|&b| b == b' ').count();
+        let gap = line[at..]
+            .bytes()
+            .take(3)
+            .take_while(|&b| b == b' ')
+            .count();
         if line[at + gap..].starts_with('>') {
             at += gap;
         }
@@ -274,12 +281,21 @@ pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
     let shallow = indent_columns(line) < 4;
     let hashes = rest.bytes().take_while(|&b| b == b'#').count();
     // An empty heading (`#`, `## `) is a heading too: its marker is the whole line then.
-    if shallow && (1..=6).contains(&hashes) && (rest[hashes..].is_empty() || rest[hashes..].starts_with(' ')) {
-        return (Kind::Heading(hashes as u8), (indent + hashes + 1).min(line.len()));
+    if shallow
+        && (1..=6).contains(&hashes)
+        && (rest[hashes..].is_empty() || rest[hashes..].starts_with(' '))
+    {
+        return (
+            Kind::Heading(hashes as u8),
+            (indent + hashes + 1).min(line.len()),
+        );
     }
     // A rule: three or more of one mark, spaces and tabs between them; it wins over a list item (`- - -`).
     let t = rest.trim_end();
-    if let Some(c) = t.chars().next().filter(|c| shallow && ['-', '*', '_'].contains(c))
+    if let Some(c) = t
+        .chars()
+        .next()
+        .filter(|c| shallow && ['-', '*', '_'].contains(c))
         && t.chars().all(|x| x == c || x == ' ' || x == '\t')
         && t.matches(c).count() >= 3
     {
@@ -291,7 +307,9 @@ pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
     if let Some(q) = quote(line) {
         // The marker runs to the content's own marker: a list item's or a heading's prefix is hidden with the quote's.
         let inner = match q.inner {
-            Kind::Heading(_) | Kind::Bullet | Kind::Ordered | Kind::Task(_) => classify_in(&line[q.at..], None).1,
+            Kind::Heading(_) | Kind::Bullet | Kind::Ordered | Kind::Task(_) => {
+                classify_in(&line[q.at..], None).1
+            }
             _ => 0,
         };
         return (Kind::Quote, q.at + inner);
@@ -552,10 +570,16 @@ pub fn web_link(rest: &str) -> Option<(Range<usize>, Range<usize>)> {
 fn relative(address: &str, text: &str) -> Option<Link> {
     let scheme = address.split_once(':').is_some_and(|(s, _)| {
         s.starts_with(|c: char| c.is_ascii_alphabetic())
-            && s.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
     });
     let balanced = address.matches('(').count() == address.matches(')').count();
-    if scheme || !balanced || address.starts_with('<') || text.contains(['<', '[']) || is_url(address) {
+    if scheme
+        || !balanced
+        || address.starts_with('<')
+        || text.contains(['<', '['])
+        || is_url(address)
+    {
         return None;
     }
     let (path, anchor) = match address.split_once('#') {
@@ -565,7 +589,10 @@ fn relative(address: &str, text: &str) -> Option<Link> {
     match (path, anchor) {
         ("", Some(anchor)) => Some(Link::Heading(anchor)),
         ("", None) => None,
-        (path, anchor) => Some(Link::Note { path: percent_decode(path), anchor }),
+        (path, anchor) => Some(Link::Note {
+            path: percent_decode(path),
+            anchor,
+        }),
     }
 }
 
@@ -575,7 +602,9 @@ pub fn percent_decode(text: &str) -> String {
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
     while i < b.len() {
-        let hex = b.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok());
+        let hex = b
+            .get(i + 1..i + 3)
+            .and_then(|h| std::str::from_utf8(h).ok());
         match (b[i], hex.and_then(|h| u8::from_str_radix(h, 16).ok())) {
             (b'%', Some(byte)) => {
                 out.push(byte);
@@ -650,12 +679,21 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
             continue;
         }
         // Extended autolinks (GFM): a bare address, or `www.` (which opens as `http://`).
-        let www = rest.starts_with("www.") && (i == 0 || b"\t *_~(".contains(&b[i - 1]) || b[i - 1].is_ascii_whitespace());
-        if ["http://", "https://", "ftp://"].iter().any(|p| rest.starts_with(p)) || www {
+        let www = rest.starts_with("www.")
+            && (i == 0 || b"\t *_~(".contains(&b[i - 1]) || b[i - 1].is_ascii_whitespace());
+        if ["http://", "https://", "ftp://"]
+            .iter()
+            .any(|p| rest.starts_with(p))
+            || www
+        {
             let end = autolink_end(rest);
             let bare = if www { 4 } else { 0 };
             if end > bare {
-                let url = if www { format!("http://{}", &rest[..end]) } else { rest[..end].to_string() };
+                let url = if www {
+                    format!("http://{}", &rest[..end])
+                } else {
+                    rest[..end].to_string()
+                };
                 out.push((i..i + end, Link::Url(url)));
                 i += end;
                 continue;
@@ -678,17 +716,29 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
     }
     // E-mail addresses (GFM), where no range above takes them: `mailto:` links.
     for (at, _) in line.match_indices('@') {
-        let local = line[..at].char_indices().rev().take_while(|&(_, c)| is_local(c)).last();
+        let local = line[..at]
+            .char_indices()
+            .rev()
+            .take_while(|&(_, c)| is_local(c))
+            .last();
         // A local part after a backslash (`\+@`) is escaped text, not an address.
-        let Some((start, _)) = local.filter(|&(k, _)| !line[..k].ends_with('\\')) else { continue };
+        let Some((start, _)) = local.filter(|&(k, _)| !line[..k].ends_with('\\')) else {
+            continue;
+        };
         let rest = &line[at + 1..];
-        let dom = rest.find(|c: char| !(c.is_ascii_alphanumeric() || "-_.".contains(c))).unwrap_or(rest.len());
+        let dom = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || "-_.".contains(c)))
+            .unwrap_or(rest.len());
         let dom = rest[..dom].trim_end_matches('.');
         let valid = dom.contains('.')
             && !dom.ends_with(['-', '_'])
             && dom.split('.').all(|seg| !seg.is_empty());
         let range = start..at + 1 + dom.len();
-        if valid && !out.iter().any(|(r, _)| r.start < range.end && range.start < r.end) {
+        if valid
+            && !out
+                .iter()
+                .any(|(r, _)| r.start < range.end && range.start < r.end)
+        {
             out.push((range.clone(), Link::Url(format!("mailto:{}", &line[range]))));
         }
     }
@@ -723,7 +773,9 @@ fn is_local(c: char) -> bool {
 /// The end of the extended autolink at the start of `rest` (GFM): up to a space or a `<`, without the
 /// trailing punctuation, without an entity's `;` (`&hl;`), and without a `)` that closes no `(` of it.
 fn autolink_end(rest: &str) -> usize {
-    let mut end = rest.find(|c: char| c.is_whitespace() || c == '<').unwrap_or(rest.len());
+    let mut end = rest
+        .find(|c: char| c.is_whitespace() || c == '<')
+        .unwrap_or(rest.len());
     loop {
         let t = &rest[..end];
         if t.ends_with(|c: char| "?!.,:*_~'\"".contains(c))
@@ -732,7 +784,9 @@ fn autolink_end(rest: &str) -> usize {
             end -= 1;
         } else if t.ends_with(';')
             && let Some(amp) = t.rfind('&')
-            && t[amp + 1..t.len() - 1].chars().all(|c| c.is_ascii_alphanumeric())
+            && t[amp + 1..t.len() - 1]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric())
             && amp + 1 < t.len() - 1
         {
             end = amp;
@@ -821,26 +875,49 @@ pub fn inline(line: &str, from: usize, flags: &mut [u32]) {
 pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
     let b = line.as_bytes();
     // Word characters, Unicode letters and digits included: the character starting at `at`, or ending before it.
-    let after = |at: usize| line.get(at..).and_then(|s| s.chars().next()).is_some_and(char::is_alphanumeric);
-    let before = |at: usize| line[..at].chars().next_back().is_some_and(char::is_alphanumeric);
+    let after = |at: usize| {
+        line.get(at..)
+            .and_then(|s| s.chars().next())
+            .is_some_and(char::is_alphanumeric)
+    };
+    let before = |at: usize| {
+        line[..at]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_alphanumeric)
+    };
     // Raw inline HTML tags: no delimiter inside one opens or closes a run (`<a href="__">`). The highlight
     // and underline tags are marks of this pass, not raw HTML.
     let tags: Vec<Range<usize>> = line
         .match_indices('<')
-        .filter(|(k, _)| !["<u>", "</u>", "<mark", "</mark>"].iter().any(|t| line[*k..].starts_with(t)))
+        .filter(|(k, _)| {
+            !["<u>", "</u>", "<mark", "</mark>"]
+                .iter()
+                .any(|t| line[*k..].starts_with(t))
+        })
         .filter_map(|(k, _)| html_tag(&line[k..]).map(|n| k..k + n))
         .collect();
     let inside = |at: usize| tags.iter().any(|t| t.contains(&at));
     // CommonMark's flanking of the `_` run holding byte `at`: (it can open, it can close).
     let flank = |at: usize| {
-        let s = (0..at).rev().take_while(|&k| b[k] == b'_').last().unwrap_or(at);
-        let e = (at..b.len()).take_while(|&k| b[k] == b'_').last().map_or(at + 1, |k| k + 1);
+        let s = (0..at)
+            .rev()
+            .take_while(|&k| b[k] == b'_')
+            .last()
+            .unwrap_or(at);
+        let e = (at..b.len())
+            .take_while(|&k| b[k] == b'_')
+            .last()
+            .map_or(at + 1, |k| k + 1);
         let punct = |c: char| !c.is_alphanumeric() && !c.is_whitespace();
         let prev = line[..s].chars().next_back().unwrap_or(' ');
         let next = line[e..].chars().next().unwrap_or(' ');
         let left = !next.is_whitespace() && (!punct(next) || prev.is_whitespace() || punct(prev));
         let right = !prev.is_whitespace() && (!punct(prev) || next.is_whitespace() || punct(next));
-        (left && (!right || punct(prev)), right && (!left || punct(next)))
+        (
+            left && (!right || punct(prev)),
+            right && (!left || punct(next)),
+        )
     };
     let mut active = 0u32;
     // The current highlight opened with `<mark>` (otherwise with `==`): it closes the same way.
@@ -915,13 +992,18 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
                 }
             } else if underscore {
                 if active & flag == 0 {
-                    flank(i).0 && rest[n..].match_indices(&rest[..n]).any(|(j, _)| !inside(i + n + j) && flank(i + n + j).1)
+                    flank(i).0
+                        && rest[n..]
+                            .match_indices(&rest[..n])
+                            .any(|(j, _)| !inside(i + n + j) && flank(i + n + j).1)
                 } else {
                     flank(i).1
                 }
             } else if active & flag == 0 {
                 rest[n..].chars().next().is_some_and(|c| !c.is_whitespace())
-                    && rest[n..].match_indices(&rest[..n]).any(|(j, _)| !inside(i + n + j))
+                    && rest[n..]
+                        .match_indices(&rest[..n])
+                        .any(|(j, _)| !inside(i + n + j))
             } else {
                 true
             }
@@ -957,7 +1039,8 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
         match link {
             Link::Tag(_) => flags[r].iter_mut().for_each(|f| *f |= TAG),
             // `[text](address)`: the text is the link, the rest fades. Relative addresses too.
-            Link::Url(_) | Link::Note { .. } | Link::Heading(_) => match web_link(&line[r.start..]) {
+            Link::Url(_) | Link::Note { .. } | Link::Heading(_) => match web_link(&line[r.start..])
+            {
                 Some((text, address)) => {
                     flags[r.clone()].iter_mut().for_each(|f| *f |= DIM);
                     flags[r.start + text.start..r.start + text.end]
@@ -999,7 +1082,11 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
         .collect();
     for (at, _) in line.match_indices('[') {
         let rest = &line[at..];
-        if at < from || at > 0 && line.as_bytes()[at - 1] == b'!' || flags[at] & CODE != 0 || held.contains(&at) {
+        if at < from
+            || at > 0 && line.as_bytes()[at - 1] == b'!'
+            || flags[at] & CODE != 0
+            || held.contains(&at)
+        {
             continue;
         }
         // Not a link when a code span cuts it, the address has unbalanced parentheses or starts with `<`,
@@ -1350,7 +1437,8 @@ pub fn code(line: &str, lang: &str, flags: &mut [u32]) {
                 n,
                 if KEYWORDS.contains(&word) {
                     KEYWORD
-                } else if word.starts_with(char::is_uppercase) && word.contains(char::is_lowercase) {
+                } else if word.starts_with(char::is_uppercase) && word.contains(char::is_lowercase)
+                {
                     TYPE
                 } else if rest[n..].starts_with('(') {
                     FUNCTION
@@ -2042,7 +2130,13 @@ mod tests {
     fn strong(line: &str) -> String {
         flags(line, 0)
             .iter()
-            .map(|&f| if f & BOLD != 0 && f & DIM == 0 { 'b' } else { '.' })
+            .map(|&f| {
+                if f & BOLD != 0 && f & DIM == 0 {
+                    'b'
+                } else {
+                    '.'
+                }
+            })
             .collect()
     }
 
@@ -2089,13 +2183,21 @@ mod tests {
     #[test]
     fn local_link_destinations_are_links() {
         // Relative addresses (notes, headings of this note) are links, as the web ones are.
-        for line in ["[x](/path)", "[x](foo.md)", "[x](#anchor)", "[x](mailto:a@b.c)"] {
+        for line in [
+            "[x](/path)",
+            "[x](foo.md)",
+            "[x](#anchor)",
+            "[x](mailto:a@b.c)",
+        ] {
             let url = web_link(line).map(|(_, u)| line[u].to_string());
             assert!(url.is_some(), "{line}");
             assert!(!links(line).is_empty(), "{line}");
         }
         let f = flags("see [x](/path) now", 0);
-        assert!(f[5] & LINK != 0 && f[6] & LINK == 0 && f[12] & QUIET != 0, "{f:?}");
+        assert!(
+            f[5] & LINK != 0 && f[6] & LINK == 0 && f[12] & QUIET != 0,
+            "{f:?}"
+        );
         assert_eq!(f.iter().filter(|&&x| x & LINK != 0).count(), 1);
         assert!(web_link("[x](a b)").is_none() && web_link("[x]()").is_none());
         assert!(links("![x](/img.png)").is_empty());
@@ -2107,7 +2209,11 @@ mod tests {
 
     #[test]
     fn intraword_underscores_follow_unicode_letters() {
-        let italic = |line: &str| flags(line, 0).iter().any(|f| f & ITALIC != 0 && f & DIM == 0);
+        let italic = |line: &str| {
+            flags(line, 0)
+                .iter()
+                .any(|f| f & ITALIC != 0 && f & DIM == 0)
+        };
         assert!(!italic("пристаням_стремятся_"));
         assert!(!italic("__пристаням__стремятся"));
         assert!(!italic("café_au_lait_"));
@@ -2127,14 +2233,33 @@ mod tests {
                 })
                 .collect()
         };
-        assert_eq!(urls("Visit www.commonmark.org/help."), ["http://www.commonmark.org/help"]);
-        assert_eq!(urls("(www.google.com/search?q=Markup+(business))"), ["http://www.google.com/search?q=Markup+(business)"]);
-        assert_eq!(urls("www.google.com/search?q=commonmark&hl;"), ["http://www.google.com/search?q=commonmark"]);
-        assert_eq!(urls("www.commonmark.org/he<lp"), ["http://www.commonmark.org/he"]);
+        assert_eq!(
+            urls("Visit www.commonmark.org/help."),
+            ["http://www.commonmark.org/help"]
+        );
+        assert_eq!(
+            urls("(www.google.com/search?q=Markup+(business))"),
+            ["http://www.google.com/search?q=Markup+(business)"]
+        );
+        assert_eq!(
+            urls("www.google.com/search?q=commonmark&hl;"),
+            ["http://www.google.com/search?q=commonmark"]
+        );
+        assert_eq!(
+            urls("www.commonmark.org/he<lp"),
+            ["http://www.commonmark.org/he"]
+        );
         assert_eq!(urls("ftp://foo.bar.baz."), ["ftp://foo.bar.baz"]);
-        assert_eq!(urls("hello@mail+xyz.example and hello+xyz@mail.example."), ["mailto:hello+xyz@mail.example"]);
+        assert_eq!(
+            urls("hello@mail+xyz.example and hello+xyz@mail.example."),
+            ["mailto:hello+xyz@mail.example"]
+        );
         assert_eq!(urls("a.b-c_d@a.b."), ["mailto:a.b-c_d@a.b"]);
-        assert!(urls("a.b-c_d@a.b-").is_empty() && urls("www.").is_empty() && urls("awww.x.org").is_empty());
+        assert!(
+            urls("a.b-c_d@a.b-").is_empty()
+                && urls("www.").is_empty()
+                && urls("awww.x.org").is_empty()
+        );
         assert!(urls(r"<foo\+@bar.example.com>").is_empty());
     }
 
@@ -2149,7 +2274,11 @@ mod tests {
     #[test]
     fn delimiters_inside_raw_html_tags_do_not_count() {
         assert!(!strong("__<a href=\"__\">").contains('b'));
-        assert!(!flags("*<img title=\"*\"/>", 0).iter().any(|f| f & ITALIC != 0 && f & DIM == 0));
+        assert!(
+            !flags("*<img title=\"*\"/>", 0)
+                .iter()
+                .any(|f| f & ITALIC != 0 && f & DIM == 0)
+        );
         assert_eq!(html_tag("<a href=\"x\">y"), Some(12));
         assert_eq!(html_tag("</b> x"), Some(4));
         assert_eq!(html_tag("< b>"), None);
@@ -2354,9 +2483,15 @@ mod tests {
         );
         // The new form: the passage runs from the start of the line (or the previous comment) to its marker.
         let fresh = "un mot<!-- comment: à revoir --> et deux<!-- comment:  --> seul";
-        assert_eq!(comments(fresh), [(0..33, 0..6, 20..29), (34..59, 34..41, 55..55)]);
+        assert_eq!(
+            comments(fresh),
+            [(0..33, 0..6, 20..29), (34..59, 34..41, 55..55)]
+        );
         // A comment on its own has nothing commented, at its start.
-        assert_eq!(comments("  <!-- comment: seul -->"), [(2..24, 2..2, 16..20)]);
+        assert_eq!(
+            comments("  <!-- comment: seul -->"),
+            [(2..24, 2..2, 16..20)]
+        );
         let note = format!("# T\n{line}\n```\n{line}\n```");
         let found: Vec<_> = all_comments(&note)
             .into_iter()
@@ -2377,7 +2512,10 @@ mod tests {
             migrate_comments(old),
             "# T\nmot **fort**<!-- comment: à revoir --> et deux<!-- comment:  --> <!-- comment: seul -->\n```\n{>>code<<}\n```\n"
         );
-        assert_eq!(migrate_comments(&migrate_comments(old)), migrate_comments(old));
+        assert_eq!(
+            migrate_comments(&migrate_comments(old)),
+            migrate_comments(old)
+        );
         assert_eq!(migrate_comments("plain\n"), "plain\n");
         assert_eq!(comments("{>>pas fini"), []);
         // Where a comment is: in a cell, a header, or a line under a table named by what it is about.
@@ -2488,7 +2626,10 @@ mod tests {
         assert_eq!(l.len(), 2);
         // The innermost brackets make the link: `[a [b](c)` links `c` only.
         let l = links("[x](fichier.md) [y]( ) [a [b](c)");
-        assert_eq!(l.iter().map(|(r, _)| r.clone()).collect::<Vec<_>>(), [0..15, 26..32]);
+        assert_eq!(
+            l.iter().map(|(r, _)| r.clone()).collect::<Vec<_>>(),
+            [0..15, 26..32]
+        );
         assert_eq!(
             web_link("[la doc](mailto:a@b.c) suite"),
             Some((1..7, 9..21))
@@ -2525,27 +2666,48 @@ mod tests {
         assert_eq!(one("[x](sub/Note.md)"), [note("sub/Note.md", None)]);
         assert_eq!(one("[x](../Note.md)"), [note("../Note.md", None)]);
         assert_eq!(one("[x](Note%20Name.md)"), [note("Note Name.md", None)]);
-        assert_eq!(one("[x](Note.md#Mon%20titre)"), [note("Note.md", Some("Mon titre"))]);
-        assert_eq!(one("[x](Note%20A.md#Un%20titre)"), [note("Note A.md", Some("Un titre"))]);
-        assert_eq!(one("[x](/abs/in/vault.md)"), [note("/abs/in/vault.md", None)]);
+        assert_eq!(
+            one("[x](Note.md#Mon%20titre)"),
+            [note("Note.md", Some("Mon titre"))]
+        );
+        assert_eq!(
+            one("[x](Note%20A.md#Un%20titre)"),
+            [note("Note A.md", Some("Un titre"))]
+        );
+        assert_eq!(
+            one("[x](/abs/in/vault.md)"),
+            [note("/abs/in/vault.md", None)]
+        );
         assert_eq!(one("[x](#heading)"), [Link::Heading("heading".into())]);
         // Not links: an empty address, an anchor alone on an empty target, another scheme, `<…>`.
         assert!(one("[x]()").is_empty() && one("[x](#)").is_empty());
         assert!(one("[x](tel:0123)").is_empty() && one("[x](<a b.md>)").is_empty());
         // Such an address styles as it did: the text is a link, not clickable, the address fades.
         let f = flags("see [x](tel:0123) now", 0);
-        assert!(f[5] & LINK != 0 && f[12] & QUIET != 0 && f[4] & DIM != 0, "{f:?}");
+        assert!(
+            f[5] & LINK != 0 && f[12] & QUIET != 0 && f[4] & DIM != 0,
+            "{f:?}"
+        );
         // Images and wikilinks keep their own targets; the web addresses are unchanged.
         assert!(one("![x](pic.png)").is_empty());
-        assert_eq!(one("[[Note]] [x](n.md)"), [Link::Wiki("Note".into()), note("n.md", None)]);
+        assert_eq!(
+            one("[[Note]] [x](n.md)"),
+            [Link::Wiki("Note".into()), note("n.md", None)]
+        );
         assert_eq!(one("[x](https://a.b)"), [Link::Url("https://a.b".into())]);
-        assert_eq!(one("[x](mailto:a@b.cd)"), [Link::Url("mailto:a@b.cd".into())]);
+        assert_eq!(
+            one("[x](mailto:a@b.cd)"),
+            [Link::Url("mailto:a@b.cd".into())]
+        );
         // Bad escapes stay as written; the heading slug follows GitHub.
         assert_eq!(percent_decode("100%+%zz%2"), "100%+%zz%2");
         assert_eq!(slug("Mon Titre, déjà!"), "mon-titre-déjà");
         assert_eq!(slug("A_b-c d"), "a_b-c-d");
         let text = "# Intro\n\ntexte\n## Mon Titre\n";
-        assert_eq!(heading_at(text, "mon-titre"), Some(text.find("## ").unwrap()));
+        assert_eq!(
+            heading_at(text, "mon-titre"),
+            Some(text.find("## ").unwrap())
+        );
         assert_eq!(heading_at(text, "Intro"), Some(0));
         assert_eq!(heading_at(text, "absent"), None);
     }

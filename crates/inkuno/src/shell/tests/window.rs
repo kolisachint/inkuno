@@ -863,7 +863,9 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
             "at {size}: the round assistant button is still drawn"
         );
         assert!(
-            foot.left() >= pane.left() && foot.right() <= pane.right() && foot.bottom() <= pane.bottom(),
+            foot.left() >= pane.left()
+                && foot.right() <= pane.right()
+                && foot.bottom() <= pane.bottom(),
             "at {size}: {foot:?} outside {pane:?}"
         );
         for (i, (got, was)) in now.iter().zip(base).enumerate() {

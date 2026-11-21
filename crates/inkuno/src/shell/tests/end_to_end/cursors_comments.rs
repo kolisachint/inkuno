@@ -102,7 +102,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         (e.position(), e.selected().to_string())
     });
     assert_eq!(flashed, (8, "- un mot".to_string()));
-    cx.executor().advance_clock(std::time::Duration::from_secs(1));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
     cx.run_until_parked();
     let pos = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
     assert_eq!(pos, "- un mot<!-- comment: ".len());
@@ -155,7 +156,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(shell.read_with(cx, |s, _| s.nav.right_shown == [Mode::Comments]));
     shell.update_in(cx, |s, window, cx| s.toggle_right_panel(window, cx));
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| s.nav.right_shown.is_empty() && s.nav.right_view == Mode::Comments));
+    assert!(shell.read_with(cx, |s, _| s.nav.right_shown.is_empty()
+        && s.nav.right_view == Mode::Comments));
     shell.update_in(cx, |s, window, cx| s.toggle_right_panel(window, cx));
     cx.run_until_parked();
     assert!(shell.read_with(cx, |s, _| s.nav.right_shown == [Mode::Comments]));
@@ -207,7 +209,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         seen.push(badge);
     }
     assert!(
-        seen.iter().all(|b| b.size.width == seen[0].size.width && b.right() == seen[0].right()),
+        seen.iter()
+            .all(|b| b.size.width == seen[0].size.width && b.right() == seen[0].right()),
         "{seen:?}"
     );
     j.load(cx, &kept, 0);
@@ -221,7 +224,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             s.nav.panel = panel;
             s.nav.list_w = px(260.);
             s.nav.right_view = view;
-            s.nav.right_shown = if panel == Panel::Hidden { Vec::new() } else { vec![view] };
+            s.nav.right_shown = if panel == Panel::Hidden {
+                Vec::new()
+            } else {
+                vec![view]
+            };
             cx.notify();
         });
         for _ in 0..3 {
@@ -231,7 +238,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     };
     let within = |cx: &mut gpui::VisualTestContext, part: &'static str, zone: &'static str| {
         let (part_at, zone_at) = (
-            cx.debug_bounds(part).unwrap_or_else(|| panic!("{part} absent")),
+            cx.debug_bounds(part)
+                .unwrap_or_else(|| panic!("{part} absent")),
             cx.debug_bounds(zone).unwrap(),
         );
         assert!(

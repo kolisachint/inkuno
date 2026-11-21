@@ -180,8 +180,13 @@ impl Editor {
     /// Whether the caret is in the code block that row `i` belongs to (its head to its foot).
     fn code_live(&self, i: usize, cursor: usize) -> bool {
         let head = (0..=i).rev().find(|&r| self.rows[r].head).unwrap_or(0);
-        let foot = (i..self.rows.len()).find(|&r| self.rows[r].foot).unwrap_or(i);
-        let (a, b) = (self.rows[head].start, self.rows[foot].start + self.rows[foot].len);
+        let foot = (i..self.rows.len())
+            .find(|&r| self.rows[r].foot)
+            .unwrap_or(i);
+        let (a, b) = (
+            self.rows[head].start,
+            self.rows[foot].start + self.rows[foot].len,
+        );
         (a..=b).contains(&cursor)
     }
 
@@ -215,8 +220,10 @@ impl Editor {
             let has_cursor = (row.start..=end).contains(&cursor);
             // Quiet: a fenced block shows its fences as source only while the caret is in it; off it, the
             // opening one shows the language, the closing one nothing.
-            let fence_hidden =
-                t.quiet && row.kind == Kind::Fence && row.gutter > px(0.) && !self.code_live(i, cursor);
+            let fence_hidden = t.quiet
+                && row.kind == Kind::Fence
+                && row.gutter > px(0.)
+                && !self.code_live(i, cursor);
             let clear = t.px(3.);
             let block = |x: Pixels, y: Pixels, w: Pixels, h: Pixels| {
                 Bounds::new(point(o.x + x, y), size(w, h))
@@ -308,8 +315,11 @@ impl Editor {
                         // A quote inside the callout: its own bars, from the second level on.
                         for level in 1..row.bars() {
                             window.paint_quad(
-                                fill(block(px(-14. + 10. * level as f32), y, px(3.), h), t.quote_bar)
-                                    .corner_radii(corners(px(1.5), row)),
+                                fill(
+                                    block(px(-14. + 10. * level as f32), y, px(3.), h),
+                                    t.quote_bar,
+                                )
+                                .corner_radii(corners(px(1.5), row)),
                             );
                         }
                         if row.head && !row.live {
@@ -338,8 +348,11 @@ impl Editor {
                         // One bar per level of the quote, 10 px apart: the outer one at -14 px.
                         for level in 0..row.bars() {
                             window.paint_quad(
-                                fill(block(px(-14. + 10. * level as f32), top, px(3.), row.height), t.quote_bar)
-                                    .corner_radii(corners(px(1.5), row)),
+                                fill(
+                                    block(px(-14. + 10. * level as f32), top, px(3.), row.height),
+                                    t.quote_bar,
+                                )
+                                .corner_radii(corners(px(1.5), row)),
                             );
                         }
                     }
@@ -541,16 +554,14 @@ impl Editor {
                                 i += 1;
                             }
                             for (x, y, width) in spans_of(start..i) {
-                                window.paint_quad(
-                                    quad(
-                                        block(x - pad, text_top + y + lift, width + pad * 2., tall),
-                                        px(4. * scale),
-                                        chip,
-                                        px(scale),
-                                        t.chip_line,
-                                        BorderStyle::default(),
-                                    ),
-                                );
+                                window.paint_quad(quad(
+                                    block(x - pad, text_top + y + lift, width + pad * 2., tall),
+                                    px(4. * scale),
+                                    chip,
+                                    px(scale),
+                                    t.chip_line,
+                                    BorderStyle::default(),
+                                ));
                             }
                         }
                     }
@@ -663,7 +674,10 @@ impl Editor {
                             // Quiet: the box sits on whole pixels, so that its 1 px border is one line, not two.
                             let origin = point(left + check.x.start, mid - side / 2.);
                             let origin = if t.quiet {
-                                point(px(f32::from(origin.x).round()), px(f32::from(origin.y).round()))
+                                point(
+                                    px(f32::from(origin.x).round()),
+                                    px(f32::from(origin.y).round()),
+                                )
                             } else {
                                 origin
                             };
@@ -701,7 +715,11 @@ impl Editor {
                                 }
                             } else {
                                 // Quiet's box is filled with the page; the other themes' is left open.
-                                let fill = if t.quiet { t.bg } else { Hsla::transparent_black() };
+                                let fill = if t.quiet {
+                                    t.bg
+                                } else {
+                                    Hsla::transparent_black()
+                                };
                                 window.paint_quad(quad(
                                     bounds,
                                     radius,
@@ -1223,7 +1241,10 @@ impl Editor {
             .ok();
         }
         // Quiet's list is a popover drawn by `completion_menu`; the other themes keep this one.
-        if focused && !t.quiet && let Some((_, items)) = self.completion() {
+        if focused
+            && !t.quiet
+            && let Some((_, items)) = self.completion()
+        {
             let chosen = self.ac_index.min(items.len() - 1);
             // The list follows the choice when it goes beyond what it shows.
             let first = chosen.saturating_sub(SHOWN - 1);

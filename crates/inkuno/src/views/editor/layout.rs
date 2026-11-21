@@ -411,7 +411,11 @@ impl Row {
 
     /// Quote bars drawn beside the row: one per level of its quote (none outside a quote).
     pub(super) fn bars(&self) -> usize {
-        if self.kind == Kind::Quote { self.nesting.quote.max(1) } else { 0 }
+        if self.kind == Kind::Quote {
+            self.nesting.quote.max(1)
+        } else {
+            0
+        }
     }
 
     /// A table's dash line, which is not seen.
@@ -699,15 +703,17 @@ pub fn text_runs(
         );
         // Quiet's links are underlined on the live line only.
         let linked = f & md::LINK != 0 && (!t.quiet || style.live);
-        let underline =
-            (m || linked || f & md::UNDER != 0).then_some(UnderlineStyle {
-                thickness: px(1.),
-                color: Some(
-                    if f & md::LINK != 0 { t.link } else { color }
-                        .opacity(if f & md::UNDER != 0 { 1. } else { 0.5 }),
-                ),
-                wavy: false,
-            });
+        let underline = (m || linked || f & md::UNDER != 0).then_some(UnderlineStyle {
+            thickness: px(1.),
+            color: Some(
+                if f & md::LINK != 0 { t.link } else { color }.opacity(if f & md::UNDER != 0 {
+                    1.
+                } else {
+                    0.5
+                }),
+            ),
+            wavy: false,
+        });
         // `upright`: the characters the app's fonts lack, in the sans, not italic.
         let run = |len: usize, upright: bool| {
             let (code, slanted) = (code && !upright, slanted && !upright);
@@ -829,8 +835,10 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u32]) -> Ve
         if matches!(link, md::Link::Footnote(_)) {
             continue;
         }
-        if matches!(link, md::Link::Url(_) | md::Link::Note { .. } | md::Link::Heading(_))
-            && let Some((text, _)) = md::web_link(&line[r.clone()])
+        if matches!(
+            link,
+            md::Link::Url(_) | md::Link::Note { .. } | md::Link::Heading(_)
+        ) && let Some((text, _)) = md::web_link(&line[r.clone()])
         {
             urls.push(r.start..r.start + text.start);
             urls.push(r.start + text.end..r.end);
@@ -1346,9 +1354,14 @@ impl Editor {
         // Quiet's code gutter: a digit of the code face, and the gutter of a block of `lines` lines (10 px each side).
         let quiet_scale = t.size / Prefs::SIZE;
         let digit = text_system
-            .advance(text_system.resolve_font(&font(mono())), px(13. * quiet_scale), '0')
+            .advance(
+                text_system.resolve_font(&font(mono())),
+                px(13. * quiet_scale),
+                '0',
+            )
             .map_or(px(8. * quiet_scale), |s| s.width);
-        let gutter_of = |lines: usize| px(20. * quiet_scale) + digit * lines.max(1).to_string().len() as f32;
+        let gutter_of =
+            |lines: usize| px(20. * quiet_scale) + digit * lines.max(1).to_string().len() as f32;
         let mut gutter_now = px(0.);
         // Mermaid diagrams and LaTeX formulas: drawn once, reused afterwards.
         let rgb = |c: Hsla| {
@@ -1379,7 +1392,14 @@ impl Editor {
         };
         let style = {
             let mut hasher = Fast::default();
-            (key(0, "").0, hex(t.accent), hex(t.link), t.syntax.map(hex), mono(), has_unequal)
+            (
+                key(0, "").0,
+                hex(t.accent),
+                hex(t.link),
+                t.syntax.map(hex),
+                mono(),
+                has_unequal,
+            )
                 .hash(&mut hasher);
             hasher.finish()
         };
@@ -1641,16 +1661,31 @@ impl Editor {
                 if !matches!(kind, Kind::Code | Kind::Fence) {
                     gutter_now = px(0.);
                 } else if kind == Kind::Fence && opens {
-                    gutter_now = match fenced.binary_search_by_key(&offset, |b| b.open).ok().map(|i| fenced[i]) {
-                        Some(b) if t.quiet && lang != "mermaid" => {
-                            gutter_of(self.content[b.open..b.close].matches('\n').count().saturating_sub(1))
-                        }
+                    gutter_now = match fenced
+                        .binary_search_by_key(&offset, |b| b.open)
+                        .ok()
+                        .map(|i| fenced[i])
+                    {
+                        Some(b) if t.quiet && lang != "mermaid" => gutter_of(
+                            self.content[b.open..b.close]
+                                .matches('\n')
+                                .count()
+                                .saturating_sub(1),
+                        ),
                         _ => px(0.),
                     };
-                } else if kind == Kind::Code && code_now && t.quiet && !rows.last().is_some_and(|r| r.kind == Kind::Code) {
+                } else if kind == Kind::Code
+                    && code_now
+                    && t.quiet
+                    && !rows.last().is_some_and(|r| r.kind == Kind::Code)
+                {
                     gutter_now = gutter_of(indented_lines(&self.content[offset..]));
                 }
-                let gutter_here = if matches!(kind, Kind::Code | Kind::Fence) { gutter_now } else { px(0.) };
+                let gutter_here = if matches!(kind, Kind::Code | Kind::Fence) {
+                    gutter_now
+                } else {
+                    px(0.)
+                };
                 if kind == Kind::Fence && !opens {
                     gutter_now = px(0.);
                 }
@@ -1715,7 +1750,11 @@ impl Editor {
                     .flatten();
                 let ibase = quoted.map_or(0, |q| q.at);
                 let body = &line[ibase..];
-                let ikind = if lazy { Kind::Para } else { quoted.map_or(kind, |q| q.inner) };
+                let ikind = if lazy {
+                    Kind::Para
+                } else {
+                    quoted.map_or(kind, |q| q.inner)
+                };
                 // The checkbox of a task, as an offset of the line.
                 let task = md::task_box(body).map(|(at, done)| (at + ibase, done));
                 let last: Option<&mut Row> = rows.last_mut();
@@ -1842,7 +1881,9 @@ impl Editor {
                     Kind::Heading(3) => (px(18.), px(16.), 1.33),
                     Kind::Heading(4) => (px(16.), px(16.), 1.4),
                     Kind::Heading(_) => (px(15.), px(16.), 1.47),
-                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => (px(13.), px(0.), 20. / 13.),
+                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => {
+                        (px(13.), px(0.), 20. / 13.)
+                    }
                     _ => (px(15.), px(0.), 22. / 15.),
                 };
                 // The sizes above hold for a `Prefs::SIZE` px body text.
@@ -1889,7 +1930,15 @@ impl Editor {
                     let mut hasher = Fast::default();
                     // Two halves: thirteen entries do not fit in one hashed tuple.
                     (
-                        (style, line, kind, marker, math, lang, (depth, cont, nesting.quote)),
+                        (
+                            style,
+                            line,
+                            kind,
+                            marker,
+                            math,
+                            lang,
+                            (depth, cont, nesting.quote),
+                        ),
                         (
                             live,
                             near,
@@ -1912,7 +1961,11 @@ impl Editor {
                 let alert = match own_tint.zip(md::callout(line)) {
                     Some((tint, label)) if t.quiet && !live && kind == Kind::Quote => {
                         let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
-                        Some((tint, label.clone(), label.end - marker.saturating_sub(indent)))
+                        Some((
+                            tint,
+                            label.clone(),
+                            label.end - marker.saturating_sub(indent),
+                        ))
                     }
                     _ => None,
                 };
@@ -1920,13 +1973,20 @@ impl Editor {
                 // padding (14 px from its edge, the box lies 12 px out). The bars sit at -14 px, 10 px apart.
                 let quote_base = if kind == Kind::Quote {
                     px(10. * quiet_scale) * nesting.quote.saturating_sub(1) as f32
-                        + if t.quiet && tinted { px(14. * quiet_scale - 12.) } else { px(0.) }
+                        + if t.quiet && tinted {
+                            px(14. * quiet_scale - 12.)
+                        } else {
+                            px(0.)
+                        }
                 } else {
                     px(0.)
                 };
                 let indent = if kind == Kind::Quote {
                     quote_base
-                } else if t.quiet && gutter_here > px(0.) && matches!(kind, Kind::Code | Kind::Fence) {
+                } else if t.quiet
+                    && gutter_here > px(0.)
+                    && matches!(kind, Kind::Code | Kind::Fence)
+                {
                     gutter_here + px(14. * quiet_scale - 12.)
                 } else {
                     px(0.)
@@ -1971,7 +2031,11 @@ impl Editor {
                         // like a checkbox in the text or a table.
                         if let Some((at, true)) = task {
                             // Quiet: the done text is `soft` (`QUIET` takes its colour over `DIM`).
-                            let dim = if t.quiet { md::DIM | md::QUIET } else { md::DIM };
+                            let dim = if t.quiet {
+                                md::DIM | md::QUIET
+                            } else {
+                                md::DIM
+                            };
                             flags[at + 4..]
                                 .iter_mut()
                                 .for_each(|f| *f |= md::STRIKE | dim);
@@ -2267,7 +2331,8 @@ impl Editor {
                                 strikethrough: None,
                             }];
                             let text = shape(name, px(14. * quiet_scale), &runs, None);
-                            let width = px(24. * quiet_scale) + text.as_ref().map_or(px(0.), |l| l.width());
+                            let width =
+                                px(24. * quiet_scale) + text.as_ref().map_or(px(0.), |l| l.width());
                             Some(Lead {
                                 line: text,
                                 len: 0,
@@ -3069,7 +3134,10 @@ mod tests {
         );
         assert_eq!(hidden("see https://example.com here"), Vec::<&str>::new());
         // A relative link hides its markers the same way: to a note, to a heading of this one.
-        assert_eq!(hidden("[t](sub/Note%20A.md#Titre)"), ["[", "](sub/Note%20A.md#Titre)"]);
+        assert_eq!(
+            hidden("[t](sub/Note%20A.md#Titre)"),
+            ["[", "](sub/Note%20A.md#Titre)"]
+        );
         assert_eq!(hidden("[t](../n.md)"), ["[", "](../n.md)"]);
         assert_eq!(hidden("[t](#titre)"), ["[", "](#titre)"]);
         assert_eq!(hidden("see [[note]] here"), Vec::<&str>::new());
@@ -3079,8 +3147,14 @@ mod tests {
         // The new comment: its marker is hidden off the live line, its passage stays.
         assert_eq!(hidden("a t<!-- comment: c --> b"), ["<!-- comment: c -->"]);
         // Headings and tasks carry it too: off the live line the marker is hidden whatever the line is.
-        assert!(hidden("## Tasks<!-- comment: Split this? -->").contains(&"<!-- comment: Split this? -->"));
-        assert!(hidden("- [ ] Settings page<!-- comment: Add it. -->").contains(&"<!-- comment: Add it. -->"));
+        assert!(
+            hidden("## Tasks<!-- comment: Split this? -->")
+                .contains(&"<!-- comment: Split this? -->")
+        );
+        assert!(
+            hidden("- [ ] Settings page<!-- comment: Add it. -->")
+                .contains(&"<!-- comment: Add it. -->")
+        );
         assert!(!hidden("## Tasks<!-- comment: Split this? -->").contains(&"Tasks"));
         assert_eq!(hidden("> [!NOTE] hi"), ["> "]);
         // An inline checkbox is not a block marker: it stays.
@@ -3458,7 +3532,11 @@ mod tests {
                 "marker {line} line height {lh}"
             );
             // A marker line is a body block: its gap sits above the line, and it has no room of its own.
-            assert_eq!(h, lh + f32::from(BLOCK_GAP), "marker {line} has no room of its own");
+            assert_eq!(
+                h,
+                lh + f32::from(BLOCK_GAP),
+                "marker {line} has no room of its own"
+            );
         }
         // A changed text line is drawn at the body size.
         assert_eq!(metrics(cx, at[2]).2, body);
@@ -3549,7 +3627,15 @@ mod tests {
         let row = |cx: &mut gpui::VisualTestContext, line: usize| {
             editor.read_with(cx, |e, _| {
                 let r = e.rows.iter().find(|r| r.start == lines[line]).unwrap();
-                (r.kind, r.bars(), r.shaped.lead.as_ref().map(|l| (l.width, l.bullet.is_some())), r.lh)
+                (
+                    r.kind,
+                    r.bars(),
+                    r.shaped
+                        .lead
+                        .as_ref()
+                        .map(|l| (l.width, l.bullet.is_some())),
+                    r.lh,
+                )
             })
         };
         let shown = |cx: &mut gpui::VisualTestContext, line: usize| {
@@ -3569,16 +3655,28 @@ mod tests {
         assert_eq!(shown(cx, 4), ("item".to_string(), false));
         assert_eq!(shown(cx, 5), ("1. one".to_string(), false));
         let (kind, bars, _, title) = row(cx, 6);
-        assert_eq!((kind, bars, shown(cx, 6)), (Kind::Quote, 1, ("Head".to_string(), false)));
-        assert!(title > row(cx, 7).3, "a heading in a quote has the title's line height");
+        assert_eq!(
+            (kind, bars, shown(cx, 6)),
+            (Kind::Quote, 1, ("Head".to_string(), false))
+        );
+        assert!(
+            title > row(cx, 7).3,
+            "a heading in a quote has the title's line height"
+        );
         // A paragraph line after a quoted paragraph is lazy: it stays in the quote.
         assert_eq!(row(cx, 8).0, Kind::Quote);
-        assert_eq!((row(cx, 8).1, shown(cx, 8)), (1, ("lazy".to_string(), false)));
+        assert_eq!(
+            (row(cx, 8).1, shown(cx, 8)),
+            (1, ("lazy".to_string(), false))
+        );
         // A blank line ends the quote; the list in the alert keeps its bullet.
         assert_eq!(row(cx, 9).0, Kind::Para);
         assert_eq!(row(cx, 9).1, 0);
         let (kind, bars, lead, _) = row(cx, 13);
-        assert_eq!((kind, bars, lead.map(|(_, bullet)| bullet)), (Kind::Quote, 1, Some(true)));
+        assert_eq!(
+            (kind, bars, lead.map(|(_, bullet)| bullet)),
+            (Kind::Quote, 1, Some(true))
+        );
         assert_eq!(shown(cx, 13), ("in alert".to_string(), false));
         // The live line shows its source, markers and all, with its bars.
         editor.update(cx, |e, _| e.revealed = Some(lines[2]));

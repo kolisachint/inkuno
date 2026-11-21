@@ -35,16 +35,17 @@ fn the_left_sidebar_never_enters_versions_assistant_or_outline(cx: &mut TestAppC
         shell.update_in(cx, |s, window, cx| s.show_nav(mode, false, window, cx));
         settle(cx);
         assert!(!left(&shell, cx).contains(&mode), "{mode:?} on the left");
-        assert!(right(&shell, cx).contains(&mode), "{mode:?} not in the right dock");
+        assert!(
+            right(&shell, cx).contains(&mode),
+            "{mode:?} not in the right dock"
+        );
     }
     cx.dispatch_action(ShowVersions);
     settle(cx);
     assert_eq!(left(&shell, cx), [Mode::Tree]);
     assert!(right(&shell, cx).contains(&Mode::Versions));
     // Stacked with the shift-click path too: the left dock keeps the tree alone.
-    shell.update_in(cx, |s, window, cx| {
-        s.stack_tool(Mode::Versions, window, cx)
-    });
+    shell.update_in(cx, |s, window, cx| s.stack_tool(Mode::Versions, window, cx));
     settle(cx);
     assert_eq!(left(&shell, cx), [Mode::Tree]);
     let _ = fs::remove_dir_all(root);
@@ -89,7 +90,8 @@ fn the_scratch_section_lists_a_new_scratch_note(cx: &mut TestAppContext) {
     assert_eq!(names.len(), 1, "{names:?}");
     settle(cx);
     assert!(
-        cx.debug_bounds(leak(format!("nav-row-{}", names[0]))).is_some(),
+        cx.debug_bounds(leak(format!("nav-row-{}", names[0])))
+            .is_some(),
         "the scratch note is drawn in the sidebar"
     );
     // Folded, the section keeps its header and is no longer open. (GPUI's debug bounds keep the last
@@ -98,7 +100,10 @@ fn the_scratch_section_lists_a_new_scratch_note(cx: &mut TestAppContext) {
     shell.update_in(cx, |s, window, cx| s.hide_tool(Mode::Scratch, window, cx));
     settle(cx);
     assert!(shell.read_with(cx, |s, _| s.nav.folded.contains(&Mode::Scratch)));
-    assert!(cx.debug_bounds("tool-fold-scratch").is_some(), "the header stays");
+    assert!(
+        cx.debug_bounds("tool-fold-scratch").is_some(),
+        "the header stays"
+    );
     assert!(shell.read_with(cx, |s, _| s.docked(Mode::Scratch)));
     let _ = fs::remove_dir_all(root);
 }
@@ -183,7 +188,9 @@ fn quiet_today_row_opens_the_daily_note(cx: &mut TestAppContext) {
     cx.simulate_click(at, gpui::Modifiers::none());
     settle(cx);
     // The daily note is named after the date, as the empty page's Today card names it.
-    let path = shell.read_with(cx, |s, _| s.pane().path.clone()).expect("a note is open");
+    let path = shell
+        .read_with(cx, |s, _| s.pane().path.clone())
+        .expect("a note is open");
     let stem = path.file_stem().unwrap().to_string_lossy().into_owned();
     assert!(path.starts_with(&root), "{path:?}");
     assert_eq!(stem.len(), 10, "{stem}");
@@ -201,6 +208,8 @@ fn quiet_settings_row_opens_the_settings_tab(cx: &mut TestAppContext) {
     cx.simulate_click(at, gpui::Modifiers::none());
     settle(cx);
     // The Settings tab opens (or is found again), as the settings chord does.
-    assert!(shell.read_with(cx, |s, _| s.panes.iter().any(|pane| pane.settings.is_some())));
+    assert!(shell.read_with(cx, |s, _| {
+        s.panes.iter().any(|pane| pane.settings.is_some())
+    }));
     let _ = fs::remove_dir_all(root);
 }

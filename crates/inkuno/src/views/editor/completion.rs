@@ -28,18 +28,48 @@ pub(super) const COMMANDS: &[Command] = &[
     ("code", "Code block", "Bloc de code", "```", "\n\n```"),
     ("table", "Table", "Tableau", "", ""),
     ("note", "Panel: note", "Panneau : note", "> [!NOTE]\n> ", ""),
-    ("warning", "Panel: warning", "Panneau : attention", "> [!WARNING]\n> ", ""),
+    (
+        "warning",
+        "Panel: warning",
+        "Panneau : attention",
+        "> [!WARNING]\n> ",
+        "",
+    ),
     ("rule", "Divider", "Séparateur", "---\n", ""),
     ("link", "Link", "Lien", "[", "](https://)"),
     ("image", "Picture", "Image", "![[", ""),
     ("math", "Formula", "Formule", "$$\n", "\n$$"),
-    ("mermaid", "Mermaid diagram", "Diagramme Mermaid", "```mermaid\n", "\n```"),
+    (
+        "mermaid",
+        "Mermaid diagram",
+        "Diagramme Mermaid",
+        "```mermaid\n",
+        "\n```",
+    ),
     ("linknote", "Link to note", "Lien vers une note", "[[", ""),
     ("linkdate", "Link to date", "Lien vers une date", "@", ""),
     ("tip", "Panel: tip", "Panneau : astuce", "> [!TIP]\n> ", ""),
-    ("important", "Panel: important", "Panneau : important", "> [!IMPORTANT]\n> ", ""),
-    ("caution", "Panel: danger", "Panneau : danger", "> [!CAUTION]\n> ", ""),
-    ("meta", "Front matter: tags, aliases", "En-tête : tags, alias", "", ""),
+    (
+        "important",
+        "Panel: important",
+        "Panneau : important",
+        "> [!IMPORTANT]\n> ",
+        "",
+    ),
+    (
+        "caution",
+        "Panel: danger",
+        "Panneau : danger",
+        "> [!CAUTION]\n> ",
+        "",
+    ),
+    (
+        "meta",
+        "Front matter: tags, aliases",
+        "En-tête : tags, alias",
+        "",
+        "",
+    ),
 ];
 
 /// The Basic blocks of the slash menu's icon grid, in order.
@@ -169,10 +199,26 @@ impl Editor {
                 return div().into_any_element();
             };
             let mark = match *name {
-                "h1" => div().text_size(t.px(12.)).font_weight(FontWeight::SEMIBOLD).child("H1").into_any_element(),
-                "h2" => div().text_size(t.px(12.)).font_weight(FontWeight::SEMIBOLD).child("H2").into_any_element(),
-                "h3" => div().text_size(t.px(12.)).font_weight(FontWeight::SEMIBOLD).child("H3").into_any_element(),
-                _ => gpui::svg().path(icon(name)).size(t.px(18.)).text_color(t.soft).into_any_element(),
+                "h1" => div()
+                    .text_size(t.px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("H1")
+                    .into_any_element(),
+                "h2" => div()
+                    .text_size(t.px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("H2")
+                    .into_any_element(),
+                "h3" => div()
+                    .text_size(t.px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("H3")
+                    .into_any_element(),
+                _ => gpui::svg()
+                    .path(icon(name))
+                    .size(t.px(18.))
+                    .text_color(t.soft)
+                    .into_any_element(),
             };
             div()
                 .id(("slash-cell", i))
@@ -201,8 +247,20 @@ impl Editor {
                     };
                     (icon(name), tr(en, fr).to_string(), token)
                 }
-                Choice::Name(name) => (if self.images.contains_key(&name.to_lowercase()) { "image.svg" } else { "note.svg" }, name.to_string(), String::new()),
-                Choice::Date(en, fr, date) => ("clock.svg", tr(en, fr).to_string(), crate::lang::date_name(date)),
+                Choice::Name(name) => (
+                    if self.images.contains_key(&name.to_lowercase()) {
+                        "image.svg"
+                    } else {
+                        "note.svg"
+                    },
+                    name.to_string(),
+                    String::new(),
+                ),
+                Choice::Date(en, fr, date) => (
+                    "clock.svg",
+                    tr(en, fr).to_string(),
+                    crate::lang::date_name(date),
+                ),
             };
             div()
                 .id(("slash-row", i))
@@ -217,7 +275,13 @@ impl Editor {
                 .text_color(t.text)
                 .when(on, |d| d.bg(t.selection))
                 .when(!on, |d| d.hover(|s| s.bg(t.hover)))
-                .child(gpui::svg().path(icon_path).size(t.px(16.)).flex_none().text_color(t.soft))
+                .child(
+                    gpui::svg()
+                        .path(icon_path)
+                        .size(t.px(16.))
+                        .flex_none()
+                        .text_color(t.soft),
+                )
                 .child(div().flex_1().min_w_0().truncate().child(text))
                 .child(
                     div()
@@ -241,7 +305,14 @@ impl Editor {
         if bare && !basic.is_empty() {
             panel = panel
                 .child(heading("Basic"))
-                .child(div().flex().flex_wrap().px(t.px(5.)).pb(t.px(4.)).children(cells))
+                .child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .px(t.px(5.))
+                        .pb(t.px(4.))
+                        .children(cells),
+                )
                 .child(heading("More"));
         }
         Some(panel.children(rows))
@@ -362,9 +433,17 @@ impl Editor {
                 let bang = self.content[..open].ends_with('!');
                 let from = if bang { open - 1 } else { open };
                 // A `]]` the editor paired after the cursor goes with the link.
-                let end = c + if self.content[c..].starts_with("]]") { 2 } else { 0 };
+                let end = c + if self.content[c..].starts_with("]]") {
+                    2
+                } else {
+                    0
+                };
                 let text = if bang {
-                    let path = self.images.get(&name.to_lowercase()).cloned().unwrap_or_default();
+                    let path = self
+                        .images
+                        .get(&name.to_lowercase())
+                        .cloned()
+                        .unwrap_or_default();
                     format!("!{}", self.link_to(name, &path))
                 } else {
                     let path = self.note_path(name);
@@ -468,10 +547,17 @@ mod tests {
         }
         // Only the two pickers write a `[[` or `![[` trigger, and their choices are Markdown links.
         for c in COMMANDS.iter().filter(|c| c.3.contains("[[")) {
-            assert!(["linknote", "image"].contains(&c.0), "{} opens a wiki picker", c.0);
+            assert!(
+                ["linknote", "image"].contains(&c.0),
+                "{} opens a wiki picker",
+                c.0
+            );
         }
         assert!(bare.starts_with(&BASIC));
         assert_eq!(BASIC.len(), 8);
-        assert!(bare.iter().all(|name| !icon(name).is_empty() || ["h1", "h2", "h3"].contains(name)));
+        assert!(
+            bare.iter()
+                .all(|name| !icon(name).is_empty() || ["h1", "h2", "h3"].contains(name))
+        );
     }
 }

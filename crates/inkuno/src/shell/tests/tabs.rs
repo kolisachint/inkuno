@@ -398,7 +398,11 @@ fn tabs_are_text_that_stay_clear_of_the_window_buttons(cx: &mut TestAppContext) 
                 };
                 drawn += 1;
                 // Quiet's pills are 28 px high, the others 30 px (`render_tabs`).
-                let high = if shell.read_with(cx, |s, _| s.theme.quiet) { 28. } else { 30. };
+                let high = if shell.read_with(cx, |s, _| s.theme.quiet) {
+                    28.
+                } else {
+                    30.
+                };
                 assert!(
                     (f32::from(pill.size.height) - high * scale).abs() < 1.,
                     "{what}: tab {tab} is {pill:?} high"
@@ -825,9 +829,7 @@ fn pointing_at_the_hidden_strip_peeks_the_band(cx: &mut TestAppContext) {
     }
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     for name in ["Alpha", "Beta"] {
-        shell.update_in(cx, |s, window, cx| {
-            s.open_from_nav(&note(name), window, cx)
-        });
+        shell.update_in(cx, |s, window, cx| s.open_from_nav(&note(name), window, cx));
     }
     let peeked = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.band_peek);
     let none = gpui::Modifiers::none();
@@ -839,11 +841,17 @@ fn pointing_at_the_hidden_strip_peeks_the_band(cx: &mut TestAppContext) {
     shell.update(cx, |s, cx| s.toggle_title_bar(cx));
     settle(cx);
     assert!(cx.debug_bounds("band-peek-0").is_none());
-    let strip = cx.debug_bounds("band-strip-0").expect("the strip is drawn").center();
+    let strip = cx
+        .debug_bounds("band-strip-0")
+        .expect("the strip is drawn")
+        .center();
     cx.simulate_mouse_move(strip, None, none);
     settle(cx);
     assert!(peeked(cx));
-    assert!(cx.debug_bounds("band-peek-0").is_some(), "the band is drawn");
+    assert!(
+        cx.debug_bounds("band-peek-0").is_some(),
+        "the band is drawn"
+    );
 
     // Still on the band (its tabs, a little lower than the strip): it stays.
     let on_band = strip + gpui::point(gpui::px(0.), gpui::px(16.));

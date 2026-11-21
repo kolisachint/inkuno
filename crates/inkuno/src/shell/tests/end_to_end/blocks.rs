@@ -48,7 +48,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         (at("> [!WARNING]"), true, false, room + gap, 0.)
     );
     // A plain quote has the ends of its bar but no room: only its gap.
-    assert_eq!(of(&l, at("> simple")), (at("> simple"), true, true, gap, 0.));
+    assert_eq!(
+        of(&l, at("> simple")),
+        (at("> simple"), true, true, gap, 0.)
+    );
     // A ``` that closes nothing: one line.
     let orphan = note.rfind("```").unwrap();
     assert_eq!(of(&l, orphan), (orphan, true, true, room, room));

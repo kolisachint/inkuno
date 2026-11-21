@@ -2,8 +2,8 @@
 //! shows one view at a time, Ctrl+Alt+1 to 4 pick them, the band's toggle shows and hides the panel,
 //! and the Versions view saves a version. No process is started.
 
-use super::*;
 use super::versions as vers;
+use super::*;
 
 /// Lets the window draw what changed (bounds are read from the last frame), then the tasks run.
 fn settle(cx: &mut gpui::VisualTestContext) {
@@ -99,7 +99,10 @@ fn the_comments_view_lists_the_cards(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("secondary-alt-2");
     settle(cx);
     assert!(cx.debug_bounds("comment-0").is_some(), "the card is drawn");
-    assert!(cx.debug_bounds("comment-1").is_none(), "one comment, one card");
+    assert!(
+        cx.debug_bounds("comment-1").is_none(),
+        "one comment, one card"
+    );
     assert!(shell.read_with(cx, |s, _| s.comment_cards.len() == 1));
     let _ = fs::remove_dir_all(root);
 }
@@ -153,14 +156,26 @@ fn the_switcher_is_clear_of_the_window_buttons_at_any_panel_width(cx: &mut TestA
         cx.simulate_resize(size(px(900.), px(700.)));
         settle(cx);
         let dock = cx.debug_bounds("dock-right").expect("the panel is drawn");
-        let pill = cx.debug_bounds("window-pill").expect("the window buttons are drawn");
-        for id in ["switch-outline", "switch-comments", "switch-versions", "switch-assistant"] {
-            let b = cx.debug_bounds(id).unwrap_or_else(|| panic!("{width}: {id} absent"));
+        let pill = cx
+            .debug_bounds("window-pill")
+            .expect("the window buttons are drawn");
+        for id in [
+            "switch-outline",
+            "switch-comments",
+            "switch-versions",
+            "switch-assistant",
+        ] {
+            let b = cx
+                .debug_bounds(id)
+                .unwrap_or_else(|| panic!("{width}: {id} absent"));
             assert!(
                 b.left() >= dock.left() && b.right() <= dock.right(),
                 "{width}: {id} {b:?} outside {dock:?}"
             );
-            assert!(b.top() >= pill.bottom(), "{width}: {id} {b:?} under the window buttons {pill:?}");
+            assert!(
+                b.top() >= pill.bottom(),
+                "{width}: {id} {b:?} under the window buttons {pill:?}"
+            );
         }
     }
     let _ = fs::remove_dir_all(root);

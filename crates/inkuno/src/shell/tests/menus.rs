@@ -85,7 +85,11 @@ fn a_selection_shows_the_toolbar_and_bold_wraps_it(cx: &mut TestAppContext) {
 #[gpui::test]
 fn a_palette_match_shows_its_line(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "menus-palette");
-    fs::write(root.join("Zèbre.md"), "# Zèbre\n\nLa girafe mange des feuilles\n").unwrap();
+    fs::write(
+        root.join("Zèbre.md"),
+        "# Zèbre\n\nLa girafe mange des feuilles\n",
+    )
+    .unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     cx.run_until_parked();
     cx.simulate_keystrokes("secondary-p");
@@ -94,7 +98,10 @@ fn a_palette_match_shows_its_line(cx: &mut TestAppContext) {
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     let row = bounds_of(cx, "palette-item-0");
-    assert!(row.size.height > px(40.), "a snippet line under the name: {row:?}");
+    assert!(
+        row.size.height > px(40.),
+        "a snippet line under the name: {row:?}"
+    );
     assert!(cx.debug_bounds("palette-panel").is_some());
 }
 

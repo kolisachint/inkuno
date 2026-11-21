@@ -70,12 +70,16 @@ fn a_relative_link_opens_its_note_at_its_heading(cx: &mut TestAppContext) {
     assert_eq!(shown(&shell, cx), Some(root.join("Home.md")));
 
     // A note that is not in the vault is not created: a notice names it instead.
-    shell.update_in(cx, |s, window, cx| s.follow(&link("[y](Missing.md)"), window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.follow(&link("[y](Missing.md)"), window, cx)
+    });
     cx.run_until_parked();
     assert!(!root.join("Missing.md").exists());
     assert_eq!(shown(&shell, cx), Some(root.join("Home.md")));
     let noticed = shell.read_with(cx, |s, _| {
-        s.toasts.iter().any(|toast| toast.text.contains("Missing.md"))
+        s.toasts
+            .iter()
+            .any(|toast| toast.text.contains("Missing.md"))
     });
     assert!(noticed);
 }
@@ -92,7 +96,9 @@ fn a_renamed_note_takes_its_relative_links_along(cx: &mut TestAppContext) {
     let (from, to) = (root.join("sub/Target.md"), root.join("sub/Renamed.md"));
     fs::rename(&from, &to).unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
-    shell.update(cx, |s, cx| s.relink("Target", "Renamed", Some((&from, &to)), cx));
+    shell.update(cx, |s, cx| {
+        s.relink("Target", "Renamed", Some((&from, &to)), cx)
+    });
     cx.run_until_parked();
     let home = fs::read_to_string(root.join("Home.md")).unwrap();
     assert!(home.contains("[x](sub/Renamed.md#Second%20part)"), "{home}");

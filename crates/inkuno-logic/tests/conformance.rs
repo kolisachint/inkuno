@@ -26,8 +26,16 @@ struct Spec {
 }
 
 const SPECS: [Spec; 2] = [
-    Spec { label: "cm", file: "commonmark-0.31.2.json", gfm: false },
-    Spec { label: "gfm", file: "gfm-0.29-extensions.json", gfm: true },
+    Spec {
+        label: "cm",
+        file: "commonmark-0.31.2.json",
+        gfm: false,
+    },
+    Spec {
+        label: "gfm",
+        file: "gfm-0.29-extensions.json",
+        gfm: true,
+    },
 ];
 
 /// comrak with the five GFM extensions, or with none (CommonMark).
@@ -77,12 +85,16 @@ fn expected_blocks<'a>(root: &'a AstNode<'a>, lines: &[&str]) -> Vec<Kind> {
         let depth = node.ancestors().count();
         match &ast.value {
             NodeValue::BlockQuote => marks.push((depth, first, last, Kind::Quote, true)),
-            NodeValue::Item(list) => marks.push((depth, first, first, bullet(list.list_type), false)),
+            NodeValue::Item(list) => {
+                marks.push((depth, first, first, bullet(list.list_type), false))
+            }
             NodeValue::TaskItem(task) => {
                 let done = task.symbol.is_some_and(|c| c != ' ');
                 marks.push((depth, first, first, Kind::Task(done), false))
             }
-            NodeValue::Paragraph | NodeValue::HtmlBlock(_) => leaves.push((first, last, Kind::Para)),
+            NodeValue::Paragraph | NodeValue::HtmlBlock(_) => {
+                leaves.push((first, last, Kind::Para))
+            }
             NodeValue::Heading(h) => leaves.push((first, last, Kind::Heading(h.level))),
             NodeValue::ThematicBreak(_) => leaves.push((first, last, Kind::Rule)),
             NodeValue::Table(_) => leaves.push((first, last, Kind::Table)),
@@ -143,7 +155,10 @@ fn comrak_spans<'a>(root: &'a AstNode<'a>, starts: &[usize], len: usize) -> [Vec
         for d in node.descendants() {
             let ast = d.data.borrow();
             let sp = ast.sourcepos;
-            let (s, e) = (pos(sp.start.line, sp.start.column), pos(sp.end.line, sp.end.column) + 1);
+            let (s, e) = (
+                pos(sp.start.line, sp.start.column),
+                pos(sp.end.line, sp.end.column) + 1,
+            );
             match &ast.value {
                 NodeValue::Text(_) => out[k][s..e].fill(true),
                 NodeValue::Code(code) if e >= s + 2 * code.num_backticks => {
@@ -159,7 +174,12 @@ fn comrak_spans<'a>(root: &'a AstNode<'a>, starts: &[usize], len: usize) -> [Vec
 
 /// Inkuno's view of the same bytes, by line: the block kind and the styled bytes. Lines Inkuno reads
 /// as code or as a rule have no inline styles.
-fn ours_spans(lines: &[&str], starts: &[usize], blocks: &[md::Block], len: usize) -> [Vec<bool>; 5] {
+fn ours_spans(
+    lines: &[&str],
+    starts: &[usize],
+    blocks: &[md::Block],
+    len: usize,
+) -> [Vec<bool>; 5] {
     let mut out = [(); 5].map(|_| vec![false; len]);
     for (i, line) in lines.iter().enumerate() {
         let base = starts[i];
@@ -197,21 +217,35 @@ fn check(markdown: &str, gfm: bool) -> Result<(), String> {
     let mut errors = Vec::new();
     let expected = expected_blocks(root, &lines);
     for (i, line) in lines.iter().enumerate() {
-        let (ours, theirs) = (md::classify_in(line, md::open_at(&blocks, starts[i])).0, expected[i]);
+        let (ours, theirs) = (
+            md::classify_in(line, md::open_at(&blocks, starts[i])).0,
+            expected[i],
+        );
         if ours != theirs {
             errors.push(format!("line {}: ours {ours:?}, oracle {theirs:?}", i + 1));
         }
     }
-    let (ours, theirs) = (ours_spans(&lines, &starts, &blocks, markdown.len()), comrak_spans(root, &starts, markdown.len()));
+    let (ours, theirs) = (
+        ours_spans(&lines, &starts, &blocks, markdown.len()),
+        comrak_spans(root, &starts, markdown.len()),
+    );
     for k in 0..5 {
         for at in (0..markdown.len()).filter(|&at| ours[k][at] != theirs[k][at]) {
             let line = starts.partition_point(|&s| s <= at);
-            let side = if ours[k][at] { "styled, oracle plain" } else { "oracle content, not styled" };
+            let side = if ours[k][at] {
+                "styled, oracle plain"
+            } else {
+                "oracle content, not styled"
+            };
             errors.push(format!("line {line} {}: {side}", STYLES[k]));
         }
     }
     errors.truncate(3);
-    if errors.is_empty() { Ok(()) } else { Err(errors.join("; ")) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
 }
 
 #[test]
@@ -228,7 +262,10 @@ fn conformance() {
                 Ok(()) => score.0 += 1,
                 Err(why) => {
                     if std::env::var("INKUNO_SPEC_VERBOSE").is_ok() {
-                        println!("{} {}: {why}\n  {:?}", spec.label, case.number, case.markdown);
+                        println!(
+                            "{} {}: {why}\n  {:?}",
+                            spec.label, case.number, case.markdown
+                        );
                     }
                     failing.insert((spec.label, case.number), why);
                 }
@@ -246,7 +283,10 @@ fn conformance() {
     let path = format!("{DIR}/expected-failures.txt");
     let now: BTreeSet<(&str, u32)> = failing.keys().copied().collect();
     if std::env::var("INKUNO_SPEC_WRITE").as_deref() == Ok("1") {
-        let body: String = now.iter().map(|(label, n)| format!("{label}:{n}\n")).collect();
+        let body: String = now
+            .iter()
+            .map(|(label, n)| format!("{label}:{n}\n"))
+            .collect();
         std::fs::write(&path, body).unwrap();
         return;
     }

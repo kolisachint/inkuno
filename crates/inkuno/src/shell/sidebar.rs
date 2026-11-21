@@ -134,7 +134,12 @@ impl Shell {
     pub(super) fn toggle_right_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.right_open() {
             true => {
-                let shown = self.nav.right_shown.first().copied().unwrap_or(self.nav.right_view);
+                let shown = self
+                    .nav
+                    .right_shown
+                    .first()
+                    .copied()
+                    .unwrap_or(self.nav.right_view);
                 self.hide_tool(shown, window, cx)
             }
             false => {
@@ -347,9 +352,7 @@ impl Shell {
         let editor = self.pane().editor.focus_handle(cx);
         match self.nav.panel {
             // The left panel hidden, the keys stay with the right dock if it shows a tool (versions, outline).
-            Panel::Hidden
-                if self.nav.focus.contains_focused(window, cx) && !self.right_open() =>
-            {
+            Panel::Hidden if self.nav.focus.contains_focused(window, cx) && !self.right_open() => {
                 window.focus(&editor)
             }
             Panel::Full if editor.is_focused(window) => window.focus(&self.nav.focus),
@@ -444,9 +447,7 @@ impl Shell {
             | Mode::Scratch
             | Mode::Comments
             | Mode::Versions
-            | Mode::Assistant => {
-                Vec::new()
-            }
+            | Mode::Assistant => Vec::new(),
             Mode::Recent => self
                 .by_recency()
                 .into_iter()
@@ -1126,7 +1127,10 @@ impl Shell {
                                     ink
                                 },
                             ),
-                            None => (row.icon(), if current && !t.quiet { t.accent } else { soft }),
+                            None => (
+                                row.icon(),
+                                if current && !t.quiet { t.accent } else { soft },
+                            ),
                         };
                         let selector = format!("nav-icon-{}", row.name);
                         (given.is_some() || tree).then(|| {
@@ -1155,7 +1159,11 @@ impl Shell {
                                 _ => d.flex_none().whitespace_nowrap(),
                             })
                             .when(t.quiet, |d| {
-                                d.text_color(if selected { t.text } else { t.text.opacity(0.85) })
+                                d.text_color(if selected {
+                                    t.text
+                                } else {
+                                    t.text.opacity(0.85)
+                                })
                             })
                             .when(current && !t.quiet, |d| d.text_color(t.accent))
                             .when(quiet && !current, |d| d.text_color(t.soft))
@@ -1414,8 +1422,7 @@ impl Shell {
                     )
                     .child(self.sidebar_toggle(true, cx))
                     .when(!t.quiet, |d| {
-                        d.child(self.search_button(cx))
-                            .child(self.new_button(cx))
+                        d.child(self.search_button(cx)).child(self.new_button(cx))
                     })
             });
         // The foot: the actions that have no place in the band, one compact row at the
@@ -1423,35 +1430,35 @@ impl Shell {
         let foot = if t.quiet {
             self.quiet_foot(band_shown, cx).into_any_element()
         } else {
-          div()
-            .id("sidebar-foot")
-            .debug_selector(|| "sidebar-foot".into())
-            .flex_none()
-            .w_full()
-            .h(t.px(BAND))
-            .flex()
-            .items_center()
-            .gap_1()
-            .px_2()
-            .overflow_hidden()
-            .border_t_1()
-            .border_color(t.border)
-            .child(commands)
-            .child(tree)
-            .when(!band_shown, |d| {
-                d.child(self.sidebar_toggle(true, cx))
-                    .child(self.search_button(cx))
-                    .child(self.new_button(cx))
-            })
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .when(!native, |d| d.map(crate::ui::widgets::drag_window)),
-            )
-            .child(self.titlebar_button(cx))
-            .into_any_element()
+            div()
+                .id("sidebar-foot")
+                .debug_selector(|| "sidebar-foot".into())
+                .flex_none()
+                .w_full()
+                .h(t.px(BAND))
+                .flex()
+                .items_center()
+                .gap_1()
+                .px_2()
+                .overflow_hidden()
+                .border_t_1()
+                .border_color(t.border)
+                .child(commands)
+                .child(tree)
+                .when(!band_shown, |d| {
+                    d.child(self.sidebar_toggle(true, cx))
+                        .child(self.search_button(cx))
+                        .child(self.new_button(cx))
+                })
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .h_full()
+                        .when(!native, |d| d.map(crate::ui::widgets::drag_window)),
+                )
+                .child(self.titlebar_button(cx))
+                .into_any_element()
         };
         let wrapper = div().h_full().flex().min_w_0();
         if !unfolded {
@@ -1480,7 +1487,11 @@ impl Shell {
                         .w(DIVIDER)
                         .h_full()
                         // Quiet: no line, the note's shadow is the edge.
-                        .bg(if t.quiet { gpui::transparent_black() } else { t.border })
+                        .bg(if t.quiet {
+                            gpui::transparent_black()
+                        } else {
+                            t.border
+                        })
                         .when(self.nav.dragging, |d| d.bg(t.accent))
                         .group_hover("nav-divider", |s| s.bg(t.accent)),
                 )
@@ -1591,7 +1602,9 @@ impl Shell {
                             crate::ui::keys::of(cx, &crate::actions::NewNote),
                             t,
                         ))
-                        .on_click(cx.listener(|this, _, window, cx| this.new_note_here(window, cx))),
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.new_note_here(window, cx)),
+                        ),
                 ),
             );
         div()
@@ -1896,7 +1909,9 @@ impl Shell {
         // panel) or none (the right dock, whose divider with the note is the line).
         div()
             .bg(if !right && t.quiet { t.ground } else { t.bg })
-            .when(!right && !t.quiet, |d| d.border_l_1().border_color(t.border))
+            .when(!right && !t.quiet, |d| {
+                d.border_l_1().border_color(t.border)
+            })
             // The right band hidden (title bar off): what is left of it is its padding.
             .when(right && !self.band_shown(), |d| d.pt(t.px(BAND_HIDDEN)))
             .overflow_hidden()
@@ -1964,7 +1979,10 @@ impl Shell {
                 .cursor_pointer()
                 .hover(|s| s.bg(t.hover))
                 .tooltip(tip(
-                    tr("Save a version of the note", "Enregistrer une version de la note"),
+                    tr(
+                        "Save a version of the note",
+                        "Enregistrer une version de la note",
+                    ),
                     crate::ui::keys::of(cx, &crate::actions::SaveRevision),
                     t,
                 ))
@@ -2083,11 +2101,16 @@ impl Shell {
                     .debug_selector(|| "right-panel-toggle".into())
                     .when(shown, |d| d.bg(t.selection))
                     .tooltip(tip(
-                        tr("Right panel: show or hide it", "Panneau de droite : afficher ou masquer"),
+                        tr(
+                            "Right panel: show or hide it",
+                            "Panneau de droite : afficher ou masquer",
+                        ),
                         crate::ui::keys::of(cx, &ToggleRightPanel),
                         t,
                     ))
-                    .on_click(cx.listener(|this, _, window, cx| this.toggle_right_panel(window, cx)))
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.toggle_right_panel(window, cx)),
+                    )
                     .children(needs.then(|| {
                         div()
                             .debug_selector(|| "switch-dot".into())
@@ -2141,7 +2164,11 @@ impl Shell {
         let switcher = switch.then(|| self.switcher(cx));
         let header = div()
             .flex_none()
-            .h(t.px(if switch && self.band_shown() { BAND } else { 32. }))
+            .h(t.px(if switch && self.band_shown() {
+                BAND
+            } else {
+                32.
+            }))
             .pl(t.px(8.))
             // Over the whole window, the window buttons float over the right end of the header.
             .pr(if (full || right) && first && !self.nav.native_bar {
@@ -2154,7 +2181,9 @@ impl Shell {
             .overflow_hidden()
             .flex()
             .items_center()
-            .when(stacked && !t.quiet, |d| d.border_t_1().border_color(t.border))
+            .when(stacked && !t.quiet, |d| {
+                d.border_t_1().border_color(t.border)
+            })
             // Stacked, a tool folds down to its header.
             .when(stacked && !t.quiet, |d| {
                 d.child(
@@ -2519,16 +2548,20 @@ impl Shell {
                 Mode::Outline => d.child(self.render_outline(cx)),
                 Mode::Assistant => d.child(self.render_assistant(window, cx)),
                 Mode::Comments => d.child(self.render_comments(cx)),
-                _ => d.when(mode == Mode::Versions, |d| d.child(self.save_version_row(cx))).child(
-                    div()
-                        .flex_1()
-                        .min_h_0()
-                        .relative()
-                        .flex()
-                        .flex_col()
-                        .child(list)
-                        .children(nothing),
-                ),
+                _ => d
+                    .when(mode == Mode::Versions, |d| {
+                        d.child(self.save_version_row(cx))
+                    })
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .relative()
+                            .flex()
+                            .flex_col()
+                            .child(list)
+                            .children(nothing),
+                    ),
             })
     }
 }

@@ -158,9 +158,7 @@ fn segmented(
                             d.text_color(t.soft).hover(|s| s.text_color(t.text))
                         })
                         .child(label)
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            pick(this, window, cx)
-                        }))
+                        .on_click(cx.listener(move |this, _, window, cx| pick(this, window, cx)))
                 }),
         )
 }
@@ -212,7 +210,13 @@ fn button(t: Theme, id: &str, label: String, pick: Pick, cx: &mut Context<Shell>
 }
 
 /// A link of the About page: an icon and a label, opened in the browser.
-fn link(t: Theme, id: &'static str, icon: &'static str, label: &str, url: &'static str) -> Stateful<Div> {
+fn link(
+    t: Theme,
+    id: &'static str,
+    icon: &'static str,
+    label: &str,
+    url: &'static str,
+) -> Stateful<Div> {
     div()
         .id(id)
         .debug_selector(move || id.to_string())
@@ -263,34 +267,42 @@ impl Shell {
                 let (author, assistant) = (self.prefs.author.clone(), self.prefs.assistant.clone());
                 let author = cx.new(|cx| Field::new(&author, theme, cx));
                 let assistant = cx.new(|cx| Field::new(&assistant, theme, cx));
-                cx.subscribe_in(&author, window, |this, author, event: &FieldEvent, _, cx| {
-                    if let FieldEvent::Changed = event {
-                        let text = author.read(cx).line.text.clone();
-                        this.prefs.author = logic::revision::clean_author(&text);
-                        vault::save_settings(&this.prefs.to_text());
-                    }
-                })
-                .detach();
-                cx.subscribe_in(&assistant, window, |this, assistant, event: &FieldEvent, _, cx| {
-                    match event {
-                        FieldEvent::Done => {
-                            let text = assistant.read(cx).line.text.trim().to_string();
-                            let changed = text != this.prefs.assistant;
-                            this.prefs.assistant = text;
+                cx.subscribe_in(
+                    &author,
+                    window,
+                    |this, author, event: &FieldEvent, _, cx| {
+                        if let FieldEvent::Changed = event {
+                            let text = author.read(cx).line.text.clone();
+                            this.prefs.author = logic::revision::clean_author(&text);
                             vault::save_settings(&this.prefs.to_text());
-                            // Another command: the agent that runs is stopped, the next prompt starts the new one.
-                            if changed {
-                                this.assistant_halt(cx);
+                        }
+                    },
+                )
+                .detach();
+                cx.subscribe_in(
+                    &assistant,
+                    window,
+                    |this, assistant, event: &FieldEvent, _, cx| {
+                        match event {
+                            FieldEvent::Done => {
+                                let text = assistant.read(cx).line.text.trim().to_string();
+                                let changed = text != this.prefs.assistant;
+                                this.prefs.assistant = text;
+                                vault::save_settings(&this.prefs.to_text());
+                                // Another command: the agent that runs is stopped, the next prompt starts the new one.
+                                if changed {
+                                    this.assistant_halt(cx);
+                                }
+                                this.assistant_check(cx);
                             }
-                            this.assistant_check(cx);
+                            FieldEvent::Cancel => {
+                                let saved = this.prefs.assistant.clone();
+                                assistant.update(cx, |field, cx| field.set(&saved, cx));
+                            }
+                            FieldEvent::Changed => {}
                         }
-                        FieldEvent::Cancel => {
-                            let saved = this.prefs.assistant.clone();
-                            assistant.update(cx, |field, cx| field.set(&saved, cx));
-                        }
-                        FieldEvent::Changed => {}
-                    }
-                })
+                    },
+                )
                 .detach();
                 let page = SettingsTab {
                     section,
@@ -302,7 +314,9 @@ impl Shell {
                 let tab = self.active;
                 self.panes[tab].settings = Some(page);
                 // Its own editor is never shown, and read-only: no text can reach it, even by a stray focus.
-                self.panes[tab].editor.update(cx, |editor, _| editor.set_readonly(true));
+                self.panes[tab]
+                    .editor
+                    .update(cx, |editor, _| editor.set_readonly(true));
                 tab
             }
         };
@@ -338,7 +352,12 @@ impl Shell {
     }
 
     /// The mini-nav: another page of the Settings tab.
-    pub(super) fn set_section(&mut self, section: Section, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn set_section(
+        &mut self,
+        section: Section,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(page) = self.pane_mut().settings.as_mut() {
             page.section = section;
         }
@@ -381,22 +400,26 @@ impl Shell {
         let find = cx.new(|cx| Field::new("", theme, cx));
         cx.observe(&find, |_, _, cx| cx.notify()).detach();
         // Enter on the picked row: its keys are awaited. Escape clears the field.
-        cx.subscribe_in(&find, window, |this, find, event: &FieldEvent, _, cx| match event {
-            FieldEvent::Done => {
-                if let Some(action) = this
-                    .help
-                    .sel
-                    .filter(|sel| this.help_actions(cx).contains(sel))
-                {
-                    this.key_edit(action, cx);
+        cx.subscribe_in(
+            &find,
+            window,
+            |this, find, event: &FieldEvent, _, cx| match event {
+                FieldEvent::Done => {
+                    if let Some(action) = this
+                        .help
+                        .sel
+                        .filter(|sel| this.help_actions(cx).contains(sel))
+                    {
+                        this.key_edit(action, cx);
+                    }
                 }
-            }
-            FieldEvent::Cancel => find.update(cx, |find, cx| {
-                find.line = line::Line::default();
-                cx.notify();
-            }),
-            FieldEvent::Changed => {}
-        })
+                FieldEvent::Cancel => find.update(cx, |find, cx| {
+                    find.line = line::Line::default();
+                    cx.notify();
+                }),
+                FieldEvent::Changed => {}
+            },
+        )
         .detach();
         self.help.find = Some(find);
     }
@@ -440,11 +463,14 @@ impl Shell {
                     .text_size(t.px(13.))
                     .cursor_pointer()
                     .when(on, |d| d.bg(t.hover).text_color(t.text))
-                    .when(!on, |d| d.text_color(t.soft).hover(|s| s.bg(t.hover).text_color(t.text)))
+                    .when(!on, |d| {
+                        d.text_color(t.soft)
+                            .hover(|s| s.bg(t.hover).text_color(t.text))
+                    })
                     .child(item.label())
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.set_section(item, window, cx)
-                    }))
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.set_section(item, window, cx)),
+                    )
             }));
         let body = match section {
             Section::Shortcuts => div()
@@ -504,7 +530,11 @@ impl Shell {
             t,
             "theme",
             vec![
-                (tr("System", "Système").into(), p.theme.is_empty(), pick(|p| p.theme.clear())),
+                (
+                    tr("System", "Système").into(),
+                    p.theme.is_empty(),
+                    pick(|p| p.theme.clear()),
+                ),
                 (
                     tr("Light", "Clair").into(),
                     p.theme == "Quiet Light",
@@ -522,18 +552,22 @@ impl Shell {
             t,
             "theme-more",
             tr("More themes…", "Plus de thèmes…").into(),
-            Box::new(|this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
-                this.choose_setting(Setting::Theme, window, cx)
-            }),
+            Box::new(
+                |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.choose_setting(Setting::Theme, window, cx)
+                },
+            ),
             cx,
         );
         let size = [14., 15., 16., 18.].map(|size: f32| {
             (
                 format!("{size}"),
                 (p.size - size).abs() < 0.5,
-                Box::new(move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
-                    this.edit_prefs(window, cx, |p| p.size = size)
-                }) as Pick,
+                Box::new(
+                    move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                        this.edit_prefs(window, cx, |p| p.size = size)
+                    },
+                ) as Pick,
             )
         });
         let size = segmented(t, "size", size.into(), cx);
@@ -550,65 +584,84 @@ impl Shell {
             t,
             "motion",
             motion,
-            Box::new(move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
-                this.edit_prefs(window, cx, |p| p.motion = (if motion { "off" } else { "on" }).into())
-            }),
+            Box::new(
+                move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.edit_prefs(window, cx, |p| {
+                        p.motion = (if motion { "off" } else { "on" }).into()
+                    })
+                },
+            ),
             cx,
         );
-        vec![
-            card(
-                t,
-                vec![
-                    row(
-                        t,
-                        tr("Theme", "Thème"),
-                        tr("Quiet follows the system unless a light or dark theme is chosen", "Quiet suit le système sauf si un thème clair ou sombre est choisi"),
-                        div().flex().gap_2().child(theme).child(more),
+        vec![card(
+            t,
+            vec![
+                row(
+                    t,
+                    tr("Theme", "Thème"),
+                    tr(
+                        "Quiet follows the system unless a light or dark theme is chosen",
+                        "Quiet suit le système sauf si un thème clair ou sombre est choisi",
                     ),
-                    row(
-                        t,
-                        tr("Text size", "Taille du texte"),
-                        tr("Also ⌘+ and ⌘−", "Aussi Ctrl+ et Ctrl−"),
-                        size,
+                    div().flex().gap_2().child(theme).child(more),
+                ),
+                row(
+                    t,
+                    tr("Text size", "Taille du texte"),
+                    tr("Also ⌘+ and ⌘−", "Aussi Ctrl+ et Ctrl−"),
+                    size,
+                ),
+                row(
+                    t,
+                    tr("Page width", "Largeur de page"),
+                    tr(
+                        "The column the text is set in",
+                        "La colonne où le texte est composé",
                     ),
-                    row(
-                        t,
-                        tr("Page width", "Largeur de page"),
-                        tr("The column the text is set in", "La colonne où le texte est composé"),
-                        width,
+                    width,
+                ),
+                row(
+                    t,
+                    tr("Animations", "Animations"),
+                    tr(
+                        "Short fades when a panel or a folder opens",
+                        "De courts fondus à l'ouverture d'un panneau ou d'un dossier",
                     ),
-                    row(
-                        t,
-                        tr("Animations", "Animations"),
-                        tr("Short fades when a panel or a folder opens", "De courts fondus à l'ouverture d'un panneau ou d'un dossier"),
-                        animations,
-                    ),
-                ],
-            ),
-        ]
+                    animations,
+                ),
+            ],
+        )]
     }
 
     fn editor_page(&self, page: &SettingsTab, cx: &mut Context<Self>) -> Vec<Div> {
         let (t, p) = (self.theme, &self.prefs);
         let named = |name: &str, fallback: &'static str| {
-            if name.is_empty() { fallback.to_string() } else { name.to_string() }
+            if name.is_empty() {
+                fallback.to_string()
+            } else {
+                name.to_string()
+            }
         };
         let font = button(
             t,
             "font",
             named(&p.font, tr("Default", "Par défaut")),
-            Box::new(|this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
-                this.choose_setting(Setting::Font, window, cx)
-            }),
+            Box::new(
+                |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.choose_setting(Setting::Font, window, cx)
+                },
+            ),
             cx,
         );
         let mono_font = button(
             t,
             "mono",
             named(&p.mono, tr("Default", "Par défaut")),
-            Box::new(|this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
-                this.choose_setting(Setting::Mono, window, cx)
-            }),
+            Box::new(
+                |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.choose_setting(Setting::Mono, window, cx)
+                },
+            ),
             cx,
         );
         // Short labels: the row's note says where a wide table goes.
@@ -629,9 +682,13 @@ impl Shell {
             t,
             "bar",
             bar,
-            Box::new(move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
-                this.edit_prefs(window, cx, |p| p.bar = (if bar { "off" } else { "on" }).into())
-            }),
+            Box::new(
+                move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.edit_prefs(window, cx, |p| {
+                        p.bar = (if bar { "off" } else { "on" }).into()
+                    })
+                },
+            ),
             cx,
         );
         let field = |field: &Entity<Field>| {
@@ -662,19 +719,28 @@ impl Shell {
                     row(
                         t,
                         tr("Code font", "Police du code"),
-                        tr("Code blocks and inline code", "Blocs de code et code en ligne"),
+                        tr(
+                            "Code blocks and inline code",
+                            "Blocs de code et code en ligne",
+                        ),
                         mono_font,
                     ),
                     row(
                         t,
                         tr("Wide tables", "Grands tableaux"),
-                        tr("Where a table wider than the text goes", "Où va un tableau plus large que le texte"),
+                        tr(
+                            "Where a table wider than the text goes",
+                            "Où va un tableau plus large que le texte",
+                        ),
                         wide,
                     ),
                     row(
                         t,
                         tr("Formatting bar", "Barre de mise en forme"),
-                        tr("Shown above a selection", "Affichée au-dessus d'une sélection"),
+                        tr(
+                            "Shown above a selection",
+                            "Affichée au-dessus d'une sélection",
+                        ),
                         bar,
                     ),
                 ],
@@ -685,13 +751,19 @@ impl Shell {
                     row(
                         t,
                         tr("Revision author", "Auteur des versions"),
-                        tr("Empty: INKUNO_AUTHOR, else your user name", "Vide : INKUNO_AUTHOR, sinon votre nom d'utilisateur"),
+                        tr(
+                            "Empty: INKUNO_AUTHOR, else your user name",
+                            "Vide : INKUNO_AUTHOR, sinon votre nom d'utilisateur",
+                        ),
                         field(&page.author),
                     ),
                     row(
                         t,
                         tr("Assistant command", "Commande de l'assistant"),
-                        tr("Enter saves. Empty: hoocode", "Entrée enregistre. Vide : hoocode"),
+                        tr(
+                            "Enter saves. Empty: hoocode",
+                            "Entrée enregistre. Vide : hoocode",
+                        ),
                         field(&page.assistant),
                     ),
                 ],
@@ -723,9 +795,11 @@ impl Shell {
                         t,
                         "vault",
                         tr("Change…", "Changer…").into(),
-                        Box::new(|this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
-                            this.choose_vault(window, cx)
-                        }),
+                        Box::new(
+                            |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                                this.choose_vault(window, cx)
+                            },
+                        ),
                         cx,
                     ),
                 ),
@@ -735,12 +809,7 @@ impl Shell {
                     &scratch,
                     div(),
                 ),
-                row(
-                    t,
-                    tr("Trash", "Corbeille"),
-                    &trash,
-                    div(),
-                ),
+                row(t, tr("Trash", "Corbeille"), &trash, div()),
             ],
         )]
     }

@@ -1,7 +1,10 @@
 //! What a `[[link]]` means in a vault: which note it names, which notes point back at one,
 //! and when a rename must leave the links alone. Pure: the shell does the writing.
 
-use std::{ops::Range, path::{Path, PathBuf}};
+use std::{
+    ops::Range,
+    path::{Path, PathBuf},
+};
 
 use super::markdown::{self, Link};
 use super::note::Note;
@@ -96,17 +99,24 @@ pub fn note_at(root: &Path, from: &Path, address: &str) -> PathBuf {
 /// are written `%20`.
 fn address_of(root: &Path, from: &Path, target: &Path, absolute: bool) -> String {
     let names = |p: &Path| -> Vec<String> {
-        p.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect()
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect()
     };
     let address = if absolute {
-        format!("/{}", names(target.strip_prefix(root).unwrap_or(target)).join("/"))
+        format!(
+            "/{}",
+            names(target.strip_prefix(root).unwrap_or(target)).join("/")
+        )
     } else {
         // Up from the folder of `from` to the common folder, then down to `target`.
         let dir = names(from.parent().unwrap_or(root));
         let there = names(target);
         let common = dir.iter().zip(&there).take_while(|(a, b)| a == b).count();
         let ups = vec![".."; dir.len() - common];
-        [ups, there[common..].iter().map(String::as_str).collect()].concat().join("/")
+        [ups, there[common..].iter().map(String::as_str).collect()]
+            .concat()
+            .join("/")
     };
     address.replace(' ', "%20")
 }
@@ -122,20 +132,33 @@ pub fn link_to(title: &str, root: &Path, folder: &Path, target: &Path) -> String
 /// name `new` instead: a note moved or renamed. The address keeps its form, `/` or relative, and its
 /// anchor. `None` if no link changes.
 // ponytail: only Markdown links are rewritten here; the `[[name]]` links follow `markdown::relink`.
-pub fn relink_file(text: &str, root: &Path, linker: &Path, old: &Path, new: &Path) -> Option<String> {
+pub fn relink_file(
+    text: &str,
+    root: &Path,
+    linker: &Path,
+    old: &Path,
+    new: &Path,
+) -> Option<String> {
     let meta = markdown::front_matter(text);
     let mut edits: Vec<(Range<usize>, String)> = Vec::new();
     for (at, line) in markdown::prose_lines(&text[meta..]) {
         for (r, link) in markdown::links(line) {
-            let Link::Note { path, anchor } = link else { continue };
+            let Link::Note { path, anchor } = link else {
+                continue;
+            };
             if note_at(root, linker, &path) != old {
                 continue;
             }
-            let Some((_, url)) = markdown::web_link(&line[r.clone()]) else { continue };
+            let Some((_, url)) = markdown::web_link(&line[r.clone()]) else {
+                continue;
+            };
             let address = address_of(root, linker, new, path.starts_with('/'));
             let anchor = anchor.map_or(String::new(), |a| format!("#{}", a.replace(' ', "%20")));
             let whole = meta + at + r.start;
-            edits.push((whole + url.start..whole + url.end, format!("{address}{anchor}")));
+            edits.push((
+                whole + url.start..whole + url.end,
+                format!("{address}{anchor}"),
+            ));
         }
     }
     if edits.is_empty() {
@@ -694,7 +717,10 @@ mod embed_tests {
     #[test]
     fn a_picker_link_is_relative_to_the_folder_of_the_note() {
         let root = Path::new("/v");
-        assert_eq!(link_to("Plan", root, root, &root.join("Plan.md")), "[Plan](Plan.md)");
+        assert_eq!(
+            link_to("Plan", root, root, &root.join("Plan.md")),
+            "[Plan](Plan.md)"
+        );
         assert_eq!(
             link_to("Plan", root, &root.join("Idées"), &root.join("Plan.md")),
             "[Plan](../Plan.md)"
@@ -710,17 +736,29 @@ mod embed_tests {
         let root = Path::new("/v");
         let from = Path::new("/v/sous/Lien.md");
         assert_eq!(note_at(root, from, "Note.md"), Path::new("/v/sous/Note.md"));
-        assert_eq!(note_at(root, from, "../Note%20A.md"), Path::new("/v/Note%20A.md"));
-        assert_eq!(note_at(root, from, "./a/../b.md"), Path::new("/v/sous/b.md"));
+        assert_eq!(
+            note_at(root, from, "../Note%20A.md"),
+            Path::new("/v/Note%20A.md")
+        );
+        assert_eq!(
+            note_at(root, from, "./a/../b.md"),
+            Path::new("/v/sous/b.md")
+        );
         assert_eq!(note_at(root, from, "/x/y"), Path::new("/v/x/y.md"));
-        assert_eq!(note_at(root, from, "Note.v2"), Path::new("/v/sous/Note.v2.md"));
+        assert_eq!(
+            note_at(root, from, "Note.v2"),
+            Path::new("/v/sous/Note.v2.md")
+        );
         // A rename in the same folder keeps the form of each address, its anchor too.
         let (old, new) = (Path::new("/v/sous/Vieux.md"), Path::new("/v/sous/Neuf.md"));
         let text = "# A\n[x](Vieux.md) [y](/sous/Vieux.md#Titre) [z](../sous/Vieux.md) [w](Autre.md)\n\
                     ```\n[c](Vieux.md)\n```\n";
         let want = "# A\n[x](Neuf.md) [y](/sous/Neuf.md#Titre) [z](Neuf.md) [w](Autre.md)\n\
                     ```\n[c](Vieux.md)\n```\n";
-        assert_eq!(relink_file(text, root, from, old, new).as_deref(), Some(want));
+        assert_eq!(
+            relink_file(text, root, from, old, new).as_deref(),
+            Some(want)
+        );
         // A move to another folder: the address is written from the linking note's folder.
         let moved = Path::new("/v/Dossier/Neuf.md");
         let got = relink_file("[x](Vieux.md) [y](Vieux.md#a%20b)", root, from, old, moved).unwrap();

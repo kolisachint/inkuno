@@ -246,7 +246,11 @@ impl Shell {
         let labels = self.tab_labels(group, cx);
         // Sidebar hidden: the bar holds the sidebar toggle after the lights (`strip_edge`); a peeked
         // band takes the same edge while the title bar is hidden (`band_edge`).
-        let edge = if peek { self.band_edge(group) } else { self.strip_edge(group) };
+        let edge = if peek {
+            self.band_edge(group)
+        } else {
+            self.strip_edge(group)
+        };
         let toggle = (edge > px(0.)).then(|| {
             div()
                 .absolute()
@@ -417,9 +421,17 @@ impl Shell {
         let pad = edge;
         Some(
             div()
-                .id(if peek { ("tabs-peek", group) } else { ("tabs", group) })
+                .id(if peek {
+                    ("tabs-peek", group)
+                } else {
+                    ("tabs", group)
+                })
                 .debug_selector(move || {
-                    if peek { format!("tabs-peek-{group}") } else { format!("tabs-{group}") }
+                    if peek {
+                        format!("tabs-peek-{group}")
+                    } else {
+                        format!("tabs-{group}")
+                    }
                 })
                 .when(!peek, |d| d.relative())
                 .flex_none()

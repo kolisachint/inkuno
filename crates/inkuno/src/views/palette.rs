@@ -984,7 +984,10 @@ impl Render for Palette {
             } else {
                 vec![
                     hint(key(&Confirm), tr("open", "ouvrir")),
-                    hint(key(&ConfirmAside), tr("in the other pane", "dans l'autre volet")),
+                    hint(
+                        key(&ConfirmAside),
+                        tr("in the other pane", "dans l'autre volet"),
+                    ),
                     hint(">".into(), tr("commands", "commandes")),
                 ]
             };

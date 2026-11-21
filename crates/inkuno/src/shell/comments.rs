@@ -47,7 +47,10 @@ impl Shell {
                         .debug_selector(|| "comments-empty".into())
                         .text_size(t.px(13.))
                         .text_color(t.soft)
-                        .child(tr("This note has no comments", "Cette note n'a pas de commentaires")),
+                        .child(tr(
+                            "This note has no comments",
+                            "Cette note n'a pas de commentaires",
+                        )),
                 )
                 .into_any_element();
         }
@@ -142,33 +145,30 @@ impl Shell {
                     .child(said),
             )
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .child(
-                        div()
-                            .id(("resolve", i))
-                            .debug_selector(move || format!("resolve-{i}"))
-                            .h(t.px(24.))
-                            .px(t.px(9.))
-                            .flex()
-                            .items_center()
-                            .rounded(t.small())
-                            .border_1()
-                            .border_color(t.border)
-                            .text_size(t.px(12.))
-                            .text_color(t.text)
-                            .cursor_pointer()
-                            .hover(|s| s.bg(t.hover))
-                            .child(tr("Resolve", "Résoudre"))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                this.pane()
-                                    .editor
-                                    .update(cx, |e, cx| e.resolve_comment(at, cx));
-                                window.focus(&this.pane().editor.focus_handle(cx));
-                            })),
-                    ),
+                div().flex().items_center().child(
+                    div()
+                        .id(("resolve", i))
+                        .debug_selector(move || format!("resolve-{i}"))
+                        .h(t.px(24.))
+                        .px(t.px(9.))
+                        .flex()
+                        .items_center()
+                        .rounded(t.small())
+                        .border_1()
+                        .border_color(t.border)
+                        .text_size(t.px(12.))
+                        .text_color(t.text)
+                        .cursor_pointer()
+                        .hover(|s| s.bg(t.hover))
+                        .child(tr("Resolve", "Résoudre"))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.pane()
+                                .editor
+                                .update(cx, |e, cx| e.resolve_comment(at, cx));
+                            window.focus(&this.pane().editor.focus_handle(cx));
+                        })),
+                ),
             )
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.comment_go(i, inside, passage.clone(), window, cx)
@@ -195,9 +195,7 @@ impl Shell {
         let flash = passage.clone();
         cx.spawn(async move |_, cx| {
             cx.background_executor().timer(FLASH).await;
-            editor
-                .update(cx, |e, cx| e.flash_end(flash, back, cx))
-                .ok();
+            editor.update(cx, |e, cx| e.flash_end(flash, back, cx)).ok();
         })
         .detach();
         window.focus(&self.pane().editor.focus_handle(cx));
@@ -205,7 +203,12 @@ impl Shell {
     }
 
     /// A click on a commented passage in the note (`EditorEvent::CommentAt`): the Comments view opens on its card.
-    pub(super) fn comment_clicked(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn comment_clicked(
+        &mut self,
+        at: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.comment_focus = self.comment_cards.iter().position(|c| c.at == at);
         self.show_view(Mode::Comments, window, cx);
         if let Some(i) = self.comment_focus {

@@ -14,7 +14,9 @@ fn ctrl_comma_opens_one_settings_tab_and_again_focuses_it(cx: &mut TestAppContex
     });
     cx.run_until_parked();
     let tabs = |cx: &mut gpui::VisualTestContext| {
-        shell.read_with(cx, |s, _| s.panes.iter().filter(|p| p.settings.is_some()).count())
+        shell.read_with(cx, |s, _| {
+            s.panes.iter().filter(|p| p.settings.is_some()).count()
+        })
     };
     cx.simulate_keystrokes("secondary-,");
     cx.run_until_parked();
@@ -61,22 +63,34 @@ fn text_size_and_theme_on_the_settings_page_write_the_preferences(cx: &mut TestA
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
-    assert_eq!(shell.read_with(cx, |s, _| (s.prefs.size, s.theme.size)), (16., 16.));
+    assert_eq!(
+        shell.read_with(cx, |s, _| (s.prefs.size, s.theme.size)),
+        (16., 16.)
+    );
     assert!(vault::load_settings().contains("size=16\n"));
     // Theme: Dark is Quiet Dark, System goes back to the default.
-    let at = cx.debug_bounds("theme-2").expect("the Dark choice").center();
+    let at = cx
+        .debug_bounds("theme-2")
+        .expect("the Dark choice")
+        .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
     assert_eq!(
         shell.read_with(cx, |s, _| (s.prefs.theme.clone(), s.theme.bg)),
         ("Quiet Dark".to_string(), Hsla::from(gpui::rgb(0x1c1c1e)))
     );
-    let at = cx.debug_bounds("theme-0").expect("the System choice").center();
+    let at = cx
+        .debug_bounds("theme-0")
+        .expect("the System choice")
+        .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
     assert_eq!(shell.read_with(cx, |s, _| s.prefs.theme.clone()), "");
     // Page width: Full is the key the palette's list writes.
-    let at = cx.debug_bounds("width-3").expect("the Full width choice").center();
+    let at = cx
+        .debug_bounds("width-3")
+        .expect("the Full width choice")
+        .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
     assert_eq!(shell.read_with(cx, |s, _| s.prefs.page.clone()), "full");

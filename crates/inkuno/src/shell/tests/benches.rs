@@ -731,7 +731,9 @@ fn help_scroll(cx: &mut TestAppContext) {
     let (shell, cx) =
         cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
     cx.run_until_parked();
-    shell.update_in(cx, |s, window, cx| s.open_settings(Section::Shortcuts, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_settings(Section::Shortcuts, window, cx)
+    });
     cx.run_until_parked();
     // Past the 140 ms opening animation.
     std::thread::sleep(Duration::from_millis(200));
@@ -750,10 +752,14 @@ fn help_scroll(cx: &mut TestAppContext) {
         println!("{what}: median {:?}, worst {:?}", all[20], all[39]);
     };
     time("frame without help", cx, &|cx| {
-        shell.update_in(cx, |s, window, cx| s.set_section(Section::About, window, cx));
+        shell.update_in(cx, |s, window, cx| {
+            s.set_section(Section::About, window, cx)
+        });
         cx.update(|window, _| window.refresh());
     });
-    shell.update_in(cx, |s, window, cx| s.open_settings(Section::Shortcuts, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_settings(Section::Shortcuts, window, cx)
+    });
     cx.run_until_parked();
     std::thread::sleep(Duration::from_millis(200));
     cx.run_until_parked();

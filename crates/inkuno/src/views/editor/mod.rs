@@ -19,8 +19,8 @@ mod notes;
 mod paint;
 mod render;
 mod style;
-mod toolbar;
 mod table;
+mod toolbar;
 
 use grid::TableRow;
 

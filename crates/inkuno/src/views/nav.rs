@@ -88,7 +88,12 @@ pub enum Mode {
 }
 
 /// The views of the right panel, in the order of its switcher. The panel shows one at a time.
-pub const VIEWS: [Mode; 4] = [Mode::Outline, Mode::Comments, Mode::Versions, Mode::Assistant];
+pub const VIEWS: [Mode; 4] = [
+    Mode::Outline,
+    Mode::Comments,
+    Mode::Versions,
+    Mode::Assistant,
+];
 
 impl Mode {
     pub const ALL: [Mode; 8] = [
@@ -123,7 +128,10 @@ impl Mode {
     /// Tools the left sidebar never shows: their views live in the right dock. (P3 moves versions
     /// right; until then the palette and the keys reach them there.)
     pub fn left_banned(self) -> bool {
-        matches!(self, Mode::Outline | Mode::Comments | Mode::Versions | Mode::Assistant)
+        matches!(
+            self,
+            Mode::Outline | Mode::Comments | Mode::Versions | Mode::Assistant
+        )
     }
 }
 
@@ -570,7 +578,9 @@ pub fn read_layout(saved: &str) -> Layout {
         right_shown,
         right_view,
         folded,
-        right_w: key("width").and_then(|w| w.parse().ok()).map_or(PANEL_W, px),
+        right_w: key("width")
+            .and_then(|w| w.parse().ok())
+            .map_or(PANEL_W, px),
         panel: match words.next() {
             Some("split") => Panel::Split,
             Some("full") => Panel::Full,
@@ -857,7 +867,9 @@ mod tests {
         assert_eq!(stock.left_shown, [Mode::Tree]);
         assert_eq!(stock.right_w, PANEL_W);
         // An older file's right dock: the views stay on the right, and only the first one named shows.
-        let older = read_layout("tree split 410 right=outline,assistant width=300 show=outline,assistant\n");
+        let older = read_layout(
+            "tree split 410 right=outline,assistant width=300 show=outline,assistant\n",
+        );
         assert_eq!(older.right, VIEWS);
         assert_eq!(older.right_shown, [Mode::Outline]);
         assert_eq!(older.right_view, Mode::Outline);
@@ -875,9 +887,15 @@ mod tests {
         assert_eq!(read_layout("recent hidden 410\n").panel, Panel::Hidden);
         // A closed panel keeps the view it last showed; an open one shows it.
         let closed = read_layout("tree split 410 view=comments\n");
-        assert_eq!((closed.right_view, closed.right_shown.is_empty()), (Mode::Comments, true));
+        assert_eq!(
+            (closed.right_view, closed.right_shown.is_empty()),
+            (Mode::Comments, true)
+        );
         let open = read_layout("tree split 410 view=comments show=assistant\n");
-        assert_eq!((open.right_view, open.right_shown.clone()), (Mode::Assistant, vec![Mode::Assistant]));
+        assert_eq!(
+            (open.right_view, open.right_shown.clone()),
+            (Mode::Assistant, vec![Mode::Assistant])
+        );
         assert_eq!(Mode::named("assistant"), Some(Mode::Assistant));
         assert_eq!(Mode::named("comments"), Some(Mode::Comments));
     }

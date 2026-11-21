@@ -35,12 +35,20 @@ pub fn snippet_at(body: &str, lower: &str, row: usize, word: &str) -> String {
 /// The line of the note where `word` (lowercase) first appears, as plain text, and the byte range of
 /// the word in it: the one-line snippet of a full-text match. Markdown markers are dropped, as
 /// `plain_line` does; the text is cut to about 80 characters around the word.
-pub fn snippet_line(body: &str, lower: &str, word: &str) -> Option<(String, std::ops::Range<usize>)> {
+pub fn snippet_line(
+    body: &str,
+    lower: &str,
+    word: &str,
+) -> Option<(String, std::ops::Range<usize>)> {
     let at = lower.find(word)?;
     let row = lower[..at].matches('\n').count();
     let plain = plain_line(body.lines().nth(row)?);
     let hit = plain.to_lowercase().find(word)?;
-    let start = plain[..hit].char_indices().rev().nth(23).map_or(0, |(i, _)| i);
+    let start = plain[..hit]
+        .char_indices()
+        .rev()
+        .nth(23)
+        .map_or(0, |(i, _)| i);
     let head = if start > 0 { "…" } else { "" };
     let text: String = plain.get(start..)?.chars().take(80).collect();
     let from = head.len() + hit - start;
@@ -70,7 +78,15 @@ pub fn plain_line(line: &str) -> String {
     if digits > 0 && s[digits..].starts_with(". ") {
         s = &s[digits + 2..];
     }
-    let s = s.replace("**", "").replace("~~", "").replace("{==", "").replace("==}", "").replace("==", "").replace("[[", "").replace("]]", "").replace('`', "");
+    let s = s
+        .replace("**", "")
+        .replace("~~", "")
+        .replace("{==", "")
+        .replace("==}", "")
+        .replace("==", "")
+        .replace("[[", "")
+        .replace("]]", "")
+        .replace('`', "");
     // `[text](target)` shows its text; the target is not shown.
     let mut out = String::with_capacity(s.len());
     let mut rest = s.as_str();
@@ -182,7 +198,10 @@ mod tests {
         assert_eq!(plain_line("> 1. `code` and my_name"), "code and my_name");
         // Comment markup goes with what is said; the passage stays, in either form.
         assert_eq!(plain_line("## Tasks<!-- comment: Split this? -->"), "Tasks");
-        assert_eq!(plain_line("- [ ] Settings page<!-- comment: Add it. -->"), "Settings page");
+        assert_eq!(
+            plain_line("- [ ] Settings page<!-- comment: Add it. -->"),
+            "Settings page"
+        );
         assert_eq!(plain_line("- un {==mot==}{>>à revoir<<} ici"), "un mot ici");
         assert_eq!(plain_line("<!-- comment: alone -->"), "");
         assert!(snippet_line(body, &lower, "absent").is_none());

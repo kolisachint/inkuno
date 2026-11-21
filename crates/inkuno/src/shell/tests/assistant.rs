@@ -322,7 +322,10 @@ fn a_run_with_the_panel_hidden_waits_as_needs_you(cx: &mut TestAppContext) {
         vec![Event::Started, Event::Text("Answer".into()), Event::Ended],
     );
     assert_eq!(status(&shell, cx), Status::NeedsYou);
-    assert!(cx.debug_bounds("switch-dot").is_some(), "the dot, on the band's toggle");
+    assert!(
+        cx.debug_bounds("switch-dot").is_some(),
+        "the dot, on the band's toggle"
+    );
     // Showing the panel is seeing the answer.
     shell.update_in(cx, |s, window, cx| s.toggle_assistant(window, cx));
     settle(cx);

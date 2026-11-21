@@ -10,7 +10,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let note = |cx: &mut gpui::VisualTestContext| {
         shell.read_with(cx, |_, cx| editor.read(cx).text().to_string())
     };
-    let section = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.settings_section());
+    let section =
+        |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.settings_section());
     let to_note = |cx: &mut gpui::VisualTestContext| {
         shell.update_in(cx, |s, window, cx| {
             if let Some(tab) = s.panes.iter().position(|pane| pane.settings.is_some()) {
@@ -59,7 +60,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(rows(cx).len(), all);
     assert_eq!(section(cx), Some(Section::Shortcuts));
     cx.simulate_input("ok");
-    assert_eq!(note(cx), "# Idées\n\n", "the note gets nothing typed on the page");
+    assert_eq!(
+        note(cx),
+        "# Idées\n\n",
+        "the note gets nothing typed on the page"
+    );
     cx.simulate_keystrokes("escape");
     to_note(cx);
     cx.simulate_input("ok");
@@ -177,10 +182,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("down enter backspace");
     assert_eq!(keys_of(cx, "editor::FindReplace"), (String::new(), true));
     cx.simulate_keystrokes("enter escape");
-    assert_eq!(
-        (editing(cx), section(cx)),
-        (None, Some(Section::Shortcuts))
-    );
+    assert_eq!((editing(cx), section(cx)), (None, Some(Section::Shortcuts)));
     assert_eq!(rows(cx).len(), 1, "the search did not move");
     // A click on the keys waits too; "default" restores the original ones.
     let at = cx.debug_bounds("key-editor::FindReplace").unwrap().center();

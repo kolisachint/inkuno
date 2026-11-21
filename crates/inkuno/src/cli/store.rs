@@ -389,7 +389,15 @@ pub fn check_links_before_move(
             },
         };
         let moves = by_address.then_some((moved, renamed.as_path()));
-        let Some(fresh) = wiki::rewrite_links(&text, Some(vault.root.as_path()), &path, old, new, wiki.contains(&path), moves) else {
+        let Some(fresh) = wiki::rewrite_links(
+            &text,
+            Some(vault.root.as_path()),
+            &path,
+            old,
+            new,
+            wiki.contains(&path),
+            moves,
+        ) else {
             continue;
         };
         if pending::rewrite_refused(&text, &fresh) {
@@ -419,7 +427,15 @@ pub fn relink(vault: &mut Vault, old: &str, new: &str, moved: Option<(&Path, &Pa
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        let Some(fresh) = wiki::rewrite_links(&text, Some(vault.root.as_path()), &path, old, new, wiki.contains(&path), moved) else {
+        let Some(fresh) = wiki::rewrite_links(
+            &text,
+            Some(vault.root.as_path()),
+            &path,
+            old,
+            new,
+            wiki.contains(&path),
+            moved,
+        ) else {
             continue;
         };
         if vault::write(&path, &fresh).is_ok() {

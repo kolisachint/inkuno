@@ -1008,7 +1008,13 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
         }
     }
     let rewritten = if old_link != new_link {
-        vault::relink(vault, &old_link, &new_link, (!image && dest.extension().is_some_and(|e| e == "md")).then_some((&path, dest.as_path())))
+        vault::relink(
+            vault,
+            &old_link,
+            &new_link,
+            (!image && dest.extension().is_some_and(|e| e == "md"))
+                .then_some((&path, dest.as_path())),
+        )
     } else {
         vault.rescan();
         0

@@ -69,7 +69,12 @@ impl Editor {
         let t = self.theme;
         // A table's handles are grabbed or picked: they keep the space above the table.
         let handles = self.pick.is_some() || self.moving.is_some();
-        if self.sel.is_empty() || self.toolbar_off || !self.more.is_empty() || self.readonly || handles {
+        if self.sel.is_empty()
+            || self.toolbar_off
+            || !self.more.is_empty()
+            || self.readonly
+            || handles
+        {
             return None;
         }
         let start = self.row_at(self.sel.start)?;
@@ -126,7 +131,13 @@ impl Editor {
                 )
         };
         let letter = |text: &'static str| div().text_size(t.px(14.)).child(text).into_any_element();
-        let icon = |path: &'static str| gpui::svg().path(path).size(t.px(16.)).text_color(t.text).into_any_element();
+        let icon = |path: &'static str| {
+            gpui::svg()
+                .path(path)
+                .size(t.px(16.))
+                .text_color(t.text)
+                .into_any_element()
+        };
         let divider = || div().w(t.px(1.)).h(t.px(16.)).mx(t.px(2.)).bg(t.border);
         let open = self.toolbar_text;
         let text_btn = div()
@@ -144,7 +155,12 @@ impl Editor {
             .when(open, |d| d.bg(t.selection))
             .hover(|s| s.bg(t.hover))
             .child(tr("Text", "Texte"))
-            .child(gpui::svg().path("chevron-down.svg").size(t.px(14.)).text_color(t.soft))
+            .child(
+                gpui::svg()
+                    .path("chevron-down.svg")
+                    .size(t.px(14.))
+                    .text_color(t.soft),
+            )
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _: &MouseDownEvent, _, cx| {
@@ -205,13 +221,7 @@ impl Editor {
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .children(rows)
         });
-        Some(
-            div()
-                .absolute()
-                .inset_0()
-                .child(bar)
-                .children(list),
-        )
+        Some(div().absolute().inset_0().child(bar).children(list))
     }
 }
 

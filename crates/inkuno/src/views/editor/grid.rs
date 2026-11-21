@@ -939,7 +939,10 @@ impl Geometry {
             LINE
         };
         let bottom = if last { LINE } else { px(0.) };
-        (top + self.pad_y, top + self.pad_y + lh + self.pad_y + bottom)
+        (
+            top + self.pad_y,
+            top + self.pad_y + lh + self.pad_y + bottom,
+        )
     }
 }
 

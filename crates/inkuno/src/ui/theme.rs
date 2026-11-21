@@ -658,7 +658,10 @@ impl Theme {
             None => (border, code_bg, soft, code_bg, code_bg, border, None),
         };
         let (popover, caution) = match &quiet {
-            Some(extras) => (Hsla::from(rgb(extras.popover)), Hsla::from(rgb(extras.caution))),
+            Some(extras) => (
+                Hsla::from(rgb(extras.popover)),
+                Hsla::from(rgb(extras.caution)),
+            ),
             None => (bg, accent_read),
         };
         Self {
@@ -828,9 +831,15 @@ impl Theme {
     /// Quiet's tint of a `[!TYPE]` alert (`label` with its brackets), if it is one of the five it has.
     pub fn alert(&self, label: &str) -> Option<Hsla> {
         let alerts = self.alerts?;
-        let kind = ["[!note]", "[!tip]", "[!important]", "[!warning]", "[!caution]"]
-            .iter()
-            .position(|k| label.eq_ignore_ascii_case(k))?;
+        let kind = [
+            "[!note]",
+            "[!tip]",
+            "[!important]",
+            "[!warning]",
+            "[!caution]",
+        ]
+        .iter()
+        .position(|k| label.eq_ignore_ascii_case(k))?;
         Some(alerts[kind])
     }
 }
@@ -976,7 +985,11 @@ mod tests {
             );
             // The sheets (`bg`) lie on the ground: told apart, and the text, the secondary text and the accent
             // (sidebar, tabs) read on both. Quiet's ground is its spec's own (1.07:1 on the dark sheet).
-            let ground_bar = if quiet_extras(name).is_some() { 1.07 } else { 1.08 };
+            let ground_bar = if quiet_extras(name).is_some() {
+                1.07
+            } else {
+                1.08
+            };
             assert!(
                 contrast(t.ground, t.bg) >= ground_bar,
                 "{name}: ground and sheet too close ({:.3})",
@@ -1023,7 +1036,11 @@ mod tests {
                 // box's mark (drawn in `bg`) reads on its `accent` fill.
                 let (page, mark) = (contrast(t.code_bg, t.bg), contrast(t.bg, t.accent));
                 // Quiet's band is subtler, as its spec sets it (1.03:1 on the white sheet).
-                let band_bar = if quiet_extras(name).is_some() { 1.03 } else { 1.05 };
+                let band_bar = if quiet_extras(name).is_some() {
+                    1.03
+                } else {
+                    1.05
+                };
                 if page < band_bar || mark < 2.5 {
                     fails.push(format!(
                         "{name}: column on page {page:.2}, check mark on accent {mark:.2}"

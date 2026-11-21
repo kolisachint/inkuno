@@ -410,10 +410,12 @@ impl Shell {
                             .font_family(mono())
                             .text_size(t.px(12.))
                             .child(row.keys.clone()),
-                        None => div()
-                            .w(t.px(156.))
-                            .flex_none()
-                            .child(keycaps(&row.keys, t, false).flex_wrap().w_full().gap_y(t.px(3.))),
+                        None => div().w(t.px(156.)).flex_none().child(
+                            keycaps(&row.keys, t, false)
+                                .flex_wrap()
+                                .w_full()
+                                .gap_y(t.px(3.)),
+                        ),
                         Some(action) => {
                             let color = if edit.is_some() || row.changed {
                                 t.accent
@@ -428,7 +430,10 @@ impl Shell {
                             } else if row.keys.is_empty() {
                                 div().font_family(mono()).text_size(t.px(12.)).child("—")
                             } else {
-                                keycaps(&row.keys, t, false).flex_wrap().w_full().gap_y(t.px(3.))
+                                keycaps(&row.keys, t, false)
+                                    .flex_wrap()
+                                    .w_full()
+                                    .gap_y(t.px(3.))
                             };
                             let key = div()
                                 .id(gpui::SharedString::from(format!("key-{action}")))
@@ -543,10 +548,12 @@ impl Shell {
                     .gap_y_4()
                     .children(sections)
                     .when(none, |d| {
-                        d.child(div().text_color(t.soft).child(tr(
-                            "No shortcut matches.",
-                            "Aucun raccourci ne correspond.",
-                        )))
+                        d.child(
+                            div().text_color(t.soft).child(tr(
+                                "No shortcut matches.",
+                                "Aucun raccourci ne correspond.",
+                            )),
+                        )
                     }),
             )
     }
