@@ -147,15 +147,17 @@ impl Editor {
                 return self.realign(cx);
             }
         }
-        match kind {
-            Kind::Task(done) => self.splice(at - 3..at - 2, if done { " " } else { "x" }, cx),
-            Kind::Bullet => {
-                self.splice(at..at, "[ ] ", cx);
-                if self.sel.end == at {
-                    self.move_to(at + 4, cx);
-                }
+        // A task's box, bullet or ordered, flips as a click on it does.
+        if !self.in_code(lr.start)
+            && let Some((box_at, _)) = md::task_box(line)
+        {
+            return self.flip_box(lr.start + box_at, cx);
+        }
+        if kind == Kind::Bullet {
+            self.splice(at..at, "[ ] ", cx);
+            if self.sel.end == at {
+                self.move_to(at + 4, cx);
             }
-            _ => {}
         }
     }
 
