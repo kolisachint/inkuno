@@ -15,7 +15,10 @@ Ground rules for every version:
 | Version | Date | File | Published |
 |--|--|--|--|
 | v1 | 2026-11-21 | `v1.html` | https://claude.ai/artifact/JoPD7oYaJom8B39UeCn8eV |
-| v2 | 2026-11-21 | `v2.html` | (same link, republished) |
+| v2 | 2026-11-21 | `v2.html` | same link, artifact version 2 |
+
+The artifact link always shows the newest version; older versions stay in this folder and in the
+artifact's own version history.
 
 ---
 
@@ -82,3 +85,15 @@ The window has four regions and nothing else:
 - **Q2 Pending changes.** The assistant's pending changes are written into the file as CriticMarkup
   until accepted. Keep that, or hold them beside the file so the `.md` is always clean?
 - **Q3 Preview tabs.** Keep preview tabs at all, or open every note as a normal tab?
+
+### v2 as built (review notes, 2026-11-21)
+
+All twenty decisions are clickable. Approximations, to settle in v3 or in the app:
+
+- The commented passage is the whole line before the comment marker, not the exact selection.
+- The assistant's prompt field and "Tighten the wording" only show a toast; "Review this note" makes
+  two pending changes.
+- Scroll position is kept per tab; the app keeps it per pane and tab.
+- Key rebinding in Settings › Shortcuts has no conflict check.
+- Pending changes are shown as written into the file (CriticMarkup), as today; Q2 is still open.
+- The window title (vault — Inkuno) is not drawn; the folder path is the tab's tooltip.
