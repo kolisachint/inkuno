@@ -760,7 +760,7 @@ impl Shell {
                 .flex()
                 .flex_col()
                 .gap(t.px(6.))
-                .rounded(t.px(10.))
+                .rounded(t.card())
                 .border_1()
                 .border_color(t.text.opacity(0.08))
                 .cursor_pointer()
