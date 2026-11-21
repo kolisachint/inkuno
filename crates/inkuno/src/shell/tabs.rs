@@ -90,6 +90,16 @@ impl Shell {
         self.theme.quiet && self.panes[tab].preview
     }
 
+    /// The focus cue on a tab, as `render_tabs` paints it: in Quiet, the shown tab carries a wash and
+    /// the tabs of a pane not in focus dim to 55 %. Returns (washed, opacity). Inkuno's cue is the
+    /// ring around the active pane (`render.rs`), so its tabs carry neither.
+    pub(super) fn tab_cue(&self, tab: usize) -> (bool, f32) {
+        let quiet = self.theme.quiet;
+        let focused = self.group_of(self.active) == self.group_of(tab);
+        let shown = self.groups[self.group_of(tab)].shown == tab;
+        (quiet && shown, if quiet && !focused { 0.55 } else { 1.0 })
+    }
+
     /// The labels of a pane's tabs, in order; two tabs of the same name (two folders) say their folder.
     pub(super) fn tab_labels(&self, group: usize, cx: &App) -> Vec<String> {
         let tabs = &self.groups[group].tabs;
@@ -213,7 +223,6 @@ impl Shell {
             return None;
         }
         let quiet = t.quiet;
-        let focused = group == self.group_of(self.active);
         let row = if quiet { 28. } else { TAB_ROW };
         let shown = self.groups[group].shown;
         // Brought into view once when it changes, so the wheel stays free afterwards. gpui scrolls with
@@ -268,6 +277,7 @@ impl Shell {
             .map(|(at, (&tab, label))| {
                 let pane = &self.panes[tab];
                 let (on, over) = (tab == shown, hovered == Some(tab));
+                let (wash, dim) = self.tab_cue(tab);
                 // Quiet: the cross shows on the shown tab too, in an 18 px box.
                 let box_px = if quiet { 18. } else { 14. };
                 let slot = div()
@@ -320,11 +330,11 @@ impl Shell {
                     // The tab shown sits on a flat panel fill — no pill, no shadow, no underline —
                     // the others are bare text that the pointer tints, on a flat hover. Quiet's
                     // shown tab is a neutral wash of the text (the sidebar's selected row).
-                    .when(on && quiet, |d| d.bg(t.text.opacity(0.072)))
+                    .when(wash, |d| d.bg(t.text.opacity(0.072)))
                     .when(on && !quiet, |d| d.bg(t.panel))
                     .when(!on, |d| d.hover(|s| s.bg(t.hover)))
                     // Quiet: the pane not in focus is dimmed as a whole.
-                    .when(quiet && !focused, |d| d.opacity(0.55))
+                    .when(dim < 1., |d| d.opacity(dim))
                     // A preview is marked by a dot, a scratch note by its word after the title; in
                     // Quiet, by italics.
                     .child(
