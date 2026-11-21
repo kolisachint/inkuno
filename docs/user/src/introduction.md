@@ -14,10 +14,10 @@ New here? [Install Inkuno](install.md), then read [First steps](first-steps.md).
 | **Linked notes** | `[[links]]` and tags. See [Links, embeds and files](links.md). |
 | **Comments** | Annotate a passage without changing it, in a format other apps can read. See [Comments](comments.md). |
 | **Daily notes** | Today's note from the blank page. See [Daily notes](daily-notes.md). |
-| **Tabs and panes** | As many tabs and split panes as the window holds. See [Tabs, panes and docks](tabs-and-panes.md). |
+| **Tabs and panes** | As many tabs and split panes as the window holds. See [Tabs and panes](tabs-and-panes.md). |
 | **Sync** | The vault is a folder of plain files: sync it with git or a cloud folder. See [Syncing a vault](sync.md). |
 | **Keyboard first** | One palette for notes and commands. Every shortcut is listed in the app and can be changed. See [Keyboard shortcuts](shortcuts.md). |
-| **Yours to dress** | A dozen themes, Inter and JetBrains Mono built in, any installed font, light and dark. See [Settings and appearance](settings.md). |
+| **Yours to dress** | Sixteen themes, Inter and JetBrains Mono built in, any installed font, light and dark. See [Settings and appearance](settings.md). |
 
 Inkuno's interface is in English.
 

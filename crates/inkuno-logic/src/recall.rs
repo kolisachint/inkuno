@@ -11,16 +11,52 @@ use crate::{lang::date_name, lang::tr};
 /// A note untouched for this long to be offered for rereading.
 const OLD: i64 = 30;
 
-/// A note to reread, and its age in days.
+/// Most notes offered at once.
+const MAX: usize = 3;
+
+/// A note to reread: its name, its first line of text and its age in days.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Recalled {
     pub path: PathBuf,
     pub name: String,
+    pub line: String,
     pub days: i64,
 }
 
-/// The notes to reread `today`: the daily notes from a week, a month and a year ago, when
-/// they exist, then a note untouched for a long time. That one is drawn at
+/// The first line of body text of a note, for a card: not a heading, not a rule, with the Markdown
+/// markers of a list, a quote, emphasis, code and links taken out. Empty when there is none.
+pub fn first_line(body: &str) -> String {
+    body.lines()
+        .map(str::trim)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with('#')
+                && !line.chars().all(|c| matches!(c, '-' | '*' | '_' | '=' | '~' | '`' | ' '))
+        })
+        .map(|line| {
+            let line = line.trim_start_matches(['>', ' ', '\t']);
+            // A list marker: a bullet, a task box, or a number with its dot.
+            let line = ["- [ ] ", "- [x] ", "- [X] ", "- ", "* ", "+ "]
+                .iter()
+                .find_map(|m| line.strip_prefix(m))
+                .unwrap_or(line);
+            let digits = line.chars().take_while(char::is_ascii_digit).count();
+            let line = match line[digits..].strip_prefix(". ") {
+                Some(rest) if digits > 0 => rest,
+                _ => line,
+            };
+            line.chars()
+                .filter(|c| !matches!(c, '*' | '_' | '`' | '~' | '[' | ']'))
+                .collect::<String>()
+                .trim()
+                .to_string()
+        })
+        .find(|line| !line.is_empty())
+        .unwrap_or_default()
+}
+
+/// The notes to reread `today` (at most three): the daily notes from a week, a month and a year
+/// ago, when they exist, then a note untouched for a long time. That one is drawn at
 /// random from the date: the same all day, another the next day.
 pub fn recall(notes: &[Note], today: Date, now: SystemTime) -> Vec<Recalled> {
     let day = markdown::day_number(today);
@@ -37,6 +73,7 @@ pub fn recall(notes: &[Note], today: Date, now: SystemTime) -> Vec<Recalled> {
             Some(Recalled {
                 path: note.path.clone(),
                 name,
+                line: first_line(&note.body),
                 days: day - markdown::day_number(date),
             })
         })
@@ -61,8 +98,10 @@ pub fn recall(notes: &[Note], today: Date, now: SystemTime) -> Vec<Recalled> {
     found.extend(old.map(|n| Recalled {
         path: n.path.clone(),
         name: n.name.clone(),
+        line: first_line(&n.body),
         days: age(n),
     }));
+    found.truncate(MAX);
     found
 }
 
@@ -186,6 +225,25 @@ mod tests {
         let now = SystemTime::now();
         assert!(recall(&[note("Hier", 1, now)], (2026, 10, 10), now).is_empty());
         assert!(recall(&[], (2026, 10, 10), now).is_empty());
+    }
+
+    #[test]
+    fn recall_offers_three_notes_at_most_with_their_first_line() {
+        let now = SystemTime::now();
+        let mut notes = vec![
+            note("2026-10-03", 7, now),
+            note("2026-09-10", 30, now),
+            note("2025-10-10", 365, now),
+            note("Ancienne", 200, now),
+        ];
+        notes[0].body = "\n# Lundi\n\n- **Plan** de la `semaine`\n".into();
+        let found = recall(&notes, (2026, 10, 10), now);
+        assert_eq!(found.len(), 3, "{found:?}");
+        assert_eq!(found[0].line, "Plan de la semaine");
+        assert_eq!(found[1].line, "du texte");
+        assert_eq!(first_line("\n \n"), "");
+        assert_eq!(first_line("# Titre\n---\n> citation\n"), "citation");
+        assert_eq!(first_line("# Titre seul\n"), "");
     }
 
     #[test]

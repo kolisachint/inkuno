@@ -18,7 +18,7 @@ Start typing. The first line is the title of the note, and the name of its file.
 
 `Ctrl + N` makes a scratch note: a quick thought, in a tab of its own, kept in the app's folder until you file it. `Ctrl + Alt + N` makes a note in the vault, in the folder selected in the tree.
 
-The round **Assistant** button at the bottom right of the note opens the [Assistant](assistant.md) panel. It needs the `hoocode` program, installed and logged in.
+The **Assistant** view of the right panel (`Ctrl + Alt + 4`, or its button in the switcher) opens the [Assistant](assistant.md). It needs the `hoocode` program, installed and logged in.
 
 ## The blank page
 
@@ -45,23 +45,16 @@ With nothing typed, in a table of a note, the palette offers its gestures under 
 
 ## Every command: the command palette
 
-`F10` (or `Ctrl + Shift + P`, or the logo at the foot of the sidebar) opens the command palette. It lists every command the current view can do, with an icon, a short name and its keys. Commands are grouped, and those of what you are on (a block or a table) come first.
+`F10` (or `Ctrl + Shift + P`) opens the command palette. It lists every command the current view can do, with an icon, a short name and its keys. Commands are grouped, and those of what you are on (a block or a table) come first.
 
 Type to find a command by what it does, then `Enter` runs it where you were. Any word of its name works, accents ignored:
 
 - `folder` offers **New folder**;
 - `theme` and `font` offer theirs too.
 
-## Every shortcut: the help panel
+## Every shortcut: the Shortcuts page
 
-`F1` (or `Ctrl + /`) opens the list of shortcuts, on the keys of what is on display: a table of the note.
-
-- A link per section sits at the top.
-- Type to search, by key or by effect (`ctrl+p`, `theme`). `Esc` empties the search, then closes.
-- Click the keys of a row to [change them](settings.md#changing-a-shortcut).
-- At its foot: the version of Inkuno, and links to its source and to its Ko-fi page.
-
-The full list is also in [Keyboard shortcuts](shortcuts.md).
+`F1` (or `Ctrl + /`) opens the Shortcuts page of the [Settings tab](settings.md), which lists every shortcut in effect. Click the keys of a row to [change them](settings.md#changing-a-shortcut).
 
 ## Menus
 
@@ -69,8 +62,8 @@ A right click in a note opens a menu: open the link under the pointer or copy it
 
 `Shift + F10` (or the `Menu` key) opens the same menu at the cursor. In the panel, it opens the menu of the selected line. Arrows, `Home` and `End` walk it, `Enter` runs, `Esc` closes and gives the keys back.
 
-The menus show, beside each action, the shortcut that does the same. Pointing at an icon of the sidebar or of a bar names it, with its shortcut.
+The menus show, beside each action, the shortcut that does the same. Pointing at an icon of the sidebar, the title band or the right panel names it, with its shortcut.
 
 ## Quit
 
-`Ctrl + Q` quits. Inkuno reopens with the panel, tabs and panes as you left them.
+`Ctrl + Q` quits. Inkuno reopens with the right panel, tabs and panes as you left them.

@@ -1,22 +1,26 @@
 # Settings and appearance
 
-Every choice is a command of the palette: type its name, and see the result at once.
+Every choice is in the **Settings** tab, `Ctrl + ,` (also the foot of the sidebar), with the pages Appearance, Editor, Files, Shortcuts and About. Each choice is also a command of the palette: type its name, and see the result at once.
 
 ## Theme
 
 Type `theme` in the palette.
 
-- 15 themes: Quiet Dark and Quiet Light, Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light).
+- 16 themes: Quiet Dark and Quiet Light, Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light), Sepia.
 - Each theme is applied as you move through the list, so you see it before choosing. `Enter` keeps it, `Esc` goes back to the one you had.
 - `Default` follows the light or dark setting of your system, with Quiet Light or Quiet Dark.
 - In every theme, links, secondary text and the titles of colored panels are adjusted to a contrast of at least 4.5:1 (WCAG AA).
 
-**The look.** The window is a warm ground, a little darker than the page in every theme. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart. Page titles follow your text font too, Inter by default.
+**The look, Quiet.** The Quiet themes (the default) are flat. The sidebar sits on the window itself, with no panel, border or shadow. The note is a flat sheet, flush with the top, right and bottom edges of the window, without rounded corners or borders; its left edge has one faint shadow to set it apart from the sidebar. Tables and code blocks have a fine line; the lines of a table, a code block and an image are drawn at least 3:1 against what is under them.
 
-- The active pane of a split has a thin accent ring.
+**The look, other themes.** The window is a warm ground, a little darker than the page. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart.
+
+- The focused pane's active tab is solid, and the other pane's tabs are dimmed.
 - The open row of a list, a tag in the text, a commented passage and the current tab take the accent colour as text.
 - Tables and code blocks have a rounded band.
 - Menus, the palette, help and notices float above, with a shadow.
+
+Page titles follow your text font too, Inter by default.
 
 ## Fonts
 
@@ -96,7 +100,7 @@ The Shortcuts page of the Settings tab (`F1`, or `Ctrl+,` then Shortcuts) lists 
 The Shortcuts page is the easy way. A JSON file does the same, for every action, and can be edited with any text editor.
 
 - **Where**: `keybindings.json` in the [configuration folder](vault.md#configuration-files): `~/.config/inkuno/` on Linux, `~/Library/Application Support/inkuno/` on macOS.
-- **Which file wins**: when `keybindings.json` is there and not empty, it is the one read, and it is read at launch: restart Inkuno to apply an edit. The older `keys` file is only read while it is absent. The help panel saves its changes to `keys`, so once `keybindings.json` exists, edit that file to change shortcuts.
+- **Which file wins**: when `keybindings.json` is there and not empty, it is the one read, and it is read at launch: restart Inkuno to apply an edit. The older `keys` file is only read while it is absent. The Shortcuts page saves its changes to `keys`, so once `keybindings.json` exists, edit that file to change shortcuts.
 - **Shape**:
 
 ```json
@@ -107,6 +111,6 @@ The Shortcuts page is the easy way. A JSON file does the same, for every action,
 }
 ```
 
-- **Action names**: `group::Name`, as the code names them: `app::` for the window (`app::OpenPalette`, `app::ToggleFocus`), `editor::` for the note (`editor::Bold`), `nav::` for the panel (`nav::ShowTree`). Only an action that has a line in the help panel can be changed. The code keeps the list (`help_sections` in `crates/inkuno/src/shell/keymap.rs`).
+- **Action names**: `group::Name`, as the code names them: `app::` for the window (`app::OpenPalette`, `app::ToggleFocus`), `editor::` for the note (`editor::Bold`), `nav::` for the panel (`nav::ShowTree`). Only an action that has a line on the Shortcuts page can be changed. The code keeps the list (`help_sections` in `crates/inkuno/src/shell/keymap.rs`).
 - **Chords**: one chord per action, in the form `secondary-shift-p`, `alt-left`, `ctrl-tab` or `f9`. `secondary` is `Cmd` on macOS and `Ctrl` elsewhere. `""` or `[]` leaves the action with no shortcut. `reset` restores the default keys of the actions it names.
 - **Faults**: an entry that cannot be used is ignored on its own, and the default stays. `inkuno --check-config` reports an unreadable chord, or a chord given to two actions, and exits with `1`. An unknown action name is not caught there: the app reports it when it starts.

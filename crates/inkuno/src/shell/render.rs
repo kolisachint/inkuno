@@ -720,10 +720,198 @@ impl Shell {
         recall::recall(&self.notes, today(), std::time::SystemTime::now())
     }
 
-    /// The empty page, under the line where you write: the day (which opens its note), the useful
-    /// keys, the notes to reread. Everything is clickable, wraps in a narrow pane and
+    /// The empty page: Quiet's cards, the others' lines (`render_empty_rows`). It disappears at the first keystroke.
+    pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        if self.theme.quiet {
+            self.render_cards(cx).into_any_element()
+        } else {
+            self.render_empty_rows(cx).into_any_element()
+        }
+    }
+
+    /// Quiet's empty page: a centred column of cards, Today, New note and Search, then the notes to
+    /// reread under "From a month ago". Each card is clickable and does what its title says.
+    fn render_cards(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let t = self.theme;
+        let closed = self
+            .vault
+            .as_ref()
+            .is_some_and(|root| self.unreadable.iter().any(|(dir, _)| dir == root));
+        let has_vault = self.vault.is_some() && !closed;
+        // A card: its icon and title, then what it does (`lines` of it, or one line cut with an
+        // ellipsis), and the hover of a row. Nothing is drawn for an empty line.
+        let card = |id: (&'static str, usize),
+                    icon: &'static str,
+                    title: String,
+                    line: String,
+                    lines: usize| {
+            div()
+                .id(id)
+                .debug_selector(move || {
+                    if id.0 == "empty-today" {
+                        id.0.to_string()
+                    } else {
+                        format!("{}-{}", id.0, id.1)
+                    }
+                })
+                .w(t.px(200.))
+                .min_h(t.px(84.))
+                .p(t.px(14.))
+                .flex()
+                .flex_col()
+                .gap(t.px(6.))
+                .rounded(t.card())
+                .border_1()
+                .border_color(t.text.opacity(0.08))
+                .cursor_pointer()
+                .hover(|s| s.bg(t.hover))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(t.px(8.))
+                        .text_size(t.px(13.))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(t.text)
+                        .child(
+                            svg()
+                                .path(icon)
+                                .size(t.px(16.))
+                                .flex_none()
+                                .text_color(t.soft),
+                        )
+                        .child(title),
+                )
+                .children((!line.is_empty()).then(|| {
+                    let text = div().text_size(t.px(12.)).text_color(t.soft);
+                    if lines == 1 {
+                        text.w_full().truncate().child(line)
+                    } else {
+                        text.line_clamp(lines).child(line)
+                    }
+                }))
+        };
+        let mut cards = Vec::new();
+        if has_vault {
+            cards.push(
+                card(
+                    ("empty-today", 0),
+                    "calendar.svg",
+                    tr("Today", "Aujourd'hui").into(),
+                    format!(
+                        "{} · {}",
+                        recall::long_date(today()),
+                        tr("open the daily note", "ouvrir la note du jour")
+                    ),
+                    2,
+                )
+                .on_click(cx.listener(|this, _, window, cx| this.open_today(window, cx)))
+                .into_any_element(),
+            );
+        }
+        // The vault takes the new note; without one (or with it unreadable), a scratch note.
+        let (new, what) = if has_vault {
+            (
+                Box::new(NewNote) as Box<dyn gpui::Action>,
+                tr("a note in the vault", "une note dans le coffre"),
+            )
+        } else {
+            (
+                Box::new(NewScratch) as Box<dyn gpui::Action>,
+                tr("a scratch note, kept outside the vault", "un brouillon, hors du coffre"),
+            )
+        };
+        let new_keys = keys::of(cx, new.as_ref());
+        cards.push(
+            card(
+                ("empty-key", 1),
+                "plus.svg",
+                tr("New note", "Nouvelle note").into(),
+                format!("{what} · {new_keys}").trim_end_matches(" · ").to_string(),
+                2,
+            )
+            .on_click(move |_, window, cx| window.dispatch_action(new.boxed_clone(), cx))
+            .into_any_element(),
+        );
+        let search_keys = keys::of(cx, &OpenPalette);
+        cards.push(
+            card(
+                ("empty-key", 0),
+                "search.svg",
+                tr("Search", "Rechercher").into(),
+                format!(
+                    "{} · {search_keys}",
+                    tr("find a note or run a command", "trouver une note ou lancer une commande")
+                )
+                .trim_end_matches(" · ")
+                .to_string(),
+                2,
+            )
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenPalette), cx))
+            .into_any_element(),
+        );
+        let recalled = if self.vault.is_some() {
+            self.recalled()
+        } else {
+            Vec::new()
+        };
+        let again = (!recalled.is_empty()).then(|| {
+            let cards = recalled.into_iter().enumerate().map(|(i, note)| {
+                card(("empty-recall", i), "note.svg", note.name.clone(), note.line.clone(), 1)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open(&note.path, window, cx)
+                    }))
+            });
+            div()
+                .flex()
+                .flex_wrap()
+                .justify_center()
+                .gap(t.px(10.))
+                .children(cards)
+        });
+        div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .left_0()
+            .right_0()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(t.px(14.))
+            .px(t.px(24.))
+            .text_size(t.px(13.))
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .justify_center()
+                    .gap(t.px(10.))
+                    .children(cards),
+            )
+            .children(again.map(|cards| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(t.px(8.))
+                    .child(
+                        div()
+                            .mt(t.px(8.))
+                            .text_size(t.px(12.))
+                            .text_color(t.soft)
+                            .child(tr("From a month ago", "Il y a un mois")),
+                    )
+                    .child(cards)
+            }))
+    }
+
+    /// The other themes' empty page, under the line where you write: the day (which opens its note),
+    /// the useful keys, the notes to reread. Everything is clickable, wraps in a narrow pane and
     /// disappears at the first keystroke.
-    pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn render_empty_rows(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = self.theme;
         // `fill`: the line is tinted on hover, like a list row.
         let row = |id: (&'static str, usize), fill: bool| {

@@ -17,8 +17,8 @@
 
 # Finding your way
 
-- [The palette and the panel](navigation.md)
-- [Tabs, panes and docks](tabs-and-panes.md)
+- [Navigation](navigation.md)
+- [Tabs and panes](tabs-and-panes.md)
 - [Search and replace](search.md)
 
 # Your vault

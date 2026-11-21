@@ -268,7 +268,6 @@ fn empty_page(cx: &mut TestAppContext) {
         "empty-today",
         "empty-key-0",
         "empty-key-1",
-        "empty-key-2",
         "empty-recall-0",
         "empty-recall-1",
     ] {

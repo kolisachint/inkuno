@@ -529,7 +529,7 @@ fn an_unreadable_vault_or_folder_says_so(cx: &mut TestAppContext) {
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     let page = |cx: &mut gpui::VisualTestContext| {
-        ["empty-key-0", "empty-key-1", "empty-key-2"]
+        ["empty-key-0", "empty-key-1"]
             .map(|key| cx.debug_bounds(key).unwrap().origin)
     };
     let readable = page(cx);
@@ -545,11 +545,11 @@ fn an_unreadable_vault_or_folder_says_so(cx: &mut TestAppContext) {
     // The empty page offers no note to write there: neither a new one nor the day's.
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
-    // (Bounds of a previous frame stay known: the keys that remain are measured.) The day's line is gone, the
-    // keys come up; « shortcuts » takes the place of « new note ».
+    // (Bounds of a previous frame stay known: the cards that remain are measured.) The day's card is
+    // gone; the search and the new-note cards stay side by side, as wide apart as before.
     let closed = page(cx);
-    assert!(closed[0].y < readable[0].y, "{closed:?} after {readable:?}");
-    assert_eq!(closed[2].x - closed[0].x, readable[1].x - readable[0].x);
+    assert_eq!(closed[1].y, closed[0].y, "{closed:?}");
+    assert_eq!(closed[1].x - closed[0].x, readable[1].x - readable[0].x);
     // The message stays inside the panel, a narrow window as a wide one.
     for width in [420., 860., 1600.] {
         cx.simulate_resize(size(px(width), px(720.)));

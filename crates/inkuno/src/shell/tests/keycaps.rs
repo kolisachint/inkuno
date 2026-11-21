@@ -262,10 +262,10 @@ fn keycaps_in_palette_and_empty_page(cx: &mut TestAppContext) {
     let (_shell, cx) =
         cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
     cx.run_until_parked();
-    // The empty page: three shortcuts, each a badge row before its words.
-    for i in 0..3 {
+    // The empty page: its cards (Search, New note), each a small box with its words.
+    for i in 0..2 {
         let row = bounds_of(cx, leak(format!("empty-key-{i}")));
-        assert!(row.size.height < px(40.), "{row:?}");
+        assert!(row.size.height < px(120.), "{row:?}");
     }
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("coffre");
