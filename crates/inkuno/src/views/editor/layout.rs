@@ -480,7 +480,7 @@ pub type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<Fast>>;
 /// The marker drawn before the text of a line: a heading's `#` (or a list item's marker, which
 /// covers no source: `len` is zero), and the room it takes (the text starts after it).
 pub(super) struct Lead {
-    /// What is written: `None` for a task's box, which is painted (see `check`).
+    /// What is written: `None` for a task's box or a bullet, which are painted (see `check`, `bullet`).
     pub(super) line: Option<WrappedLine>,
     /// Bytes of the line it covers.
     pub(super) len: usize,
@@ -490,6 +490,27 @@ pub(super) struct Lead {
     /// Where the written part is drawn, from the left of the lead (a number is right-aligned).
     pub(super) dx: Pixels,
     pub(super) check: Option<Check>,
+    /// A bullet, painted as a shape (see `Bullet`), with its extent from the left of the lead.
+    pub(super) bullet: Option<(Bullet, Range<Pixels>)>,
+}
+
+/// The shape of a bullet, as GitHub draws them: a disc at the top, a ring below, a square deeper.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Bullet {
+    Disc,
+    Ring,
+    Square,
+}
+
+impl Bullet {
+    /// The shape of an item at `depth`.
+    pub(super) fn at(depth: usize) -> Self {
+        match depth {
+            0 => Bullet::Disc,
+            1 => Bullet::Ring,
+            _ => Bullet::Square,
+        }
+    }
 }
 
 /// The box of a task on its first visual line, drawn by paint, and what a click on it does.
@@ -1682,6 +1703,10 @@ impl Editor {
                 } else {
                     0
                 };
+                // An indented paragraph after a list item continues it: it hangs at the item's text.
+                let cont = (kind == Kind::Para && !code && !math)
+                    .then(|| md::continuation_depth(line, self.content[..offset].split('\n').rev()))
+                    .flatten();
                 let id = {
                     let near = composed
                         .as_ref()
@@ -1690,7 +1715,7 @@ impl Editor {
                     let mut hasher = Fast::default();
                     // Two halves: thirteen entries do not fit in one hashed tuple.
                     (
-                        (style, line, kind, marker, math, lang, depth),
+                        (style, line, kind, marker, math, lang, (depth, cont)),
                         (
                             live,
                             near,
@@ -1808,9 +1833,16 @@ impl Editor {
                                     | Kind::Task(_)
                             );
                         // A list item's prefix (its marker, an ordered task's box) is not shown off-live:
-                        // its lead draws the marker, and `skip` hides the source (see `cut`).
-                        let item = hide && list;
-                        let prefix = if list { md::item_prefix(line) } else { marker };
+                        // its lead draws the marker, and `skip` hides the source (see `cut`). A
+                        // continuation's indent is hidden the same way.
+                        let item = hide && (list || cont.is_some());
+                        let prefix = if list {
+                            md::item_prefix(line)
+                        } else if cont.is_some() {
+                            md::indent_len(line)
+                        } else {
+                            marker
+                        };
                         let elide = if hide {
                             elided(line, prefix, kind, &flags)
                         } else {
@@ -1899,73 +1931,91 @@ impl Editor {
                             mono: false,
                             tint: None,
                         };
-                        let mut lead = if item {
-                            // A bullet, a number or a box, in the margin of its depth (`level`). A number
-                            // is right-aligned in its box, a bullet centered; a task's box is painted.
+                        let mut lead = if let Some(parent) = cont.filter(|_| item) {
+                            // A continuation hangs at the text of the item it belongs to. Its source
+                            // indent is hidden (`cut`); nothing is drawn.
+                            // ponytail: a wide number of the parent (`100.`) pushes its text further
+                            // right; its continuation lines do not follow it yet.
                             let em = px(t.size);
-                            let (level, bx, gap, side) =
-                                (em * 1.5 * depth as f32, em * 1.5, em * 0.35, em * 0.875);
+                            Some(Lead {
+                                line: None,
+                                len: 0,
+                                width: em * 1.875 * (parent + 1) as f32,
+                                dy: px(0.),
+                                dx: px(0.),
+                                check: None,
+                                bullet: None,
+                            })
+                        } else if item {
+                            // A list item's marker sits right-aligned, 0.5em before its text, in the gutter of its
+                            // depth: a gutter is 1.875em (30px at 16px), and it grows for a number too wide for it.
+                            // A bullet is a shape, a number a glyph (its text colour), a task's box is painted.
+                            let em = px(t.size);
+                            let gutter = em * 1.875;
+                            let (gap, side, dot) = (em * 0.5, em * 0.875, em * 0.35);
                             let glyph_style = RunStyle {
                                 pending: pend,
                                 heading: false,
-                                soft: true,
+                                soft: false,
                                 italic: false,
                                 mono: false,
                                 tint: None,
                             };
-                            let glyph = |s: &str| {
+                            let label = (kind == Kind::Ordered).then(|| {
+                                let source = line[md::indent_len(line)..marker].trim_end();
+                                md::number_label(source, depth)
+                            });
+                            let text = label.as_ref().and_then(|s| {
                                 shape(
                                     s,
                                     font_size,
                                     &text_runs(&t, s, &vec![0; s.len()], |_| false, &glyph_style),
                                     None,
                                 )
-                            };
-                            let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
-                            let written = match kind {
-                                Kind::Ordered => Some(line[indent..marker].trim_end()),
-                                Kind::Bullet => Some(["•", "◦", "▪"][depth % 3]),
-                                _ => None,
-                            };
-                            let (text, mark, dx) = match written {
-                                None => (None, bx, px(0.)),
-                                Some(s) => {
-                                    let text = glyph(s);
-                                    let w = text
-                                        .as_ref()
-                                        .and_then(|l| l.position_for_index(s.len(), lh))
-                                        .map_or(px(0.), |p| p.x);
-                                    if kind == Kind::Ordered {
-                                        let mark = bx.max(w + gap);
-                                        (text, mark, mark - gap - w)
-                                    } else {
-                                        (text, bx, (bx - w) / 2.)
-                                    }
-                                }
-                            };
-                            // An ordered task's box follows its number; a bullet task's is its marker's.
-                            let task = md::task_box(line);
-                            let box_at = if kind == Kind::Ordered { mark } else { px(0.) };
-                            let check = task.map(|(at, done)| {
-                                let from = level + box_at + (bx - side) / 2.;
-                                Check {
-                                    at,
-                                    x: from..from + side,
-                                    done,
-                                }
                             });
-                            let room = if kind == Kind::Ordered && task.is_some() {
-                                mark + bx
-                            } else {
-                                mark
+                            let number = match (&text, &label) {
+                                (Some(l), Some(s)) => {
+                                    l.position_for_index(s.len(), lh).map_or(px(0.), |p| p.x)
+                                }
+                                _ => px(0.),
+                            };
+                            let task = md::task_box(line);
+                            let bullet = (kind == Kind::Bullet).then(|| Bullet::at(depth));
+                            // The width of the marker: a shape, a number, or a box (after a number
+                            // for an ordered task, with `dot` between them).
+                            let mark = match (kind, task.is_some()) {
+                                (Kind::Bullet, _) => dot,
+                                (Kind::Ordered, true) => number + dot + side,
+                                (Kind::Ordered, false) => number,
+                                _ => side,
+                            };
+                            // The text starts after the marker's gap; the gutter grows to fit a wider marker.
+                            let text_at =
+                                gutter * (depth + 1) as f32 + (mark + gap - gutter).max(px(0.));
+                            let right = text_at - gap;
+                            let (check, number_right) = match task {
+                                Some((at, done)) => {
+                                    let from = right - side;
+                                    let number_right = from - dot;
+                                    (
+                                        Some(Check {
+                                            at,
+                                            x: from..from + side,
+                                            done,
+                                        }),
+                                        number_right,
+                                    )
+                                }
+                                None => (None, right),
                             };
                             Some(Lead {
                                 line: text,
                                 len: 0,
-                                width: level + room,
+                                width: text_at,
                                 dy: px(0.),
-                                dx: level + dx,
+                                dx: number_right - number,
                                 check,
+                                bullet: bullet.map(|shape| (shape, right - dot..right)),
                             })
                         } else {
                             // The live line shows its `# ` marker; the others hide it (see `elided`).
@@ -1992,6 +2042,7 @@ impl Editor {
                                     dy: px(0.),
                                     dx: px(0.),
                                     check: None,
+                                    bullet: None,
                                 })
                         };
                         let wrap = (kind != Kind::Table)
@@ -2828,7 +2879,7 @@ mod tests {
         // The cursor's line starts out live; every other line hides its markers.
         assert_eq!(rows[0], ("# Title".to_string(), true));
         assert_eq!(rows[2], ("Hello bold and italic.".to_string(), false));
-        assert_eq!(rows[4], ("• item one".to_string(), false));
+        assert_eq!(rows[4], ("item one".to_string(), false));
         assert_eq!(rows[5], ("task open".to_string(), false));
         assert_eq!(rows[6], ("task done".to_string(), false));
         assert_eq!(rows[8], ("1. first".to_string(), false));
@@ -2855,7 +2906,7 @@ mod tests {
         let rows = shown(cx, &lines);
         assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
         assert_eq!(rows[0], ("Title".to_string(), false));
-        assert_eq!(rows[4], ("• item one".to_string(), false));
+        assert_eq!(rows[4], ("item one".to_string(), false));
         // Clicking the link line reveals its address; the others keep hiding.
         let link_middle = editor.read_with(cx, |e, _| e.point_of(at(12) + 1).unwrap());
         cx.simulate_click(link_middle, gpui::Modifiers::none());
@@ -3174,8 +3225,8 @@ mod tests {
         (editor, cx)
     }
 
-    /// Each item's hidden prefix, its lead's source bytes (none: decorative), its glyph, its box
-    /// (its `[` and whether it is checked) and its width.
+    /// Each item's hidden prefix, its lead's source bytes (none: decorative), its glyph, its bullet's
+    /// shape, its box (its `[` and whether it is checked) and its width: the text starts there.
     #[gpui::test]
     fn list_items_draw_their_markers(cx: &mut gpui::TestAppContext) {
         let text = "Intro\n- a\n  - b\n7. c\n10. d\n1) e\n- [ ] f\n- [x] g\n1. [ ] h\n";
@@ -3197,6 +3248,7 @@ mod tests {
                         row.shaped.skip,
                         lead.len,
                         lead.line.as_ref().map(|l| l.text.to_string()),
+                        lead.bullet.as_ref().map(|(shape, _)| *shape),
                         lead.check.as_ref().map(|c| (c.at, c.done)),
                         lead.width,
                     )
@@ -3204,32 +3256,88 @@ mod tests {
                 .collect::<Vec<_>>()
         });
         let glyph = |s: &str| Some(s.to_string());
-        // Bullets cycle with the depth (two spaces of indent is one level).
-        assert_eq!(items[0], (2, 0, glyph("•"), None, em * 1.5));
-        assert_eq!(items[1], (4, 0, glyph("◦"), None, em * 3.));
-        // A number keeps its delimiter; its box is at least a bullet's.
+        // Bullets are shapes that change with the depth: a disc, a ring, then a square. The text
+        // starts at 1.875em per level (two spaces of indent is one level).
+        assert_eq!(items[0], (2, 0, None, Some(Bullet::Disc), None, em * 1.875));
+        assert_eq!(items[1], (4, 0, None, Some(Bullet::Ring), None, em * 3.75));
+        // A number keeps its delimiter, and fits its gutter.
         assert_eq!(
-            (items[2].0, items[2].1, items[2].2.clone()),
-            (3, 0, glyph("7."))
+            (items[2].0, items[2].1, items[2].2.clone(), items[2].5),
+            (3, 0, glyph("7."), em * 1.875)
         );
-        assert!(items[2].4 >= em * 1.5);
-        assert_eq!(
-            (items[3].0, items[3].1, items[3].2.clone()),
-            (4, 0, glyph("10."))
-        );
-        assert!(items[3].4 >= em * 1.5);
-        assert_eq!(
-            (items[4].0, items[4].1, items[4].2.clone()),
-            (3, 0, glyph("1)"))
-        );
-        // A task's box is painted, in place of a bullet; the box holds the `[` of its source.
-        assert_eq!(items[5], (6, 0, None, Some((2, false)), em * 1.5));
-        assert_eq!(items[6], (6, 0, None, Some((2, true)), em * 1.5));
-        // An ordered task: a number, then its box.
+        assert_eq!(items[3].0, 4);
+        assert_eq!(items[3].2, glyph("10."));
+        assert!(items[3].5 >= em * 1.875);
+        assert_eq!(items[4].0, 3);
+        assert_eq!(items[4].2, glyph("1)"));
+        // A task's box is painted in place of a bullet; the box holds the `[` of its source.
+        assert_eq!(items[5], (6, 0, None, None, Some((2, false)), em * 1.875));
+        assert_eq!(items[6], (6, 0, None, None, Some((2, true)), em * 1.875));
+        // An ordered task: a number, then its box. The number is too wide for the gutter, which grows.
         assert_eq!(items[7].0, 7);
         assert_eq!(items[7].2, glyph("1."));
-        assert_eq!(items[7].3, Some((3, false)));
-        assert!(items[7].4 >= em * 3.);
+        assert_eq!(items[7].4, Some((3, false)));
+        assert!(items[7].5 > em * 1.875);
+    }
+
+    /// Ordered items count in roman numerals one level down and in letters below, from the source
+    /// number; the source itself stays, and the live line shows it.
+    #[gpui::test]
+    fn nested_ordered_items_count_in_roman_and_letters(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n3. a\n   3. b\n      3) c\n- x\n  3. d\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let labels = editor.read_with(cx, |e, _| {
+            [1, 2, 3, 5]
+                .iter()
+                .map(|&i| {
+                    let row = e.rows.iter().find(|r| r.start == lines[i]).unwrap();
+                    row.shaped
+                        .lead
+                        .as_ref()
+                        .unwrap()
+                        .line
+                        .as_ref()
+                        .unwrap()
+                        .text
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        });
+        // Depth 0 is decimal, depth 1 roman (also under a bullet), depth 2 letters.
+        assert_eq!(labels, ["3.", "iii.", "c)", "iii."]);
+    }
+
+    /// A line indented under an item is its continuation: its indent is hidden and its text starts
+    /// at the text of the item, at the depth of that item.
+    #[gpui::test]
+    fn a_continuation_hangs_at_its_item_text(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n- a\n  more of a\n  - b\n      more of b\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let (under_a, under_b) = editor.read_with(cx, |e, _| {
+            let row = |i: usize| e.rows.iter().find(|r| r.start == lines[i]).unwrap();
+            let a = row(2);
+            let b = row(4);
+            let lead_a = a.shaped.lead.as_ref().unwrap();
+            let lead_b = b.shaped.lead.as_ref().unwrap();
+            assert_eq!((lead_a.len, lead_a.line.is_none()), (0, true));
+            assert_eq!(a.shaped.skip, 2, "the indent is hidden");
+            (
+                (
+                    lead_a.width,
+                    a.live,
+                    a.shaped.line.as_ref().map(|l| l.text.to_string()),
+                ),
+                (lead_b.width, b.shaped.skip),
+            )
+        });
+        let em = px(editor.read_with(cx, |e, _| e.theme.size));
+        // The text of `- a` starts at 1.875em; of `  - b`, one level further, at 3.75em.
+        assert_eq!(under_a.0, em * 1.875);
+        assert_eq!(under_a.2.as_deref(), Some("more of a"));
+        assert_eq!(under_b.0, em * 3.75);
+        assert_eq!(under_b.1, 6);
     }
 
     /// A click on the drawn box of a task checks it. A click on the rest of the marker puts the
@@ -3279,28 +3387,20 @@ mod tests {
     fn an_item_follows_the_indent_of_the_items_above(cx: &mut gpui::TestAppContext) {
         let text = "Intro\n- a\n  - b\n";
         let (editor, cx) = laid_out(cx, text);
-        // The glyph of the item starting at `start`.
-        let glyph = |cx: &mut gpui::VisualTestContext, start: usize| {
+        // The bullet shape of the item starting at `start`.
+        let shape = |cx: &mut gpui::VisualTestContext, start: usize| {
             editor.read_with(cx, |e, _| {
                 let row = e.rows.iter().find(|r| r.start == start).unwrap();
-                row.shaped
-                    .lead
-                    .as_ref()
-                    .unwrap()
-                    .line
-                    .as_ref()
-                    .unwrap()
-                    .text
-                    .to_string()
+                row.shaped.lead.as_ref().unwrap().bullet.as_ref().unwrap().0
             })
         };
         let first_item = starts(text)[1];
-        assert_eq!(glyph(cx, starts(text)[2]), "◦");
+        assert_eq!(shape(cx, starts(text)[2]), Bullet::Ring);
         editor.update(cx, |e, cx| e.edit(first_item..first_item, "  ", cx));
         let _ = cx.update(|window, cx| window.draw(cx));
         cx.run_until_parked();
         let edited = editor.read_with(cx, |e, _| e.text().to_string());
-        assert_eq!(glyph(cx, starts(&edited)[2]), "•");
+        assert_eq!(shape(cx, starts(&edited)[2]), Bullet::Disc);
     }
 
     /// The second visual line of a long item starts where its text starts, under the first.

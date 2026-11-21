@@ -1,6 +1,6 @@
 # Writing notes
 
-What you type is what is saved. Inkuno only changes how it looks: markers stay visible but dimmed, and the file on disk is always plain Markdown.
+What you type is what is saved. Inkuno only changes how it looks: markers stay visible but dimmed. A list marker is drawn as a bullet, a number or a checkbox, and the raw Markdown marker shows on the line you are editing. The file on disk is always plain Markdown.
 
 ## Markdown
 
