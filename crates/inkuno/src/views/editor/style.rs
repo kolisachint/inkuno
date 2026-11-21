@@ -103,6 +103,13 @@ impl Editor {
             pos.x - self.origin.x,
             pos.y - self.origin.y - row.y - row.pad,
         );
+        // The box drawn in the margin of a task (its first visual line): its source is hidden.
+        if let Some(check) = row.shaped.lead.as_ref().and_then(|l| l.check.as_ref()) {
+            let x = local.x + row.dx;
+            if x >= check.x.start && x <= check.x.end && local.y >= px(0.) && local.y < row.lh {
+                return Some(row.start + check.at);
+            }
+        }
         md::checkboxes(line, 0).into_iter().find_map(|b| {
             let (from, to) = (row.pos(b.start), row.pos(b.end));
             let inside = local.x >= from.x

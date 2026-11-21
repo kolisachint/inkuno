@@ -299,9 +299,11 @@ impl Row {
         let p = match &self.grid {
             Some(grid) => grid.pos(i.min(self.len), self.lh),
             None => match &self.shaped.lead {
-                Some(lead) if i < lead.len => {
-                    lead.line.position_for_index(i, self.lh).unwrap_or_default()
-                }
+                Some(lead) if i < lead.len => lead
+                    .line
+                    .as_ref()
+                    .and_then(|line| line.position_for_index(i, self.lh))
+                    .unwrap_or_default(),
                 lead => {
                     let skip = self.shaped.skip;
                     let at = lead.as_ref().map_or(px(0.), |l| l.width);
@@ -312,7 +314,8 @@ impl Row {
                             self.lh,
                         )
                     });
-                    p.map_or_else(Default::default, |p| point(p.x + at, p.y))
+                    // An empty line has no text to measure: its caret sits after the lead.
+                    p.map_or_else(|| point(at, px(0.)), |p| point(p.x + at, p.y))
                 }
             },
         };
@@ -355,12 +358,15 @@ impl Row {
         }
         if let Some(lead) = &self.shaped.lead {
             // On the marker (first visual line, left of the title), or in the title shifted by it.
+            // A decorative marker (a bullet, a box) covers no source: the click goes to the text's start.
             if p.y < self.lh && p.x < lead.width {
-                return lead
-                    .line
-                    .closest_index_for_position(p, self.lh)
-                    .unwrap_or_else(|i| i)
-                    .min(lead.len);
+                return match &lead.line {
+                    Some(line) if lead.len > 0 => line
+                        .closest_index_for_position(p, self.lh)
+                        .unwrap_or_else(|i| i)
+                        .min(lead.len),
+                    _ => self.shaped.skip,
+                };
             }
             let p = point(p.x - lead.width, p.y);
             return match self
@@ -471,20 +477,35 @@ pub(super) fn cached_shape(
 
 pub type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<Fast>>;
 
-/// The marker of a heading, drawn before its title.
+/// The marker drawn before the text of a line: a heading's `#` (or a list item's marker, which
+/// covers no source: `len` is zero), and the room it takes (the text starts after it).
 pub(super) struct Lead {
-    pub(super) line: WrappedLine,
-    /// Bytes of the line it covers, and the room it takes (the title starts after it).
+    /// What is written: `None` for a task's box, which is painted (see `check`).
+    pub(super) line: Option<WrappedLine>,
+    /// Bytes of the line it covers.
     pub(super) len: usize,
     pub(super) width: Pixels,
     /// How far down it is drawn so that its baseline is the title's.
     pub(super) dy: Pixels,
+    /// Where the written part is drawn, from the left of the lead (a number is right-aligned).
+    pub(super) dx: Pixels,
+    pub(super) check: Option<Check>,
+}
+
+/// The box of a task on its first visual line, drawn by paint, and what a click on it does.
+pub(super) struct Check {
+    /// Byte of the `[` of the box, in the line.
+    pub(super) at: usize,
+    /// Its horizontal extent, from the left of the lead.
+    pub(super) x: Range<Pixels>,
+    pub(super) done: bool,
 }
 
 /// What a line displays, as long as neither it nor its context change.
 pub(super) struct Shaped {
     pub(super) line: Option<WrappedLine>,
-    /// Source bytes hidden before the shaped text (a heading's `# `, shown by `lead` or hidden with it).
+    /// Source bytes hidden before the shaped text: a heading's `# `, a list item's prefix (`- `, `7. `, `- [ ] `),
+    /// shown by `lead` when live or drawn in its place.
     pub(super) skip: usize,
     /// A heading's `#` marker: shaped on its own at the body size, since a line has a single font size.
     pub(super) lead: Option<Lead>,
@@ -695,25 +716,23 @@ pub fn text_runs(
     runs
 }
 
-/// Byte ranges of `line` hidden when it is not the live one: its block prefix (`- `, `1. `,
-/// `> `, `- [ ] `, the indent kept so that nested items keep their level), its inline style
+/// Byte ranges of `line` hidden when it is not the live one, from `marker` on: its inline style
 /// markers (`**`, backticks…) and the address of a `[text](url)` link (`[` and `](url)` hide,
 /// the label alone stays, Typora-style; the clicked or edited line shows its source again).
 /// Bare addresses, tags, images, comments, callouts and footnote labels stay readable; a checked
-/// task keeps its (struck) text; code stays as is. The caller only asks for the kinds it hides.
+/// task keeps its (struck) text; code stays as is. A quote's prefix is hidden here, from `marker`;
+/// a list item's prefix is hidden by its layout instead (see `item_prefix`). The caller only asks
+/// for the kinds it hides.
 fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
-    if matches!(
-        kind,
-        Kind::Quote | Kind::Bullet | Kind::Ordered | Kind::Task(_)
-    ) {
+    if kind == Kind::Quote {
         let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
         if marker > indent {
             out.push((indent, marker));
         }
     }
     // A checked task dims its text: it stays.
-    if matches!(kind, Kind::Task(true)) {
+    if matches!(kind, Kind::Task(true)) || md::task_box(line).is_some_and(|(_, done)| done) {
         return out;
     }
     // What stays readable: links, images, comments, callouts, footnote labels.
@@ -955,6 +974,34 @@ impl Editor {
                     && rows[r.end].kind != Kind::Table
                 {
                     r.end += 1;
+                }
+                // A list item's depth reads the items above it: a changed item re-lays the ones
+                // after it, to the end of their list (blank and indented lines belong to a list).
+                let item =
+                    |i: usize| matches!(rows[i].kind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
+                let member = |i: usize| {
+                    let s = rows[i].start;
+                    let s = if s <= p {
+                        s
+                    } else {
+                        (s as isize + delta) as usize
+                    };
+                    item(i)
+                        || rows[i].kind == Kind::Para
+                            && self.content.get(s..).is_some_and(|t| {
+                                let t = t.split('\n').next().unwrap_or("");
+                                t.trim().is_empty() || t.starts_with([' ', '\t'])
+                            })
+                };
+                if before.clone().any(item)
+                    || matches!(
+                        md::classify(last, false).0,
+                        Kind::Bullet | Kind::Ordered | Kind::Task(_)
+                    )
+                {
+                    while r.end < n && member(r.end) {
+                        r.end += 1;
+                    }
                 }
                 grown |= *r != before;
             }
@@ -1626,6 +1673,15 @@ impl Editor {
                 let composed = marked
                     .clone()
                     .filter(|m| m.start <= offset + line.len() && m.end >= offset);
+                // A list item's depth sets its marker's indent: the lines above it tell it.
+                let depth = if matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) {
+                    md::list_depth(
+                        md::indent_columns(line),
+                        self.content[..offset].split('\n').rev(),
+                    )
+                } else {
+                    0
+                };
                 let id = {
                     let near = composed
                         .as_ref()
@@ -1634,7 +1690,7 @@ impl Editor {
                     let mut hasher = Fast::default();
                     // Two halves: thirteen entries do not fit in one hashed tuple.
                     (
-                        (style, line, kind, marker, math, lang),
+                        (style, line, kind, marker, math, lang, depth),
                         (
                             live,
                             near,
@@ -1691,16 +1747,13 @@ impl Editor {
                                 formula = Some((source.to_string(), display));
                             }
                         }
-                        if kind == Kind::Task(true) {
-                            flags[marker..]
+                        // A checked task (bullet or ordered) strikes its text. Its checkbox is bold,
+                        // like a checkbox in the text or a table.
+                        if let Some((at, true)) = md::task_box(line) {
+                            flags[at + 4..]
                                 .iter_mut()
                                 .for_each(|f| *f |= md::STRIKE | md::DIM);
-                            // Checked, its checkbox is bold, like a checkbox in the text or a table.
-                            if let Some(at) = line[..marker].find('[') {
-                                flags[at..(at + 3).min(marker)]
-                                    .iter_mut()
-                                    .for_each(|f| *f |= md::BOLD);
-                            }
+                            flags[at..at + 3].iter_mut().for_each(|f| *f |= md::BOLD);
                         }
                         if let Some(label) = md::callout(line).filter(|_| own_tint.is_some()) {
                             // The type is tinted, its `[!` and `]` are markers like any other.
@@ -1754,8 +1807,12 @@ impl Editor {
                                     | Kind::Ordered
                                     | Kind::Task(_)
                             );
+                        // A list item's prefix (its marker, an ordered task's box) is not shown off-live:
+                        // its lead draws the marker, and `skip` hides the source (see `cut`).
+                        let item = hide && list;
+                        let prefix = if list { md::item_prefix(line) } else { marker };
                         let elide = if hide {
-                            elided(line, marker, kind, &flags)
+                            elided(line, prefix, kind, &flags)
                         } else {
                             Default::default()
                         };
@@ -1812,11 +1869,12 @@ impl Editor {
                             mono: code || kind == Kind::Table,
                             tint: own_tint,
                         };
-                        // A title's `#` marker is at the body size, `dim`, on the title's baseline.
-                        let cut = if matches!(kind, Kind::Heading(_)) {
-                            marker
-                        } else {
-                            0
+                        // The source before the text: a heading's `#` (its lead shows it when live), a
+                        // list item's prefix (hidden off-live: its lead draws the marker instead).
+                        let cut = match kind {
+                            Kind::Heading(_) => marker,
+                            _ if item => prefix,
+                            _ => 0,
                         };
                         let runs = text_runs(
                             &t,
@@ -1841,33 +1899,109 @@ impl Editor {
                             mono: false,
                             tint: None,
                         };
-                        // The live line shows its `# ` marker; the others hide it (see `elided`).
-                        let mut lead = (cut > 0 && live)
-                            .then(|| {
+                        let mut lead = if item {
+                            // A bullet, a number or a box, in the margin of its depth (`level`). A number
+                            // is right-aligned in its box, a bullet centered; a task's box is painted.
+                            let em = px(t.size);
+                            let (level, bx, gap, side) =
+                                (em * 1.5 * depth as f32, em * 1.5, em * 0.35, em * 0.875);
+                            let glyph_style = RunStyle {
+                                pending: pend,
+                                heading: false,
+                                soft: true,
+                                italic: false,
+                                mono: false,
+                                tint: None,
+                            };
+                            let glyph = |s: &str| {
                                 shape(
-                                    &shown[..cut],
-                                    px(t.size),
-                                    &text_runs(
-                                        &t,
-                                        &shown[..cut],
-                                        &flags[..cut],
-                                        is_marked,
-                                        &marker_style,
-                                    ),
+                                    s,
+                                    font_size,
+                                    &text_runs(&t, s, &vec![0; s.len()], |_| false, &glyph_style),
                                     None,
                                 )
-                            })
-                            .flatten()
-                            .map(|line| Lead {
-                                width: line.position_for_index(cut, lh).map_or(px(0.), |p| p.x),
-                                line,
-                                len: cut,
-                                dy: px(0.),
+                            };
+                            let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+                            let written = match kind {
+                                Kind::Ordered => Some(line[indent..marker].trim_end()),
+                                Kind::Bullet => Some(["•", "◦", "▪"][depth % 3]),
+                                _ => None,
+                            };
+                            let (text, mark, dx) = match written {
+                                None => (None, bx, px(0.)),
+                                Some(s) => {
+                                    let text = glyph(s);
+                                    let w = text
+                                        .as_ref()
+                                        .and_then(|l| l.position_for_index(s.len(), lh))
+                                        .map_or(px(0.), |p| p.x);
+                                    if kind == Kind::Ordered {
+                                        let mark = bx.max(w + gap);
+                                        (text, mark, mark - gap - w)
+                                    } else {
+                                        (text, bx, (bx - w) / 2.)
+                                    }
+                                }
+                            };
+                            // An ordered task's box follows its number; a bullet task's is its marker's.
+                            let task = md::task_box(line);
+                            let box_at = if kind == Kind::Ordered { mark } else { px(0.) };
+                            let check = task.map(|(at, done)| {
+                                let from = level + box_at + (bx - side) / 2.;
+                                Check {
+                                    at,
+                                    x: from..from + side,
+                                    done,
+                                }
                             });
+                            let room = if kind == Kind::Ordered && task.is_some() {
+                                mark + bx
+                            } else {
+                                mark
+                            };
+                            Some(Lead {
+                                line: text,
+                                len: 0,
+                                width: level + room,
+                                dy: px(0.),
+                                dx: level + dx,
+                                check,
+                            })
+                        } else {
+                            // The live line shows its `# ` marker; the others hide it (see `elided`).
+                            (cut > 0 && live)
+                                .then(|| {
+                                    shape(
+                                        &shown[..cut],
+                                        px(t.size),
+                                        &text_runs(
+                                            &t,
+                                            &shown[..cut],
+                                            &flags[..cut],
+                                            is_marked,
+                                            &marker_style,
+                                        ),
+                                        None,
+                                    )
+                                })
+                                .flatten()
+                                .map(|line| Lead {
+                                    width: line.position_for_index(cut, lh).map_or(px(0.), |p| p.x),
+                                    line: Some(line),
+                                    len: cut,
+                                    dy: px(0.),
+                                    dx: px(0.),
+                                    check: None,
+                                })
+                        };
                         let wrap = (kind != Kind::Table)
                             .then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
                         let line = shape(&shown[cut..], font_size, &runs, wrap);
-                        if let Some(lead) = &mut lead {
+                        // A heading's `#` sits on the title's baseline (a list marker is at the body size: none).
+                        if let Some(lead) = &mut lead
+                            && lead.len > 0
+                            && let Some(glyph) = &lead.line
+                        {
                             // An empty title has no metrics of its own: those of a letter will do.
                             let probe = if shown[cut..].is_empty() {
                                 shape(
@@ -1883,17 +2017,13 @@ impl Editor {
                                 let baseline = |l: &WrappedLine| {
                                     (lh - (l.ascent() + l.descent())) / 2. + l.ascent()
                                 };
-                                lead.dy = baseline(title) - baseline(&lead.line);
+                                lead.dy = baseline(title) - baseline(glyph);
                             }
                         }
                         Rc::new(Shaped {
                             line,
-                            // Offsets before a hidden heading marker still address the text.
-                            skip: if matches!(kind, Kind::Heading(_)) {
-                                cut
-                            } else {
-                                0
-                            },
+                            // Offsets before a hidden marker still address the text.
+                            skip: cut,
                             lead,
                             subs,
                             formula,
@@ -2549,7 +2679,7 @@ mod tests {
     fn hidden(line: &str) -> Vec<&str> {
         let (kind, marker) = md::classify(line, false);
         let flags = md::flags(line, marker);
-        elided(line, marker, kind, &flags)
+        elided(line, md::item_prefix(line), kind, &flags)
             .into_iter()
             .map(|r| &line[r.0..r.1])
             .collect()
@@ -2567,14 +2697,16 @@ mod tests {
         // Unmatched signs are text: they stay.
         assert_eq!(hidden("a * b"), Vec::<&str>::new());
         assert_eq!(hidden("a -> b"), Vec::<&str>::new());
-        // Block prefixes go, the indent kept.
-        assert_eq!(hidden("- item **b**"), ["- ", "**", "**"]);
-        assert_eq!(hidden("  - nested"), ["- "]);
-        assert_eq!(hidden("1. first"), ["1. "]);
+        // A quote's prefix goes. A list item's prefix is drawn as a lead instead (see `item_prefix`),
+        // so only the inline markers of its text are hidden here.
+        assert_eq!(hidden("- item **b**"), ["**", "**"]);
+        assert_eq!(hidden("  - nested"), Vec::<&str>::new());
+        assert_eq!(hidden("1. first"), Vec::<&str>::new());
         assert_eq!(hidden("> quote"), ["> "]);
-        assert_eq!(hidden("- [ ] open"), ["- [ ] "]);
-        // A checked task keeps its struck text; only the marker goes.
-        assert_eq!(hidden("- [x] done"), ["- [x] "]);
+        assert_eq!(hidden("- [ ] open"), Vec::<&str>::new());
+        // A checked task keeps its struck text, bullet or number.
+        assert_eq!(hidden("- [x] done"), Vec::<&str>::new());
+        assert_eq!(hidden("1. [x] done"), Vec::<&str>::new());
         // A heading keeps its title (its `# ` goes with the lead, not here).
         assert_eq!(hidden("# Title **b**"), ["**", "**"]);
         // A `[text](url)` link shows its label alone off-live; the clicked or edited
@@ -2641,8 +2773,14 @@ mod tests {
     fn displayed(editor: &Editor, start: usize) -> (String, bool) {
         let row = editor.rows.iter().find(|r| r.start == start).unwrap();
         let mut text = String::new();
-        if let Some(l) = row.shaped.lead.as_ref() {
-            text.push_str(&l.line.text);
+        if let Some(l) = row.shaped.lead.as_ref()
+            && let Some(glyph) = &l.line
+        {
+            text.push_str(&glyph.text);
+            // A list item's marker is set off from its text; a heading's `# ` has its own space.
+            if l.len == 0 {
+                text.push(' ');
+            }
         }
         if let Some(l) = row.shaped.line.as_ref() {
             text.push_str(&l.text);
@@ -2690,10 +2828,10 @@ mod tests {
         // The cursor's line starts out live; every other line hides its markers.
         assert_eq!(rows[0], ("# Title".to_string(), true));
         assert_eq!(rows[2], ("Hello bold and italic.".to_string(), false));
-        assert_eq!(rows[4], ("item one".to_string(), false));
+        assert_eq!(rows[4], ("• item one".to_string(), false));
         assert_eq!(rows[5], ("task open".to_string(), false));
         assert_eq!(rows[6], ("task done".to_string(), false));
-        assert_eq!(rows[8], ("first".to_string(), false));
+        assert_eq!(rows[8], ("1. first".to_string(), false));
         assert_eq!(rows[10], ("quote here".to_string(), false));
         assert_eq!(rows[12], ("our link".to_string(), false));
         assert_eq!(rows[14], ("code bit".to_string(), false));
@@ -2717,7 +2855,7 @@ mod tests {
         let rows = shown(cx, &lines);
         assert_eq!(rows[2], ("Hello **bold** and *italic*.".to_string(), true));
         assert_eq!(rows[0], ("Title".to_string(), false));
-        assert_eq!(rows[4], ("item one".to_string(), false));
+        assert_eq!(rows[4], ("• item one".to_string(), false));
         // Clicking the link line reveals its address; the others keep hiding.
         let link_middle = editor.read_with(cx, |e, _| e.point_of(at(12) + 1).unwrap());
         cx.simulate_click(link_middle, gpui::Modifiers::none());
@@ -3017,6 +3155,174 @@ mod tests {
         assert!(
             kept.len() >= 3 && kept.iter().all(|p| *p == Pend::Plain),
             "{kept:?}"
+        );
+    }
+
+    /// Lays out `text` in an editor, with its first line live (the cursor is there) and the
+    /// others not: what the tests of list items look at.
+    fn laid_out<'a>(
+        cx: &'a mut gpui::TestAppContext,
+        text: &str,
+    ) -> (gpui::Entity<Editor>, &'a mut gpui::VisualTestContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        editor.update(cx, |e, cx| e.load(text.to_string(), 0, cx));
+        cx.run_until_parked();
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        (editor, cx)
+    }
+
+    /// Each item's hidden prefix, its lead's source bytes (none: decorative), its glyph, its box
+    /// (its `[` and whether it is checked) and its width.
+    #[gpui::test]
+    fn list_items_draw_their_markers(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n- a\n  - b\n7. c\n10. d\n1) e\n- [ ] f\n- [x] g\n1. [ ] h\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let em = px(editor.read_with(cx, |e, _| e.theme.size));
+        let items = editor.read_with(cx, |e, _| {
+            lines[1..9]
+                .iter()
+                .map(|&start| {
+                    let row = e.rows.iter().find(|r| r.start == start).unwrap();
+                    let lead = row.shaped.lead.as_ref().unwrap_or_else(|| {
+                        panic!(
+                            "row at {start}: kind {:?}, live {}, skip {}, len {}",
+                            row.kind, row.live, row.shaped.skip, row.len
+                        )
+                    });
+                    (
+                        row.shaped.skip,
+                        lead.len,
+                        lead.line.as_ref().map(|l| l.text.to_string()),
+                        lead.check.as_ref().map(|c| (c.at, c.done)),
+                        lead.width,
+                    )
+                })
+                .collect::<Vec<_>>()
+        });
+        let glyph = |s: &str| Some(s.to_string());
+        // Bullets cycle with the depth (two spaces of indent is one level).
+        assert_eq!(items[0], (2, 0, glyph("•"), None, em * 1.5));
+        assert_eq!(items[1], (4, 0, glyph("◦"), None, em * 3.));
+        // A number keeps its delimiter; its box is at least a bullet's.
+        assert_eq!(
+            (items[2].0, items[2].1, items[2].2.clone()),
+            (3, 0, glyph("7."))
+        );
+        assert!(items[2].4 >= em * 1.5);
+        assert_eq!(
+            (items[3].0, items[3].1, items[3].2.clone()),
+            (4, 0, glyph("10."))
+        );
+        assert!(items[3].4 >= em * 1.5);
+        assert_eq!(
+            (items[4].0, items[4].1, items[4].2.clone()),
+            (3, 0, glyph("1)"))
+        );
+        // A task's box is painted, in place of a bullet; the box holds the `[` of its source.
+        assert_eq!(items[5], (6, 0, None, Some((2, false)), em * 1.5));
+        assert_eq!(items[6], (6, 0, None, Some((2, true)), em * 1.5));
+        // An ordered task: a number, then its box.
+        assert_eq!(items[7].0, 7);
+        assert_eq!(items[7].2, glyph("1."));
+        assert_eq!(items[7].3, Some((3, false)));
+        assert!(items[7].4 >= em * 3.);
+    }
+
+    /// A click on the drawn box of a task checks it. A click on the rest of the marker puts the
+    /// caret at the start of the item's text, not at the line's start.
+    #[gpui::test]
+    fn a_drawn_box_checks_its_task(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n- [ ] f\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let (box_click, marker_click, start) = editor.read_with(cx, |e, _| {
+            let row = e.rows.iter().find(|r| r.start == lines[1]).unwrap();
+            let lead = row.shaped.lead.as_ref().unwrap();
+            let check = lead.check.as_ref().unwrap();
+            let origin = e.point_of(row.start).unwrap();
+            // The text starts `lead.width` right of the line's start: the box is left of it.
+            let left = origin.x - lead.width;
+            let y = origin.y;
+            (
+                point(left + (check.x.start + check.x.end) / 2., y),
+                point(left + px(1.), y),
+                row.start,
+            )
+        });
+        // The box first: a click on it does not reveal the line, so its box is still drawn.
+        cx.simulate_click(box_click, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.text().to_string()),
+            "Intro\n- [x] f\n"
+        );
+        cx.simulate_click(marker_click, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.text().to_string()),
+            "Intro\n- [x] f\n"
+        );
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.cursor()),
+            start + 6,
+            "after the marker, at the item's text"
+        );
+    }
+
+    /// An item's depth comes from the items above it: indenting the one above moves the item
+    /// below it to the top level, and its bullet changes, though its own line is not edited.
+    #[gpui::test]
+    fn an_item_follows_the_indent_of_the_items_above(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n- a\n  - b\n";
+        let (editor, cx) = laid_out(cx, text);
+        // The glyph of the item starting at `start`.
+        let glyph = |cx: &mut gpui::VisualTestContext, start: usize| {
+            editor.read_with(cx, |e, _| {
+                let row = e.rows.iter().find(|r| r.start == start).unwrap();
+                row.shaped
+                    .lead
+                    .as_ref()
+                    .unwrap()
+                    .line
+                    .as_ref()
+                    .unwrap()
+                    .text
+                    .to_string()
+            })
+        };
+        let first_item = starts(text)[1];
+        assert_eq!(glyph(cx, starts(text)[2]), "◦");
+        editor.update(cx, |e, cx| e.edit(first_item..first_item, "  ", cx));
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        let edited = editor.read_with(cx, |e, _| e.text().to_string());
+        assert_eq!(glyph(cx, starts(&edited)[2]), "•");
+    }
+
+    /// The second visual line of a long item starts where its text starts, under the first.
+    #[gpui::test]
+    fn a_wrapped_item_hangs_under_its_text(cx: &mut gpui::TestAppContext) {
+        let text = format!("Intro\n- {}\n", "word ".repeat(150));
+        let (editor, cx) = laid_out(cx, &text);
+        let start = starts(&text)[1];
+        let (width, second, under) = editor.read_with(cx, |e, _| {
+            let row = e.rows.iter().find(|r| r.start == start).unwrap();
+            let lead = row.shaped.lead.as_ref().unwrap();
+            let second = (row.shaped.skip..row.len)
+                .find(|&i| row.pos(i).y >= row.lh)
+                .expect("the item wraps");
+            // A point just right of the text's edge, on the second line: the text there starts
+            // at the edge of the text, not of the line (gpui reports a wrap byte at the end above).
+            let under = row.index_at(point(lead.width + px(1.), row.lh * 1.5));
+            (lead.width, second, under)
+        });
+        assert!(
+            under <= second,
+            "the second line is not under the text: {under} after {second}, text at {width:?}"
         );
     }
 }
