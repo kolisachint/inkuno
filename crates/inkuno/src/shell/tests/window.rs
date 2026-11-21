@@ -479,9 +479,9 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Where the app draws the window buttons, no tab and no comment column goes under them: in a window of 420, 860
-/// and 1 600 px, with eight tabs of long titles and a note that has comments, the tabs' row and the column's header
-/// end before the buttons or start below them.
+/// Where the app draws the window buttons, no tab and no panel view goes under them: in a window of 420, 860
+/// and 1 600 px, with eight tabs of long titles and a note that has comments, the tabs' row and the Comments view's
+/// name end before the buttons or start below them.
 #[gpui::test]
 fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
     let root = std::env::temp_dir().join(format!("inkuno-pill-row-{}", std::process::id()));
@@ -512,9 +512,10 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             s.open_note(note, cx);
         }
     });
-    // Shut-default (ui.md §12): the column starts closed; open it so the header geometry below is exercised.
+    // The right panel on its Comments view, so the view's header geometry below is exercised.
     shell.update_in(cx, |s, _window, cx| {
-        s.comments_shut = false;
+        s.nav.right_view = nav::Mode::Comments;
+        s.nav.right_shown = vec![nav::Mode::Comments];
         cx.notify();
     });
     cx.run_until_parked();
@@ -537,10 +538,10 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             "{width}: the tabs' row {row:?} runs under the window buttons {pill:?}"
         );
         assert!(row.size.width > px(0.), "{width}: no room left for a tab");
-        if let Some(shut) = cx.debug_bounds("comments-shut") {
+        if let Some(head) = cx.debug_bounds("view-head-comments") {
             assert!(
-                shut.top() >= pill.bottom() || shut.right() <= pill.left(),
-                "{width}: the comments' header {shut:?} under the window buttons {pill:?}"
+                head.top() >= pill.bottom() || head.right() <= pill.left(),
+                "{width}: the Comments view's name {head:?} under the window buttons {pill:?}"
             );
             seen += 1;
         }
@@ -553,7 +554,7 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             "{width}: the vault name {name:?} runs under the window buttons {pill:?}"
         );
     }
-    assert!(seen > 0, "the comments column was never open");
+    assert!(seen > 0, "the Comments view was never open");
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -650,7 +651,7 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         .debug_bounds("drag-strip-0")
         .expect("the strip over the note is a handle");
     assert_eq!(strip.size.height, px(BAND), "{strip:?}");
-    // Panel open beside the note (the header's free part past the title), with the comment column open.
+    // Panel open beside the note (the header's free part past the title), with the Comments view shown.
     panel(cx, nav::Panel::Split);
     check("one tab, panel", 1, cx);
     let (head, title) = (
@@ -661,16 +662,19 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         head.right() > title.right() + px(40.) || head.size.width < title.size.width + px(40.),
         "{head:?} {title:?}"
     );
-    // Shut-default (ui.md §12): the column starts closed; open it before asserting it is drawn.
     shell.update_in(cx, |s, _window, cx| {
-        s.comments_shut = false;
+        s.nav.right_view = nav::Mode::Comments;
+        s.nav.right_shown = vec![nav::Mode::Comments];
         cx.notify();
     });
     settle(cx);
     assert!(
-        cx.debug_bounds("comments").is_some(),
-        "the comments column is open"
+        cx.debug_bounds("comments-view").is_some(),
+        "the Comments view is open"
     );
+    // The Comments view takes its room at this width: the two-tab and two-pane steps check the panes without it.
+    shell.update(cx, |s, _| s.nav.right_shown.clear());
+    settle(cx);
     // Two tabs: the bar, free past the last tab.
     shell.update_in(cx, |s, window, cx| {
         s.add_tab(window, cx);
@@ -848,18 +852,18 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
         cx.run_until_parked();
         assert_eq!(shell.read_with(cx, |s, _| s.theme.size), size);
         let now = measure(cx);
-        // The note's foot: the comments bubble and the assistant button side by side, none over
-        // another, both inside the note.
+        // The note's foot: the comments bubble alone, inside the note. The round assistant button is gone
+        // (decision 11): the assistant is a view of the right panel.
         let pane = cx.debug_bounds("pane-0").expect("the note is drawn");
-        let foot = ["comments-toggle", "assistant-toggle"].map(|name| {
-            cx.debug_bounds(name)
-                .unwrap_or_else(|| panic!("{name} at {size}"))
-        });
-        assert!(foot[0].right() <= foot[1].left(), "at {size}: {foot:?}");
+        let foot = cx
+            .debug_bounds("comments-toggle")
+            .unwrap_or_else(|| panic!("comments-toggle at {size}"));
         assert!(
-            foot.iter().all(|b| b.left() >= pane.left()
-                && b.right() <= pane.right()
-                && b.bottom() <= pane.bottom()),
+            cx.debug_bounds("assistant-toggle").is_none(),
+            "at {size}: the round assistant button is still drawn"
+        );
+        assert!(
+            foot.left() >= pane.left() && foot.right() <= pane.right() && foot.bottom() <= pane.bottom(),
             "at {size}: {foot:?} outside {pane:?}"
         );
         for (i, (got, was)) in now.iter().zip(base).enumerate() {

@@ -146,6 +146,10 @@ impl AssetSource for Assets {
                 r#"<path d="M3 4A1.5 1.5 0 0 1 4.5 2.5H11.5A1.5 1.5 0 0 1 13 4V9.5A1.5 1.5 0 0 1 11.5 11H7L4 13.5V11H4.5A1.5 1.5 0 0 1 3 9.5Z"/>"#
             }
             "c-outline.svg" => r#"<path d="M3 4H13M5.5 8H13M8 12H13"/>"#,
+            // Project artwork: the right panel's toggle, a panel on the window's right third (the `c-split` family).
+            "c-rpanel.svg" => {
+                r#"<rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M10.5 3.5V12.5"/>"#
+            }
             "c-calendar.svg" => {
                 r#"<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5H13.5M5.5 2.5V4.5M10.5 2.5V4.5"/>"#
             }

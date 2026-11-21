@@ -441,7 +441,7 @@ impl Shell {
                 // bar already starts past the sidebar, so it pads only what the sidebar leaves.
                 .pl(pad)
                 .children(toggle)
-                .when(corner, |d| d.pr(t.px(render::PILL_ROOM)))
+                .when(corner, |d| d.pr(t.px(render::NOTE_ROOM)))
                 // Past the last tab, it lands at the end; out of the bar, nowhere in it.
                 .on_drag_move(cx.listener(
                     move |this, e: &gpui::DragMoveEvent<TabDragged>, _, cx| {

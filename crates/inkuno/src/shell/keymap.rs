@@ -106,12 +106,14 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 t(tr("Current file", "Fichier affiché"), tr("The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate", "L'arbre marque le fichier du volet et de l'onglet actifs, y compris les schémas, images et tableaux ; la sélection reste distincte")),
                 k(&nav::ShowRecent, tr("Recent notes", "Notes récentes")),
                 k(&nav::ShowScratch, tr("Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it", "Brouillons : le panneau les liste, les plus récents d'abord ; Entrée en ouvre un, Suppr. le jette")),
-                k(&ShowVersions, tr("Versions of the note: the panel lists its saved versions, newest first; Enter compares one with the note as it is now", "Versions de la note : le panneau liste ses versions enregistrées, les plus récentes d'abord ; Entrée en compare une avec la note telle qu'elle est")),
+                k(&ShowVersions, tr("Versions of the note: the right panel lists its saved versions, newest first; Enter compares one with the note as it is now", "Versions de la note : le panneau de droite liste ses versions enregistrées, les plus récentes d'abord ; Entrée en compare une avec la note telle qu'elle est")),
                 t(tr("A picture", "Une image"), tr("Shown in place of the note", "Affichée à la place de la note")),
                 k(&nav::ToggleFull, tr("Panel on the whole window", "Panneau en pleine fenêtre")),
-                p("assistant", tr("Assistant: show or hide its panel in the right dock (also a round button at the foot of the note)", "Assistant : afficher ou masquer son panneau dans le dock de droite (aussi un bouton rond en bas de la note)")),
+                p("assistant", tr("Assistant: show or hide its view of the right panel (Ctrl+Alt+4 shows it)", "Assistant : afficher ou masquer sa vue du panneau de droite (Ctrl+Alt+4 l'affiche)")),
+                k(&ShowCommentsView, tr("Comments of the note: the right panel lists them as cards; a click on one shows its passage, Resolve closes it", "Commentaires de la note : le panneau de droite les liste en cartes ; un clic sur l'une montre son passage, Résoudre la ferme")),
                 p("improve", tr("Assistant: improve the selection, or the whole note; the proposal comes back as pending changes", "Assistant : améliorer la sélection, ou la note entière ; la proposition revient en changements en attente")),
-                k(&ToggleOutline, tr("Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note)", "Plan : afficher ou masquer les titres de la note dans le dock de droite (aussi dans la palette, Plan de la note)")),
+                k(&ToggleOutline, tr("Outline: show or hide the headings of the note in the right panel (also in the palette, as Outline of the note)", "Plan : afficher ou masquer les titres de la note dans le panneau de droite (aussi dans la palette, Plan de la note)")),
+                k(&ToggleRightPanel, tr("Right panel: show or hide it, on the view it showed last (its switcher picks Outline, Comments, Versions or Assistant)", "Panneau de droite : afficher ou masquer, sur la vue affichée en dernier (son sélecteur choisit Plan, Commentaires, Versions ou Assistant)")),
                 k(&ToggleSidebar, tr("Sidebar: show or hide the side panel", "Barre latérale : afficher ou masquer le panneau latéral")),
                 k(&ToggleFocus, tr("Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back", "Mode focus : la note seule, bord à bord, sans barres ni panneaux ; F9 ou Échap revient")),
                 k(&ToggleTitleBar, tr("Title bar: show or hide the bar the app draws (its buttons come back with it)", "Barre de titre : afficher ou masquer la barre dessinée par l'app (ses boutons reviennent avec elle)")),
@@ -374,6 +376,11 @@ pub(crate) fn defaults() -> Vec<keys::Bind> {
         b("secondary-shift-p", &ToggleCommands, None),
         // The outline of the note, in the right dock: a press shows it or hides it.
         b("secondary-shift-o", &ToggleOutline, None),
+        // The right panel's views, one each: Ctrl+Alt+1 to 4 (Versions is the third, its own action).
+        b("secondary-alt-1", &ShowOutlineView, None),
+        b("secondary-alt-2", &ShowCommentsView, None),
+        b("secondary-alt-3", &ShowVersions, None),
+        b("secondary-alt-4", &ShowAssistantView, None),
         // From button to button, where Tab has no other use (the note indents with it). In the window's own
         // context: a binding with none counts as the deepest and would take Tab from the views that use it.
         b("tab", &FocusNext, Some("Shell")),

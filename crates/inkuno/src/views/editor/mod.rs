@@ -248,6 +248,8 @@ pub enum EditorEvent {
     BlockMenu(Point<Pixels>),
     /// A diagram, formula or picture to view large.
     View(Source),
+    /// A click on a commented passage: the comment's start (the Comments view shows its card).
+    CommentAt(usize),
     /// A link to a heading or a block of a note, to open: the note and where in it; with Shift, aside.
     OpenAt(crate::logic::wiki::Target, bool),
     /// A short message for the shell to show once: an edit refused for a pending change, a

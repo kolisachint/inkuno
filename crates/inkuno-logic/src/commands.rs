@@ -455,6 +455,21 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
+            "app::ShowCommentsView",
+            tr("Comments of the note", "Commentaires de la note"),
+            "comment.svg",
+            Go,
+        ),
+        (
+            "app::ToggleRightPanel",
+            tr(
+                "Right panel: show or hide it",
+                "Panneau de droite : afficher ou masquer",
+            ),
+            "c-rpanel.svg",
+            Go,
+        ),
+        (
             "app::KeepInVault",
             tr(
                 "Keep this scratch note in the vault",

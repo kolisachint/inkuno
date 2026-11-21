@@ -1024,7 +1024,13 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
         }
     }
     for (whole, noted, said) in comments(line) {
-        if whole.start < from || flags[whole.start] & CODE != 0 {
+        // The new form's passage starts at the line's start (or a cell's, or the previous comment's), before
+        // the prefix: what counts is where its marker starts, not the whole.
+        let at = match is_html_comment(&line[whole.clone()]) {
+            true => noted.end,
+            false => whole.start,
+        };
+        if at < from || flags[at] & CODE != 0 {
             continue;
         }
         // The new form: the whole marker fades, its text with it (hidden off the live line); the

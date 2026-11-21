@@ -6,7 +6,6 @@ impl Shell {
     /// The note's comments, in the same list as its outline: the commented text, then
     /// what is said about it.
     pub(super) fn open_comments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.comments_shut = false;
         let said = markdown::all_comments(self.pane().editor.read(cx).text())
             .into_iter()
             .map(|n| {

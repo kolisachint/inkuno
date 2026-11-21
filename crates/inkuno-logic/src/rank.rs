@@ -51,7 +51,8 @@ pub fn snippet_line(body: &str, lower: &str, word: &str) -> Option<(String, std:
 /// A line of Markdown as the text it shows: heading, quote, list and task marks, emphasis and code
 /// markers, and links reduced to their text. A `_` stays, so that `my_name` reads as it is.
 pub fn plain_line(line: &str) -> String {
-    let mut s = line.trim();
+    let shown = cut_between(&cut_between(line, "<!-- comment:", "-->"), "{>>", "<<}");
+    let mut s = shown.trim();
     let hashes = s.len() - s.trim_start_matches('#').len();
     if (1..=6).contains(&hashes) && s[hashes..].starts_with(' ') {
         s = s[hashes..].trim_start();
@@ -69,7 +70,7 @@ pub fn plain_line(line: &str) -> String {
     if digits > 0 && s[digits..].starts_with(". ") {
         s = &s[digits + 2..];
     }
-    let s = s.replace("**", "").replace("~~", "").replace("==", "").replace("[[", "").replace("]]", "").replace('`', "");
+    let s = s.replace("**", "").replace("~~", "").replace("{==", "").replace("==}", "").replace("==", "").replace("[[", "").replace("]]", "").replace('`', "");
     // `[text](target)` shows its text; the target is not shown.
     let mut out = String::with_capacity(s.len());
     let mut rest = s.as_str();
@@ -83,6 +84,22 @@ pub fn plain_line(line: &str) -> String {
         out.push_str(&rest[..open]);
         out.push_str(&rest[open + 1..close]);
         rest = &rest[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `text` with each `open`…`close` span taken out, the markers with it; an open without its close stays.
+/// Both comment forms go this way: the passage stays, what is said does not.
+fn cut_between(text: &str, open: &str, close: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(open) {
+        let Some(end) = rest[start..].find(close).map(|i| start + i + close.len()) else {
+            break;
+        };
+        out.push_str(&rest[..start]);
+        rest = &rest[end..];
     }
     out.push_str(rest);
     out
@@ -163,6 +180,11 @@ mod tests {
         assert_eq!(text, "Book the venue");
         assert_eq!(&text[range], "venue");
         assert_eq!(plain_line("> 1. `code` and my_name"), "code and my_name");
+        // Comment markup goes with what is said; the passage stays, in either form.
+        assert_eq!(plain_line("## Tasks<!-- comment: Split this? -->"), "Tasks");
+        assert_eq!(plain_line("- [ ] Settings page<!-- comment: Add it. -->"), "Settings page");
+        assert_eq!(plain_line("- un {==mot==}{>>à revoir<<} ici"), "un mot ici");
+        assert_eq!(plain_line("<!-- comment: alone -->"), "");
         assert!(snippet_line(body, &lower, "absent").is_none());
     }
 }
