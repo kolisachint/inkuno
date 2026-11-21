@@ -786,7 +786,7 @@ impl Shell {
                 .children((!line.is_empty()).then(|| {
                     let text = div().text_size(t.px(12.)).text_color(t.soft);
                     if lines == 1 {
-                        text.min_w_0().truncate().child(line)
+                        text.w_full().truncate().child(line)
                     } else {
                         text.line_clamp(lines).child(line)
                     }

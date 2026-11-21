@@ -1242,7 +1242,7 @@ The note is a flat sheet, flush with the top, right and bottom edges of the wind
 
 ### 22.2 The empty page (Quiet)
 
-A centred column of three cards, **Today**, **New note** and **Search**, each 190 px wide with a 1 px border at 8 % of the text, 10 px radius and 12 px padding, and the hover fill. Under them, **From a month ago** with up to three recall cards (title and first line of the note). Cards with no vault: New note creates a scratch note. The other themes keep their rows (`render_empty_rows`). Code: `shell/render.rs` (`render_empty`, `render_cards`), `inkuno-logic/src/recall.rs` (`first_line`, the cap of three).
+A centred column of three cards, **Today**, **New note** and **Search**, each 200 px wide with a 1 px border at 8 % of the text, 10 px radius, 14 px padding, 10 px gaps and the hover fill. The title is 13 px medium in the text colour; the description is 12 px in the soft colour. Under them, **From a month ago** with up to three recall cards: the title, then the note's first body line (headings skipped, Markdown markers removed, one line with an ellipsis), or the title alone when the note has none. Cards with no vault: New note creates a scratch note. The other themes keep their rows (`render_empty_rows`). Code: `shell/render.rs` (`render_empty`, `render_cards`), `inkuno-logic/src/recall.rs` (`first_line`, the cap of three).
 
 ### 22.3 Quiet tokens
 
