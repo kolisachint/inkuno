@@ -11,7 +11,7 @@ The half-filled circle at the bottom of the rail, or `theme` in the palette.
 - `Default` follows the light or dark setting of your system, with Inkuno Light or Inkuno Dark.
 - In every theme, links, secondary text and the titles of colored panels are adjusted to a contrast of at least 4.5:1 (WCAG AA).
 
-**The look.** The window is a warm ground, a little darker than the page in every theme. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart. Page titles are in a serif, while note titles follow your font.
+**The look.** The window is a warm ground, a little darker than the page in every theme. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart. Page titles follow your text font too, Inter by default.
 
 - The active pane of a split has a thin accent ring.
 - The open row of a list, a tag in the text, a commented passage and the current tab take the accent colour as text.
@@ -20,10 +20,10 @@ The half-filled circle at the bottom of the rail, or `theme` in the palette.
 
 ## Fonts
 
-Inkuno carries IBM Plex Sans (text), IBM Plex Mono (code) and IBM Plex Serif (page titles), under the SIL Open Font License (`crates/inkuno/assets/fonts/`). So it looks the same everywhere, with nothing to install.
+Inkuno carries Inter (text and titles) and JetBrains Mono (code), under the SIL Open Font License (`crates/inkuno/assets/fonts/`). So it looks the same everywhere, with nothing to install.
 
 - Type `font` in the palette to choose another font, for the app or for the code, among those installed on your system. Type in the list to filter it.
-- Ideograms and emoji, which Plex does not draw, come from a font of your system.
+- Ideograms and emoji, which the bundled fonts do not draw, come from a font of your system.
 - A variable font cannot be emboldened. See [Troubleshooting](troubleshooting.md#bold-text-is-not-bold).
 
 ## Text size

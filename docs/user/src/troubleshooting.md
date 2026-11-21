@@ -14,7 +14,7 @@ The download is not notarized. See [macOS](install.md#macos) for the one-time st
 
 ## Bold text is not bold
 
-The font you picked is a variable font, which the text engine cannot embolden. [Pick another font](settings.md#fonts), or none to go back to the built-in ones.
+Inkuno's built-in Inter and JetBrains Mono ship static bold cuts, so bold works out of the box. A font you picked yourself may be a variable font, which the text engine cannot embolden. [Pick another font](settings.md#fonts), or none to go back to the built-in ones.
 
 ## A note was not renamed after I changed its title
 

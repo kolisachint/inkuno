@@ -7,33 +7,54 @@
 
 | Role | Face | Size (px @1x) | Line-height / spacing |
 |------|------|---------------|------------------------|
-| UI / body / headings / nav / metadata | Inter (variable; static cuts as fallback) | body 16 | 1.7 |
+| UI / body / headings / nav / metadata | Inter (four static cuts bundled: regular, italic, bold, bold italic) | body 16 | 1.7 |
 | Paragraph spacing | — | 16 px between blocks | — |
 | H1 / H2 / H3 | Inter | 30 / 23 / 19 | TBD (verify in editor style) |
-| Code (blocks + inline) | JetBrains Mono (variable) | 14 | TBD |
+| Code (blocks + inline) | JetBrains Mono (variable regulars; static bold and bold italic) | 14 | TBD |
 | Metadata (counts, hints) | Inter | 12 | `soft` token, WCAG AA 4.5:1 |
 | Measure | — | **800 px** at body 16 | follows zoom (`Page::measure`) |
 
 Principles: variable fonts, **bundled locally** with OFL licence notices
 (no download, no system dependency), **user-changeable later** via the
-existing `font` / `mono` prefs overrides (`crates/inkuno/src/ui/assets.rs:70`,
+existing `font` / `mono` prefs overrides (`apply_fonts`, `crates/inkuno/src/ui/assets.rs:67`;
 `crates/inkuno-logic/src/prefs.rs:7-8`).
 
 ## 2. Where Inkuno is today (verified)
 
-- Bundled + default faces are **IBM Plex Sans + IBM Plex Mono**
-  (`crates/inkuno/src/ui/assets.rs:16,22`), exposed as `sans()` / `mono()`
-  (`crates/inkuno/src/ui/assets.rs:38,42`), overridable from prefs (`crates/inkuno/src/ui/assets.rs:70`).
-  `apply_fonts` already prefers an *installed* Inter / JetBrains Mono
-  (`crates/inkuno/src/ui/assets.rs:62-67`), so the fallback chain exists; only the
-  bundled default is still Plex.
+- Bundled + default faces are **Inter** (text, body, headings and page titles) and
+  **JetBrains Mono** (code blocks, inline code, and any monospace use), both under
+  `crates/inkuno/assets/fonts/` with OFL notices.
+  - Inter: four static cuts (`Inter-Regular.otf`, `Inter-Italic.otf`, `Inter-Bold.otf`,
+    `Inter-BoldItalic.otf`). gpui 0.2 cannot embolden, so the bolds are static files.
+  - JetBrains Mono: variable regulars (`JetBrainsMono[wght].ttf`,
+    `JetBrainsMono-Italic[wght].ttf`) plus static `JetBrainsMono-Bold.ttf` and
+    `JetBrainsMono-BoldItalic.ttf`.
+- All ten files are listed in `FONT_FILES` (`crates/inkuno/src/ui/assets.rs:26`) and
+  registered by `init_fonts` (`crates/inkuno/src/ui/assets.rs:53`).
+- Exposed as `sans()` / `mono()` (`crates/inkuno/src/ui/assets.rs:39`, `:43`). Titles draw
+  with `sans()` in semibold (`crates/inkuno/src/views/editor/layout.rs:656`); code spans use `mono()`.
+- `apply_fonts` (`crates/inkuno/src/ui/assets.rs:67`) picks each face in order: the family
+  chosen in prefs (`font` / `mono`, `crates/inkuno-logic/src/prefs.rs:7-8`) if installed;
+  then the bundled Inter / JetBrains Mono; then IBM Plex Sans / Plex Mono, which are no
+  longer bundled and match only for people who have them installed. With nothing
+  installed the first name in each list (the bundled face) is used.
+- Plex Serif is bundled but unused: `IBMPlexSerif-SemiBold.ttf` and
+  `IBMPlexSerif-SemiBoldItalic.ttf` are in `FONT_FILES` (`crates/inkuno/src/ui/assets.rs:35-36`),
+  and no code selects them. See §5, question 5.
 - Page widths are Narrow 560 / **Normal 800** / Wide 960 / Full
   (`crates/inkuno/src/ui/theme.rs:47-56`), width follows zoom
   (`Page::measure`, `crates/inkuno/src/ui/theme.rs:44-54`), default Normal
   (`Page::of` fallback `crates/inkuno/src/ui/theme.rs:34`, `crates/inkuno-logic/src/prefs.rs:28`).
   800 px landed 2026-11-08 as the Normal measure (option (a) in `app-ui.md` §14).
 
-## 3. Bundling proof (this step)
+## 3. Bundling proof (this step) — historical
+
+> **Historical, resolved.** This was the staging step. Its outcome is live now (§2), and
+> the names below no longer exist in the code: `InterVariable*.ttf` were replaced by the
+> static Inter cuts, `INTER_FILES` / `JETBRAINS_MONO_FILES` were folded into `FONT_FILES`,
+> and the test `north_star_fonts_are_bundled` is now `bundled_fonts_are_real_fonts`
+> (`crates/inkuno/src/ui/assets.rs:518`). The blocker for flipping the default (P1) is
+> resolved too: static bold cuts ship next to the variables. P2 (the `theme.rs` tokens) is not.
 
 Staged in `crates/inkuno/assets/fonts/`, SIL OFL with licence notices alongside:
 
@@ -94,16 +115,20 @@ Landed per the user's final call (option (a) in `app-ui.md` §14): Normal is now
    `crates/inkuno-logic/src/prefs.rs:15,28,36,53` (`page` key round-trips),
    `crates/inkuno/src/shell/settings.rs:34,41` (`Setting::Page` list renders labels).
    Under option (b), add the key + label + `Page::of` round-trip.
-8. Book follow-ups (when the flip lands, separate proposal): 
-   `docs/user/src/settings.md:23`, `docs/user/src/compatibility.md:18`,
-   `docs/user/src/introduction.md:24` still promise bundled Plex.
+8. Book follow-ups: done. The book named bundled Plex in `settings.md`,
+   `compatibility.md` and `introduction.md`; those now say Inter and JetBrains Mono.
 
 ## 5. Open questions
 
 1. **800 px: adjust Normal or add a width?** → decided: option (a), landed 2026-11-08 (`app-ui.md` §14).
-2. **Bold story for variable fonts:** static bold cuts alongside, or wait for
-   a gpui upgrade with synthetic bold? (Blocks activating the staged files.)
-3. **CJK fallback chain** (`crates/inkuno/src/ui/assets.rs:46` notes Plex has no CJK glyphs;
-   Inter/JetBrains Mono don't either) — unchanged by this step, still TBD.
+2. **Bold story for variable fonts** → resolved: static bold cuts ship next to the
+   variables (§2), so bold works without a gpui upgrade.
+3. **CJK fallback chain** (`crates/inkuno/src/ui/assets.rs:46-49`: `needs_system_font` sends
+   CJK characters to a system font; Plex, Inter and JetBrains Mono have no CJK glyphs) —
+   still TBD beyond that routing.
 4. **Weight tokens** (`semibold` headings? medium UI?) ship with the
    `theme.rs` flip, not here.
+5. **Plex Serif (bundled, unused).** `IBMPlexSerif-SemiBold.ttf` and its italic ship in the
+   binary (`crates/inkuno/src/ui/assets.rs:35-36`), but titles draw with `sans()`. Owner to
+   decide: wire the serif to titles, or drop the two files, and their license notice, from
+   the binary and `crates/inkuno/assets/fonts/`.

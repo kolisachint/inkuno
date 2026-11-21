@@ -1,5 +1,5 @@
 //! What ships inside the binary: the Inter and JetBrains Mono text faces, the Plex serif
-//! for titles, and the icons (16 px SVG drawn as code).
+//! (bundled but unused: no code draws with it), and the icons (16 px SVG drawn as code).
 
 use std::{
     borrow::Cow,
