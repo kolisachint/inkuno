@@ -123,7 +123,7 @@ A **Typora-inspired, document-first writing app**:
 - **Left region — explorer.** The file tree, recent notes, calendar, tags, links,
   graph (Inkuno: `Mode::Tree/Recent/Calendar/Tags/Links/Graph` shown via
   `Nav::left_shown`, `crates/inkuno/src/shell/docks.rs:70-75`; tree state `crates/inkuno/src/views/nav.rs`,
-  drawing `crates/inkuno/src/shell/sidebar.rs`). Default: visible, narrow rail + panel.
+  drawing `crates/inkuno/src/shell/sidebar.rs`). Default: visible. The unified sidebar (§20) holds the band, the panel and the foot; there is no separate rail.
 - **Center region — canvas.** The note(s): tab bar + editor, arranged by the
   pane tree (`render_layout`, `crates/inkuno/src/shell/render.rs:990`; placed by
   `logic/layout.rs`, `docs/design/architecture.md:48`). Always present; it is the focus.
@@ -435,6 +435,7 @@ App / vault / panes (global + `Shell` / `Nav` / `Palette` contexts):
 
 - CURRENT: tree / recent / tags / links / calendar / graph live in the
 dock-panel; tree marks the active file; arrows preview in an italic tab.
+- CURRENT (§20, built 2026-11-21): the 40 px rail is gone. The sidebar's top band holds the sidebar toggle, search and new note; its foot holds the commands logo, the tree button and the title bar switch.
 - Spec: narrow column, small semibold section labels, one active-row tint
   (brand 20 %); folder chevrons, tag `#` prefix, counts right-aligned.
 - TBD: exact icon set, active-row color token, preview-tab italic style —
@@ -1190,20 +1191,20 @@ Owner decisions, 2026-11-21 (answered in chat; these are owner approvals):
 - [x] `traffic_pad` removed; `strip_edge` (`shell/tabs.rs:168`) gives the top-left row its edge past the toggle. `TRAFFIC_ROOM` removed from `render.rs`, `sidebar.rs`, `tabs.rs`. The lights room is only in the band at the top left (`strip_edge`), not on the welcome page.
 - [x] Tests (`crates/inkuno/src/shell/tests/window.rs`): `the_top_band_has_one_height_and_one_top_edge` (1282; band height and top edge in all four states), `the_lights_room_is_only_in_the_band_at_the_top_left` (1374), `every_former_rail_action_is_still_a_button` (1452; each button clicked), and the updated `the_title_bar_hides_and_comes_back_from_the_sidebar` (1009). Layout file: `views/nav.rs` test (about line 869): an old `rail` panel word loads as hidden.
 - [x] Layout file: the panel word is `hidden` (`views/nav.rs:615`); `rail` and anything unknown read as hidden (`views/nav.rs:564`). The rail key was never saved as its own key, so no key is removed.
-- [ ] Update §4 and §12.1 to point here: NOT done (outside crew B's file scope; the owner or the next crew).
+- [x] Update §4 and §12.1 to the unified sidebar (crew F3, 2026-11-21): §4 and §12.1 above name the band and foot, not the rail.
 
 ### 20.4 Open (TBD) and what is not verified
 
 - Where the rail actions go: placed per the table above (20.3); the owner confirms or moves them.
 - Whether the band token is also the title-bar strip's height: yes, `BAND` is the title bar strip's height too (`TAB_BAR = BAND`, `render.rs:583`).
 - **Not verified on screen: the Linux pill.** The sandbox has no compositor, so gpui uses server decorations and draws no pill (the app's own bar needs compositor support: `gpui-0.2.2/src/platform/linux/x11/window.rs:1528`). The screenshots show the lights-room path instead. The pill's place is covered only by the existing test `window_buttons_leave_the_header_and_the_title_clear` (`shell/tests/window.rs:329`), which sets `client = true`. A run with a compositor (xcompmgr or picom) is needed.
-- **Gap: sidebar hidden and title bar hidden.** Then the band is 12px, the sidebar is gone, and the foot with its toggle is gone too. The only way back is Ctrl+B and Ctrl+Shift+S. The spec does not cover this combination. Owner decision needed (a toggle in the 12px pad, or accept the keys).
-- **Help text still says "the rail".** `shell/keymap.rs:45` ("also the first button of the rail"), `:86` ("Shift+click on the rail") and `:114` ("the rail stays"). Changing them needs `docs/user/src/shortcuts.md` regenerated (`make docs`), which is outside this crew's scope. `shortcuts_page_is_current` will fail once they change.
+- **Gap: sidebar hidden and title bar hidden.** Then the band is 12px, the sidebar is gone, and the foot with its toggle is gone too. The only way back is Ctrl+B and Ctrl+Shift+S. The spec does not cover this combination. Owner decision needed: backlog W1.
+- **Help text** no longer says "the rail" (crew F3, 2026-11-21): `shell/keymap.rs` names the logo at the foot of the sidebar, a view's button and the sidebar; `docs/user/src/shortcuts.md` is regenerated (`INKUNO_WRITE_DOCS=1 cargo test shortcuts_page_is_current`).
 - **Right-band title duplication:** the first right tool's name is in the switcher, and its header no longer repeats it. Confirm with the owner that the switcher alone is the header.
 - Screenshots (Xvfb, the server-decoration path): `target/visual/chrome/1-hidden-title-shown.png` to `6-sidebar-hidden-title-hidden.png`, and the `scripts/visual-check.sh mixed` run `target/visual/20261121-052149/`. Note that capture 6 shows the sidebar open with the title bar hidden (the script's keys reopened the sidebar before it ran); the name is wrong, the image is right.
 - Macintosh is not checked: the lights path is only in the tests (`client = false`).
 
 ## 21. Lists and the visual check
 
-- **Lists: the north star is GitHub + Typora** (APPROVED by owner 2026-11-21). The reference table and Inkuno's PROPOSED target are in `docs/design/markdown_renderer.md` §10. The colour and nesting of list markers follow the owner's pick there.
-- **Visual check findings, 2026-11-21**, from `scripts/visual-check.sh` (screenshots confirmed by the owner): the list markers, `~~~` fences, 4-space indented code and table cells. They are in `docs/backlog.md`, Follow-ups (a) to (d); the chrome direction is in §20 and (e) in the backlog.
+- **Lists: the north star is GitHub + Typora** (APPROVED by owner 2026-11-21). The reference table and Inkuno's target (§10.3) are in `docs/design/markdown_renderer.md` §10, both APPROVED by the owner 2026-11-21. The colour and nesting of list markers follow the owner's pick there.
+- **Visual check findings, 2026-11-21**, from `scripts/visual-check.sh` (screenshots confirmed by the owner): the list markers, `~~~` fences, 4-space indented code and table cells. The list, fence, indented-code and table-cell findings are built on this branch (crew F3). The open ones are in `docs/backlog.md`, Follow-ups: rendering R1 to R7, and window chrome W1 and W2.

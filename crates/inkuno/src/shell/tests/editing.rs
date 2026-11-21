@@ -677,3 +677,72 @@ fn formatting_journey(cx: &mut TestAppContext) {
     assert!(!Prefs::parse("").to_text().contains("bar="));
     let _ = fs::remove_dir_all(&root);
 }
+
+/// What Enter and a click do on the Markdown the user types: Enter after a fence line closes it with
+/// the same character and length, Enter on an ordered task carries it on unchecked, and a click on the
+/// box drawn in front of a task that is not being edited checks it, the source staying as written.
+#[gpui::test]
+fn enter_and_boxes_follow_the_markdown(cx: &mut TestAppContext) {
+    let root = std::env::temp_dir().join(format!("inkuno-enter-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("Note.md"), "x").unwrap();
+    let _config = isolated_config(&root);
+    cx.update(bind_keys);
+    cx.update(init_fonts);
+    let (shell, cx) = cx.add_window_view({
+        let root = root.clone();
+        |window, cx| Shell::new(Some(root), Vec::new(), window, cx)
+    });
+    cx.simulate_resize(size(px(900.), px(600.)));
+    cx.run_until_parked();
+    let text = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
+    };
+    let load = |cx: &mut gpui::VisualTestContext, note: &str, at: usize| {
+        shell.update(cx, |s, cx| {
+            s.pane()
+                .editor
+                .update(cx, |e, cx| e.load(note.to_string(), at, cx))
+        });
+        cx.run_until_parked();
+    };
+    // A fence opened by typing: Enter writes the closing fence, the same character and length, and
+    // the cursor waits on the empty line between them.
+    load(cx, "", 0);
+    cx.simulate_input("~~~py");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(text(cx), "~~~py\n\n~~~");
+    cx.simulate_input("x");
+    assert_eq!(text(cx), "~~~py\nx\n~~~");
+    load(cx, "", 0);
+    cx.simulate_input("````");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(text(cx), "````\n\n````");
+    // An ordered task goes on as an unchecked one, checked or not.
+    load(cx, "1. [ ] x", 8);
+    cx.simulate_keystrokes("enter");
+    assert_eq!(text(cx), "1. [ ] x\n2. [ ] ");
+    load(cx, "1. [x] a", 8);
+    cx.simulate_keystrokes("enter");
+    assert_eq!(text(cx), "1. [x] a\n2. [ ] ");
+    // The box drawn at the start of a task on a line that is not being edited: a click checks it,
+    // and the line keeps its source.
+    let note = "- [ ] x\n\nfin";
+    load(cx, note, note.len());
+    // The box is painted in the margin, left of the note's text column: a press 8 to 16 px to its left
+    // hits it (measured at 16 px; `layout.rs` lays it out from the text's edge). The column moves with
+    // the line's state, so the spot is read again before each click.
+    let click_box = |cx: &mut gpui::VisualTestContext| {
+        let start = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(0).unwrap());
+        cx.simulate_click(
+            start - gpui::point(px(12.), px(0.)),
+            gpui::Modifiers::none(),
+        );
+    };
+    click_box(cx);
+    assert_eq!(text(cx), "- [x] x\n\nfin");
+    click_box(cx);
+    assert_eq!(text(cx), "- [ ] x\n\nfin");
+    let _ = fs::remove_dir_all(&root);
+}

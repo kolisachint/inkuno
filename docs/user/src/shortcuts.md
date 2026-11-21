@@ -12,7 +12,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Keys | Action |
 |---|---|
 | `Ctrl+P` | Find by name or text, create, filter by \#tag |
-| `F10` / `Ctrl+Shift+P` | Command palette: every command, found by what it does (also the first button of the rail, or \> in the palette) |
+| `F10` / `Ctrl+Shift+P` | Command palette: every command, found by what it does (also the logo at the foot of the sidebar, or \> in the palette) |
 | `Ctrl+F` | Find in the note |
 | `Ctrl+R` | Find and replace in the note |
 | `F3` | Search bar: next match (Enter too) |
@@ -53,7 +53,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 |  | Move the tab to the pane below (split off if there is none) |
 |  | Give every pane the same room |
 | `Alt+Shift+Enter` | The pane on the whole window, and back (the others keep what they hold) |
-| `Shift+click on the rail, title of a view` | Shift+click stacks the view under those shown in its dock; drag its title to another place in a dock, or to the right edge to open the right dock. Escape lets go |
+| `Shift+click on a view's button, title of a view` | Shift+click stacks the view under those shown in its dock; drag its title to another place in a dock, or to the right edge to open the right dock. Escape lets go |
 | Dragging a tab | Onto a tab bar: it moves there; onto the middle of a pane: it joins it; near an edge of a pane: a new pane opens there with it. A file from the tree does the same. Escape lets go without moving anything |
 | Border between panes | Drag it to share the room; double click: even shares |
 | Opening a file | Click in the tree, choose in the palette, follow a link: the file opens in a tab of its own, or its tab comes to the front if it is already open; the arrows in the tree preview notes in a single italic tab |
@@ -81,7 +81,7 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | `Ctrl+P › assistant` | Assistant: show or hide its panel in the right dock (also a round button at the foot of the note) |
 | `Ctrl+P › improve` | Assistant: improve the selection, or the whole note; the proposal comes back as pending changes |
 | `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note) |
-| `Ctrl+B` | Sidebar: show or hide the side panel (the rail stays) |
+| `Ctrl+B` | Sidebar: show or hide the side panel |
 | `F9` | Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back |
 | `Ctrl+Shift+S` | Title bar: show or hide the bar the app draws (its buttons come back with it) |
 | `Arrows` | Select and preview |

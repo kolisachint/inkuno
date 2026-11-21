@@ -4,7 +4,7 @@ Every choice is a command of the palette: type its name, and see the result at o
 
 ## Theme
 
-The half-filled circle at the bottom of the rail, or `theme` in the palette.
+Type `theme` in the palette.
 
 - 13 themes: Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light).
 - Each theme is applied as you move through the list, so you see it before choosing. `Enter` keeps it, `Esc` goes back to the one you had.
@@ -30,7 +30,7 @@ Inkuno carries Inter (text and titles) and JetBrains Mono (code), under the SIL 
 
 `Ctrl + +` and `Ctrl + -` change the size, `Ctrl + 0` restores the default.
 
-Headings, code and the width of the text column scale with it. The interface around the note (panel, rail, menus, palette, help) follows too, from 85 % to 150 %, so it stays usable at either end.
+Headings, code and the width of the text column scale with it. The interface around the note (sidebar, panel, menus, palette, help) follows too, from 85 % to 150 %, so it stays usable at either end.
 
 ## Page width
 

@@ -483,12 +483,12 @@ pub const ICON_SET: &[(&str, &str)] = &[
 /// The app logo: the kit's optical 16 px mark at its exact colors, the nib in
 /// charcoal over the cobalt stroke. The kit keeps the nib+ink mark as-is, so
 /// there is no accent tint: on any theme the mark is `#20232B` + `#4263EB`.
-/// VISIBLE CHANGE: the rail mark no longer follows the theme accent; on
+/// VISIBLE CHANGE: the sidebar mark no longer follows the theme accent; on
 /// Inkuno Dark the charcoal nib sits close to the dark ground (the cobalt
 /// stroke carries it).
 ///
 /// gpui paints an SVG as an alpha mask in a single color, hence the two layers.
-/// Callers: the rail commands button (`shell/sidebar.rs`), the empty today's
+/// Callers: the sidebar's commands logo button (`shell/sidebar.rs`), the empty today's
 /// row (`shell/render.rs`) and the About footer (`shell/help.rs`).
 pub fn logo(t: Theme) -> impl IntoElement {
     let layer = |path: &'static str, color: u32| {

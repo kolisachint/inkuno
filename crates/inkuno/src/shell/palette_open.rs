@@ -344,7 +344,7 @@ impl Shell {
         commands::arrange(list, here)
     }
 
-    /// The command palette (F10, or the rail's first button): the palette, only the commands.
+    /// The command palette (F10, or the sidebar's logo button): the palette, only the commands.
     pub(super) fn open_commands(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.palette.is_some() {
             return;

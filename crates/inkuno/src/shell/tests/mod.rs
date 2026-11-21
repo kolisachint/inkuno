@@ -4,6 +4,7 @@
 
 mod assistant;
 mod benches;
+mod chrome;
 mod current_file;
 mod editing;
 mod end_to_end;

@@ -2,9 +2,9 @@
 
 The [palette](first-steps.md#find-anything-the-palette) (`Ctrl + P`) finds and creates notes. The panel shows the vault in three views: the tree, recent notes and vault search. The right dock holds the outline, the headings of the open note, and the [Assistant](assistant.md) panel.
 
-## The rail and its views
+## The sidebar and its views
 
-A rail of icons stays on the left of the window. It opens a panel beside the note, in one of these views:
+The sidebar runs down the left of the window, beside the note. Its top band holds, on the right, the sidebar toggle, search and new note. Its foot row holds the command palette (the logo), the vault tree and the title bar switch. With the title bar hidden, the three buttons of the top band join that foot row. The panel beside it shows one of these views:
 
 | View | Key | Shows |
 |---|---|---|
@@ -12,15 +12,15 @@ A rail of icons stays on the left of the window. It opens a panel beside the not
 | Recent | — | every note, from the most to the least recently opened (`› recent notes`; `Ctrl + P` opens on recent) |
 | Search | — | the matches of a vault search, note by note |
 
-The rail also holds, at the top: the command palette, the vault tree, search and new note. Everything else left the rail for the palette: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
+Everything else is in the palette, not in the sidebar: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
 
 - **Right dock**: the outline and the Assistant are tools of the right dock, hidden at first. The Assistant opens from its button or the palette (`assistant`); see [Assistant](assistant.md).
-- **Fold**: press the key of the view on display, or click its icon. The panel folds back to the rail.
-- **Resize**: drag the line between the panel and the note. Dragged all the way left, the panel folds to its rail. All the way right, it takes the whole window. Double-click the line for the default width.
+- **Hide**: press the key of the view on display while the panel has the keys. When its last view goes, the panel hides. A click on the tree button shows the tree and never hides it.
+- **Resize**: drag the line between the panel and the note. Dragged all the way left, the panel hides. All the way right, it takes the whole window. Double-click the line for the default width.
 - **Whole window**: `Ctrl + M`, or the arrows button at the top of the panel, puts the panel on the whole window, and back.
-- **Sidebar**: `Ctrl + B` shows or hides the panel, and the rail stays. It works from the note too. The same switch is at the foot of the rail, and the choice is kept at the next start.
-- **Title bar**: `Ctrl + Shift + S` hides the bar Inkuno draws on Linux, with its window buttons. The switch at the foot of the rail brings it back, and the choice is kept at the next start. On macOS the key hides the system bar and its three window buttons, and shows them again; focus mode hides them too. On Windows the system draws the bar, so the key changes nothing there.
-- **Focus mode**: `F9`, or `› focus mode` in the palette, leaves the note alone, edge to edge: no rail, no panel, no tab bar, no title bar. `F9` again, or `Esc` in the note, brings back the layout as it was.
+- **Sidebar**: `Ctrl + B` shows or hides the sidebar, and it works from the note too. Its switch is the first of the three buttons at the right of the top band; with the title bar hidden, it moves to the foot. While the sidebar is hidden, the same button sits in a strip at the top of the note. The choice is kept at the next start.
+- **Title bar**: `Ctrl + Shift + S` hides the bar Inkuno draws on Linux, with its window buttons. The switch at the foot of the sidebar, its last button, brings it back, and the choice is kept at the next start. If the sidebar is hidden as well, the keys are the only way back: `Ctrl + B`, then `Ctrl + Shift + S`. On macOS the key hides the system bar and its three window buttons, and shows them again; focus mode hides them too. On Windows the system draws the bar, so the key changes nothing there.
+- **Focus mode**: `F9`, or `› focus mode` in the palette, leaves the note alone, edge to edge: no sidebar, no right dock, no tab bar, no title bar. `F9` again, or `Esc` in the note, brings back the layout as it was.
 
 
 ## Keys in the panel
@@ -32,7 +32,7 @@ The same keys work in every view.
 | `↑` `↓` | select a note and preview it beside the panel, in a single tab in italics |
 | `Enter`, or a click | open the note in its tab and start typing |
 | `←` `→` | tree: fold or unfold a folder |
-| `Tab`, `Shift + Tab` | tree and recent: go along the buttons of the panel and of the rail. A ring shows which one has the keys; `Enter` or `Space` presses it. |
+| `Tab`, `Shift + Tab` | tree and recent: go along the buttons of the sidebar. A ring shows which one has the keys; `Enter` or `Space` presses it. |
 | `F2`, `Delete` | tree and recent: rename the selected note or folder, move it to the trash |
 | `Ctrl + Shift + N` | new folder, next to the selected line of the tree |
 | `Esc` | back to the note |
@@ -78,5 +78,5 @@ Right click a note, a file or a folder in the tree, then **Icon…**. Pick one o
 The trash is the hidden folder `.trash` at the top of the vault. Deleting moves a note or a folder there; nothing is ever destroyed.
 
 - **Undo**: moving something to the trash shows a message with **Undo**. It puts the item back exactly where it was. Its folder is made again if it is gone, and nothing is overwritten.
-- **Restore later**: click the bin at the bottom of the rail, or type `trash` in the palette. It lists the trash, and `Enter` returns the chosen item to the top of the vault. The trash does not remember where an item came from. A name already taken gets another one.
+- **Restore later**: type `trash` in the palette. It lists the trash, and `Enter` returns the chosen item to the top of the vault. The trash does not remember where an item came from. A name already taken gets another one.
 - **Empty the trash** with your file manager.

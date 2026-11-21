@@ -50,7 +50,7 @@ What other programs change in the vault (a sync tool, a script, another editor) 
 
 ## Backup
 
-Click the arrow into a tray at the bottom of the rail, or type `back up` in the palette, and choose a folder. Inkuno writes there one archive of the whole vault, trash included, named after the vault and the date: `Notes 2026-10-09.tar.gz`. It is numbered if that name is taken.
+Type `back up` in the palette, and choose a folder. Inkuno writes there one archive of the whole vault, trash included, named after the vault and the date: `Notes 2026-10-09.tar.gz`. It is numbered if that name is taken.
 
 A folder inside the vault is refused.
 

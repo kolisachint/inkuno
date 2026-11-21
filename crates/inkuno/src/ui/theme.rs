@@ -743,7 +743,7 @@ mod tests {
                 "{name}: soft"
             );
             // The sheets (`bg`) lie on the ground: told apart, and the text, the secondary text and the accent
-            // (rail, tabs) read on both.
+            // (sidebar, tabs) read on both.
             assert!(
                 contrast(t.ground, t.bg) >= 1.08,
                 "{name}: ground and sheet too close ({:.3})",
