@@ -192,7 +192,7 @@ fn quiet_today_row_opens_the_daily_note(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn quiet_settings_row_opens_the_theme_choice(cx: &mut TestAppContext) {
+fn quiet_settings_row_opens_the_settings_tab(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = quiet_sidebar(cx, "sidebar-quiet-settings");
     let at = cx
         .debug_bounds("nav-settings")
@@ -200,6 +200,7 @@ fn quiet_settings_row_opens_the_theme_choice(cx: &mut TestAppContext) {
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     settle(cx);
-    assert!(shell.read_with(cx, |s, _| s.palette.is_some()));
+    // The Settings tab opens (or is found again), as the settings chord does.
+    assert!(shell.read_with(cx, |s, _| s.panes.iter().any(|pane| pane.settings.is_some())));
     let _ = fs::remove_dir_all(root);
 }
