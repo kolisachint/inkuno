@@ -272,9 +272,10 @@ impl Shell {
 
     /// The links to the note follow the name its title gave it since it was opened.
     pub(super) fn follow_title(&mut self, cx: &mut Context<Self>) {
-        if let (Some(old), Some(path)) = (self.pane_mut().origin.take(), &self.pane_mut().path) {
-            let new = vault::stem(path);
-            self.relink(&old, &new, cx);
+        if let (Some(old), Some(path)) = (self.pane_mut().origin.take(), self.pane().path.clone()) {
+            let new = vault::stem(&path);
+            let from = path.with_file_name(format!("{old}.md"));
+            self.relink(&old, &new, Some((&from, &path)), cx);
             // Still open in its tab: a later title follows from this name.
             self.pane_mut().origin = Some(new);
         }
@@ -304,25 +305,35 @@ impl Shell {
         }
     }
 
-    /// `[[links]]` to `old` now point to `new` in every note;
-    /// true if the shown note was rewritten. No effect if another note
-    /// is still called `old`: the links may be meant for it.
-    // ponytail: synchronous rewrite, limited to the notes the index says link to
-    // `old`; move to a background task if a note is linked from hundreds of others.
-    pub(super) fn relink(&mut self, old: &str, new: &str, cx: &mut Context<Self>) -> bool {
-        let paths: Vec<PathBuf> = {
-            let Some(targets) = logic::wiki::relink_set(&self.notes, old, new) else {
-                return false;
-            };
-            targets.iter().map(|n| n.path.clone()).collect()
+    /// `[[links]]` to `old` now point to `new` in every note, and the relative links to a note
+    /// moved from `moved.0` to `moved.1`; true if the shown note was rewritten. No effect on the
+    /// `[[links]]` if another note is still called `old`: the links may be meant for it.
+    // ponytail: synchronous rewrite, the `[[links]]` limited to the notes the index says link to
+    // `old`; a note moved reads every note of the vault, as a relative link names its file. Move to
+    // a background task if either gets slow.
+    pub(super) fn relink(
+        &mut self,
+        old: &str,
+        new: &str,
+        moved: Option<(&Path, &Path)>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let wiki: Vec<PathBuf> = logic::wiki::relink_set(&self.notes, old, new)
+            .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
+            .unwrap_or_default();
+        let paths: Vec<PathBuf> = match moved {
+            Some(_) => self.notes.iter().map(|n| n.path.clone()).collect(),
+            None => wiki.clone(),
         };
-        let mut changed = Vec::new();
+        let (root, mut changed) = (self.vault.clone(), Vec::new());
         for note in self.notes.iter_mut().filter(|n| paths.contains(&n.path)) {
-            let rewritten = fs::read_to_string(&note.path)
-                .ok()
-                .and_then(|text| markdown::relink(&text, old, new))
-                .filter(|text| vault::write(&note.path, text).is_ok());
-            if let Some(text) = rewritten {
+            let Ok(text) = fs::read_to_string(&note.path) else {
+                continue;
+            };
+            let linker = note.path.clone();
+            let wiki = wiki.contains(&linker);
+            let rewritten = logic::wiki::rewrite_links(&text, root.as_deref(), &linker, old, new, wiki, moved);
+            if let Some(text) = rewritten.filter(|text| vault::write(&note.path, text).is_ok()) {
                 (note.tags, note.links) = Note::index(&text);
                 changed.push(note.path.clone());
             }
@@ -367,18 +378,26 @@ impl Shell {
                 note
             })
             .collect();
-        let Some(targets) = logic::wiki::relink_set(&notes, old, new) else {
-            return false;
+        let wiki: Vec<PathBuf> = logic::wiki::relink_set(&notes, old, new)
+            .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
+            .unwrap_or_default();
+        // A note file moved by its name: the relative addresses of every note may follow it.
+        let renamed = moved.with_file_name(format!("{new}.md"));
+        let by_address = moved.extension().is_some_and(|e| e == "md");
+        let paths: Vec<PathBuf> = match by_address {
+            true => notes.iter().map(|n| n.path.clone()).collect(),
+            false => wiki.clone(),
         };
-        let refused = targets.iter().any(|note| {
+        let refused = paths.iter().any(|path| {
             let current = match text {
-                Some(text) if note.path == moved => text.to_string(),
-                _ => match fs::read_to_string(&note.path) {
+                Some(text) if path == moved => text.to_string(),
+                _ => match fs::read_to_string(path) {
                     Ok(text) => text,
                     Err(_) => return false,
                 },
             };
-            markdown::relink(&current, old, new)
+            let moves = by_address.then_some((moved, renamed.as_path()));
+            logic::wiki::rewrite_links(&current, self.vault.as_deref(), path, old, new, wiki.contains(path), moves)
                 .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
         });
         if refused {
@@ -733,6 +752,44 @@ impl Shell {
                 }
             }
             Link::Wiki(name) => self.open_wiki(name, window, cx),
+            Link::Note { path, anchor } => self.follow_note(path, anchor.as_deref(), window, cx),
+            Link::Heading(anchor) => self.jump_to_heading(anchor, cx),
+        }
+    }
+
+    /// Opens the note a relative link names, at its heading when it has one. Resolved from the note
+    /// shown (the vault root for an unsaved one); a note that is not in the vault is not created.
+    fn follow_note(
+        &mut self,
+        address: &str,
+        anchor: Option<&str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(root) = self.vault.clone() else {
+            return;
+        };
+        let from = self.pane().path.clone().unwrap_or_else(|| root.join("New.md"));
+        let target = logic::wiki::note_at(&root, &from, address);
+        if !self.notes.iter().any(|n| n.path == target) {
+            let shown = address.to_string();
+            return self.say(
+                Tone::Failed,
+                format!("{} « {shown} »", tr("Note not found:", "Note introuvable :")),
+                cx,
+            );
+        }
+        self.open(&target, window, cx);
+        if let Some(anchor) = anchor {
+            self.jump_to_heading(anchor, cx);
+        }
+    }
+
+    /// Scrolls the shown note to its heading `anchor` (GitHub's slug, see `markdown::heading_at`).
+    fn jump_to_heading(&mut self, anchor: &str, cx: &mut Context<Self>) {
+        let at = markdown::heading_at(self.pane().editor.read(cx).text(), anchor);
+        if let Some(at) = at {
+            self.pane().editor.update(cx, |e, cx| e.jump(at, true, cx));
         }
     }
 

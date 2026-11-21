@@ -20,6 +20,7 @@ mod outline;
 mod panel_rows;
 mod panes;
 mod pending;
+mod relative_links;
 mod revisions;
 mod save_close;
 mod scratch;

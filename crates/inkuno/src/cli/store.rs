@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     logic::note::Note,
-    logic::{markdown, pending, rank, wiki},
+    logic::{pending, rank, wiki},
     platform::vault,
 };
 
@@ -342,24 +342,32 @@ pub fn check_links_before_move(
             note
         })
         .collect();
-    let Some(targets) = wiki::relink_set(&notes, old, new) else {
-        return Ok(());
+    // Like the app: a note file moved by its name, the relative addresses of every note may follow it.
+    let wiki: Vec<PathBuf> = wiki::relink_set(&notes, old, new)
+        .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
+        .unwrap_or_default();
+    let renamed = moved.with_file_name(format!("{new}.md"));
+    let by_address = moved.extension().is_some_and(|e| e == "md");
+    let paths: Vec<PathBuf> = match by_address {
+        true => notes.iter().map(|n| n.path.clone()).collect(),
+        false => wiki.clone(),
     };
-    for note in targets {
+    for path in paths {
         let text = match edited {
-            Some(text) if note.path == moved => text.to_string(),
-            _ => match fs::read_to_string(&note.path) {
+            Some(text) if path == moved => text.to_string(),
+            _ => match fs::read_to_string(&path) {
                 Ok(text) => text,
                 Err(_) => continue,
             },
         };
-        let Some(fresh) = markdown::relink(&text, old, new) else {
+        let moves = by_address.then_some((moved, renamed.as_path()));
+        let Some(fresh) = wiki::rewrite_links(&text, Some(vault.root.as_path()), &path, old, new, wiki.contains(&path), moves) else {
             continue;
         };
         if pending::rewrite_refused(&text, &fresh) {
             return Err(format!(
                 "`{}` has a pending change that links to `{old}`: accept or reject its pending changes in Inkuno first",
-                rel(&vault.root, &note.path)
+                rel(&vault.root, &path)
             ));
         }
     }
@@ -367,19 +375,23 @@ pub fn check_links_before_move(
 }
 
 /// Rewrites `[[old]]` into `[[new]]` in every note that links to it, unless another note
-/// is still called `old`. Returns how many notes changed.
-pub fn relink(vault: &mut Vault, old: &str, new: &str) -> usize {
+/// is still called `old`, and the relative addresses to the note moved from `moved.0` to `moved.1`
+/// (see `wiki::rewrite_links`). Returns how many notes changed.
+pub fn relink(vault: &mut Vault, old: &str, new: &str, moved: Option<(&Path, &Path)>) -> usize {
     vault.rescan();
-    let Some(targets) = wiki::relink_set(&vault.notes, old, new) else {
-        return 0;
+    let wiki: Vec<PathBuf> = wiki::relink_set(&vault.notes, old, new)
+        .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
+        .unwrap_or_default();
+    let paths: Vec<PathBuf> = match moved {
+        Some(_) => vault.notes.iter().map(|n| n.path.clone()).collect(),
+        None => wiki.clone(),
     };
-    let paths: Vec<PathBuf> = targets.iter().map(|n| n.path.clone()).collect();
     let mut changed = 0;
     for path in paths {
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        let Some(fresh) = markdown::relink(&text, old, new) else {
+        let Some(fresh) = wiki::rewrite_links(&text, Some(vault.root.as_path()), &path, old, new, wiki.contains(&path), moved) else {
             continue;
         };
         if vault::write(&path, &fresh).is_ok() {

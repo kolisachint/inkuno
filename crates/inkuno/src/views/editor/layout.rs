@@ -816,7 +816,7 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u32]) -> Ve
     }
     // What stays readable: links, images, comments, callouts, footnote labels.
     // (A footnote's brackets fade like other markers; only its label is kept.)
-    // Of a `[text](url)` link, only the label stays, its `[` and `](url)` hide (the address
+    // Of a `[text](url)` link, only the label stays, its `[` and `](url)` hide, relative ones too (the address
     // reads `QUIET`, so the loops below name those bytes explicitly).
     let mut links: Vec<Range<usize>> = Vec::new();
     let mut urls: Vec<Range<usize>> = Vec::new();
@@ -824,7 +824,7 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u32]) -> Ve
         if matches!(link, md::Link::Footnote(_)) {
             continue;
         }
-        if matches!(link, md::Link::Url(_))
+        if matches!(link, md::Link::Url(_) | md::Link::Note { .. } | md::Link::Heading(_))
             && let Some((text, _)) = md::web_link(&line[r.clone()])
         {
             urls.push(r.start..r.start + text.start);
@@ -3021,6 +3021,10 @@ mod tests {
             ["[", "](https://example.com)"]
         );
         assert_eq!(hidden("see https://example.com here"), Vec::<&str>::new());
+        // A relative link hides its markers the same way: to a note, to a heading of this one.
+        assert_eq!(hidden("[t](sub/Note%20A.md#Titre)"), ["[", "](sub/Note%20A.md#Titre)"]);
+        assert_eq!(hidden("[t](../n.md)"), ["[", "](../n.md)"]);
+        assert_eq!(hidden("[t](#titre)"), ["[", "](#titre)"]);
         assert_eq!(hidden("see [[note]] here"), Vec::<&str>::new());
         assert_eq!(hidden("a #tag b"), Vec::<&str>::new());
         assert_eq!(hidden("![a](p.png)"), Vec::<&str>::new());

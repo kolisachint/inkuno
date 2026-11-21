@@ -36,6 +36,12 @@ pub enum Kind {
 pub enum Link {
     Wiki(String),
     Url(String),
+    /// `[text](path)`, `[text](path#anchor)`: a note of the vault, by its path as written
+    /// (percent-decoded), relative to the folder of the linking note, or to the vault root for a
+    /// leading `/`. An anchor is a heading, as written.
+    Note { path: String, anchor: Option<String> },
+    /// `[text](#heading)`: a heading of the same note.
+    Heading(String),
     Tag(String),
     /// A footnote reference `[^label]` (see `footnote_ref`): whether it is defined is known
     /// document-wide only (see `footnotes`), so per-line readers style every reference as a link
@@ -503,6 +509,71 @@ pub fn web_link(rest: &str) -> Option<(Range<usize>, Range<usize>)> {
     ok.then_some((text, url))
 }
 
+/// What a `[text](address)` link with a relative address points to: a note (`Note.md`, `sub/Note.md#h`,
+/// `../Note.md`, `/Note.md`, `Note%20Name.md`) or a heading of this note (`#h`). `None` for an address
+/// with a protocol (see `is_url`), another scheme, or a `<…>` address.
+fn relative(address: &str, text: &str) -> Option<Link> {
+    let scheme = address.split_once(':').is_some_and(|(s, _)| {
+        s.starts_with(|c: char| c.is_ascii_alphabetic())
+            && s.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
+    });
+    let balanced = address.matches('(').count() == address.matches(')').count();
+    if scheme || !balanced || address.starts_with('<') || text.contains(['<', '[']) || is_url(address) {
+        return None;
+    }
+    let (path, anchor) = match address.split_once('#') {
+        Some((path, anchor)) => (path, Some(percent_decode(anchor)).filter(|a| !a.is_empty())),
+        None => (address, None),
+    };
+    match (path, anchor) {
+        ("", Some(anchor)) => Some(Link::Heading(anchor)),
+        ("", None) => None,
+        (path, anchor) => Some(Link::Note { path: percent_decode(path), anchor }),
+    }
+}
+
+/// The text of a percent-encoded address (`Note%20Name` is `Note Name`); bad escapes stay as written.
+pub fn percent_decode(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = b.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok());
+        match (b[i], hex.and_then(|h| u8::from_str_radix(h, 16).ok())) {
+            (b'%', Some(byte)) => {
+                out.push(byte);
+                i += 3;
+            }
+            _ => {
+                out.push(b[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The slug GitHub gives a heading, which its `#anchor` names: lowercase, spaces as `-`, the
+/// punctuation dropped except `-` and `_`.
+pub fn slug(heading: &str) -> String {
+    heading
+        .trim()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || c.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .map(|c| if c.is_whitespace() { '-' } else { c })
+        .collect()
+}
+
+/// The byte where the heading that `anchor` names starts in `text` (the first one with its slug).
+pub fn heading_at(text: &str, anchor: &str) -> Option<usize> {
+    let wanted = slug(anchor);
+    headings(text)
+        .into_iter()
+        .find(|(_, label, _)| slug(label) == wanted)
+        .map(|(.., at)| at)
+}
+
 /// Wikilinks, `[text](address)` links, URLs, tags and footnote references of the line, with
 /// their byte range.
 pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
@@ -528,6 +599,16 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
             && is_url(&rest[url.clone()])
         {
             out.push((i..i + url.end + 1, Link::Url(rest[url.clone()].to_string())));
+            i += url.end + 1;
+            continue;
+        }
+        // `[text](note.md#heading)`, `[text](#heading)`: a relative address (see `relative`).
+        if b[i] == b'['
+            && (i == 0 || b[i - 1] != b'!')
+            && let Some((text, url)) = web_link(rest)
+            && let Some(link) = relative(&rest[url.clone()], &rest[text])
+        {
+            out.push((i..i + url.end + 1, link));
             i += url.end + 1;
             continue;
         }
@@ -831,13 +912,15 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
 /// Links, tags, footnote references and comments: what notes add to the styles of the marks.
 fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
     for (r, link) in links(line) {
-        if r.start < from {
+        // A relative address in code is text: the web addresses there keep their styles, as before.
+        let code = |r: &Range<usize>| flags[r.clone()].iter().any(|f| f & CODE != 0);
+        if r.start < from || !matches!(link, Link::Url(_)) && code(&r) {
             continue;
         }
         match link {
             Link::Tag(_) => flags[r].iter_mut().for_each(|f| *f |= TAG),
-            // `[text](address)`: the text is the link, the rest fades.
-            Link::Url(_) => match web_link(&line[r.start..]) {
+            // `[text](address)`: the text is the link, the rest fades. Relative addresses too.
+            Link::Url(_) | Link::Note { .. } | Link::Heading(_) => match web_link(&line[r.start..]) {
                 Some((text, address)) => {
                     flags[r.clone()].iter_mut().for_each(|f| *f |= DIM);
                     flags[r.start + text.start..r.start + text.end]
@@ -870,11 +953,16 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
             }
         }
     }
-    // `[text](address)` with another address (`/path`, `note.md`, `#top`): styled like a web link, but
-    // not in `links`, so that a click never hands it to the browser.
+    // `[text](address)` with another scheme (`tel:`, `x-app:`): styled as a link, not clickable,
+    // as before relative addresses were read. The links above keep their own styles.
+    let held: Vec<usize> = links(line)
+        .iter()
+        .filter(|(_, l)| matches!(l, Link::Url(_) | Link::Note { .. } | Link::Heading(_)))
+        .map(|(r, _)| r.start)
+        .collect();
     for (at, _) in line.match_indices('[') {
         let rest = &line[at..];
-        if at < from || at > 0 && line.as_bytes()[at - 1] == b'!' || flags[at] & CODE != 0 {
+        if at < from || at > 0 && line.as_bytes()[at - 1] == b'!' || flags[at] & CODE != 0 || held.contains(&at) {
             continue;
         }
         // Not a link when a code span cuts it, the address has unbalanced parentheses or starts with `<`,
@@ -1355,7 +1443,7 @@ pub fn index(text: &str) -> (Vec<String>, Vec<String>) {
             let (list, item) = match link {
                 Link::Tag(t) => (&mut tags, t),
                 Link::Wiki(w) => (&mut wikis, w.to_lowercase()),
-                Link::Footnote(_) | Link::Url(_) => continue,
+                Link::Footnote(_) | Link::Url(_) | Link::Note { .. } | Link::Heading(_) => continue,
             };
             if !list.contains(&item) {
                 list.push(item);
@@ -1827,13 +1915,12 @@ mod tests {
     }
 
     #[test]
-    fn local_link_destinations_are_links_but_not_clickable() {
+    fn local_link_destinations_are_links() {
+        // Relative addresses (notes, headings of this note) are links, as the web ones are.
         for line in ["[x](/path)", "[x](foo.md)", "[x](#anchor)", "[x](mailto:a@b.c)"] {
             let url = web_link(line).map(|(_, u)| line[u].to_string());
             assert!(url.is_some(), "{line}");
-            // Only the web addresses are clickable.
-            let clickable = !links(line).is_empty();
-            assert_eq!(clickable, is_url(&url.unwrap()), "{line}");
+            assert!(!links(line).is_empty(), "{line}");
         }
         let f = flags("see [x](/path) now", 0);
         assert!(f[5] & LINK != 0 && f[6] & LINK == 0 && f[12] & QUIET != 0, "{f:?}");
@@ -2184,7 +2271,9 @@ mod tests {
         assert_eq!(l[0], (5..30, Link::Url("https://a.b/c#d".into())));
         assert_eq!(l[1], (41..58, Link::Url("https://a.b/i.png".into())));
         assert_eq!(l.len(), 2);
-        assert!(links("[x](fichier.md) [y]( ) [a [b](c)").is_empty());
+        // The innermost brackets make the link: `[a [b](c)` links `c` only.
+        let l = links("[x](fichier.md) [y]( ) [a [b](c)");
+        assert_eq!(l.iter().map(|(r, _)| r.clone()).collect::<Vec<_>>(), [0..15, 26..32]);
         assert_eq!(
             web_link("[la doc](mailto:a@b.c) suite"),
             Some((1..7, 9..21))
@@ -2208,6 +2297,42 @@ mod tests {
         let (tags, wikis) = index("#A\n```\n#b [[z]]\n```\n#a #c [[X]] [[x|alias]] [[Y]]");
         assert_eq!(tags, vec!["a", "c"]);
         assert_eq!(wikis, vec!["x", "y"]);
+    }
+
+    #[test]
+    fn links_to_notes_and_headings() {
+        let note = |path: &str, anchor: Option<&str>| Link::Note {
+            path: path.into(),
+            anchor: anchor.map(Into::into),
+        };
+        let one = |line: &str| links(line).into_iter().map(|(_, l)| l).collect::<Vec<_>>();
+        assert_eq!(one("[x](Note.md)"), [note("Note.md", None)]);
+        assert_eq!(one("[x](sub/Note.md)"), [note("sub/Note.md", None)]);
+        assert_eq!(one("[x](../Note.md)"), [note("../Note.md", None)]);
+        assert_eq!(one("[x](Note%20Name.md)"), [note("Note Name.md", None)]);
+        assert_eq!(one("[x](Note.md#Mon%20titre)"), [note("Note.md", Some("Mon titre"))]);
+        assert_eq!(one("[x](Note%20A.md#Un%20titre)"), [note("Note A.md", Some("Un titre"))]);
+        assert_eq!(one("[x](/abs/in/vault.md)"), [note("/abs/in/vault.md", None)]);
+        assert_eq!(one("[x](#heading)"), [Link::Heading("heading".into())]);
+        // Not links: an empty address, an anchor alone on an empty target, another scheme, `<…>`.
+        assert!(one("[x]()").is_empty() && one("[x](#)").is_empty());
+        assert!(one("[x](tel:0123)").is_empty() && one("[x](<a b.md>)").is_empty());
+        // Such an address styles as it did: the text is a link, not clickable, the address fades.
+        let f = flags("see [x](tel:0123) now", 0);
+        assert!(f[5] & LINK != 0 && f[12] & QUIET != 0 && f[4] & DIM != 0, "{f:?}");
+        // Images and wikilinks keep their own targets; the web addresses are unchanged.
+        assert!(one("![x](pic.png)").is_empty());
+        assert_eq!(one("[[Note]] [x](n.md)"), [Link::Wiki("Note".into()), note("n.md", None)]);
+        assert_eq!(one("[x](https://a.b)"), [Link::Url("https://a.b".into())]);
+        assert_eq!(one("[x](mailto:a@b.cd)"), [Link::Url("mailto:a@b.cd".into())]);
+        // Bad escapes stay as written; the heading slug follows GitHub.
+        assert_eq!(percent_decode("100%+%zz%2"), "100%+%zz%2");
+        assert_eq!(slug("Mon Titre, déjà!"), "mon-titre-déjà");
+        assert_eq!(slug("A_b-c d"), "a_b-c-d");
+        let text = "# Intro\n\ntexte\n## Mon Titre\n";
+        assert_eq!(heading_at(text, "mon-titre"), Some(text.find("## ").unwrap()));
+        assert_eq!(heading_at(text, "Intro"), Some(0));
+        assert_eq!(heading_at(text, "absent"), None);
     }
 
     #[test]
