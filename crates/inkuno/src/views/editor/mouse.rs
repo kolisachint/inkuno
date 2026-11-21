@@ -564,7 +564,7 @@ impl Editor {
             self.revealed = revealed;
             return;
         }
-        let (kind, marker) = md::classify(line, self.in_code(lr.start));
+        let (kind, marker) = md::classify_in(line, self.open_fence(lr.start));
         if matches!(kind, Kind::Task(_)) && col + 4 >= marker && col < marker {
             self.move_to(lr.end, cx);
             return self.toggle_task(cx);

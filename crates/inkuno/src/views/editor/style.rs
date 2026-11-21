@@ -70,7 +70,7 @@ impl Editor {
     /// selection) says where we are, and the whole selection moves to the next.
     pub(super) fn cycle_list(&mut self, cx: &mut Context<Self>) {
         let line = self.line_range(self.sel.start);
-        let kind = md::classify(&self.content[line.clone()], self.in_code(line.start)).0;
+        let kind = md::classify_in(&self.content[line.clone()], self.open_fence(line.start)).0;
         let next = match kind {
             Kind::Bullet => ListStyle::Ordered,
             Kind::Ordered => ListStyle::Task,
@@ -123,7 +123,7 @@ impl Editor {
     pub(super) fn toggle_task(&mut self, cx: &mut Context<Self>) {
         let lr = self.line_range(self.cursor());
         let line = &self.content[lr.clone()];
-        let (kind, marker) = md::classify(line, self.in_code(lr.start));
+        let (kind, marker) = md::classify_in(line, self.open_fence(lr.start));
         let at = lr.start + marker;
         // A box written in the text or in a cell, under the cursor or in its cell.
         let c = self.cursor();
@@ -172,21 +172,20 @@ impl Editor {
         }
         let sel = self.sel.clone();
         let first = self.line_range(sel.start);
-        let mut code = self.in_code(first.start);
         let mut parts = Vec::new();
         if sel.is_empty() {
-            if !code {
+            if !self.in_code(first.start) {
                 parts.push(sel);
             }
             return parts;
         }
+        let fenced = md::blocks(&self.content);
         let mut at = first.start;
         while at <= sel.end {
             let lr = self.line_range(at);
             let line = &self.content[lr.clone()];
-            if md::is_fence(line) {
-                code = !code && self.content[lr.end..].lines().any(md::is_fence);
-            } else if !code && self.is_table_line(&lr) {
+            let prose = md::open_at(&fenced, lr.start).is_none() && !md::is_fence(line);
+            if prose && self.is_table_line(&lr) {
                 if !self.is_dash_row(&lr) {
                     parts.extend(
                         self.line_cells(&lr, &sel)
@@ -194,7 +193,7 @@ impl Editor {
                             .filter_map(|c| self.trimmed(c.start, c.end)),
                     );
                 }
-            } else if !code {
+            } else if prose {
                 let (a, b) = (
                     sel.start.max(lr.start + md::classify(line, false).1),
                     sel.end.min(lr.end),
