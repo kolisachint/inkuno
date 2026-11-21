@@ -1610,7 +1610,11 @@ impl Shell {
             self.nav.rows = self.nav_rows();
             self.nav.rows_from = source;
         }
-        let shown = self.nav.rows.len().clamp(1, 6) as f32;
+        // An empty section keeps two rows of height for its one-line-or-two message.
+        let shown = match self.nav.rows.len() {
+            0 => 2.,
+            n => n.min(6) as f32,
+        };
         let (head, row) = match t.quiet {
             true => (42., 30.),
             false => (32., nav::ROW),
@@ -2223,7 +2227,11 @@ impl Shell {
                 .text_color(t.soft)
                 .child(
                     div()
-                        .debug_selector(|| "nav-empty".into())
+                        // The scratch section has its own: the tree's test finds the tree's message.
+                        .debug_selector(move || match mode {
+                            Mode::Scratch => "nav-empty-scratch".into(),
+                            _ => "nav-empty".into(),
+                        })
                         .max_w_full()
                         .child(said),
                 )
