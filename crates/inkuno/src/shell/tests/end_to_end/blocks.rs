@@ -125,9 +125,10 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     let lh = |n: u8| rows.iter().find(|r| r.1 == n).unwrap().3;
     // Line heights fall with the level (H5 and H6 share the body size), room above: none on the first line, then a
-    // body line for H1 and H2, two thirds of it for the rest.
+    // body line for H1 and H2, two thirds of it for the rest. H4 and H5 may round to the same pixels: 16 × 1.4 and
+    // 15 × 1.47 are 22.4 and 22.05 px at the default size, so the comparison of those two is not strict.
     assert!(
-        lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) > lh(5) && lh(5) == lh(6),
+        lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) >= lh(5) && lh(5) == lh(6),
         "{rows:?}"
     );
     let pad = |n: u8| rows.iter().rfind(|r| r.1 == n).unwrap().2;

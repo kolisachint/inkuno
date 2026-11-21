@@ -41,9 +41,9 @@ fn the_palette_and_the_menu_keep_their_rows(cx: &mut TestAppContext) {
         cx.run_until_parked();
     };
     for (keys, zoom) in [
-        ("secondary-- ".repeat(5), 11.),
-        ("secondary-0 ".into(), 16.),
-        ("secondary-= ".repeat(16), 32.),
+        ("secondary-- ".repeat(4), 11.),
+        ("secondary-0 ".into(), 15.),
+        ("secondary-= ".repeat(17), 32.),
     ] {
         cx.simulate_keystrokes("secondary-0");
         cx.simulate_keystrokes(keys.trim_end());

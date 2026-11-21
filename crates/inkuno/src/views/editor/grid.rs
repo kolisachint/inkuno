@@ -14,7 +14,7 @@ use gpui::{
 };
 
 use crate::{
-    logic::markdown as md,
+    logic::{markdown as md, prefs::Prefs},
     ui::theme::Theme,
     views::editor::{Fast, FastMap, RunStyle, text_runs},
 };
@@ -87,7 +87,7 @@ pub struct Look<'a> {
 
 /// Text size of a cell, and its line height.
 pub fn font_size(theme: &Theme) -> Pixels {
-    px(15.) * (theme.size / 16.)
+    px(15.) * (theme.size / Prefs::SIZE)
 }
 
 pub fn line_height(theme: &Theme) -> Pixels {
@@ -616,7 +616,7 @@ fn shape_flags(
     };
     let style = RunStyle {
         pending: Default::default(),
-        heading: false,
+        heading: 0,
         soft: false,
         italic: false,
         mono: false,

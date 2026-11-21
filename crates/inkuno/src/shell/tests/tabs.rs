@@ -359,15 +359,15 @@ fn tabs_are_text_that_stay_clear_of_the_window_buttons(cx: &mut TestAppContext) 
         }
     };
     for (keys, zoom) in [
-        ("secondary-- ".repeat(5), 11.),
-        ("secondary-0 ".into(), 16.),
-        ("secondary-= ".repeat(16), 32.),
+        ("secondary-- ".repeat(4), 11.),
+        ("secondary-0 ".into(), 15.),
+        ("secondary-= ".repeat(17), 32.),
     ] {
         cx.simulate_keystrokes(keys.trim_end());
         assert_eq!(shell.read_with(cx, |s, _| s.theme.size), zoom);
-        let scale = if zoom < 16. {
+        let scale = if zoom < 15. {
             0.85
-        } else if zoom > 16. {
+        } else if zoom > 15. {
             1.5
         } else {
             1.

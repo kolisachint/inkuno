@@ -23,7 +23,8 @@ pub struct Prefs {
 }
 
 impl Prefs {
-    pub const SIZE: f32 = 16.;
+    /// The default body size; the reference every size proportion (UI scale, measure, headings) is taken from.
+    pub const SIZE: f32 = 15.;
     /// The assistant's command when the setting is empty.
     pub const ASSISTANT: &'static str = "hoocode";
 
@@ -110,7 +111,7 @@ mod tests {
             ("Dracula", "Inter", "")
         );
         // Size clamped, and unreadable value ignored.
-        assert_eq!((prefs.size, Prefs::parse("size=NaN").size), (32., 16.));
+        assert_eq!((prefs.size, Prefs::parse("size=NaN").size), (32., 15.));
         assert_eq!(Prefs::parse(&prefs.to_text()), prefs);
         // Unknown keys are ignored (the removed `updates` setting reads as defaults).
         assert_eq!(Prefs::parse("updates=off\n"), Prefs::parse(""));

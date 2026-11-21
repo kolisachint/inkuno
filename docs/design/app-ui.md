@@ -573,6 +573,7 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 
 > LANDED 2026-11-08 — option (a): adjust Normal 720 → 800, per user final call.
 > Detail companion: `docs/design/typography.md`.
+> 2026-11-21: Quiet.md scale: body 15/22, headings 28/21/18/16/15 (H1 to H6), code 13/20; the reference size is `Prefs::SIZE` (15), so the default UI scale stays 1.0.
 
 - [x] **Propose** — this section + `typography.md` (tokens table, bundling
       proof, 800 px migration path).

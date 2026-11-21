@@ -221,13 +221,13 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("enter");
     assert_eq!(mono(), ".SystemUIFont");
     cx.simulate_keystrokes("secondary-= secondary-= secondary--");
-    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 17.);
+    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 16.);
     assert_eq!(
         vault::load_settings(),
-        "theme=Inkuno Light\nfont=\nmono=.SystemUIFont\nsize=17\n"
+        "theme=Inkuno Light\nfont=\nmono=.SystemUIFont\nsize=16\n"
     );
     cx.simulate_keystrokes("secondary-0");
-    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 16.);
+    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 15.);
     cx.simulate_input("!");
     assert_eq!(text(cx), "# Idées\n\nok!");
 }

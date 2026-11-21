@@ -824,10 +824,10 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     };
     let base = measure(cx);
     for (keys, size, scale) in [
-        ("secondary-= ".repeat(8), 24., 1.5),
+        ("secondary-= ".repeat(9), 24., 1.5),
         ("secondary-= ".repeat(6), 30., 1.5),
-        ("secondary-0 ".into(), 16., 1.),
-        ("secondary-- ".repeat(5), 11., 0.85),
+        ("secondary-0 ".into(), 15., 1.),
+        ("secondary-- ".repeat(4), 11., 0.85),
     ] {
         cx.simulate_keystrokes(keys.trim_end());
         cx.run_until_parked();
@@ -850,7 +850,7 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
         for (i, (got, was)) in now.iter().zip(base).enumerate() {
             assert!(
                 (got / was - scale).abs() < 0.04,
-                "at {size}: measure {i} is {got}, {was} at 16 (×{scale} expected)"
+                "at {size}: measure {i} is {got}, {was} at 15 (×{scale} expected)"
             );
         }
     }

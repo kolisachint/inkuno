@@ -2,6 +2,7 @@
 
 use super::listing::{self, Nesting};
 use super::*;
+use crate::logic::prefs::Prefs;
 use crate::ui::assets::needs_system_font;
 
 /// What the layout depends on, apart from the text: if nothing changed, it is kept.
@@ -615,7 +616,8 @@ pub(super) fn pend_of(found: &[crate::logic::pending::Area], line: usize) -> Pen
 
 /// What, in a line's style, comes from its nature rather than its text.
 pub struct RunStyle {
-    pub heading: bool,
+    /// The level of a heading (1 to 6); 0 for any other line.
+    pub heading: u8,
     /// Pending change the line belongs to: a removed line is dimmed and struck through.
     pub pending: Pend,
     /// The text is `soft` (a level 6 heading).
@@ -695,7 +697,10 @@ pub fn text_runs(
             TextRun {
                 len,
                 font: Font {
-                    weight: if style.heading {
+                    // Titles: the first two levels in bold, the others in semibold.
+                    weight: if style.heading == 1 || style.heading == 2 {
+                        FontWeight::BOLD
+                    } else if style.heading > 0 {
                         FontWeight::SEMIBOLD
                     } else if f & md::BOLD != 0 {
                         FontWeight::BOLD
@@ -1711,19 +1716,20 @@ impl Editor {
                     last.height += TABLE_GAP;
                     y += TABLE_GAP;
                 }
-                // Titles: a scale of about 1.2, about one body line of room above the first two levels
-                // and two thirds of it above the others.
-                let (font_size, pad) = match kind {
-                    Kind::Heading(1) => (px(30.), px(24.)),
-                    Kind::Heading(2) => (px(23.), px(24.)),
-                    Kind::Heading(3) => (px(19.), px(16.)),
-                    Kind::Heading(4) => (px(17.), px(16.)),
-                    Kind::Heading(_) => (px(16.), px(16.)),
-                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => (px(14.), px(0.)),
-                    _ => (px(16.), px(0.)),
+                // Titles: about one body line of room above the first two levels and two thirds of it
+                // above the others. Sizes and line heights hold for a body of `Prefs::SIZE` px (15):
+                // body 22/15, code 20/13, titles 28/21/18/16/15 (`docs/design/app-ui.md` §14).
+                let (font_size, pad, leading) = match kind {
+                    Kind::Heading(1) => (px(28.), px(24.), 1.3),
+                    Kind::Heading(2) => (px(21.), px(24.), 1.3),
+                    Kind::Heading(3) => (px(18.), px(16.), 1.33),
+                    Kind::Heading(4) => (px(16.), px(16.), 1.4),
+                    Kind::Heading(_) => (px(15.), px(16.), 1.47),
+                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => (px(13.), px(0.), 20. / 13.),
+                    _ => (px(15.), px(0.), 22. / 15.),
                 };
-                // The sizes above hold for a 16 px body text.
-                let font_size = font_size * (t.size / 16.);
+                // The sizes above hold for a `Prefs::SIZE` px body text.
+                let font_size = font_size * (t.size / Prefs::SIZE);
                 // A marker line is drawn smaller, so that a change takes less room.
                 let pend = pend_of(&self.pending, offset);
                 let font_size = if pend == Pend::Mark {
@@ -1734,7 +1740,7 @@ impl Editor {
                 let pad = if offset == 0 {
                     px(0.)
                 } else {
-                    pad * (t.size / 16.)
+                    pad * (t.size / Prefs::SIZE)
                 };
 
                 // An unchanged line, in the same context, reuses its styling from
@@ -1780,13 +1786,7 @@ impl Editor {
                     hasher.finish()
                 };
                 // A title's lines are closer than the body's, so that it belongs to what follows.
-                let lh = (font_size
-                    * if matches!(kind, Kind::Heading(_)) {
-                        1.35
-                    } else {
-                        1.7
-                    })
-                .round();
+                let lh = (font_size * leading).round();
                 let made = if grid_row.is_some() {
                     empty.clone()
                 } else {
@@ -1946,7 +1946,10 @@ impl Editor {
 
                         let style = RunStyle {
                             pending: pend,
-                            heading: matches!(kind, Kind::Heading(_)),
+                            heading: match kind {
+                                Kind::Heading(level) => level,
+                                _ => 0,
+                            },
                             soft: kind == Kind::Heading(6),
                             italic: kind == Kind::Quote && !tinted,
                             mono: code || kind == Kind::Table,
@@ -1976,7 +1979,7 @@ impl Editor {
                             };
                         let marker_style = RunStyle {
                             pending: pend,
-                            heading: false,
+                            heading: 0,
                             soft: false,
                             italic: false,
                             mono: false,
@@ -2006,7 +2009,7 @@ impl Editor {
                             let (gap, side, dot) = (em * 0.5, em * 0.875, em * 0.35);
                             let glyph_style = RunStyle {
                                 pending: pend,
-                                heading: false,
+                                heading: 0,
                                 soft: false,
                                 italic: false,
                                 mono: false,
@@ -2271,7 +2274,7 @@ impl Editor {
                     _ => (false, false),
                 };
                 let room = if matches!(kind, Kind::Code | Kind::Fence) || tinted {
-                    BLOCK_ROOM * (t.size / 16.)
+                    BLOCK_ROOM * (t.size / Prefs::SIZE)
                 } else {
                     px(0.)
                 };
@@ -2720,7 +2723,7 @@ mod tests {
     fn plain() -> RunStyle {
         RunStyle {
             pending: Pend::Plain,
-            heading: false,
+            heading: 0,
             soft: false,
             italic: false,
             mono: false,
@@ -3206,7 +3209,7 @@ mod tests {
         };
         let (body_h, body_lh, body_font) = metrics(cx, at[0]);
         assert_eq!(body_font, body);
-        assert_eq!(body_lh, (body * 1.7).round());
+        assert_eq!(body_lh, (body * 22. / 15.).round());
         assert_eq!(body_h, body_lh);
         // A marker line is 0.8 of a body line, to a pixel of rounding.
         for line in [1, 3, 4, 6] {

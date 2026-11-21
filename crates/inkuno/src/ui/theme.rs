@@ -65,7 +65,7 @@ impl Page {
             Page::Wide => 960.,
             Page::Full => return px(f32::MAX),
         };
-        px(base * size / 16.)
+        px(base * size / Prefs::SIZE)
     }
 }
 
@@ -567,7 +567,7 @@ impl Theme {
             border,
             ground,
             size: prefs.size,
-            ui: (prefs.size / 16.).clamp(0.85, 1.5),
+            ui: (prefs.size / Prefs::SIZE).clamp(0.85, 1.5),
             page: Page::of(&prefs.page),
             wide: Wide::of(&prefs.wide),
             bar: prefs.bar != "off",
@@ -1123,13 +1123,13 @@ mod tests {
 
     #[test]
     fn page_width_follows_the_text_size() {
-        assert_eq!(Page::Normal.measure(16.), px(800.));
-        assert_eq!(Page::Normal.measure(32.), px(1600.));
+        assert_eq!(Page::Normal.measure(15.), px(800.));
+        assert_eq!(Page::Normal.measure(30.), px(1600.));
         assert!(
-            Page::Narrow.measure(16.) < Page::Normal.measure(16.)
-                && Page::Normal.measure(16.) < Page::Wide.measure(16.)
+            Page::Narrow.measure(15.) < Page::Normal.measure(15.)
+                && Page::Normal.measure(15.) < Page::Wide.measure(15.)
         );
-        assert!(Page::Wide.measure(16.) < Page::Full.measure(16.));
+        assert!(Page::Wide.measure(15.) < Page::Full.measure(15.));
         // Keys are read back; an unknown or missing key means the default choice.
         assert!(
             Page::ALL.into_iter().all(|p| Page::of(p.key()) == p)
