@@ -626,6 +626,10 @@ pub struct RunStyle {
     pub mono: bool,
     /// Color of the callout the line is part of.
     pub tint: Option<Hsla>,
+    /// The line is the live one (its source shows): Quiet underlines its links only then.
+    pub live: bool,
+    /// Inline code is drawn as a chip by paint (Quiet), not as a background run.
+    pub chip: bool,
 }
 
 /// The styles of the line `text`, `flags` (one flag word per byte), in one piece
@@ -682,8 +686,10 @@ pub fn text_runs(
             style.mono || f & md::CODE != 0,
             f & md::ITALIC != 0 || style.italic,
         );
+        // Quiet's links are underlined on the live line only.
+        let linked = f & md::LINK != 0 && (!t.quiet || style.live);
         let underline =
-            (m || f & (md::LINK | md::UNDER) != 0).then_some(UnderlineStyle {
+            (m || linked || f & md::UNDER != 0).then_some(UnderlineStyle {
                 thickness: px(1.),
                 color: Some(
                     if f & md::LINK != 0 { t.link } else { color }
@@ -716,7 +722,7 @@ pub fn text_runs(
                     ..font(if code { mono() } else { sans() })
                 },
                 color,
-                background_color: (f & md::CODE != 0).then_some(t.code_bg),
+                background_color: (f & md::CODE != 0 && !style.chip).then_some(t.code_bg),
                 // A single underline for the whole link, brackets included: gpui 0.2 leaves
                 // a bit of underline in the margin if the underline changes style
                 // right at a wrap.
@@ -1708,13 +1714,29 @@ impl Editor {
                 } else {
                     None
                 };
+                // A body block starts a gap below the line before it: a paragraph, list item, quote or
+                // callout line. A blank line, code, a table row, a heading, a formula and the front matter
+                // keep their spacing. The gap is part of the row's pad, so the text, its markers and its hits move together.
+                let block_gap = if offset > 0
+                    && !math
+                    && !line.trim().is_empty()
+                    && matches!(
+                        kind,
+                        Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_) | Kind::Quote
+                    ) {
+                    BLOCK_GAP * (t.size / Prefs::SIZE)
+                } else {
+                    px(0.)
+                };
+                // A body line after a table takes the larger of the table's gap and its own block gap, not their sum.
                 if kind != Kind::Table
                     && after_table
                     && let Some(last) = last
                 {
-                    last.gap = TABLE_GAP;
-                    last.height += TABLE_GAP;
-                    y += TABLE_GAP;
+                    let gap = TABLE_GAP.max(block_gap);
+                    last.gap = gap;
+                    last.height += gap;
+                    y += gap;
                 }
                 // Titles: about one body line of room above the first two levels and two thirds of it
                 // above the others. Sizes and line heights hold for a body of `Prefs::SIZE` px (15):
@@ -1742,21 +1764,8 @@ impl Editor {
                 } else {
                     pad * (t.size / Prefs::SIZE)
                 };
-                // A body block starts a gap below the line before it: a paragraph, list item, quote or
-                // callout line. A blank line, code, a table row, a heading, a formula and the front matter
-                // keep their spacing. The gap is part of the row's pad, so the text, its markers and its hits move together.
-                let block_gap = if offset > 0
-                    && !math
-                    && !line.trim().is_empty()
-                    && matches!(
-                        kind,
-                        Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_) | Kind::Quote
-                    ) {
-                    BLOCK_GAP * (t.size / Prefs::SIZE)
-                } else {
-                    px(0.)
-                };
-                let pad = pad + block_gap;
+                // The table's gap above already holds this one.
+                let pad = if after_table { pad } else { pad + block_gap };
 
                 // An unchanged line, in the same context, reuses its styling from
                 // the previous frame: typing only reprocesses the touched line.
@@ -1841,9 +1850,11 @@ impl Editor {
                         // A checked task (bullet or ordered) strikes its text. Its checkbox is bold,
                         // like a checkbox in the text or a table.
                         if let Some((at, true)) = md::task_box(line) {
+                            // Quiet: the done text is `soft` (`QUIET` takes its colour over `DIM`).
+                            let dim = if t.quiet { md::DIM | md::QUIET } else { md::DIM };
                             flags[at + 4..]
                                 .iter_mut()
-                                .for_each(|f| *f |= md::STRIKE | md::DIM);
+                                .for_each(|f| *f |= md::STRIKE | dim);
                             flags[at..at + 3].iter_mut().for_each(|f| *f |= md::BOLD);
                         }
                         if let Some(label) = md::callout(line).filter(|_| own_tint.is_some()) {
@@ -1966,9 +1977,11 @@ impl Editor {
                                 _ => 0,
                             },
                             soft: kind == Kind::Heading(6),
-                            italic: kind == Kind::Quote && !tinted,
+                            italic: kind == Kind::Quote && !tinted && !t.quiet,
                             mono: code || kind == Kind::Table,
                             tint: own_tint,
+                            live,
+                            chip: t.chip.is_some() && !math,
                         };
                         // The source before the text: a heading's `#` (its lead shows it when live), a
                         // list item's prefix (hidden off-live: its lead draws the marker instead).
@@ -1999,6 +2012,8 @@ impl Editor {
                             italic: false,
                             mono: false,
                             tint: None,
+                            live: true,
+                            chip: false,
                         };
                         let mut lead = if let Some(parent) = cont.filter(|_| item) {
                             // A continuation hangs at the text of the item it belongs to. Its source
@@ -2021,7 +2036,14 @@ impl Editor {
                             // A bullet is a shape, a number a glyph (its text colour), a task's box is painted.
                             let em = px(t.size);
                             let gutter = em * 1.875;
-                            let (gap, side, dot) = (em * 0.5, em * 0.875, em * 0.35);
+                            // Quiet: a 17 px box and 5 px bullets at size 15 (`app-ui.md` §3); the gutter logic stays.
+                            let scale = t.size / Prefs::SIZE;
+                            let (gap, side, dot) = if t.quiet {
+                                (em * 0.5, px(17. * scale), em * 0.35)
+                            } else {
+                                (em * 0.5, em * 0.875, em * 0.35)
+                            };
+                            let bullet_side = if t.quiet { px(5. * scale) } else { dot };
                             let glyph_style = RunStyle {
                                 pending: pend,
                                 heading: 0,
@@ -2029,6 +2051,8 @@ impl Editor {
                                 italic: false,
                                 mono: false,
                                 tint: None,
+                                live: true,
+                                chip: false,
                             };
                             let label = (kind == Kind::Ordered).then(|| {
                                 let source = line[md::indent_len(line)..marker].trim_end();
@@ -2095,7 +2119,7 @@ impl Editor {
                                 dy: px(0.),
                                 dx: number_right - number,
                                 check,
-                                bullet: bullet.map(|shape| (shape, right - dot..right)),
+                                bullet: bullet.map(|shape| (shape, right - bullet_side..right)),
                             })
                         } else {
                             // The live line shows its `# ` marker; the others hide it (see `elided`).
@@ -2743,6 +2767,8 @@ mod tests {
             italic: false,
             mono: false,
             tint: None,
+            live: true,
+            chip: false,
         }
     }
 

@@ -227,14 +227,29 @@ impl Editor {
                         );
                     } else {
                         window.paint_quad(
-                            fill(block(px(-14.), top, px(3.), row.height), t.border)
+                            fill(block(px(-14.), top, px(3.), row.height), t.quote_bar)
                                 .corner_radii(corners(px(1.5), row)),
                         )
                     }
                 }
                 Kind::Rule if !row.live => {
                     let mid = top + row.height / 2.;
-                    window.paint_quad(fill(block(px(0.), mid, w, px(1.)), t.border));
+                    match t.dots {
+                        // Quiet: dots of 1.6 px on a 6 px pitch, centred across the width (at size 15).
+                        Some(dots) => {
+                            let scale = t.size / crate::logic::prefs::Prefs::SIZE;
+                            let (d, pitch) = (px(1.6 * scale), px(6. * scale));
+                            let count = ((w - d) / pitch).floor() as usize + 1;
+                            let start = (w - (pitch * (count - 1) as f32 + d)) / 2.;
+                            for i in 0..count {
+                                let x = start + pitch * i as f32;
+                                window.paint_quad(
+                                    fill(block(x, mid - d / 2., d, d), dots).corner_radii(d / 2.),
+                                );
+                            }
+                        }
+                        None => window.paint_quad(fill(block(px(0.), mid, w, px(1.)), t.border)),
+                    }
                     continue;
                 }
                 _ => {}
@@ -346,46 +361,49 @@ impl Editor {
                 let mark = |range: &Range<usize>, color: Hsla, window: &mut Window| {
                     mark_edged(range, color, None, window)
                 };
+                // The pieces of a passage on this line (`r`, bytes of the line): one per line of a wrap, or one per cell.
+                let spans_of = |r: Range<usize>| -> Vec<(Pixels, Pixels, Pixels)> {
+                    // At a wrap, the offset of a line's first byte reads as the end of the line before: take the line
+                    // of the byte next to it.
+                    let (a, inner) = (row.pos(r.start), row.pos(r.start + 1));
+                    let a = if a.y == inner.y {
+                        a
+                    } else {
+                        point(px(0.), inner.y)
+                    };
+                    let (b, last) = (row.pos(r.end), row.pos(r.end - 1));
+                    // The passage ends the line, the offset after it reads as the next line's: it ends one letter after the last.
+                    let b = if b.y == last.y {
+                        b
+                    } else {
+                        let before = row.pos(r.end.saturating_sub(2));
+                        point(
+                            last.x
+                                + if before.y == last.y && last.x > before.x {
+                                    last.x - before.x
+                                } else {
+                                    t.px(8.)
+                                },
+                            last.y,
+                        )
+                    };
+                    if let Some(grid) = &row.grid {
+                        grid.spans(r.start, r.end, row.lh)
+                            .into_iter()
+                            .map(|(x, y, w)| (x - row.dx, y, w))
+                            .collect()
+                    } else if a.y == b.y {
+                        vec![(a.x, a.y, b.x - a.x)]
+                    } else {
+                        vec![(a.x, a.y, w - a.x), (px(0.), b.y, b.x)]
+                    }
+                };
                 // Tags are pills: the accent at 10 % behind the text, a little wider and shorter than the line, so
                 // that the text and the line's height stay where they are. A tag cut by a wrap is one pill per line.
                 if !matches!(row.kind, Kind::Code | Kind::Fence | Kind::Meta | Kind::Rule) {
                     let (pad, tall, lift) = (t.px(3.), row.lh * 0.78, row.lh * 0.11);
                     for r in md::tags(&self.content[row.start..end], row.kind == Kind::Table) {
-                        // At a wrap, the offset of a line's first byte reads as the end of the line before: take the line
-                        // of the byte next to it.
-                        let (a, inner) = (row.pos(r.start), row.pos(r.start + 1));
-                        let a = if a.y == inner.y {
-                            a
-                        } else {
-                            point(px(0.), inner.y)
-                        };
-                        let (b, last) = (row.pos(r.end), row.pos(r.end - 1));
-                        // The tag ends the line, the offset after it reads as the next line's: it ends one letter after the last.
-                        let b = if b.y == last.y {
-                            b
-                        } else {
-                            let before = row.pos(r.end.saturating_sub(2));
-                            point(
-                                last.x
-                                    + if before.y == last.y && last.x > before.x {
-                                        last.x - before.x
-                                    } else {
-                                        t.px(8.)
-                                    },
-                                last.y,
-                            )
-                        };
-                        let spans: Vec<(Pixels, Pixels, Pixels)> = if let Some(grid) = &row.grid {
-                            grid.spans(r.start, r.end, row.lh)
-                                .into_iter()
-                                .map(|(x, y, w)| (x - row.dx, y, w))
-                                .collect()
-                        } else if a.y == b.y {
-                            vec![(a.x, a.y, b.x - a.x)]
-                        } else {
-                            vec![(a.x, a.y, w - a.x), (px(0.), b.y, b.x)]
-                        };
-                        for (x, y, width) in spans {
+                        for (x, y, width) in spans_of(r) {
                             window.paint_quad(
                                 fill(
                                     block(x - pad, text_top + y + lift, width + pad * 2., tall),
@@ -393,6 +411,35 @@ impl Editor {
                                 )
                                 .corner_radii(t.small()),
                             );
+                        }
+                    }
+                    // Quiet: inline code is a chip, 4 px out on each side of the code (the text keeps its place), with a 1 px rim.
+                    if let Some(chip) = t.chip {
+                        let scale = t.size / crate::logic::prefs::Prefs::SIZE;
+                        let (pad, tall, lift) = (px(4. * scale), row.lh * 0.82, row.lh * 0.09);
+                        let flags = md::flags(&self.content[row.start..end], 0);
+                        let mut i = 0;
+                        while i < flags.len() {
+                            if flags[i] & md::CODE == 0 {
+                                i += 1;
+                                continue;
+                            }
+                            let start = i;
+                            while i < flags.len() && flags[i] & md::CODE != 0 {
+                                i += 1;
+                            }
+                            for (x, y, width) in spans_of(start..i) {
+                                window.paint_quad(
+                                    quad(
+                                        block(x - pad, text_top + y + lift, width + pad * 2., tall),
+                                        px(4. * scale),
+                                        chip,
+                                        px(scale),
+                                        t.chip_line,
+                                        BorderStyle::default(),
+                                    ),
+                                );
+                            }
                         }
                     }
                 }
@@ -472,7 +519,16 @@ impl Editor {
                             let (radius, fill, edge) = match shape {
                                 Bullet::Disc => (side / 2., t.text, px(0.)),
                                 Bullet::Ring => (side / 2., Hsla::transparent_black(), px(1.)),
-                                Bullet::Square => (px(0.), t.text, px(0.)),
+                                // Quiet's square has a 1 px radius at size 15.
+                                Bullet::Square => (
+                                    if t.quiet {
+                                        px(t.size / crate::logic::prefs::Prefs::SIZE)
+                                    } else {
+                                        px(0.)
+                                    },
+                                    t.text,
+                                    px(0.),
+                                ),
                             };
                             window.paint_quad(quad(
                                 bounds,
@@ -485,40 +541,57 @@ impl Editor {
                         }
                         if let Some(check) = &lead.check {
                             let side = check.x.end - check.x.start;
-                            // Centered on the x-height of the first line (about a tenth of an em below the middle).
-                            let mid = text_top + row.lh * 0.5 + px(t.size * 0.1);
+                            // Centered on the x-height of the first line (about a tenth of an em below the middle);
+                            // Quiet centres it on the line itself.
+                            let mid = if t.quiet {
+                                text_top + row.lh * 0.5
+                            } else {
+                                text_top + row.lh * 0.5 + px(t.size * 0.1)
+                            };
                             let bounds = Bounds::new(
                                 point(left + check.x.start, mid - side / 2.),
                                 size(side, side),
                             );
-                            let edge = px(t.size * 0.09375);
+                            let (radius, edge) = if t.quiet {
+                                let scale = t.size / crate::logic::prefs::Prefs::SIZE;
+                                (px(5. * scale), px(scale))
+                            } else {
+                                (px(3.), px(t.size * 0.09375))
+                            };
                             if check.done {
                                 window.paint_quad(quad(
                                     bounds,
-                                    px(3.),
+                                    radius,
                                     t.accent,
                                     edge,
                                     t.accent,
                                     BorderStyle::default(),
                                 ));
-                                // A check mark in two strokes, centered in the box.
+                                // A check mark in two strokes, centered in the box; Quiet's span about 13/17 of it.
                                 let at = |x: f32, y: f32| {
                                     point(bounds.origin.x + side * x, bounds.origin.y + side * y)
                                 };
+                                let tick = if t.quiet {
+                                    [(0.13, 0.53), (0.40, 0.79), (0.89, 0.21)]
+                                } else {
+                                    [(0.24, 0.52), (0.43, 0.7), (0.77, 0.3)]
+                                };
                                 let mut mark = gpui::PathBuilder::stroke(edge * 1.3);
-                                mark.move_to(at(0.24, 0.52));
-                                mark.line_to(at(0.43, 0.7));
-                                mark.line_to(at(0.77, 0.3));
+                                mark.move_to(at(tick[0].0, tick[0].1));
+                                mark.line_to(at(tick[1].0, tick[1].1));
+                                mark.line_to(at(tick[2].0, tick[2].1));
                                 if let Ok(path) = mark.build() {
                                     window.paint_path(path, gpui::white());
                                 }
                             } else {
+                                // Quiet's box is filled with the page; the other themes' is left open.
+                                let fill = if t.quiet { t.bg } else { Hsla::transparent_black() };
                                 window.paint_quad(quad(
                                     bounds,
-                                    px(3.),
-                                    Hsla::transparent_black(),
+                                    radius,
+                                    fill,
                                     edge,
-                                    t.soft,
+                                    t.todo_box,
                                     BorderStyle::default(),
                                 ));
                             }

@@ -125,6 +125,19 @@ pub struct Theme {
     pub link: Hsla,
     /// The colours of a code block's tokens, by the indices of `syntax`.
     pub syntax: [Hsla; 6],
+    /// Quiet's own block marks (the Quiet.md design spec): a 17 px task box, 5 px bullets, quotes
+    /// upright, a link underlined on its live line only. The other themes keep the marks they had.
+    pub quiet: bool,
+    /// The border of an unchecked task box: the text at 22 % in Quiet, `soft` elsewhere.
+    pub todo_box: Hsla,
+    /// The bar beside a quote: `border` unless the theme sets its own (Quiet).
+    pub quote_bar: Hsla,
+    /// The dots of a rule (`---`) in Quiet; `None` draws the solid 1 px line in `border`.
+    pub dots: Option<Hsla>,
+    /// The fill of inline code in Quiet, a chip with a 1 px rim of `chip_line`; `None` keeps the
+    /// code's background, `code_bg`.
+    pub chip: Option<Hsla>,
+    pub chip_line: Hsla,
     /// Lines that are not text but must be seen (3:1): graph edges, diagram strokes.
     pub line: Hsla,
     /// The surface of a hovered button or row: a little of the text over what is under it, so that it
@@ -423,12 +436,18 @@ pub mod syntax {
     pub const FUNCTION: usize = 5;
 }
 
-/// What the Quiet themes (the Quiet.md design spec) set beyond the seeds: the link, the ground and the
-/// six code colours. The other themes derive them in `Theme::of`.
+/// What the Quiet themes (the Quiet.md design spec) set beyond the seeds: the link, the ground, the
+/// six code colours and the block marks. The other themes derive them in `Theme::of`.
 struct Extras {
     link: u32,
     ground: u32,
     syntax: [u32; 6],
+    /// Alphas of the text for the task box's border and the rule's dots.
+    todo_box: f32,
+    dots: f32,
+    quote_bar: u32,
+    chip: u32,
+    chip_line: u32,
 }
 
 /// The Quiet extras of the theme `name`, if it is one of the Quiet themes.
@@ -438,11 +457,21 @@ fn quiet_extras(name: &str) -> Option<Extras> {
             link: 0x105592,
             ground: 0xeff0f1,
             syntax: [0x8d9096, 0xb2565c, 0x89713a, 0x9759b3, 0x3878b1, 0x5f7e43],
+            todo_box: 0.22,
+            dots: 0.45,
+            quote_bar: 0xc9cacb,
+            chip: 0xf6f6f7,
+            chip_line: 0xe2e3e3,
         }),
         "Quiet Dark" => Some(Extras {
             link: 0x8ab4f8,
             ground: 0x141517,
             syntax: [0x8d9096, 0xe06c75, 0xd8b25c, 0xc58af9, 0x6cb6ff, 0x98c379],
+            todo_box: 0.22,
+            dots: 0.40,
+            quote_bar: 0x4a4c4f,
+            chip: 0x262628,
+            chip_line: 0x353638,
         }),
         _ => None,
     }
@@ -548,7 +577,24 @@ impl Theme {
                 [soft, accent_read, code(0.33), code(0.6), text, text],
             ),
         };
+        // Quiet's block marks; the other themes keep the colours they always had.
+        let (todo_box, quote_bar, dots, chip, chip_line) = match &quiet {
+            Some(extras) => (
+                text.opacity(extras.todo_box),
+                Hsla::from(rgb(extras.quote_bar)),
+                Some(text.opacity(extras.dots)),
+                Some(Hsla::from(rgb(extras.chip))),
+                Hsla::from(rgb(extras.chip_line)),
+            ),
+            None => (soft, border, None, None, border),
+        };
         Self {
+            quiet: quiet.is_some(),
+            todo_box,
+            quote_bar,
+            dots,
+            chip,
+            chip_line,
             bg,
             text,
             dim,
@@ -1183,5 +1229,23 @@ mod tests {
         assert_eq!(seeds_in("My Dark", text).map(|s| s[0]), Some(0x000000));
         assert_eq!(seeds_in("Missing", text), None);
         assert_eq!(seeds_in("My Dark", "nope"), None);
+    }
+
+    #[test]
+    fn block_marks_follow_the_quiet_spec() {
+        for (name, _) in THEMES {
+            let t = Theme::of(
+                &Prefs::parse(&format!("theme={name}\n")),
+                WindowAppearance::Light,
+            );
+            if name.starts_with("Quiet") {
+                assert!(t.quiet && t.dots.is_some() && t.chip.is_some(), "{name}");
+                assert_eq!(t.todo_box, t.text.opacity(0.22), "{name}");
+            } else {
+                // The other themes keep the marks they had: a solid rule, no chip, a soft box border.
+                assert!(!t.quiet && t.dots.is_none() && t.chip.is_none(), "{name}");
+                assert_eq!((t.todo_box, t.quote_bar), (t.soft, t.border), "{name}");
+            }
+        }
     }
 }

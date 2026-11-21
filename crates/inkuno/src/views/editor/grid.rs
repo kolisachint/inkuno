@@ -621,6 +621,8 @@ fn shape_flags(
         italic: false,
         mono: false,
         tint: None,
+        live: true,
+        chip: look.theme.chip.is_some(),
     };
     let runs = text_runs(look.theme, &shown_text, &styles, is_marked, &style);
     let line = text_system
