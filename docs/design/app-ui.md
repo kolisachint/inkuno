@@ -1266,16 +1266,18 @@ Defined per theme in `quiet_extras` (`ui/theme.rs`), for `Quiet Light` and `Quie
 
 ### 22.4 Dark pass (2026-11-21)
 
-Every fixture of `scripts/visual-check.sh` was rendered with `Quiet Dark` pinned. Contrast was measured against the sheet, the code block and the gutter: text at 4.5:1, lines and boxes at 3:1. Fixes (Quiet Dark only):
+Every fixture of `scripts/visual-check.sh` was rendered with `Quiet Dark` pinned, and the code, table and media pages were re-checked after the last change. Text must reach 4.5:1 against the sheet, the code block and the gutter. Decorative lines stay subtle hairlines, close to the light theme's (about 1.4 to 1.6:1 on the sheet), except the quote bar, which is a meaningful mark and reaches 3:1. Fixes (Quiet Dark only):
 
-| Token | Was | Now | Ratio before → after |
-|---|---|---|---|
-| `gutter_num` | `#5b5d60` | `#868686` | 2.49 → 4.52 |
-| `quote_bar` | `#4a4c4f` | `#676767` | 1.98 → 3.01 |
-| `code_line` | `#2e2f31` | `#6a6a6a` | 1.27 → 3.04 |
-| `chip_line` | `#353638` | `#6f6f6f` | 1.41 → 3.01 |
-| `table_alpha` | 0.09 | 0.34 | 1.29 → 3.10 |
-| `ring_alpha` | 0.08 | 0.34 | 1.26 → 3.10 |
+| Token | Was | Now | Ratio before → after | Why |
+|---|---|---|---|---|
+| `gutter_num` | `#5b5d60` | `#868686` | 2.49 → 4.52 | line numbers are text |
+| `quote_bar` | `#4a4c4f` | `#676767` | 1.98 → 3.01 | a meaningful mark |
+| `code_line` | `#2e2f31` | `#36373a` | 1.27 → 1.43 | hairline of a code box |
+| `chip_line` | `#353638` | `#3a3b3e` | 1.41 → 1.35 | hairline rim of inline code |
+| `table_alpha` | 0.09 | 0.12 | 1.29 → 1.43 | table grid, hairline |
+| `ring_alpha` | 0.08 | 0.12 | 1.26 → 1.43 | image ring, hairline |
+
+The first pass set the decorative lines to 3:1 (`#6a6a6a`, `#6f6f6f`, alpha 0.34); the owner judged that too heavy, and they were softened to the values above. No theme test pinned the old values.
 
 Already at or above target, unchanged: body and secondary text, the five syntax colours (4.9 to 7.8), `link`, `caution`, the alert tints, the task box (`todo_box`, 3.3), the rule dots (3.3), the highlight (`Theme::highlight` enforces 4.5). Light themes were not changed.
 
