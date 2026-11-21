@@ -991,16 +991,41 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
     );
     cx.simulate_keystrokes("escape");
 
-    // Two panes: a ring around the active one's sheet.
+    // Two panes. Inkuno marks the active one with a ring around its sheet. Quiet draws no ring: its
+    // focus cue is on the tabs (`tab_cue`), the active pane's shown tab on a wash, the other pane's
+    // tabs dimmed to 55 %.
     cx.simulate_keystrokes("secondary-\\");
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
-    let ring = cx
-        .debug_bounds("pane-active")
-        .expect("the active pane is marked");
     let active = shell.read_with(cx, |s, _| s.active);
-    let pane = cx.debug_bounds(leak(format!("pane-{active}"))).unwrap();
-    assert_eq!(ring, pane, "the ring runs along the sheet's edge");
+    let other = shell.read_with(cx, |s, _| {
+        s.groups
+            .iter()
+            .find(|g| !g.tabs.contains(&active))
+            .expect("a second pane")
+            .shown
+    });
+    for theme in ["Quiet Light", "Inkuno Light"] {
+        shell.update_in(cx, |s, window, cx| {
+            s.prefs.theme = theme.into();
+            s.restyle(window, cx);
+        });
+        cx.run_until_parked();
+        let (quiet, cues) = shell.read_with(cx, |s, _| {
+            (s.theme.quiet, (s.tab_cue(active), s.tab_cue(other)))
+        });
+        if quiet {
+            assert!(cx.debug_bounds("pane-active").is_none(), "{theme}: no ring");
+            assert_eq!(cues, ((true, 1.0), (true, 0.55)), "{theme}");
+        } else {
+            let ring = cx
+                .debug_bounds("pane-active")
+                .expect("the active pane is marked");
+            let pane = cx.debug_bounds(leak(format!("pane-{active}"))).unwrap();
+            assert_eq!(ring, pane, "the ring runs along the sheet's edge");
+            assert_eq!(cues, ((false, 1.0), (false, 1.0)), "{theme}");
+        }
+    }
 }
 
 /// Ctrl+Shift+S hides the bar the app draws, with its window buttons. The sidebar keeps a button
