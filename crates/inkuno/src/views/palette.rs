@@ -957,15 +957,20 @@ impl Render for Palette {
                     .child(keycaps(&keys, t, false))
                     .child(what)
             };
+            // Quiet writes the return key as ↵: `↵ open · Ctrl ↵ other pane · > commands`.
+            let key = |action: &dyn gpui::Action| {
+                let keys = crate::ui::keys::of(cx, action);
+                match t.quiet {
+                    true => keys.replace("Enter", "↵").replace('+', " "),
+                    false => keys,
+                }
+            };
             let hints = if self.commands_only {
-                vec![hint(crate::ui::keys::of(cx, &Confirm), tr("run", "lancer"))]
+                vec![hint(key(&Confirm), tr("run", "lancer"))]
             } else {
                 vec![
-                    hint(crate::ui::keys::of(cx, &Confirm), tr("open", "ouvrir")),
-                    hint(
-                        crate::ui::keys::of(cx, &ConfirmAside),
-                        tr("in the other pane", "dans l'autre volet"),
-                    ),
+                    hint(key(&Confirm), tr("open", "ouvrir")),
+                    hint(key(&ConfirmAside), tr("in the other pane", "dans l'autre volet")),
                     hint(">".into(), tr("commands", "commandes")),
                 ]
             };
