@@ -45,6 +45,7 @@ cargo nextest run --locked                   # same tests, faster feedback
 
 - Pure functions are tested in their own module.
 - Every user path is tested end to end in `crates/inkuno/src/shell/tests/`, with simulated keystrokes: a chapter of `end_to_end/`, or a journey of its own. A new feature adds its path there.
+- Unit tests do not show how Markdown is drawn. After a change to the editor's layout, paint or Markdown classification, run `scripts/visual-check.sh` on Linux and look at the screenshots of each component's fixture note (`tests/visual/fixtures/`). The steps and what to look for are in [docs/workflow.md](docs/workflow.md#visual-check-markdown-rendering).
 
 ## Documentation
 
