@@ -122,8 +122,10 @@ impl Editor {
 
     /// The Markdown link `[title](path)` to `to`, the path relative to the folder of the note being edited.
     pub(super) fn link_to(&self, title: &str, to: &Path) -> String {
-        let from = self.dirs.first().map_or(Path::new(""), PathBuf::as_path);
-        crate::logic::wiki::link_to(title, from, to)
+        // `dirs` holds the note's folder, then the vault's root.
+        let root = self.dirs.last().map_or(Path::new(""), PathBuf::as_path);
+        let folder = self.dirs.first().map_or(root, PathBuf::as_path);
+        crate::logic::wiki::link_to(title, root, folder, to)
     }
 
     /// Quiet's completion list, a popover above or below the cursor: after a bare `/` the Basic icon grid and
