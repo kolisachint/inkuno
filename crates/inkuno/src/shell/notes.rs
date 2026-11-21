@@ -339,7 +339,8 @@ impl Shell {
             };
             let linker = note.path.clone();
             let wiki = wiki.contains(&linker);
-            let rewritten = logic::wiki::rewrite_links(&text, root.as_deref(), &linker, old, new, wiki, moved);
+            let rewritten =
+                logic::wiki::rewrite_links(&text, root.as_deref(), &linker, old, new, wiki, moved);
             if let Some(text) = rewritten.filter(|text| vault::write(&note.path, text).is_ok()) {
                 (note.tags, note.links) = Note::index(&text);
                 changed.push(note.path.clone());
@@ -407,8 +408,16 @@ impl Shell {
                 },
             };
             let moves = by_address.then_some((moved, renamed.as_path()));
-            logic::wiki::rewrite_links(&current, self.vault.as_deref(), path, old, new, wiki.contains(path), moves)
-                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
+            logic::wiki::rewrite_links(
+                &current,
+                self.vault.as_deref(),
+                path,
+                old,
+                new,
+                wiki.contains(path),
+                moves,
+            )
+            .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
         });
         if refused {
             self.say(
@@ -517,9 +526,13 @@ impl Shell {
                 None => {
                     let date = date_name(today());
                     let copy = free_conflict_path(path, &date);
-                    // The copy is the note's own text: its pending changes stay with the note.
-                    let text = platform::sidecar::split(home.as_ref(), path, &disk, "").0;
-                    if let Err(e) = vault::write(&copy, &text) {
+                    // The copy is the other version: its own text, and its pending changes beside it.
+                    let (text, entries) = platform::sidecar::split(home.as_ref(), path, &disk, "");
+                    let written = vault::write(&copy, &text).and_then(|()| match &home {
+                        Some(home) => platform::sidecar::store(home, &copy, &entries),
+                        None => Ok(()),
+                    });
+                    if let Err(e) = written {
                         let what = tr(
                             "Changed here and elsewhere, and the other version could not be kept:",
                             "Modifiée ici et ailleurs, et l'autre version n'a pas pu être gardée :",
@@ -823,13 +836,20 @@ impl Shell {
         let Some(root) = self.vault.clone() else {
             return;
         };
-        let from = self.pane().path.clone().unwrap_or_else(|| root.join("New.md"));
+        let from = self
+            .pane()
+            .path
+            .clone()
+            .unwrap_or_else(|| root.join("New.md"));
         let target = logic::wiki::note_at(&root, &from, address);
         if !self.notes.iter().any(|n| n.path == target) {
             let shown = address.to_string();
             return self.say(
                 Tone::Failed,
-                format!("{} « {shown} »", tr("Note not found:", "Note introuvable :")),
+                format!(
+                    "{} « {shown} »",
+                    tr("Note not found:", "Note introuvable :")
+                ),
                 cx,
             );
         }

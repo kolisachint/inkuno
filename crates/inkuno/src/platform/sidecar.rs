@@ -13,7 +13,10 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{revisions::Home, vault};
+use super::{
+    revisions::{Home, home_of},
+    vault,
+};
 use crate::logic::{
     markdown,
     pending::{self, Entry},
@@ -133,5 +136,172 @@ pub fn save(home: Option<&Home>, path: &Path, display: &str, author: &str) -> io
             store(home, path, &entries)
         }
         None => vault::write(path, display),
+    }
+}
+
+/// The folder of the pending lists of a home: a list mirrors its note's path (`<rel>.json`, or a
+/// folder `<rel>` for the notes under it). A note's list is found by its path alone.
+fn lists_root(home: &Home) -> PathBuf {
+    match home {
+        Home::Vault(root) | Home::Scratch(root) => root.join(".inkuno").join("pending"),
+    }
+}
+
+/// The bin of trashed lists: a trashed note's list waits here under the name it got in the trash,
+/// as its history does in the revisions bin, and comes back with it (`restore_along`).
+fn bin_root(home: &Home) -> PathBuf {
+    match home {
+        Home::Vault(root) | Home::Scratch(root) => root.join(".inkuno").join("pending-trash"),
+    }
+}
+
+/// The path of `note`'s list, without the `.json`: a file's list is `<base>.json`, a folder's is
+/// `<base>`. `None` outside the home.
+fn base(home: &Home, note: &Path) -> Option<PathBuf> {
+    let rel = match home {
+        Home::Vault(root) => note.strip_prefix(root).ok()?.to_path_buf(),
+        Home::Scratch(_) => PathBuf::from(note.file_name()?),
+    };
+    Some(lists_root(home).join(rel))
+}
+
+/// `path` with `.json` added to its name.
+fn json_of(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".json");
+    PathBuf::from(name)
+}
+
+/// Moves one list (or folder of lists) from `src` to `dst`. Nothing is overwritten: a list already
+/// at `dst` is an error. A list on another disk is copied, then removed.
+fn move_one(src: &Path, dst: &Path) -> io::Result<()> {
+    if !src.exists() {
+        return Ok(());
+    }
+    if dst.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "the pending changes of that name already exist",
+        ));
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    copy_path(src, dst)?;
+    if src.is_dir() {
+        fs::remove_dir_all(src)
+    } else {
+        fs::remove_file(src)
+    }
+}
+
+/// Copies a file or a folder tree.
+fn copy_path(src: &Path, dst: &Path) -> io::Result<()> {
+    if src.is_dir() {
+        fs::create_dir_all(dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            copy_path(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        fs::copy(src, dst).map(|_| ())
+    }
+}
+
+/// Moves the lists of `src` to `dst` (both the note's own and a folder's).
+fn move_lists(src: &Path, dst: &Path) -> io::Result<()> {
+    move_one(src, dst)?;
+    move_one(&json_of(src), &json_of(dst))
+}
+
+/// Follows a note or folder that moved or was renamed: its pending lists move with it, as its
+/// history does (`revisions::move_along` calls this).
+pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()> {
+    let (Some(hf), Some(ht)) = (home_of(from, vault), home_of(to, vault)) else {
+        return Ok(());
+    };
+    let (Some(src), Some(dst)) = (base(&hf, from), base(&ht, to)) else {
+        return Ok(());
+    };
+    move_lists(&src, &dst)
+}
+
+/// A trashed note or folder: its pending lists go to the bin under the name it got in the trash
+/// (`trashed`). A stale entry of that name in the bin is moved aside, never deleted.
+pub fn trash_along(vault: Option<&Path>, path: &Path, trashed: &Path) -> io::Result<()> {
+    let (Some(home), Some(name)) = (home_of(path, vault), trashed.file_name()) else {
+        return Ok(());
+    };
+    let Some(src) = base(&home, path) else {
+        return Ok(());
+    };
+    let bin = bin_root(&home);
+    for slot in [bin.join(name), json_of(&bin.join(name))] {
+        if fs::symlink_metadata(&slot).is_ok() {
+            let mut n = 1;
+            let aside = loop {
+                let candidate = bin.join(format!("{}.stale-{n}", name.to_string_lossy()));
+                if fs::symlink_metadata(&candidate).is_err() {
+                    break candidate;
+                }
+                n += 1;
+            };
+            fs::rename(&slot, &aside)?;
+        }
+    }
+    move_lists(&src, &bin.join(name))
+}
+
+/// Undo of a trash, or a restore from it: the lists that went to the bin with `trashed` go back to
+/// `to`. Nothing is done when there are none; nothing is overwritten.
+pub fn restore_along(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Result<()> {
+    let (Some(home), Some(name)) = (home_of(to, vault), trashed.file_name()) else {
+        return Ok(());
+    };
+    let Some(dst) = base(&home, to) else {
+        return Ok(());
+    };
+    move_lists(&bin_root(&home).join(name), &dst)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_lists_follow_a_move_a_trash_and_a_restore() {
+        let root = std::env::temp_dir().join(format!("inkuno-sidecar-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("a")).unwrap();
+        let note = root.join("a").join("Plan.md");
+        fs::write(&note, "# Plan\n").unwrap();
+        let entry = Entry {
+            id: 1,
+            author: "assistant".into(),
+            at: 7,
+            old: "old\n".into(),
+            new: "new\n".into(),
+        };
+        let home = Home::Vault(root.clone());
+        store(&home, &note, std::slice::from_ref(&entry)).unwrap();
+        // A rename of the folder carries the list of its notes.
+        let moved = root.join("b");
+        fs::rename(root.join("a"), &moved).unwrap();
+        move_along(Some(&root), &root.join("a"), &moved).unwrap();
+        let note = moved.join("Plan.md");
+        assert_eq!(read(&home, &note), vec![entry.clone()]);
+        // Trashed: the list leaves the note's place and waits in the bin under the trashed name.
+        let trashed = root.join(".trash").join("Plan.md");
+        trash_along(Some(&root), &note, &trashed).unwrap();
+        assert!(read(&home, &note).is_empty());
+        assert!(bin_root(&home).join("Plan.md.json").is_file());
+        // Restored: back at the note's place.
+        restore_along(Some(&root), &trashed, &note).unwrap();
+        assert_eq!(read(&home, &note), vec![entry]);
+        let _ = fs::remove_dir_all(root);
     }
 }
