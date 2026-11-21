@@ -76,7 +76,7 @@ A small bar at the bottom of the note, centered, applies styles with a click: bo
 - The right-click menu and the palette (`bulleted`, `numbered`, `task`, `plain text`) go straight to the kind you want. The same kind again gives back plain text.
 - Indentation is kept. A numbered list restarts at 1 on each level. A ticked box stays ticked from one task list to another.
 - Headings, tables, quotes and code are left alone.
-- One `Ctrl + Z` undoes it. Each kind can get its own key in the help panel.
+- One `Ctrl + Z` undoes it. Each kind can get its own key on the Shortcuts page of the Settings tab.
 
 ## Slash commands
 

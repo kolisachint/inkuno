@@ -23,7 +23,7 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 - **Agents.** `inkuno` on the command line lets an agent with a shell read notes, write them and add Mermaid diagrams, with Inkuno's links, trash and diagrams. [Guide](docs/user/src/agents.md)
 - **Safe tab closing.** Close a tab, the other tabs or a whole pane from a tab's right click, or every file from the palette. If saving fails, the document stays open with its edits and undo history.
 - **Local sharing.** Copy a whole note to the clipboard, or the code block under the cursor.
-- **Keyboard first.** One palette for notes and commands. Every shortcut is listed in the app (`F1`) and can be changed.
+- **Keyboard first.** One palette for notes and commands. Every shortcut is listed in Settings › Shortcuts (`F1`) and can be changed.
 - **A quiet window.** A files-only sidebar, one right panel for the outline, comments, versions and the Assistant, and an empty page that starts with cards.
 - **Comments that stay plain.** A comment is an HTML comment, which GitHub hides. An agent's edits wait beside the note until you accept or reject them, so the file is always clean Markdown.
 - **Yours to dress.** 16 themes, Inter and JetBrains Mono built in, any installed font. Light and dark, in English.

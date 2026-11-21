@@ -52,16 +52,9 @@ Type to find a command by what it does, then `Enter` runs it where you were. Any
 - `folder` offers **New folder**;
 - `theme` and `font` offer theirs too.
 
-## Every shortcut: the help panel
+## Every shortcut: the Shortcuts page
 
-`F1` (or `Ctrl + /`) opens the list of shortcuts, on the keys of what is on display: a table of the note.
-
-- A link per section sits at the top.
-- Type to search, by key or by effect (`ctrl+p`, `theme`). `Esc` empties the search, then closes.
-- Click the keys of a row to [change them](settings.md#changing-a-shortcut).
-- At its foot: the version of Inkuno, and links to its source and to its Ko-fi page.
-
-The full list is also in [Keyboard shortcuts](shortcuts.md).
+`F1` (or `Ctrl + /`) opens the Shortcuts page of the [Settings tab](settings.md), which lists every shortcut in effect. Click the keys of a row to [change them](settings.md#changing-a-shortcut).
 
 ## Menus
 
