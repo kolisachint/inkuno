@@ -408,6 +408,22 @@ alerts), **edit like Typora** (the caret's line shows its source; every other li
   (remove it) or one not in it fails (a regression). The list only shrinks; its size is the
   conformance score, reported in this section.
 
+Score 2026-11-21: CommonMark 334/652, GFM extensions 9/24 (`tests/conformance.rs`; the failing
+examples are listed in `crates/inkuno-logic/tests/spec/expected-failures.txt`).
+
+Worst sections, top 8 by failures:
+
+| Spec | Section | Passed | Failing |
+|--|--|--|--|
+| CommonMark | Emphasis and strong emphasis | 57/132 | 75 |
+| CommonMark | Links | 22/90 | 68 |
+| CommonMark | List items | 26/48 | 22 |
+| CommonMark | HTML blocks | 23/44 | 21 |
+| CommonMark | Setext headings | 9/27 | 18 |
+| CommonMark | Link reference definitions | 9/27 | 18 |
+| CommonMark | Code spans | 8/22 | 14 |
+| CommonMark | Autolinks | 5/19 | 14 |
+
 ### 11.5 Known gaps to close, in order
 
 1. Setext headings (`Title` underlined with `===` / `---`).
@@ -419,6 +435,19 @@ alerts), **edit like Typora** (the caret's line shows its source; every other li
 7. HTML blocks and inline HTML: shown as dimmed source, never executed; GFM's tag filter applies.
 8. Converting the Outside tier: `[[ ]]` and `@` pickers write relative links; comments move to
    `<!-- … -->` (pending owner answer Q1 in `prototypes/README.md`).
+
+Found by the first conformance run (2026-11-21), folded into the order above as quick wins first:
+
+- Quick wins: `__strong__`; empty ATX heading `#`; spaced rules `- - -` / `* * *`; four-space indent
+  stops a heading or rule; relative links `[x](/path)` styled (not only `http(s)`); Unicode-aware
+  intraword `_` (cm 362).
+- Indented code blocks (four spaces) recognised as code.
+- GFM tables: rows without a leading pipe; a delimiter row with the wrong column count is not a table
+  (gfm 203).
+- GFM extended autolinks (`www.`, e-mail, bare URLs with trailing punctuation rules): 0/11 today.
+- **Multi-line inline spans** (emphasis, code or a link crossing a line break, e.g. cm 121, 405) fail
+  by construction of the per-line classifier. Report them as a separate count, not as rendering
+  failures, until the editor's inline pass can look across soft breaks.
 
 ### 11.6 Where it is stated
 
