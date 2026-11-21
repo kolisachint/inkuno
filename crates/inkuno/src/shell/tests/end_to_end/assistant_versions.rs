@@ -383,11 +383,13 @@ fn the_versions_panel_lists_the_saves_and_compares_one(
         ]
     );
 
-    // Down to the oldest, Enter: a comparison tab, read-only, the new line pending.
-    for _ in 0..4 {
-        cx.simulate_keystrokes("down");
-    }
-    cx.simulate_keystrokes("enter");
+    // The oldest, clicked: a comparison tab, read-only, the new line pending. (The keys reach the
+    // panel in its own tests; after the palette's command the row is clicked.)
+    let oldest = cx
+        .debug_bounds(leak(format!("nav-row-{}", names[3])))
+        .expect("the oldest save is listed")
+        .center();
+    cx.simulate_click(oldest, gpui::Modifiers::none());
     vers::settle(cx);
     let compare = vers::compare_tab(shell, cx);
     assert_eq!(
