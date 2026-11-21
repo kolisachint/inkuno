@@ -332,7 +332,7 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
     );
     assert_eq!(
         editor_text(&shell, cx),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     // The answer is not shown; the summary is the last line.
     let lines = entries(&shell, cx);
@@ -354,7 +354,7 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
     assert!(
         fs::read_to_string(root.join("Plan.md"))
             .unwrap()
-            .contains("{==un peu de texte==}{>>Trop court.<<}")
+            .contains("un peu de texte<!-- comment: Trop court. -->")
     );
 
     // One undo takes the whole review back.
@@ -409,7 +409,7 @@ fn a_review_of_a_note_whose_tab_closed_writes_the_file(cx: &mut TestAppContext) 
     );
     assert_eq!(
         fs::read_to_string(root.join("Plan.md")).unwrap(),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     let _ = fs::remove_dir_all(root);
 }
@@ -655,7 +655,7 @@ fn the_first_review_of_a_session_writes_its_comment(cx: &mut TestAppContext) {
     );
     assert_eq!(
         editor_text(&shell, cx),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     assert_eq!(
         entries(&shell, cx).last(),
@@ -684,7 +684,7 @@ fn a_review_reads_the_text_of_separate_messages(cx: &mut TestAppContext) {
     );
     assert_eq!(
         editor_text(&shell, cx),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     assert_eq!(
         entries(&shell, cx).last(),
@@ -1117,10 +1117,19 @@ fn an_improvement_of_a_note_that_is_not_open_writes_its_file(cx: &mut TestAppCon
         cx,
         vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
     );
+    // The file keeps its own text; the proposal waits beside it, in `.inkuno`, until a person decides.
     assert_eq!(
         fs::read_to_string(root.join("Plan.md")).unwrap(),
-        "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
+        "# Plan\n\nun peu de texte\n"
     );
+    let changes = crate::platform::sidecar::read(
+        &crate::platform::revisions::Home::Vault(root.clone()),
+        &root.join("Plan.md"),
+    );
+    assert_eq!(changes.len(), 1, "{changes:?}");
+    assert_eq!(changes[0].old, "un peu de texte\n");
+    assert_eq!(changes[0].new, "Un peu plus clair.\n");
+    assert_eq!(changes[0].author, "assistant");
     let _ = fs::remove_dir_all(root);
 }
 

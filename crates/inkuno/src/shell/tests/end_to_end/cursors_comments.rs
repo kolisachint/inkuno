@@ -62,12 +62,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     j.load(cx, "- un mot ici\nfin", 5);
     cx.simulate_keystrokes("shift-right shift-right shift-right secondary-shift-m");
     cx.simulate_input("à revoir");
-    assert_eq!(text(cx), "- un {==mot==}{>>à revoir<<} ici\nfin");
+    assert_eq!(text(cx), "- un mot<!-- comment: à revoir --> ici\nfin");
     cx.simulate_keystrokes("down secondary-shift-m");
     cx.simulate_input("ok");
     assert_eq!(
         text(cx),
-        "- un {==mot==}{>>à revoir<<} ici\n{==fin==}{>>ok<<}"
+        "- un mot<!-- comment: à revoir --> ici\nfin<!-- comment: ok -->"
     );
     // The panel, right of the note: a click on a card leads into its comment,
     // its check mark resolves it; closed, it comes back when the palette lists comments.
@@ -113,13 +113,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let (pos, card_dbg) = shell.read_with(cx, |s, cx| {
         (s.pane().editor.read(cx).position(), format!("{card:?}"))
     });
-    assert_eq!(pos, 17, "card={card_dbg}");
+    // The card puts the caret in the comment's text: after `- un mot<!-- comment: `.
+    assert_eq!(pos, "- un mot<!-- comment: ".len(), "card={card_dbg}");
     shell.update(cx, |s, cx| {
         s.pane()
             .editor
-            .update(cx, |e, cx| e.resolve_comment(34, cx))
+            .update(cx, |e, cx| e.resolve_comment(40, cx))
     });
-    assert_eq!(text(cx), "- un {==mot==}{>>à revoir<<} ici\nfin");
+    assert_eq!(text(cx), "- un mot<!-- comment: à revoir --> ici\nfin");
     cx.simulate_keystrokes("secondary-z");
     // The column marks the comment under the caret, and none elsewhere.
     let seen = |cx: &mut gpui::VisualTestContext, at: usize| {
@@ -130,17 +131,17 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         shell.read_with(cx, |s, _| s.comments_seen)
     };
     assert_eq!(
-        (seen(cx, 40), seen(cx, 0), seen(cx, 8)),
+        (seen(cx, 40), seen(cx, 36), seen(cx, 8)),
         (Some(1), None, Some(0))
     );
     // Resolved by the keys (the editor keeps Tab, so the shortcut is the way), and undone.
     cx.simulate_keystrokes("secondary-shift-m");
     cx.run_until_parked();
-    assert_eq!(text(cx), "- un mot ici\n{==fin==}{>>ok<<}");
+    assert_eq!(text(cx), "- un mot ici\nfin<!-- comment: ok -->");
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(
         text(cx),
-        "- un {==mot==}{>>à revoir<<} ici\n{==fin==}{>>ok<<}"
+        "- un mot<!-- comment: à revoir --> ici\nfin<!-- comment: ok -->"
     );
     // The corner button, left of the copy one, closes the panel (and reopens it).
     cx.run_until_parked();
@@ -164,13 +165,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, cx| s.palette.is_none()
         && !s.comments_shut
-        && s.pane().editor.read(cx).position() == 5));
+        // The comment starts with its passage: the line's start.
+        && s.pane().editor.read(cx).position() == 0));
     cx.simulate_keystrokes("secondary-shift-m");
-    assert_eq!(text(cx), "- un mot ici\n{==fin==}{>>ok<<}");
+    assert_eq!(text(cx), "- un mot ici\nfin<!-- comment: ok -->");
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(
         text(cx),
-        "- un {==mot==}{>>à revoir<<} ici\n{==fin==}{>>ok<<}"
+        "- un mot<!-- comment: à revoir --> ici\nfin<!-- comment: ok -->"
     );
     // The dot at its limits: one comment or a hundred and twenty. Its right edge does not move,
     // it stays in the window and away from the copy button, and its size does not change.
@@ -179,7 +181,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         format!(
             "# T\n\n{}\n",
             (0..n)
-                .map(|i| format!("mot{{=={i}==}}{{>>c{i}<<}}"))
+                .map(|i| format!("mot<!-- comment: c{i} -->"))
                 .collect::<Vec<_>>()
                 .join(" ")
         )

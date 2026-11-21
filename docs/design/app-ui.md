@@ -821,8 +821,9 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ## 17. Pending changes (built 2026-11-15)
 
-> Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The marks are in the note file (`logic/pending.rs`,
-> CriticMarkup in block form); this section is what the editor does with them. Chords: §17.5.
+> Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The changes are beside the note, in
+> `.inkuno/pending` (2026-11-21, `platform/sidecar.rs`); the editor shows them as marks in block form (`logic/pending.rs`),
+> composed from the file and the list, and split again on save. This section is what the editor does with them. Chords: §17.5.
 
 - [x] **Propose**, **User approves**: the flow of `revisions.md` (Decisions, 2026-11-14 and 2026-11-15).
 - [x] **Implement**: `views/editor/layout.rs` (`Pend`, `pend_of`), `paint.rs` (the wash), `text_runs` (dim and
@@ -895,7 +896,7 @@ Normal 800 is the default (§10.4 lock released for this change).
   found again by that exact text. An outside edit may have moved it meanwhile; if no change has the text any more,
   nothing is written and the message `That change is gone or changed: nothing was commented.` is shown.
   The comment is written by `markdown::comment_on` on the first added line of the change, or on its first removed
-  line when nothing is added: `{==passage==}{>>text<<}`. The passage is that whole line, so it must be unique in the
+  line when nothing is added: `passage<!-- comment: text -->` (2026-11-21, Q1). The passage is that whole line, so it must be unique in the
   note, or the reason is said and nothing changes (empty line, comment marks already there, passage not unique).
 - The change stays pending. One undo step, through `absorb`.
 

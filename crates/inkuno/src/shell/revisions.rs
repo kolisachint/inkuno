@@ -45,7 +45,9 @@ impl Shell {
                 cx,
             );
         };
-        let text = self.pane().editor.read(cx).text().to_string();
+        // A version is the note's own text: its pending changes are not in it.
+        let shown = self.pane().editor.read(cx).text().to_string();
+        let text = platform::sidecar::split(Some(&home), &path, &shown, "").0;
         match history::latest(&home, &path) {
             Ok(Some(last)) if last.text == text => {
                 return self.say(
@@ -105,13 +107,15 @@ impl Shell {
         let Some(home) = history::home_of(path, self.vault.as_deref()) else {
             return;
         };
-        let text = match self.pane_showing(path) {
+        // A version is the note's own text: its pending changes are not in it.
+        let shown = match self.pane_showing(path) {
             Some(tab) => self.panes[tab].editor.read(cx).text().to_string(),
             None => match fs::read_to_string(path) {
-                Ok(text) => text,
+                Ok(disk) => platform::sidecar::display(Some(&home), path, &disk),
                 Err(e) => return self.fail(tr("Not saved", "Non enregistré"), path, e, cx),
             },
         };
+        let text = platform::sidecar::split(Some(&home), path, &shown, "").0;
         let memo = Some(memo.trim()).filter(|m| !m.is_empty());
         let author = self.revision_author();
         match history::save(&home, path, &author, memo, &text, history::now()) {

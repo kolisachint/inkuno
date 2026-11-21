@@ -31,7 +31,7 @@ impl Editor {
         {
             return marks.clone();
         }
-        let commented = self.content.contains("{>>") || self.content.contains("{==");
+        let commented = self.content.contains(md::COMMENT_OPEN);
         let marks: HashMap<usize, Notes> = starts
             .iter()
             .filter(|_| commented)
@@ -58,7 +58,7 @@ impl Editor {
             }
         };
         for lr in self.comment_lines_after(range.end) {
-            let body = self.content[lr.clone()].trim().trim_start_matches("{>>");
+            let body = md::comment_line_text(self.content[lr.clone()].trim()).unwrap_or("");
             let named = |list: &[String]| {
                 list.iter()
                     .position(|name| body.starts_with(&format!("{name}: ")))
@@ -76,8 +76,8 @@ impl Editor {
             if l != 1 {
                 for (c, cell) in md::cells(line).into_iter().enumerate() {
                     let text = &line[cell.clone()];
-                    if md::comments(text).first().is_some_and(|(whole, ..)| {
-                        *whole == (0..text.len()) && text.starts_with("{==")
+                    if md::comments(text).first().is_some_and(|(whole, noted, _)| {
+                        *whole == (0..text.len()) && !noted.is_empty()
                     }) {
                         note(
                             Target::Cell(l.saturating_sub(1), c),

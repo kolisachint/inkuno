@@ -9,7 +9,9 @@ impl Editor {
             return self.refuse_pending(cx);
         }
         if let Some(text) = self.pick_text() {
-            cx.write_to_clipboard(ClipboardItem::new_string(text));
+            cx.write_to_clipboard(ClipboardItem::new_string(crate::logic::pending::plain(
+                &text,
+            )));
             if cut {
                 self.clear_pick(cx);
             }
@@ -22,10 +24,13 @@ impl Editor {
         if cut && self.touches_pending(&self.sel.clone(), "") {
             return self.refuse_pending(cx);
         }
+        // A copy never holds a pending mark: it is the text the note will have once accepted.
         let text = self
             .cells_text()
             .unwrap_or_else(|| self.content[self.sel.clone()].to_string());
-        cx.write_to_clipboard(ClipboardItem::new_string(text));
+        cx.write_to_clipboard(ClipboardItem::new_string(crate::logic::pending::plain(
+            &text,
+        )));
         if cut && !self.clear_cells(cx) {
             self.edit(self.sel.clone(), "", cx);
             self.realign(cx);

@@ -442,7 +442,8 @@ Worst sections, top 8 by failures:
 6. List rules: interrupting a paragraph, lazy continuation, loose vs tight.
 7. HTML blocks and inline HTML: shown as dimmed source, never executed; GFM's tag filter applies.
 8. Converting the Outside tier: `[[ ]]` and `@` pickers write relative links; comments move to
-   `<!-- … -->` (pending owner answer Q1 in `prototypes/README.md`).
+   `passage<!-- comment: … -->` (done 2026-11-21, Q1 in `prototypes/README.md`: the CriticMarkup form is still
+   read, and rewritten on save; pending changes are beside the note, Q2).
 
 Found by the first conformance run (2026-11-21), folded into the order above as quick wins first:
 

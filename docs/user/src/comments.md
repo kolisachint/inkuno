@@ -4,13 +4,13 @@
 
 ## In the file
 
-The comment is kept in the note itself, as [CriticMarkup](https://criticmarkup.com/):
+The comment is kept in the note itself, as an HTML comment that GitHub hides:
 
 ```text
-{==the text==}{>>the comment<<}
+the text<!-- comment: the comment -->
 ```
 
-The file stays plain Markdown. In Inkuno, the text is highlighted and the comment follows it, faded.
+The passage is the text from the start of its line (or of its table cell, or of the comment before it) up to the comment. In Inkuno, the passage is highlighted and the comment is faded; off the line you are editing, the comment's markup is hidden. Notes written with the earlier CriticMarkup comments (`{==text==}{>>comment<<}`) are read as before, and are written in this form when the note is next saved.
 
 A review by the [Assistant](assistant.md) writes its findings in this form too. All the comments of one review are one undo step.
 
@@ -30,7 +30,7 @@ On a comment, `Ctrl + Shift + M` resolves it. On a line of its own (see below), 
 ## In a table
 
 - **A cell**: the comment is on the text of the cell. A selection over several cells gets one comment per cell, never across a `|`. A `|` typed in the comment is written `\|`.
-- **A row, a column or the whole table**, taken by its grip: the comment goes on a line of its own under the table, named by its content. A row is named by its first cell, a column by its header: `{>>Column "Age": in years<<}`.
+- **A row, a column or the whole table**, taken by its grip: the comment goes on a line of its own under the table, named by its content. A row is named by its first cell, a column by its header: `<!-- comment: Column "Age": in years -->`.
 
 Because the comment is named by content, a sort leaves it where it belongs:
 

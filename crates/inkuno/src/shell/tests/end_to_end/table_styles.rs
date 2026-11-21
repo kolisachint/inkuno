@@ -175,7 +175,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_input("a|b");
     assert_eq!(
         flat(cx),
-        "Nom|Âge/{==Léa==}{>>a\\|b<<}|31/Max|7",
+        "Nom|Âge/Léa<!-- comment: a\\|b -->|31/Max|7",
         "{:?}",
         text(cx)
     );
@@ -191,7 +191,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("secondary-shift-m");
     assert_eq!(
         flat(cx),
-        "Nom|Âge/{==Léa==}{>><<}|{==31==}{>><<}/{==Max==}{>><<}|7",
+        "Nom|Âge/Léa<!-- comment:  -->|31<!-- comment:  -->/Max<!-- comment:  -->|7",
         "{:?}",
         text(cx)
     );
@@ -211,7 +211,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(
         text(cx),
         format!(
-            "{}\n\n{{>>Column \"Âge\": en années<<}}\n\nsuite",
+            "{}\n\n<!-- comment: Column \"Âge\": en années -->\n\nsuite",
             grid.trim_end_matches("\n\nsuite")
         )
     );
@@ -232,7 +232,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
     assert!(
-        text(cx).contains("\n\n{>>Row \"Max\": <<}\n\nsuite"),
+        text(cx).contains("\n\n<!-- comment: Row \"Max\":  -->\n\nsuite"),
         "{:?}",
         text(cx)
     );
@@ -241,7 +241,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
     assert!(
-        text(cx).contains("\n\n{>>Table: <<}\n\nsuite") && flat(cx) == "Nom|Âge/Léa|31/Max|7",
+        text(cx).contains("\n\n<!-- comment: Table:  -->\n\nsuite")
+            && flat(cx) == "Nom|Âge/Léa|31/Max|7",
         "{:?}",
         text(cx)
     );
@@ -252,15 +253,18 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = center(cx, Part::Row(2));
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
-    assert_eq!(text(cx), format!("{twins}\n\n{{>>Row \"x\" (2): <<}}"));
+    assert_eq!(
+        text(cx),
+        format!("{twins}\n\n<!-- comment: Row \"x\" (2):  -->")
+    );
     // The comments under a table follow it. Renamed first cell or header: the name changes in the
     // comment; a sort leaves it with its row; deleting the row, the column or the table deletes it,
     // in one undo step.
-    let note = "| Nom | Âge |\n| --- | --- |\n| Léa | 31  |\n| Max | 7   |\n\n{>>Row \"Léa\": a<<}\n\n{>>Column \"Âge\": b<<}\n\n{>>Table: c<<}\n\n{>>libre<<}\n\nsuite";
+    let note = "| Nom | Âge |\n| --- | --- |\n| Léa | 31  |\n| Max | 7   |\n\n<!-- comment: Row \"Léa\": a -->\n\n<!-- comment: Column \"Âge\": b -->\n\n<!-- comment: Table: c -->\n\n<!-- comment: libre -->\n\nsuite";
     let comments = |cx: &mut gpui::VisualTestContext| {
         text(cx)
             .lines()
-            .filter(|l| l.starts_with("{>>"))
+            .filter(|l| l.starts_with("<!-- comment:"))
             .collect::<Vec<_>>()
             .join(" ")
     };
@@ -269,7 +273,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_input("Zoé");
     assert_eq!(
         comments(cx),
-        "{>>Row \"Zoé\": a<<} {>>Column \"Âge\": b<<} {>>Table: c<<} {>>libre<<}",
+        "<!-- comment: Row \"Zoé\": a --> <!-- comment: Column \"Âge\": b --> <!-- comment: Table: c --> <!-- comment: libre -->",
         "{:?}",
         text(cx)
     );
@@ -279,7 +283,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("shift-right shift-right shift-right");
     cx.simulate_keystrokes("backspace");
     assert!(
-        comments(cx).starts_with("{>>Row 2: a<<}"),
+        comments(cx).starts_with("<!-- comment: Row 2: a -->"),
         "{}",
         comments(cx)
     );
@@ -287,15 +291,15 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("shift-right shift-right shift-right");
     cx.simulate_input("Prénom");
     assert!(
-        comments(cx).contains("{>>Column \"Âge\": b<<}"),
+        comments(cx).contains("<!-- comment: Column \"Âge\": b -->"),
         "another header leaves the column alone"
     );
     j.load(cx, note, note.find("Âge").unwrap());
     cx.simulate_keystrokes("shift-right shift-right shift-right");
     cx.simulate_input("Années");
     assert!(
-        comments(cx).contains("{>>Column \"Années\": b<<}")
-            && comments(cx).contains("{>>Row \"Léa\": a<<}"),
+        comments(cx).contains("<!-- comment: Column \"Années\": b -->")
+            && comments(cx).contains("<!-- comment: Row \"Léa\": a -->"),
         "{}",
         comments(cx)
     );
@@ -309,7 +313,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     op(cx, editor::TableOp::SortDesc);
     assert_eq!(flat(cx), "Nom|Âge/Max|7/Léa|31");
     assert!(
-        comments(cx).starts_with("{>>Row \"Léa\": a<<}"),
+        comments(cx).starts_with("<!-- comment: Row \"Léa\": a -->"),
         "a sort leaves the comment with its row"
     );
     j.load(cx, note, note.find("Léa").unwrap());
@@ -317,7 +321,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     op(cx, editor::TableOp::DeleteRow);
     assert_eq!(
         comments(cx),
-        "{>>Column \"Âge\": b<<} {>>Table: c<<} {>>libre<<}",
+        "<!-- comment: Column \"Âge\": b --> <!-- comment: Table: c --> <!-- comment: libre -->",
         "{:?}",
         text(cx)
     );
@@ -332,14 +336,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     op(cx, editor::TableOp::DeleteCol);
     assert_eq!(
         comments(cx),
-        "{>>Row \"Léa\": a<<} {>>Table: c<<} {>>libre<<}",
+        "<!-- comment: Row \"Léa\": a --> <!-- comment: Table: c --> <!-- comment: libre -->",
         "{:?}",
         text(cx)
     );
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(text(cx), note);
     op(cx, editor::TableOp::DeleteTable);
-    assert_eq!(comments(cx), "{>>libre<<}", "{:?}", text(cx));
+    assert_eq!(comments(cx), "<!-- comment: libre -->", "{:?}", text(cx));
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(text(cx), note);
     // Emptying cells renames too: a cleared column and a pasted header carry their comments along; and a
@@ -350,7 +354,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("delete");
     assert!(
-        comments(cx).contains("{>>Column 2: b<<}") && comments(cx).contains("{>>Row \"Léa\": a<<}"),
+        comments(cx).contains("<!-- comment: Column 2: b -->")
+            && comments(cx).contains("<!-- comment: Row \"Léa\": a -->"),
         "{}",
         comments(cx)
     );
@@ -361,7 +366,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("delete");
     assert!(
-        comments(cx).starts_with("{>>Row 3: a<<}") || comments(cx).starts_with("{>>Row 2: a<<}"),
+        comments(cx).starts_with("<!-- comment: Row 3: a -->")
+            || comments(cx).starts_with("<!-- comment: Row 2: a -->"),
         "{}",
         comments(cx)
     );
@@ -388,7 +394,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     op(cx, editor::TableOp::DuplicateRow);
     assert!(
-        comments(cx).starts_with("{>>Row \"Léa\" (1): a<<} {>>Column \"Âge\": b<<}"),
+        comments(cx).starts_with(
+            "<!-- comment: Row \"Léa\" (1): a --> <!-- comment: Column \"Âge\": b -->"
+        ),
         "{}",
         comments(cx)
     );
@@ -399,7 +407,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     op(cx, editor::TableOp::Transpose);
     assert_eq!(
         comments(cx),
-        "{>>Column \"Léa\": a<<} {>>Row \"Âge\": b<<} {>>Table: c<<} {>>libre<<}",
+        "<!-- comment: Column \"Léa\": a --> <!-- comment: Row \"Âge\": b --> <!-- comment: Table: c --> <!-- comment: libre -->",
         "{:?}",
         text(cx)
     );
@@ -410,17 +418,22 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     op(cx, editor::TableOp::RowAbove);
     assert!(
-        comments(cx).starts_with("{>>Row \"Léa\": a<<}"),
+        comments(cx).starts_with("<!-- comment: Row \"Léa\": a -->"),
         "{}",
         comments(cx)
     );
     // Deleting a row that is not commented leaves the comment of another row where it is, and the
     // rows that shared a first cell lose their number.
-    let twins = "| a | b |\n| - | - |\n| x | 1 |\n| x | 2 |\n\n{>>Row \"x\" (2): n<<}";
+    let twins = "| a | b |\n| - | - |\n| x | 1 |\n| x | 2 |\n\n<!-- comment: Row \"x\" (2): n -->";
     j.load(cx, twins, twins.find('1').unwrap());
     cx.run_until_parked();
     op(cx, editor::TableOp::DeleteRow);
-    assert_eq!(comments(cx), "{>>Row \"x\": n<<}", "{:?}", text(cx));
+    assert_eq!(
+        comments(cx),
+        "<!-- comment: Row \"x\": n -->",
+        "{:?}",
+        text(cx)
+    );
     // What is drawn: the parts that carry a comment, and the one the cursor is in the comment of.
     use editor::Target::*;
     let notes = |cx: &mut gpui::VisualTestContext| {
@@ -428,7 +441,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             s.pane().editor.update(cx, |e, _| e.first_notes())
         })
     };
-    let marked = "| Nom | {==Âge==}{>>a<<} | Ville |\n| --- | --- | --- |\n| Léa | 31 | {==Lyon==}{>>b<<} |\n| Max | {==7==}{>>c<<} é | x |\n\n{>>Row \"Max\": d<<}\n\n{>>Column \"Ville\": e<<}\n\n{>>Table: f<<}\n\n{>>Row 9: g<<}\n\nsuite";
+    let marked = "| Nom | Âge<!-- comment: a --> | Ville |\n| --- | --- | --- |\n| Léa | 31 | Lyon<!-- comment: b --> |\n| Max | 7<!-- comment: c --> é | x |\n\n<!-- comment: Row \"Max\": d -->\n\n<!-- comment: Column \"Ville\": e -->\n\n<!-- comment: Table: f -->\n\n<!-- comment: Row 9: g -->\n\nsuite";
     j.load(cx, marked, 0);
     cx.run_until_parked();
     let n = notes(cx);
@@ -458,12 +471,17 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     assert!(notes(cx).found.is_empty());
     // A comment on its own: resolving takes its line, at the start of the note, between two
-    // paragraphs, at the end; in the middle of a line, only its markup goes.
+    // paragraphs, at the end; after a passage, only its markup goes.
     for (note, at, left) in [
-        ("{>>a<<}\nsuite", 3, "suite"),
-        ("avant\n\n{>>a<<}\n\nsuite", 10, "avant\n\nsuite"),
-        ("avant\n\n{>>a<<}", 10, "avant"),
-        ("un {>>a<<} deux", 6, "un  deux"),
+        ("<!-- comment: a -->\nsuite", 3, "suite"),
+        (
+            "avant\n\n<!-- comment: a -->\n\nsuite",
+            10,
+            "avant\n\nsuite",
+        ),
+        ("avant\n\n<!-- comment: a -->", 10, "avant"),
+        // Its passage is the text before it on the line: "un", which stays.
+        ("un <!-- comment: a --> deux", 6, "un deux"),
     ] {
         j.load(cx, note, at);
         cx.simulate_keystrokes("secondary-shift-m");

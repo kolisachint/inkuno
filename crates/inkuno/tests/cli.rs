@@ -1076,7 +1076,7 @@ fn comment_file_works_without_any_vault() {
     assert_eq!(run.out, format!("{}\n", absolute.display()));
     assert_eq!(
         fs::read_to_string(&note).unwrap(),
-        "# S\n\nThe {==passage==}{>>more?<<} here.\n"
+        "# S\n\nThe passage<!-- comment: more? --> here.\n"
     );
     // The extension is read without regard to case, and --json gives the path and the token.
     fs::write(folder.join("U.MD"), "# U\n\nTwo lines\n").unwrap();
@@ -1099,7 +1099,7 @@ fn comment_file_works_without_any_vault() {
     let written = fs::read(folder.join("U.MD")).unwrap();
     assert_eq!(
         std::str::from_utf8(&written).unwrap(),
-        "# U\n\nTwo {==lines==}{>>a b<<}\n"
+        "# U\n\nTwo lines<!-- comment: a b -->\n"
     );
     assert_eq!(
         value["path"],
@@ -1221,7 +1221,7 @@ fn comment_wraps_one_passage_and_daily_writes_its_day() {
     assert!(
         fs::read_to_string(vault.join("c.md"))
             .unwrap()
-            .contains("{==passage==}{>>more?<<}")
+            .contains("passage<!-- comment: more? -->")
     );
     let missing = inkuno(&home, &vault, &["comment", "c.md", "--passage", "here"]);
     assert_eq!(missing.code, 2);
@@ -1667,8 +1667,53 @@ fn links_of_an_unreadable_note_is_an_error_not_an_empty_answer() {
 }
 
 /// The note's text after a `write`, the first line of its pending marks included.
+/// The note's file as it is on disk: its own text, without pending changes.
 fn note_text(vault: &Path, name: &str) -> String {
     fs::read_to_string(vault.join(name)).unwrap()
+}
+
+/// The note's text as the person and an agent see it: the file with its pending changes marked
+/// (`read --json`). The changes themselves are beside the file, in `.inkuno/pending`.
+fn shown(home: &Path, vault: &Path, name: &str) -> String {
+    let run = inkuno(home, vault, &["read", name, "--json"]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    let read: Value = serde_json::from_str(&run.out).unwrap();
+    read["text"].as_str().unwrap().to_string()
+}
+
+/// The person's decision on the note's pending change `index`, as the app makes it: an accept
+/// writes the change's new text into the file, a reject keeps the file's text; either way the
+/// change leaves the list, and the others follow the file.
+fn decide(vault: &Path, name: &str, index: usize, accept: bool) {
+    let list = vault
+        .join(".inkuno")
+        .join("pending")
+        .join(format!("{name}.json"));
+    let mut value: Value = serde_json::from_str(&fs::read_to_string(&list).unwrap()).unwrap();
+    let changes = value["changes"].as_array_mut().unwrap();
+    let change = changes.remove(index);
+    let (at, old, new) = (
+        change["at"].as_u64().unwrap() as usize,
+        change["old"].as_str().unwrap().to_string(),
+        change["new"].as_str().unwrap().to_string(),
+    );
+    if accept {
+        let mut text = note_text(vault, name);
+        text.replace_range(at..at + old.len(), &new);
+        write(&vault.join(name), &text);
+        for other in changes.iter_mut() {
+            let other_at = other["at"].as_u64().unwrap() as usize;
+            if other_at > at {
+                let moved = other_at + new.len() - old.len();
+                other["at"] = Value::from(moved);
+            }
+        }
+    }
+    if changes.is_empty() {
+        fs::remove_file(&list).unwrap();
+    } else {
+        fs::write(&list, value.to_string()).unwrap();
+    }
 }
 
 #[test]
@@ -1697,9 +1742,12 @@ fn write_marks_the_note_and_saves_two_automatic_revisions() {
         run.err
     );
     assert_eq!(
-        note_text(&vault, "plan.md"),
+        shown(&home, &vault, "plan.md"),
         "# Plan\n\n{--\nOne.\n--}\n{++\nTwo.\n++}\n"
     );
+    // The file keeps its own text: no mark is written into it; the change waits in `.inkuno`.
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n\nOne.\n");
+    assert!(vault.join(".inkuno/pending/plan.md.json").is_file());
     let list = inkuno(&home, &vault, &["rev", "list", "plan.md", "--json"]);
     let revs: Value = serde_json::from_str(&list.out).unwrap();
     let revs = revs.as_array().unwrap();
@@ -1781,7 +1829,7 @@ fn write_is_refused_while_changes_are_pending() {
         ],
     );
     assert_eq!(first.code, 0, "{}", first.err);
-    let marked = note_text(&vault, "plan.md");
+    let marked = shown(&home, &vault, "plan.md");
     // The token of the marked text the person now has: the agent read it after its own change.
     let marked_token = token_of(&home, &vault, "plan.md");
     let second = inkuno(
@@ -1801,7 +1849,7 @@ fn write_is_refused_while_changes_are_pending() {
     assert_eq!(second.code, 1);
     assert!(second.err.contains("accept or reject"), "{}", second.err);
     assert!(second.out.is_empty());
-    assert_eq!(note_text(&vault, "plan.md"), marked);
+    assert_eq!(shown(&home, &vault, "plan.md"), marked);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -1840,7 +1888,7 @@ fn replace_takes_back_the_own_proposal_and_writes_the_new_one() {
     assert_eq!(result["replaced"], true);
     assert_eq!(result["changes"], 1);
     assert_eq!(
-        note_text(&vault, "plan.md"),
+        shown(&home, &vault, "plan.md"),
         "# Plan\n\n{--\nOne.\n--}\n{++\nThree.\n++}\n"
     );
     // Four revisions: the first pair, then the person's text again and the new proposal.
@@ -1861,7 +1909,7 @@ fn a_second_write_without_replace_says_how_to_replace_the_proposal() {
     write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
     let first = propose(&home, &vault, "claude", "# Plan\n\nTwo.\n", &[]);
     assert_eq!(first.code, 0, "{}", first.err);
-    let marked = note_text(&vault, "plan.md");
+    let marked = shown(&home, &vault, "plan.md");
     let second = propose(&home, &vault, "claude", "# Plan\n\nThree.\n", &[]);
     assert_eq!(second.code, 1, "{}", second.err);
     assert!(
@@ -1871,7 +1919,7 @@ fn a_second_write_without_replace_says_how_to_replace_the_proposal() {
         "{}",
         second.err
     );
-    assert_eq!(note_text(&vault, "plan.md"), marked);
+    assert_eq!(shown(&home, &vault, "plan.md"), marked);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -1882,7 +1930,7 @@ fn replace_refuses_a_token_of_an_earlier_text() {
     let old = token_of(&home, &vault, "plan.md");
     let first = propose(&home, &vault, "claude", "# Plan\n\nTwo.\n", &[]);
     assert_eq!(first.code, 0, "{}", first.err);
-    let marked = note_text(&vault, "plan.md");
+    let marked = shown(&home, &vault, "plan.md");
     let run = inkuno(
         &home,
         &vault,
@@ -1905,7 +1953,7 @@ fn replace_refuses_a_token_of_an_earlier_text() {
         "{}",
         run.err
     );
-    assert_eq!(note_text(&vault, "plan.md"), marked);
+    assert_eq!(shown(&home, &vault, "plan.md"), marked);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -1915,7 +1963,7 @@ fn replace_refuses_a_proposal_by_another_author() {
     write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
     let first = propose(&home, &vault, "claude", "# Plan\n\nTwo.\n", &[]);
     assert_eq!(first.code, 0, "{}", first.err);
-    let marked = note_text(&vault, "plan.md");
+    let marked = shown(&home, &vault, "plan.md");
     let run = propose(&home, &vault, "bo", "# Plan\n\nThree.\n", &["--replace"]);
     assert_eq!(run.code, 1, "{}", run.err);
     assert!(
@@ -1925,7 +1973,7 @@ fn replace_refuses_a_proposal_by_another_author() {
         "{}",
         run.err
     );
-    assert_eq!(note_text(&vault, "plan.md"), marked);
+    assert_eq!(shown(&home, &vault, "plan.md"), marked);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -1935,10 +1983,8 @@ fn replace_refuses_a_proposal_after_the_person_rejected_one_change() {
     write(&vault.join("plan.md"), "# Plan\n\nOne.\n\nTwo.\n");
     let first = propose(&home, &vault, "claude", "# Plan\n\nUno.\n\nDos.\n", &[]);
     assert_eq!(first.code, 0, "{}", first.err);
-    let marked = note_text(&vault, "plan.md");
-    // The person rejects the first change: its marks go and the removed line stays.
-    let rejected = marked.replacen("{--\nOne.\n--}\n{++\nUno.\n++}\n", "One.\n", 1);
-    write(&vault.join("plan.md"), &rejected);
+    // The person rejects the first change: it leaves the list and the file keeps its line.
+    decide(&vault, "plan.md", 0, false);
     let run = propose(
         &home,
         &vault,
@@ -1952,7 +1998,8 @@ fn replace_refuses_a_proposal_after_the_person_rejected_one_change() {
         "{}",
         run.err
     );
-    assert_eq!(note_text(&vault, "plan.md"), rejected);
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n\nOne.\n\nTwo.\n");
+    assert!(shown(&home, &vault, "plan.md").contains("{--\nTwo.\n--}\n{++\nDos.\n++}"));
     let _ = fs::remove_dir_all(home);
 }
 
@@ -1962,10 +2009,8 @@ fn replace_is_allowed_after_the_person_accepted_one_change_and_keeps_it() {
     write(&vault.join("plan.md"), "# Plan\n\nOne.\n\nTwo.\n");
     let first = propose(&home, &vault, "claude", "# Plan\n\nUno.\n\nDos.\n", &[]);
     assert_eq!(first.code, 0, "{}", first.err);
-    let marked = note_text(&vault, "plan.md");
-    // The person accepts the first change: its added line stays, its marks go.
-    let accepted = marked.replacen("{--\nOne.\n--}\n{++\nUno.\n++}\n", "Uno.\n", 1);
-    write(&vault.join("plan.md"), &accepted);
+    // The person accepts the first change: its added line is in the file now.
+    decide(&vault, "plan.md", 0, true);
     let run = propose(
         &home,
         &vault,
@@ -1975,9 +2020,10 @@ fn replace_is_allowed_after_the_person_accepted_one_change_and_keeps_it() {
     );
     assert_eq!(run.code, 0, "{}", run.err);
     assert_eq!(
-        note_text(&vault, "plan.md"),
+        shown(&home, &vault, "plan.md"),
         "# Plan\n\nUno.\n\n{--\nTwo.\n--}\n{++\nTres.\n++}\n"
     );
+    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n\nUno.\n\nTwo.\n");
     let _ = fs::remove_dir_all(home);
 }
 
@@ -1987,11 +2033,11 @@ fn replace_with_the_persons_own_text_is_refused_as_nothing_changed() {
     write(&vault.join("plan.md"), "# Plan\n\nOne.\n");
     let first = propose(&home, &vault, "claude", "# Plan\n\nTwo.\n", &[]);
     assert_eq!(first.code, 0, "{}", first.err);
-    let marked = note_text(&vault, "plan.md");
+    let marked = shown(&home, &vault, "plan.md");
     let run = propose(&home, &vault, "claude", "# Plan\n\nOne.\n", &["--replace"]);
     assert_eq!(run.code, 1, "{}", run.err);
     assert!(run.err.contains("nothing changed"), "{}", run.err);
-    assert_eq!(note_text(&vault, "plan.md"), marked);
+    assert_eq!(shown(&home, &vault, "plan.md"), marked);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2010,7 +2056,7 @@ fn replace_without_pending_changes_is_a_plain_write() {
     let result: Value = serde_json::from_str(&run.out).unwrap();
     assert!(result.get("replaced").is_none(), "{}", run.out);
     assert_eq!(
-        note_text(&vault, "plan.md"),
+        shown(&home, &vault, "plan.md"),
         "# Plan\n\n{--\nOne.\n--}\n{++\nTwo.\n++}\n"
     );
     let _ = fs::remove_dir_all(home);
@@ -2039,7 +2085,7 @@ fn write_refuses_a_token_no_saved_version_has() {
     );
     assert_eq!(run.code, 1);
     assert!(run.err.contains("changed since it was read"), "{}", run.err);
-    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n\nOne, edited.\n");
+    assert_eq!(shown(&home, &vault, "plan.md"), "# Plan\n\nOne, edited.\n");
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2076,7 +2122,7 @@ fn a_stale_token_of_a_saved_version_merges_when_other_lines_changed() {
         "{}",
         run.err
     );
-    let text = note_text(&vault, "plan.md");
+    let text = shown(&home, &vault, "plan.md");
     assert!(text.contains("{--\nOne.\n--}\n{++\nUno.\n++}"), "{text}");
     assert!(text.contains("Three."), "{text}");
     let _ = fs::remove_dir_all(home);
@@ -2113,7 +2159,7 @@ fn a_stale_token_of_a_saved_version_is_refused_when_the_same_lines_changed() {
     );
     assert_eq!(run.code, 1, "{}", run.out);
     assert!(run.err.contains("line 3"), "{}", run.err);
-    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n\nEin.\n");
+    assert_eq!(shown(&home, &vault, "plan.md"), "# Plan\n\nEin.\n");
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2131,7 +2177,7 @@ fn write_needs_an_author_and_a_text() {
         "not read\n",
     );
     assert_eq!(no_text.code, 2, "{}", no_text.err);
-    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    assert_eq!(shown(&home, &vault, "plan.md"), "# Plan\n");
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2157,9 +2203,9 @@ fn write_reads_the_new_text_from_standard_input() {
     );
     assert_eq!(run.code, 0, "{}", run.err);
     assert!(
-        note_text(&vault, "plan.md").contains("{++\nNew.\n++}"),
+        shown(&home, &vault, "plan.md").contains("{++\nNew.\n++}"),
         "{}",
-        note_text(&vault, "plan.md")
+        shown(&home, &vault, "plan.md")
     );
     let _ = fs::remove_dir_all(home);
 }
@@ -2185,7 +2231,7 @@ fn write_needs_the_token_of_read_json() {
         "{}",
         run.err
     );
-    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    assert_eq!(shown(&home, &vault, "plan.md"), "# Plan\n");
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2212,7 +2258,7 @@ fn write_refuses_an_empty_text_and_changes_nothing() {
         assert_eq!(run.code, 1, "{:?}: {}", empty, run.err);
         assert!(run.err.contains("the text is empty"), "{}", run.err);
     }
-    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    assert_eq!(shown(&home, &vault, "plan.md"), "# Plan\n");
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2254,7 +2300,7 @@ fn text_from_standard_input_that_is_not_utf8_fails_for_every_command() {
         "{}",
         append_run.err
     );
-    assert_eq!(note_text(&vault, "plan.md"), "# Plan\n");
+    assert_eq!(shown(&home, &vault, "plan.md"), "# Plan\n");
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2289,7 +2335,7 @@ fn edit_and_comment_refuse_a_change_of_a_pending_area() {
         assert!(run.err.contains(TOUCHES), "{}", run.err);
         assert!(run.out.is_empty(), "{}", run.out);
     }
-    assert_eq!(note_text(&vault, "plan.md"), PENDING);
+    assert_eq!(shown(&home, &vault, "plan.md"), PENDING);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -2335,8 +2381,29 @@ fn edits_outside_the_areas_and_an_append_at_the_end_still_work() {
         &["comment", "plan.md", "--passage", "c", "--text", "note"],
     );
     assert_eq!(comment.code, 0, "{}", comment.err);
-    let text = note_text(&vault, "plan.md");
+    let text = shown(&home, &vault, "plan.md");
     assert!(text.contains("{--\nold\n--}\n{++\nnew\n++}\n"), "{text}");
-    assert!(text.ends_with("{==c==}{>>note<<}\n\nlast\n"), "{text}");
+    assert!(
+        text.ends_with("c<!-- comment: note -->\n\nlast\n"),
+        "{text}"
+    );
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn an_old_comment_is_written_in_the_new_form_by_the_next_comment() {
+    let (home, vault) = sandbox("migrate-comment");
+    write(&vault.join("c.md"), "# C\n\n{==a==}{>>old<<} b\n");
+    let run = inkuno(
+        &home,
+        &vault,
+        &["comment", "c.md", "--passage", "b", "--text", "new"],
+    );
+    assert_eq!(run.code, 0, "{}", run.err);
+    // The earlier form is read, and written in the new one; the text of both comments is kept.
+    assert_eq!(
+        note_text(&vault, "c.md"),
+        "# C\n\na<!-- comment: old --> b<!-- comment: new -->\n"
+    );
     let _ = fs::remove_dir_all(home);
 }

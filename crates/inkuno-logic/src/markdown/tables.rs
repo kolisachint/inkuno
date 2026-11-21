@@ -285,7 +285,7 @@ pub fn track(old: &[String], new: &[String]) -> Vec<Option<usize>> {
         .collect()
 }
 
-/// The comment lines under a table (`{>>Row "Léa": …<<}`) after its rows and columns changed:
+/// The comment lines under a table (`<!-- comment: Row "Léa": … -->`) after its rows and columns changed:
 /// what each becomes, `None` when what it is about is gone. `rows` and `cols` say where each old
 /// row and column went (`None`: deleted); `old` and `new` are their `scopes`. A line that is about
 /// something else, or a table that stays, is left as it is.
@@ -300,7 +300,7 @@ pub fn retarget(
         .iter()
         .map(|line| {
             let indent = &line[..line.len() - line.trim_start().len()];
-            let Some(body) = line.trim().strip_prefix("{>>") else {
+            let Some(body) = super::comment_line_text(line) else {
                 return Some(line.to_string());
             };
             if body.starts_with("Table: ") {
@@ -320,9 +320,10 @@ pub fn retarget(
                 });
             match hit {
                 None => Some(line.to_string()),
-                Some((Some(name), rest)) if !table_gone => {
-                    Some(format!("{indent}{{>>{name}: {rest}"))
-                }
+                Some((Some(name), rest)) if !table_gone => Some(format!(
+                    "{indent}{}",
+                    super::comment_line(&format!("{name}: {rest}"))
+                )),
                 Some(_) => None,
             }
         })

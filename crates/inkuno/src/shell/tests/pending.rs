@@ -252,7 +252,7 @@ fn a_comment_on_a_change_is_written_and_the_change_stays_pending(cx: &mut TestAp
     cx.simulate_keystrokes("enter");
     settle(cx);
     let marked = text(&shell, cx);
-    assert!(marked.contains("{==new==}{>>à relire<<}"), "{marked}");
+    assert!(marked.contains("new<!-- comment: à relire -->"), "{marked}");
     assert!(pending::has_pending(&marked), "still pending");
     assert_eq!(pending::areas(&marked).len(), 1);
     assert_eq!(
@@ -381,7 +381,10 @@ fn a_comment_finds_its_change_again_after_an_outside_edit_moved_it(cx: &mut Test
     cx.simulate_keystrokes("enter");
     settle(cx);
     let marked = text(&shell, cx);
-    assert!(marked.contains("{==deux==}{>>à relire<<}"), "{marked}");
+    assert!(
+        marked.contains("deux<!-- comment: à relire -->"),
+        "{marked}"
+    );
     assert!(
         !marked.contains("one"),
         "the first change went away: {marked}"
@@ -584,5 +587,84 @@ fn typing_in_a_table_inside_a_change_is_refused(cx: &mut TestAppContext) {
         "the table text is unchanged"
     );
     assert!(says(&shell, cx, REFUSED), "the refusal is said");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A save takes the marks off the file: its own text is written, and the change waits beside it in
+/// `.inkuno/pending`, where a reopen finds it again (the editor shows it marked as before).
+#[gpui::test]
+fn a_save_keeps_the_file_free_of_marks_and_the_change_beside_it(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note("pending-clean-save", NOTE, cx);
+    put(&shell, cx, NOTE.find("keep").unwrap() + 4);
+    cx.simulate_input("!");
+    settle(cx);
+    shell.update(cx, |s, cx| s.flush(cx));
+    settle(cx);
+    let file = fs::read_to_string(root.join("Plan.md")).unwrap();
+    assert_eq!(
+        file, "# Plan\n\nkeep!\nold\nend\n",
+        "the file keeps its own text"
+    );
+    let changes = crate::platform::sidecar::read(
+        &crate::platform::revisions::Home::Vault(root.clone()),
+        &root.join("Plan.md"),
+    );
+    assert_eq!(changes.len(), 1, "{changes:?}");
+    assert_eq!(
+        (changes[0].old.as_str(), changes[0].new.as_str()),
+        ("old\n", "new\n")
+    );
+    // The editor still shows the change, marked; accepting it writes its text into the file.
+    assert!(
+        text(&shell, cx).contains("{++\nnew\n++}"),
+        "{}",
+        text(&shell, cx)
+    );
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
+    put(&shell, cx, NOTE.find("{++").unwrap() + 1);
+    cx.dispatch_action(editor::AcceptChange);
+    settle(cx);
+    shell.update(cx, |s, cx| s.flush(cx));
+    settle(cx);
+    assert_eq!(
+        fs::read_to_string(root.join("Plan.md")).unwrap(),
+        "# Plan\n\nkeep!\nnew\nend\n"
+    );
+    assert!(
+        crate::platform::sidecar::read(
+            &crate::platform::revisions::Home::Vault(root.clone()),
+            &root.join("Plan.md"),
+        )
+        .is_empty()
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Comments written in the earlier form are written in the new one on the next save, and the
+/// editor takes the new form too.
+#[gpui::test]
+fn a_save_writes_the_old_comments_in_the_new_form(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open_note(
+        "pending-migrate",
+        "# Plan\n\nkeep {==this==}{>>old note<<} here\n{>>standalone<<}\n",
+        cx,
+    );
+    assert!(
+        text(&shell, cx).contains("keep this<!-- comment: old note --> here"),
+        "{}",
+        text(&shell, cx)
+    );
+    let end = text(&shell, cx).len();
+    put(&shell, cx, end);
+    cx.simulate_input("x");
+    settle(cx);
+    shell.update(cx, |s, cx| s.flush(cx));
+    settle(cx);
+    assert_eq!(
+        fs::read_to_string(root.join("Plan.md")).unwrap(),
+        "# Plan\n\nkeep this<!-- comment: old note --> here\n<!-- comment: standalone -->\nx"
+    );
     let _ = fs::remove_dir_all(root);
 }

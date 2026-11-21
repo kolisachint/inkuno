@@ -986,11 +986,17 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
                 .for_each(|f| *f |= QUIET);
         }
     }
-    // A comment: its text keeps its styles (the editor highlights it), the rest fades.
     for (whole, noted, said) in comments(line) {
         if whole.start < from || flags[whole.start] & CODE != 0 {
             continue;
         }
+        // The new form: the whole marker fades, its text with it (hidden off the live line); the
+        // passage keeps its styles.
+        if is_html_comment(&line[whole.clone()]) {
+            flags[noted.end..whole.end].fill(DIM);
+            continue;
+        }
+        // The earlier form: its text keeps its styles (the editor highlights it), the rest fades.
         flags[whole.start..noted.start].fill(DIM);
         flags[noted.end..whole.end].fill(DIM);
         flags[said].fill(DIM | ITALIC | QUIET);
@@ -1552,10 +1558,28 @@ pub fn headings(text: &str) -> Vec<(u8, &str, usize)> {
     found
 }
 
-/// `{==passage==}{>>comment<<}`. In a table cell a `|` of the comment is written `\|`. The
+/// Opening of a comment in the note: `passage<!-- comment: text -->`. GitHub hides HTML comments,
+/// so the note reads cleanly there. The passage is the text from the start of the line (or of
+/// the cell of a table, or the end of the previous comment) up to the marker, trimmed.
+pub const COMMENT_OPEN: &str = "<!-- comment:";
+const HTML_CLOSE: &str = "-->";
+
+/// Refusal of a comment text or passage that would break the marks: a comment cannot hold `-->`,
+/// so every one is spaced out (`-- >`), and a passage cannot hold a mark of either form.
+pub fn spaced(text: &str) -> String {
+    let mut flat = text.replace("\r\n", " ").replace(['\n', '\r'], " ");
+    while flat.contains(HTML_CLOSE) {
+        flat = flat.replace(HTML_CLOSE, "-- >");
+    }
+    flat
+}
+
+/// `passage<!-- comment: text -->`. In a table cell a `|` of the comment is written `\|`. The
 /// syntax is read line by line, so the passage is one line, and the comment's line breaks become
-/// spaces; an empty comment is refused. A `<<}` in the comment gets a space inside, so that it
-/// cannot close the comment early, and a passage holding comment marks is refused.
+/// spaces; an empty comment is refused. A `-->` in the comment is spaced out, so that it cannot
+/// close the comment early, and a passage holding comment marks is refused. The comment is
+/// written after `passage`; it is anchored to the text from the start of its line (or cell, or
+/// the previous comment) up to the marker, so `passage` is the part of the line it covers.
 pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String> {
     if passage.is_empty() {
         return Err("the passage is empty".into());
@@ -1563,19 +1587,15 @@ pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, St
     if passage.contains(['\n', '\r']) {
         return Err("the passage must be on one line".into());
     }
-    if ["{==", "==}", "{>>", "<<}"]
+    if ["{==", "==}", "{>>", "<<}", COMMENT_OPEN, HTML_CLOSE]
         .iter()
         .any(|mark| passage.contains(mark))
     {
         return Err("the passage holds comment marks".into());
     }
-    let flat = comment.replace("\r\n", " ").replace(['\n', '\r'], " ");
-    let mut flat = flat.trim().to_string();
+    let mut flat = spaced(comment).trim().to_string();
     if flat.is_empty() {
         return Err("the comment is empty".into());
-    }
-    while flat.contains("<<}") {
-        flat = flat.replace("<<}", "<< }");
     }
     let mut at = Vec::new();
     let mut from = 0;
@@ -1599,26 +1619,25 @@ pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, St
         .map(|i| *start + i)
         .unwrap_or(text.len());
     let in_cell = *start + passage.len() <= line_end && is_table_line(&text[line_start..line_end]);
-    let said = if in_cell {
-        flat.replace('|', "\\|")
-    } else {
-        flat.to_string()
-    };
-    let mut out = String::with_capacity(text.len() + said.len() + 12);
-    out.push_str(&text[..*start]);
-    out.push_str("{==");
-    out.push_str(passage);
-    out.push_str("==}{>>");
-    out.push_str(&said);
-    out.push_str("<<}");
-    out.push_str(&text[*start + passage.len()..]);
+    if in_cell {
+        flat = flat.replace('|', "\\|");
+    }
+    let end = *start + passage.len();
+    let mut out = String::with_capacity(text.len() + flat.len() + 20);
+    out.push_str(&text[..end]);
+    out.push_str(COMMENT_OPEN);
+    out.push(' ');
+    out.push_str(&flat);
+    out.push_str(" -->");
+    out.push_str(&text[end..]);
     Ok(out)
 }
 
-/// Comments of the line, written in CriticMarkup `{==text==}{>>comment<<}`: the range
-/// of the whole, that of the commented text and that of the comment. A comment on its own,
-/// `{>>comment<<}`, has an empty commented text, at its start.
-pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
+/// Comments written in the earlier CriticMarkup form, `{==passage==}{>>comment<<}` (or on their own,
+/// `{>>comment<<}`): read, and rewritten to the new form by `migrate_comments`. Same ranges as
+/// `comments`: the whole, the commented text and the comment. A comment on its own has an empty
+/// commented text, at its start.
+fn critic_comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
     let (mut found, mut from) = (Vec::new(), 0);
     while let Some(open) = line[from..].find("{==").map(|i| i + from) {
         let Some(mid) = line[open + 3..].find("==}{>>").map(|i| i + open + 3) else {
@@ -1644,8 +1663,118 @@ pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
         }
         from = end + 3;
     }
+    found
+}
+
+/// Comments of the line: the range of the whole (the passage and its marker), that of the
+/// commented text and that of the comment. A comment on its own, `<!-- comment: text -->` with
+/// nothing before it, has an empty commented text, at its start. A CriticMarkup comment is read
+/// too (`critic_comments`).
+pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
+    let mut found = critic_comments(line);
+    let mut from = 0;
+    while let Some(open) = line[from..].find(COMMENT_OPEN).map(|i| i + from) {
+        let said_at = open + COMMENT_OPEN.len();
+        let Some(close) = line[said_at..].find(HTML_CLOSE).map(|i| i + said_at) else {
+            break;
+        };
+        let end = close + HTML_CLOSE.len();
+        // The passage starts after the previous comment, after the last bar of a table line.
+        let mut start = found
+            .iter()
+            .filter(|(whole, ..)| whole.end <= open)
+            .map(|(whole, ..)| whole.end)
+            .max()
+            .unwrap_or(0)
+            .max(from);
+        if is_table_line(line) {
+            let bytes = line.as_bytes();
+            if let Some(bar) = (start..open)
+                .rev()
+                .find(|&i| bytes[i] == b'|' && (i == 0 || bytes[i - 1] != b'\\'))
+            {
+                start = bar + 1;
+            }
+        }
+        let inner = said_range(&line[said_at..close]);
+        let said = said_at + inner.start..said_at + inner.end;
+        let passage = &line[start..open];
+        let lead = passage.len() - passage.trim_start().len();
+        let noted = start + lead..start + passage.trim_end().len();
+        if noted.is_empty() {
+            found.push((open..end, open..open, said));
+        } else {
+            found.push((noted.start..end, noted, said));
+        }
+        from = end;
+    }
     found.sort_by_key(|(whole, ..)| whole.start);
     found
+}
+
+/// The text of a comment line on its own, `<!-- comment: text -->` (indent allowed), if the line is
+/// one. The single space on each side of the text is the markup's, the rest is the text as written.
+pub fn comment_line_text(line: &str) -> Option<&str> {
+    let body = line
+        .trim()
+        .strip_prefix(COMMENT_OPEN)?
+        .strip_suffix(HTML_CLOSE)?;
+    Some(&body[said_range(body)])
+}
+
+/// Where the text is inside `<!-- comment: … -->` (the bytes between the marks): without the one
+/// space each side, which belongs to the markup.
+fn said_range(inner: &str) -> Range<usize> {
+    let lo = usize::from(inner.starts_with(' '));
+    let hi = inner.len() - usize::from(inner.len() > lo && inner.ends_with(' '));
+    lo..hi
+}
+
+/// A comment on its own, `<!-- comment: text -->`, the text spaced as `comment_on` spaces it. The
+/// text is written as it is given: a trailing space stays inside the marks.
+pub fn comment_line(text: &str) -> String {
+    format!("{COMMENT_OPEN} {} {HTML_CLOSE}", spaced(text))
+}
+
+/// Whether a comment's whole (as `comments` gives it) is in the new form: it ends with its marker.
+pub fn is_html_comment(whole: &str) -> bool {
+    whole.ends_with(HTML_CLOSE)
+}
+
+/// The note with every comment in the earlier CriticMarkup form written in the new one, outside
+/// code blocks: `{==passage==}{>>text<<}` becomes `passage<!-- comment: text -->`, and a comment
+/// on its own `{>>text<<}` becomes `<!-- comment: text -->`. The texts are kept as they are, except
+/// that a `-->` is spaced out. The passage is anchored to its line (see `comment_on`), so a
+/// passage in the middle of a line covers the text from the start of the line up to its marker.
+/// A note with no such comment is returned as it is.
+pub fn migrate_comments(text: &str) -> String {
+    if !text.contains("{==") && !text.contains("{>>") {
+        return text.to_string();
+    }
+    let prose: std::collections::HashSet<usize> =
+        prose_lines(text).into_iter().map(|(at, _)| at).collect();
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    for piece in text.split_inclusive('\n') {
+        let body = piece.strip_suffix('\n').unwrap_or(piece);
+        if prose.contains(&at) && body.contains("{>>") {
+            let mut last = 0;
+            for (whole, noted, said) in critic_comments(body) {
+                out.push_str(&body[last..whole.start]);
+                out.push_str(&body[noted.clone()]);
+                out.push_str(&comment_line(&body[said]));
+                last = whole.end;
+            }
+            out.push_str(&body[last..]);
+        } else {
+            out.push_str(body);
+        }
+        if piece.ends_with('\n') {
+            out.push('\n');
+        }
+        at += piece.len();
+    }
+    out
 }
 
 /// A comment of the note, as its panel lists it.
@@ -1713,7 +1842,7 @@ pub fn split_scope(said: &str) -> Option<(String, &str)> {
 /// All the note's comments, outside code blocks.
 pub fn all_comments(text: &str) -> Vec<Note<'_>> {
     // Almost no note has any: a single search says so, without reading the lines.
-    if !text.contains("{==") && !text.contains("{>>") {
+    if !text.contains("{==") && !text.contains("{>>") && !text.contains(COMMENT_OPEN) {
         return Vec::new();
     }
     let mut found = Vec::new();
@@ -1750,7 +1879,7 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
                     Some(r) => format!("Cell {}{}", column_letters(c), r.saturating_sub(1)),
                     None => String::new(),
                 };
-            } else if noted.start == whole.start
+            } else if noted.is_empty()
                 && let Some((scope, rest)) = split_scope(note.said)
             {
                 note.scope = scope;
@@ -1764,39 +1893,39 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{all_comments, comment_on};
+    use super::{all_comments, comment_on, migrate_comments};
 
     #[test]
     fn a_comment_cannot_close_its_markup_early_or_inject_markdown() {
-        // The comment would close `{>>` at `<<}` and let the link land in the note as Markdown.
+        // The comment would close `<!--` at `-->` and let the link land in the note as Markdown.
         let text = "A passage here and more.\n";
-        let said = "Fine<<} [see](https://example.com) {>>";
+        let said = "Fine --> [see](https://example.com) <!-- x";
         let out = comment_on(text, "passage here", said).unwrap();
         assert_eq!(
             out,
-            "A {==passage here==}{>>Fine<< } [see](https://example.com) {>><<} and more.\n"
+            "A passage here<!-- comment: Fine -- > [see](https://example.com) <!-- x --> and more.\n"
         );
         let notes = all_comments(&out);
         assert_eq!(notes.len(), 1, "{notes:?}");
-        assert_eq!(notes[0].noted, "passage here");
-        assert_eq!(notes[0].said, "Fine<< } [see](https://example.com) {>>");
+        assert_eq!(notes[0].noted, "A passage here");
+        assert_eq!(notes[0].said, "Fine -- > [see](https://example.com) <!-- x");
         assert_eq!(&out[notes[0].end..], " and more.\n");
     }
 
     #[test]
     fn every_closing_mark_in_a_comment_is_broken_even_when_they_overlap() {
-        let out = comment_on("alpha\n", "alpha", "a<<<}b<<}<<}c").unwrap();
+        let out = comment_on("alpha\n", "alpha", "a-->b-->-->c").unwrap();
         let notes = all_comments(&out);
         assert_eq!(notes.len(), 1);
-        assert!(!notes[0].said.contains("<<}"), "{:?}", notes[0].said);
-        assert_eq!(notes[0].said, "a<<< }b<< }<< }c");
+        assert!(!notes[0].said.contains("-->"), "{:?}", notes[0].said);
+        assert_eq!(notes[0].said, "a-- >b-- >-- >c");
         assert_eq!(&out[notes[0].end..], "\n");
     }
 
     #[test]
     fn a_passage_holding_comment_marks_is_refused() {
         let text = "a {== b ==} c {>> d <<} e\n";
-        for passage in ["{==", "==}", "{>>", "<<}"] {
+        for passage in ["{==", "==}", "{>>", "<<}", "<!-- comment:", "-->"] {
             let refused = comment_on(text, &format!("x{passage}y"), "note").unwrap_err();
             assert_eq!(refused, "the passage holds comment marks", "{passage}");
         }
@@ -2120,12 +2249,12 @@ mod tests {
         ]);
         let new = scopes(&after);
         let lines = [
-            "{>>Row \"Léa\" (1): a<<}",
-            "{>>Row \"Léa\" (2): b<<}",
-            "{>>Column 2: c<<}",
-            "{>>Table: d<<}",
-            "{>>libre<<}",
-            "  {>>Row 4: e<<}",
+            "<!-- comment: Row \"Léa\" (1): a -->",
+            "<!-- comment: Row \"Léa\" (2): b -->",
+            "<!-- comment: Column 2: c -->",
+            "<!-- comment: Table: d -->",
+            "<!-- comment: libre -->",
+            "  <!-- comment: Row 4: e -->",
         ];
         let moved = [Some(0), None, Some(1), Some(2)];
         let kept = [Some(0), Some(1), Some(2)];
@@ -2133,11 +2262,11 @@ mod tests {
             retarget(&lines, &old, &new, (&moved, &kept), false),
             [
                 None,
-                Some("{>>Row \"Léa\": b<<}".to_string()),
+                Some("<!-- comment: Row \"Léa\": b -->".to_string()),
                 Some(lines[2].to_string()),
                 Some(lines[3].to_string()),
                 Some(lines[4].to_string()),
-                Some("  {>>Row 3: e<<}".to_string())
+                Some("  <!-- comment: Row 3: e -->".to_string())
             ]
         );
         assert_eq!(
@@ -2145,11 +2274,17 @@ mod tests {
             [None, None, None, None, Some(lines[4].to_string()), None]
         );
         // Comments: the text, the comment, and where the whole starts; not in code.
+        // The earlier CriticMarkup form is still read.
         let line = "un {==mot **fort**==}{>>à revoir<<} et {==deux==}{>><<} {==seul==}";
         assert_eq!(
             comments(line),
             [(3..36, 6..18, 24..33), (40..56, 43..47, 53..53)]
         );
+        // The new form: the passage runs from the start of the line (or the previous comment) to its marker.
+        let fresh = "un mot<!-- comment: à revoir --> et deux<!-- comment:  --> seul";
+        assert_eq!(comments(fresh), [(0..33, 0..6, 20..29), (34..59, 34..41, 55..55)]);
+        // A comment on its own has nothing commented, at its start.
+        assert_eq!(comments("  <!-- comment: seul -->"), [(2..24, 2..2, 16..20)]);
         let note = format!("# T\n{line}\n```\n{line}\n```");
         let found: Vec<_> = all_comments(&note)
             .into_iter()
@@ -2164,6 +2299,14 @@ mod tests {
             comments("a {>>seul<<} b {==x==}{>>y<<}"),
             [(2..12, 2..2, 5..9), (15..29, 18..19, 25..26)]
         );
+        // The earlier form is rewritten to the new one, texts kept, outside code.
+        let old = "# T\n{==mot **fort**==}{>>à revoir<<} et {==deux==}{>><<} {>>seul<<}\n```\n{>>code<<}\n```\n";
+        assert_eq!(
+            migrate_comments(old),
+            "# T\nmot **fort**<!-- comment: à revoir --> et deux<!-- comment:  --> <!-- comment: seul -->\n```\n{>>code<<}\n```\n"
+        );
+        assert_eq!(migrate_comments(&migrate_comments(old)), migrate_comments(old));
+        assert_eq!(migrate_comments("plain\n"), "plain\n");
         assert_eq!(comments("{>>pas fini"), []);
         // Where a comment is: in a cell, a header, or a line under a table named by what it is about.
         let table = "| a | b |\n| - | - |\n| {==x==}{>>1<<} | y |\n| u | {==v==}{>>2<<} |\n\n{>>Row \"x\" (2): trois<<}\n\n{>>Column 2: quatre<<}\n\n{>>Table: cinq<<}\n\n{>>libre<<}";

@@ -46,7 +46,7 @@ writing
   inkuno restore <path>              bring a file back from .trash
   inkuno write <note>                propose a full new text: its changes wait as pending marks
   inkuno daily                       today's daily note, or the one of --date
-  inkuno comment <note|--file PATH>  comment a passage: {==passage==}{>>comment<<}
+  inkuno comment <note|--file PATH>  comment a passage: passage<!-- comment: text -->
 diagrams
   inkuno render [<file>]             a PNG of an SVG, of a note's Mermaid block, or of a source
   inkuno render --check              whether a Mermaid source draws

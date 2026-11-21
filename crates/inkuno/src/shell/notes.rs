@@ -30,7 +30,11 @@ impl Shell {
         }
         let editor = self.pane().editor.read(cx);
         let code = editor.code_at_cursor().filter(|_| block);
-        let text = code.unwrap_or(editor.text()).to_string();
+        // The note's text without its pending marks: what it will say once every change is accepted.
+        let text = match code {
+            Some(code) => code.to_string(),
+            None => logic::pending::plain(editor.text()),
+        };
         cx.write_to_clipboard(ClipboardItem::new_string(text));
         self.copied = true;
         cx.notify();
@@ -113,7 +117,10 @@ impl Shell {
         self.set_file(None, cx);
         cx.notify();
         match fs::read_to_string(path) {
-            Ok(text) => {
+            Ok(disk) => {
+                // The note's pending changes beside the file are shown as marked areas.
+                let home = platform::revisions::home_of(path, self.vault.as_deref());
+                let text = platform::sidecar::display(home.as_ref(), path, &disk);
                 // Second line of defence: a note never loads into a comparison (the routes open a
                 // tab of their own first). If one did, the tab becomes the note: editable, no comparison.
                 self.pane_mut().compare = None;
@@ -392,7 +399,10 @@ impl Shell {
             let current = match text {
                 Some(text) if path == moved => text.to_string(),
                 _ => match fs::read_to_string(path) {
-                    Ok(text) => text,
+                    Ok(disk) => {
+                        let home = platform::revisions::home_of(path, self.vault.as_deref());
+                        platform::sidecar::display(home.as_ref(), path, &disk)
+                    }
                     Err(_) => return false,
                 },
             };
@@ -492,9 +502,11 @@ impl Shell {
     /// written next to the note, as a sync conflict is. False if that copy could not be written:
     /// the note is then not saved, so that nothing is lost.
     pub(super) fn take_outside(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
-        let Ok(disk) = fs::read_to_string(path) else {
+        let Ok(raw) = fs::read_to_string(path) else {
             return true;
         };
+        let home = platform::revisions::home_of(path, self.vault.as_deref());
+        let disk = platform::sidecar::display(home.as_ref(), path, &raw);
         if disk == self.pane().base {
             return true;
         }
@@ -505,7 +517,9 @@ impl Shell {
                 None => {
                     let date = date_name(today());
                     let copy = free_conflict_path(path, &date);
-                    if let Err(e) = vault::write(&copy, &disk) {
+                    // The copy is the note's own text: its pending changes stay with the note.
+                    let text = platform::sidecar::split(home.as_ref(), path, &disk, "").0;
+                    if let Err(e) = vault::write(&copy, &text) {
                         let what = tr(
                             "Changed here and elsewhere, and the other version could not be kept:",
                             "Modifiée ici et ailleurs, et l'autre version n'a pas pu être gardée :",
@@ -533,6 +547,20 @@ impl Shell {
         true
     }
 
+    /// The pane's text to save. A comment typed in the earlier form is written in the new one, and
+    /// the editor takes the new form too (one undo step).
+    pub(super) fn migrated_text(&mut self, cx: &mut Context<Self>) -> String {
+        let shown = self.pane().editor.read(cx).text().to_string();
+        let migrated = markdown::migrate_comments(&shown);
+        if migrated != shown {
+            let whole = 0..shown.len();
+            self.pane()
+                .editor
+                .update(cx, |e, cx| e.absorb(&[(whole, migrated.clone())], cx));
+        }
+        migrated
+    }
+
     /// Writes the pane's note to disk if it changed.
     // ponytail: synchronous write on the UI thread (a few KB, < 1 ms);
     // move to a background task if notes get very large.
@@ -551,11 +579,24 @@ impl Shell {
         {
             return false;
         }
-        let content = self.pane().editor.read(cx).text().to_string();
-        if self.pane().path.is_none() && content.trim().is_empty() {
+        let shown = self.migrated_text(cx);
+        if self.pane().path.is_none() && shown.trim().is_empty() {
             self.pane_mut().dirty = false;
             return true;
         }
+        // The file's text, and the pending changes that go beside it (none in the file itself).
+        let home = self
+            .pane()
+            .path
+            .as_deref()
+            .and_then(|path| platform::revisions::home_of(path, Some(root.as_path())));
+        let old_path = self.pane().path.clone();
+        let (content, entries) = match &old_path {
+            Some(path) => {
+                platform::sidecar::split(home.as_ref(), path, &shown, &self.revision_author())
+            }
+            None => (shown.clone(), Vec::new()),
+        };
         // A `#` title added or changed at the top: the file now bears its name.
         if vault::h1_of(&content).is_some_and(|h1| self.pane().h1.as_ref() != Some(&h1)) {
             self.pane_mut().synced = true;
@@ -570,7 +611,7 @@ impl Shell {
             let renamed = current.with_file_name(format!("{title}.md"));
             if old != title
                 && !renamed.exists()
-                && self.links_pending(&current, &old, &title, Some(&content), cx)
+                && self.links_pending(&current, &old, &title, Some(&shown), cx)
             {
                 return false;
             }
@@ -583,8 +624,21 @@ impl Shell {
             &content,
         ) {
             Ok(path) => {
+                // The changes follow the note to its name; the old list goes when the name changed.
+                if let Some(home) = &home {
+                    if old_path.as_ref().is_some_and(|old| *old != path) {
+                        let _ = platform::sidecar::store(home, old_path.as_deref().unwrap(), &[]);
+                    }
+                    if let Err(e) = platform::sidecar::store(home, &path, &entries) {
+                        self.say(
+                            Tone::Failed,
+                            format!("{}: {}", path.display(), crate::lang::io_reason(&e)),
+                            cx,
+                        );
+                    }
+                }
                 self.pane_mut().dirty = false;
-                self.pane_mut().base = content.clone();
+                self.pane_mut().base = shown.clone();
                 self.calm();
                 let (tags, links) = markdown::index(&content);
                 let old = self.pane().path.clone();

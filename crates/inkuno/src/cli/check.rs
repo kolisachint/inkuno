@@ -242,11 +242,11 @@ fn a_comment_stays_on_one_line_and_its_passage_too() {
     );
     assert_eq!(
         markdown::comment_on(text, "alpha", "one\r\ntwo\nthree").unwrap(),
-        "# T\n\n{==alpha==}{>>one two three<<} beta\n"
+        "# T\n\nalpha<!-- comment: one two three --> beta\n"
     );
     assert_eq!(
         markdown::comment_on(text, "alpha", "  padded  ").unwrap(),
-        "# T\n\n{==alpha==}{>>padded<<} beta\n"
+        "# T\n\nalpha<!-- comment: padded --> beta\n"
     );
     assert_eq!(
         markdown::comment_on(text, "alpha", "").unwrap_err(),
@@ -315,7 +315,7 @@ fn editing_renames_and_comments_follow_the_app() {
         &json!({"note": "Table", "passage": "hello", "comment": "yes|no"}),
     ));
     let table = fs::read_to_string(root.join("Table.md")).unwrap();
-    assert!(table.contains("{==hello==}{>>yes\\|no<<}"), "{table}");
+    assert!(table.contains("hello<!-- comment: yes\\|no -->"), "{table}");
     write(&root, "Dup.md", "# Dup\n\none one\n");
     vault.rescan();
     assert!(

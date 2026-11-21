@@ -16,6 +16,10 @@
 //! line stands alone: its four strings are the only lines that count as marks, and only outside a
 //! code fence (see below). Pure: no disk here.
 //!
+//! This is the form the editor shows. On disk the marks are not written: the note's file holds its
+//! own text (`split`: the removed lines, without the added ones), and each area is an `Entry` kept
+//! beside the note; `compose` writes the marks back from the text and the entries.
+//!
 //! Line breaks at the end of a text: a text may lack its final line break. When an area ends the
 //! text, the line break just before its close mark (`\n`, or `\r\n` in a CRLF text) is not content
 //! on either side: accept and reject take it off. So a reject gives back the note's text exactly,
@@ -427,6 +431,133 @@ fn added_of(area: &Area) -> Range<usize> {
 
 fn removed_of(area: &Area) -> Range<usize> {
     area.removed.clone()
+}
+
+/// One pending change kept beside its note (in the `.inkuno` folder, never in the `.md`). The note
+/// holds `old` at byte `at`: the lines the change removes, which are still the note's text. `new`
+/// is what it becomes once accepted. `id` and `author` are kept as they were written.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Entry {
+    pub id: u32,
+    pub author: String,
+    pub at: usize,
+    pub old: String,
+    pub new: String,
+}
+
+/// The note text as it is on disk, and the pending changes beside it: `display` (the text with
+/// its marks, as the editor shows it) is split into the note's own text, the removed lines
+/// (`reject_all`) and one entry per area. An entry takes the `id` and `author` of the `known`
+/// entry with the same `old` and `new`, if there is one; otherwise it is numbered after the
+/// largest id known, with no author. The note text has no mark in it.
+pub fn split(display: &str, known: &[Entry]) -> (String, Vec<Entry>) {
+    let mut base = String::with_capacity(display.len());
+    let mut entries: Vec<Entry> = Vec::new();
+    let mut last = 0;
+    for area in areas(display) {
+        base.push_str(&display[last..area.range.start]);
+        let at = base.len();
+        let (old, new) = (&display[area.removed.clone()], &display[area.added.clone()]);
+        base.push_str(old);
+        entries.push(Entry {
+            at,
+            old: old.to_string(),
+            new: new.to_string(),
+            ..Entry::default()
+        });
+        last = area.range.end;
+    }
+    base.push_str(&display[last..]);
+    let mut used = vec![false; known.len()];
+    let mut next = known.iter().map(|e| e.id).max().unwrap_or(0);
+    for entry in &mut entries {
+        let same = known
+            .iter()
+            .enumerate()
+            .find(|(i, k)| !used[*i] && k.old == entry.old && k.new == entry.new);
+        match same {
+            Some((i, k)) => {
+                used[i] = true;
+                entry.id = k.id;
+                entry.author = k.author.clone();
+            }
+            None => {
+                next += 1;
+                entry.id = next;
+            }
+        }
+    }
+    (base, entries)
+}
+
+/// Where `entry` is in `base`: at its offset when the removed text is there, else the nearest
+/// place where it is. `None` when the removed text is no longer in the note.
+fn locate(base: &str, entry: &Entry) -> Option<usize> {
+    let at = entry.at.min(base.len());
+    if base
+        .get(at..)
+        .is_some_and(|rest| rest.starts_with(&entry.old))
+    {
+        return Some(at);
+    }
+    if entry.old.is_empty() {
+        return Some(at);
+    }
+    base.match_indices(&entry.old)
+        .map(|(i, _)| i)
+        .min_by_key(|&i| i.abs_diff(at))
+}
+
+/// The text with its pending changes written as areas, as the editor shows them: the inverse of
+/// `split`. An entry whose removed text is gone from `base` is left out. Entries are placed in
+/// order of their offsets; one that overlaps an earlier one is left out too.
+pub fn compose(base: &str, entries: &[Entry]) -> String {
+    let eol = if base.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut placed: Vec<(usize, &Entry)> = entries
+        .iter()
+        .filter(|e| !(e.old.is_empty() && e.new.is_empty()))
+        .filter_map(|e| locate(base, e).map(|at| (at, e)))
+        .collect();
+    placed.sort_by_key(|(at, _)| *at);
+    let mut out = String::with_capacity(base.len() + 64);
+    let mut last = 0;
+    for (at, e) in placed {
+        let end = at + e.old.len();
+        if at < last {
+            continue;
+        }
+        out.push_str(&base[last..at]);
+        start_line(&mut out, eol);
+        // The area ends a text that has no final line break: its last mark has none either.
+        let ends_text = end == base.len() && !base.ends_with('\n');
+        if !e.old.is_empty() {
+            let omit = ends_text && e.new.is_empty();
+            out.push_str(&block("{--", &[e.old.as_str()], "--}", omit, eol));
+        }
+        if !e.new.is_empty() {
+            out.push_str(&block("{++", &[e.new.as_str()], "++}", ends_text, eol));
+        }
+        last = end;
+    }
+    out.push_str(&base[last..]);
+    out
+}
+
+/// A fragment of the editor's text as it is copied: the marks go, the removed lines go, the added
+/// lines stay, so that a copy never holds a mark and is the text the note will have once accepted.
+pub fn plain(fragment: &str) -> String {
+    let mut out = String::with_capacity(fragment.len());
+    let mut removed = false;
+    for piece in fragment.split_inclusive('\n') {
+        match bare(piece) {
+            OPEN_DEL => removed = true,
+            CLOSE_DEL => removed = false,
+            OPEN_ADD | CLOSE_ADD => {}
+            _ if removed => {}
+            _ => out.push_str(piece),
+        }
+    }
+    out
 }
 
 /// Area `index` accepted: its removed lines go, its added lines stay, the marks go.
@@ -1282,5 +1413,80 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_change_is_split_into_the_note_text_and_an_entry_and_composed_back() {
+        // Each shape: a change in the middle, at the end without a final break, a pure insertion,
+        // a pure removal, two changes, CRLF.
+        let cases = [
+            "keep\n{--\nold\n--}\n{++\nnew\n++}\nend\n",
+            "a\n{--\nb\n--}\n{++\nc\n++}",
+            "a\n{++\nadded\n++}\nb\n",
+            "a\n{--\ngone\n--}\nb\n",
+            "x\n{--\n1\n--}\n{++\n2\n++}\nm\n{--\n3\n--}\n{++\n4\n++}\n",
+            "x\r\n{--\r\n1\r\n--}\r\n{++\r\n2\r\n++}\r\nend\r\n",
+        ];
+        for display in cases {
+            let (base, entries) = split(display, &[]);
+            assert_eq!(base, reject_all(display), "{display:?}");
+            assert_eq!(compose(&base, &entries), display, "{display:?}");
+            assert!(!base.contains("{--") && !base.contains("{++"), "{base:?}");
+        }
+        let (base, entries) = split("keep\n{--\nold\n--}\n{++\nnew\n++}\nend\n", &[]);
+        assert_eq!(base, "keep\nold\nend\n");
+        assert_eq!(
+            entries,
+            [Entry {
+                id: 1,
+                author: String::new(),
+                at: 5,
+                old: "old\n".into(),
+                new: "new\n".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_split_keeps_the_id_and_author_of_a_known_entry() {
+        let display = "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n{++\nfresh\n++}\n";
+        let known = [Entry {
+            id: 7,
+            author: "assistant".into(),
+            at: 2,
+            old: "old\n".into(),
+            new: "new\n".into(),
+        }];
+        let (_, entries) = split(display, &known);
+        assert_eq!(
+            (entries[0].id, entries[0].author.as_str()),
+            (7, "assistant")
+        );
+        assert_eq!((entries[1].id, entries[1].author.as_str()), (8, ""));
+    }
+
+    #[test]
+    fn compose_finds_a_moved_removed_text_and_leaves_out_a_gone_one() {
+        let entry = Entry {
+            id: 1,
+            author: String::new(),
+            at: 0,
+            old: "two\n".into(),
+            new: "TWO\n".into(),
+        };
+        // The note gained a line above: the entry follows its text.
+        assert_eq!(
+            compose("zero\none\ntwo\n", std::slice::from_ref(&entry)),
+            "zero\none\n{--\ntwo\n--}\n{++\nTWO\n++}\n"
+        );
+        // The text is gone: nothing is marked, the note is as it is.
+        assert_eq!(compose("zero\n", &[entry]), "zero\n");
+    }
+
+    #[test]
+    fn a_copy_of_marked_text_holds_no_mark() {
+        assert_eq!(plain("a\n{--\nold\n--}\n{++\nnew\n++}\nb\n"), "a\nnew\nb\n");
+        assert_eq!(plain("{--\nold\n--}\n"), "");
+        assert_eq!(plain("plain\n"), "plain\n");
     }
 }
