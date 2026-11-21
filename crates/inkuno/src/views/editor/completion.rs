@@ -16,7 +16,7 @@ pub(super) type Command = (
 
 /// What `/` offers, in the order of its menu: the Basic blocks (`BASIC`), then the More list. Only what
 /// GitHub renders as Markdown. The `before` of a trigger (`[[`, `![[`, `@`) opens its picker, which
-/// writes a link. The three alerts are typed only (`TYPED`).
+/// writes a link. The alerts and the front matter are typed only (`TYPED`).
 pub(super) const COMMANDS: &[Command] = &[
     ("h1", "Heading 1", "Titre 1", "# ", ""),
     ("h2", "Heading 2", "Titre 2", "## ", ""),
@@ -39,13 +39,14 @@ pub(super) const COMMANDS: &[Command] = &[
     ("tip", "Panel: tip", "Panneau : astuce", "> [!TIP]\n> ", ""),
     ("important", "Panel: important", "Panneau : important", "> [!IMPORTANT]\n> ", ""),
     ("caution", "Panel: danger", "Panneau : danger", "> [!CAUTION]\n> ", ""),
+    ("meta", "Front matter: tags, aliases", "En-tête : tags, alias", "", ""),
 ];
 
 /// The Basic blocks of the slash menu's icon grid, in order.
 pub(super) const BASIC: [&str; 8] = ["h1", "h2", "h3", "list", "num", "todo", "quote", "code"];
 
-/// Typed only: not in the menu's list when nothing is typed after `/`.
-pub(super) const TYPED: [&str; 3] = ["tip", "important", "caution"];
+/// Typed only: not in the menu's list when nothing is typed after `/`. Front matter (`/tags`) is YAML, not Markdown.
+pub(super) const TYPED: [&str; 4] = ["tip", "important", "caution", "meta"];
 
 /// The icon of a slash command in the menu: a file of `ui::assets`, or none for the heading
 /// commands, drawn as their letters.
@@ -74,7 +75,7 @@ fn date_label(en: &str, date: md::Date) -> String {
     if en.is_empty() {
         return crate::lang::date_name(date);
     }
-    let (_, day, month) = date;
+    let (_, month, day) = date;
     let weekday = en[..1].to_uppercase() + &en[1..];
     format!("{weekday}, {day} {}", md::MONTHS[month as usize - 1].0)
 }
@@ -390,6 +391,29 @@ impl Editor {
             }
             Choice::Command(&(name, _, _, before, after)) => {
                 let slash = start - 1;
+                // The front matter goes at the top of the note, wherever it is asked for; if it is already there,
+                // the cursor goes to it. Either way it waits between the tag brackets.
+                if name == "meta" {
+                    let front = "---\ntags: []\naliases: []\n---\n";
+                    let adds = md::front_matter(&self.content) == 0;
+                    if self.touches_pending(&(slash..c), "")
+                        || (adds && self.touches_pending(&(0..0), front))
+                    {
+                        self.refuse_pending(cx);
+                        return true;
+                    }
+                    self.push_undo(true);
+                    self.edit(slash..c, "", cx);
+                    if adds {
+                        self.edit(0..0, front, cx);
+                    }
+                    let block = &self.content[..md::front_matter(&self.content)];
+                    let at = block
+                        .find("tags: [")
+                        .map_or("---\n".len(), |i| i + "tags: [".len());
+                    self.move_to(at, cx);
+                    return true;
+                }
                 if name == "table" {
                     if self.touches_pending(&(slash..c), "") {
                         self.refuse_pending(cx);

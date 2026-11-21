@@ -1,7 +1,7 @@
 //! Small widgets shared by the views: icon buttons, tooltips, and the window-drag handle.
 
 use gpui::{
-    AnyView, App, BoxShadow, Context, Div, InteractiveElement, MouseButton, SharedString, Stateful,
+    AnyView, App, Context, Div, InteractiveElement, MouseButton, SharedString, Stateful,
     Window, div, prelude::*, svg,
 };
 
@@ -143,18 +143,12 @@ pub fn popover(t: Theme) -> Div {
     if !t.quiet {
         return floating(t);
     }
-    let shadow = |y: f32, blur: f32, alpha: f32| BoxShadow {
-        color: gpui::hsla(0., 0., 0., alpha),
-        offset: gpui::point(gpui::px(0.), gpui::px(y)),
-        blur_radius: gpui::px(blur),
-        spread_radius: gpui::px(0.),
-    };
     div()
         .bg(t.popover)
         .rounded(t.sheet())
         .border_1()
         .border_color(t.text.opacity(0.08))
-        .shadow(vec![shadow(1., 3., 0.05), shadow(8., 24., 0.10)])
+        .shadow(t.popover_shadow())
 }
 
 /// A row of a menu: 32 px with a 5 px side margin, 8 px padding and a 6 px radius in Quiet; the

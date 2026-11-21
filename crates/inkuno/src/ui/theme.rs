@@ -745,6 +745,17 @@ impl Theme {
         }]
     }
 
+    /// Quiet's menu shadows: 0 1 3 at 5 % and 0 8 24 at 10 %, under a popover.
+    pub fn popover_shadow(&self) -> Vec<BoxShadow> {
+        let shadow = |y: f32, blur: f32, alpha: f32| BoxShadow {
+            color: hsla(0., 0., 0., alpha),
+            offset: point(px(0.), px(y)),
+            blur_radius: px(blur),
+            spread_radius: px(0.),
+        };
+        vec![shadow(1., 3., 0.05), shadow(8., 24., 0.10)]
+    }
+
     /// What covers the page: palette, menus, help, toasts.
     pub fn floating(&self) -> Vec<BoxShadow> {
         vec![BoxShadow {

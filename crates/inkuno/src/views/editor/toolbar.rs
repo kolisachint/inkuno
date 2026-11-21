@@ -67,7 +67,9 @@ impl Editor {
     /// the toolbar is hidden.
     fn toolbar_at(&self) -> Option<Point<Pixels>> {
         let t = self.theme;
-        if self.sel.is_empty() || self.toolbar_off || !self.more.is_empty() || self.readonly {
+        // A table's handles are grabbed or picked: they keep the space above the table.
+        let handles = self.pick.is_some() || self.moving.is_some();
+        if self.sel.is_empty() || self.toolbar_off || !self.more.is_empty() || self.readonly || handles {
             return None;
         }
         let start = self.row_at(self.sel.start)?;
