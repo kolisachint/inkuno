@@ -1,5 +1,6 @@
 //! Layout: lines shaped and placed, redone only where the text changed (`Damage`, `plan`).
 
+use super::listing::{self, Nesting};
 use super::*;
 use crate::ui::assets::needs_system_font;
 
@@ -289,6 +290,8 @@ pub(super) struct Row {
     pub(super) broken: Option<&'static str>,
     /// Its place in a pending change: the wash of an added or removed line is drawn behind it.
     pub(super) pend: Pend,
+    /// The lists and indented code above the line, as the line leaves them (see `listing`).
+    pub(super) nesting: Nesting,
 }
 
 impl Row {
@@ -994,33 +997,30 @@ impl Editor {
                 {
                     r.end += 1;
                 }
-                // A list item's depth reads the items above it: a changed item re-lays the ones
-                // after it, to the end of their list (blank and indented lines belong to a list).
-                let item =
-                    |i: usize| matches!(rows[i].kind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
-                let member = |i: usize| {
-                    let s = rows[i].start;
-                    let s = if s <= p {
-                        s
+                // The lines after the zone read the lists and the code above them: the zone grows
+                // until what it leaves is what the old layout had there (see `listing`). A list
+                // item's depth thus re-lays only the items it changes the nesting of.
+                if r.end < n {
+                    let (start, stop) = bounds(&*r);
+                    let text = if start <= stop && stop <= len {
+                        &self.content[start..stop]
                     } else {
-                        (s as isize + delta) as usize
+                        ""
                     };
-                    item(i)
-                        || rows[i].kind == Kind::Para
-                            && self.content.get(s..).is_some_and(|t| {
-                                let t = t.split('\n').next().unwrap_or("");
-                                t.trim().is_empty() || t.starts_with([' ', '\t'])
-                            })
-                };
-                if before.clone().any(item)
-                    || matches!(
-                        md::classify(last, false).0,
-                        Kind::Bullet | Kind::Ordered | Kind::Task(_)
-                    )
-                {
-                    while r.end < n && member(r.end) {
-                        r.end += 1;
-                    }
+                    // The line of an old row, in the new text: the rows after the zone keep their text.
+                    let line = |i: usize| {
+                        let s = rows[i].start;
+                        let s = if s <= p {
+                            s
+                        } else {
+                            (s as isize + delta) as usize
+                        };
+                        self.content
+                            .get(s..)
+                            .and_then(|t| t.split('\n').next())
+                            .unwrap_or("")
+                    };
+                    listing::settle(rows, r, text, line);
                 }
                 grown |= *r != before;
             }
@@ -1049,25 +1049,19 @@ impl Editor {
                 return None;
             }
             let mut lines = 0;
-            let mut at = start;
+            // What the lines above the new text leave for it (see `listing`).
+            let mut nesting = Nesting::before(rows, r.start);
             for l in self.content[start..stop].split('\n') {
                 lines += 1;
                 if md::is_fence(l) || l.trim() == "$$" || (big.is_some() && !md::is_table_line(l)) {
                     return None;
                 }
-                // An indented line may be code, depending on the blank lines and the list above it.
-                if md::starts_indented_code(l, self.content[..at].split('\n').rev()) {
+                // An indented line may be code: after a blank line with no list above it, or in
+                // the code block above it. Lines that continue a list are not code.
+                if nesting.starts_code(l) {
                     return None;
                 }
-                at += l.len() + 1;
-            }
-            // The line after the new text may be code too, when it continues an indented block.
-            if stop < len {
-                let after = stop + 1;
-                let next = self.content[after..].split('\n').next().unwrap_or("");
-                if md::starts_indented_code(next, self.content[..after].split('\n').rev()) {
-                    return None;
-                }
+                nesting.advance(l, false);
             }
             // A table going back under the threshold is laid out like a small one: redo everything.
             if let Some(b) = block.filter(|_| big.is_some())
@@ -1107,6 +1101,8 @@ impl Editor {
         i64,
         (bool, bool),
         bool,
+        // Depth of the innermost item at or above the line: the nesting the layout reads.
+        i64,
     )> {
         let px = |v: Pixels| (f32::from(v) * 100.).round() as i64;
         self.rows
@@ -1123,6 +1119,7 @@ impl Editor {
                     px(r.gap),
                     (r.head, r.foot),
                     r.live,
+                    r.nesting.innermost(),
                 )
             })
             .collect()
@@ -1187,7 +1184,8 @@ impl Editor {
                             && a.6 == b.6
                             && near(a.7, b.7)
                             && a.8 == b.8
-                            && a.9 == b.9,
+                            && a.9 == b.9
+                            && a.10 == b.10,
                         "line {i}: {a:?} against {b:?}"
                     );
                 }
@@ -1370,8 +1368,9 @@ impl Editor {
         let mut offset;
         // The opener of the fenced code block in progress, if any.
         let mut in_code: Option<md::Fence> = None;
-        // Indented code: the previous line is one; the previous line is blank, or there is none.
-        let (mut indented, mut starts) = (false, true);
+        // The lists and the indented code above the line (see `listing`): each zone starts from the
+        // row above it, set before the first line of the zone.
+        let mut nesting: Nesting;
         // Front matter: its lines are written faded, monospaced, without being interpreted.
         let meta = md::front_matter(&self.content);
         // Color of a `[!TYPE]` callout: its tint tells its type.
@@ -1465,6 +1464,7 @@ impl Editor {
             old_rows.by_ref().take(region.old.len()).for_each(drop);
             next_old = region.old.end;
             offset = region.start;
+            nesting = Nesting::after(&rows);
             tint = None;
             let first_new = rows.len();
             // Zone starting at the first line of a very big table: the table stays recorded.
@@ -1480,6 +1480,8 @@ impl Editor {
                 if let Some((geom, rank, _)) = &region.big {
                     let (pad, height) =
                         geom.metrics(rank + rows.len() - first_new, false, grid::line_height(&t));
+                    // A table line that is not indented ends the list above it (see `Nesting::advance`).
+                    nesting.advance(line, false);
                     rows.push(Row {
                         pend: pend_of(&self.pending, offset),
                         live: false,
@@ -1501,6 +1503,7 @@ impl Editor {
                         dx: px(0.),
                         grid: None,
                         broken: None,
+                        nesting: nesting.clone(),
                     });
                     y += height;
                     offset += line.len() + 1;
@@ -1513,25 +1516,16 @@ impl Editor {
                 };
                 // Indented code: four columns (or a tab) after a blank line or at the start, or the next
                 // line of such a block. A list item's continuation is not code.
-                let blank = line.trim().is_empty();
-                let code_now = !blank
-                    && in_code.is_none()
+                let code_now = in_code.is_none()
                     && !matches!(kind, Kind::Fence | Kind::Meta)
-                    && md::indent_columns(line) >= 4
-                    && (indented
-                        || starts
-                            && md::starts_indented_code(
-                                line,
-                                self.content[..offset].split('\n').rev(),
-                            ));
+                    && nesting.starts_code(line);
                 if code_now {
                     kind = Kind::Code;
                     marker = 0;
                 }
-                if !blank {
-                    indented = code_now;
-                }
-                starts = blank;
+                // The nesting the line itself reads (its depth, its continuation), before it is advanced.
+                let above = nesting.clone();
+                nesting.advance(line, code_now);
                 let mut opens = false;
                 let mut drawing = None;
                 let mut broken = None;
@@ -1635,7 +1629,11 @@ impl Editor {
                             &defined,
                         ));
                         let (first, n, lh) = (rows.len(), block.len(), grid::line_height(&t));
+                        // The first line's nesting is already read; each next one reads the lines before it.
                         for (k, &(at, text)) in block.iter().enumerate() {
+                            if k > 0 {
+                                nesting.advance(text, false);
+                            }
                             let (pad, height) = geom.metrics(k, k + 1 == n, lh);
                             rows.push(Row {
                                 pend: pend_of(&self.pending, at),
@@ -1658,6 +1656,7 @@ impl Editor {
                                 dx: px(0.),
                                 grid: None,
                                 broken: None,
+                                nesting: nesting.clone(),
                             });
                             y += height;
                         }
@@ -1735,16 +1734,13 @@ impl Editor {
                     .filter(|m| m.start <= offset + line.len() && m.end >= offset);
                 // A list item's depth sets its marker's indent: the lines above it tell it.
                 let depth = if matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) {
-                    md::list_depth(
-                        md::indent_columns(line),
-                        self.content[..offset].split('\n').rev(),
-                    )
+                    above.depth_of(md::indent_columns(line))
                 } else {
                     0
                 };
                 // An indented paragraph after a list item continues it: it hangs at the item's text.
                 let cont = (kind == Kind::Para && !code && !math)
-                    .then(|| md::continuation_depth(line, self.content[..offset].split('\n').rev()))
+                    .then(|| above.continuation(line))
                     .flatten();
                 let id = {
                     let near = composed
@@ -2298,6 +2294,7 @@ impl Editor {
                     grid: grid_row,
                     broken,
                     pend,
+                    nesting: nesting.clone(),
                 };
                 let height = row.height + row.image_height() + row.gap;
                 rows.push(Row { height, ..row });
