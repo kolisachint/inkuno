@@ -153,7 +153,7 @@ impl Shell {
             }
             if !matches!(event, PaletteEvent::Preview(_)) {
                 this.palette = None;
-                window.focus(&this.pane().editor.focus_handle(cx));
+                this.focus_note(window, cx);
                 vault::save_settings(&this.prefs.to_text());
             }
             this.restyle(window, cx);
@@ -179,11 +179,11 @@ impl Shell {
                     this.prefs.author = logic::revision::clean_author(text);
                     vault::save_settings(&this.prefs.to_text());
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 _ => {}
             }
@@ -217,11 +217,11 @@ impl Shell {
                         this.assistant_halt(cx);
                     }
                     this.assistant_check(cx);
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 _ => {}
             }

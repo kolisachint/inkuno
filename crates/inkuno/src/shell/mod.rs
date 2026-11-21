@@ -17,12 +17,14 @@ mod render;
 mod revisions;
 mod scratch;
 mod settings;
+mod settings_tab;
 mod sidebar;
 mod tabs;
 mod toasts;
 mod versions;
 
 use help::*;
+use settings_tab::*;
 use keymap::*;
 use pane::*;
 use toasts::*;
@@ -58,7 +60,7 @@ use gpui::{
     Decorations, Div, Entity, FocusHandle, Focusable, KeyBinding, MouseButton, MouseMoveEvent,
     ObjectFit, PathPromptOptions, Pixels, Point, ResizeEdge, Size, Stateful, TitlebarOptions,
     Transformation, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
-    WindowOptions, div, ease_out_quint, img, percentage, point, prelude::*, px, size, svg,
+    WindowOptions, div, img, percentage, point, prelude::*, px, size, svg,
 };
 
 use editor::{Editor, EditorEvent};
@@ -167,7 +169,7 @@ struct Shell {
     versions_stale: bool,
     /// Counts the reads of the list: the panel's rows are built again when it moves.
     versions_rev: u64,
-    /// The help panel, open or not.
+    /// The shortcuts page of the Settings tab (its search, the keys being changed).
     help: Help,
     /// The assistant's panel and its state (the process side is the seam in `assistant.rs`).
     assistant: assistant::Assistant,

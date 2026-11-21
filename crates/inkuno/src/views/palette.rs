@@ -67,6 +67,10 @@ fn help_label() -> &'static str {
     tr("Keyboard shortcuts, about", "Raccourcis clavier, à propos")
 }
 
+fn settings_label() -> &'static str {
+    tr("Settings", "Réglages")
+}
+
 /// Appearance setting offered by the palette.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Setting {
@@ -124,6 +128,8 @@ pub enum PaletteEvent {
     Create(String),
     ChangeVault,
     Help,
+    /// The Settings tab, on its first page.
+    Settings,
     NewFolder,
     Setting(Setting),
     /// The chosen lines of the note, as a list or as text.
@@ -153,6 +159,7 @@ enum Item {
     Create,
     Vault,
     Help,
+    Settings,
     Folder,
     Comments,
     Trash,
@@ -506,7 +513,11 @@ impl Palette {
         if !q.is_empty() && !q.starts_with('#') && !exact {
             items.push(Item::Create);
         }
-        for (label, item) in [(vault_label(), Item::Vault), (help_label(), Item::Help)] {
+        for (label, item) in [
+            (vault_label(), Item::Vault),
+            (help_label(), Item::Help),
+            (settings_label(), Item::Settings),
+        ] {
             if command(&q, label) {
                 items.push(item);
             }
@@ -553,6 +564,7 @@ impl Palette {
                         name,
                         "app::OpenVault"
                             | "app::ToggleHelp"
+                            | "app::OpenSettings"
                             | "nav::NewFolder"
                             | "app::ChooseTheme"
                             | "editor::ListBullet"
@@ -611,6 +623,7 @@ impl Palette {
             Some(Item::Create) => PaletteEvent::Create(self.query.text.trim().to_string()),
             Some(Item::Vault) => PaletteEvent::ChangeVault,
             Some(Item::Help) => PaletteEvent::Help,
+            Some(Item::Settings) => PaletteEvent::Settings,
             Some(Item::Folder) => PaletteEvent::NewFolder,
             Some(&Item::Restyle(style)) => PaletteEvent::Restyle(style),
             Some(&Item::Grid(op)) => PaletteEvent::Grid(op),
@@ -845,6 +858,7 @@ impl Render for Palette {
                 ),
                 Item::Vault => (vault_label().to_string(), crate::ui::keys::of(cx, &crate::actions::OpenVault)),
                 Item::Help => (help_label().to_string(), crate::ui::keys::of(cx, &crate::actions::ToggleHelp)),
+                Item::Settings => (settings_label().to_string(), crate::ui::keys::of(cx, &crate::actions::OpenSettings)),
                 Item::Folder => (folder_label().to_string(), crate::ui::keys::of(cx, &crate::views::nav::NewFolder)),
                 Item::Comments => (comments_label().to_string(), String::new()),
                 &Item::Restyle(style) => (list_label(style).to_string(), String::new()),
@@ -858,7 +872,7 @@ impl Render for Palette {
             // Where the detail is a shortcut, not a description.
             let shortcut = matches!(
                 item,
-                Item::Vault | Item::Help | Item::Folder | Item::Grid(_)
+                Item::Vault | Item::Help | Item::Settings | Item::Folder | Item::Grid(_)
             );
             let note = matches!(item, Item::Note(_));
             let age = match item {

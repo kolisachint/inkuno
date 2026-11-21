@@ -723,6 +723,10 @@ impl Theme {
         self.px(8.)
     }
 
+    /// The radius of a card of rows: the Settings page's groups.
+    pub fn card(&self) -> Pixels {
+        self.px(10.)
+    }
     /// The radius of a sheet laid on the ground: the note, the panel, the tools.
     #[allow(dead_code)] // used by the views from step 3 of #91
     pub fn sheet(&self) -> Pixels {

@@ -999,6 +999,13 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
     );
     cx.simulate_keystrokes("escape");
 
+    // The Settings tab goes: the note is in front again.
+    shell.update_in(cx, |s, window, cx| {
+        if let Some(tab) = s.panes.iter().position(|pane| pane.settings.is_some()) {
+            s.close_tab(tab, window, cx);
+        }
+    });
+    cx.run_until_parked();
     // Two panes. Inkuno marks the active one with a ring around its sheet. Quiet draws no ring: its
     // focus cue is on the tabs (`tab_cue`), the active pane's shown tab on a wash, the other pane's
     // tabs dimmed to 55 %.

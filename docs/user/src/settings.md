@@ -80,7 +80,7 @@ These choices are kept in a file named `settings`, in the [configuration folder]
 
 ## Changing a shortcut
 
-The help panel (`F1`) lists every shortcut, and lets you give any of them other keys.
+The Shortcuts page of the Settings tab (`F1`, or `Ctrl+,` then Shortcuts) lists every shortcut, and lets you give any of them other keys.
 
 - **Change**: click the keys of a row, or move to it with `Down` and press `Enter`. The row waits, and the next combination you press becomes its shortcut, at once. `Esc` cancels. `Backspace` leaves the action with no shortcut.
 - **Conflicts**: a combination already used where the action applies is not taken. The row says by which action. `Enter` (**Replace**) gives it to the new one, and the other is left without a shortcut. The same keys in two views that never meet (a table and a diagram) are not a conflict.
@@ -93,7 +93,7 @@ The help panel (`F1`) lists every shortcut, and lets you give any of them other 
 
 ## Changing shortcuts from a file
 
-The help panel is the easy way. A JSON file does the same, for every action, and can be edited with any text editor.
+The Shortcuts page is the easy way. A JSON file does the same, for every action, and can be edited with any text editor.
 
 - **Where**: `keybindings.json` in the [configuration folder](vault.md#configuration-files): `~/.config/inkuno/` on Linux, `~/Library/Application Support/inkuno/` on macOS.
 - **Which file wins**: when `keybindings.json` is there and not empty, it is the one read, and it is read at launch: restart Inkuno to apply an edit. The older `keys` file is only read while it is absent. The help panel saves its changes to `keys`, so once `keybindings.json` exists, edit that file to change shortcuts.
