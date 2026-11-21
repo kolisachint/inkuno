@@ -58,10 +58,15 @@ fn commands_are_found(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("enter");
     assert_eq!(mode(cx), None);
     assert_eq!(text(cx), "**mot**");
-    // The rail's first button opens it too; a click on a command runs it.
+    // The logo at the foot of the sidebar opens it too (the sidebar shown); a click on a command runs it.
+    shell.update(cx, |s, _| s.nav.panel = nav::Panel::Split);
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
     let at = cx
         .debug_bounds("nav-commands")
-        .expect("the rail button")
+        .expect("the logo button")
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert_eq!(mode(cx).map(|m| m.0), Some(true));

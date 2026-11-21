@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::shell::render::badge_label;
+use crate::ui::theme::{BAND, BAND_HIDDEN, LIGHTS_ROOM};
 
 #[test]
 fn badge_shows_the_count_up_to_nine() {
@@ -247,8 +248,8 @@ fn empty_page(cx: &mut TestAppContext) {
     };
     assert_eq!(open(cx), None);
 
-    // The logo is in the rail, whatever the system.
-    assert!(cx.debug_bounds("rail-logo").is_some());
+    // The sidebar is hidden at first: its toggle is in the top strip of the note.
+    assert!(cx.debug_bounds("nav-sidebar").is_some());
     // The notes to revisit: the daily note from a week ago, then an old note.
     assert_eq!(
         shell.read_with(cx, |s, _| s
@@ -262,7 +263,7 @@ fn empty_page(cx: &mut TestAppContext) {
     cx.simulate_resize(size(px(360.), px(640.)));
     cx.run_until_parked();
     let pane = cx.debug_bounds("pane-0").unwrap();
-    assert!(pane.size.width < px(360.), "{pane:?}");
+    assert!(pane.size.width <= px(360.), "{pane:?}");
     for part in [
         "empty-today",
         "empty-key-0",
@@ -414,14 +415,14 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
         } else {
             assert_eq!(
                 top,
-                px(40.),
-                "{window}/{panel}: a note wide enough starts under the window's handle strip"
+                px(BAND),
+                "{window}/{panel}: a note wide enough starts under the window's band"
             );
         }
     }
     // No panel, the page is as wide as the window lets it: the default window starts under the handle strip, a narrow one gives room.
     shell.update(cx, |s, cx| {
-        s.nav.panel = nav::Panel::Rail;
+        s.nav.panel = nav::Panel::Hidden;
         cx.notify();
     });
     for window in [860., 1600., 420., 320.] {
@@ -438,8 +439,8 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
         } else {
             assert_eq!(
                 top,
-                px(40.),
-                "{window}: a note wide enough starts under the window's handle strip"
+                px(BAND),
+                "{window}: a note wide enough starts under the window's band"
             );
         }
     }
@@ -626,17 +627,18 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         });
     };
     // One pane, one tab: no tab bar, the strip; the text starts under it.
-    panel(cx, nav::Panel::Rail);
+    panel(cx, nav::Panel::Hidden);
     check("one tab, rail", 1, cx);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).top_margin()),
         px(56.),
         "the text starts under the strip"
     );
-    let rail = cx
-        .debug_bounds("rail-free")
-        .expect("the rail has an empty part");
-    assert!(rail.size.height > px(20.), "{rail:?}");
+    // Hidden, the strip over the note is the handle that moves the window: a band tall.
+    let strip = cx
+        .debug_bounds("drag-strip-0")
+        .expect("the strip over the note is a handle");
+    assert_eq!(strip.size.height, px(BAND), "{strip:?}");
     // Panel open beside the note (the header's free part past the title), with the comment column open.
     panel(cx, nav::Panel::Split);
     check("one tab, panel", 1, cx);
@@ -664,7 +666,7 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         s.open_note(&two, cx);
     });
     check("two tabs, panel", 1, cx);
-    panel(cx, nav::Panel::Rail);
+    panel(cx, nav::Panel::Hidden);
     check("two tabs, rail", 1, cx);
     // Two panes of one tab each.
     shell.update_in(cx, |s, window, cx| {
@@ -727,17 +729,17 @@ fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) 
                     "{what}: between the panes {pair:?}"
                 );
             }
-            let rail = cx.debug_bounds("rail-free").expect("the rail is drawn");
             if panels {
                 let panel = cx.debug_bounds("nav-panel").expect("the panel is drawn");
-                assert_eq!(
-                    panel.left(),
-                    rail.right(),
-                    "{what}: the panel touches the rail's side {panel:?} {rail:?}"
+                assert!(
+                    panel.left() <= px(10.),
+                    "{what}: the panel touches the window's left side {panel:?}"
                 );
-                assert_eq!(
-                    (panel.top(), panel.bottom()),
-                    (px(0.), px(720.)),
+                // The band scales with the note's zoom: its height is the theme's, not the token.
+                let band = shell.read_with(cx, |s, _| s.theme.px(BAND));
+                assert!(
+                    (panel.top() - band).abs() < px(0.5)
+                        && (panel.bottom() - (px(720.) - band)).abs() < px(0.5),
                     "{what}: panel {panel:?}"
                 );
                 assert_eq!(
@@ -746,17 +748,16 @@ fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) 
                     "{what}: between the panel and the note {panel:?} {sheets:?}"
                 );
             } else {
-                assert_eq!(
-                    sheets[0].left() - rail.right(),
-                    px(0.),
-                    "{what}: the note touches the rail's side"
+                assert!(
+                    sheets[0].left() <= px(10.),
+                    "{what}: the note takes the window's left side"
                 );
             }
             seen += 1;
         };
     for width in [860., 1600., 420.] {
         shell.update(cx, |s, cx| {
-            s.nav.panel = nav::Panel::Rail;
+            s.nav.panel = nav::Panel::Hidden;
             cx.notify();
         });
         check(&format!("{width} folded"), width, false, 1, cx);
@@ -1002,63 +1003,10 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
     assert_eq!(ring, pane, "the ring runs along the sheet's edge");
 }
 
-/// The rail reads as three groups (navigation, views, actions) then the bottom ones: in a 900, 720 and
-/// 480 px high window the buttons come in that order, none overlaps the next, and the groups are a
-/// button apart (at 480 px the rail scrolls, so the layout is the same).
-#[gpui::test]
-fn rail_groups_keep_their_order_and_room(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("inkuno-rail-groups-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    let _config = isolated_config(&root);
-    cx.update(bind_keys);
-    cx.update(init_fonts);
-    let (_shell, cx) =
-        cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
-    cx.run_until_parked();
-    let order = ["nav-commands", "nav-tree", "nav-search", "nav-new"];
-    for height in [900., 720., 480.] {
-        cx.simulate_resize(size(px(860.), px(height)));
-        for _ in 0..3 {
-            cx.update(|window, _| window.refresh());
-            cx.run_until_parked();
-        }
-        let b: Vec<_> = order
-            .iter()
-            .map(|id| {
-                cx.debug_bounds(id)
-                    .unwrap_or_else(|| panic!("{id} is drawn at {height}"))
-            })
-            .collect();
-        for (pair, ids) in b.windows(2).zip(order.windows(2)) {
-            assert!(
-                pair[0].bottom() <= pair[1].top(),
-                "{} overlaps {} at {height}",
-                ids[0],
-                ids[1]
-            );
-        }
-        let gap = |from: &str, to: &str| {
-            let at = |id: &str| b[order.iter().position(|o| *o == id).unwrap()];
-            at(to).top() - at(from).bottom()
-        };
-        for (from, to) in [("nav-commands", "nav-tree"), ("nav-tree", "nav-search")] {
-            assert!(
-                gap(from, to) >= px(24.),
-                "{from} and {to} are not set apart at {height}"
-            );
-        }
-        assert!(
-            gap("nav-search", "nav-new") < px(8.),
-            "find and new stay one group at {height}"
-        );
-    }
-}
-
-/// Ctrl+Shift+S hides the bar the app draws, with its window buttons. The rail keeps a button
+/// Ctrl+Shift+S hides the bar the app draws, with its window buttons. The sidebar keeps a button
 /// that brings it back, and the choice survives a restart (the layout file).
 #[gpui::test]
-fn the_title_bar_hides_and_comes_back_from_the_rail(cx: &mut TestAppContext) {
+fn the_title_bar_hides_and_comes_back_from_the_sidebar(cx: &mut TestAppContext) {
     let root = std::env::temp_dir().join(format!("inkuno-title-bar-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
@@ -1078,7 +1026,7 @@ fn the_title_bar_hides_and_comes_back_from_the_rail(cx: &mut TestAppContext) {
             cx.update(|window, _| window.refresh());
             cx.run_until_parked();
         }
-        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip) > px(0.)
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip) == px(BAND)
     };
     assert!(drawn(cx), "the bar is drawn at first");
 
@@ -1087,10 +1035,15 @@ fn the_title_bar_hides_and_comes_back_from_the_rail(cx: &mut TestAppContext) {
     assert!(!drawn(cx), "the bar is hidden: no strip under it");
     assert!(vault::load_layout().contains("titlebar=hidden"));
 
-    // The rail's button brings the bar back.
+    // The sidebar's foot button brings the bar back (the sidebar shown: its foot holds the button).
+    shell.update(cx, |s, _| s.nav.panel = nav::Panel::Split);
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
     let at = cx
-        .debug_bounds("rail-titlebar")
-        .expect("the rail keeps the way back")
+        .debug_bounds("nav-titlebar")
+        .expect("the sidebar keeps the way back")
         .center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert!(shell.read_with(cx, |s, _| s.nav.title_bar));
@@ -1308,12 +1261,293 @@ fn normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline(cx: &mut T
     // Hidden: no strip, and the note starts at the content's top.
     cx.simulate_keystrokes("secondary-shift-s");
     settle(cx);
-    assert_eq!(strip(cx), px(0.), "hidden: no strip");
+    assert_eq!(
+        strip(cx),
+        px(BAND_HIDDEN),
+        "hidden: the band is 12 px of padding"
+    );
     let note = cx.debug_bounds("pane-0").expect("the first note is drawn");
     assert_eq!(
         note.top() - inset,
         px(0.),
         "hidden: the note starts at the content's top"
     );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The top band (`app-ui.md` §20.1) has one height in every state: 38 px with the title bar shown, 12 px of
+/// padding without it, in the editor as in the sidebar. The left band, the note and the right dock's header
+/// share one top edge, with the left sidebar open or hidden.
+#[gpui::test]
+fn the_top_band_has_one_height_and_one_top_edge(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "band");
+    fs::write(root.join("A.md"), "# A\n\nun\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("A.md"), window, cx)
+    });
+    shell.update(cx, |s, _| {
+        s.client = true;
+        s.nav.right_shown = vec![nav::Mode::Outline];
+    });
+    let settle = |cx: &mut gpui::VisualTestContext| {
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+    };
+    for (panel, title_bar) in [
+        (nav::Panel::Split, true),
+        (nav::Panel::Hidden, true),
+        (nav::Panel::Split, false),
+        (nav::Panel::Hidden, false),
+    ] {
+        shell.update(cx, |s, _| {
+            s.nav.panel = panel;
+            s.nav.title_bar = title_bar;
+        });
+        settle(cx);
+        let state = format!("{panel:?}, title bar {title_bar}");
+        let (band, pad) = match title_bar {
+            true => (px(BAND), px(0.)),
+            false => (px(BAND_HIDDEN), px(BAND_HIDDEN)),
+        };
+        // The note starts under the band (its strip, or the padding alone).
+        let strip = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip);
+        assert_eq!(strip, band, "{state}: the note's top");
+        // The right dock: its first header is the band (the switcher), padded when the bar is hidden.
+        let right = cx
+            .debug_bounds("dock-right")
+            .expect("the right dock is drawn");
+        let head = cx
+            .debug_bounds("tool-head-outline")
+            .expect("the right dock's first header");
+        assert_eq!(
+            head.top() - right.top(),
+            pad,
+            "{state}: the right dock's top"
+        );
+        assert_eq!(
+            head.size.height,
+            px(if title_bar { BAND } else { 32. }),
+            "{state}: the right header's height"
+        );
+        let note = cx.debug_bounds("pane-0").expect("the note is drawn");
+        if panel == nav::Panel::Hidden {
+            assert!(
+                !shell.read_with(cx, |s, _| s.left_open()),
+                "{state}: no left panel"
+            );
+            assert_eq!(
+                note.top(),
+                right.top(),
+                "{state}: the note and the right dock share a top"
+            );
+        } else {
+            let left = cx
+                .debug_bounds("sidebar-band")
+                .expect("the left band is drawn");
+            assert_eq!(left.size.height, band, "{state}: the left band");
+            assert_eq!(
+                left.top(),
+                right.top(),
+                "{state}: the left band and the right dock"
+            );
+            assert_eq!(
+                left.top(),
+                note.top(),
+                "{state}: the left band and the note"
+            );
+            assert!(
+                cx.debug_bounds("sidebar-foot").is_some(),
+                "{state}: the foot row"
+            );
+        }
+    }
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The lights' room (macOS) is in the band at the window's top left, and nowhere else: with the sidebar open,
+/// the band holds it and the note starts past the sidebar; hidden, the note's own strip holds it, then the
+/// sidebar toggle, then the note's title. With the title bar hidden, no lights and no room.
+#[gpui::test]
+fn the_lights_room_is_only_in_the_band_at_the_top_left(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "lights");
+    fs::write(root.join("A.md"), "# A\n\nun\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("A.md"), window, cx)
+    });
+    // No client decorations here: the system draws the bar, so the lights float over the top left.
+    shell.update(cx, |s, _| {
+        s.client = false;
+        s.nav.panel = nav::Panel::Split;
+    });
+    let settle = |cx: &mut gpui::VisualTestContext| {
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+    };
+    settle(cx);
+    let lights = px(LIGHTS_ROOM);
+    let edge = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.strip_edge(0));
+    // Sidebar open: the band starts its buttons past the lights; the note has no room to make for them.
+    assert_eq!(edge(cx), px(0.), "the note's strip starts at its own edge");
+    let toggle = cx.debug_bounds("nav-sidebar").expect("the sidebar toggle");
+    assert!(
+        toggle.left() >= lights,
+        "the toggle is past the lights: {toggle:?}"
+    );
+    assert!(
+        toggle.top() < cx.debug_bounds("sidebar-band").unwrap().bottom(),
+        "the toggle is in the band"
+    );
+    assert_eq!(
+        edge(cx),
+        px(0.),
+        "no note title in the band: the note's strip is its own"
+    );
+    // Sidebar hidden: the note's strip holds the lights, the toggle, then the title.
+    shell.update(cx, |s, _| s.nav.panel = nav::Panel::Hidden);
+    settle(cx);
+    let edge_now = edge(cx);
+    assert_eq!(
+        edge_now,
+        lights + px(32.),
+        "the strip clears the lights and the toggle"
+    );
+    let toggle = cx
+        .debug_bounds("nav-sidebar")
+        .expect("the toggle, in the strip");
+    assert!(
+        toggle.left() >= lights,
+        "the toggle is past the lights: {toggle:?}"
+    );
+    let title = cx
+        .debug_bounds("strip-title")
+        .expect("the note's title, in the strip");
+    assert!(
+        title.left() >= toggle.right(),
+        "the title starts after the toggle: {title:?}"
+    );
+    // Title bar hidden: no lights, so no room; the band is 12 px of padding.
+    shell.update(cx, |s, _| {
+        s.nav.panel = nav::Panel::Split;
+        s.nav.title_bar = false;
+    });
+    settle(cx);
+    assert_eq!(edge(cx), px(0.), "no lights without the title bar");
+    assert!(
+        cx.debug_bounds("nav-sidebar").is_some(),
+        "the foot keeps the sidebar toggle with the bar hidden"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Every action the rail held still has a button, or a key that does the same: the commands logo, the tree,
+/// search, new note, the sidebar toggle and the title bar toggle. The band keeps three of them; with the bar
+/// hidden the band is gone and they move to the foot.
+#[gpui::test]
+fn every_former_rail_action_is_still_a_button(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "rail-actions");
+    fs::write(root.join("A.md"), "# A\n\nun\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("A.md"), window, cx)
+    });
+    shell.update(cx, |s, _| {
+        s.client = true;
+        s.nav.panel = nav::Panel::Split;
+    });
+    let settle = |cx: &mut gpui::VisualTestContext| {
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+    };
+    settle(cx);
+    let click = |cx: &mut gpui::VisualTestContext, id: &str| {
+        let at = cx
+            .debug_bounds(leak(id.to_string()))
+            .unwrap_or_else(|| panic!("{id} is drawn"))
+            .center();
+        cx.simulate_click(at, gpui::Modifiers::none());
+        cx.run_until_parked();
+    };
+    // The band: sidebar toggle, search, new note, right-aligned in that order.
+    let band = ["nav-sidebar", "nav-search", "nav-new"].map(|id| {
+        cx.debug_bounds(id)
+            .unwrap_or_else(|| panic!("{id} in the band"))
+    });
+    assert!(band[0].right() <= band[1].left() && band[1].right() <= band[2].left());
+    // The foot: the commands logo, the tree, the title bar toggle, in that order.
+    let foot = ["nav-commands", "nav-tree", "nav-titlebar"].map(|id| {
+        cx.debug_bounds(id)
+            .unwrap_or_else(|| panic!("{id} in the foot"))
+    });
+    assert!(foot[0].right() <= foot[1].left() && foot[1].right() <= foot[2].left());
+
+    // The commands logo opens the palette on commands.
+    click(cx, "nav-commands");
+    assert!(
+        shell.read_with(cx, |s, _| s.palette.is_some()),
+        "the logo opens the palette"
+    );
+    cx.simulate_keystrokes("escape");
+    // Search opens the palette too.
+    click(cx, "nav-search");
+    assert!(
+        shell.read_with(cx, |s, _| s.palette.is_some()),
+        "search opens the palette"
+    );
+    cx.simulate_keystrokes("escape");
+    // The tree: from another tool, it shows the tree again.
+    shell.update(cx, |s, _| s.nav.activate(nav::Mode::Recent));
+    settle(cx);
+    click(cx, "nav-tree");
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.nav.mode),
+        nav::Mode::Tree,
+        "the tree button"
+    );
+    // New note: a note appears in the vault.
+    click(cx, "nav-new");
+    cx.run_until_parked();
+    assert!(
+        shell.read_with(cx, |s, _| s.pane().path.is_none() && s.pane().fresh),
+        "a new note is open, not yet filed"
+    );
+    // The sidebar toggle hides the panel; the strip's toggle brings it back.
+    click(cx, "nav-sidebar");
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), nav::Panel::Hidden);
+    settle(cx);
+    click(cx, "nav-sidebar");
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), nav::Panel::Split);
+    // The title bar toggle hides the bar: the band collapses and its buttons join the foot.
+    click(cx, "nav-titlebar");
+    assert!(!shell.read_with(cx, |s, _| s.nav.title_bar));
+    settle(cx);
+    let band_height = cx.debug_bounds("sidebar-band").unwrap().size.height;
+    assert_eq!(band_height, px(BAND_HIDDEN), "the band is padding only");
+    for id in [
+        "nav-sidebar",
+        "nav-search",
+        "nav-new",
+        "nav-commands",
+        "nav-tree",
+        "nav-titlebar",
+    ] {
+        let bounds = cx
+            .debug_bounds(id)
+            .unwrap_or_else(|| panic!("{id} in the foot"));
+        assert!(
+            bounds.top() > cx.debug_bounds("sidebar-band").unwrap().bottom() - px(1.),
+            "{id} is in the foot, under the band"
+        );
+    }
+    // And the same button brings the bar back.
+    click(cx, "nav-titlebar");
+    assert!(shell.read_with(cx, |s, _| s.nav.title_bar));
     let _ = fs::remove_dir_all(&root);
 }

@@ -12,7 +12,7 @@ impl Shell {
         if self.vault.is_none() {
             return;
         }
-        if self.nav.panel == Panel::Rail || self.nav.mode != Mode::Tree {
+        if self.nav.panel == Panel::Hidden || self.nav.mode != Mode::Tree {
             self.show_nav(Mode::Tree, false, window, cx);
         }
         self.menu_do(Do::NewFolder, self.nav.sel.clone(), window, cx);

@@ -52,10 +52,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         cx.simulate_mouse_move(at(to), MouseButton::Left, gpui::Modifiers::none());
         cx.simulate_mouse_up(at(to), MouseButton::Left, gpui::Modifiers::none());
     };
-    drag(cx, 302., 450.);
+    // The divider sits at the panel's width, from the window's left edge (no rail beside it).
+    drag(cx, 262., 410.);
     assert_eq!(vault::load_layout(), "tree split 410\n");
-    drag(cx, 452., 60.);
-    assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), Panel::Rail);
+    drag(cx, 412., 60.);
+    assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), Panel::Hidden);
 
     // Recent notes (no chord: the palette), full screen (Ctrl+M), then Escape gives back the room and focus to the note.
     cx.dispatch_action(nav::ShowRecent);
@@ -67,10 +68,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("down escape");
     assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), Panel::Split);
     assert_eq!(text(cx), "# Sous");
-    // Asking again for the shown mode: first focus, then collapsing to the rail.
+    // Asking again for the shown mode: first focus, then hiding the panel.
     cx.dispatch_action(nav::ShowRecent);
     cx.dispatch_action(nav::ShowRecent);
-    assert_eq!(vault::load_layout(), "recent rail 410\n");
+    assert_eq!(vault::load_layout(), "recent hidden 410\n");
 
     // Full screen: the selection no longer moves the note (arrows move it, Tab only
     // walks the header buttons); Enter gives it its place back. The selection is

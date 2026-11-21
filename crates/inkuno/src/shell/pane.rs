@@ -378,7 +378,7 @@ impl Shell {
     fn room_beside(&mut self, group: usize, side: Side, cx: &mut Context<Self>) -> bool {
         let fits = self.fits(group, side);
         if !fits && self.may_fold(side) {
-            self.nav.panel = Panel::Rail;
+            self.nav.panel = Panel::Hidden;
             self.nav.save();
             return true;
         }

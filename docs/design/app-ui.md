@@ -1145,7 +1145,7 @@ Normal 800 is the default (§10.4 lock released for this change).
   (`platform/clock.rs`, `local`).
 - A restore needs the note in a tab that is not a comparison (§19.3); the note of a comparison is not restored from its panel.
 
-## 20. Window chrome: unified sidebar (APPROVED by owner 2026-11-21; NOT built)
+## 20. Window chrome: unified sidebar (APPROVED by owner 2026-11-21; BUILT 2026-11-21, pill not yet seen on screen)
 
 Owner decisions, 2026-11-21 (answered in chat; these are owner approvals):
 
@@ -1166,23 +1166,42 @@ Owner decisions, 2026-11-21 (answered in chat; these are owner approvals):
 - The lights overlap the rail logo when the panel is collapsed. `TRAFFIC_ROOM = 78.` (`crates/inkuno/src/shell/render.rs:23`) reserves the room; `traffic_pad` (`crates/inkuno/src/shell/tabs.rs:170-180`) pads the tabs, the pane and the first dock header but not the rail; the rail top is at `crates/inkuno/src/shell/sidebar.rs:1211-1228`.
 - With the title bar hidden, content runs to the top edge, and the right dock header does not line up with the left one.
 
-### 20.3 Implementation checklist (NOT started; the next step after this doc)
+### 20.3 Implementation checklist (built 2026-11-21, writer crew B)
 
-- [ ] Remove the 40px rail (`views/nav.rs:55`) and its column in `shell/sidebar.rs`. Where each rail action goes: TBD. Owner to place the commands logo and the new-note button; the tree, search and the two sidebar toggles follow §20.1. Check every rail action still has a route (palette, chord or the band).
-- [ ] Band height token: 38px, one theme token for both sidebars. Today's top row is `STRIP: f32 = 40.` (`crates/inkuno/src/shell/render.rs:25`). Token name: TBD.
-- [ ] Mirrored right band: the same background token, the 38px band with the Outline/Assistant switcher, the same header style, a 1px border.
-- [ ] Hidden-sidebar strip: a 38px strip across the editor, holding the lights, the toggle and the centred note title.
-- [ ] Title-bar-hidden state: the band collapses to 12px of padding; the macOS lights stay hidden (decision 2).
-- [ ] Linux client-decoration pill: place it in the new band. Today it is added after the body when the title bar is shown (`crates/inkuno/src/shell/render.rs:469`); exact placement: TBD.
-- [ ] Remove `traffic_pad` (`crates/inkuno/src/shell/tabs.rs:170-180`) or re-derive it from the band. Check that the tabs, the pane and the dock headers line up on both sides.
-- [ ] Tests: `crates/inkuno/src/shell/tests/window.rs` for the band states (sidebar open, collapsed, hidden strip, title bar hidden, both docks). Then the visual check (`app-ui.md` §1 rule 5) on Linux with screenshots of each state.
-- [ ] Layout file: save the new states. Key names: TBD.
-- [ ] Update §4 and §12.1 to point here once built.
+- [x] Remove the 40px rail. The rail's column is gone: `views/nav.rs` (the `RAIL` constant is deleted, `Panel::Rail` is now `Panel::Hidden`); `shell/sidebar.rs:1161` (`render_nav`) draws the left panel alone, with its band and foot.
+- [x] Where each rail action went (owner to confirm; the placement is crew B's, from §20.1):
 
-### 20.4 Open (TBD)
+  | Former rail button (id) | What it did | New place |
+  |---|---|---|
+  | `nav-commands` (logo) | opens the command palette (`>`) | foot row, first (`shell/sidebar.rs`, `sidebar-foot`); F10 still opens it |
+  | `nav-tree` | shows the vault tree | foot row, second; its key (`ShowTree`) still works |
+  | `nav-search` | opens the palette (find or create) | band, right-aligned, second (`search_button`); with the title bar hidden, the foot |
+  | `nav-new` | new note here | band, right-aligned, third (`new_button`); with the title bar hidden, the foot |
+  | `rail-sidebar` (sidebar toggle, Ctrl+B) | shows or hides the left panel | band, right-aligned, first (`sidebar_toggle`); the top strip of the note while the panel is hidden (`render.rs`, `nav-sidebar`); the foot with the title bar hidden |
+  | `rail-titlebar` (Ctrl+Shift+S) | shows or hides the title bar | foot row, last (`titlebar_button`); Ctrl+Shift+S unchanged |
+  | `rail-free` (empty drag part) | moves the window | the empty part of the band and of the foot (`drag_window` on the spacer only) |
 
-- Where the rail actions go (§20.3, first item).
-- Whether the band token is also the title-bar strip's height. TBD.
+  Not on the rail before, so no change: theme, back and forward, trash, sync, backup and help stay in the palette (`›` word) and on their keys.
+- [x] Band height token: `BAND` 38px, `BAND_HIDDEN` 12px, `LIGHTS_ROOM` 78px, in `ui/theme.rs:11`, `:14`, `:17`. The tab bar is the band (`shell/tabs.rs:9`, `TAB_BAR = BAND`); the single-page strip is the band too (`shell/render.rs:926`, `:935`).
+- [x] Mirrored right band: the switcher (one button per right tool, `shell/sidebar.rs` `switcher`, `show_right`) is the header of the right dock's first tool (`render_dock`, `switch`), the same background as the left (`render_stack`), a 1px hairline on its inner edge (the existing dock divider).
+- [x] Hidden-sidebar strip: `shell/render.rs` (the strip overlay, `strip-title` and the toggle, from about line 1260) for a single page; `shell/tabs.rs` (`render_tabs`, `toggle`) when the note has tabs. Lights room, then the toggle, then the note's title centred.
+- [x] Title-bar-hidden state: the bands are `BAND_HIDDEN` of padding (`shell/sidebar.rs` `band`; `shell/render.rs:935`; `shell/tabs.rs:374`). macOS lights stay hidden (decision 2, unchanged in `platform/mac_chrome.rs`).
+- [x] Linux client-decoration pill: drawn in the band row (`shell/render.rs:583`, `h(BAND)`). Built, not verified on screen: see 20.4.
+- [x] `traffic_pad` removed; `strip_edge` (`shell/tabs.rs:168`) gives the top-left row its edge past the toggle. `TRAFFIC_ROOM` removed from `render.rs`, `sidebar.rs`, `tabs.rs`. The lights room is only in the band at the top left (`strip_edge`), not on the welcome page.
+- [x] Tests (`crates/inkuno/src/shell/tests/window.rs`): `the_top_band_has_one_height_and_one_top_edge` (1282; band height and top edge in all four states), `the_lights_room_is_only_in_the_band_at_the_top_left` (1374), `every_former_rail_action_is_still_a_button` (1452; each button clicked), and the updated `the_title_bar_hides_and_comes_back_from_the_sidebar` (1009). Layout file: `views/nav.rs` test (about line 869): an old `rail` panel word loads as hidden.
+- [x] Layout file: the panel word is `hidden` (`views/nav.rs:615`); `rail` and anything unknown read as hidden (`views/nav.rs:564`). The rail key was never saved as its own key, so no key is removed.
+- [ ] Update §4 and §12.1 to point here: NOT done (outside crew B's file scope; the owner or the next crew).
+
+### 20.4 Open (TBD) and what is not verified
+
+- Where the rail actions go: placed per the table above (20.3); the owner confirms or moves them.
+- Whether the band token is also the title-bar strip's height: yes, `BAND` is the title bar strip's height too (`TAB_BAR = BAND`, `render.rs:583`).
+- **Not verified on screen: the Linux pill.** The sandbox has no compositor, so gpui uses server decorations and draws no pill (the app's own bar needs compositor support: `gpui-0.2.2/src/platform/linux/x11/window.rs:1528`). The screenshots show the lights-room path instead. The pill's place is covered only by the existing test `window_buttons_leave_the_header_and_the_title_clear` (`shell/tests/window.rs:329`), which sets `client = true`. A run with a compositor (xcompmgr or picom) is needed.
+- **Gap: sidebar hidden and title bar hidden.** Then the band is 12px, the sidebar is gone, and the foot with its toggle is gone too. The only way back is Ctrl+B and Ctrl+Shift+S. The spec does not cover this combination. Owner decision needed (a toggle in the 12px pad, or accept the keys).
+- **Help text still says "the rail".** `shell/keymap.rs:45` ("also the first button of the rail"), `:86` ("Shift+click on the rail") and `:114` ("the rail stays"). Changing them needs `docs/user/src/shortcuts.md` regenerated (`make docs`), which is outside this crew's scope. `shortcuts_page_is_current` will fail once they change.
+- **Right-band title duplication:** the first right tool's name is in the switcher, and its header no longer repeats it. Confirm with the owner that the switcher alone is the header.
+- Screenshots (Xvfb, the server-decoration path): `target/visual/chrome/1-hidden-title-shown.png` to `6-sidebar-hidden-title-hidden.png`, and the `scripts/visual-check.sh mixed` run `target/visual/20261121-052149/`. Note that capture 6 shows the sidebar open with the title bar hidden (the script's keys reopened the sidebar before it ran); the name is wrong, the image is right.
+- Macintosh is not checked: the lights path is only in the tests (`client = false`).
 
 ## 21. Lists and the visual check
 
