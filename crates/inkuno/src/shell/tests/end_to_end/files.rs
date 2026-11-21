@@ -56,11 +56,11 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     shell.update(cx, |s, cx| s.set_icon(root.join("Tests.md"), None, cx));
     assert_eq!(fs::read_to_string(root.join(".inkuno-icons")).unwrap(), "");
     // Links follow, in the file as in the shown note.
-    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[[Tests]]");
+    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[Tests](Tests.md)");
     assert!(
         fs::read_to_string(root.join("Courses.md"))
             .unwrap()
-            .ends_with("[[Tests]]")
+            .ends_with("[Tests](Tests.md)")
     );
 
     // Changing the title renames the note too: links only follow once the
@@ -78,12 +78,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(
         fs::read_to_string(root.join("Courses.md"))
             .unwrap()
-            .ends_with("[[Tests]]")
+            .ends_with("[Tests](Tests.md)")
     );
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("cou");
     cx.simulate_keystrokes("enter secondary-e");
-    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[[TestsXY]]");
+    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[TestsXY](TestsXY.md)");
 
     // Drag and drop: a note, then a whole folder, moved into another folder.
     shell.update(cx, |s, cx| {
@@ -147,7 +147,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     shell.update(cx, |s, _| s.nav.sel = Some(archives.clone()));
     cx.simulate_keystrokes("delete");
     assert!(root.join(".trash/Archives 2026/Projets/Plan.md").is_file() && !archives.exists());
-    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[[TestsXY]]");
+    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[TestsXY](TestsXY.md)");
     shell.update(cx, |s, _| s.nav.sel = Some(root.join("Courses.md")));
     cx.simulate_keystrokes("delete");
     assert!(root.join(".trash/Courses.md").is_file());

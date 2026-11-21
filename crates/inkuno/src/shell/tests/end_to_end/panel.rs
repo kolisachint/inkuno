@@ -13,7 +13,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         shell.read_with(cx, |s, _| (s.nav.mode, s.nav.panel)),
         (Mode::Tree, Panel::Split)
     );
-    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[[Test]]");
+    assert_eq!(text(cx), "# Courses\n\n- lait #maison\n[Test](Test.md)");
     // Courses is open in a tab already: that tab is shown, without counting as an opening.
     assert!(shell.read_with(cx, |s, _| !s.pane().preview
         && s.recent[0] == root.join("Idées.md")));

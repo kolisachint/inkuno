@@ -903,7 +903,6 @@ impl Render for Palette {
                             .child(
                                 div()
                                     .flex_none()
-                                    .rounded(t.px(2.))
                                     .bg(t.accent.opacity(0.22))
                                     .text_color(t.text)
                                     .child(word),
