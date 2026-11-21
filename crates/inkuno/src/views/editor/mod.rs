@@ -19,6 +19,7 @@ mod notes;
 mod paint;
 mod render;
 mod style;
+mod toolbar;
 mod table;
 
 use grid::TableRow;
@@ -293,6 +294,8 @@ pub struct Editor {
     /// repeated clicks cycle through them.
     foot_jump: Option<(usize, usize)>,
     notes: Rc<[String]>,
+    /// Each note's name and aliases with its file: the links the pickers write point there.
+    targets: Rc<[(String, PathBuf)]>,
     /// Folders to look for images in: the note's, then the vault.
     dirs: Vec<PathBuf>,
     /// Vault images by file name (lowercase): wherever they are
@@ -382,6 +385,10 @@ pub struct Editor {
     bar: BarState,
     /// The note is the active pane's: a single formatting bar for the whole window.
     pub bar_here: bool,
+    /// The selection toolbar is hidden: by typing or scrolling, until the selection is made again.
+    pub(super) toolbar_off: bool,
+    /// Text ▾ of the selection toolbar is open.
+    pub(super) toolbar_text: bool,
     /// Left edge (in the window) of the window buttons floating over the top right corner, where the app draws them:
     /// a first line reaching under it starts lower (`place`).
     pub pill: Option<Pixels>,
@@ -457,6 +464,7 @@ impl Editor {
             feet_rev: u64::MAX,
             foot_jump: None,
             notes: Rc::from([]),
+            targets: Rc::from([]),
             dirs: Vec::new(),
             images: HashMap::new(),
             copied: None,
@@ -501,6 +509,8 @@ impl Editor {
             corner: 1,
             bar: BarState::default(),
             bar_here: true,
+            toolbar_off: false,
+            toolbar_text: false,
             pill: None,
             strip: px(0.),
             top: TOP,
@@ -595,6 +605,11 @@ impl Editor {
     /// Shared by every editor of the window: one list, however many tabs are open.
     pub fn set_notes(&mut self, notes: Rc<[String]>) {
         self.notes = notes;
+    }
+
+    /// The notes' names and aliases with their files, so that a picker writes a link to the right one.
+    pub fn set_targets(&mut self, targets: Rc<[(String, PathBuf)]>) {
+        self.targets = targets;
     }
 
     pub fn set_images(&mut self, images: &[PathBuf]) {

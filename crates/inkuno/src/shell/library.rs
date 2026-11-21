@@ -335,10 +335,20 @@ impl Shell {
             .map(|n| n.name.clone())
             .chain(self.notes.iter().flat_map(|n| n.aliases.iter().cloned()))
             .collect();
+        let targets: std::rc::Rc<[(String, PathBuf)]> = self
+            .notes
+            .iter()
+            .flat_map(|n| {
+                std::iter::once(n.name.clone())
+                    .chain(n.aliases.iter().cloned())
+                    .map(|name| (name, n.path.clone()))
+            })
+            .collect();
         let pictures = vault::pictures(&self.images);
         for pane in &self.panes[tabs] {
             pane.editor.update(cx, |e, _| {
                 e.set_notes(names.clone());
+                e.set_targets(targets.clone());
                 e.set_images(&pictures);
             });
         }

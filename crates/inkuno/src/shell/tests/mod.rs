@@ -14,6 +14,7 @@ mod find_bar;
 mod floating;
 mod keyboard;
 mod keycaps;
+mod menus;
 mod layout;
 mod motion;
 mod outline;

@@ -1212,7 +1212,8 @@ impl Editor {
             )
             .ok();
         }
-        if focused && let Some((_, items)) = self.completion() {
+        // Quiet's list is a popover drawn by `completion_menu`; the other themes keep this one.
+        if focused && !t.quiet && let Some((_, items)) = self.completion() {
             let chosen = self.ac_index.min(items.len() - 1);
             // The list follows the choice when it goes beyond what it shows.
             let first = chosen.saturating_sub(SHOWN - 1);

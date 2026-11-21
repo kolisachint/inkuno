@@ -63,7 +63,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     cx.simulate_keystrokes("secondary-end enter");
     cx.simulate_input("[[inkuno a");
     cx.simulate_keystrokes("enter");
-    assert!(text(cx).ends_with("[[Inkuno app]]"));
+    assert!(text(cx).ends_with("[Inkuno app](Appli.md)"));
     shell.update_in(cx, |s, window, cx| s.open_wiki("inkuno APP", window, cx));
     j.settle(cx);
     assert!(shell.read_with(cx, |s, _| s.pane().path.as_deref()
