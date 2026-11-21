@@ -39,6 +39,24 @@ impl Editor {
         self.reveal_top = top;
     }
 
+    /// Selects a passage, the way the Comments view flashes a comment's text. The caret stays at its end.
+    pub fn select_passage(&mut self, passage: Range<usize>, cx: &mut Context<Self>) {
+        self.more.clear();
+        self.sel = self.clamp(passage.start)..self.clamp(passage.end);
+        self.reversed = false;
+        self.reveal = true;
+        self.reveal_top = false;
+        cx.notify();
+    }
+
+    /// The end of a flash: the selection is the passage still (the person did not move on), so the
+    /// caret goes back to `back`.
+    pub fn flash_end(&mut self, passage: Range<usize>, back: usize, cx: &mut Context<Self>) {
+        if self.sel == (self.clamp(passage.start)..self.clamp(passage.end)) {
+            self.jump(back, false, cx);
+        }
+    }
+
     pub(super) fn cursor(&self) -> usize {
         if self.reversed {
             self.sel.start

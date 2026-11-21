@@ -4,6 +4,7 @@
 
 mod assistant;
 mod changes;
+mod comments;
 mod files;
 mod help;
 pub(crate) mod keymap;
@@ -137,9 +138,11 @@ struct Shell {
     icons: std::collections::HashMap<PathBuf, String>,
     /// Icon picker grid, if open.
     icon_pick: Option<IconPick>,
-    /// The comments panel was closed: it waits to be asked for again.
-    comments_shut: bool,
-    /// Scroll of the comments column, and the comment it last showed (the caret's).
+    /// The note's comments as the Comments view lists them, read with the note (`comments.rs`).
+    comment_cards: Vec<comments::Card>,
+    /// The card the Comments view focuses: the caret's comment, or the one clicked last.
+    comment_focus: Option<usize>,
+    /// Scroll of the Comments view, and the comment the caret was in last.
     comments_scroll: gpui::ScrollHandle,
     comments_seen: Option<usize>,
     /// Status messages shown, oldest to newest.
@@ -261,7 +264,8 @@ impl Shell {
             icon_pick: None,
             // Calm UI (ui.md §12): the comments column starts collapsed to its dot;
             // the palette (`› comments`) reopens it via `open_comments`.
-            comments_shut: true,
+            comment_cards: Vec::new(),
+            comment_focus: None,
             comments_scroll: gpui::ScrollHandle::new(),
             comments_seen: None,
             toasts: Vec::new(),

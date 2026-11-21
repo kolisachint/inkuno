@@ -18,6 +18,7 @@ mod menus;
 mod layout;
 mod motion;
 mod outline;
+mod right_panel;
 mod panel_rows;
 mod panes;
 mod pending;

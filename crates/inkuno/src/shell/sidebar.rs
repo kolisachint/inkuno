@@ -97,17 +97,51 @@ impl Shell {
         self.settle_nav(window, cx);
     }
 
-    /// `app::ToggleOutline` (chord and palette): shows the outline in the right dock, alone, so
-    /// that it takes the place of the assistant there; a press while it is shown hides it. The
-    /// full-window panel gives way to the split one, where the right dock is drawn.
+    /// `app::ToggleOutline` (chord and palette): shows the outline view of the right panel; a press while it
+    /// is shown hides the panel.
     pub(super) fn toggle_outline(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.docked(Mode::Outline) {
             return self.hide_tool(Mode::Outline, window, cx);
         }
+        self.show_view(Mode::Outline, window, cx);
+    }
+
+    /// One view of the right panel, alone, and the panel open on it (`Ctrl+Alt+1..4`, the palette, the
+    /// switcher). The other views are not closed, only not shown. The keys go to the view; the Assistant's
+    /// field takes them.
+    pub(super) fn show_view(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
         if self.nav.panel == Panel::Full {
             self.nav.panel = Panel::Split;
         }
-        self.show_nav(Mode::Outline, false, window, cx);
+        self.put_tool(mode);
+        // The versions are read again each time their view is shown.
+        if mode == Mode::Versions {
+            self.versions_stale = true;
+            self.sync_versions(cx);
+        }
+        self.nav.reveal = true;
+        // After the settle: with the left panel hidden, it hands the keys to the note; a view keeps them.
+        self.settle_nav(window, cx);
+        match mode {
+            Mode::Assistant => window.focus(&self.assistant.field.focus_handle(cx)),
+            _ => window.focus(&self.nav.focus),
+        }
+        cx.notify();
+    }
+
+    /// The band's toggle and `ToggleRightPanel`: the panel shown on its view, or hidden (the view it showed
+    /// is remembered for the next time).
+    pub(super) fn toggle_right_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.right_open() {
+            true => {
+                let shown = self.nav.right_shown.first().copied().unwrap_or(self.nav.right_view);
+                self.hide_tool(shown, window, cx)
+            }
+            false => {
+                let view = self.nav.right_view;
+                self.show_view(view, window, cx)
+            }
+        }
     }
 
     /// The tools drawn in the left dock (or the right one), top to bottom: those shown there that
@@ -146,11 +180,6 @@ impl Shell {
     /// The tool's view comes into `Nav` and its dock opens on it: alone, as the panel always did,
     /// unless it is already shown there with others.
     pub(super) fn put_tool(&mut self, mode: Mode) {
-        // Outline, versions and assistant live in the right dock: asking for them, from the palette
-        // or the keys, shows them there. (P3 moves versions right.)
-        if mode.left_banned() && !self.nav.right.contains(&mode) {
-            self.nav.right.push(mode);
-        }
         // The scratch notes are a section under the tree, not a tool of the stack: asking for them
         // opens the section.
         if mode == Mode::Scratch {
@@ -161,12 +190,22 @@ impl Shell {
             self.nav.activate(mode);
             return;
         }
+        // The selection is shared by the panels: a version chosen in the Versions view is not a row of the
+        // tree, and a tree row is not a version. Entering or leaving the view drops it (the rendering swaps
+        // the views in and out, which must not).
+        if self.nav.mode != mode && (self.nav.mode == Mode::Versions || mode == Mode::Versions) {
+            self.nav.sel = None;
+            self.nav.marked.clear();
+        }
         let right = self.nav.right.contains(&mode);
         if !self.docked(mode) {
             match right {
                 true => self.nav.right_shown = vec![mode],
                 false => self.nav.left_shown = vec![mode],
             }
+        }
+        if right {
+            self.nav.right_view = mode;
         }
         if !right && self.nav.panel == Panel::Hidden {
             self.nav.panel = Panel::Split;
@@ -192,7 +231,8 @@ impl Shell {
                 } else {
                     &mut self.nav.left_shown
                 };
-                if fresh {
+                // The right panel shows one view: a second one replaces the first.
+                if fresh || right {
                     stack.clear();
                 }
                 stack.retain(|m| *m != mode);
@@ -256,7 +296,7 @@ impl Shell {
         } else {
             px(0.)
         };
-        let room = self.nav.total - left - self.nav.aside - DIVIDER - pane::MIN_PANE;
+        let room = self.nav.total - left - DIVIDER - pane::MIN_PANE;
         match room < px(160.) {
             true => px(0.),
             false => self.nav.right_w.clamp(px(160.), room),
@@ -322,7 +362,7 @@ impl Shell {
     /// Width of the panel open beside the note: the one it was given, as long as the note
     /// (`NOTE_MIN`) and what is reserved to its right keep their room.
     pub(super) fn split_width(&self) -> Pixels {
-        let room = self.nav.total - DIVIDER - self.nav.aside;
+        let room = self.nav.total - DIVIDER;
         let floor = px(120.);
         match self.nav.list_w {
             w if w == px(0.) => room / 2.,
@@ -399,7 +439,12 @@ impl Shell {
         };
         match self.nav.mode {
             Mode::Tree => tree_rows(root, &self.notes, &self.dirs, &self.images, &self.nav.open),
-            Mode::Search | Mode::Outline | Mode::Scratch | Mode::Versions | Mode::Assistant => {
+            Mode::Search
+            | Mode::Outline
+            | Mode::Scratch
+            | Mode::Comments
+            | Mode::Versions
+            | Mode::Assistant => {
                 Vec::new()
             }
             Mode::Recent => self
@@ -1772,7 +1817,7 @@ impl Shell {
                     MouseButton::Left,
                     cx.listener(|this, e: &MouseDownEvent, window, cx| {
                         if e.click_count >= 2 {
-                            this.nav.right_w = LIST_W;
+                            this.nav.right_w = PANEL_W;
                             this.settle_nav(window, cx);
                         } else {
                             this.nav.right_dragging = true;
@@ -1877,12 +1922,64 @@ impl Shell {
             .children(sections)
     }
 
+    /// A view's name under the switcher: 12 px semibold, soft; the Comments view says how many it has.
+    fn view_head(&self, mode: Mode) -> Div {
+        let t = self.theme;
+        let count = (mode == Mode::Comments).then_some(self.comment_cards.len());
+        div()
+            .debug_selector(move || format!("view-head-{}", mode.name()))
+            .flex_none()
+            .h(t.px(32.))
+            .px(t.px(16.))
+            .flex()
+            .items_center()
+            .gap(t.px(6.))
+            .text_size(t.px(12.))
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(t.soft)
+            .child(self.tool_title(mode))
+            .children(count.map(|n| {
+                div()
+                    .font_weight(gpui::FontWeight::NORMAL)
+                    .child(n.to_string())
+            }))
+    }
+
+    /// The Versions view's button: a version of the note saved now, as Ctrl+Alt+S does (its name asked for).
+    fn save_version_row(&self, cx: &mut Context<Self>) -> Div {
+        let t = self.theme;
+        div().flex_none().px(t.px(16.)).pb(t.px(8.)).child(
+            div()
+                .id("version-save")
+                .debug_selector(|| "version-save".into())
+                .h(t.px(28.))
+                .px(t.px(10.))
+                .flex()
+                .items_center()
+                .rounded(t.small())
+                .border_1()
+                .border_color(t.border)
+                .text_size(t.px(13.))
+                .text_color(t.text)
+                .cursor_pointer()
+                .hover(|s| s.bg(t.hover))
+                .tooltip(tip(
+                    tr("Save a version of the note", "Enregistrer une version de la note"),
+                    crate::ui::keys::of(cx, &crate::actions::SaveRevision),
+                    t,
+                ))
+                .child(tr("Save version", "Enregistrer une version"))
+                .on_click(cx.listener(|this, _, window, cx| this.save_revision(window, cx))),
+        )
+    }
+
     /// The name a tool's header and its switcher button show.
     pub(super) fn tool_title(&self, mode: Mode) -> String {
         match (mode, &self.vault) {
             (Mode::Tree, Some(root)) => vault::stem(root),
             (Mode::Search, _) => tr("Search", "Recherche").to_string(),
             (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
+            (Mode::Comments, _) => tr("Comments", "Commentaires").to_string(),
             (Mode::Scratch, _) => tr("Scratch", "Brouillons").to_string(),
             (Mode::Versions, _) => tr("Versions", "Versions").to_string(),
             (Mode::Assistant, _) => tr("Assistant", "Assistant").to_string(),
@@ -1890,52 +1987,119 @@ impl Shell {
         }
     }
 
-    /// The right band's tool switcher: one button per tool that lives in the right dock. The ones
-    /// shown are in full ink on the selection; a click shows that tool alone.
+    /// The right panel's switcher: one icon button per view (`VIEWS`), the shown one on the selection. The
+    /// Comments button counts the note's comments; the Assistant's shows a dot while it needs the person.
     pub(super) fn switcher(&self, cx: &Context<Self>) -> Div {
         let t = self.theme;
         let shown = self.dock_tools(true);
+        let count = self.comment_cards.len();
+        let needs = self.assistant.status == crate::shell::assistant::Status::NeedsYou;
         div()
             .flex()
             .items_center()
-            .gap_1()
-            .min_w_0()
-            .overflow_hidden()
-            .children(self.nav.right.clone().into_iter().map(|m| {
+            .gap(t.px(2.))
+            .flex_none()
+            .children(VIEWS.into_iter().map(|m| {
                 let on = shown.contains(&m);
+                let (icon, action): (&'static str, &dyn Action) = match m {
+                    Mode::Outline => ("c-outline.svg", &ShowOutlineView),
+                    Mode::Comments => ("comment.svg", &ShowCommentsView),
+                    Mode::Versions => ("clock.svg", &crate::actions::ShowVersions),
+                    _ => ("assistant.svg", &ShowAssistantView),
+                };
+                let keys = crate::ui::keys::of(cx, action);
+                let badge = match m {
+                    Mode::Comments if count > 0 => Some(
+                        div()
+                            .debug_selector(|| "switch-badge".into())
+                            .absolute()
+                            .top(t.px(-2.))
+                            .right(t.px(-2.))
+                            .min_w(t.px(15.))
+                            .h(t.px(15.))
+                            .px(t.px(3.))
+                            .rounded_full()
+                            .bg(t.accent)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(t.px(10.))
+                            .text_color(t.bg)
+                            .child(crate::shell::render::badge_label(count)),
+                    ),
+                    Mode::Assistant if needs => Some(
+                        div()
+                            .debug_selector(|| "switch-dot".into())
+                            .absolute()
+                            .top(t.px(2.))
+                            .right(t.px(2.))
+                            .size(t.px(7.))
+                            .rounded_full()
+                            .bg(t.accent),
+                    ),
+                    _ => None,
+                };
                 div()
                     .id(("switch", m as usize))
                     .debug_selector(move || format!("switch-{}", m.name()))
-                    .h(t.px(26.))
-                    .px_2()
+                    .size(t.px(30.))
                     .flex_none()
                     .flex()
                     .items_center()
-                    .rounded(t.small())
+                    .justify_center()
+                    .relative()
+                    .rounded(t.large())
                     .cursor_pointer()
-                    .text_size(t.px(13.))
-                    .font_weight(if on {
-                        gpui::FontWeight::SEMIBOLD
-                    } else {
-                        gpui::FontWeight::NORMAL
-                    })
-                    .text_color(if on { t.text } else { t.soft })
                     .hover(|s| s.bg(t.hover))
                     .when(on, |d| d.bg(t.selection))
-                    .child(self.tool_title(m))
-                    .on_click(
-                        cx.listener(move |this, _, window, cx| this.show_right(m, window, cx)),
+                    .tooltip(tip(self.tool_title(m), keys, t))
+                    .child(
+                        svg()
+                            .path(icon)
+                            .size(t.px(18.))
+                            .flex_none()
+                            .text_color(if on { t.text } else { t.soft }),
                     )
+                    .children(badge)
+                    .on_click(cx.listener(move |this, _, window, cx| match m {
+                        Mode::Comments => this.show_comments(window, cx),
+                        _ => this.show_view(m, window, cx),
+                    }))
             }))
     }
 
-    /// Shows one tool of the right dock alone (the switcher): the others are hidden, not closed.
-    pub(super) fn show_right(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
-        self.nav.right_shown = vec![mode];
-        self.nav.folded.remove(&mode);
-        self.nav.activate(mode);
-        window.focus(&self.nav.focus);
-        self.settle_nav(window, cx);
+    /// The band's right end, beside the window buttons: shows or hides the right panel.
+    pub(super) fn render_right_toggle(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let t = self.theme;
+        let shown = self.right_open();
+        // An answer waiting for the person shows here too, while the panel is hidden (`switch-dot` in it).
+        let needs = self.assistant.status == super::assistant::Status::NeedsYou;
+        div()
+            .absolute()
+            .top(t.px((BAND - 24.) / 2.))
+            .right(t.px(crate::shell::render::PILL_ROOM))
+            .child(
+                ui::widgets::icon_button("right-panel", "c-rpanel.svg", t)
+                    .debug_selector(|| "right-panel-toggle".into())
+                    .when(shown, |d| d.bg(t.selection))
+                    .tooltip(tip(
+                        tr("Right panel: show or hide it", "Panneau de droite : afficher ou masquer"),
+                        crate::ui::keys::of(cx, &ToggleRightPanel),
+                        t,
+                    ))
+                    .on_click(cx.listener(|this, _, window, cx| this.toggle_right_panel(window, cx)))
+                    .children(needs.then(|| {
+                        div()
+                            .debug_selector(|| "switch-dot".into())
+                            .absolute()
+                            .top(t.px(2.))
+                            .right(t.px(2.))
+                            .size(t.px(7.))
+                            .rounded_full()
+                            .bg(t.accent)
+                    })),
+            )
+            .into_any_element()
     }
 
     /// Header and content of the tool whose view is in `Nav`, in the right dock or the left one;
@@ -1971,12 +2135,13 @@ impl Shell {
         let first = self.dock_tools(right).first() == Some(&mode);
         let folded = self.all_folded();
         let title = self.tool_title(mode);
-        // The first tool of the right dock: its header is the band, the tool switcher in it.
-        let switch = right && first && self.band_shown();
+        // The first tool of the right dock: its header is the band, the view switcher in it (shown with the
+        // title bar hidden too: the panel's own row).
+        let switch = right && first;
         let switcher = switch.then(|| self.switcher(cx));
         let header = div()
             .flex_none()
-            .h(t.px(if switch { BAND } else { 32. }))
+            .h(t.px(if switch && self.band_shown() { BAND } else { 32. }))
             .pl(t.px(8.))
             // Over the whole window, the window buttons float over the right end of the header.
             .pr(if (full || right) && first && !self.nav.native_bar {
@@ -2106,9 +2271,10 @@ impl Shell {
                                     .child(title.clone())
                             }),
                     )
-                    // The band's switcher, then the free part of the band: the handle that moves the window.
-                    .when_some(switcher, |d, switcher| {
-                        d.child(switcher).child(
+                    // The band's free part: the handle that moves the window. The switcher is its own row below
+                    // the band (below), clear of the window buttons at any panel width.
+                    .when(switch, |d| {
+                        d.child(
                             div()
                                 .flex_1()
                                 .min_w_0()
@@ -2334,11 +2500,26 @@ impl Shell {
                     false => header.into_any_element(),
                 })
             })
+            // The right panel's own row of views, under the band: four 30 px buttons at the panel's left.
+            .when_some(switcher, |d, switcher| {
+                d.child(
+                    div()
+                        .debug_selector(|| "switch-row".into())
+                        .flex_none()
+                        .h(t.px(36.))
+                        .pl(t.px(8.))
+                        .flex()
+                        .items_center()
+                        .child(switcher),
+                )
+            })
+            .when(right, |d| d.child(self.view_head(mode)))
             .map(|d| match mode {
                 _ if shut => d,
                 Mode::Outline => d.child(self.render_outline(cx)),
                 Mode::Assistant => d.child(self.render_assistant(window, cx)),
-                _ => d.child(
+                Mode::Comments => d.child(self.render_comments(cx)),
+                _ => d.when(mode == Mode::Versions, |d| d.child(self.save_version_row(cx))).child(
                     div()
                         .flex_1()
                         .min_h_0()

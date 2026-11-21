@@ -731,6 +731,7 @@ impl Shell {
             self.active = pane;
         }
         match event {
+            EditorEvent::CommentAt(at) => self.comment_clicked(*at, window, cx),
             EditorEvent::Changed => {
                 self.in_pane(pane, |this| {
                     this.keep_preview();
