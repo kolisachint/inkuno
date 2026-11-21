@@ -161,6 +161,8 @@ pub struct Theme {
     pub hover: Hsla,
     /// The same, a little stronger, while the pointer is down (`.active`).
     pub pressed: Hsla,
+    /// The neutral pill of a selected sidebar row: the text at 7.2 % (Quiet; the others keep `selection`).
+    pub pill: Hsla,
     /// Background of a line the agent added to a note, pending (`pending.rs`): a green wash, quiet.
     pub added: Hsla,
     /// Background of a line the agent removed, pending: a red wash, quiet. Its text is `soft`.
@@ -686,6 +688,7 @@ impl Theme {
             selection: accent.opacity(share),
             hover: text.opacity(0.07),
             pressed: text.opacity(0.13),
+            pill: text.opacity(0.072),
             added: pending_wash(GREEN, bg, [text, soft]),
             removed: pending_wash(RED, bg, [text, soft]),
             code_bg,

@@ -344,6 +344,8 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
         shell.client = true;
         shell
     });
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     cx.run_until_parked();
     let settle = |cx: &mut gpui::VisualTestContext| {
         for _ in 0..3 {
@@ -579,6 +581,8 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         shell.client = true;
         shell
     });
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     cx.run_until_parked();
     cx.simulate_resize(size(px(860.), px(720.)));
     let settle = |cx: &mut gpui::VisualTestContext| {
@@ -695,6 +699,8 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
 #[gpui::test]
 fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "ground");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     let (one, two) = (root.join("Une.md"), root.join("Deux.md"));
     fs::write(&one, "# Titre\n\nTexte\n").unwrap();
     fs::write(&two, "# Autre\n\nTexte\n").unwrap();
@@ -797,6 +803,8 @@ fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) 
 #[gpui::test]
 fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "scale");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     fs::write(
         root.join("Alpha.md"),
         "# Alpha\n\nUn mot<!-- comment: remarque --> et beaucoup de mots pour un long compteur.\n",

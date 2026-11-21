@@ -297,6 +297,11 @@ impl AssetSource for Assets {
             "theme.svg" => {
                 r#"<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5A5.5 5.5 0 0 1 8 13.5Z" fill="black"/>"#
             }
+            // Project artwork (not Nucleo): the Settings row's gear, drawn in the set's stroke style
+            // on the 16 px grid: a hub and eight teeth.
+            "gear.svg" => {
+                r#"<circle cx="8" cy="8" r="2.25"/><path d="M8 1.5V3.5M8 12.5V14.5M1.5 8H3.5M12.5 8H14.5M3.3 3.3L4.7 4.7M11.3 11.3L12.7 12.7M3.3 12.7L4.7 11.3M11.3 4.7L12.7 3.3"/>"#
+            }
             // Nib silhouette of the kit's optical 16 px mark (`svg/inkuno-mark-16.svg`:
             // `M166 86 H346 L391 211 L256 405 L121 211 Z` on a 512 grid, ×1/32 here).
             // The ink stroke is the `logo-ink.svg` layer below: gpui paints each SVG
