@@ -7,7 +7,7 @@ use std::fs;
 use serde_json::{Value, json};
 
 use crate::{
-    logic::mermaid,
+    logic::{markdown, mermaid},
     ui::{figure, svg},
 };
 
@@ -156,25 +156,32 @@ fn picture(
     Err(Outcome::err("this file is not a Mermaid block or an SVG"))
 }
 
+/// The sources of the ```mermaid (or ~~~mermaid) blocks of `text`. A block ends at a fence of its
+/// own character and at least its length, so a tilde line inside a backtick block is code.
 fn mermaid_blocks(text: &str) -> Vec<String> {
     let mut blocks = Vec::new();
     let mut current = String::new();
-    let mut open = false;
+    // The opener of the block the line is in, and whether it is a Mermaid block.
+    let mut open: Option<(markdown::Fence, bool)> = None;
     for line in text.lines() {
-        if crate::logic::markdown::is_fence(line) {
-            if open {
-                blocks.push(std::mem::take(&mut current));
-                open = false;
-            } else {
-                let info = line.trim_start().trim_start_matches('`').trim();
-                let word = info.split_whitespace().next().unwrap_or("");
-                open = word.eq_ignore_ascii_case("mermaid");
+        match open {
+            None => {
+                if let Some((fence, info)) = markdown::fence_of(line) {
+                    let word = info.split_whitespace().next().unwrap_or("");
+                    open = Some((fence, word.eq_ignore_ascii_case("mermaid")));
+                }
             }
-            continue;
-        }
-        if open {
-            current.push_str(line);
-            current.push('\n');
+            Some((fence, mermaid)) => {
+                if markdown::closes(line, fence) {
+                    if mermaid {
+                        blocks.push(std::mem::take(&mut current));
+                    }
+                    open = None;
+                } else if mermaid {
+                    current.push_str(line);
+                    current.push('\n');
+                }
+            }
         }
     }
     blocks
@@ -198,4 +205,18 @@ fn png_size(png: &[u8]) -> (u32, u32) {
     }
     let word = |at: usize| u32::from_be_bytes(png[at..at + 4].try_into().unwrap_or([0; 4]));
     (word(16), word(20))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mermaid_blocks_close_only_with_their_own_fence() {
+        // A tilde line inside a backtick Mermaid block is source; a backtick Mermaid line inside a
+        // tilde block is not a block of its own.
+        let text = "```mermaid\ngraph\n~~~\nA-->B\n```\n\n~~~md\n```mermaid\nnot\n```\n~~~\n\n~~~mermaid\nX\n~~~ \n";
+        assert_eq!(mermaid_blocks(text), ["graph\n~~~\nA-->B\n", "X\n"]);
+        assert!(mermaid_blocks("```mermaid\ngraph\n~~~\n").is_empty());
+    }
 }

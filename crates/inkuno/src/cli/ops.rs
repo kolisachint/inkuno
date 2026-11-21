@@ -303,13 +303,12 @@ fn section_text(text: &str, section: &str) -> Result<String, String> {
 fn outgoing(vault: &Vault, text: &str) -> Vec<Value> {
     let mut found = Vec::new();
     let mut seen = Vec::new();
-    let mut in_code = false;
-    for (row, line) in text.lines().enumerate() {
-        if markdown::is_fence(line) {
-            in_code = !in_code;
-            continue;
-        }
-        if in_code {
+    let blocks = markdown::blocks(text);
+    let mut at = 0;
+    for (row, line) in text.split('\n').enumerate() {
+        let start = at;
+        at += line.len() + 1;
+        if markdown::is_fence(line) || markdown::open_at(&blocks, start).is_some() {
             continue;
         }
         for (_, link) in markdown::links(line) {
@@ -1292,6 +1291,33 @@ mod tests {
         } else {
             snapshot(home, path, author, memo, text)
         }
+    }
+
+    #[test]
+    fn outgoing_links_leave_out_the_code_blocks_of_either_fence() {
+        let dir = std::env::temp_dir().join(format!("inkuno-ops-links-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Target.md"), "# Target\n").unwrap();
+        let vault = Vault::open(dir.clone()).unwrap();
+        let targets = |text: &str| -> Vec<(String, u64)> {
+            outgoing(&vault, text)
+                .iter()
+                .map(|v| {
+                    (
+                        v["target"].as_str().unwrap().to_string(),
+                        v["line"].as_u64().unwrap(),
+                    )
+                })
+                .collect()
+        };
+        // A tilde line inside a backtick block is code: [[Secret]] is not a link.
+        let mixed = "```md\n~~~\n[[Secret]]\n~~~\n```\n[[Target]]";
+        assert_eq!(targets(mixed), [("Target".to_string(), 6)]);
+        // A tilde block alone, with a backtick line inside it.
+        let tilde = "~~~\n[[Secret]]\n```\n~~~\n[[Target]]";
+        assert_eq!(targets(tilde), [("Target".to_string(), 5)]);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

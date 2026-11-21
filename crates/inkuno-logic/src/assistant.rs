@@ -60,7 +60,7 @@ pub fn findings(answer: &str) -> Vec<(String, String)> {
             if let Some(open) = open.as_mut().filter(|open| open.comment.is_none()) {
                 open.comment = Some(value.to_string());
             }
-        } else if line.is_empty() || line.starts_with("```") {
+        } else if line.is_empty() || markdown::is_fence(line) {
             // The comment ends here; a passage still waiting for its comment stays open.
             if open.as_ref().is_some_and(|open| open.comment.is_some()) {
                 finish(&mut open, &mut found);
@@ -263,11 +263,7 @@ fn is_mark(line: &str, mark: &str) -> bool {
 /// Whether the first line of `text` is a code fence line: three backticks or more once its indent
 /// is taken off. The original passage (or note) is checked with this, see [`proposal`].
 pub fn starts_with_fence(text: &str) -> bool {
-    text.lines().next().is_some_and(is_fence)
-}
-
-fn is_fence(line: &str) -> bool {
-    line.trim_start().starts_with("```")
+    text.lines().next().is_some_and(markdown::is_fence)
 }
 
 /// The block between the first `BEGIN TEXT` and the last `END TEXT` line of `answer`, or `None`
@@ -285,7 +281,10 @@ pub fn proposal(answer: &str, original_fenced: bool) -> Option<String> {
         return None;
     }
     let mut inner = &lines[begin + 1..end];
-    let wrapped = inner.len() >= 2 && is_fence(inner[0]) && is_fence(inner[inner.len() - 1]);
+    // Wrapped: the first line opens a fence that the last line closes (same character, as long).
+    let wrapped = inner.len() >= 2
+        && markdown::fence_of(inner[0])
+            .is_some_and(|(fence, _)| markdown::closes(inner[inner.len() - 1], fence));
     if wrapped && !original_fenced {
         inner = &inner[1..inner.len() - 1];
     }
@@ -494,6 +493,16 @@ mod tests {
     }
 
     #[test]
+    fn a_comment_ends_at_a_tilde_fence_too() {
+        // A tilde wrapper is a fence: its closing line is not part of the comment.
+        let answer = "~~~text\nPASSAGE: the bridge opens in May\nCOMMENT: Which year?\n~~~";
+        assert_eq!(
+            findings(answer),
+            vec![pair("the bridge opens in May", "Which year?")]
+        );
+    }
+
+    #[test]
     fn an_answer_wrapped_in_a_code_fence_is_read() {
         let answer = "```text\nPASSAGE: the bridge opens in May\nCOMMENT: Which year?\n```";
         assert_eq!(
@@ -659,6 +668,22 @@ mod tests {
         assert!(starts_with_fence("  ```rust\nfn main() {}\n```"));
         assert!(!starts_with_fence("text\n```\ncode\n```"));
         assert!(!starts_with_fence(""));
+    }
+
+    #[test]
+    fn a_wrapper_fence_is_dropped_only_by_its_own_closing_fence() {
+        // A tilde line inside a backtick wrapper is text, and the wrapper closes on its own fence.
+        let mixed = "BEGIN TEXT\n```md\n~~~\nSee.\n~~~\n```\nEND TEXT";
+        assert_eq!(
+            proposal(mixed, false),
+            Some("~~~\nSee.\n~~~".into()),
+            "the backtick wrapper goes, the tildes stay"
+        );
+        // A tilde wrapper, closed by a backtick line, is not a wrapper: nothing is dropped.
+        let open = "BEGIN TEXT\n~~~\nSee.\n```\nEND TEXT";
+        assert_eq!(proposal(open, false), Some("~~~\nSee.\n```".into()));
+        let tilde = "BEGIN TEXT\n~~~\nSee.\n~~~\nEND TEXT";
+        assert_eq!(proposal(tilde, false), Some("See.".into()));
     }
 
     #[test]
