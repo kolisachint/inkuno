@@ -351,6 +351,37 @@ fn editing_renames_and_comments_follow_the_app() {
 }
 
 #[test]
+fn a_moved_note_takes_its_relative_links_along() {
+    // A relative Markdown link follows the note from any folder, as the app rewrites it: the
+    // address keeps its form, from the linking note's folder or from the vault root.
+    let root = scratch();
+    write(&root, "Solo.md", "# Solo\n\nbody\n");
+    write(&root, "Dir/Walk.md", "# Walk\n\n[s](../Solo.md#part)\n");
+    write(&root, "Plain.md", "# Plain\n\n[s](Solo.md) [r](/Solo.md)\n");
+    write(&root, "Code.md", "# Code\n\n```\n[c](Solo.md)\n```\n");
+    let mut vault = open(&root);
+    let moved = ok(notes::rename_note(
+        &mut vault,
+        &json!({"note": "Solo", "name": "Only", "folder": "Box"}),
+    ));
+    assert_eq!(moved["path"], "Box/Only.md");
+    assert_eq!(
+        fs::read_to_string(root.join("Dir/Walk.md")).unwrap(),
+        "# Walk\n\n[s](../Box/Only.md#part)\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Plain.md")).unwrap(),
+        "# Plain\n\n[s](Box/Only.md) [r](/Box/Only.md)\n"
+    );
+    // Code is text: the link in the fence stays.
+    assert!(
+        fs::read_to_string(root.join("Code.md"))
+            .unwrap()
+            .contains("[c](Solo.md)")
+    );
+}
+
+#[test]
 fn the_history_follows_a_note_through_rename_trash_and_restore() {
     use crate::platform::revisions::{self, Home};
     let root = scratch();

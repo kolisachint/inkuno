@@ -117,6 +117,19 @@ impl Shell {
             (Do::CopyAddress, Some(Link::Url(url))) => {
                 return cx.write_to_clipboard(ClipboardItem::new_string(url));
             }
+            // A relative address is copied as Markdown writes it: spaces as `%20`.
+            (Do::CopyAddress, Some(Link::Note { path, anchor })) => {
+                let address = match anchor {
+                    Some(anchor) => format!("{path}#{anchor}"),
+                    None => path.clone(),
+                };
+                let address = address.replace(' ', "%20");
+                return cx.write_to_clipboard(ClipboardItem::new_string(address));
+            }
+            (Do::CopyAddress, Some(Link::Heading(anchor))) => {
+                let address = format!("#{anchor}").replace(' ', "%20");
+                return cx.write_to_clipboard(ClipboardItem::new_string(address));
+            }
             _ => None,
         };
         if let Some(action) = action {
@@ -245,7 +258,8 @@ impl Shell {
                                 } else {
                                     (current.clone(), name)
                                 };
-                                if !is_dir && this.relink(&old, &new, cx) {
+                                let moved = (!image && !is_dir).then_some((path.as_path(), to.as_path()));
+                                if !is_dir && this.relink(&old, &new, moved, cx) {
                                     this.reload(cx);
                                 }
                             }
@@ -563,7 +577,7 @@ impl Shell {
             groups[2].push((tr("Comment", "Commenter"), Do::Comment));
             groups[3].push((BlockOp::Delete.label(), Do::Block(BlockOp::Delete)));
         } else if let Some(link) = &menu.text {
-            let web = matches!(link, Some(Link::Url(_)));
+            let web = matches!(link, Some(Link::Url(_) | Link::Note { .. } | Link::Heading(_)));
             // Inside a pending change: its gestures, on the change under the pointer.
             if menu.change {
                 groups[0].push((
