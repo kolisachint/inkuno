@@ -227,6 +227,38 @@ pub fn classify(line: &str, in_code: bool) -> (Kind, usize) {
     classify_in(line, in_code.then_some(Fence { ch: b'`', len: 3 }))
 }
 
+/// A block quote line: its depth (the `>` markers), the byte where its content starts (after the last
+/// marker and one optional space, with up to three spaces before a nested marker) and the kind the
+/// content has on its own line (`Para`, `Heading`, `Bullet`, `Ordered`, `Task`, `Fence`, `Rule`, `Table`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Quoted {
+    pub depth: usize,
+    pub at: usize,
+    pub inner: Kind,
+}
+
+/// The quote of `line`, if it is a block quote line (`>` after its indent, with or without a space).
+pub fn quote(line: &str) -> Option<Quoted> {
+    let mut at = indent_len(line);
+    let mut depth = 0;
+    while line[at..].starts_with('>') {
+        depth += 1;
+        at += 1;
+        if line[at..].starts_with(' ') {
+            at += 1;
+        }
+        let gap = line[at..].bytes().take(3).take_while(|&b| b == b' ').count();
+        if line[at + gap..].starts_with('>') {
+            at += gap;
+        }
+    }
+    (depth > 0).then(|| Quoted {
+        depth,
+        at,
+        inner: classify_in(&line[at..], None).0,
+    })
+}
+
 /// Kind of the line and length (in bytes) of its marker, indentation included. `open` is the opener of
 /// the code block the line is in, if any: inside it, only the closing fence is a fence, the rest is code.
 pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
@@ -256,8 +288,13 @@ pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
     if rest.starts_with('|') {
         return (Kind::Table, 0);
     }
-    if rest == ">" || rest.starts_with("> ") {
-        return (Kind::Quote, indent + rest.len().min(2));
+    if let Some(q) = quote(line) {
+        // The marker runs to the content's own marker: a list item's or a heading's prefix is hidden with the quote's.
+        let inner = match q.inner {
+            Kind::Heading(_) | Kind::Bullet | Kind::Ordered | Kind::Task(_) => classify_in(&line[q.at..], None).1,
+            _ => 0,
+        };
+        return (Kind::Quote, q.at + inner);
     }
     let b = rest.as_bytes();
     if b.len() >= 2 && matches!(b[0], b'-' | b'*' | b'+') && b[1] == b' ' {
@@ -2124,10 +2161,39 @@ mod tests {
         assert_eq!(classify("- [x] a", false), (Kind::Task(true), 6));
         assert_eq!(classify("12. a", false), (Kind::Ordered, 4));
         assert_eq!(classify("> q", false), (Kind::Quote, 2));
+        assert_eq!(classify(">q", false), (Kind::Quote, 1));
+        assert_eq!(classify("> > q", false), (Kind::Quote, 4));
+        assert_eq!(classify(">", false), (Kind::Quote, 1));
+        assert_eq!(classify("> - a", false), (Kind::Quote, 4));
+        assert_eq!(classify("> 1. a", false), (Kind::Quote, 5));
+        assert_eq!(classify("> # T", false), (Kind::Quote, 4));
+        assert_eq!(classify("> - [x] a", false), (Kind::Quote, 8));
         assert_eq!(classify("---", false), (Kind::Rule, 3));
         assert_eq!(classify("```rust", false), (Kind::Fence, 7));
         assert_eq!(classify("- a", true), (Kind::Code, 0));
         assert_eq!(classify("texte", false), (Kind::Para, 0));
+    }
+
+    #[test]
+    fn quotes_read_their_depth_and_content() {
+        let q = |line: &str| quote(line).map(|q| (q.depth, q.at, q.inner));
+        assert_eq!(q("> text"), Some((1, 2, Kind::Para)));
+        assert_eq!(q(">text"), Some((1, 1, Kind::Para)));
+        assert_eq!(q(">"), Some((1, 1, Kind::Para)));
+        assert_eq!(q("> > > deep"), Some((3, 6, Kind::Para)));
+        assert_eq!(q(">>> deep"), Some((3, 4, Kind::Para)));
+        assert_eq!(q(">  > two"), Some((2, 5, Kind::Para)));
+        assert_eq!(q("  > indented"), Some((1, 4, Kind::Para)));
+        assert_eq!(q("> - item"), Some((1, 2, Kind::Bullet)));
+        assert_eq!(q("> 1. item"), Some((1, 2, Kind::Ordered)));
+        assert_eq!(q("> - [ ] todo"), Some((1, 2, Kind::Task(false))));
+        assert_eq!(q("> > # Title"), Some((2, 4, Kind::Heading(1))));
+        assert_eq!(q("> ```rust"), Some((1, 2, Kind::Fence)));
+        assert_eq!(q("> ---"), Some((1, 2, Kind::Rule)));
+        assert_eq!(q("plain > text"), None);
+        // A quote's marker is the whole prefix up to the content's own marker.
+        assert_eq!(classify("> > - a", false), (Kind::Quote, 6));
+        assert_eq!(classify("  > > # a", false), (Kind::Quote, 8));
     }
 
     #[test]

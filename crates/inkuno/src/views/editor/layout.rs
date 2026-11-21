@@ -409,6 +409,11 @@ impl Row {
             .map_or_else(|| self.visual_rows(), |grid| grid.lines_at(i))
     }
 
+    /// Quote bars drawn beside the row: one per level of its quote (none outside a quote).
+    pub(super) fn bars(&self) -> usize {
+        if self.kind == Kind::Quote { self.nesting.quote.max(1) } else { 0 }
+    }
+
     /// A table's dash line, which is not seen.
     pub(super) fn hidden(&self) -> bool {
         self.grid.as_ref().is_some_and(|g| g.hidden())
@@ -1687,13 +1692,32 @@ impl Editor {
                 if math {
                     (kind, marker) = (Kind::Para, 0);
                 }
+                // A paragraph line after a quoted paragraph is its lazy continuation: it stays in the quote.
+                let lazy = kind == Kind::Para
+                    && !code
+                    && !line.trim().is_empty()
+                    && above.open
+                    && above.quote > 0;
+                if lazy {
+                    (kind, marker) = (Kind::Quote, 0);
+                }
                 // Callout: the `> [!TYPE]` quote and the ones that follow it.
-                let own_tint = (kind == Kind::Quote)
+                let own_tint = (kind == Kind::Quote && !lazy)
                     .then(|| md::callout(line))
                     .flatten()
                     .map(|r| tint_of(&line[r]));
                 tint = own_tint.or(tint).filter(|_| kind == Kind::Quote);
                 let tinted = tint.is_some();
+                // A quote's content is laid out as the line it holds: `body` starts after its markers, and
+                // `ikind` is its kind (a lazy line holds a paragraph). Its markers are `marker` and below.
+                let quoted = (kind == Kind::Quote && !lazy)
+                    .then(|| md::quote(line))
+                    .flatten();
+                let ibase = quoted.map_or(0, |q| q.at);
+                let body = &line[ibase..];
+                let ikind = if lazy { Kind::Para } else { quoted.map_or(kind, |q| q.inner) };
+                // The checkbox of a task, as an offset of the line.
+                let task = md::task_box(body).map(|(at, done)| (at + ibase, done));
                 let last: Option<&mut Row> = rows.last_mut();
                 let after_table = last.as_ref().is_some_and(|r| r.kind == Kind::Table);
                 let header = kind == Kind::Table && !after_table;
@@ -1812,7 +1836,7 @@ impl Editor {
                 // Titles: about one body line of room above the first two levels and two thirds of it
                 // above the others. Sizes and line heights hold for a body of `Prefs::SIZE` px (15):
                 // body 22/15, code 20/13, titles 28/21/18/16/15 (`docs/design/app-ui.md` §14).
-                let (font_size, pad, leading) = match kind {
+                let (font_size, pad, leading) = match ikind {
                     Kind::Heading(1) => (px(28.), px(24.), 1.3),
                     Kind::Heading(2) => (px(21.), px(24.), 1.3),
                     Kind::Heading(3) => (px(18.), px(16.), 1.33),
@@ -1847,14 +1871,14 @@ impl Editor {
                     .clone()
                     .filter(|m| m.start <= offset + line.len() && m.end >= offset);
                 // A list item's depth sets its marker's indent: the lines above it tell it.
-                let depth = if matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) {
-                    above.depth_of(md::indent_columns(line))
+                let depth = if matches!(ikind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) {
+                    above.depth_of(md::indent_columns(body))
                 } else {
                     0
                 };
                 // An indented paragraph after a list item continues it: it hangs at the item's text.
-                let cont = (kind == Kind::Para && !code && !math)
-                    .then(|| above.continuation(line))
+                let cont = (ikind == Kind::Para && !code && !math)
+                    .then(|| above.continuation(body))
                     .flatten();
                 let id = {
                     let near = composed
@@ -1865,7 +1889,7 @@ impl Editor {
                     let mut hasher = Fast::default();
                     // Two halves: thirteen entries do not fit in one hashed tuple.
                     (
-                        (style, line, kind, marker, math, lang, (depth, cont)),
+                        (style, line, kind, marker, math, lang, (depth, cont, nesting.quote)),
                         (
                             live,
                             near,
@@ -1892,8 +1916,16 @@ impl Editor {
                     }
                     _ => None,
                 };
-                let indent = if t.quiet && tinted && kind == Kind::Quote {
-                    px(14. * quiet_scale - 12.)
+                // A quote's content starts after its bars: 10 px per level beyond the first, and in Quiet a box's
+                // padding (14 px from its edge, the box lies 12 px out). The bars sit at -14 px, 10 px apart.
+                let quote_base = if kind == Kind::Quote {
+                    px(10. * quiet_scale) * nesting.quote.saturating_sub(1) as f32
+                        + if t.quiet && tinted { px(14. * quiet_scale - 12.) } else { px(0.) }
+                } else {
+                    px(0.)
+                };
+                let indent = if kind == Kind::Quote {
+                    quote_base
                 } else if t.quiet && gutter_here > px(0.) && matches!(kind, Kind::Code | Kind::Fence) {
                     gutter_here + px(14. * quiet_scale - 12.)
                 } else {
@@ -1905,7 +1937,7 @@ impl Editor {
                     cached_shape(&mut shaped, id, frame, || {
                         let mut formula = None;
                         let mut flags = vec![0u32; line.len()];
-                        let list = matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
+                        let list = matches!(ikind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
                         flags[..marker].fill(if list { md::MARK } else { md::DIM });
                         if kind == Kind::Meta {
                             flags.fill(md::DIM | md::QUIET);
@@ -1937,7 +1969,7 @@ impl Editor {
                         }
                         // A checked task (bullet or ordered) strikes its text. Its checkbox is bold,
                         // like a checkbox in the text or a table.
-                        if let Some((at, true)) = md::task_box(line) {
+                        if let Some((at, true)) = task {
                             // Quiet: the done text is `soft` (`QUIET` takes its colour over `DIM`).
                             let dim = if t.quiet { md::DIM | md::QUIET } else { md::DIM };
                             flags[at + 4..]
@@ -2002,9 +2034,9 @@ impl Editor {
                         // continuation's indent is hidden the same way.
                         let item = hide && (list || cont.is_some());
                         let prefix = if list {
-                            md::item_prefix(line)
+                            ibase + md::item_prefix(body)
                         } else if cont.is_some() {
-                            md::indent_len(line)
+                            ibase + md::indent_len(body)
                         } else {
                             marker
                         };
@@ -2060,11 +2092,11 @@ impl Editor {
 
                         let style = RunStyle {
                             pending: pend,
-                            heading: match kind {
+                            heading: match ikind {
                                 Kind::Heading(level) => level,
                                 _ => 0,
                             },
-                            soft: kind == Kind::Heading(6),
+                            soft: ikind == Kind::Heading(6),
                             italic: kind == Kind::Quote && !tinted && !t.quiet,
                             mono: code || kind == Kind::Table,
                             tint: own_tint,
@@ -2076,8 +2108,9 @@ impl Editor {
                         // list item's prefix (hidden off-live: its lead draws the marker instead).
                         let cut = match kind {
                             Kind::Heading(_) => marker,
+                            // A quote's markers are elided with its inner prefix (see `elided`); an alert's label is cut.
+                            Kind::Quote => alert.as_ref().map_or(0, |a| a.2),
                             _ if item => prefix,
-                            _ if alert.is_some() => alert.as_ref().map_or(0, |a| a.2),
                             _ => 0,
                         };
                         let runs = text_runs(
@@ -2115,7 +2148,7 @@ impl Editor {
                             Some(Lead {
                                 line: None,
                                 len: 0,
-                                width: em * 1.875 * (parent + 1) as f32,
+                                width: em * 1.875 * (parent + 1) as f32 + quote_base,
                                 dy: px(0.),
                                 dx: px(0.),
                                 check: None,
@@ -2146,8 +2179,8 @@ impl Editor {
                                 chip: false,
                                 semi: false,
                             };
-                            let label = (kind == Kind::Ordered).then(|| {
-                                let source = line[md::indent_len(line)..marker].trim_end();
+                            let label = (ikind == Kind::Ordered).then(|| {
+                                let source = body[md::indent_len(body)..marker - ibase].trim_end();
                                 md::number_label(source, depth)
                             });
                             let text = label.as_ref().and_then(|s| {
@@ -2164,11 +2197,10 @@ impl Editor {
                                 }
                                 _ => px(0.),
                             };
-                            let task = md::task_box(line);
-                            let bullet = (kind == Kind::Bullet).then(|| Bullet::at(depth));
+                            let bullet = (ikind == Kind::Bullet).then(|| Bullet::at(depth));
                             // The width of the marker: a shape, a number, or a box (after a number
                             // for an ordered task, with `dot` between them).
-                            let mark = match kind {
+                            let mark = match ikind {
                                 Kind::Bullet => dot,
                                 Kind::Ordered => number,
                                 _ => side,
@@ -2180,7 +2212,7 @@ impl Editor {
                             // An ordered task: its number keeps the place of the other numbers of its depth
                             // (right-aligned before the gap, or further left for a wide one), then its box,
                             // then its text. A bullet task's box sits right-aligned before its text.
-                            let (text_at, check, number_right) = match (kind, task) {
+                            let (text_at, check, number_right) = match (ikind, task) {
                                 (Kind::Ordered, Some((at, done))) => {
                                     let number_right =
                                         (gutter * (depth + 1) as f32 - gap).max(number);
@@ -2204,14 +2236,21 @@ impl Editor {
                                 }
                                 (_, None) => (text_at, None, right),
                             };
+                            // A quote's bars come first: the item and its marker sit after them.
                             Some(Lead {
                                 line: text,
                                 len: 0,
-                                width: text_at,
+                                width: text_at + quote_base,
                                 dy: px(0.),
-                                dx: number_right - number,
-                                check,
-                                bullet: bullet.map(|shape| (shape, right - bullet_side..right)),
+                                dx: number_right - number + quote_base,
+                                check: check.map(|c| Check {
+                                    at: c.at,
+                                    x: c.x.start + quote_base..c.x.end + quote_base,
+                                    done: c.done,
+                                }),
+                                bullet: bullet.map(|shape| {
+                                    (shape, right - bullet_side + quote_base..right + quote_base)
+                                }),
                             })
                         } else if let Some((tint, label, _)) = alert.clone() {
                             // The icon's room (16 px and 6 px of gap, from 14 px in), then the kind's name, semibold.
@@ -2431,11 +2470,14 @@ impl Editor {
                             .get(offset + line.len() + 1..)
                             .and_then(|rest| rest.split('\n').next())
                             .unwrap_or("");
+                        // The quote goes on with a quote line of its own (a callout starts another) or a lazy line.
+                        let next_kind = md::classify(next, false).0;
+                        let goes_on = (next_kind == Kind::Quote && md::callout(next).is_none())
+                            || (nesting.open && next_kind == Kind::Para && !next.trim().is_empty());
                         (
                             own_tint.is_some()
                                 || !rows.last().is_some_and(|r| r.kind == Kind::Quote),
-                            md::classify(next, false).0 != Kind::Quote
-                                || md::callout(next).is_some(),
+                            !goes_on,
                         )
                     }
                     _ => (false, false),
@@ -3488,6 +3530,58 @@ mod tests {
         let _ = cx.update(|window, cx| window.draw(cx));
         cx.run_until_parked();
         (editor, cx)
+    }
+
+    /// A block quote: every marker hides off the live line, each level draws its bar (10 px apart) and its
+    /// content is laid out after the bars as its own kind (a bullet, a number, a heading, a lazy line in the quote).
+    #[gpui::test]
+    fn quote_levels_draw_bars_and_hide_their_markers(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n\n> > deep text\n>\n> - item\n> 1. one\n> # Head\n> para\nlazy\n\nafter\n\n> [!note]\n> - in alert";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let size = editor.read_with(cx, |e, _| e.theme.size);
+        // The indent of one level beyond the first, as the layout computes it.
+        let step = px(10. * (size / Prefs::SIZE));
+        let row = |cx: &mut gpui::VisualTestContext, line: usize| {
+            editor.read_with(cx, |e, _| {
+                let r = e.rows.iter().find(|r| r.start == lines[line]).unwrap();
+                (r.kind, r.bars(), r.shaped.lead.as_ref().map(|l| (l.width, l.bullet.is_some())), r.lh)
+            })
+        };
+        let shown = |cx: &mut gpui::VisualTestContext, line: usize| {
+            editor.read_with(cx, |e, _| displayed(e, lines[line]))
+        };
+        // Two levels: two bars, and the text starts one step after the outer bar's place.
+        let (kind, bars, lead, _) = row(cx, 2);
+        assert_eq!((kind, bars), (Kind::Quote, 2));
+        assert_eq!(lead.map(|(w, _)| w), Some(step));
+        assert_eq!(shown(cx, 2), ("deep text".to_string(), false));
+        // A bare `>` is a quote line with nothing in it: its bar stays, its marker hides.
+        assert_eq!(row(cx, 3).1, 1);
+        assert_eq!(shown(cx, 3), (String::new(), false));
+        // Items and headings in a quote: a bullet is drawn, numbers and titles keep their text.
+        let (_, bars, lead, _) = row(cx, 4);
+        assert_eq!((bars, lead.map(|(_, bullet)| bullet)), (1, Some(true)));
+        assert_eq!(shown(cx, 4), ("item".to_string(), false));
+        assert_eq!(shown(cx, 5), ("1. one".to_string(), false));
+        let (kind, bars, _, title) = row(cx, 6);
+        assert_eq!((kind, bars, shown(cx, 6)), (Kind::Quote, 1, ("Head".to_string(), false)));
+        assert!(title > row(cx, 7).3, "a heading in a quote has the title's line height");
+        // A paragraph line after a quoted paragraph is lazy: it stays in the quote.
+        assert_eq!(row(cx, 8).0, Kind::Quote);
+        assert_eq!((row(cx, 8).1, shown(cx, 8)), (1, ("lazy".to_string(), false)));
+        // A blank line ends the quote; the list in the alert keeps its bullet.
+        assert_eq!(row(cx, 9).0, Kind::Para);
+        assert_eq!(row(cx, 9).1, 0);
+        let (kind, bars, lead, _) = row(cx, 13);
+        assert_eq!((kind, bars, lead.map(|(_, bullet)| bullet)), (Kind::Quote, 1, Some(true)));
+        assert_eq!(shown(cx, 13), ("in alert".to_string(), false));
+        // The live line shows its source, markers and all, with its bars.
+        editor.update(cx, |e, _| e.revealed = Some(lines[2]));
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        assert_eq!(shown(cx, 2), ("> > deep text".to_string(), true));
+        assert_eq!(row(cx, 2).1, 2);
     }
 
     /// Each item's hidden prefix, its lead's source bytes (none: decorative), its glyph, its bullet's
