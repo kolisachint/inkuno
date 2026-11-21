@@ -138,6 +138,18 @@ pub struct Theme {
     /// code's background, `code_bg`.
     pub chip: Option<Hsla>,
     pub chip_line: Hsla,
+    /// Quiet's code block: the 1 px border of its box, its line-number gutter (fill, numbers, and the
+    /// rule beside it). The other themes draw the box in `code_bg` and no gutter.
+    pub code_line: Hsla,
+    pub gutter: Hsla,
+    pub gutter_num: Hsla,
+    /// Quiet's table: the outer border and the grid lines, its header fill. The others draw them in `code_bg`.
+    pub table_line: Hsla,
+    pub th: Hsla,
+    /// Quiet's image ring: a 1 px line over the picture's edge.
+    pub ring: Hsla,
+    /// Quiet's alert tints (NOTE, TIP, IMPORTANT, WARNING, CAUTION), legible on their fill; `None` elsewhere.
+    pub alerts: Option<[Hsla; 5]>,
     /// Lines that are not text but must be seen (3:1): graph edges, diagram strokes.
     pub line: Hsla,
     /// The surface of a hovered button or row: a little of the text over what is under it, so that it
@@ -448,6 +460,16 @@ struct Extras {
     quote_bar: u32,
     chip: u32,
     chip_line: u32,
+    code_line: u32,
+    gutter: u32,
+    gutter_num: u32,
+    th: u32,
+    /// Ink of the table lines and the ring (black in Light, white in Dark), at these alphas.
+    ink: u32,
+    table_alpha: f32,
+    ring_alpha: f32,
+    /// The five alert tints, NOTE to CAUTION.
+    alerts: [u32; 5],
 }
 
 /// The Quiet extras of the theme `name`, if it is one of the Quiet themes.
@@ -457,21 +479,37 @@ fn quiet_extras(name: &str) -> Option<Extras> {
             link: 0x105592,
             ground: 0xeff0f1,
             syntax: [0x8d9096, 0xb2565c, 0x89713a, 0x9759b3, 0x3878b1, 0x5f7e43],
-            todo_box: 0.22,
+            todo_box: 0.40,
             dots: 0.45,
             quote_bar: 0xc9cacb,
             chip: 0xf6f6f7,
             chip_line: 0xe2e3e3,
+            code_line: 0xeaebeb,
+            gutter: 0xf8f8f8,
+            gutter_num: 0xb9babc,
+            th: 0xf8f8f8,
+            ink: 0x000000,
+            table_alpha: 0.09,
+            ring_alpha: 0.08,
+            alerts: [0x2f6fd6, 0x2f8a57, 0x7c4dd6, 0xa8650a, 0xc93a3a],
         }),
         "Quiet Dark" => Some(Extras {
             link: 0x8ab4f8,
             ground: 0x141517,
             syntax: [0x8d9096, 0xe06c75, 0xd8b25c, 0xc58af9, 0x6cb6ff, 0x98c379],
-            todo_box: 0.22,
+            todo_box: 0.40,
             dots: 0.40,
             quote_bar: 0x4a4c4f,
             chip: 0x262628,
             chip_line: 0x353638,
+            code_line: 0x2e2f31,
+            gutter: 0x1f1f21,
+            gutter_num: 0x5b5d60,
+            th: 0x232325,
+            ink: 0xffffff,
+            table_alpha: 0.09,
+            ring_alpha: 0.08,
+            alerts: [0x6ea6ff, 0x58c48a, 0xa98bff, 0xe0a23c, 0xff7b72],
         }),
         _ => None,
     }
@@ -588,6 +626,24 @@ impl Theme {
             ),
             None => (soft, border, None, None, border),
         };
+        // Quiet's blocks: the box, gutter, table and image lines; the alerts' tints read on their fill
+        // (7 % of the tint over the page). The other themes keep their own colours (`None`, `code_bg`).
+        let (code_line, gutter, gutter_num, table_line, th, ring, alerts) = match &quiet {
+            Some(extras) => {
+                let ink = Hsla::from(rgb(extras.ink));
+                let fill = |c: u32| blend(Hsla::from(rgb(c)), bg, 0.07);
+                (
+                    Hsla::from(rgb(extras.code_line)),
+                    Hsla::from(rgb(extras.gutter)),
+                    Hsla::from(rgb(extras.gutter_num)),
+                    ink.opacity(extras.table_alpha),
+                    Hsla::from(rgb(extras.th)),
+                    ink.opacity(extras.ring_alpha),
+                    Some(extras.alerts.map(|c| legible(Hsla::from(rgb(c)), fill(c)))),
+                )
+            }
+            None => (border, code_bg, soft, code_bg, code_bg, border, None),
+        };
         Self {
             quiet: quiet.is_some(),
             todo_box,
@@ -595,6 +651,13 @@ impl Theme {
             dots,
             chip,
             chip_line,
+            code_line,
+            gutter,
+            gutter_num,
+            table_line,
+            th,
+            ring,
+            alerts,
             bg,
             text,
             dim,
@@ -716,6 +779,24 @@ impl Theme {
     /// label and the tint alone say the type.
     pub fn callout_label(&self, tint: Hsla) -> Hsla {
         blend(legible(tint, blend(tint, self.bg, 0.1)), self.text, 0.1)
+    }
+
+    /// The radius of a block's box (a code block, a table, a callout): 8 px at size 15 in Quiet, `band` elsewhere.
+    pub fn block_radius(&self) -> Pixels {
+        if self.quiet {
+            px(8. * self.size / Prefs::SIZE)
+        } else {
+            self.band()
+        }
+    }
+
+    /// Quiet's tint of a `[!TYPE]` alert (`label` with its brackets), if it is one of the five it has.
+    pub fn alert(&self, label: &str) -> Option<Hsla> {
+        let alerts = self.alerts?;
+        let kind = ["[!note]", "[!tip]", "[!important]", "[!warning]", "[!caution]"]
+            .iter()
+            .position(|k| label.eq_ignore_ascii_case(k))?;
+        Some(alerts[kind])
     }
 }
 
@@ -1240,7 +1321,7 @@ mod tests {
             );
             if name.starts_with("Quiet") {
                 assert!(t.quiet && t.dots.is_some() && t.chip.is_some(), "{name}");
-                assert_eq!(t.todo_box, t.text.opacity(0.22), "{name}");
+                assert_eq!(t.todo_box, t.text.opacity(0.40), "{name}");
             } else {
                 // The other themes keep the marks they had: a solid rule, no chip, a soft box border.
                 assert!(!t.quiet && t.dots.is_none() && t.chip.is_none(), "{name}");

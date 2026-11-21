@@ -293,6 +293,10 @@ pub(super) struct Row {
     pub(super) pend: Pend,
     /// The lists and indented code above the line, as the line leaves them (see `listing`).
     pub(super) nesting: Nesting,
+    /// Quiet's code gutter: its width, zero outside a numbered code block; and the number of a code line in it
+    /// (zero for none).
+    pub(super) gutter: Pixels,
+    pub(super) number: usize,
 }
 
 impl Row {
@@ -630,6 +634,8 @@ pub struct RunStyle {
     pub live: bool,
     /// Inline code is drawn as a chip by paint (Quiet), not as a background run.
     pub chip: bool,
+    /// Quiet's table header: semibold.
+    pub semi: bool,
 }
 
 /// The styles of the line `text`, `flags` (one flag word per byte), in one piece
@@ -706,7 +712,7 @@ pub fn text_runs(
                     // Titles: the first two levels in bold, the others in semibold.
                     weight: if style.heading == 1 || style.heading == 2 {
                         FontWeight::BOLD
-                    } else if style.heading > 0 {
+                    } else if style.heading > 0 || style.semi {
                         FontWeight::SEMIBOLD
                     } else if f & md::BOLD != 0 {
                         FontWeight::BOLD
@@ -759,6 +765,34 @@ pub fn text_runs(
         i = j;
     }
     runs
+}
+
+/// The lines of the indented code block that starts `rest` (its first line is indented): up to the first
+/// line that is not, blank lines at its end not counted.
+fn indented_lines(rest: &str) -> usize {
+    let (mut count, mut blank) = (0, 0);
+    for line in rest.split('\n') {
+        if line.trim().is_empty() {
+            blank += 1;
+        } else if md::indent_columns(line) < 4 {
+            break;
+        } else {
+            count += blank + 1;
+            blank = 0;
+        }
+    }
+    count
+}
+
+/// The name of a Quiet alert, from its `[!TYPE]` label.
+fn alert_name(label: &str) -> &'static str {
+    match label.to_ascii_lowercase().as_str() {
+        "[!tip]" => tr("Tip", "Astuce"),
+        "[!important]" => tr("Important", "Important"),
+        "[!warning]" => tr("Warning", "Avertissement"),
+        "[!caution]" => tr("Caution", "Attention"),
+        _ => tr("Note", "Note"),
+    }
 }
 
 /// Byte ranges of `line` hidden when it is not the live one, from `marker` on: its inline style
@@ -1299,6 +1333,13 @@ impl Editor {
             .advance(text_system.resolve_font(&font(sans())), px(16.), '≠')
             .is_ok();
         let mut lang = String::new();
+        // Quiet's code gutter: a digit of the code face, and the gutter of a block of `lines` lines (10 px each side).
+        let quiet_scale = t.size / Prefs::SIZE;
+        let digit = text_system
+            .advance(text_system.resolve_font(&font(mono())), px(13. * quiet_scale), '0')
+            .map_or(px(8. * quiet_scale), |s| s.width);
+        let gutter_of = |lines: usize| px(20. * quiet_scale) + digit * lines.max(1).to_string().len() as f32;
+        let mut gutter_now = px(0.);
         // Mermaid diagrams and LaTeX formulas: drawn once, reused afterwards.
         let rgb = |c: Hsla| {
             let c = Rgba::from(c);
@@ -1399,6 +1440,9 @@ impl Editor {
         let meta = md::front_matter(&self.content);
         // Color of a `[!TYPE]` callout: its tint tells its type.
         let tint_of = |label: &str| {
+            if let Some(c) = t.alert(label) {
+                return c;
+            }
             let h = match label.to_ascii_lowercase().as_str() {
                 "[!tip]" | "[!success]" => 0.38,
                 "[!important]" => 0.75,
@@ -1528,6 +1572,8 @@ impl Editor {
                         grid: None,
                         broken: None,
                         nesting: nesting.clone(),
+                        gutter: px(0.),
+                        number: 0,
                     });
                     y += height;
                     offset += line.len() + 1;
@@ -1579,6 +1625,24 @@ impl Editor {
                         broken =
                             failed(&kept, k.0).then(|| tr("Unreadable figure", "Figure illisible"));
                     }
+                }
+                // Quiet's gutter: a fenced block keeps the width of its lines from its opening fence (a Mermaid
+                // block keeps none), an indented one from its first line.
+                if !matches!(kind, Kind::Code | Kind::Fence) {
+                    gutter_now = px(0.);
+                } else if kind == Kind::Fence && opens {
+                    gutter_now = match fenced.binary_search_by_key(&offset, |b| b.open).ok().map(|i| fenced[i]) {
+                        Some(b) if t.quiet && lang != "mermaid" => {
+                            gutter_of(self.content[b.open..b.close].matches('\n').count().saturating_sub(1))
+                        }
+                        _ => px(0.),
+                    };
+                } else if kind == Kind::Code && code_now && t.quiet && !rows.last().is_some_and(|r| r.kind == Kind::Code) {
+                    gutter_now = gutter_of(indented_lines(&self.content[offset..]));
+                }
+                let gutter_here = if matches!(kind, Kind::Code | Kind::Fence) { gutter_now } else { px(0.) };
+                if kind == Kind::Fence && !opens {
+                    gutter_now = px(0.);
                 }
                 let code = matches!(kind, Kind::Code | Kind::Fence | Kind::Meta);
                 // Formula over several lines, between two `$$` lines.
@@ -1681,6 +1745,8 @@ impl Editor {
                                 grid: None,
                                 broken: None,
                                 nesting: nesting.clone(),
+                                gutter: px(0.),
+                                number: 0,
                             });
                             y += height;
                         }
@@ -1804,6 +1870,7 @@ impl Editor {
                             tinted,
                             foot,
                             pend,
+                            f32::from(gutter_here).to_bits(),
                         ),
                     )
                         .hash(&mut hasher);
@@ -1811,6 +1878,22 @@ impl Editor {
                 };
                 // A title's lines are closer than the body's, so that it belongs to what follows.
                 let lh = (font_size * leading).round();
+                // Quiet's alert, when not live: its `[!TYPE]` marker is cut, and the line shows an icon and the kind's name.
+                // Its text is indented to the box's padding (14 px from its edge, the box lies 12 px out).
+                let alert = match own_tint.zip(md::callout(line)) {
+                    Some((tint, label)) if t.quiet && !live && kind == Kind::Quote => {
+                        let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+                        Some((tint, label.clone(), label.end - marker.saturating_sub(indent)))
+                    }
+                    _ => None,
+                };
+                let indent = if t.quiet && tinted && kind == Kind::Quote {
+                    px(14. * quiet_scale - 12.)
+                } else if t.quiet && gutter_here > px(0.) && matches!(kind, Kind::Code | Kind::Fence) {
+                    gutter_here + px(14. * quiet_scale - 12.)
+                } else {
+                    px(0.)
+                };
                 let made = if grid_row.is_some() {
                     empty.clone()
                 } else {
@@ -1982,12 +2065,14 @@ impl Editor {
                             tint: own_tint,
                             live,
                             chip: t.chip.is_some() && !math,
+                            semi: false,
                         };
                         // The source before the text: a heading's `#` (its lead shows it when live), a
                         // list item's prefix (hidden off-live: its lead draws the marker instead).
                         let cut = match kind {
                             Kind::Heading(_) => marker,
                             _ if item => prefix,
+                            _ if alert.is_some() => alert.as_ref().map_or(0, |a| a.2),
                             _ => 0,
                         };
                         let runs = text_runs(
@@ -2014,6 +2099,7 @@ impl Editor {
                             tint: None,
                             live: true,
                             chip: false,
+                            semi: false,
                         };
                         let mut lead = if let Some(parent) = cont.filter(|_| item) {
                             // A continuation hangs at the text of the item it belongs to. Its source
@@ -2053,6 +2139,7 @@ impl Editor {
                                 tint: None,
                                 live: true,
                                 chip: false,
+                                semi: false,
                             };
                             let label = (kind == Kind::Ordered).then(|| {
                                 let source = line[md::indent_len(line)..marker].trim_end();
@@ -2121,6 +2208,42 @@ impl Editor {
                                 check,
                                 bullet: bullet.map(|shape| (shape, right - bullet_side..right)),
                             })
+                        } else if let Some((tint, label, _)) = alert.clone() {
+                            // The icon's room (16 px and 6 px of gap, from 14 px in), then the kind's name, semibold.
+                            let name = alert_name(&line[label]);
+                            let runs = [TextRun {
+                                len: name.len(),
+                                font: Font {
+                                    weight: FontWeight::SEMIBOLD,
+                                    ..font(sans())
+                                },
+                                color: tint,
+                                background_color: None,
+                                underline: None,
+                                strikethrough: None,
+                            }];
+                            let text = shape(name, px(14. * quiet_scale), &runs, None);
+                            let width = px(24. * quiet_scale) + text.as_ref().map_or(px(0.), |l| l.width());
+                            Some(Lead {
+                                line: text,
+                                len: 0,
+                                width,
+                                dy: px(0.),
+                                dx: px(24. * quiet_scale),
+                                check: None,
+                                bullet: None,
+                            })
+                        } else if indent > px(0.) {
+                            // A box's text, or a code block's, begins past its gutter (none outside Quiet).
+                            Some(Lead {
+                                line: None,
+                                len: 0,
+                                width: indent,
+                                dy: px(0.),
+                                dx: px(0.),
+                                check: None,
+                                bullet: None,
+                            })
                         } else {
                             // The live line shows its `# ` marker; the others hide it (see `elided`).
                             (cut > 0 && live)
@@ -2154,7 +2277,7 @@ impl Editor {
                         let line = shape(&shown[cut..], font_size, &runs, wrap);
                         // A heading's `#` sits on the title's baseline (a list marker is at the body size: none).
                         if let Some(lead) = &mut lead
-                            && lead.len > 0
+                            && (lead.len > 0 || alert.is_some())
                             && let Some(glyph) = &lead.line
                         {
                             // An empty title has no metrics of its own: those of a letter will do.
@@ -2350,11 +2473,24 @@ impl Editor {
                     broken,
                     pend,
                     nesting: nesting.clone(),
+                    gutter: gutter_here,
+                    number: 0,
                 };
                 let height = row.height + row.image_height() + row.gap;
                 rows.push(Row { height, ..row });
                 y += height;
                 offset += line.len() + 1;
+            }
+        }
+        // Quiet's code lines are numbered from 1 in their block (a block opens on its `head` row).
+        let mut number = 0;
+        for row in rows.iter_mut() {
+            if row.head {
+                number = 0;
+            }
+            if row.kind == Kind::Code && row.gutter > px(0.) {
+                number += 1;
+                row.number = number;
             }
         }
         if let Some(last) = rows
@@ -2769,6 +2905,7 @@ mod tests {
             tint: None,
             live: true,
             chip: false,
+            semi: false,
         }
     }
 

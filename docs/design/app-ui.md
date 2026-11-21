@@ -117,6 +117,8 @@ A **Typora-inspired, document-first writing app**:
   are Quiet Dark and Quiet Light, picked by the system appearance when no theme is chosen. The Quiet extras
   (link, ground, six code colours) are set in `quiet_extras` (`crates/inkuno/src/ui/theme.rs`); other themes derive them.
 
+- **2026-11-21: Quiet block styles** (Quiet Light and Quiet Dark only; the other themes keep theirs). A code block is a box with a 1 px `code_line` border and radius 8, its line numbers in a gutter (mono 13, `gutter_num` on `gutter`, 10 px each side, a 1 px divider), the fences showing their language alone off the live block. A table has a 1 px `table_line` frame and grid, radius 8, a `th` header in semibold, cells padded 12 × 9. An alert (`> [!NOTE]`, TIP, IMPORTANT, WARNING, CAUTION) is a radius-8 box of its tint at 7 % with a 22 % line, its first line an info icon and the kind's name in semibold 14, its `[!TYPE]` cut off the live line. An image has radius 8 and a 1 px ring. An unchecked to-do box is drawn at text 40 % on whole pixels. Tokens: `Theme::code_line`, `gutter`, `gutter_num`, `table_line`, `th`, `ring`, `alerts`, `block_radius()`.
+
 ## 4. Layout standard: three regions
 
 ```

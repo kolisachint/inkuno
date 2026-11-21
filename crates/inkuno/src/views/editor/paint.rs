@@ -177,6 +177,14 @@ impl Element for EditorElement {
 }
 
 impl Editor {
+    /// Whether the caret is in the code block that row `i` belongs to (its head to its foot).
+    fn code_live(&self, i: usize, cursor: usize) -> bool {
+        let head = (0..=i).rev().find(|&r| self.rows[r].head).unwrap_or(0);
+        let foot = (i..self.rows.len()).find(|&r| self.rows[r].foot).unwrap_or(i);
+        let (a, b) = (self.rows[head].start, self.rows[foot].start + self.rows[foot].len);
+        (a..=b).contains(&cursor)
+    }
+
     pub(super) fn paint(&self, focused: bool, window: &mut Window, cx: &mut App) {
         let (t, o, w) = (self.theme, self.origin, self.width);
         let cursor = self.cursor();
@@ -205,11 +213,68 @@ impl Editor {
             let text_top = top + row.pad;
             let end = row.start + row.len;
             let has_cursor = (row.start..=end).contains(&cursor);
+            // Quiet: a fenced block shows its fences as source only while the caret is in it; off it, the
+            // opening one shows the language, the closing one nothing.
+            let fence_hidden =
+                t.quiet && row.kind == Kind::Fence && row.gutter > px(0.) && !self.code_live(i, cursor);
             let clear = t.px(3.);
             let block = |x: Pixels, y: Pixels, w: Pixels, h: Pixels| {
                 Bounds::new(point(o.x + x, y), size(w, h))
             };
             match row.kind {
+                Kind::Code | Kind::Fence if row.gutter > px(0.) => {
+                    // Quiet: a box with a 1 px line (the top and bottom only on its head and foot), and its line
+                    // numbers in a gutter; the fences show their source on the live block alone.
+                    let (y, h) = shape_span(row, top, clear);
+                    let s = t.size / crate::logic::prefs::Prefs::SIZE;
+                    let (radius, one) = (px(8. * s), px(1.));
+                    let edge = |on: bool| if on { one } else { px(0.) };
+                    let rim = gpui::Edges {
+                        top: edge(row.head),
+                        right: one,
+                        bottom: edge(row.foot),
+                        left: one,
+                    };
+                    window.paint_quad(quad(
+                        block(px(-12.), y, w + px(24.), h),
+                        corners(radius, row),
+                        t.code_bg,
+                        rim,
+                        t.code_line,
+                        BorderStyle::default(),
+                    ));
+                    let gutter = row.gutter;
+                    let lip = |on: bool| if on { radius - one } else { px(0.) };
+                    window.paint_quad(
+                        fill(block(px(-11.), y, gutter - one, h), t.gutter).corner_radii(Corners {
+                            top_left: lip(row.head),
+                            bottom_left: lip(row.foot),
+                            top_right: px(0.),
+                            bottom_right: px(0.),
+                        }),
+                    );
+                    window.paint_quad(fill(block(px(-12.) + gutter - one, y, one, h), t.code_line));
+                    if row.number > 0 {
+                        let digits = row.number.to_string();
+                        let size = px(13. * s);
+                        let run = TextRun {
+                            len: digits.len(),
+                            font: font(mono()),
+                            color: t.gutter_num,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        let num = window.text_system().shape_line(
+                            SharedString::from(digits),
+                            size,
+                            &[run],
+                            None,
+                        );
+                        let at = o.x + px(-12.) + gutter - px(10. * s) - num.width;
+                        num.paint(point(at, text_top), row.lh, window, cx).ok();
+                    }
+                }
                 Kind::Code | Kind::Fence => {
                     let (y, h) = shape_span(row, top, clear);
                     window.paint_quad(
@@ -219,7 +284,44 @@ impl Editor {
                 }
                 Kind::Quote => {
                     // A callout is its tinted shape alone, lined up with the code blocks; a plain quote keeps a thin neutral bar.
-                    if let Some(tint) = row.tint {
+                    if let Some(tint) = row.tint
+                        && t.quiet
+                    {
+                        // Quiet: 7 % of the tint, a 1 px line of 22 %, and the alert's icon on its first line (not live).
+                        let (y, h) = shape_span(row, top, clear);
+                        let s = t.size / crate::logic::prefs::Prefs::SIZE;
+                        let one = px(1.);
+                        let rim = gpui::Edges {
+                            top: if row.head { one } else { px(0.) },
+                            right: one,
+                            bottom: if row.foot { one } else { px(0.) },
+                            left: one,
+                        };
+                        window.paint_quad(quad(
+                            block(px(-12.), y, w + px(24.), h),
+                            corners(t.block_radius(), row),
+                            tint.opacity(0.07),
+                            rim,
+                            tint.opacity(0.22),
+                            BorderStyle::default(),
+                        ));
+                        if row.head && !row.live {
+                            let icon = px(16. * s);
+                            let at = Bounds::new(
+                                point(o.x + px(14. * s - 12.), text_top + (row.lh - icon) / 2.),
+                                size(icon, icon),
+                            );
+                            window
+                                .paint_svg(
+                                    at,
+                                    "info.svg".into(),
+                                    TransformationMatrix::unit(),
+                                    tint,
+                                    cx,
+                                )
+                                .ok();
+                        }
+                    } else if let Some(tint) = row.tint {
                         let (y, h) = shape_span(row, top, clear);
                         window.paint_quad(
                             fill(block(px(-12.), y, w + px(24.), h), tint.opacity(0.1))
@@ -291,7 +393,7 @@ impl Editor {
                         .all(Row::hidden);
                     grid.paint_back(
                         Bounds::new(point(left, top), size(wide, row.height - row.gap)),
-                        t.band(),
+                        t.block_radius(),
                         ends,
                         &t,
                         window,
@@ -548,10 +650,14 @@ impl Editor {
                             } else {
                                 text_top + row.lh * 0.5 + px(t.size * 0.1)
                             };
-                            let bounds = Bounds::new(
-                                point(left + check.x.start, mid - side / 2.),
-                                size(side, side),
-                            );
+                            // Quiet: the box sits on whole pixels, so that its 1 px border is one line, not two.
+                            let origin = point(left + check.x.start, mid - side / 2.);
+                            let origin = if t.quiet {
+                                point(px(f32::from(origin.x).round()), px(f32::from(origin.y).round()))
+                            } else {
+                                origin
+                            };
+                            let bounds = Bounds::new(origin, size(side, side));
                             let (radius, edge) = if t.quiet {
                                 let scale = t.size / crate::logic::prefs::Prefs::SIZE;
                                 (px(5. * scale), px(scale))
@@ -597,7 +703,7 @@ impl Editor {
                             }
                         }
                     }
-                    if let Some(line) = &row.shaped.line {
+                    if let Some(line) = row.shaped.line.as_ref().filter(|_| !fence_hidden) {
                         let at = lead.map_or(px(0.), |l| l.width);
                         line.paint(
                             point(o.x - row.dx + at, text_top),
@@ -608,6 +714,30 @@ impl Editor {
                             cx,
                         )
                         .ok();
+                    }
+                }
+                if fence_hidden && row.opens {
+                    let info = md::fence_of(&self.content[row.start..end])
+                        .map(|(_, info)| info.trim().to_string())
+                        .unwrap_or_default();
+                    if !info.is_empty() {
+                        let run = TextRun {
+                            len: info.len(),
+                            font: font(sans()),
+                            color: t.soft,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        let s = t.size / crate::logic::prefs::Prefs::SIZE;
+                        let name = window.text_system().shape_line(
+                            SharedString::from(info),
+                            px(11. * s),
+                            &[run],
+                            None,
+                        );
+                        let at = o.x + px(14. * s - 12.) + row.gutter;
+                        name.paint(point(at, text_top), row.lh, window, cx).ok();
                     }
                 }
                 if focused && sel.is_empty() && has_cursor {
@@ -628,9 +758,25 @@ impl Editor {
             });
             if let Some((image, s)) = &row.image {
                 let at = block(px(0.), o.y + row.image_top(), s.width, s.height);
+                // Quiet: radius 8 and a 1 px ring over the edge (both at size 15).
+                let radius = if t.quiet {
+                    px(8. * t.size / crate::logic::prefs::Prefs::SIZE)
+                } else {
+                    px(6.)
+                };
                 window
-                    .paint_image(at, Corners::all(px(6.)), image.clone(), 0, false)
+                    .paint_image(at, Corners::all(radius), image.clone(), 0, false)
                     .ok();
+                if t.quiet {
+                    window.paint_quad(quad(
+                        at,
+                        radius,
+                        Hsla::transparent_black(),
+                        px(1.),
+                        t.ring,
+                        BorderStyle::default(),
+                    ));
+                }
             } else if let Some(said) = row.broken {
                 label(said, t.soft, window)
                     .paint(point(o.x, o.y + row.image_top()), BROKEN, window, cx)
@@ -735,10 +881,10 @@ impl Editor {
             );
             window.paint_quad(quad(
                 area,
-                t.band(),
+                t.block_radius(),
                 Hsla::transparent_black(),
                 px(1.),
-                t.code_bg,
+                t.table_line,
                 BorderStyle::default(),
             ));
         }
