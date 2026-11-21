@@ -305,6 +305,13 @@ impl Editor {
                             tint.opacity(0.22),
                             BorderStyle::default(),
                         ));
+                        // A quote inside the callout: its own bars, from the second level on.
+                        for level in 1..row.bars() {
+                            window.paint_quad(
+                                fill(block(px(-14. + 10. * level as f32), y, px(3.), h), t.quote_bar)
+                                    .corner_radii(corners(px(1.5), row)),
+                            );
+                        }
                         if row.head && !row.live {
                             let icon = px(16. * s);
                             let at = Bounds::new(
@@ -328,10 +335,13 @@ impl Editor {
                                 .corner_radii(corners(t.band(), row)),
                         );
                     } else {
-                        window.paint_quad(
-                            fill(block(px(-14.), top, px(3.), row.height), t.quote_bar)
-                                .corner_radii(corners(px(1.5), row)),
-                        )
+                        // One bar per level of the quote, 10 px apart: the outer one at -14 px.
+                        for level in 0..row.bars() {
+                            window.paint_quad(
+                                fill(block(px(-14. + 10. * level as f32), top, px(3.), row.height), t.quote_bar)
+                                    .corner_radii(corners(px(1.5), row)),
+                            );
+                        }
                     }
                 }
                 Kind::Rule if !row.live => {
