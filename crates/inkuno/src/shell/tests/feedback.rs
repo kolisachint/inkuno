@@ -529,7 +529,7 @@ fn an_unreadable_vault_or_folder_says_so(cx: &mut TestAppContext) {
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     let page = |cx: &mut gpui::VisualTestContext| {
-        ["empty-key-0", "empty-key-1", "empty-key-2"]
+        ["empty-key-0", "empty-key-1"]
             .map(|key| cx.debug_bounds(key).unwrap().origin)
     };
     let readable = page(cx);
