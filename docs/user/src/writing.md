@@ -11,7 +11,7 @@ What you type is what is saved. Inkuno only changes how it looks. Off the line y
 | `1. ` or `1) ` | a numbered list, renumbered as you add, remove or indent items |
 | `[] ` or `- [ ] ` | a task: click the box or press `Ctrl + Enter` to check it. `- [x] ` is a ticked one, and `*` or `+` work in place of `-`. |
 | `[ ]` or `[x]` | a box on its own, in a sentence or in a table cell: click it, or press `Ctrl + Enter` next to it |
-| `> ` | a quote |
+| `> ` | a quote; `> >` nests one inside it, with one bar per level |
 | `> [!NOTE]` | a colored panel: that line and the quote lines after it |
 | `` ``` `` or `~~~`, then `Enter` | a code block, closed for you with the same mark |
 | `\| a \| b \|` | a table |
