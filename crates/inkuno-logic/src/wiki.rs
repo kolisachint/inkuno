@@ -356,7 +356,7 @@ fn rewrite(
             out.push_str(line);
             continue;
         }
-        let mut flags = vec![0u16; line.len()];
+        let mut flags = vec![0u32; line.len()];
         markdown::inline(line, 0, &mut flags);
         let mut done = 0;
         let mut from = 0;

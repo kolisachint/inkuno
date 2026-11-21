@@ -6,9 +6,9 @@ Every choice is a command of the palette: type its name, and see the result at o
 
 Type `theme` in the palette.
 
-- 13 themes: Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light).
+- 15 themes: Quiet Dark and Quiet Light, Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light).
 - Each theme is applied as you move through the list, so you see it before choosing. `Enter` keeps it, `Esc` goes back to the one you had.
-- `Default` follows the light or dark setting of your system, with Inkuno Light or Inkuno Dark.
+- `Default` follows the light or dark setting of your system, with Quiet Light or Quiet Dark.
 - In every theme, links, secondary text and the titles of colored panels are adjusted to a contrast of at least 4.5:1 (WCAG AA).
 
 **The look.** The window is a warm ground, a little darker than the page in every theme. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart. Page titles follow your text font too, Inter by default.

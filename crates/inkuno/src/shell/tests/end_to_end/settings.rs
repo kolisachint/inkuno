@@ -207,7 +207,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("escape");
     assert_eq!(look(cx), system);
     cx.dispatch_action(ChooseTheme);
-    cx.simulate_keystrokes("down down enter");
+    cx.simulate_input("inkuno light");
+    cx.simulate_keystrokes("enter");
     assert_eq!(
         look(cx),
         ("Inkuno Light".to_string(), Hsla::from(gpui::rgb(0xf5f5f2)))

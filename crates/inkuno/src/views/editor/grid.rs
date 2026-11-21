@@ -546,7 +546,7 @@ fn shape(
             subs: Vec::new(),
         };
     }
-    let mut flags = vec![0u16; text.len()];
+    let mut flags = vec![0u32; text.len()];
     md::inline(text, 0, &mut flags);
     md::footnote_flags(text, &mut flags, defined);
     let hidden = if hide {
@@ -563,7 +563,7 @@ fn shape(
 fn shape_flags(
     text_system: &WindowTextSystem,
     text: &str,
-    mut flags: Vec<u16>,
+    mut flags: Vec<u32>,
     wrap: Option<Pixels>,
     bold: bool,
     marked: &Option<Range<usize>>,

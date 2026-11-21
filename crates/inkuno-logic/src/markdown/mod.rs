@@ -44,24 +44,27 @@ pub enum Link {
 }
 
 // Inline styles, one word of flags per byte of text.
-pub const BOLD: u16 = 1;
-pub const ITALIC: u16 = 2;
-pub const CODE: u16 = 4;
-pub const STRIKE: u16 = 8;
-pub const DIM: u16 = 16;
-pub const LINK: u16 = 32;
-pub const TAG: u16 = 64;
-pub const MARK: u16 = 128;
+pub const BOLD: u32 = 1;
+pub const ITALIC: u32 = 2;
+pub const CODE: u32 = 4;
+pub const STRIKE: u32 = 8;
+pub const DIM: u32 = 16;
+pub const LINK: u32 = 32;
+pub const TAG: u32 = 64;
+pub const MARK: u32 = 128;
 // Highlight `==text==` and underline `<u>text</u>` (Markdown has no underline: the HTML tag serves).
-pub const HIGHLIGHT: u16 = 2048;
-pub const UNDER: u16 = 4096;
+pub const HIGHLIGHT: u32 = 2048;
+pub const UNDER: u32 = 4096;
 // Text that steps back but is still read (front matter, the address of a link, comments): `DIM` for the
 // rest of the code, drawn readable.
-pub const QUIET: u16 = 8192;
+pub const QUIET: u32 = 8192;
 // Code block coloring.
-pub const KEYWORD: u16 = 256;
-pub const STRING: u16 = 512;
-pub const NUMBER: u16 = 1024;
+pub const KEYWORD: u32 = 256;
+pub const STRING: u32 = 512;
+pub const NUMBER: u32 = 1024;
+pub const COMMENT: u32 = 16384;
+pub const TYPE: u32 = 32768;
+pub const FUNCTION: u32 = 65536;
 
 pub const INDENT: &str = "    ";
 
@@ -463,7 +466,7 @@ pub fn count_footnotes(text: &str) -> usize {
 /// Back to literal text for the references of `line` that `defined` does not know: only defined
 /// labels keep the link style that `links_and_comments` gives every reference. Only the brackets
 /// lose `DIM` (a label keeps its emphasis, if any); the label loses `LINK`.
-pub fn footnote_flags(line: &str, flags: &mut [u16], defined: &dyn Fn(&str) -> bool) {
+pub fn footnote_flags(line: &str, flags: &mut [u32], defined: &dyn Fn(&str) -> bool) {
     for (r, label) in footnote_ref(line) {
         if !defined(&label) {
             for f in &mut flags[r.start..r.start + 2] {
@@ -569,7 +572,7 @@ fn boxes(line: &str, from: usize) -> impl Iterator<Item = Range<usize>> + '_ {
 
 /// The line's checkboxes, outside inline code.
 pub fn checkboxes(line: &str, from: usize) -> Vec<Range<usize>> {
-    let mut flags = vec![0u16; line.len()];
+    let mut flags = vec![0u32; line.len()];
     inline(line, from, &mut flags);
     boxes(line, from)
         .filter(|r| flags[r.start] & CODE == 0)
@@ -614,7 +617,7 @@ pub fn mark_signs(color: usize) -> (String, &'static str) {
 }
 
 /// Fills `flags` with the inline styles of `line` from byte `from`: all of them.
-pub fn inline(line: &str, from: usize, flags: &mut [u16]) {
+pub fn inline(line: &str, from: usize, flags: &mut [u32]) {
     emphasis(line, from, flags);
     let b = line.as_bytes();
     // A `[ ]` or `[x]` checkbox: colored, bold once checked.
@@ -631,13 +634,13 @@ pub fn inline(line: &str, from: usize, flags: &mut [u16]) {
 
 /// Fills `flags` with the styles made by marks alone (`**`, `*`, `_`, `~~`, `==`, `<u>`, `<mark>`, backticks):
 /// the marks are `DIM`. Texts that are not notes (a diagram's) read only this part.
-pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
+pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
     let b = line.as_bytes();
     let alnum = |i: Option<usize>| {
         i.and_then(|i| b.get(i))
             .is_some_and(u8::is_ascii_alphanumeric)
     };
-    let mut active = 0u16;
+    let mut active = 0u32;
     // The current highlight opened with `<mark>` (otherwise with `==`): it closes the same way.
     let mut tagged = false;
     let mut i = from;
@@ -724,7 +727,7 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
 }
 
 /// Links, tags, footnote references and comments: what notes add to the styles of the marks.
-fn links_and_comments(line: &str, from: usize, flags: &mut [u16]) {
+fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
     for (r, link) in links(line) {
         if r.start < from {
             continue;
@@ -850,10 +853,10 @@ pub fn tags(line: &str, table: bool) -> Vec<Range<usize>> {
 }
 
 /// The styles the formatting bar applies, in the order of its buttons.
-pub const STYLES: [u16; 6] = [BOLD, ITALIC, UNDER, STRIKE, HIGHLIGHT, CODE];
+pub const STYLES: [u32; 6] = [BOLD, ITALIC, UNDER, STRIKE, HIGHLIGHT, CODE];
 
 /// The ways a style is written: `(opening, closing)`, the first is the one applied.
-pub fn delimiters(flag: u16) -> &'static [(&'static str, &'static str)] {
+pub fn delimiters(flag: u32) -> &'static [(&'static str, &'static str)] {
     match flag {
         BOLD => &[("**", "**")],
         ITALIC => &[("*", "*"), ("_", "_")],
@@ -866,8 +869,8 @@ pub fn delimiters(flag: u16) -> &'static [(&'static str, &'static str)] {
 }
 
 /// The inline styles of `line` (see `inline`), one word per byte.
-pub fn flags(line: &str, from: usize) -> Vec<u16> {
-    let mut flags = vec![0u16; line.len()];
+pub fn flags(line: &str, from: usize) -> Vec<u32> {
+    let mut flags = vec![0u32; line.len()];
     inline(line, from.min(line.len()), &mut flags);
     flags
 }
@@ -880,9 +883,9 @@ pub fn flags(line: &str, from: usize) -> Vec<u16> {
 // a selection straddling two spans of the same style removes neither (the style is applied again).
 pub fn unmark(
     line: &str,
-    flags: &[u16],
+    flags: &[u32],
     sel: Range<usize>,
-    flag: u16,
+    flag: u32,
 ) -> Option<(Range<usize>, Range<usize>)> {
     let has = |i: usize| flags.get(i).is_some_and(|f| f & flag != 0);
     let pivot = if sel.is_empty() {
@@ -1025,11 +1028,11 @@ const KEYWORDS: &[&str] = &[
     "yield",
 ];
 
-/// Colors a line of code: comments, strings, numbers and keywords.
+/// Colors a line of code: comments, strings, numbers, keywords, types (CamelCase) and calls (`name(`).
 // ponytail: a single line-by-line lexer for all languages, with no state from one
 // line to the next (`/* */` comments and multi-line strings ignored).
 // Move to a grammar per language (tree-sitter) if coloring becomes wrong.
-pub fn code(line: &str, lang: &str, flags: &mut [u16]) {
+pub fn code(line: &str, lang: &str, flags: &mut [u32]) {
     let comment = match lang {
         "py" | "python" | "sh" | "bash" | "zsh" | "fish" | "shell" | "yaml" | "yml" | "toml"
         | "rb" | "ruby" | "r" | "perl" | "make" | "makefile" | "dockerfile" | "conf" | "ini"
@@ -1042,7 +1045,7 @@ pub fn code(line: &str, lang: &str, flags: &mut [u16]) {
     while i < line.len() {
         let rest = &line[i..];
         if rest.starts_with(comment) {
-            flags[i..].fill(DIM | ITALIC | QUIET);
+            flags[i..].fill(DIM | ITALIC | QUIET | COMMENT);
             return;
         }
         let c = rest.chars().next().unwrap();
@@ -1074,10 +1077,15 @@ pub fn code(line: &str, lang: &str, flags: &mut [u16]) {
             let n = rest
                 .find(|x: char| !x.is_alphanumeric() && x != '_')
                 .unwrap_or(rest.len());
+            let word = &rest[..n];
             (
                 n,
-                if KEYWORDS.contains(&&rest[..n]) {
+                if KEYWORDS.contains(&word) {
                     KEYWORD
+                } else if word.starts_with(char::is_uppercase) && word.contains(char::is_lowercase) {
+                    TYPE
+                } else if rest[n..].starts_with('(') {
+                    FUNCTION
                 } else {
                     0
                 },
@@ -1121,7 +1129,7 @@ const SYMBOLS: &[(&str, &str)] = &[
 
 /// Symbols to display in place of their ASCII spelling (`->` becomes `→`), outside
 /// code and links: (start byte, replaced length, symbol). The text does not change.
-pub fn symbols(line: &str, from: usize, flags: &[u16]) -> Vec<(usize, usize, &'static str)> {
+pub fn symbols(line: &str, from: usize, flags: &[u32]) -> Vec<(usize, usize, &'static str)> {
     let b = line.as_bytes();
     // A symbol stuck to another operator (`-->`, `!==`, `<--`) stays as is.
     let glued = |i: Option<usize>| {
@@ -1866,7 +1874,7 @@ mod tests {
                 "AAA".into()
             )
         );
-        let mut flags = vec![0u16; line.len()];
+        let mut flags = vec![0u32; line.len()];
         inline(line, 0, &mut flags);
         assert!(flags[3..6].iter().all(|f| *f == DIM) && flags[6] == 0 && flags[12] == BOLD);
         assert!(
@@ -1937,7 +1945,7 @@ mod tests {
                 && !is_url("https://a b")
                 && !is_url("a.b")
         );
-        let mut flags = vec![0u16; 31];
+        let mut flags = vec![0u32; 31];
         inline("lire [la doc](https://a.b/c#d).", 0, &mut flags);
         assert!(
             flags[5] == DIM
@@ -1975,7 +1983,7 @@ mod tests {
     #[test]
     fn styles_inline() {
         let line = "a **b** `c*` snake_case_x *é*";
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         inline(line, 0, &mut f);
         assert_eq!(f[2], DIM);
         assert_eq!(f[4], BOLD);
@@ -2283,7 +2291,7 @@ mod tests {
     #[test]
     fn finds_the_marks_to_remove() {
         let cut =
-            |line: &str, sel: Range<usize>, flag: u16| unmark(line, &flags(line, 0), sel, flag);
+            |line: &str, sel: Range<usize>, flag: u32| unmark(line, &flags(line, 0), sel, flag);
         // A cursor in the span, at its edge, or between its marks; outside everything, nothing.
         assert_eq!(cut("a **bc** d", 5..5, BOLD), Some((2..4, 6..8)));
         assert_eq!(cut("a **bc** d", 4..4, BOLD), Some((2..4, 6..8)));
@@ -2331,18 +2339,23 @@ mod tests {
     #[test]
     fn colors_code() {
         let line = r#"let x = f("a // b", 42); // fin"#;
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         code(line, "rust", &mut f);
-        assert_eq!((f[0], f[4], f[8]), (KEYWORD, 0, 0));
+        assert_eq!((f[0], f[4], f[8]), (KEYWORD, 0, FUNCTION));
         assert!(f[10..18].iter().all(|&x| x == STRING));
-        assert_eq!((f[20], f[25]), (NUMBER, DIM | ITALIC | QUIET));
+        assert_eq!((f[20], f[25]), (NUMBER, DIM | ITALIC | QUIET | COMMENT));
         // A lifetime is not a string; `#` comments in Python, not in Rust.
         let line = "fn f<'a>(x: &'a str) # '\\n'";
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         code(line, "rust", &mut f);
         assert!(f[3..21].iter().all(|&x| x == 0) && f[23] == STRING);
         code(line, "python", &mut f);
-        assert_eq!(f[21], DIM | ITALIC | QUIET);
+        assert_eq!(f[21], DIM | ITALIC | QUIET | COMMENT);
+        // A CamelCase name is a type, a name right before `(` a call; a SHOUTED name is neither.
+        let line = "Vec::<u8>::make(MAX, log(x))";
+        let mut f = vec![0u32; line.len()];
+        code(line, "rust", &mut f);
+        assert_eq!((f[0], f[11], f[16], f[21]), (TYPE, FUNCTION, 0, FUNCTION));
     }
 
     #[test]
@@ -2364,7 +2377,7 @@ mod tests {
     #[test]
     fn finds_symbols_and_images() {
         let line = "a -> b != c `x -> y` <-> --> !== [[a->b]]";
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         inline(line, 0, &mut f);
         assert_eq!(
             symbols(line, 0, &f),
@@ -3048,7 +3061,7 @@ mod tests {
         // The checkbox of a list task is the marker's, which is skipped.
         assert_eq!(checkboxes("- [ ] a [ ] b", 6).len(), 1);
         // A checked box is bold.
-        let mut flags = vec![0u16; 7];
+        let mut flags = vec![0u32; 7];
         inline("[x] [ ]", 0, &mut flags);
         assert!(flags[..3].iter().all(|f| f & (MARK | BOLD) == MARK | BOLD));
         assert!(flags[4..].iter().all(|f| f & MARK != 0 && f & BOLD == 0));

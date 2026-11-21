@@ -73,6 +73,7 @@ use crate::{
     ui::svg,
     ui::theme::Theme,
     ui::theme::Wide,
+    ui::theme::syntax,
     views::viewer::Source,
 };
 

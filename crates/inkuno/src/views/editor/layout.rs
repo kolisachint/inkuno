@@ -631,7 +631,7 @@ pub struct RunStyle {
 pub fn text_runs(
     t: &Theme,
     text: &str,
-    flags: &[u16],
+    flags: &[u32],
     marked: impl Fn(usize) -> bool,
     style: &RunStyle,
 ) -> Vec<TextRun> {
@@ -645,19 +645,31 @@ pub fn text_runs(
         }
         let color = if style.pending == Pend::Mark {
             t.dim
-        } else if style.pending == Pend::Removed || f & md::QUIET != 0 {
+        } else if style.pending == Pend::Removed {
+            t.soft
+        } else if f & md::COMMENT != 0 {
+            t.syntax[syntax::COMMENT]
+        } else if f & md::QUIET != 0 {
             t.soft
         } else if f & md::DIM != 0 {
             t.dim
         } else if f & md::STRING != 0 {
-            t.string
+            t.syntax[syntax::STRING]
         } else if f & md::NUMBER != 0 {
-            t.number
+            t.syntax[syntax::NUMBER]
+        } else if f & md::TYPE != 0 {
+            t.syntax[syntax::TYPE]
+        } else if f & md::FUNCTION != 0 {
+            t.syntax[syntax::FUNCTION]
+        } else if f & md::KEYWORD != 0 {
+            t.syntax[syntax::KEYWORD]
         } else if f & md::MARK != 0
             && let Some(tint) = style.tint
         {
             t.callout_label(tint)
-        } else if f & (md::LINK | md::TAG | md::MARK | md::KEYWORD) != 0 {
+        } else if f & md::LINK != 0 {
+            t.link
+        } else if f & (md::TAG | md::MARK) != 0 {
             t.accent
         } else if style.soft {
             t.soft
@@ -672,7 +684,7 @@ pub fn text_runs(
             (m || f & (md::LINK | md::UNDER) != 0).then_some(UnderlineStyle {
                 thickness: px(1.),
                 color: Some(
-                    if f & md::LINK != 0 { t.accent } else { color }
+                    if f & md::LINK != 0 { t.link } else { color }
                         .opacity(if f & md::UNDER != 0 { 1. } else { 0.5 }),
                 ),
                 wavy: false,
@@ -745,7 +757,7 @@ pub fn text_runs(
 /// task keeps its (struck) text; code stays as is. A quote's prefix is hidden here, from `marker`;
 /// a list item's prefix is hidden by its layout instead (see `item_prefix`). The caller only asks
 /// for the kinds it hides.
-pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
+pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u32]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     if kind == Kind::Quote {
         let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
@@ -1305,7 +1317,8 @@ impl Editor {
         };
         let style = {
             let mut hasher = Fast::default();
-            (key(0, "").0, hex(t.accent), mono(), has_unequal).hash(&mut hasher);
+            (key(0, "").0, hex(t.accent), hex(t.link), t.syntax.map(hex), mono(), has_unequal)
+                .hash(&mut hasher);
             hasher.finish()
         };
         // Figures are drawn at the page's largest width, for this screen.
@@ -1779,7 +1792,7 @@ impl Editor {
                 } else {
                     cached_shape(&mut shaped, id, frame, || {
                         let mut formula = None;
-                        let mut flags = vec![0u16; line.len()];
+                        let mut flags = vec![0u32; line.len()];
                         let list = matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
                         flags[..marker].fill(if list { md::MARK } else { md::DIM });
                         if kind == Kind::Meta {
@@ -2687,7 +2700,7 @@ mod tests {
     use gpui::WindowAppearance;
 
     /// The runs of `text` as `(piece, italic, mono)`, `flags` the same on every byte.
-    fn pieces(text: &str, flag: u16, style: RunStyle) -> Vec<(String, bool, bool)> {
+    fn pieces(text: &str, flag: u32, style: RunStyle) -> Vec<(String, bool, bool)> {
         let t = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
         let (mut at, flags) = (0, vec![flag; text.len()]);
         text_runs(&t, text, &flags, |_| false, &style)

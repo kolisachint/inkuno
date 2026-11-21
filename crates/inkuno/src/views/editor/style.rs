@@ -219,7 +219,7 @@ impl Editor {
     pub(super) fn cut(
         &self,
         part: &Range<usize>,
-        flag: u16,
+        flag: u32,
     ) -> Option<(Range<usize>, Range<usize>)> {
         let lr = self.line_range(part.start);
         let line = &self.content[lr.clone()];
@@ -240,7 +240,7 @@ impl Editor {
     /// (see `md::unmark`). A lone cursor puts both signs and sits between them. Over
     /// several lines or cells, each gets its own signs, only where it lacks them: a style does
     /// not run from one line to the next, nor across a `|`.
-    pub(super) fn mark(&mut self, flag: u16, cx: &mut Context<Self>) {
+    pub(super) fn mark(&mut self, flag: u32, cx: &mut Context<Self>) {
         let Some(&(open, close)) = md::delimiters(flag).first() else {
             return;
         };

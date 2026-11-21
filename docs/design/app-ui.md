@@ -109,6 +109,9 @@ A **Typora-inspired, document-first writing app**:
 - All tokens centralize in `crates/inkuno/src/ui/theme.rs` (`Theme` struct,
   `crates/inkuno/src/ui/theme.rs:100-124`); views must not hard-code colors/sizes.
   (Inkuno rule: layers depend downwards only, `docs/design/architecture.md:19-27`.)
+- **2026-11-21: Quiet theme is the default; Inkuno Light/Dark stay selectable.** `THEMES[0]` and `THEMES[1]`
+  are Quiet Dark and Quiet Light, picked by the system appearance when no theme is chosen. The Quiet extras
+  (link, ground, six code colours) are set in `quiet_extras` (`crates/inkuno/src/ui/theme.rs`); other themes derive them.
 
 ## 4. Layout standard: three regions
 
