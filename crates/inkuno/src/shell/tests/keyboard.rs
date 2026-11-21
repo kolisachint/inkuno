@@ -298,7 +298,7 @@ fn ctrl_b_toggles_the_sidebar_from_the_note(cx: &mut TestAppContext) {
     assert_eq!(panel(cx), nav::Panel::Split);
 
     cx.simulate_keystrokes("secondary-b");
-    assert_eq!(panel(cx), nav::Panel::Rail, "the panel folds onto the rail");
+    assert_eq!(panel(cx), nav::Panel::Hidden, "the panel is hidden");
     assert!(in_note(cx), "the note keeps the keys");
     assert_eq!(text(cx), "# Note\n\nmot", "Ctrl+B is not bold any more");
 

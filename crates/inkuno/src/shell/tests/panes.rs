@@ -162,11 +162,12 @@ fn panes_split_move_resize_and_come_back(cx: &mut TestAppContext) {
     assert_eq!(shell.read_with(cx, |s, _| s.zoomed), None);
 
     // A window too small for every pane shows the active one alone; bigger again, all come back.
-    // (At 420 px each column keeps 190 px: still enough.)
+    // (At 420 px each column keeps 190 px: still enough.) The rail's 40 px are gone, so the narrow
+    // window is 280 px: the room the rail left at 320.
     cx.simulate_resize(size(px(420.), px(720.)));
     cx.run_until_parked();
     assert_eq!(shell.read_with(cx, |s, _| s.alone()), None);
-    cx.simulate_resize(size(px(320.), px(720.)));
+    cx.simulate_resize(size(px(280.), px(720.)));
     cx.run_until_parked();
     assert_eq!(shell.read_with(cx, |s, _| s.alone()), Some(2));
     let alone = areas(&shell, cx)[2];
@@ -348,7 +349,7 @@ fn tabs_dragged_into_place(cx: &mut TestAppContext) {
     assert_eq!(aims(cx), (None, None));
     cx.simulate_mouse_up(edge, MouseButton::Left, none);
     assert_eq!(state(&shell, cx).0, "row(0.5 0, 0.5 1)");
-    // Out of every pane and bar (over the rail): nothing either.
+    // Out of every pane and bar (over the sidebar's room): nothing either.
     let rail = point(px(10.), px(300.));
     hold(cx, "Beta", rail);
     assert_eq!(aims(cx), (None, None));

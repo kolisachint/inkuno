@@ -245,10 +245,10 @@ fn the_bar_holds_its_place(cx: &mut TestAppContext) {
         }
     };
     let geometries = [
-        (nav::Panel::Rail, 260., "secondary-0"),
+        (nav::Panel::Hidden, 260., "secondary-0"),
         (nav::Panel::Split, 260., "secondary-0"),
         (nav::Panel::Split, 600., "secondary-0"),
-        (nav::Panel::Rail, 260., &"secondary-= ".repeat(16)),
+        (nav::Panel::Hidden, 260., &"secondary-= ".repeat(16)),
     ];
     for (i, (panel, list_w, zoom)) in geometries.into_iter().enumerate() {
         shell.update(cx, |s, cx| {
@@ -303,7 +303,7 @@ fn the_bar_holds_its_place(cx: &mut TestAppContext) {
     }
     cx.simulate_keystrokes("secondary-0");
     shell.update(cx, |s, cx| {
-        s.nav.panel = nav::Panel::Rail;
+        s.nav.panel = nav::Panel::Hidden;
         cx.notify();
     });
     // A search of 300 characters with no space: the bar keeps its width, the field scrolls.

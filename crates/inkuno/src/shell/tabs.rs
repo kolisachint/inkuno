@@ -1,17 +1,17 @@
-//! The tab bar of a pane: one quiet 38 px strip over what it shows — transparent, no pills.
+//! The tab bar of a pane: one quiet band over what it shows — transparent, no pills.
 //! Each tab is bare text at 13 px; the one shown sits on a flat panel fill, with a hairline under
 //! the bar. Unsaved tabs carry a small accent dot; the close cross appears on hover only.
 
 use super::*;
+use crate::ui::theme::{BAND, BAND_HIDDEN, LIGHTS_ROOM};
 
-/// Height of the tab bar, at scale 1: a fixed 38 px strip over the note.
-pub(super) const TAB_BAR: f32 = 38.;
+/// Height of the tab bar, at scale 1: the band (`app-ui.md` §20.1), the same as the sidebars' top rows.
+pub(super) const TAB_BAR: f32 = BAND;
 /// Height of a tab row in the bar, at scale 1: fits 13 px text, the dot and the hover cross.
 const TAB_ROW: f32 = 30.;
-/// Room the traffic lights float over at the window's top left when the system draws the title
-/// bar (macOS, Windows), at scale 1: an editor-area top row clears it from the window's edge
-/// once (the sidebar's header does the same past the rail), so the bar never pads it twice.
-const TRAFFIC_ROOM: f32 = 78.;
+/// The bar's row once the title bar is hidden: its band is `BAND_HIDDEN` of padding, and the row
+/// under it is this tall.
+const TAB_ROW_HIDDEN: f32 = 28.;
 
 /// A tab being dragged: a small card with its name follows the pointer.
 #[derive(Clone)]
@@ -162,21 +162,15 @@ impl Shell {
         self.close_tabs(&all, None, window, cx);
     }
 
-    /// Clearance an editor-area top row leaves on its left under a native title bar, measured
-    /// from the window's edge once: the traffic lights float over the window's top left, and the
-    /// row already starts past the sidebar — so what the sidebar covers is not padded again. It
-    /// follows the sidebar: the rail alone when collapsed, the rail plus the open panel (at
-    /// whatever width it was dragged to) when expanded; zero when the lights are not there.
-    pub(super) fn traffic_pad(&self) -> Pixels {
-        if !self.nav.lights {
+    /// The left edge of a top row of `group` clear of what the window draws there: where the sidebar is
+    /// hidden, the top-left pane's row starts past the sidebar toggle, and past the traffic lights on
+    /// macOS (`LIGHTS_ROOM`). Zero everywhere else: an open sidebar already leaves the row its place.
+    pub(super) fn strip_edge(&self, group: usize) -> Pixels {
+        if self.left_open() || !self.band_shown() || self.layout.panes().first() != Some(&group) {
             return px(0.);
         }
-        let t = self.theme;
-        let mut sidebar = self.nav.left + t.px(nav::RAIL);
-        if self.left_open() && self.nav.panel == Panel::Split {
-            sidebar += self.split_width() + nav::DIVIDER;
-        }
-        (t.px(TRAFFIC_ROOM) - sidebar).max(px(0.))
+        self.theme
+            .px(if self.nav.lights { LIGHTS_ROOM } else { 8. } + 32.)
     }
 
     /// The tab bar of `group`, drawn only for several tabs — a single page gets the whole pane,
@@ -213,6 +207,14 @@ impl Shell {
             }
         }
         let labels = self.tab_labels(group, cx);
+        // Sidebar hidden: the bar holds the sidebar toggle after the lights (`strip_edge`).
+        let toggle = (self.strip_edge(group) > px(0.)).then(|| {
+            div()
+                .absolute()
+                .top(t.px((TAB_BAR - 28.) / 2.))
+                .left(t.px(if self.nav.lights { LIGHTS_ROOM } else { 8. }))
+                .child(self.sidebar_toggle(false, cx))
+        });
         // Each tab is a box and its text; the cross and the dot are drawn only where they show (the
         // tab shown, the one under the pointer), so that a long bar stays cheap to draw.
         // ponytail: every tab is laid out at each frame (about 20 µs a tab: 2 ms for a hundred, measured
@@ -357,8 +359,8 @@ impl Shell {
         // The window buttons sit over the top right corner: the right pane's bar stops before them,
         // so that no tab scrolls under them.
         let corner = client && self.nav.title_bar && group == self.corner_group();
-        // From the window's edge once (see `traffic_pad`): already past the sidebar.
-        let pad = self.traffic_pad();
+        // Where the sidebar is hidden, past the toggle (and the lights): see `strip_edge`.
+        let pad = self.strip_edge(group);
         Some(
             div()
                 .id(("tabs", group))
@@ -366,7 +368,13 @@ impl Shell {
                 .relative()
                 .flex_none()
                 .w_full()
-                .h(t.px(TAB_BAR))
+                .h(t.px(if self.band_shown() {
+                    TAB_BAR
+                } else {
+                    BAND_HIDDEN + TAB_ROW_HIDDEN
+                }))
+                // Title bar hidden: the 12 px of its band come first, above the row of tabs.
+                .when(!self.band_shown(), |d| d.pt(t.px(BAND_HIDDEN)))
                 .flex()
                 .text_size(t.px(13.))
                 .border_b_1()
@@ -374,7 +382,8 @@ impl Shell {
                 // Under a native title bar the traffic lights float over the window's top left:
                 // the first tab starts right of them, measured from the window's edge once — the
                 // bar already starts past the sidebar, so it pads only what the sidebar leaves.
-                .when(self.nav.lights, |d| d.pl(pad))
+                .pl(pad)
+                .children(toggle)
                 .when(corner, |d| d.pr(t.px(render::PILL_ROOM)))
                 // Past the last tab, it lands at the end; out of the bar, nowhere in it.
                 .on_drag_move(cx.listener(

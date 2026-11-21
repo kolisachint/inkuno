@@ -5,6 +5,17 @@ use gpui::{BoxShadow, Hsla, Pixels, WindowAppearance, hsla, point, px, rgb};
 
 use crate::{lang::tr, logic::prefs::Prefs};
 
+/// Height of the top band of the window (`app-ui.md` §20.1): the top row of the left sidebar (its
+/// buttons), of the right one (its tool switcher) and of the editor (its tab bar, or its strip). The
+/// window buttons float in the band at the top right.
+pub const BAND: f32 = 38.;
+/// The band once the title bar is hidden (`app::ToggleTitleBar`): what is left of it is 12 px of
+/// top padding, in both sidebars and the editor.
+pub const BAND_HIDDEN: f32 = 12.;
+/// Room the native traffic lights float over at the window's top left, at scale 1 (macOS). Applied only
+/// inside the band that sits at the window's top left in the current state.
+pub const LIGHTS_ROOM: f32 = 78.;
+
 /// Width of the text column ("Page width" setting).
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum Page {

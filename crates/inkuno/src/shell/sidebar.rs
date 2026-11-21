@@ -1,4 +1,4 @@
-//! The side panel as the shell drives it: rail, tree, recent notes, outline, search and list
+//! The side panel as the shell drives it: its band, tree, recent notes, outline, search and list
 //! pages, context menu and file operations.
 
 use crate::{
@@ -19,13 +19,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::render::PILL_ROOM;
 use super::*;
 use crate::ui::assets::ICON_SET;
+use crate::ui::theme::{BAND, BAND_HIDDEN, LIGHTS_ROOM};
 use crate::views::nav::*;
 
-/// Room the native traffic lights float over at the window's top left: what the sidebar
-/// header leaves free on that side, at scale 1 (mirrors `PILL_ROOM` on the right under the drawn bar).
-const TRAFFIC_ROOM: f32 = 78.;
+/// A view in sight is a small sheet laid under its button: the ground colour, lifted.
+fn on_sheet(b: Stateful<Div>, on: bool, t: Theme) -> Stateful<Div> {
+    b.rounded(t.large())
+        .when(on, |d| d.bg(t.bg).shadow(t.lifted()))
+}
 
 impl Shell {
     /// Shows the tool where it lives (its dock, alone unless it is stacked there already)
@@ -82,7 +86,7 @@ impl Shell {
     }
 
     pub(super) fn left_open(&self) -> bool {
-        self.nav.panel != Panel::Rail && !self.dock_tools(false).is_empty()
+        self.nav.panel != Panel::Hidden && !self.dock_tools(false).is_empty()
     }
 
     pub(super) fn right_open(&self) -> bool {
@@ -105,14 +109,14 @@ impl Shell {
                 false => self.nav.left_shown = vec![mode],
             }
         }
-        if !right && self.nav.panel == Panel::Rail {
+        if !right && self.nav.panel == Panel::Hidden {
             self.nav.panel = Panel::Split;
         }
         self.nav.folded.remove(&mode);
         self.nav.activate(mode);
     }
 
-    /// Shift+click on the rail: the tool joins the others of its dock, at the bottom, or leaves
+    /// Shift+click on a tool's button: the tool joins the others of its dock, at the bottom, or leaves
     /// them if it is shown. (The graph refresh went with the graph.)
     pub(super) fn stack_tool(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
         let right = self.nav.right.contains(&mode);
@@ -131,7 +135,7 @@ impl Shell {
                 }
                 stack.retain(|m| *m != mode);
                 stack.push(mode);
-                if !right && self.nav.panel == Panel::Rail {
+                if !right && self.nav.panel == Panel::Hidden {
                     self.nav.panel = Panel::Split;
                 }
                 self.nav.folded.remove(&mode);
@@ -143,14 +147,14 @@ impl Shell {
         }
     }
 
-    /// The tool leaves its dock's stack; the last one of the left dock folds the panel onto its
-    /// rail instead, so that it comes back the same.
+    /// The tool leaves its dock's stack; the last one of the left dock hides the panel instead, so
+    /// that it comes back the same.
     pub(super) fn hide_tool(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
         let right = self.nav.right.contains(&mode);
         let had_focus = self.nav.focus.contains_focused(window, cx);
         match right {
             true => self.nav.right_shown.retain(|m| *m != mode),
-            false if self.dock_tools(false) == [mode] => self.nav.panel = Panel::Rail,
+            false if self.dock_tools(false) == [mode] => self.nav.panel = Panel::Hidden,
             false => self.nav.left_shown.retain(|m| *m != mode),
         }
         // The keys go to another tool in sight, or back to the note.
@@ -185,8 +189,7 @@ impl Shell {
         } else {
             px(0.)
         };
-        let room =
-            self.nav.total - self.theme.px(RAIL) - left - self.nav.aside - DIVIDER - pane::MIN_PANE;
+        let room = self.nav.total - left - self.nav.aside - DIVIDER - pane::MIN_PANE;
         match room < px(160.) {
             true => px(0.),
             false => self.nav.right_w.clamp(px(160.), room),
@@ -214,12 +217,12 @@ impl Shell {
         self.settle_nav(window, cx);
     }
 
-    /// Ctrl+B: the left dock shown or hidden. Hidden, it folds onto the rail (the same state as
-    /// the last tool closed by hand, saved in the layout file); shown, it reopens on the tool it
-    /// last showed, the tree if none. The keys stay where they are: the note keeps them.
+    /// Ctrl+B: the left dock shown or hidden. Hidden, it is gone and the note takes its room (the
+    /// same state as the last tool closed by hand, saved in the layout file); shown, it reopens on
+    /// the tool it last showed, the tree if none. The keys stay where they are: the note keeps them.
     pub(super) fn toggle_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.left_open() {
-            true => self.nav.panel = Panel::Rail,
+            true => self.nav.panel = Panel::Hidden,
             false => {
                 if self.dock_tools(false).is_empty() {
                     self.put_tool(Mode::Tree);
@@ -236,7 +239,7 @@ impl Shell {
         (self.nav.dragging, self.nav.right_dragging) = (false, false);
         let editor = self.pane().editor.focus_handle(cx);
         match self.nav.panel {
-            Panel::Rail if self.nav.focus.contains_focused(window, cx) => window.focus(&editor),
+            Panel::Hidden if self.nav.focus.contains_focused(window, cx) => window.focus(&editor),
             Panel::Full if editor.is_focused(window) => window.focus(&self.nav.focus),
             _ => {}
         }
@@ -247,7 +250,7 @@ impl Shell {
     /// Width of the panel open beside the note: the one it was given, as long as the note
     /// (`NOTE_MIN`) and what is reserved to its right keep their room.
     pub(super) fn split_width(&self) -> Pixels {
-        let room = self.nav.total - self.theme.px(RAIL) - DIVIDER - self.nav.aside;
+        let room = self.nav.total - DIVIDER - self.nav.aside;
         let floor = px(120.);
         match self.nav.list_w {
             w if w == px(0.) => room / 2.,
@@ -257,10 +260,10 @@ impl Shell {
 
     /// The separator follows the pointer; at the ends, one side collapses.
     pub(super) fn drag_nav(&mut self, x: Pixels, cx: &mut Context<Self>) {
-        let x = x - self.nav.left - self.theme.px(RAIL);
-        let room = self.nav.total - self.theme.px(RAIL);
+        let x = x - self.nav.left;
+        let room = self.nav.total;
         self.nav.panel = if x < px(100.) {
-            Panel::Rail
+            Panel::Hidden
         } else if x > room - px(140.) {
             Panel::Full
         } else {
@@ -282,7 +285,7 @@ impl Shell {
             .fold(0u64, u64::wrapping_add);
         (
             self.nav.mode,
-            self.nav.panel == Panel::Rail,
+            self.nav.panel == Panel::Hidden,
             &self.vault,
             &self.dirs,
             &self.images,
@@ -680,7 +683,7 @@ impl Shell {
         );
         let width = match (right, alone) {
             (true, _) => self.right_width(),
-            (_, true) => self.nav.total - self.theme.px(RAIL),
+            (_, true) => self.nav.total,
             _ => self.split_width(),
         };
         // The list's own margin (`px_2`) on both sides.
@@ -1154,7 +1157,7 @@ impl Shell {
             .collect()
     }
 
-    /// The rail, then the left dock and its separator if it is open.
+    /// The left dock and its separator, if it is open: its band, its tool, its foot row.
     pub(super) fn render_nav(
         &mut self,
         window: &mut Window,
@@ -1185,179 +1188,130 @@ impl Shell {
         }
         let panel = self.nav.panel;
         let unfolded = self.left_open();
-        let (sidebar, title_bar) = (unfolded, self.nav.title_bar);
-
-        // The view in sight is a small sheet laid on the rail, its icon in the accent.
-        let on_sheet = |b: Stateful<Div>, on: bool| {
-            b.rounded(t.large())
-                .when(on, |d| d.bg(t.bg).shadow(t.lifted()))
-        };
+        let keys = |action: &dyn Action| crate::ui::keys::of(cx, action);
+        let full = panel == Panel::Full;
+        let width = self.split_width();
+        // The band at the top of the panel is the window's top row: its buttons when the title bar is
+        // shown; when it is hidden, nothing but its 12 px of padding (the buttons move to the foot).
+        let band_shown = self.band_shown();
+        let lights = self.nav.lights;
+        let native = self.nav.native_bar;
         let shown: Vec<Mode> = Mode::ALL.into_iter().filter(|m| self.docked(*m)).collect();
         let mode_button = |id: &'static str, icon, m: Mode, label: &'static str, keys: String| {
-            on_sheet(button(id, icon, shown.contains(&m), t), shown.contains(&m))
-                .debug_selector(move || id.to_string())
-                .tooltip(tip(label, keys, t))
-                // Shift+click: with the others of its dock, one above the other.
-                // A plain click never hides: the sidebar stays shown (hiding is on the keys
-                // and the palette; bring back by restoring `true`).
-                .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
-                    match e.modifiers().shift {
-                        true => this.stack_tool(m, window, cx),
-                        false => this.show_nav(m, false, window, cx),
-                    }
-                }))
+            on_sheet(
+                button(id, icon, shown.contains(&m), t),
+                shown.contains(&m),
+                t,
+            )
+            .debug_selector(move || id.to_string())
+            .tooltip(tip(label, keys, t))
+            // Shift+click: with the others of its dock, one above the other.
+            // A plain click never hides: the sidebar stays shown (hiding is on the keys
+            // and the palette; bring back by restoring `true`).
+            .on_click(cx.listener(
+                move |this, e: &ClickEvent, window, cx| match e.modifiers().shift {
+                    true => this.stack_tool(m, window, cx),
+                    false => this.show_nav(m, false, window, cx),
+                },
+            ))
         };
-        let keys = |action: &dyn Action| crate::ui::keys::of(cx, action);
-        let rail = div()
-            .id("rail")
+        let commands = div()
+            .id("nav-commands")
+            .debug_selector(|| "nav-commands".into())
+            .size(t.px(28.))
             .flex_none()
-            .w(t.px(RAIL))
-            .h_full()
-            // A short window: the rail scrolls, its last buttons stay reachable.
-            .overflow_y_scroll()
-            .py_2()
             .flex()
-            .flex_col()
             .items_center()
-            .gap_1()
-            // The app logo is the commands button, at the top of the rail on every system.
+            .justify_center()
+            .rounded(t.small())
+            .cursor_pointer()
+            .tab_index(0)
+            .focus(|s| s.border_2().border_color(t.accent))
+            .hover(|s| s.bg(t.hover))
+            .active(|s| s.bg(t.pressed))
             .child(
                 div()
-                    .id("nav-commands")
-                    .debug_selector(|| "nav-commands".into())
-                    .size(t.px(28.))
-                    .flex_none()
-                    .flex()
+                    .debug_selector(|| "nav-logo".into())
+                    .child(crate::ui::assets::logo(t)),
+            )
+            .tooltip(tip(
+                tr("Commands", "Commandes"),
+                keys(&crate::actions::ToggleCommands),
+                t,
+            ))
+            .on_click(cx.listener(|this, _, window, cx| this.open_commands(window, cx)));
+        let tree = mode_button(
+            "nav-tree",
+            "tree.svg",
+            Mode::Tree,
+            tr("Vault tree", "Arbre du coffre"),
+            keys(&ShowTree),
+        );
+        // The band: the lights' room at the left (macOS, where the system draws the bar), then the sidebar
+        // toggle, search and new note, right-aligned. Narrow, the last ones are cut at the edge.
+        let band = div()
+            .id("sidebar-band")
+            .debug_selector(|| "sidebar-band".into())
+            .flex_none()
+            .w_full()
+            .h(t.px(if band_shown { BAND } else { BAND_HIDDEN }))
+            .when(band_shown, |d| {
+                d.flex()
                     .items_center()
-                    .justify_center()
-                    .rounded(t.small())
-                    .cursor_pointer()
-                    .tab_index(0)
-                    .focus(|s| s.border_2().border_color(t.accent))
-                    .hover(|s| s.bg(t.hover))
-                    .active(|s| s.bg(t.pressed))
+                    .gap_1()
+                    .overflow_hidden()
+                    .pl(if lights { t.px(LIGHTS_ROOM) } else { t.px(8.) })
+                    // Over the whole window, the window buttons float over the right end of the band.
+                    .pr(if full && !native {
+                        t.px(PILL_ROOM)
+                    } else {
+                        t.px(8.)
+                    })
                     .child(
                         div()
-                            .debug_selector(|| "rail-logo".into())
-                            .child(crate::ui::assets::logo(t)),
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .when(!native, |d| d.map(crate::ui::widgets::drag_window)),
                     )
-                    .tooltip(tip(
-                        tr("Commands", "Commandes"),
-                        keys(&crate::actions::ToggleCommands),
-                        t,
-                    ))
-                    .on_click(cx.listener(|this, _, window, cx| this.open_commands(window, cx))),
-            )
-            // Two groups, one button's height apart: the vault tree, then find and new.
-            // Everything else left the rail for the palette (back/forward, trash, sync,
-            // backup, theme, help all stay one `› word` away, chords unchanged).
+                    .child(self.sidebar_toggle(true, cx))
+                    .child(self.search_button(cx))
+                    .child(self.new_button(cx))
+            });
+        // The foot: the actions that have no place in the band, one compact row at the
+        // bottom of the sidebar. With the title bar hidden, the band is gone and its buttons join it.
+        let foot = div()
+            .id("sidebar-foot")
+            .debug_selector(|| "sidebar-foot".into())
+            .flex_none()
+            .w_full()
+            .h(t.px(BAND))
+            .flex()
+            .items_center()
+            .gap_1()
+            .px_2()
+            .overflow_hidden()
+            .border_t_1()
+            .border_color(t.border)
+            .child(commands)
+            .child(tree)
+            .when(!band_shown, |d| {
+                d.child(self.sidebar_toggle(true, cx))
+                    .child(self.search_button(cx))
+                    .child(self.new_button(cx))
+            })
             .child(
                 div()
-                    .mt(t.px(28.))
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_1()
-                    // Calm default: the rail shows the vault tree only. Recent notes and vault
-                    // search stay as modes (Mode::ALL) and reopen on demand through the palette
-                    // or the dock tool gate (put_tool/stack_tool).
-                    .child(mode_button(
-                        "nav-tree",
-                        "tree.svg",
-                        Mode::Tree,
-                        tr("Vault tree", "Arbre du coffre"),
-                        keys(&ShowTree),
-                    )),
-            )
-            .child(
-                div()
-                    .mt(t.px(28.))
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        button("nav-search", "search.svg", false, t)
-                            .debug_selector(|| "nav-search".into())
-                            .tooltip(tip(
-                                tr("Find or create a note", "Chercher ou créer une note"),
-                                keys(&crate::actions::OpenPalette),
-                                t,
-                            ))
-                            .on_click(
-                                cx.listener(|this, _, window, cx| {
-                                    this.open_palette("", window, cx)
-                                }),
-                            ),
-                    )
-                    .child(
-                        button("nav-new", "plus.svg", false, t)
-                            .debug_selector(|| "nav-new".into())
-                            .tooltip(tip(
-                                tr("New note", "Nouvelle note"),
-                                keys(&crate::actions::NewNote),
-                                t,
-                            ))
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.new_note_here(window, cx)),
-                            ),
-                    ),
-            )
-            .child(
-                div()
-                    .debug_selector(|| "rail-free".into())
                     .flex_1()
-                    .w_full()
-                    .when(!self.nav.native_bar, |d| {
-                        d.map(crate::ui::widgets::drag_window)
-                    }),
+                    .min_w_0()
+                    .h_full()
+                    .when(!native, |d| d.map(crate::ui::widgets::drag_window)),
             )
-            // The two chrome switches, at the foot of the rail: the one part of the chrome that stays
-            // when the title bar is hidden, so the bar always comes back from here.
-            .child(
-                div()
-                    .mb_1()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_1()
-                    .child(on_sheet(
-                        button("rail-sidebar", "c-split.svg", sidebar, t)
-                            .debug_selector(|| "rail-sidebar".into())
-                            .tooltip(tip(
-                                tr(
-                                    "Sidebar: show or hide the side panel",
-                                    "Barre latérale : afficher ou masquer le panneau",
-                                ),
-                                keys(&ToggleSidebar),
-                                t,
-                            ))
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.toggle_sidebar(window, cx)),
-                            ),
-                        sidebar,
-                    ))
-                    .child(on_sheet(
-                        button("rail-titlebar", "c-titlebar.svg", title_bar, t)
-                            .debug_selector(|| "rail-titlebar".into())
-                            .tooltip(tip(
-                                tr(
-                                    "Title bar: show or hide it",
-                                    "Barre de titre : afficher ou masquer",
-                                ),
-                                keys(&ToggleTitleBar),
-                                t,
-                            ))
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_title_bar(cx))),
-                        title_bar,
-                    )),
-            );
-
+            .child(self.titlebar_button(cx));
         let wrapper = div().h_full().flex().min_w_0();
         if !unfolded {
-            return wrapper.flex_none().child(rail);
+            return div().flex_none();
         }
-        let full = panel == Panel::Full;
         let content = self.render_stack(false, window, cx);
         // A 1 px hairline between the panel and the note; its handle (DIVIDER_HIT each side) is laid over
         // both. Double-click: original width.
@@ -1413,11 +1367,99 @@ impl Shell {
                     }),
                 ),
         );
+        let column = div()
+            .h_full()
+            .flex_none()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            // The band, the tools and the foot share the panel's background.
+            .bg(t.bg)
+            .map(|d| if full { d.flex_1() } else { d.w(width) })
+            .child(band)
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .overflow_hidden()
+                    .child(crate::ui::widgets::fade_in(content, "nav-in", &t)),
+            )
+            .child(foot);
         wrapper
             .map(|d| if full { d.flex_1() } else { d.flex_none() })
-            .child(rail)
-            .child(crate::ui::widgets::fade_in(content, "nav-in", &t))
+            .child(column)
             .child(divider)
+    }
+
+    /// The sidebar's toggle (Ctrl+B): in the band, in the foot row when the title bar is hidden, and in
+    /// the top strip of the note while the sidebar is hidden.
+    pub(super) fn sidebar_toggle(&self, active: bool, cx: &mut Context<Self>) -> Stateful<Div> {
+        let t = self.theme;
+        button("nav-sidebar", "c-split.svg", active, t)
+            .debug_selector(|| "nav-sidebar".into())
+            .tooltip(tip(
+                tr(
+                    "Sidebar: show or hide the side panel",
+                    "Barre latérale : afficher ou masquer le panneau",
+                ),
+                crate::ui::keys::of(cx, &ToggleSidebar),
+                t,
+            ))
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_sidebar(window, cx)))
+    }
+
+    /// The vault search: the palette, where a note is found or created.
+    pub(super) fn search_button(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let t = self.theme;
+        button("nav-search", "search.svg", false, t)
+            .debug_selector(|| "nav-search".into())
+            .tooltip(tip(
+                tr("Find or create a note", "Chercher ou créer une note"),
+                crate::ui::keys::of(cx, &crate::actions::OpenPalette),
+                t,
+            ))
+            .on_click(cx.listener(|this, _, window, cx| this.open_palette("", window, cx)))
+    }
+
+    /// A new note in the current place.
+    pub(super) fn new_button(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let t = self.theme;
+        button("nav-new", "plus.svg", false, t)
+            .debug_selector(|| "nav-new".into())
+            .tooltip(tip(
+                tr("New note", "Nouvelle note"),
+                crate::ui::keys::of(cx, &crate::actions::NewNote),
+                t,
+            ))
+            .on_click(cx.listener(|this, _, window, cx| this.new_note_here(window, cx)))
+    }
+
+    /// The title bar's toggle (Ctrl+Shift+S), at the foot of the sidebar, so that the bar always comes back.
+    pub(super) fn titlebar_button(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let t = self.theme;
+        let on = self.nav.title_bar;
+        on_sheet(
+            button("nav-titlebar", "c-titlebar.svg", on, t)
+                .debug_selector(|| "nav-titlebar".into())
+                .tooltip(tip(
+                    tr(
+                        "Title bar: show or hide it",
+                        "Barre de titre : afficher ou masquer",
+                    ),
+                    crate::ui::keys::of(cx, &ToggleTitleBar),
+                    t,
+                ))
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_title_bar(cx))),
+            on,
+            t,
+        )
+    }
+
+    /// Whether the top band of the window is drawn: the title bar is shown (`app::ToggleTitleBar`) and
+    /// focus mode is off. Its height is `BAND`; hidden, the bands are `BAND_HIDDEN` of padding.
+    pub(super) fn band_shown(&self) -> bool {
+        self.nav.title_bar && !self.focus_mode
     }
 
     /// The right dock, if it is open and the window leaves the note its room.
@@ -1527,11 +1569,13 @@ impl Shell {
             sections.push(section);
         }
         self.nav.activate(active);
-        // Flat, edge to edge: no card and no shadow. Its one hairline is on the rail's side (the left
+        // Flat, edge to edge: no card and no shadow. Its one hairline is on the left panel's side (the left
         // panel) or none (the right dock, whose divider with the note is the line).
         div()
             .bg(t.bg)
             .when(!right, |d| d.border_l_1().border_color(t.border))
+            // The right band hidden (title bar off): what is left of it is its padding.
+            .when(right && !self.band_shown(), |d| d.pt(t.px(BAND_HIDDEN)))
             .overflow_hidden()
             .debug_selector(move || {
                 if right {
@@ -1553,6 +1597,67 @@ impl Shell {
                 }
             })
             .children(sections)
+    }
+
+    /// The name a tool's header and its switcher button show.
+    pub(super) fn tool_title(&self, mode: Mode) -> String {
+        match (mode, &self.vault) {
+            (Mode::Tree, Some(root)) => vault::stem(root),
+            (Mode::Search, _) => tr("Search", "Recherche").to_string(),
+            (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
+            (Mode::Scratch, _) => tr("Scratch", "Brouillons").to_string(),
+            (Mode::Versions, _) => tr("Versions", "Versions").to_string(),
+            (Mode::Assistant, _) => tr("Assistant", "Assistant").to_string(),
+            _ => tr("Recent", "Récents").to_string(),
+        }
+    }
+
+    /// The right band's tool switcher: one button per tool that lives in the right dock. The ones
+    /// shown are in full ink on the selection; a click shows that tool alone.
+    pub(super) fn switcher(&self, cx: &Context<Self>) -> Div {
+        let t = self.theme;
+        let shown = self.dock_tools(true);
+        div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .min_w_0()
+            .overflow_hidden()
+            .children(self.nav.right.clone().into_iter().map(|m| {
+                let on = shown.contains(&m);
+                div()
+                    .id(("switch", m as usize))
+                    .debug_selector(move || format!("switch-{}", m.name()))
+                    .h(t.px(26.))
+                    .px_2()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .rounded(t.small())
+                    .cursor_pointer()
+                    .text_size(t.px(13.))
+                    .font_weight(if on {
+                        gpui::FontWeight::SEMIBOLD
+                    } else {
+                        gpui::FontWeight::NORMAL
+                    })
+                    .text_color(if on { t.text } else { t.soft })
+                    .hover(|s| s.bg(t.hover))
+                    .when(on, |d| d.bg(t.selection))
+                    .child(self.tool_title(m))
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.show_right(m, window, cx)),
+                    )
+            }))
+    }
+
+    /// Shows one tool of the right dock alone (the switcher): the others are hidden, not closed.
+    pub(super) fn show_right(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        self.nav.right_shown = vec![mode];
+        self.nav.folded.remove(&mode);
+        self.nav.activate(mode);
+        window.focus(&self.nav.focus);
+        self.settle_nav(window, cx);
     }
 
     /// Header and content of the tool whose view is in `Nav`, in the right dock or the left one;
@@ -1587,30 +1692,17 @@ impl Shell {
         // Under the window buttons: the top tool of the right dock, or of the left one on the whole window.
         let first = self.dock_tools(right).first() == Some(&mode);
         let folded = self.all_folded();
-        let title = match (mode, &self.vault) {
-            (Mode::Tree, Some(root)) => vault::stem(root),
-            (Mode::Search, _) => tr("Search", "Recherche").to_string(),
-            (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
-            (Mode::Scratch, _) => tr("Scratch", "Brouillons").to_string(),
-            (Mode::Versions, _) => tr("Versions", "Versions").to_string(),
-            (Mode::Assistant, _) => tr("Assistant", "Assistant").to_string(),
-            _ => tr("Recent", "Récents").to_string(),
-        };
+        let title = self.tool_title(mode);
+        // The first tool of the right dock: its header is the band, the tool switcher in it.
+        let switch = right && first && self.band_shown();
+        let switcher = switch.then(|| self.switcher(cx));
         let header = div()
             .flex_none()
-            .h(t.px(32.))
-            // Under the native bar the traffic lights float over the window's left edge, rail
-            // included: the header clears them from its own edge, so its title starts exactly at
-            // the traffic inset from the window (TRAFFIC_ROOM past the rail), in line with every
-            // other top row, instead of the whole inset twice.
-            .pl(if !right && first && self.nav.lights {
-                (t.px(TRAFFIC_ROOM) - t.px(RAIL)).max(t.px(8.))
-            } else {
-                t.px(8.)
-            })
+            .h(t.px(if switch { BAND } else { 32. }))
+            .pl(t.px(8.))
             // Over the whole window, the window buttons float over the right end of the header.
             .pr(if (full || right) && first && !self.nav.native_bar {
-                t.px(super::render::PILL_ROOM)
+                t.px(PILL_ROOM)
             } else {
                 t.px(4.)
             })
@@ -1711,7 +1803,7 @@ impl Shell {
                     .h_full()
                     .flex()
                     .items_center()
-                    .when(!self.nav.native_bar, |d| {
+                    .when(!self.nav.native_bar && !switch, |d| {
                         d.map(crate::ui::widgets::drag_window)
                     })
                     .child(
@@ -1729,13 +1821,25 @@ impl Shell {
                             .when(mode == Mode::Tree, |d| d.flex_1())
                             // Quiet sans-semibold title (13 px) for a 32 px header: no serif at this size.
                             // The tree shows none: its vault name moved to the window's title bar.
-                            .when(mode != Mode::Tree, |d| {
+                            .when(mode != Mode::Tree && !switch, |d| {
                                 d.font_weight(gpui::FontWeight::SEMIBOLD)
                                     .text_size(t.px(13.))
                                     .text_color(t.text)
                                     .child(title.clone())
                             }),
-                    ),
+                    )
+                    // The band's switcher, then the free part of the band: the handle that moves the window.
+                    .when_some(switcher, |d, switcher| {
+                        d.child(switcher).child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .h_full()
+                                .when(!self.nav.native_bar, |d| {
+                                    d.map(crate::ui::widgets::drag_window)
+                                }),
+                        )
+                    }),
             )
             // No hide button in the header: the sidebar stays shown; hiding is on the keys
             // and the palette (`hide_tool` unchanged, bring the button back below to restore it).

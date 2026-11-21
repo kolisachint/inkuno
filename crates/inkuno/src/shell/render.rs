@@ -1,6 +1,7 @@
 //! Drawing the window: title bar, panes, empty page, badges, resize edges.
 
 use super::*;
+use crate::ui::theme::{BAND, BAND_HIDDEN, LIGHTS_ROOM};
 
 /// The number in the comments badge: "9+" beyond nine, so that it stays round.
 pub(super) fn badge_label(count: usize) -> String {
@@ -17,12 +18,6 @@ pub(super) const SHADOW: Pixels = px(10.);
 /// `PILL_ROOM` adds its margin to the window's edge and some air: what every top row leaves free under it.
 const PILL_W: f32 = 106.;
 pub(super) const PILL_ROOM: f32 = 124.;
-/// Room the native traffic lights float over at the window's top left: what the welcome page
-/// and a pane's top strip leave free on that side when the system draws the bar, at scale 1
-/// (mirrors `PILL_ROOM` on the right under the drawn bar).
-const TRAFFIC_ROOM: f32 = 78.;
-/// Height of the top row of the window (the window buttons' row): the strip of a pane without a tab bar that moves the window.
-const STRIP: f32 = 40.;
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -208,7 +203,7 @@ impl Render for Shell {
                 .gap_2()
                 .children(toasts);
             // The left dock first: it settles which tool takes the keys.
-            // Focus mode draws neither the rail, nor the docks, nor the comments: the note alone.
+            // Focus mode draws neither the sidebars, nor the bands, nor the comments: the note alone.
             let focus = self.focus_mode;
             let docks = (!focus).then(|| self.render_nav(window, cx));
             let docked = (!focus)
@@ -575,7 +570,7 @@ impl Shell {
     // their own, so they sit on the surface of whatever row is under them. Every top row
     // (tab bar, panel header, board bar, CSV bar) stops `PILL_ROOM` short of them and a narrow
     // note starts under them. The group is also a move handle, like the panel header, the
-    // empty part of the rail and the board bar; Alt + drag moves from anywhere.
+    // empty part of the sidebar's band and the board bar; Alt + drag moves from anywhere.
     pub(super) fn render_window_controls(&self, window: &Window, cx: &mut Context<Self>) -> Div {
         let t = self.theme;
         let controls = window.window_controls();
@@ -585,7 +580,7 @@ impl Shell {
             // and the tab rows share their middle.
             .top_0()
             .right_2()
-            .h(t.px(tabs::TAB_BAR))
+            .h(t.px(BAND))
             .flex()
             .items_center()
             .gap_2()
@@ -637,8 +632,6 @@ impl Shell {
                 .justify_center()
                 .gap_3()
                 .px_4()
-                // Under the native bar the traffic lights float over the left end of the page.
-                .when(self.nav.lights, |d| d.pl(t.px(TRAFFIC_ROOM)))
                 .text_center()
                 .child(
                     div()
@@ -928,22 +921,27 @@ impl Shell {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
         // Without a tab bar, the top row of the pane is a handle to move the window (Linux): the note's text starts under it.
-        let strip = title_bar && !barred;
+        let strip = self.band_shown() && !barred;
         // Under the native bar the traffic lights float over the left end of that same row:
         // it starts past them, with no handle under the lights, and the note steps down for it.
         let traffic = self.nav.lights && !barred;
         // A tab bar puts the note below the window buttons: its text no longer steps down for them.
         let pill = (title_bar && !barred && group == self.corner_group())
             .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
+        // The note's text starts under the band (a single page: its strip) or under the 12 px left by a
+        // hidden title bar. A tab bar is the band itself: the text steps down past it.
+        let pad = if barred || self.focus_mode {
+            px(0.)
+        } else if self.band_shown() {
+            t.px(BAND)
+        } else {
+            t.px(BAND_HIDDEN)
+        };
         self.pane().editor.update(cx, |e, _| {
             e.corner = corner;
             e.bar_here = active;
             e.pill = pill;
-            e.strip = if strip || traffic {
-                t.px(STRIP)
-            } else {
-                px(0.)
-            };
+            e.strip = pad;
         });
         // The comments column takes what the panel and the note leave it, 270 px at
         // most; short of 140 px, it does not show (its button stays, a wider window brings it back).
@@ -955,7 +953,7 @@ impl Shell {
                 } else {
                     px(0.)
                 };
-                (self.nav.total - t.px(nav::RAIL) - panel - nav::NOTE_MIN).min(px(270.))
+                (self.nav.total - panel - nav::NOTE_MIN).min(px(270.))
             })
             .filter(|width| *width >= px(140.));
         if active && column.is_none() {
@@ -1181,8 +1179,8 @@ impl Shell {
                     .border_1()
                     .border_color(t.accent.opacity(0.5))
             });
-        // From the window's edge once (see `traffic_pad`): the pane starts past the sidebar.
-        let traffic_edge = if traffic { self.traffic_pad() } else { px(0.) };
+        // The top strip's left edge: past the sidebar toggle (and the lights), where the sidebar is hidden.
+        let traffic_edge = self.strip_edge(group);
         // Flat, edge to edge: a pane has no corners and no shadow; its neighbour is a hairline away.
         let area = div()
             .bg(t.bg)
@@ -1234,12 +1232,14 @@ impl Shell {
             .child(note)
             .when((strip || traffic) && free_top, |d| {
                 // Under the native bar the strip keeps its room but takes no handle: the lights
-                // stay clickable. Its left edge is window-relative (see `traffic_pad`).
+                // stay clickable. Where the sidebar is hidden, its left edge is past the toggle.
                 let edge = traffic_edge;
+                let at_left = edge > px(0.);
+                let corner_here = group == self.corner_group();
                 // Zed-style: where the app draws the bar itself, the vault name sits centered in
-                // the window's top row — the corner group's, under the window buttons. Plain text:
-                // it takes no pointer, the strip stays a handle; it clears the buttons on the right.
-                let name = (strip && group == self.corner_group())
+                // the window's top row, under the window buttons. Plain text: it takes no pointer, the
+                // strip stays a handle; it clears the buttons on the right.
+                let name = (strip && corner_here && !at_left)
                     .then(|| self.vault.as_ref().map(|v| vault::stem(v)))
                     .flatten()
                     .map(|name| {
@@ -1253,18 +1253,48 @@ impl Shell {
                             .text_color(t.soft)
                             .child(name)
                     });
+                // Sidebar hidden: the strip holds the sidebar toggle after the lights, then the note's
+                // name, centred (the note's own title, not the vault's).
+                let note = at_left.then(|| {
+                    let p = &self.panes[pane];
+                    let title = if p.scratch && p.file.is_none() {
+                        logic::scratch::title(p.editor.read(cx).text())
+                    } else {
+                        p.displayed_path()
+                            .map(|path| vault::stem(path).to_string())
+                            .unwrap_or_else(|| tr("New note", "Nouvelle note").to_string())
+                    };
+                    div()
+                        .debug_selector(|| "strip-title".into())
+                        .min_w_0()
+                        .truncate()
+                        .when(corner_here, |d| d.mr(t.px(PILL_ROOM)))
+                        .text_size(t.px(13.))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(t.soft)
+                        .child(title)
+                });
+                let toggle = at_left.then(|| {
+                    div()
+                        .absolute()
+                        .top(t.px((BAND - 28.) / 2.))
+                        .left(t.px(if self.nav.lights { LIGHTS_ROOM } else { 8. }))
+                        .child(self.sidebar_toggle(false, cx))
+                });
                 let bare = div()
                     .debug_selector(move || format!("drag-strip-{group}"))
                     .absolute()
                     .top_0()
                     .left(edge)
                     .right_0()
-                    .h(t.px(STRIP))
+                    .h(t.px(BAND))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .children(name);
+                    .children(name)
+                    .children(note);
                 d.child(if traffic { bare } else { bare.map(drag_window) })
+                    .children(toggle)
             })
             // The active pane of several: a 1 px ring around it, the accent at 30 %. Alone, a pane needs none.
             .when(many && active, |d| {

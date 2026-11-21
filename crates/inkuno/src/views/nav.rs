@@ -1,5 +1,5 @@
-//! Navigation: an always-visible icon rail, and a panel (vault
-//! tree, recent notes, graph or tags) that shares the window with the note.
+//! Navigation: the left sidebar (vault tree, recent notes, outline or tags) and the right one, which
+//! share the window with the note (`app-ui.md` §20).
 
 use std::{
     collections::{HashMap, HashSet},
@@ -51,8 +51,7 @@ actions!(
     ]
 );
 
-/// Width of the rail and height of a row, at the interface's scale 1 (`Theme::px`).
-pub const RAIL: f32 = 40.;
+/// Height of a row, at the interface's scale 1 (`Theme::px`).
 pub const ROW: f32 = 28.;
 /// Indent of a tree row per level of depth, at scale 1: tight, so deep vaults keep room.
 pub const INDENT: f32 = 12.;
@@ -126,10 +125,10 @@ pub struct View {
     pub reveal: bool,
 }
 
-/// Place of the panel: collapsed onto its rail, next to the note, or alone.
+/// Place of the left panel: hidden (the note takes its room), next to the note, or alone on the window.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Panel {
-    Rail,
+    Hidden,
     Split,
     Full,
 }
@@ -452,7 +451,7 @@ pub struct Nav {
     pub reveal: bool,
     /// The folder unfolded last, when, and which unfolding it was: its rows fade in for `FADE`.
     pub unfolded: Option<(PathBuf, std::time::Instant, u32)>,
-    /// The system draws the title bar (macOS, Windows): the rail does not have to serve as a
+    /// The system draws the title bar (macOS, Windows): the sidebar's band does not have to serve as a
     /// handle to move the window.
     pub native_bar: bool,
     /// The traffic lights float over the note's top left now: where the system draws the bar and
@@ -561,7 +560,8 @@ pub fn read_layout(saved: &str) -> Layout {
         panel: match words.next() {
             Some("split") => Panel::Split,
             Some("full") => Panel::Full,
-            _ => Panel::Rail,
+            // `hidden`, and `rail` from before the unified sidebar (or anything else): the panel is hidden.
+            _ => Panel::Hidden,
         },
         list_w: {
             let list = words.next().and_then(|w| w.parse().ok()).map_or(LIST_W, px);
@@ -612,7 +612,7 @@ impl Nav {
 
     pub fn save(&self) {
         let panel = match self.panel {
-            Panel::Rail => "rail",
+            Panel::Hidden => "hidden",
             Panel::Split => "split",
             Panel::Full => "full",
         };
@@ -694,7 +694,7 @@ impl Nav {
 
     /// Folder where to create a note from the tree: the selection's.
     pub fn target_dir(&self) -> Option<PathBuf> {
-        if self.panel == Panel::Rail || self.mode != Mode::Tree {
+        if self.panel == Panel::Hidden || self.mode != Mode::Tree {
             return None;
         }
         folder_of(self.sel.as_ref()?)
@@ -865,6 +865,10 @@ mod tests {
         assert!(left.right.contains(&Mode::Assistant));
         // Named as the first word, it is not the left dock's tool either.
         assert_eq!(read_layout("assistant rail 410\n").mode, Mode::Tree);
+        // A layout saved with the old 40 px rail: its panel word is read as hidden, nothing else changes.
+        let old = read_layout("recent rail 410\n");
+        assert_eq!((old.mode, old.panel), (Mode::Recent, Panel::Hidden));
+        assert_eq!(read_layout("recent hidden 410\n").panel, Panel::Hidden);
         // Shown with the others, as written.
         let shown = read_layout("tree split 410 right=outline,assistant show=assistant,outline\n");
         assert_eq!(shown.right_shown, [Mode::Assistant, Mode::Outline]);
