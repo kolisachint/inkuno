@@ -154,8 +154,14 @@ capture() {
   sleep 1
   xdotool key Return
   sleep 2
-  # The caret on the H1 leaves the other lines in their rendered form.
+  # The line revealed at load keeps its source: a keyboard move does not hide it again, so the
+  # first list item would show raw Markdown. A click on the H1 (a tall title line, hit with or
+  # without a tab bar) makes the H1 the revealed line instead, and the lines below render.
   xdotool key ctrl+Home
+  xdotool mousemove 420 92
+  sleep 0.5
+  xdotool click 1
+  sleep 1
   xdotool mousemove 1250 900
   sleep 1
   while :; do

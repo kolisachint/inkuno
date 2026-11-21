@@ -460,6 +460,29 @@ impl Editor {
                                 )
                                 .ok();
                         }
+                        if let Some((shape, x)) = &lead.bullet {
+                            // A bullet, centered like a box on the first line: a disc, a ring
+                            // (a 1px stroke) or a square, in the text colour.
+                            let side = x.end - x.start;
+                            let mid = text_top + row.lh * 0.5 + px(t.size * 0.1);
+                            let bounds = Bounds::new(
+                                point(left + x.start, mid - side / 2.),
+                                size(side, side),
+                            );
+                            let (radius, fill, edge) = match shape {
+                                Bullet::Disc => (side / 2., t.text, px(0.)),
+                                Bullet::Ring => (side / 2., Hsla::transparent_black(), px(1.)),
+                                Bullet::Square => (px(0.), t.text, px(0.)),
+                            };
+                            window.paint_quad(quad(
+                                bounds,
+                                radius,
+                                fill,
+                                edge,
+                                t.text,
+                                BorderStyle::default(),
+                            ));
+                        }
                         if let Some(check) = &lead.check {
                             let side = check.x.end - check.x.start;
                             // Centered on the x-height of the first line (about a tenth of an em below the middle).

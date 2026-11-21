@@ -65,7 +65,8 @@ pub const NUMBER: u16 = 1024;
 
 pub const INDENT: &str = "    ";
 
-fn indent_len(line: &str) -> usize {
+/// Bytes of leading indent (spaces and tabs) of `line`.
+pub fn indent_len(line: &str) -> usize {
     line.len() - line.trim_start_matches([' ', '\t']).len()
 }
 

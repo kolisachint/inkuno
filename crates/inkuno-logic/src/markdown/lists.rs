@@ -254,8 +254,105 @@ pub fn indent_columns(line: &str) -> usize {
         .sum()
 }
 
+/// `n` in lowercase roman numerals (`iv`, `xc`), as GitHub's `ol ol` lists count. Outside 1 to
+/// 3999 there is no such numeral: the decimal number stays.
+pub fn to_roman(n: u64) -> String {
+    if n == 0 || n > 3999 {
+        return n.to_string();
+    }
+    const STEPS: [(u64, &str); 13] = [
+        (1000, "m"),
+        (900, "cm"),
+        (500, "d"),
+        (400, "cd"),
+        (100, "c"),
+        (90, "xc"),
+        (50, "l"),
+        (40, "xl"),
+        (10, "x"),
+        (9, "ix"),
+        (5, "v"),
+        (4, "iv"),
+        (1, "i"),
+    ];
+    let (mut left, mut out) = (n, String::new());
+    for (value, letters) in STEPS {
+        while left >= value {
+            out.push_str(letters);
+            left -= value;
+        }
+    }
+    out
+}
+
+/// `n` in lowercase letters, as GitHub's `ol ol ol` lists count: `a` to `z`, then `aa` for 27.
+/// Zero keeps its decimal form, as in CSS.
+pub fn to_alpha(n: u64) -> String {
+    if n == 0 {
+        return n.to_string();
+    }
+    let (mut left, mut out) = (n, Vec::new());
+    while left > 0 {
+        left -= 1;
+        out.push(b'a' + (left % 26) as u8);
+        left /= 26;
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap_or_default()
+}
+
+/// The number an ordered item shows at `depth`, from its source marker (`3.`, `12)`): decimal at
+/// the top, roman one level down, letters below (GitHub's `ol`, `ol ol` and `ol ol ol`). The
+/// delimiter stays. A marker that does not parse is shown as it is.
+pub fn number_label(marker: &str, depth: usize) -> String {
+    let digits = marker.bytes().take_while(u8::is_ascii_digit).count();
+    let Ok(n) = marker[..digits].parse::<u64>() else {
+        return marker.to_string();
+    };
+    let shown = match depth {
+        0 => n.to_string(),
+        1 => to_roman(n),
+        _ => to_alpha(n),
+    };
+    format!("{shown}{}", &marker[digits..])
+}
+
+/// The continuation of a list item: a line that is not a list line, is indented by at least two
+/// columns and follows the items of a list (blank lines and other continuations may lie between).
+/// Returns the depth of the item it belongs to: the nearest item above it indented no more than
+/// it. `above` holds the lines above the line, nearest first. An unindented line that is not a
+/// list item ends the list: no continuation.
+pub fn continuation_depth<'a>(
+    line: &str,
+    above: impl IntoIterator<Item = &'a str>,
+) -> Option<usize> {
+    let columns = indent_columns(line);
+    if columns < 2 || line.trim().is_empty() || classify(line, false).0 != Kind::Para {
+        return None;
+    }
+    let mut above = above.into_iter();
+    while let Some(prev) = above.next() {
+        if prev.trim().is_empty() {
+            continue;
+        }
+        let prev_columns = indent_columns(prev);
+        if matches!(
+            classify(prev, false).0,
+            Kind::Bullet | Kind::Ordered | Kind::Task(_)
+        ) {
+            if prev_columns <= columns {
+                return Some(list_depth(prev_columns, above));
+            }
+        } else if prev_columns == 0 {
+            return None;
+        }
+    }
+    None
+}
+
 /// Nesting level of a list item indented by `indent` columns, from the lines above it (nearest
-/// first): the number of distinct smaller indents among the items it follows. Blank lines and
+/// first): the number of its ancestors, each item above less indented than the one found before
+/// it. Blank lines and
 /// indented lines (the continuations of an item) are passed over; any other unindented line ends
 /// the list, so that the items above it do not count.
 pub fn list_depth<'a>(indent: usize, above: impl IntoIterator<Item = &'a str>) -> usize {
@@ -263,7 +360,9 @@ pub fn list_depth<'a>(indent: usize, above: impl IntoIterator<Item = &'a str>) -
     if indent == 0 {
         return 0;
     }
-    let mut levels: Vec<usize> = Vec::new();
+    // The ancestors: each item above that is less indented than the last ancestor found (the
+    // items of an earlier sibling group, indented deeper, do not count).
+    let (mut levels, mut least) = (0, indent);
     for line in above {
         if line.trim().is_empty() {
             continue;
@@ -273,14 +372,15 @@ pub fn list_depth<'a>(indent: usize, above: impl IntoIterator<Item = &'a str>) -
             classify(line, false).0,
             Kind::Bullet | Kind::Ordered | Kind::Task(_)
         ) {
-            if columns < indent && !levels.contains(&columns) {
-                levels.push(columns);
+            if columns < least {
+                levels += 1;
+                least = columns;
             }
         } else if columns == 0 {
             break;
         }
     }
-    levels.len()
+    levels
 }
 
 /// The checkbox of a task line: the byte where its `[` is, and whether it is checked. A bullet
@@ -328,6 +428,8 @@ mod tests {
         // Siblings do not add a level, and a top-level item has none.
         assert_eq!(list_depth(3, ["   - c", "   - b", "1. a"]), 1);
         assert_eq!(list_depth(0, ["- a"]), 0);
+        // A deeper item of an earlier group is not an ancestor: `   - c` is under `1. a` alone.
+        assert_eq!(list_depth(3, ["- b", "  1. x", "1. a"]), 1);
     }
 
     #[test]
@@ -353,6 +455,60 @@ mod tests {
         assert_eq!(item_prefix("1. a"), 3);
         assert_eq!(item_prefix("  - a"), 4);
         assert_eq!(item_prefix("para"), 0);
+    }
+
+    #[test]
+    fn roman_and_alpha_numbers() {
+        for (n, roman) in [
+            (1, "i"),
+            (4, "iv"),
+            (9, "ix"),
+            (14, "xiv"),
+            (40, "xl"),
+            (90, "xc"),
+            (400, "cd"),
+            (1994, "mcmxciv"),
+        ] {
+            assert_eq!(to_roman(n), roman, "roman of {n}");
+        }
+        assert_eq!(to_roman(0), "0");
+        assert_eq!(to_roman(4000), "4000");
+        for (n, alpha) in [(1, "a"), (26, "z"), (27, "aa"), (52, "az"), (53, "ba")] {
+            assert_eq!(to_alpha(n), alpha, "alpha of {n}");
+        }
+        assert_eq!(to_alpha(0), "0");
+    }
+
+    #[test]
+    fn ordered_numbers_follow_the_depth() {
+        assert_eq!(number_label("3.", 0), "3.");
+        assert_eq!(number_label("3.", 1), "iii.");
+        assert_eq!(number_label("8)", 1), "viii)");
+        assert_eq!(number_label("1.", 2), "a.");
+        assert_eq!(number_label("27.", 3), "aa.");
+        assert_eq!(number_label("100.", 0), "100.");
+    }
+
+    #[test]
+    fn a_continuation_belongs_to_the_item_above_it() {
+        // Two spaces under a top-level item: its depth is 0.
+        assert_eq!(continuation_depth("  more", ["- a"]), Some(0));
+        // Under a nested item (indent 2, depth 1), past a blank line.
+        assert_eq!(
+            continuation_depth("    more", ["", "  - b", "- a"]),
+            Some(1)
+        );
+        assert_eq!(continuation_depth("  more", ["  - b", "- a"]), Some(1));
+        // A continuation of a continuation keeps the item's depth.
+        assert_eq!(continuation_depth("  more", ["   again", "- a"]), Some(0));
+        // Not a continuation: one column, a list line, a blank line, an unindented paragraph
+        // (which ends the list), or no list at all.
+        assert_eq!(continuation_depth(" more", ["- a"]), None);
+        assert_eq!(continuation_depth("  - b", ["- a"]), None);
+        assert_eq!(continuation_depth("   ", ["- a"]), None);
+        assert_eq!(continuation_depth("  more", ["Intro"]), None);
+        assert_eq!(continuation_depth("  more", ["", "Intro", "- a"]), None);
+        assert_eq!(continuation_depth("  more", []), None);
     }
 
     #[test]
