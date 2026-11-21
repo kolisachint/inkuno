@@ -432,6 +432,8 @@ App / vault / panes (global + `Shell` / `Nav` / `Palette` contexts):
 
 ## 12. Visual spec v1 (PROPOSED 2026-11-08)
 
+> Superseded by §22 (Quiet window, 2026-11-21) wherever they differ: the regions, the sidebar (files only), the one right panel, the empty page and the Quiet tokens. Kept as history.
+
 > Status: proposal anchored to the in-repo mockup build
 > `docs/design/mockups/editor-current-v1.html` (which renders this spec; §9
 > keeps the original PNG as the vision reference). Read both side by side:
@@ -505,6 +507,8 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 ---
 
 ## 13. Strip-down v1 (user-approved 2026-11-08; supersedes §10.2)
+
+> Superseded by §22 (Quiet window, 2026-11-21): the sidebar views, the right dock with its stacked tools, the comments column and the round Assistant button are replaced by the regions of §22. Kept as history.
 
 > Direction: a calm single-pane writing app. Stripped components stay modular
 > in code — nothing deleted — so any of them can come back anytime; they are
@@ -1220,3 +1224,63 @@ Owner decisions, 2026-11-21 (answered in chat; these are owner approvals):
 
 - **Lists: the north star is GitHub + Typora** (APPROVED by owner 2026-11-21). The reference table and Inkuno's target (§10.3) are in `docs/design/markdown_renderer.md` §10, both APPROVED by the owner 2026-11-21. The colour and nesting of list markers follow the owner's pick there.
 - **Visual check findings, 2026-11-21**, from `scripts/visual-check.sh` (screenshots confirmed by the owner): the list markers, `~~~` fences, 4-space indented code and table cells. The list, fence, indented-code and table-cell findings are built on this branch (crew F3). The open ones are in `docs/backlog.md`, Follow-ups: rendering R1 to R7, and window chrome W1 and W2.
+
+## 22. Quiet window (2026-11-21)
+
+The shipped design of the window, after the Quiet packages P1 to P8. The spec and its decision log are in `docs/design/prototypes/`: `v2.html` (the prototype, approved 2026-11-21) and `README.md` (its twenty decisions, the three open questions answered, the build packages and their notes). Where this section and the prototype differ, the code is the reference; the difference is recorded here.
+
+### 22.1 Regions
+
+The window has four regions and nothing else:
+
+1. **Title band** (`BAND`, 38 px; 12 px hidden): the tab strip of each pane, the window controls and the right-panel switch. The strip is the band, even for one note. Ctrl+Shift+S hides the band; a pointer on its top edge brings it back over the note.
+2. **Left sidebar, files only**: Search and Today rows, the tree, a folded Scratch section at the bottom, Settings at the foot. It sits on the window background, without a panel, border or shadow. Recent notes and search live in the palette (Ctrl+P).
+3. **Panes**: one or two, side by side, each with its own tabs. Preview tabs are in italics. The focused pane's active tab is solid; the other pane's tabs are dimmed. A hairline divides the panes.
+4. **Right panel**: one panel with four views, Outline, Comments, Versions and Assistant, chosen by an icon switcher in the band; one view at a time, 280 px wide. Ctrl+Shift+O opens the outline, Ctrl+Alt+1 to 4 pick a view.
+
+The note is a flat sheet, flush with the top, right and bottom edges of the window, without gutters, rounded corners or borders. Its left edge casts one faint shadow (the only structural exception).
+
+### 22.2 The empty page (Quiet)
+
+A centred column of three cards, **Today**, **New note** and **Search**, each 190 px wide with a 1 px border at 8 % of the text, 10 px radius and 12 px padding, and the hover fill. Under them, **From a month ago** with up to three recall cards (title and first line of the note). Cards with no vault: New note creates a scratch note. The other themes keep their rows (`render_empty_rows`). Code: `shell/render.rs` (`render_empty`, `render_cards`), `inkuno-logic/src/recall.rs` (`first_line`, the cap of three).
+
+### 22.3 Quiet tokens
+
+Defined per theme in `quiet_extras` (`ui/theme.rs`), for `Quiet Light` and `Quiet Dark`. Each is a semantic token of `Theme`, and nothing else in the UI sets a colour for Quiet:
+
+| Token | Meaning |
+|---|---|
+| `link` | text of a link and a tag |
+| `ground` | the window background under the sheets |
+| `syntax` | the six code colours (comment, keyword, type, function, string, number) |
+| `todo_box` | the border of an unchecked task box (text at 40 %) |
+| `dots` | the dots of a rule (text at 40 %) |
+| `quote_bar` | the bar beside a quote |
+| `chip`, `chip_line` | the fill and the 1 px rim of inline code |
+| `code_line`, `gutter`, `gutter_num` | the box, the line-number gutter and its numbers of a code block |
+| `th` | a table's header fill |
+| `ink`, `table_alpha`, `ring_alpha` | the table's grid and outline, and an image's ring: `ink` at the alpha |
+| `alerts` | the five alert tints (NOTE, TIP, IMPORTANT, WARNING, CAUTION), made legible on their fill |
+| `popover` | the fill of menus and the palette |
+| `caution` | the red of destructive items |
+
+### 22.4 Dark pass (2026-11-21)
+
+Every fixture of `scripts/visual-check.sh` was rendered with `Quiet Dark` pinned. Contrast was measured against the sheet, the code block and the gutter: text at 4.5:1, lines and boxes at 3:1. Fixes (Quiet Dark only):
+
+| Token | Was | Now | Ratio before → after |
+|---|---|---|---|
+| `gutter_num` | `#5b5d60` | `#868686` | 2.49 → 4.52 |
+| `quote_bar` | `#4a4c4f` | `#676767` | 1.98 → 3.01 |
+| `code_line` | `#2e2f31` | `#6a6a6a` | 1.27 → 3.04 |
+| `chip_line` | `#353638` | `#6f6f6f` | 1.41 → 3.01 |
+| `table_alpha` | 0.09 | 0.34 | 1.29 → 3.10 |
+| `ring_alpha` | 0.08 | 0.34 | 1.26 → 3.10 |
+
+Already at or above target, unchanged: body and secondary text, the five syntax colours (4.9 to 7.8), `link`, `caution`, the alert tints, the task box (`todo_box`, 3.3), the rule dots (3.3), the highlight (`Theme::highlight` enforces 4.5). Light themes were not changed.
+
+### 22.5 Status
+
+- Built: P1 (title band, tabs), P5 (menus, palette, slash menu), P6 (links), P7 (comments as `passage<!-- comment: text -->`; pending changes beside the note in `.inkuno/pending`), P8 (empty page, dark pass, these docs).
+- Not yet merged when this section was written: P2 (sidebar), P3 (right panel), P4 (Settings tab). The user guide describes them as the prototype specifies; `shortcuts.md` is regenerated from the help text when they land.
+- Open questions of the prototype (Q1 to Q3) are answered as in its log. The gap in §20.4 (sidebar and title bar both hidden) is still open in backlog W1.

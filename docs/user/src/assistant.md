@@ -10,22 +10,22 @@ The agent is not part of Inkuno. Inkuno starts the `hoocode` program and talks t
 
 Without it, the Assistant still opens, and its panel says that the program was not found. Nothing else changes.
 
-## The button
+## The state
 
-A round button sits at the bottom right corner of the note, 30 pixels wide. The comments bubble stays to its left. The button shows the state of the agent:
+The Assistant's button in the switcher of the right panel shows the state of the agent. There is no button at the bottom of the note.
 
 | State | What you see |
 |---|---|
 | Idle | quiet |
 | Working | the accent colour, pulsing slowly |
-| Needs you | an accent dot: an answer came while the panel was closed |
+| Needs you | an accent dot: an answer came while the view was not on display |
 | Not installed | dimmed; the tooltip says `Assistant: hoocode is not installed`, with the command set in the settings |
 
-A click opens the panel, or closes it. Opening the panel clears the dot. The button is not shown in [focus mode](navigation.md) (`F9`).
+A click on the button shows the Assistant view. Showing it clears the dot. The panel is hidden in [focus mode](navigation.md) (`F9`).
 
 ## The panel
 
-The panel is a tool of the right dock, next to the outline. It is hidden at first. Open it with the **Assistant** button, or open the command palette and type `assistant`. There is no key for it by default.
+The panel is the Assistant view of the right panel, beside the outline, comments and versions. Open it with its button in the switcher, `Ctrl + Alt + 4`, or the command palette: type `assistant`.
 
 From top to bottom, the panel has:
 
@@ -43,12 +43,12 @@ From top to bottom, the panel has:
 
 ## Review this note
 
-**Review this note** asks the agent to read the note and list what it finds: unclear or wrong statements, gaps, contradictions and typos that change the meaning. The agent answers with a short list of passages and comments. Inkuno then writes each one as a comment on its passage, in the [comment syntax](comments.md): `{==passage==}{>>comment<<}`.
+**Review this note** asks the agent to read the note and list what it finds: unclear or wrong statements, gaps, contradictions and typos that change the meaning. The agent answers with a short list of passages and comments. Inkuno then writes each one as a comment on its passage, in the [comment syntax](comments.md): `passage<!-- comment: text -->`.
 
 - The answer itself is not shown. While the agent works, the panel says **Reviewing…**. When it ends, the panel says how many comments were written.
 - All the comments of one review are one undo step. `Ctrl + Z` takes the whole review back.
 - A finding is left out when its passage is not in the note exactly once, or when it lies inside a comment that is already there. The panel says how many were left out.
-- The comments show in the comments panel, with the ones you write. Click one to go to it, and resolve it as usual.
+- The comments show in the Comments view, with the ones you write. Click one to go to it, and resolve it as usual.
 
 If you edit the note while the agent works, the comments go into the text as it is when the agent ends.
 

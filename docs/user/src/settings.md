@@ -1,22 +1,26 @@
 # Settings and appearance
 
-Every choice is a command of the palette: type its name, and see the result at once.
+Every choice is in the **Settings** tab, `Ctrl + ,` (also the foot of the sidebar), with the pages Appearance, Editor, Files, Shortcuts and About. Each choice is also a command of the palette: type its name, and see the result at once.
 
 ## Theme
 
 Type `theme` in the palette.
 
-- 15 themes: Quiet Dark and Quiet Light, Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light).
+- 16 themes: Quiet Dark and Quiet Light, Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light), Sepia.
 - Each theme is applied as you move through the list, so you see it before choosing. `Enter` keeps it, `Esc` goes back to the one you had.
 - `Default` follows the light or dark setting of your system, with Quiet Light or Quiet Dark.
 - In every theme, links, secondary text and the titles of colored panels are adjusted to a contrast of at least 4.5:1 (WCAG AA).
 
-**The look.** The window is a warm ground, a little darker than the page in every theme. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart. Page titles follow your text font too, Inter by default.
+**The look, Quiet.** The Quiet themes (the default) are flat. The sidebar sits on the window itself, with no panel, border or shadow. The note is a flat sheet, flush with the top, right and bottom edges of the window, without rounded corners or borders; its left edge has one faint shadow to set it apart from the sidebar. Tables and code blocks have a fine line; the lines of a table, a code block and an image are drawn at least 3:1 against what is under them.
 
-- The active pane of a split has a thin accent ring.
+**The look, other themes.** The window is a warm ground, a little darker than the page. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart.
+
+- The focused pane's active tab is solid, and the other pane's tabs are dimmed.
 - The open row of a list, a tag in the text, a commented passage and the current tab take the accent colour as text.
 - Tables and code blocks have a rounded band.
 - Menus, the palette, help and notices float above, with a shadow.
+
+Page titles follow your text font too, Inter by default.
 
 ## Fonts
 

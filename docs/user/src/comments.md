@@ -14,15 +14,14 @@ The passage is the text from the start of its line (or of its table cell, or of 
 
 A review by the [Assistant](assistant.md) writes its findings in this form too. All the comments of one review are one undo step.
 
-## The comments panel
+## The Comments view
 
-A panel to the right of the note lists its comments.
+The right panel has a **Comments** view, `Ctrl + Alt + 2`, that lists the comments of the note. It shares the panel with the outline, the versions and the Assistant: see [Navigation](navigation.md#the-right-panel).
 
 - Click a comment to go to it.
 - Click its check mark (it shows under the pointer) to resolve it: the markup goes, the text stays.
-- The comment of the passage under the caret is on a tint, and the panel scrolls to it.
-- The speech bubble at the bottom right of the note closes and opens the panel. So does the panel's cross.
-- A badge on the bubble counts the comments (`9+` beyond nine).
+- The comment of the passage under the caret is on a tint, and the list scrolls to it.
+- Its button in the panel's switcher counts the comments (`9+` beyond nine).
 - `comments` in the palette lists them, to jump to one from the keyboard.
 
 On a comment, `Ctrl + Shift + M` resolves it. On a line of its own (see below), the line goes.
@@ -42,6 +41,6 @@ How it shows:
 
 - A commented cell is tinted, with a mark in its corner.
 - A commented row, column or table is outlined, with a dot on its grip. It is stronger while the cursor is in the comment.
-- The panel says where each comment is: `Cell C2`, `Row Léa`, `Column Age`, `Table`.
+- The Comments view says where each comment is: `Cell C2`, `Row Léa`, `Column Age`, `Table`.
 
 A comment on an empty cell is refused: there is nothing to highlight.
