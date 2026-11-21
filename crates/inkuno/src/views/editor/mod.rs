@@ -747,13 +747,6 @@ impl Editor {
         &self.content[self.sel.clone()]
     }
 
-    fn fences_before(&self, at: usize) -> usize {
-        self.content[..at]
-            .lines()
-            .filter(|l| md::is_fence(l))
-            .count()
-    }
-
     /// Footnote definitions of the text, recomputed when it changed.
     pub(super) fn feet(&mut self) -> &[md::FootDef] {
         if self.feet_rev != self.revision {
@@ -791,10 +784,15 @@ impl Editor {
         self.feet.iter().map(|d| d.label.to_lowercase()).collect()
     }
 
-    /// A ``` without a closing fence does not open a block, as in `layout`.
+    /// The opener of the code block the line at `line_start` is in, if any. A fence without a
+    /// closing one does not open a block, as in `layout`.
+    fn open_fence(&self, line_start: usize) -> Option<md::Fence> {
+        md::open_at(&md::blocks(&self.content), line_start)
+    }
+
+    /// Whether the line at `line_start` is inside a code block.
     fn in_code(&self, line_start: usize) -> bool {
-        self.fences_before(line_start) % 2 == 1
-            && self.content[line_start..].lines().any(md::is_fence)
+        self.open_fence(line_start).is_some()
     }
 
     // ----- Search in the note -----

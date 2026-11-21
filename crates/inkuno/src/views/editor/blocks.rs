@@ -180,7 +180,7 @@ impl Editor {
         if held.secondary() && self.footnote_defined_at(i) {
             return Some(CursorStyle::PointingHand);
         }
-        let (kind, marker) = md::classify(line, self.in_code(lr.start));
+        let (kind, marker) = md::classify_in(line, self.open_fence(lr.start));
         (matches!(kind, Kind::Task(_)) && col + 4 >= marker && col < marker)
             .then_some(CursorStyle::PointingHand)
     }

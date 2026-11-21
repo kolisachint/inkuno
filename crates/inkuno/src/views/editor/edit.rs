@@ -386,17 +386,18 @@ impl Editor {
         let c = self.cursor();
         let lr = self.line_range(c);
         let line = self.content[lr.clone()].to_string();
-        let in_code = self.in_code(lr.start);
-        // Opening a code block: also put the closing fence.
-        if md::is_fence(&line)
-            && !in_code
+        let open = self.open_fence(lr.start);
+        // Opening a code block: also put the closing fence, as long and of the same kind.
+        if let Some((fence, _)) = md::fence_of(&line)
+            && open.is_none()
             && c == lr.end
-            && self.fences_before(self.content.len()) % 2 == 1
+            && !md::blocks(&self.content).iter().any(|b| b.open == lr.start)
         {
-            self.edit(c..c, "\n\n```", cx);
+            let closing = (fence.ch as char).to_string().repeat(fence.len);
+            self.edit(c..c, &format!("\n\n{closing}"), cx);
             return self.move_to(c + 1, cx);
         }
-        match md::on_enter(&line, c - lr.start, in_code) {
+        match md::on_enter(&line, c - lr.start, open) {
             Enter::Insert(text) => self.edit(c..c, &text, cx),
             Enter::Clear => self.edit(lr, "", cx),
         }
@@ -413,7 +414,7 @@ impl Editor {
         let first = self.line_range(self.sel.start);
         if indent && self.sel.is_empty() {
             let line = &self.content[first.clone()];
-            let (kind, _) = md::classify(line, self.in_code(first.start));
+            let (kind, _) = md::classify_in(line, self.open_fence(first.start));
             if !matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) {
                 return self.edit(self.sel.clone(), md::INDENT, cx);
             }

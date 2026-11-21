@@ -35,7 +35,6 @@ pub(super) struct Laid {
     pub(super) len: usize,
     pub(super) cursor: usize,
     pub(super) revealed: Option<usize>,
-    pub(super) fences: usize,
     pub(super) dollars: usize,
     /// Length of the front matter.
     pub(super) meta: usize,
@@ -59,8 +58,7 @@ pub(super) struct Region {
 /// What is kept from the previous layout, and what is redone.
 pub(super) struct Plan {
     pub(super) regions: Vec<Region>,
-    /// Counts of fence lines and `$$`, unchanged.
-    pub(super) fences: usize,
+    /// Count of lines reduced to `$$`, unchanged.
     pub(super) dollars: usize,
     /// Reused lines following `after` (bytes of the old text) shift by `delta`.
     pub(super) after: usize,
@@ -744,7 +742,7 @@ pub fn text_runs(
 /// task keeps its (struck) text; code stays as is. A quote's prefix is hidden here, from `marker`;
 /// a list item's prefix is hidden by its layout instead (see `item_prefix`). The caller only asks
 /// for the kinds it hides.
-fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
+pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     if kind == Kind::Quote {
         let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
@@ -1051,9 +1049,23 @@ impl Editor {
                 return None;
             }
             let mut lines = 0;
+            let mut at = start;
             for l in self.content[start..stop].split('\n') {
                 lines += 1;
                 if md::is_fence(l) || l.trim() == "$$" || (big.is_some() && !md::is_table_line(l)) {
+                    return None;
+                }
+                // An indented line may be code, depending on the blank lines and the list above it.
+                if md::starts_indented_code(l, self.content[..at].split('\n').rev()) {
+                    return None;
+                }
+                at += l.len() + 1;
+            }
+            // The line after the new text may be code too, when it continues an indented block.
+            if stop < len {
+                let after = stop + 1;
+                let next = self.content[after..].split('\n').next().unwrap_or("");
+                if md::starts_indented_code(next, self.content[..after].split('\n').rev()) {
                     return None;
                 }
             }
@@ -1073,7 +1085,6 @@ impl Editor {
         }
         Some(Plan {
             regions,
-            fences: laid.fences,
             dollars: laid.dollars,
             after: if touched { q } else { usize::MAX },
             delta,
@@ -1240,24 +1251,27 @@ impl Editor {
                 }
             })
         });
-        // A ``` without a closing fence opens no block: otherwise each ``` typed would
-        // switch the whole rest of the note to code, hence restyle it. If
-        // there is one too many, it is the one being typed (the cursor is on the line of the
-        // last change), otherwise the last: a cursor merely resting on a fence of a closed
-        // block must not shift the pairing of the others.
-        let (mut fences, mut dollars) = match &plan {
-            Some(plan) => (plan.fences, plan.dollars),
-            None => md::count_fences_and_dollars(&self.content),
-        };
-        let (fences0, dollars0) = (fences, dollars);
+        // A fence without a closing one opens no block (see `md::blocks`). If the fences are odd in
+        // number and the line being typed is one, that line is the unpaired one: it waits for its
+        // partner, and the blocks after it keep their code. The code blocks of a full layout are
+        // found once here; an incremental one holds no fence line.
         let typed = self.line_range(cursor);
-        let orphan = (plan.is_none()
-            && fences % 2 == 1
-            && md::is_fence(&self.content[typed.clone()])
+        let set_aside = (plan.is_none()
             && self.content.is_char_boundary(self.edited_at)
-            && self.line_range(self.edited_at) == typed)
+            && self.line_range(self.edited_at) == typed
+            && md::is_fence(&self.content[typed.clone()])
+            && self.content.split('\n').filter(|l| md::is_fence(l)).count() % 2 == 1)
             .then_some(typed.start);
-        fences -= orphan.is_some() as usize;
+        let fenced = if plan.is_some() {
+            Vec::new()
+        } else {
+            md::blocks_with(&self.content, set_aside)
+        };
+        let mut dollars = match &plan {
+            Some(plan) => plan.dollars,
+            None => md::count_dollars(&self.content),
+        };
+        let dollars0 = dollars;
         // A font without `≠` composes it from a `=` and a misplaced bar: might as well
         // leave `!=`.
         let has_unequal = text_system
@@ -1354,7 +1368,10 @@ impl Editor {
         let mut rows = Vec::with_capacity(self.rows.len() + 16);
         let mut y = px(0.);
         let mut offset;
-        let mut in_code = false;
+        // The opener of the fenced code block in progress, if any.
+        let mut in_code: Option<md::Fence> = None;
+        // Indented code: the previous line is one; the previous line is blank, or there is none.
+        let (mut indented, mut starts) = (false, true);
         // Front matter: its lines are written faded, monospaced, without being interpreted.
         let meta = md::front_matter(&self.content);
         // Color of a `[!TYPE]` callout: its tint tells its type.
@@ -1492,19 +1509,41 @@ impl Editor {
                 let (mut kind, mut marker) = if offset < meta {
                     (Kind::Meta, 0)
                 } else {
-                    md::classify(line, in_code)
+                    md::classify_in(line, in_code)
                 };
+                // Indented code: four columns (or a tab) after a blank line or at the start, or the next
+                // line of such a block. A list item's continuation is not code.
+                let blank = line.trim().is_empty();
+                let code_now = !blank
+                    && in_code.is_none()
+                    && !matches!(kind, Kind::Fence | Kind::Meta)
+                    && md::indent_columns(line) >= 4
+                    && (indented
+                        || starts
+                            && md::starts_indented_code(
+                                line,
+                                self.content[..offset].split('\n').rev(),
+                            ));
+                if code_now {
+                    kind = Kind::Code;
+                    marker = 0;
+                }
+                if !blank {
+                    indented = code_now;
+                }
+                starts = blank;
                 let mut opens = false;
                 let mut drawing = None;
                 let mut broken = None;
                 let mut enlarge = None;
-                let was_in_code = in_code;
-                if kind == Kind::Fence && orphan != Some(offset) {
-                    opens = !in_code && fences > 1;
-                    in_code = opens;
-                    fences -= 1;
+                let was_in_code = in_code.is_some();
+                if kind == Kind::Fence {
+                    let fence = md::fence_of(line);
+                    opens =
+                        !was_in_code && fenced.binary_search_by_key(&offset, |b| b.open).is_ok();
+                    in_code = if opens { fence.map(|(f, _)| f) } else { None };
                     if opens {
-                        lang = line.trim_start()[3..].trim().to_lowercase();
+                        lang = fence.map_or_else(String::new, |(_, info)| info.to_lowercase());
                         block = (lang == "mermaid").then(|| (offset, String::new()));
                     } else if let Some((start, source)) = block.take() {
                         // A diagram is drawn once the cursor has left the block, in a background task.
@@ -1711,7 +1750,8 @@ impl Editor {
                     let near = composed
                         .as_ref()
                         .map(|m| (m.start.wrapping_sub(offset), m.end.wrapping_sub(offset)));
-                    let lang = (kind == Kind::Code).then_some(&lang);
+                    // Indented code has no language: the one of the last fence does not apply to it.
+                    let lang = (kind == Kind::Code && !code_now).then_some(&lang);
                     let mut hasher = Fast::default();
                     // Two halves: thirteen entries do not fit in one hashed tuple.
                     (
@@ -1755,9 +1795,11 @@ impl Editor {
                                 md::CODE
                             });
                         } else if kind == Kind::Code {
-                            // With no language given, in plain text or in Mermaid, the block stays as it is.
-                            if !matches!(lang.as_str(), "" | "text" | "txt" | "plain" | "mermaid") {
-                                md::code(line, &lang, &mut flags);
+                            // Indented code has no language: the one of the last fence does not apply to it.
+                            // With none given, in plain text or in Mermaid, the block stays as it is.
+                            let language = if code_now { "" } else { lang.as_str() };
+                            if !matches!(language, "" | "text" | "txt" | "plain" | "mermaid") {
+                                md::code(line, language, &mut flags);
                             }
                         } else if !code && kind != Kind::Rule {
                             md::inline(line, marker, &mut flags);
@@ -1983,30 +2025,41 @@ impl Editor {
                             let bullet = (kind == Kind::Bullet).then(|| Bullet::at(depth));
                             // The width of the marker: a shape, a number, or a box (after a number
                             // for an ordered task, with `dot` between them).
-                            let mark = match (kind, task.is_some()) {
-                                (Kind::Bullet, _) => dot,
-                                (Kind::Ordered, true) => number + dot + side,
-                                (Kind::Ordered, false) => number,
+                            let mark = match kind {
+                                Kind::Bullet => dot,
+                                Kind::Ordered => number,
                                 _ => side,
                             };
                             // The text starts after the marker's gap; the gutter grows to fit a wider marker.
                             let text_at =
                                 gutter * (depth + 1) as f32 + (mark + gap - gutter).max(px(0.));
                             let right = text_at - gap;
-                            let (check, number_right) = match task {
-                                Some((at, done)) => {
-                                    let from = right - side;
-                                    let number_right = from - dot;
-                                    (
-                                        Some(Check {
-                                            at,
-                                            x: from..from + side,
-                                            done,
-                                        }),
-                                        number_right,
-                                    )
+                            // An ordered task: its number keeps the place of the other numbers of its depth
+                            // (right-aligned before the gap, or further left for a wide one), then its box,
+                            // then its text. A bullet task's box sits right-aligned before its text.
+                            let (text_at, check, number_right) = match (kind, task) {
+                                (Kind::Ordered, Some((at, done))) => {
+                                    let number_right =
+                                        (gutter * (depth + 1) as f32 - gap).max(number);
+                                    let from = number_right + dot;
+                                    let text_at = from + side + gap;
+                                    let check = Check {
+                                        at,
+                                        x: from..from + side,
+                                        done,
+                                    };
+                                    (text_at, Some(check), number_right)
                                 }
-                                None => (None, right),
+                                (_, Some((at, done))) => {
+                                    let from = right - side;
+                                    let check = Check {
+                                        at,
+                                        x: from..from + side,
+                                        done,
+                                    };
+                                    (text_at, Some(check), from - dot)
+                                }
+                                (_, None) => (text_at, None, right),
                             };
                             Some(Lead {
                                 line: text,
@@ -2183,6 +2236,16 @@ impl Editor {
                 // A code block and a callout have room inside their fill, above the first line and under the last.
                 let (head, foot) = match kind {
                     Kind::Fence => (!was_in_code, was_in_code || !opens),
+                    // Indented code: the first line of the block and the last one get the room.
+                    Kind::Code if !was_in_code => (
+                        !rows.last().is_some_and(|r| r.kind == Kind::Code),
+                        self.content
+                            .get(offset + line.len() + 1..)
+                            .and_then(|rest| rest.split('\n').next())
+                            .is_none_or(|next| {
+                                next.trim().is_empty() || md::indent_columns(next) < 4
+                            }),
+                    ),
                     Kind::Quote => {
                         let next = self
                             .content
@@ -2305,7 +2368,6 @@ impl Editor {
             len: text_len,
             cursor,
             revealed: self.revealed,
-            fences: fences0,
             dollars: dollars0,
             meta,
             foot,
@@ -3338,6 +3400,65 @@ mod tests {
         assert_eq!(under_a.2.as_deref(), Some("more of a"));
         assert_eq!(under_b.0, em * 3.75);
         assert_eq!(under_b.1, 6);
+    }
+
+    /// An ordered task keeps its number where the numbers of its depth are (right-aligned before the
+    /// gap); its box and its text follow. The plain items keep their text at the gutter.
+    #[gpui::test]
+    fn an_ordered_task_keeps_its_number_in_the_gutter(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n1. plain\n1. [ ] task\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let (plain, task) = editor.read_with(cx, |e, _| {
+            let lead = |start: usize| {
+                let row = e.rows.iter().find(|r| r.start == start).unwrap();
+                let lead = row.shaped.lead.as_ref().unwrap();
+                (
+                    lead.dx,
+                    lead.width,
+                    lead.check.as_ref().map(|c| c.x.clone()),
+                )
+            };
+            (lead(lines[1]), lead(lines[2]))
+        });
+        let em = px(editor.read_with(cx, |e, _| e.theme.size));
+        let (gutter, gap) = (em * 1.875, em * 0.5);
+        // The plain item: its text at the gutter, its number right-aligned before the gap.
+        assert_eq!(plain.1, gutter);
+        // The same number, in the same place.
+        assert_eq!(task.0, plain.0);
+        // The box is after the number, and the text after the box.
+        let plain_right = plain.1 - gap;
+        let check = task.2.clone().expect("a box");
+        assert!(check.start > plain_right, "box {check:?} under the number");
+        assert!(task.1 > check.end, "text {:?} before its box", task.1);
+    }
+
+    /// The cells of a table hide their markers off the caret's row, as the body lines do; the row
+    /// under the caret shows its source.
+    #[gpui::test]
+    fn table_cells_hide_their_markers_off_the_caret_row(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n\n| a | b | c |\n| --- | --- | --- |\n| **bold** | `code` | [x](https://e.org) |\n";
+        let (editor, cx) = laid_out(cx, text);
+        let row = starts(text)[4];
+        let cells = |cx: &mut gpui::VisualTestContext| {
+            editor.read_with(cx, |e, _| {
+                let r = e.rows.iter().find(|r| r.start == row).unwrap();
+                r.grid
+                    .as_ref()
+                    .unwrap()
+                    .cells
+                    .iter()
+                    .map(|c| c.shown())
+                    .collect::<Vec<_>>()
+            })
+        };
+        // The caret is on the first line: the table's markers are hidden.
+        assert_eq!(cells(cx), ["bold", "code", "x"]);
+        editor.update(cx, |e, cx| e.move_to(row + 3, cx));
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        assert_eq!(cells(cx), ["**bold**", "`code`", "[x](https://e.org)"]);
     }
 
     /// A click on the drawn box of a task checks it. A click on the rest of the marker puts the

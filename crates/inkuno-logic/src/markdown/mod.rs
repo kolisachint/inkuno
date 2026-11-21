@@ -70,8 +70,126 @@ pub fn indent_len(line: &str) -> usize {
     line.len() - line.trim_start_matches([' ', '\t']).len()
 }
 
+/// The opener of a code fence: its character (`` ` `` or `~`) and the length of its run.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Fence {
+    pub ch: u8,
+    pub len: usize,
+}
+
+/// The fence of `line` and its info string (what follows the run, trimmed), if it is a fence:
+/// three or more backticks or tildes; the info string of a backtick fence holds no backtick.
+// ponytail: the indent is not limited to three spaces, so a fence inside a list item keeps working;
+// a fence indented by four spaces outside any list is read as a fence, not as indented code.
+pub fn fence_of(line: &str) -> Option<(Fence, &str)> {
+    let rest = line.trim_start_matches([' ', '\t']);
+    let ch = *rest.as_bytes().first()?;
+    if ch != b'`' && ch != b'~' {
+        return None;
+    }
+    let len = rest.bytes().take_while(|&b| b == ch).count();
+    let info = rest[len..].trim();
+    if len < 3 || (ch == b'`' && info.contains('`')) {
+        return None;
+    }
+    Some((Fence { ch, len }, info))
+}
+
 pub fn is_fence(line: &str) -> bool {
-    line.trim_start().starts_with("```")
+    fence_of(line).is_some()
+}
+
+/// Whether `line` closes a block opened by `open`: a fence of the same character, at least as long,
+/// with nothing after it.
+pub fn closes(line: &str, open: Fence) -> bool {
+    matches!(fence_of(line), Some((f, info)) if info.is_empty() && f.ch == open.ch && f.len >= open.len)
+}
+
+/// A fenced code block: its opener, the byte offsets of the starts of its opening and closing lines,
+/// and the end of the closing line.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Block {
+    pub fence: Fence,
+    pub open: usize,
+    pub close: usize,
+    pub end: usize,
+}
+
+/// The code blocks of `text`, in order. A fence opens a block only if a fence closing it comes
+/// later (a lone ``` opens nothing); a block ends at the first closing fence, as in CommonMark.
+pub fn blocks(text: &str) -> Vec<Block> {
+    blocks_with(text, None)
+}
+
+/// `blocks`, the fence line starting at byte `set_aside` (if any) taken as plain text: the editor
+/// sets aside the fence being typed, so that it waits for its partner and the block after it
+/// keeps its code.
+/// One pass forward, one back: the cost does not grow with the square of the fences.
+pub fn blocks_with(text: &str, set_aside: Option<usize>) -> Vec<Block> {
+    // The fence lines: start, end, fence, and whether the line can close (nothing after the run).
+    let mut fences: Vec<(usize, usize, Fence, bool)> = Vec::new();
+    let mut at = 0;
+    for line in text.split('\n') {
+        if let Some((fence, info)) = fence_of(line)
+            && set_aside != Some(at)
+        {
+            fences.push((at, at + line.len(), fence, info.is_empty()));
+        }
+        at += line.len() + 1;
+    }
+    // Scanning back: an opener has a closer after it when the longest closing run of its character
+    // after it is at least as long.
+    let mut longest = [0usize; 2];
+    let mut has_closer = vec![false; fences.len()];
+    for (i, &(_, _, fence, closable)) in fences.iter().enumerate().rev() {
+        let k = (fence.ch == b'~') as usize;
+        has_closer[i] = longest[k] >= fence.len;
+        if closable {
+            longest[k] = longest[k].max(fence.len);
+        }
+    }
+    let mut out = Vec::new();
+    let mut open: Option<(Fence, usize)> = None;
+    for (i, &(start, end, fence, closable)) in fences.iter().enumerate() {
+        match open {
+            None if has_closer[i] => open = Some((fence, start)),
+            Some((o, from)) if closable && fence.ch == o.ch && fence.len >= o.len => {
+                out.push(Block {
+                    fence: o,
+                    open: from,
+                    close: start,
+                    end,
+                });
+                open = None;
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The opener of the code block that the line starting at byte `at` is in, if any. The opening
+/// fence line is not in its block; the closing one is.
+pub fn open_at(blocks: &[Block], at: usize) -> Option<Fence> {
+    let i = blocks.partition_point(|b| b.close < at);
+    blocks
+        .get(i)
+        .filter(|b| b.open < at && at <= b.close)
+        .map(|b| b.fence)
+}
+
+/// The lines of `text` that are neither fences nor inside a code block, with their byte offsets.
+pub fn prose_lines(text: &str) -> Vec<(usize, &str)> {
+    let blocks = blocks(text);
+    let mut out = Vec::new();
+    let mut at = 0;
+    for line in text.split('\n') {
+        if !is_fence(line) && open_at(&blocks, at).is_none() {
+            out.push((at, line));
+        }
+        at += line.len() + 1;
+    }
+    out
 }
 
 /// The line is a table line: `classify(line, false)` calls it `Kind::Table`, without the rest of the work.
@@ -79,19 +197,10 @@ pub fn is_table_line(line: &str) -> bool {
     line[indent_len(line)..].starts_with('|')
 }
 
-/// Number of ``` fence lines and of lines reduced to `$$` in the text, without analysing it line by line:
-/// we look for the patterns, which are rare, then look at the line where each one falls.
-pub fn count_fences_and_dollars(text: &str) -> (usize, usize) {
+/// Number of lines reduced to `$$` in the text.
+pub fn count_dollars(text: &str) -> usize {
     let line_start = |at: usize| text[..at].rfind('\n').map_or(0, |i| i + 1);
     let line_end = |at: usize| text[at..].find('\n').map_or(text.len(), |i| at + i);
-    let (mut fences, mut last) = (0, usize::MAX);
-    for (at, _) in text.match_indices("```") {
-        let start = line_start(at);
-        if start != last && text[start..at].chars().all(char::is_whitespace) {
-            fences += 1;
-            last = start;
-        }
-    }
     let (mut dollars, mut last) = (0, usize::MAX);
     for (at, _) in text.match_indices("$$") {
         let start = line_start(at);
@@ -100,18 +209,25 @@ pub fn count_fences_and_dollars(text: &str) -> (usize, usize) {
             last = start;
         }
     }
-    (fences, dollars)
+    dollars
 }
 
-/// Kind of the line and length (in bytes) of its marker, indentation included.
+/// Kind of the line and length (in bytes) of its marker, for a line that is inside a code block
+/// when `in_code` (taken as a ``` block: see `classify_in` for the opener of any block).
 pub fn classify(line: &str, in_code: bool) -> (Kind, usize) {
+    classify_in(line, in_code.then_some(Fence { ch: b'`', len: 3 }))
+}
+
+/// Kind of the line and length (in bytes) of its marker, indentation included. `open` is the opener of
+/// the code block the line is in, if any: inside it, only the closing fence is a fence, the rest is code.
+pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
     let indent = indent_len(line);
     let rest = &line[indent..];
-    if rest.starts_with("```") {
-        return (Kind::Fence, line.len());
-    }
-    if in_code {
-        return (Kind::Code, 0);
+    match open {
+        Some(open) if closes(line, open) => return (Kind::Fence, line.len()),
+        Some(_) => return (Kind::Code, 0),
+        None if is_fence(line) => return (Kind::Fence, line.len()),
+        None => {}
     }
     let hashes = rest.bytes().take_while(|&b| b == b'#').count();
     if (1..=6).contains(&hashes) && rest[hashes..].starts_with(' ') {
@@ -280,44 +396,34 @@ pub fn footnotes(text: &str) -> Vec<FootDef> {
         return Vec::new();
     }
     let meta = front_matter(text);
-    let fences = text[meta..].lines().filter(|line| is_fence(line)).count();
-    let (mut seen, mut in_code, mut at, mut found): (usize, bool, usize, Vec<FootDef>) =
-        (0, false, 0, Vec::new());
+    let mut found: Vec<FootDef> = Vec::new();
     // References met before their definition, in order: the display numbers follow them.
     let mut pending: Vec<(String, usize)> = Vec::new();
-    for line in text.split('\n') {
-        if at >= meta {
-            if is_fence(line) {
-                seen += 1;
-                in_code = !in_code && seen < fences;
-            } else if !in_code {
-                let start = at;
-                let marker = footnote_def(line).map(|(label, marker, _)| {
-                    let key = label.to_lowercase();
-                    if !found.iter().any(|d| d.label.to_lowercase() == key) {
-                        // First-seen casing: an earlier reference may have named it already.
-                        let seen = pending
-                            .iter()
-                            .find(|(l, _)| l.to_lowercase() == key)
-                            .map(|(l, _)| l.clone())
-                            .unwrap_or(label);
-                        found.push(FootDef {
-                            label: seen,
-                            display: 0,
-                            at: start,
-                            refs: Vec::new(),
-                        });
-                    }
-                    marker
+    for (at, line) in prose_lines(&text[meta..]) {
+        let start = meta + at;
+        let marker = footnote_def(line).map(|(label, marker, _)| {
+            let key = label.to_lowercase();
+            if !found.iter().any(|d| d.label.to_lowercase() == key) {
+                // First-seen casing: an earlier reference may have named it already.
+                let seen = pending
+                    .iter()
+                    .find(|(l, _)| l.to_lowercase() == key)
+                    .map(|(l, _)| l.clone())
+                    .unwrap_or(label);
+                found.push(FootDef {
+                    label: seen,
+                    display: 0,
+                    at: start,
+                    refs: Vec::new(),
                 });
-                for (r, label) in footnote_ref(line) {
-                    if marker.as_ref() != Some(&r) {
-                        pending.push((label, start + r.start));
-                    }
-                }
+            }
+            marker
+        });
+        for (r, label) in footnote_ref(line) {
+            if marker.as_ref() != Some(&r) {
+                pending.push((label, start + r.start));
             }
         }
-        at += line.len() + 1;
     }
     for (label, pos) in &pending {
         let key = label.to_lowercase();
@@ -348,20 +454,10 @@ pub fn count_footnotes(text: &str) -> usize {
         return 0;
     }
     let meta = front_matter(text);
-    let fences = text[meta..].lines().filter(|line| is_fence(line)).count();
-    let (mut seen, mut in_code, mut at, mut n) = (0, false, 0, 0);
-    for line in text.split('\n') {
-        if at >= meta {
-            if is_fence(line) {
-                seen += 1;
-                in_code = !in_code && seen < fences;
-            } else if !in_code {
-                n += line.match_indices("[^").count();
-            }
-        }
-        at += line.len() + 1;
-    }
-    n
+    prose_lines(&text[meta..])
+        .into_iter()
+        .map(|(_, line)| line.match_indices("[^").count())
+        .sum()
 }
 
 /// Back to literal text for the references of `line` that `defined` does not know: only defined
@@ -1000,21 +1096,16 @@ pub fn code(line: &str, lang: &str, flags: &mut [u16]) {
 }
 
 /// Content (fences excluded) of the code block that contains byte `at`. A
-/// ``` without a closing fence opens no block.
+/// fence without a closing one opens no block.
 pub fn code_block(text: &str, at: usize) -> Option<Range<usize>> {
-    let mut open = None;
-    let mut offset = 0;
-    for line in text.split('\n') {
-        if is_fence(line) {
-            match open.take() {
-                Some(start) if (start..offset).contains(&at) => return Some(start..offset - 1),
-                Some(_) => {}
-                None => open = Some(offset + line.len() + 1),
-            }
-        }
-        offset += line.len() + 1;
-    }
-    None
+    blocks(text).into_iter().find_map(|b| {
+        // The content starts after the opening line and ends before the break that precedes the closing one.
+        let first = text[b.open..]
+            .find('\n')
+            .map_or(text.len(), |i| b.open + i + 1);
+        let content = first..b.close.saturating_sub(1);
+        (first..b.close).contains(&at).then_some(content)
+    })
 }
 
 const SYMBOLS: &[(&str, &str)] = &[
@@ -1120,27 +1211,22 @@ pub fn index(text: &str) -> (Vec<String>, Vec<String>) {
         }
     }
     let mut wikis = Vec::new();
-    let mut in_code = false;
-    for line in text[front_matter(text)..].lines() {
-        if is_fence(line) {
-            in_code = !in_code;
-        } else if !in_code {
-            for (_, link) in links(line) {
-                let (list, item) = match link {
-                    Link::Tag(t) => (&mut tags, t),
-                    Link::Wiki(w) => (&mut wikis, w.to_lowercase()),
-                    Link::Footnote(_) | Link::Url(_) => continue,
-                };
-                if !list.contains(&item) {
-                    list.push(item);
-                }
+    for (_, line) in prose_lines(&text[front_matter(text)..]) {
+        for (_, link) in links(line) {
+            let (list, item) = match link {
+                Link::Tag(t) => (&mut tags, t),
+                Link::Wiki(w) => (&mut wikis, w.to_lowercase()),
+                Link::Footnote(_) | Link::Url(_) => continue,
+            };
+            if !list.contains(&item) {
+                list.push(item);
             }
-            // A displayed image counts as a link to its file.
-            if let Some((_, path)) = image(line) {
-                let name = file_name(&path).to_lowercase();
-                if !wikis.contains(&name) {
-                    wikis.push(name);
-                }
+        }
+        // A displayed image counts as a link to its file.
+        if let Some((_, path)) = image(line) {
+            let name = file_name(&path).to_lowercase();
+            if !wikis.contains(&name) {
+                wikis.push(name);
             }
         }
     }
@@ -1154,12 +1240,14 @@ pub fn relink(text: &str, old: &str, new: &str) -> Option<String> {
     let meta = front_matter(text);
     let mut out = String::with_capacity(text.len());
     out.push_str(&text[..meta]);
-    let mut in_code = false;
-    for line in text[meta..].split_inclusive('\n') {
+    let body = &text[meta..];
+    let fenced = blocks(body);
+    let mut at = 0;
+    for line in body.split_inclusive('\n') {
         let mut done = 0;
-        if is_fence(line) {
-            in_code = !in_code;
-        } else if !in_code {
+        let prose = !is_fence(line) && open_at(&fenced, at).is_none();
+        at += line.len();
+        if prose {
             for (range, link) in links(line) {
                 if matches!(link, Link::Wiki(target) if target.to_lowercase() == old) {
                     // `[[target|alias]]` or `[[target#anchor]]`: only the target changes.
@@ -1181,11 +1269,12 @@ pub fn relink(text: &str, old: &str, new: &str) -> Option<String> {
 /// The text where `![…](folder/old)` images name the file `new`.
 fn reembed(text: &str, old: &str, new: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut in_code = false;
+    let fenced = blocks(text);
+    let mut at = 0;
     for line in text.split_inclusive('\n') {
-        if is_fence(line) {
-            in_code = !in_code;
-        } else if !in_code
+        let prose = !is_fence(line) && open_at(&fenced, at).is_none();
+        at += line.len();
+        if prose
             && let Some((range, path)) = image(line)
             && !line[range.clone()].starts_with("![[")
             && file_name(&path).to_lowercase() == old
@@ -1226,17 +1315,12 @@ pub fn callout(line: &str) -> Option<Range<usize>> {
 /// closing fence opens no block.
 pub fn headings(text: &str) -> Vec<(u8, &str, usize)> {
     let meta = front_matter(text);
-    let fences = text[meta..].lines().filter(|line| is_fence(line)).count();
-    let (mut seen, mut in_code, mut at, mut found) = (0, false, meta, Vec::new());
-    for line in text[meta..].split('\n') {
-        if is_fence(line) {
-            seen += 1;
-            in_code = !in_code && seen < fences;
-        } else if !in_code && let (Kind::Heading(_), marker) = classify(line, false) {
+    let mut found = Vec::new();
+    for (at, line) in prose_lines(&text[meta..]) {
+        if let (Kind::Heading(_), marker) = classify(line, false) {
             let level = line.trim_start().bytes().take_while(|&b| b == b'#').count() as u8;
-            found.push((level, line[marker..].trim(), at));
+            found.push((level, line[marker..].trim(), meta + at));
         }
-        at += line.len() + 1;
     }
     found
 }
@@ -1405,50 +1489,48 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
     if !text.contains("{==") && !text.contains("{>>") {
         return Vec::new();
     }
-    let fences = text.lines().filter(|line| is_fence(line)).count();
-    let (mut seen, mut in_code, mut at, mut found) = (0, false, 0, Vec::new());
+    let mut found = Vec::new();
     // Line of the table we are in (the header is 0, the dashes 1).
     let mut row: Option<usize> = None;
-    for line in text.split('\n') {
-        if is_fence(line) {
-            seen += 1;
-            in_code = !in_code && seen < fences;
+    // Where the next prose line starts: after a fence or a code line the table is over.
+    let mut next = 0;
+    for (at, line) in prose_lines(text) {
+        if at != next {
             row = None;
-        } else if !in_code {
-            row = line
-                .trim_start()
-                .starts_with('|')
-                .then(|| row.map_or(0, |r| r + 1));
-            let cells = row.map(|_| cells(line));
-            for (whole, noted, said) in comments(line) {
-                let mut note = Note {
-                    noted: &line[noted.clone()],
-                    said: &line[said.clone()],
-                    at: at + whole.start,
-                    inside: at + said.start,
-                    end: at + whole.end,
-                    scope: String::new(),
-                };
-                if let Some(cells) = &cells {
-                    let c = cells
-                        .iter()
-                        .rposition(|cell| cell.start <= whole.start)
-                        .unwrap_or(0);
-                    note.scope = match row {
-                        Some(0) => format!("Header {}", column_letters(c)),
-                        Some(r) => format!("Cell {}{}", column_letters(c), r.saturating_sub(1)),
-                        None => String::new(),
-                    };
-                } else if noted.start == whole.start
-                    && let Some((scope, rest)) = split_scope(note.said)
-                {
-                    note.scope = scope;
-                    note.said = rest;
-                }
-                found.push(note);
-            }
         }
-        at += line.len() + 1;
+        next = at + line.len() + 1;
+        row = line
+            .trim_start()
+            .starts_with('|')
+            .then(|| row.map_or(0, |r| r + 1));
+        let cells = row.map(|_| cells(line));
+        for (whole, noted, said) in comments(line) {
+            let mut note = Note {
+                noted: &line[noted.clone()],
+                said: &line[said.clone()],
+                at: at + whole.start,
+                inside: at + said.start,
+                end: at + whole.end,
+                scope: String::new(),
+            };
+            if let Some(cells) = &cells {
+                let c = cells
+                    .iter()
+                    .rposition(|cell| cell.start <= whole.start)
+                    .unwrap_or(0);
+                note.scope = match row {
+                    Some(0) => format!("Header {}", column_letters(c)),
+                    Some(r) => format!("Cell {}{}", column_letters(c), r.saturating_sub(1)),
+                    None => String::new(),
+                };
+            } else if noted.start == whole.start
+                && let Some((scope, rest)) = split_scope(note.said)
+            {
+                note.scope = scope;
+                note.said = rest;
+            }
+            found.push(note);
+        }
     }
     found
 }
@@ -2310,19 +2392,22 @@ mod tests {
 
     #[test]
     fn continues_lists() {
-        assert_eq!(on_enter("- a", 3, false), Enter::Insert("\n- ".into()));
+        assert_eq!(on_enter("- a", 3, None), Enter::Insert("\n- ".into()));
         assert_eq!(
-            on_enter("  9. a", 6, false),
+            on_enter("  9. a", 6, None),
             Enter::Insert("\n  10. ".into())
         );
         assert_eq!(
-            on_enter("- [x] a", 7, false),
+            on_enter("- [x] a", 7, None),
             Enter::Insert("\n- [ ] ".into())
         );
-        assert_eq!(on_enter("> a", 3, false), Enter::Insert("\n> ".into()));
-        assert_eq!(on_enter("- ", 2, false), Enter::Clear);
-        assert_eq!(on_enter("  x", 3, false), Enter::Insert("\n  ".into()));
-        assert_eq!(on_enter("- a", 3, true), Enter::Insert("\n".into()));
+        assert_eq!(on_enter("> a", 3, None), Enter::Insert("\n> ".into()));
+        assert_eq!(on_enter("- ", 2, None), Enter::Clear);
+        assert_eq!(on_enter("  x", 3, None), Enter::Insert("\n  ".into()));
+        assert_eq!(
+            on_enter("- a", 3, Some(Fence { ch: b'`', len: 3 })),
+            Enter::Insert("\n".into())
+        );
     }
 
     #[test]
@@ -3001,15 +3086,8 @@ mod tests {
             lines.iter().rev().cloned().collect::<Vec<_>>().join("\n"),
             "```\n```".to_string(),
         ] {
-            let (fences, dollars) = (
-                text.split('\n').filter(|l| is_fence(l)).count(),
-                text.split('\n').filter(|l| l.trim() == "$$").count(),
-            );
-            assert_eq!(
-                count_fences_and_dollars(&text),
-                (fences, dollars),
-                "{text:?}"
-            );
+            let dollars = text.split('\n').filter(|l| l.trim() == "$$").count();
+            assert_eq!(count_dollars(&text), dollars, "{text:?}");
         }
         for l in lines {
             assert_eq!(
@@ -3018,5 +3096,100 @@ mod tests {
                 "{l:?}"
             );
         }
+    }
+
+    fn backtick() -> Fence {
+        Fence { ch: b'`', len: 3 }
+    }
+
+    #[test]
+    fn fences_are_backticks_or_tildes_of_three_or_more() {
+        let (f, info) = fence_of("~~~python").unwrap();
+        assert_eq!((f, info), (Fence { ch: b'~', len: 3 }, "python"));
+        assert_eq!(fence_of("````").unwrap().0, Fence { ch: b'`', len: 4 });
+        assert_eq!(fence_of("~~~ a`b").unwrap().1, "a`b");
+        // A backtick fence's info string holds no backtick: that line is text.
+        assert!(fence_of("``x`").is_none());
+        assert!(fence_of("``").is_none());
+        assert!(fence_of("~~").is_none());
+        assert!(fence_of("x ```").is_none());
+        // Up to three spaces of indent make a fence, and so does the indent of a list item.
+        assert!(is_fence("   ```"));
+        assert!(is_fence("  ~~~"));
+        assert!(is_fence("    ```"));
+    }
+
+    #[test]
+    fn a_block_closes_only_with_the_same_character_at_least_as_long() {
+        // A tilde block holds backtick fences as text, and closes at its own tildes.
+        let text = "~~~python\n```\nx\n~~~";
+        assert_eq!(blocks(text).len(), 1);
+        assert_eq!(blocks(text)[0].fence, Fence { ch: b'~', len: 3 });
+        assert_eq!(
+            classify_in("```", Some(Fence { ch: b'~', len: 3 })).0,
+            Kind::Code
+        );
+        // A closer of another character does not close a backtick block.
+        let text = "```\na\n~~~\nb\n```";
+        let found = blocks(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].fence, backtick());
+        assert_eq!(open_at(&found, text.find("~~~").unwrap()), Some(backtick()));
+        // A longer closer closes; a shorter one does not.
+        let text = "````\na\n```\nb\n````";
+        assert_eq!(blocks(text).len(), 1);
+        assert_eq!(blocks(text)[0].end, text.len());
+        let text = "```\na\n````\nb\n```";
+        let found = blocks(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].close, text.find("````").unwrap());
+        // A closer with text after its run is not one.
+        assert!(!closes("```python", backtick()));
+        assert!(closes("   ```", backtick()));
+    }
+
+    #[test]
+    fn a_lone_fence_opens_no_block_and_the_first_pair_wins() {
+        assert!(blocks("```\nx").is_empty());
+        assert!(blocks("~~~\nx\n```").is_empty());
+        // A fence after a closed block with no partner opens nothing.
+        let text = "```\na\n```\n~~~\nb";
+        assert_eq!(blocks(text).len(), 1);
+        // The set-aside line waits for its partner: the next pair keeps its block.
+        let text = "```\n```\nx\n```";
+        let set = text.find("```\nx").unwrap();
+        let found = blocks_with(text, Some(0));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].open, set);
+        assert_eq!(blocks(text)[0].open, 0);
+    }
+
+    #[test]
+    fn code_blocks_hold_their_lines_between_fences() {
+        let text = "a\n~~~rust\nlet x = 1;\n~~~\nb";
+        assert_eq!(code_block(text, 12), Some(10..20));
+        assert_eq!(&text[10..20], "let x = 1;");
+        // The fences are not code, nor is the text outside the block.
+        assert_eq!(code_block(text, 4), None);
+        assert_eq!(code_block(text, 0), None);
+    }
+
+    #[test]
+    fn indented_code_starts_after_a_blank_line_outside_lists() {
+        // The first line of the note.
+        assert!(starts_indented_code("    code", std::iter::empty()));
+        // After a blank line, under a paragraph.
+        assert!(starts_indented_code("    code", ["", "Intro"]));
+        // A continuation of a list item, or a nested item, is not code.
+        assert!(!starts_indented_code("    more", ["", "- item"]));
+        assert!(!starts_indented_code(
+            "    - sub",
+            ["", "  more", "1. item"]
+        ));
+        // Less than four columns, or blank: not code.
+        assert!(!starts_indented_code("  code", ["", "Intro"]));
+        assert!(!starts_indented_code("    ", ["", "Intro"]));
+        // A list that an unindented line ended is a list no more.
+        assert!(starts_indented_code("    code", ["", "Intro", "- item"]));
     }
 }

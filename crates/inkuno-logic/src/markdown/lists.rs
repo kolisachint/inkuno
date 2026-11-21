@@ -10,9 +10,10 @@ pub enum Enter {
     Clear,
 }
 
-/// Behaviour of the Enter key on `line`, cursor at byte `col`.
-pub fn on_enter(line: &str, col: usize, in_code: bool) -> Enter {
-    let (kind, marker) = classify(line, in_code);
+/// Behaviour of the Enter key on `line`, cursor at byte `col`; `open` is the opener of the code block
+/// the line is in, if any.
+pub fn on_enter(line: &str, col: usize, open: Option<Fence>) -> Enter {
+    let (kind, marker) = classify_in(line, open);
     let indent = &line[..indent_len(line)];
     let list = matches!(
         kind,
@@ -73,20 +74,12 @@ pub fn fill(template: &str, title: &str, date: &str, time: &str) -> (String, usi
 /// is none), so that the note born from the template carries the name it is given.
 pub fn templatize(text: &str) -> String {
     let start = front_matter(text);
-    let (mut at, mut fenced) = (start, false);
-    for line in text[start..].split_inclusive('\n') {
-        let bare = line.trim_end_matches('\n');
-        if is_fence(bare) {
-            fenced = !fenced;
-        }
-        if !fenced
-            && classify(bare, false).0 == Kind::Heading(1)
-            && line.trim_start().starts_with("# ")
-        {
-            let end = at + line.trim_end_matches('\n').len();
+    for (offset, bare) in prose_lines(&text[start..]) {
+        let at = start + offset;
+        if classify(bare, false).0 == Kind::Heading(1) && bare.trim_start().starts_with("# ") {
+            let end = at + bare.len();
             return format!("{}# {{{{title}}}}{}", &text[..at], &text[end..]);
         }
-        at += line.len();
     }
     format!("{}# {{{{title}}}}\n\n{}", &text[..start], &text[start..])
 }
@@ -107,15 +100,17 @@ pub enum ListStyle {
 /// are already in this style, they become text again. Items keep their indent, a numbered
 /// list restarts from 1 at each level, and a checked box stays checked from one task to the other.
 pub fn restyle(block: &str, to: ListStyle) -> (String, Vec<(usize, usize)>) {
-    let mut fenced = false;
+    let fenced = blocks(block);
+    let mut at = 0;
     let lines: Vec<(&str, Option<Kind>)> = block
         .split('\n')
         .map(|line| {
-            if is_fence(line) {
-                fenced = !fenced;
+            let start = at;
+            at += line.len() + 1;
+            if is_fence(line) || open_at(&fenced, start).is_some() {
                 return (line, None);
             }
-            if fenced || line.trim().is_empty() {
+            if line.trim().is_empty() {
                 return (line, None);
             }
             let kind = classify(line, false).0;
@@ -350,6 +345,33 @@ pub fn continuation_depth<'a>(
     None
 }
 
+/// Whether `line` starts indented code: four columns of indent (or a tab), and no list item above it
+/// that it could continue. `above` holds the lines above it, nearest first: blank and indented lines
+/// are passed over, so a list item found before any unindented line makes `line` a continuation (or a
+/// nested item), not code. Only the start is decided here: the lines that follow an indented code line
+/// stay code while they are indented.
+pub fn starts_indented_code<'a>(line: &str, above: impl IntoIterator<Item = &'a str>) -> bool {
+    if indent_columns(line) < 4 || line.trim().is_empty() {
+        return false;
+    }
+    for prev in above {
+        if prev.trim().is_empty() {
+            continue;
+        }
+        if matches!(
+            classify(prev, false).0,
+            Kind::Bullet | Kind::Ordered | Kind::Task(_)
+        ) {
+            return false;
+        }
+        // An unindented line ends any list.
+        if indent_columns(prev) == 0 {
+            return true;
+        }
+    }
+    true
+}
+
 /// Nesting level of a list item indented by `indent` columns, from the lines above it (nearest
 /// first): the number of its ancestors, each item above less indented than the one found before
 /// it. Blank lines and
@@ -514,16 +536,16 @@ mod tests {
     #[test]
     fn enter_carries_an_ordered_task_on() {
         assert_eq!(
-            on_enter("1. [ ] a", 8, false),
+            on_enter("1. [ ] a", 8, None),
             Enter::Insert("\n2. [ ] ".to_string())
         );
         assert_eq!(
-            on_enter("1. [x] a", 8, false),
+            on_enter("1. [x] a", 8, None),
             Enter::Insert("\n2. [ ] ".to_string())
         );
-        assert_eq!(on_enter("1. [ ] ", 7, false), Enter::Clear);
+        assert_eq!(on_enter("1. [ ] ", 7, None), Enter::Clear);
         assert_eq!(
-            on_enter("1. a", 4, false),
+            on_enter("1. a", 4, None),
             Enter::Insert("\n2. ".to_string())
         );
     }

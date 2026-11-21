@@ -232,6 +232,15 @@ pub struct Cell {
 }
 
 impl Cell {
+    /// The text shown in the cell: its markers are gone off the caret's row.
+    #[cfg(test)]
+    pub fn shown(&self) -> String {
+        self.shape
+            .line
+            .as_ref()
+            .map_or(String::new(), |l| l.text.to_string())
+    }
+
     fn lines(&self) -> i32 {
         self.shape
             .line
@@ -490,6 +499,7 @@ impl TableRow {
 
 /// A piece of text to lay out. `foot` versions the footnote definitions: adding one restyles
 /// every reference, so the cache must not outlive them.
+#[allow(clippy::too_many_arguments)]
 fn key(
     text: &str,
     wrap: Option<Pixels>,
@@ -497,6 +507,7 @@ fn key(
     marked: &Option<Range<usize>>,
     look: &Look,
     foot: u64,
+    hide: bool,
 ) -> u64 {
     let mut hasher = Fast::default();
     (
@@ -507,6 +518,7 @@ fn key(
         look.style,
         f32::from(font_size(look.theme)).to_bits(),
         foot,
+        hide,
     )
         .hash(&mut hasher);
     hasher.finish()
@@ -514,6 +526,9 @@ fn key(
 
 /// Lays out a cell's text, on one line or at width `wrap`. Footnotes keep their source:
 /// a defined reference reads as a link, without hiding its brackets (see `footnote_flags`).
+/// `hide`: the markers of the text (`**`, backticks, the address of a link…) are not shown,
+/// as on the lines of the note that the caret is not on (see `layout::elided`).
+#[allow(clippy::too_many_arguments)]
 fn shape(
     text_system: &WindowTextSystem,
     text: &str,
@@ -522,6 +537,7 @@ fn shape(
     marked: &Option<Range<usize>>,
     look: &Look,
     defined: &dyn Fn(&str) -> bool,
+    hide: bool,
 ) -> Shape {
     if text.is_empty() {
         return Shape {
@@ -533,9 +549,17 @@ fn shape(
     let mut flags = vec![0u16; text.len()];
     md::inline(text, 0, &mut flags);
     md::footnote_flags(text, &mut flags, defined);
-    shape_flags(text_system, text, flags, wrap, bold, marked, look)
+    let hidden = if hide {
+        super::layout::elided(text, 0, md::Kind::Para, &flags)
+    } else {
+        Vec::new()
+    };
+    shape_flags(text_system, text, flags, wrap, bold, marked, look, &hidden)
 }
 
+/// Shapes `text` with its `flags`; the byte ranges of `hidden` are not shown (they are
+/// substitutions of nothing, so that the caret and the selection still map through them).
+#[allow(clippy::too_many_arguments)]
 fn shape_flags(
     text_system: &WindowTextSystem,
     text: &str,
@@ -544,6 +568,7 @@ fn shape_flags(
     bold: bool,
     marked: &Option<Range<usize>>,
     look: &Look,
+    hidden: &[(usize, usize)],
 ) -> Shape {
     if bold {
         flags.iter_mut().for_each(|f| *f |= md::BOLD);
@@ -556,6 +581,15 @@ fn shape_flags(
     );
     let mut chars = text.char_indices().peekable();
     while let Some((i, c)) = chars.next() {
+        if let Some(&(a, b)) = hidden.iter().find(|&&(a, b)| (a..b).contains(&i)) {
+            if i == a {
+                subs.push((a, b - a, 0));
+            }
+            while chars.peek().is_some_and(|&(j, _)| j < b) {
+                chars.next();
+            }
+            continue;
+        }
         let mut end = i + c.len_utf8();
         if c == '\\'
             && let Some(&(j, next)) = chars.peek()
@@ -636,6 +670,10 @@ pub fn build(
         .is_some_and(|&(at, line)| (at..=at + line.len()).contains(&cursor));
     let (first, last) = (lines[0].0, lines[lines.len() - 1]);
     let composing = marked.filter(|m| m.start <= last.0 + last.1.len() && m.end >= first);
+    // The row under the caret shows its markers: the others hide them.
+    let live = lines
+        .iter()
+        .position(|&(at, line)| (at..=at + line.len()).contains(&cursor));
     let mut hasher = Fast::default();
     (
         look.style,
@@ -643,6 +681,7 @@ pub fn build(
         touched,
         composing.map(|m| (m.start - first.min(m.start), m.end)),
         lines.len(),
+        live,
     )
         .hash(&mut hasher);
     lines
@@ -730,11 +769,13 @@ fn rows(
     let mut wide = vec![MIN_WIDE; cols];
     let mut narrow = vec![NARROWEST; cols];
     let mut alone = vec![vec![px(0.); cols]; lines.len()];
+    // The row under the caret shows its source; the others hide their markers.
+    let live = |r: usize| (lines[r].0..=lines[r].0 + lines[r].1.len()).contains(&cursor);
     for &r in &shown_rows {
         for c in 0..cols {
-            let (text, bold) = (text(r, c), r == 0);
-            let one = cache.shape(key(text, None, bold, &None, look, foot), || {
-                shape(text_system, text, None, bold, &None, look, defined)
+            let (text, bold, hide) = (text(r, c), r == 0, !live(r));
+            let one = cache.shape(key(text, None, bold, &None, look, foot, hide), || {
+                shape(text_system, text, None, bold, &None, look, defined, hide)
             });
             if let Some(line) = &one.line {
                 alone[r][c] = line.unwrapped_layout.width;
@@ -788,8 +829,9 @@ fn rows(
                     // A text that fits on its line is not cut: GPUI's measure and wrapping
                     // differ by a few fractions of a pixel.
                     let wrap = (alone[r][c] > widths[c]).then_some(widths[c]);
-                    let shape = cache.shape(key(text, wrap, bold, &here, look, foot), || {
-                        shape(text_system, text, wrap, bold, &here, look, defined)
+                    let hide = !live(r);
+                    let shape = cache.shape(key(text, wrap, bold, &here, look, foot, hide), || {
+                        shape(text_system, text, wrap, bold, &here, look, defined, hide)
                     });
                     Cell {
                         range,
@@ -912,8 +954,8 @@ pub fn geometry(
     for r in (0..lines.len()).filter(|&r| Some(r) != dash) {
         for (c, w) in wide.iter_mut().enumerate() {
             let (text, bold) = (text(r, c), r == 0);
-            let one = cache.shape(key(text, None, bold, &None, look, foot), || {
-                shape(text_system, text, None, bold, &None, look, defined)
+            let one = cache.shape(key(text, None, bold, &None, look, foot, false), || {
+                shape(text_system, text, None, bold, &None, look, defined, false)
             });
             if let Some(line) = &one.line {
                 *w = w.max(f32::from(line.unwrapped_layout.width));
@@ -974,8 +1016,8 @@ pub fn big_row(
                 .map(|m| {
                     m.start.saturating_sub(at + range.start)..m.end.saturating_sub(at + range.start)
                 });
-            let shape = cache.shape(key(text, None, bold, &here, look, foot), || {
-                shape(text_system, text, None, bold, &here, look, defined)
+            let shape = cache.shape(key(text, None, bold, &here, look, foot, false), || {
+                shape(text_system, text, None, bold, &here, look, defined, false)
             });
             let clip = shape
                 .line
