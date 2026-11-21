@@ -1561,7 +1561,7 @@ impl Shell {
             .child(notes)
     }
 
-    /// The Quiet sidebar's foot: the Settings row (for now the settings' palette entry) and the
+    /// The Quiet sidebar's foot: the Settings row (the settings tab, `OpenSettings`) and the
     /// title bar's toggle, which stays here so that the bar always comes back.
     fn quiet_foot(&self, band_shown: bool, cx: &mut Context<Self>) -> Stateful<Div> {
         let t = self.theme;
@@ -1569,14 +1569,14 @@ impl Shell {
             "nav-settings",
             "gear.svg",
             tr("Settings", "Réglages").to_string(),
-            crate::ui::keys::of(cx, &crate::actions::ChooseTheme),
+            crate::ui::keys::of(cx, &crate::actions::OpenSettings),
             false,
             t,
         )
         .flex_1()
         .min_w_0()
         .on_click(cx.listener(|_, _, window, cx| {
-            window.dispatch_action(Box::new(crate::actions::ChooseTheme), cx)
+            window.dispatch_action(Box::new(crate::actions::OpenSettings), cx)
         }));
         div()
             .id("sidebar-foot")
