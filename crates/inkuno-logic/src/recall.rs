@@ -23,15 +23,36 @@ pub struct Recalled {
     pub days: i64,
 }
 
-/// The first line of text of a note: the first line that is not blank, without its heading marks.
+/// The first line of body text of a note, for a card: not a heading, not a rule, with the Markdown
+/// markers of a list, a quote, emphasis, code and links taken out. Empty when there is none.
 pub fn first_line(body: &str) -> String {
     body.lines()
         .map(str::trim)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with('#')
+                && !line.chars().all(|c| matches!(c, '-' | '*' | '_' | '=' | '~' | '`' | ' '))
+        })
+        .map(|line| {
+            let line = line.trim_start_matches(['>', ' ', '\t']);
+            // A list marker: a bullet, a task box, or a number with its dot.
+            let line = ["- [ ] ", "- [x] ", "- [X] ", "- ", "* ", "+ "]
+                .iter()
+                .find_map(|m| line.strip_prefix(m))
+                .unwrap_or(line);
+            let digits = line.chars().take_while(char::is_ascii_digit).count();
+            let line = match line[digits..].strip_prefix(". ") {
+                Some(rest) if digits > 0 => rest,
+                _ => line,
+            };
+            line.chars()
+                .filter(|c| !matches!(c, '*' | '_' | '`' | '~' | '[' | ']'))
+                .collect::<String>()
+                .trim()
+                .to_string()
+        })
         .find(|line| !line.is_empty())
         .unwrap_or_default()
-        .trim_start_matches('#')
-        .trim()
-        .to_string()
 }
 
 /// The notes to reread `today` (at most three): the daily notes from a week, a month and a year
@@ -215,12 +236,14 @@ mod tests {
             note("2025-10-10", 365, now),
             note("Ancienne", 200, now),
         ];
-        notes[0].body = "\n# Lundi\n\nPlan de la semaine\n".into();
+        notes[0].body = "\n# Lundi\n\n- **Plan** de la `semaine`\n".into();
         let found = recall(&notes, (2026, 10, 10), now);
         assert_eq!(found.len(), 3, "{found:?}");
-        assert_eq!(found[0].line, "Lundi");
+        assert_eq!(found[0].line, "Plan de la semaine");
         assert_eq!(found[1].line, "du texte");
         assert_eq!(first_line("\n \n"), "");
+        assert_eq!(first_line("# Titre\n---\n> citation\n"), "citation");
+        assert_eq!(first_line("# Titre seul\n"), "");
     }
 
     #[test]

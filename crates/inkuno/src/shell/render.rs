@@ -738,8 +738,13 @@ impl Shell {
             .as_ref()
             .is_some_and(|root| self.unreadable.iter().any(|(dir, _)| dir == root));
         let has_vault = self.vault.is_some() && !closed;
-        // A card: its icon and title, then one line of what it does, and the hover of a row.
-        let card = |id: (&'static str, usize), icon: &'static str, title: String, line: String| {
+        // A card: its icon and title, then what it does (`lines` of it, or one line cut with an
+        // ellipsis), and the hover of a row. Nothing is drawn for an empty line.
+        let card = |id: (&'static str, usize),
+                    icon: &'static str,
+                    title: String,
+                    line: String,
+                    lines: usize| {
             div()
                 .id(id)
                 .debug_selector(move || {
@@ -749,9 +754,9 @@ impl Shell {
                         format!("{}-{}", id.0, id.1)
                     }
                 })
-                .w(t.px(190.))
+                .w(t.px(200.))
                 .min_h(t.px(84.))
-                .p(t.px(12.))
+                .p(t.px(14.))
                 .flex()
                 .flex_col()
                 .gap(t.px(6.))
@@ -766,6 +771,8 @@ impl Shell {
                         .flex()
                         .items_center()
                         .gap(t.px(8.))
+                        .text_size(t.px(13.))
+                        .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(t.text)
                         .child(
                             svg()
@@ -776,13 +783,14 @@ impl Shell {
                         )
                         .child(title),
                 )
-                .child(
-                    div()
-                        .text_size(t.px(12.))
-                        .text_color(t.soft)
-                        .line_clamp(2)
-                        .child(line),
-                )
+                .children((!line.is_empty()).then(|| {
+                    let text = div().text_size(t.px(12.)).text_color(t.soft);
+                    if lines == 1 {
+                        text.min_w_0().truncate().child(line)
+                    } else {
+                        text.line_clamp(lines).child(line)
+                    }
+                }))
         };
         let mut cards = Vec::new();
         if has_vault {
@@ -796,6 +804,7 @@ impl Shell {
                         recall::long_date(today()),
                         tr("open the daily note", "ouvrir la note du jour")
                     ),
+                    2,
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.open_today(window, cx)))
                 .into_any_element(),
@@ -820,6 +829,7 @@ impl Shell {
                 "plus.svg",
                 tr("New note", "Nouvelle note").into(),
                 format!("{what} · {new_keys}").trim_end_matches(" · ").to_string(),
+                2,
             )
             .on_click(move |_, window, cx| window.dispatch_action(new.boxed_clone(), cx))
             .into_any_element(),
@@ -836,6 +846,7 @@ impl Shell {
                 )
                 .trim_end_matches(" · ")
                 .to_string(),
+                2,
             )
             .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenPalette), cx))
             .into_any_element(),
@@ -847,7 +858,7 @@ impl Shell {
         };
         let again = (!recalled.is_empty()).then(|| {
             let cards = recalled.into_iter().enumerate().map(|(i, note)| {
-                card(("empty-recall", i), "note.svg", note.name.clone(), note.line.clone())
+                card(("empty-recall", i), "note.svg", note.name.clone(), note.line.clone(), 1)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.open(&note.path, window, cx)
                     }))
