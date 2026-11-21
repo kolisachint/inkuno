@@ -111,6 +111,13 @@ fn address_of(root: &Path, from: &Path, target: &Path, absolute: bool) -> String
     address.replace(' ', "%20")
 }
 
+/// The Markdown link `[title](address)` that a picker writes: the address to note `target` from the
+/// folder `folder` of the vault `root`, as `address_of` writes it (relative, spaces as `%20`).
+pub fn link_to(title: &str, root: &Path, folder: &Path, target: &Path) -> String {
+    let from = folder.join("_");
+    format!("[{title}]({})", address_of(root, &from, target, false))
+}
+
 /// The text where the relative links of note `linker` (in the vault `root`) that name the file `old`
 /// name `new` instead: a note moved or renamed. The address keeps its form, `/` or relative, and its
 /// anchor. `None` if no link changes.
@@ -681,6 +688,20 @@ mod embed_tests {
         assert_eq!(
             rename_heading(tilde, "N", "Un", "Z"),
             ("~~~\n![[N#Un]]\n```\n~~~\n![[N#Z]]".to_string(), 1)
+        );
+    }
+
+    #[test]
+    fn a_picker_link_is_relative_to_the_folder_of_the_note() {
+        let root = Path::new("/v");
+        assert_eq!(link_to("Plan", root, root, &root.join("Plan.md")), "[Plan](Plan.md)");
+        assert_eq!(
+            link_to("Plan", root, &root.join("Idées"), &root.join("Plan.md")),
+            "[Plan](../Plan.md)"
+        );
+        assert_eq!(
+            link_to("Note x", root, &root.join("A"), &root.join("B c/Note x.md")),
+            "[Note x](../B%20c/Note%20x.md)"
         );
     }
 

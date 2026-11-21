@@ -32,6 +32,62 @@ pub fn snippet_at(body: &str, lower: &str, row: usize, word: &str) -> String {
     )
 }
 
+/// The line of the note where `word` (lowercase) first appears, as plain text, and the byte range of
+/// the word in it: the one-line snippet of a full-text match. Markdown markers are dropped, as
+/// `plain_line` does; the text is cut to about 80 characters around the word.
+pub fn snippet_line(body: &str, lower: &str, word: &str) -> Option<(String, std::ops::Range<usize>)> {
+    let at = lower.find(word)?;
+    let row = lower[..at].matches('\n').count();
+    let plain = plain_line(body.lines().nth(row)?);
+    let hit = plain.to_lowercase().find(word)?;
+    let start = plain[..hit].char_indices().rev().nth(23).map_or(0, |(i, _)| i);
+    let head = if start > 0 { "…" } else { "" };
+    let text: String = plain.get(start..)?.chars().take(80).collect();
+    let from = head.len() + hit - start;
+    let range = from..(from + word.len()).min(head.len() + text.len());
+    Some((format!("{head}{text}"), range))
+}
+
+/// A line of Markdown as the text it shows: heading, quote, list and task marks, emphasis and code
+/// markers, and links reduced to their text. A `_` stays, so that `my_name` reads as it is.
+pub fn plain_line(line: &str) -> String {
+    let mut s = line.trim();
+    let hashes = s.len() - s.trim_start_matches('#').len();
+    if (1..=6).contains(&hashes) && s[hashes..].starts_with(' ') {
+        s = s[hashes..].trim_start();
+    }
+    while let Some(rest) = s.strip_prefix('>') {
+        s = rest.trim_start();
+    }
+    for mark in ["- [ ] ", "- [x] ", "- [X] ", "- ", "* ", "+ "] {
+        if let Some(rest) = s.strip_prefix(mark) {
+            s = rest;
+            break;
+        }
+    }
+    let digits = s.chars().take_while(char::is_ascii_digit).count();
+    if digits > 0 && s[digits..].starts_with(". ") {
+        s = &s[digits + 2..];
+    }
+    let s = s.replace("**", "").replace("~~", "").replace("==", "").replace("[[", "").replace("]]", "").replace('`', "");
+    // `[text](target)` shows its text; the target is not shown.
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s.as_str();
+    while let Some(open) = rest.find('[') {
+        let Some(close) = rest[open..].find("](").map(|i| open + i) else {
+            break;
+        };
+        let Some(end) = rest[close..].find(')').map(|i| close + i) else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        out.push_str(&rest[open + 1..close]);
+        rest = &rest[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// The text in lowercase, without its accents: « thème » is found by typing « theme ».
 pub fn fold(text: &str) -> String {
     text.to_lowercase()
@@ -97,5 +153,16 @@ mod tests {
         assert!(fuzzy("crs", "courses") < fuzzy("ours", "courses"));
         assert_eq!(fuzzy("xyz", "courses"), None);
         assert!(fuzzy("", "courses").is_some());
+    }
+
+    #[test]
+    fn a_snippet_is_the_plain_line_with_the_word_marked() {
+        let body = "# Plan\n\n- [ ] **Book** the [venue](https://x.y/z)\n";
+        let lower = body.to_lowercase();
+        let (text, range) = snippet_line(body, &lower, "venue").unwrap();
+        assert_eq!(text, "Book the venue");
+        assert_eq!(&text[range], "venue");
+        assert_eq!(plain_line("> 1. `code` and my_name"), "code and my_name");
+        assert!(snippet_line(body, &lower, "absent").is_none());
     }
 }
