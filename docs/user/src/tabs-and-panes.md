@@ -36,7 +36,7 @@ Tabs come back at the next start. A tab out of sight keeps its text, cursor and 
 `Ctrl + \` splits the pane to the right, `Ctrl + Alt + \` below, as many times as the window has room for. Write a note while reading two others, or keep a table under a note.
 
 - A new pane opens on the palette, to choose what goes there. Each pane shows anything Inkuno can show.
-- A pane is split only if both halves keep room to write: 300 px wide, 200 px high. Otherwise a message says so. The very first split folds the panel onto its rail when that is enough.
+- A pane is split only if both halves keep room to write: 300 px wide, 200 px high. Otherwise a message says so. The very first split hides the sidebar when that is enough.
 - The pane with the focus is marked by a line at its top, and a thin accent ring. The palette, the tree and the shortcuts act on it.
 - A note already shown in one pane is not opened twice: the focus moves to it.
 - The layout comes back at the next launch.
@@ -69,4 +69,4 @@ A file dragged from the tree does the same. Dropped on the right half of a windo
 ## Docks
 
 The panel's tools live in a left dock beside the note. Drag a tool's title to another place in its dock, or to the right edge: a right dock opens and takes it.
-A stacked tool folds to its header with its chevron button. The header has no hide button: asking again for the shown tool hides it, first giving it the keys; the last one folds the panel back to its rail.
+A stacked tool folds to its header with its chevron button. The header has no hide button: asking again for the shown tool hides it, first giving it the keys; the last one hides the sidebar.

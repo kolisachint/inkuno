@@ -9,7 +9,7 @@ use crate::ui::theme::Theme;
 
 gpui::actions!(widgets, [Press]);
 
-/// Icon button of the rail and of panel headers. Tab reaches it, a ring shows it has the keys, Enter
+/// Icon button of the sidebar bands and of panel headers. Tab reaches it, a ring shows it has the keys, Enter
 /// or Space presses it; a click does not take the focus from the note.
 pub fn button(
     id: impl Into<gpui::ElementId>,

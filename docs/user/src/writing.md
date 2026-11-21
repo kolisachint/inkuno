@@ -1,6 +1,6 @@
 # Writing notes
 
-What you type is what is saved. Inkuno only changes how it looks: markers stay visible but dimmed. A list marker is drawn as a bullet, a number or a checkbox, and the raw Markdown marker shows on the line you are editing. The file on disk is always plain Markdown.
+What you type is what is saved. Inkuno only changes how it looks. Off the line you are editing, Markdown markers are hidden: a list marker is drawn as a bullet, a number or a checkbox, and the line you edit shows its Markdown. The file on disk is always plain Markdown.
 
 ## Markdown
 
@@ -13,7 +13,7 @@ What you type is what is saved. Inkuno only changes how it looks: markers stay v
 | `[ ]` or `[x]` | a box on its own, in a sentence or in a table cell: click it, or press `Ctrl + Enter` next to it |
 | `> ` | a quote |
 | `> [!NOTE]` | a colored panel: that line and the quote lines after it |
-| `` ``` `` then `Enter` | a code block, closed for you |
+| `` ``` `` or `~~~`, then `Enter` | a code block, closed for you with the same mark |
 | `\| a \| b \|` | a table |
 | `---`, `***` or `___` | a divider |
 | `[[Note name]]` | a link to another note, see [Links](links.md) |
@@ -27,7 +27,8 @@ What you type is what is saved. Inkuno only changes how it looks: markers stay v
 Some details:
 
 - **Panels**: `NOTE`, `TIP`, `IMPORTANT`, `WARNING` and `CAUTION` each have their color, as on GitHub.
-- **Code blocks**: name the language (`` ```rust ``) to get it colored. The copy icon on the first line copies the content of the block.
+- **Code blocks**: a line of three or more backticks or tildes (`` ``` `` or `~~~`) opens one, and `Enter` at the end of that line closes it with the same mark and length. Name the language (`` ```rust `` or `~~~rust`) to get it colored. The copy icon on the first line copies the content of the block.
+- **Indented code**: four spaces, or a tab, at the start of a line make a code line, when no list item above it is being continued. The lines after it stay code while they are indented.
 - **Mermaid**: the diagram is drawn under its block once the cursor has left it. The magnifier next to the copy button shows it full size, to zoom and move around.
 - **Formulas**: a formula is drawn under its line, not within the text. Only the first one of a line is drawn.
 - **Arrows**: the symbols are shown everywhere except on the line you are editing and inside code.

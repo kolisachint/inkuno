@@ -368,13 +368,13 @@ impl Shell {
         }
     }
 
-    /// The panel can fold onto its rail to make room for the first split.
+    /// The sidebar can hide to make room for the first split.
     fn may_fold(&self, side: Side) -> bool {
         side.axis() == layout::Axis::Row && self.groups.len() == 1 && self.nav.panel == Panel::Split
     }
 
     /// Whether `group` can be split on `side`, both halves keeping their minimum; if not, the
-    /// message says why. The first split folds the panel onto its rail when only that makes room.
+    /// message says why. The first split hides the sidebar when only that makes room.
     fn room_beside(&mut self, group: usize, side: Side, cx: &mut Context<Self>) -> bool {
         let fits = self.fits(group, side);
         if !fits && self.may_fold(side) {
