@@ -73,14 +73,21 @@ impl Shell {
     }
 
     /// What a tab shows of its label: a preview is marked by a dot, a scratch note by the word
-    /// after its title (a folder reads the same way: as a second word).
+    /// after its title (a folder reads the same way: as a second word). Quiet marks a preview in
+    /// italics instead (`tab_italic`), so its title is bare.
     pub(super) fn caption(&self, tab: usize, label: &str) -> String {
         let pane = &self.panes[tab];
         match (pane.preview, pane.scratch) {
+            (true, _) if self.theme.quiet => label.to_string(),
             (true, _) => format!("{label} \u{2022}"),
             (false, true) => format!("{label} · {}", tr("Scratch", "Brouillon")),
             (false, false) => label.to_string(),
         }
+    }
+
+    /// A preview tab's title is set in italics in Quiet (the others: the dot, see `caption`).
+    pub(super) fn tab_italic(&self, tab: usize) -> bool {
+        self.theme.quiet && self.panes[tab].preview
     }
 
     /// The labels of a pane's tabs, in order; two tabs of the same name (two folders) say their folder.
@@ -166,7 +173,16 @@ impl Shell {
     /// hidden, the top-left pane's row starts past the sidebar toggle, and past the traffic lights on
     /// macOS (`LIGHTS_ROOM`). Zero everywhere else: an open sidebar already leaves the row its place.
     pub(super) fn strip_edge(&self, group: usize) -> Pixels {
-        if self.left_open() || !self.band_shown() || self.layout.panes().first() != Some(&group) {
+        if !self.band_shown() {
+            return px(0.);
+        }
+        self.band_edge(group)
+    }
+
+    /// `strip_edge` as the band of `group` takes it when drawn, whether or not the band is shown now:
+    /// the peeked band of a hidden title bar starts at the same edge.
+    pub(super) fn band_edge(&self, group: usize) -> Pixels {
+        if self.left_open() || self.layout.panes().first() != Some(&group) {
             return px(0.);
         }
         self.theme
@@ -180,10 +196,15 @@ impl Shell {
     /// text, the one shown on a flat panel fill (no pill, no shadow, no underline). One that is
     /// not saved yet carries an accent dot; the cross appears on hover only, for any tab; a
     /// preview tab is marked by a suffix, never italics.
+    ///
+    /// Quiet (`Theme::quiet`) draws the band on the ground, 28 px pills of radius 8 with the shown
+    /// tab on a 7 % wash, a cross of 18 px on the shown tab too, and a pane not in focus dimmed to
+    /// 55 %; a preview tab is italic. `peek` draws the same bar as the overlay of a hidden title bar.
     pub(super) fn render_tabs(
         &mut self,
         group: usize,
         client: bool,
+        peek: bool,
         cx: &mut Context<Self>,
     ) -> Option<Stateful<Div>> {
         let t = self.theme;
@@ -191,6 +212,9 @@ impl Shell {
         if tabs.len() < 2 || self.focus_mode {
             return None;
         }
+        let quiet = t.quiet;
+        let focused = group == self.group_of(self.active);
+        let row = if quiet { 28. } else { TAB_ROW };
         let shown = self.groups[group].shown;
         // Brought into view once when it changes, so the wheel stays free afterwards. gpui scrolls with
         // the places of the last frame: a bar not drawn yet (at startup) asks for one more frame.
@@ -207,8 +231,10 @@ impl Shell {
             }
         }
         let labels = self.tab_labels(group, cx);
-        // Sidebar hidden: the bar holds the sidebar toggle after the lights (`strip_edge`).
-        let toggle = (self.strip_edge(group) > px(0.)).then(|| {
+        // Sidebar hidden: the bar holds the sidebar toggle after the lights (`strip_edge`); a peeked
+        // band takes the same edge while the title bar is hidden (`band_edge`).
+        let edge = if peek { self.band_edge(group) } else { self.strip_edge(group) };
+        let toggle = (edge > px(0.)).then(|| {
             div()
                 .absolute()
                 .top(t.px((TAB_BAR - 28.) / 2.))
@@ -242,8 +268,10 @@ impl Shell {
             .map(|(at, (&tab, label))| {
                 let pane = &self.panes[tab];
                 let (on, over) = (tab == shown, hovered == Some(tab));
+                // Quiet: the cross shows on the shown tab too, in an 18 px box.
+                let box_px = if quiet { 18. } else { 14. };
                 let slot = div()
-                    .size(t.px(14.))
+                    .size(t.px(box_px))
                     .flex_none()
                     .flex()
                     .items_center()
@@ -252,7 +280,7 @@ impl Shell {
                 // The slot at the row's end: the close cross on hover only, for any tab; an
                 // accent dot for a tab not saved yet otherwise; empty space to keep the row's
                 // width steady.
-                let slot = match (over, dirty) {
+                let slot = match (over || (quiet && on), dirty) {
                     // The cross appears on hover only; an unsaved tab keeps its dot until then.
                     (true, _) => slot.child(
                         div()
@@ -280,20 +308,32 @@ impl Shell {
                     .relative()
                     .flex_none()
                     .max_w(t.px(200.))
-                    .h(t.px(TAB_ROW))
-                    .pl(t.px(8.))
-                    .pr(t.px(4.))
+                    .h(t.px(row))
+                    .pl(t.px(if quiet { 10. } else { 8. }))
+                    .pr(t.px(if quiet { 6. } else { 4. }))
+                    .when(quiet, |d| d.rounded(t.large()))
                     .flex()
                     .items_center()
                     .gap(t.px(4.))
                     .cursor_pointer()
                     .text_color(if on || over { t.text } else { t.soft })
                     // The tab shown sits on a flat panel fill — no pill, no shadow, no underline —
-                    // the others are bare text that the pointer tints, on a flat hover.
-                    .when(on, |d| d.bg(t.panel))
+                    // the others are bare text that the pointer tints, on a flat hover. Quiet's
+                    // shown tab is a neutral wash of the text (the sidebar's selected row).
+                    .when(on && quiet, |d| d.bg(t.text.opacity(0.072)))
+                    .when(on && !quiet, |d| d.bg(t.panel))
                     .when(!on, |d| d.hover(|s| s.bg(t.hover)))
-                    // A preview is marked by a dot, a scratch note by its word after the title.
-                    .child(div().min_w_0().truncate().child(self.caption(tab, &label)))
+                    // Quiet: the pane not in focus is dimmed as a whole.
+                    .when(quiet && !focused, |d| d.opacity(0.55))
+                    // A preview is marked by a dot, a scratch note by its word after the title; in
+                    // Quiet, by italics.
+                    .child(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .when(self.tab_italic(tab), |d| d.italic())
+                            .child(self.caption(tab, &label)),
+                    )
                     .child(slot)
                     .when(aim == Some(at), |d| d.child(line().left_0()))
                     .when(aim == Some(count) && at + 1 == count, |d| {
@@ -360,25 +400,28 @@ impl Shell {
         // so that no tab scrolls under them.
         let corner = client && self.nav.title_bar && group == self.corner_group();
         // Where the sidebar is hidden, past the toggle (and the lights): see `strip_edge`.
-        let pad = self.strip_edge(group);
+        let pad = edge;
         Some(
             div()
-                .id(("tabs", group))
-                .debug_selector(move || format!("tabs-{group}"))
-                .relative()
+                .id(if peek { ("tabs-peek", group) } else { ("tabs", group) })
+                .debug_selector(move || {
+                    if peek { format!("tabs-peek-{group}") } else { format!("tabs-{group}") }
+                })
+                .when(!peek, |d| d.relative())
                 .flex_none()
                 .w_full()
-                .h(t.px(if self.band_shown() {
+                .h(t.px(if self.band_shown() || peek {
                     TAB_BAR
                 } else {
                     BAND_HIDDEN + TAB_ROW_HIDDEN
                 }))
                 // Title bar hidden: the 12 px of its band come first, above the row of tabs.
-                .when(!self.band_shown(), |d| d.pt(t.px(BAND_HIDDEN)))
+                .when(!self.band_shown() && !peek, |d| d.pt(t.px(BAND_HIDDEN)))
                 .flex()
                 .text_size(t.px(13.))
-                .border_b_1()
-                .border_color(t.border)
+                // Quiet: the band is the ground, with no hairline under it. A peeked band is opaque over the note.
+                .when(quiet || peek, |d| d.bg(if quiet { t.ground } else { t.bg }))
+                .when(!quiet, |d| d.border_b_1().border_color(t.border))
                 // Under a native title bar the traffic lights float over the window's top left:
                 // the first tab starts right of them, measured from the window's edge once — the
                 // bar already starts past the sidebar, so it pads only what the sidebar leaves.
@@ -410,7 +453,7 @@ impl Shell {
                         .h_full()
                         .flex()
                         .items_center()
-                        .gap(t.px(0.))
+                        .gap(t.px(if quiet { 4. } else { 0. }))
                         .overflow_x_scroll()
                         .track_scroll(&self.groups[group].scroll)
                         .children(cells)
@@ -454,5 +497,86 @@ impl Shell {
                     )
                 }),
         )
+    }
+
+    /// Title bar hidden: the 12 px strip at the top of a pane. Pointing at it peeks the band over the note
+    /// (`render_peek`), until the pointer leaves that band.
+    pub(super) fn render_peek_strip(&self, group: usize, cx: &mut Context<Self>) -> Stateful<Div> {
+        let t = self.theme;
+        div()
+            .id(("band-strip", group))
+            .debug_selector(move || format!("band-strip-{group}"))
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .h(t.px(BAND_HIDDEN))
+            .on_hover(cx.listener(move |this, hover: &bool, _, cx| {
+                if *hover && !this.band_peek {
+                    this.band_peek = true;
+                    cx.notify();
+                }
+            }))
+    }
+
+    /// The band drawn over the note while the hidden title bar is peeked: the tab row of `group`, or for
+    /// one note its name, centred. The pointer leaving it takes the peek back.
+    pub(super) fn render_peek(&mut self, group: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let t = self.theme;
+        let band = match self.render_tabs(group, false, true, cx) {
+            Some(bar) => bar.into_any_element(),
+            None => {
+                // One note: its name, centred past the sidebar toggle where the sidebar is hidden, as the
+                // strip of a shown band draws it.
+                let edge = self.band_edge(group);
+                let name = self.tab_name(self.groups[group].shown, cx);
+                let toggle = (edge > px(0.)).then(|| {
+                    div()
+                        .absolute()
+                        .top(t.px((BAND - 28.) / 2.))
+                        .left(t.px(if self.nav.lights { LIGHTS_ROOM } else { 8. }))
+                        .child(self.sidebar_toggle(false, cx))
+                });
+                div()
+                    .debug_selector(|| "band-name".into())
+                    .size_full()
+                    .relative()
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .left(edge)
+                            .right_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(t.px(13.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(t.soft)
+                            .child(div().min_w_0().truncate().child(name)),
+                    )
+                    .children(toggle)
+                    .into_any_element()
+            }
+        };
+        div()
+            .id(("band-peek", group))
+            .debug_selector(move || format!("band-peek-{group}"))
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .h(t.px(BAND))
+            .bg(if t.quiet { t.ground } else { t.bg })
+            .shadow(t.floating())
+            .on_hover(cx.listener(move |this, hover: &bool, _, cx| {
+                if !*hover && this.band_peek {
+                    this.band_peek = false;
+                    cx.notify();
+                }
+            }))
+            .child(band)
+            .into_any_element()
     }
 }

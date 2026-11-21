@@ -130,9 +130,13 @@ impl Render for Shell {
                 let (area, said) = self.in_pane(pane, |this| {
                     this.render_pane(pane, group, pane == active, title_bar, window, cx)
                 });
-                let bar = self.render_tabs(group, client, cx);
+                let bar = self.render_tabs(group, client, false, cx);
                 // Its tab bar sits on the ground, above the sheet of the note.
                 let gap = bar.is_some();
+                // Title bar hidden: its 12 px strip at the top of the pane peeks the band over the note.
+                let hidden = !self.focus_mode && !self.nav.title_bar;
+                let strip = hidden.then(|| self.render_peek_strip(group, cx));
+                let peek = (hidden && self.band_peek).then(|| self.render_peek(group, cx));
                 areas.push(Some(
                     div()
                         .size_full()
@@ -140,9 +144,12 @@ impl Render for Shell {
                         .min_h_0()
                         .flex()
                         .flex_col()
+                        .relative()
                         .when(gap, |d| d.gap(t.px(6.)))
                         .children(bar)
                         .child(area)
+                        .children(strip)
+                        .children(peek)
                         .into_any_element(),
                 ));
                 if pane == active {
@@ -219,13 +226,15 @@ impl Render for Shell {
                 .child(toasts)
         };
 
+        // Focus mode in Quiet: the note's sheet runs to the window's edges, so the ground is its colour.
+        let ground = if self.focus_mode && t.quiet { t.bg } else { t.ground };
         let content = div()
             .size_full()
             .relative()
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(t.ground)
+            .bg(ground)
             .text_color(t.text)
             .font_family(sans())
             .when(framed, |d| {
@@ -538,6 +547,7 @@ impl Shell {
     /// that is no longer drawn go back to the note.
     pub(super) fn toggle_focus_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_mode = !self.focus_mode;
+        self.band_peek = false;
         if self.focus_mode && self.nav.focus.contains_focused(window, cx) {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
@@ -562,6 +572,7 @@ impl Shell {
     /// Where the system draws the bar (macOS, Windows) the app draws none, so nothing moves there.
     pub(super) fn toggle_title_bar(&mut self, cx: &mut Context<Self>) {
         self.nav.title_bar = !self.nav.title_bar;
+        self.band_peek = false;
         self.nav.save();
         cx.notify();
     }
@@ -1297,7 +1308,7 @@ impl Shell {
                     .children(toggle)
             })
             // The active pane of several: a 1 px ring around it, the accent at 30 %. Alone, a pane needs none.
-            .when(many && active, |d| {
+            .when(many && active && !t.quiet, |d| {
                 d.child(
                     div()
                         .debug_selector(|| "pane-active".into())

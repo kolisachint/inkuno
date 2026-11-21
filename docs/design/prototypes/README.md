@@ -114,7 +114,7 @@ tests green except the two sandbox-as-root tests, screenshots against `v2.html`)
 
 | # | Package | Main files | Status |
 |--|--|--|--|
-| P1 | Title band and tabs: Quiet tab pills, preview tabs in italics, dimmed unfocused pane, hidden-band peek on hover, focus mode surface | `shell/tabs.rs`, `shell/render.rs`, `shell/pane.rs` | started 2026-11-21 |
+| P1 | Title band and tabs: Quiet tab pills, preview tabs in italics, dimmed unfocused pane, hidden-band peek on hover, focus mode surface | `shell/tabs.rs`, `shell/render.rs`, `shell/pane.rs` | built, uncommitted |
 | P2 | Left sidebar, files only: Search and Today rows, tree, Scratch section, Settings at the foot; Quiet rows | `shell/sidebar.rs`, `views/nav.rs` | |
 | P3 | One right panel: icon switcher with Outline, Comments, Versions, Assistant; versions and assistant leave the left; the comments column becomes the Comments view | `shell/sidebar.rs`, `shell/render.rs`, `shell/versions.rs`, `shell/assistant.rs` | |
 | P4 | Settings tab with Appearance, Editor, Files, Shortcuts (F1), About | new `views/settings*`, `shell/settings.rs`, `shell/help.rs` | |
