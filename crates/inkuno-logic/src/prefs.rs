@@ -25,6 +25,9 @@ pub struct Prefs {
 impl Prefs {
     /// The default body size; the reference every size proportion (UI scale, measure, headings) is taken from.
     pub const SIZE: f32 = 15.;
+    /// Version of the file's layout, written on every save. Files without it (or with an older one) were
+    /// saved with the former default of 16 px, which then reads as `SIZE`.
+    pub const VERSION: u32 = 2;
     /// The assistant's command when the setting is empty.
     pub const ASSISTANT: &'static str = "hoocode";
 
@@ -37,6 +40,7 @@ impl Prefs {
     }
 
     pub fn parse(text: &str) -> Self {
+        let mut version = 0;
         let mut prefs = Self {
             theme: String::new(),
             font: String::new(),
@@ -51,6 +55,7 @@ impl Prefs {
         };
         for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
             match key {
+                "prefs" => version = value.parse().unwrap_or(0),
                 "theme" => prefs.theme = value.into(),
                 "font" => prefs.font = value.into(),
                 "mono" => prefs.mono = value.into(),
@@ -70,14 +75,18 @@ impl Prefs {
                 _ => {}
             }
         }
+        // The former default of 16 px, kept by a file of an older version, is the default now.
+        if version < Self::VERSION && prefs.size == 16. {
+            prefs.size = Self::SIZE;
+        }
         prefs.size = prefs.size.clamp(11., 32.);
         prefs
     }
 
     pub fn to_text(&self) -> String {
         let mut text = format!(
-            "theme={}\nfont={}\nmono={}\nsize={}\n",
-            self.theme, self.font, self.mono, self.size
+            "prefs={}\ntheme={}\nfont={}\nmono={}\nsize={}\n",
+            Self::VERSION, self.theme, self.font, self.mono, self.size
         );
         for (key, value) in [
             ("page", &self.page),
@@ -100,6 +109,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_former_default_size_moves_to_the_new_one() {
+        // Saved before the Quiet typography (no `prefs` key, or an older one): a size of 16 was the default.
+        assert_eq!(Prefs::parse("theme=Quiet\nsize=16\n").size, 15.);
+        assert_eq!(Prefs::parse("prefs=1\nsize=16\n").size, 15.);
+        // Any other size is kept as saved.
+        assert_eq!(Prefs::parse("size=18\n").size, 18.);
+        // Saved with the version: a size of 16 is a choice.
+        let kept = Prefs::parse("prefs=2\nsize=16\n");
+        assert_eq!(kept.size, 16.);
+        // Every save writes the version, and the migrated size is what the next read finds.
+        assert_eq!(Prefs::parse(&kept.to_text()), kept);
+        let migrated = Prefs::parse("size=16\n");
+        assert_eq!(Prefs::parse(&migrated.to_text()).size, 15.);
+        assert!(migrated.to_text().starts_with("prefs=2\n"));
+    }
+
+    #[test]
     fn reads_settings() {
         let prefs = Prefs::parse("theme=Dracula\nfont=Inter\nsize=99\nbogus\nmono=\n");
         assert_eq!(
@@ -113,6 +139,7 @@ mod tests {
         // Size clamped, and unreadable value ignored.
         assert_eq!((prefs.size, Prefs::parse("size=NaN").size), (32., 15.));
         assert_eq!(Prefs::parse(&prefs.to_text()), prefs);
+        assert!(prefs.to_text().contains("prefs=2\n"));
         // Unknown keys are ignored (the removed `updates` setting reads as defaults).
         assert_eq!(Prefs::parse("updates=off\n"), Prefs::parse(""));
         // Page width and wide tables: absent until chosen.

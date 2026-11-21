@@ -41,8 +41,8 @@ impl Shell {
         // The theme's default is not one of the list: it follows the system, light or dark.
         let default = match setting {
             Setting::Theme => tr(
-                "Default: Inkuno, light or dark like the system",
-                "Par défaut : Inkuno, clair ou sombre comme le système",
+                "Default: Quiet, light or dark like the system",
+                "Par défaut : Quiet, clair ou sombre comme le système",
             ),
             _ => tr("Default", "Par défaut"),
         };

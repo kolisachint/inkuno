@@ -987,7 +987,7 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             .palette
             .as_ref()
             .and_then(|p| p.read(cx).choice_at(0))),
-        Some("Default: Inkuno, light or dark like the system".to_string())
+        Some("Default: Quiet, light or dark like the system".to_string())
     );
     cx.simulate_keystrokes("escape");
 

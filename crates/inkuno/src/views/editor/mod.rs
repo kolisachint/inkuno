@@ -199,8 +199,10 @@ const COPY_SIZE: Pixels = px(22.);
 const MATH_SCALE: f32 = 1.2;
 /// Space between a line and the image it points to.
 const IMAGE_GAP: Pixels = px(8.);
-/// Room inside the fill of a code block or callout, above its first line and under its last (at 16 px text).
+/// Room inside the fill of a code block or callout, above its first line and under its last (at 15 px text).
 const BLOCK_ROOM: Pixels = px(9.);
+/// Gap above a body block's line (paragraph, list item, quote or callout line), at 15 px text.
+const BLOCK_GAP: Pixels = px(9.);
 /// Height of the line that says a figure or a picture cannot be read.
 const BROKEN: Pixels = px(20.);
 /// `file` is inside `root`, once `..` and symbolic links are resolved: a received

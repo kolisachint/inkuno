@@ -1742,6 +1742,21 @@ impl Editor {
                 } else {
                     pad * (t.size / Prefs::SIZE)
                 };
+                // A body block starts a gap below the line before it: a paragraph, list item, quote or
+                // callout line. A blank line, code, a table row, a heading, a formula and the front matter
+                // keep their spacing. The gap is part of the row's pad, so the text, its markers and its hits move together.
+                let block_gap = if offset > 0
+                    && !math
+                    && !line.trim().is_empty()
+                    && matches!(
+                        kind,
+                        Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_) | Kind::Quote
+                    ) {
+                    BLOCK_GAP * (t.size / Prefs::SIZE)
+                } else {
+                    px(0.)
+                };
+                let pad = pad + block_gap;
 
                 // An unchanged line, in the same context, reuses its styling from
                 // the previous frame: typing only reprocesses the touched line.
@@ -3222,7 +3237,8 @@ mod tests {
                 (lh - body_lh * 0.8).abs() <= 1.0,
                 "marker {line} line height {lh}"
             );
-            assert_eq!(h, lh, "marker {line} has no room of its own");
+            // A marker line is a body block: its gap sits above the line, and it has no room of its own.
+            assert_eq!(h, lh + f32::from(BLOCK_GAP), "marker {line} has no room of its own");
         }
         // A changed text line is drawn at the body size.
         assert_eq!(metrics(cx, at[2]).2, body);

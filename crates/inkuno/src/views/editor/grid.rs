@@ -85,13 +85,13 @@ pub struct Look<'a> {
     pub style: u64,
 }
 
-/// Text size of a cell, and its line height.
+/// Text size of a cell, and its line height: 14/20 at the default body size (`docs/design/app-ui.md` §14).
 pub fn font_size(theme: &Theme) -> Pixels {
-    px(15.) * (theme.size / Prefs::SIZE)
+    px(14.) * (theme.size / Prefs::SIZE)
 }
 
 pub fn line_height(theme: &Theme) -> Pixels {
-    (font_size(theme) * 1.5).round()
+    (font_size(theme) * 20. / 14.).round()
 }
 
 /// Text byte → shown text byte.

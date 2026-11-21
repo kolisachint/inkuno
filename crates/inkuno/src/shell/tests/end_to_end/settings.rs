@@ -224,7 +224,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 16.);
     assert_eq!(
         vault::load_settings(),
-        "theme=Inkuno Light\nfont=\nmono=.SystemUIFont\nsize=16\n"
+        "prefs=2\ntheme=Inkuno Light\nfont=\nmono=.SystemUIFont\nsize=16\n"
     );
     cx.simulate_keystrokes("secondary-0");
     assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 15.);

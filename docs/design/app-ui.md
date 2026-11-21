@@ -72,18 +72,22 @@ A **Typora-inspired, document-first writing app**:
 
 | Role      | Size | Line-height | Current state |
 |-----------|------|-------------|---------------|
-| Body      | 16   | 1.7         | Default body size is 16 (`crates/inkuno-logic/src/prefs.rs:24`); line-height TBD — verify in `crates/inkuno/src/views/editor/style.rs` |
-| H1        | 30   | TBD         | TBD — verify heading scale in editor style |
-| H2        | 23   | TBD         | TBD |
-| H3        | 19   | TBD         | TBD |
-| UI chrome | 13–14| —           | UI scale follows body size: `ui = size/16` clamped 0.85–1.5 (`crates/inkuno/src/ui/theme.rs:118`, `crates/inkuno/src/ui/theme.rs:116`) |
-| Code      | 14   | TBD         | TBD — verify code run sizing |
-| Metadata (counts, hints) | 12 | — | Secondary text uses `soft` color token, WCAG AA 4.5:1 (`crates/inkuno/src/ui/theme.rs:77`) |
+| Body      | 15   | 22/15 (≈1.47) | Default body size is 15, `Prefs::SIZE` (`crates/inkuno-logic/src/prefs.rs`); the sizes below hold for it (`crates/inkuno/src/views/editor/layout.rs`) |
+| H1        | 28   | 1.3         | Bold (`layout.rs`, heading table) |
+| H2        | 21   | 1.3         | Bold |
+| H3        | 18   | 1.33        | Semibold |
+| H4        | 16   | 1.4         | Semibold |
+| H5–H6     | 15   | 1.47        | Semibold; H6 is `soft` |
+| UI chrome | 13–14| —           | UI scale follows body size: `ui = size/15` clamped 0.85–1.5 (`crates/inkuno/src/ui/theme.rs`) |
+| Code      | 13   | 20/13 (≈1.54) | Code blocks and inline code (`layout.rs`) |
+| Table cells | 14 | 20/14       | `crates/inkuno/src/views/editor/grid.rs` |
+| Block gap | 9    | —           | Above each body block's line: paragraph, list item, quote or callout line; scales with size (`BLOCK_GAP`, `crates/inkuno/src/views/editor/mod.rs`) |
+| Metadata (counts, hints) | 12 | — | Secondary text uses `soft` color token, WCAG AA 4.5:1 (`crates/inkuno/src/ui/theme.rs`) |
 
 ### Measure + spacing (target)
 
-- **Doc max-width: 800 px** at body 16.
-- **Paragraph spacing: 16 px** between blocks.
+- **Doc max-width: 800 px** at body 15.
+- **Block gap: 9 px** above each body block's line (paragraph, list item, quote or callout line); headings keep their own top pads, and code, table rows, formula lines and the front matter get none.
 - **Current state (Inkuno):** page widths are Narrow 560 / Normal 800 / Wide 960 /
   Full (`crates/inkuno/src/ui/theme.rs:49-51`), width follows zoom
   (`Page::measure`, `crates/inkuno/src/ui/theme.rs:44-54`), default Normal
@@ -288,6 +292,7 @@ Every Phase 1 proposal must name which mockup element it implements.
    > no shadow. The window keeps its own frame (rounding, shadow and resize margin where Inkuno draws
    > it). The comments column keeps its 8 px from the note: it is a column of cards, not a pane. The
    > rest of item 4 (page widths, pill clearance) stands.
+   > 2026-11-21: lifted for the Quiet reskin: body blocks get a 9 px gap, list items included. The gap sits above the line box, in the row's pad: the caret, selection, clicks, the block grip and the markers stay with the text.
    Normal page measure is now 800 (option (a) landed, item 5 below);
    pill clearance went PILL_CLEAR 48→56 with it. Inset crew owns
    `render.rs` + `layout.rs` + `shell/mod.rs`: any traffic math depending on

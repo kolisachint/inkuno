@@ -19,6 +19,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = |s: &str| note.find(s).unwrap();
     let room = l[0].3;
     assert!(room > 0., "{l:?}");
+    // Each quote or callout line that is not the note's first one has a gap above it, as the body blocks do; a
+    // callout's first line adds its room to that gap. Both scale with the text, as in the layout.
+    let size = shell.read_with(cx, |s, _| s.theme.size);
+    let gap = 9. * (size / crate::logic::prefs::Prefs::SIZE);
     // Code: the room above the opening line and under the closing one only.
     assert_eq!(of(&l, 0), (0, true, false, room, 0.));
     assert_eq!(of(&l, at("let")), (at("let"), false, false, 0., 0.));
@@ -29,22 +33,22 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Callout: from its `[!TYPE]` line to the line before the next block, a gap between it and the code block.
     assert_eq!(
         of(&l, at("> [!NOTE]")),
-        (at("> [!NOTE]"), true, false, room, 0.)
+        (at("> [!NOTE]"), true, false, room + gap, 0.)
     );
-    assert_eq!(of(&l, at("> une")), (at("> une"), false, false, 0., 0.));
-    assert_eq!(of(&l, at("> deux")), (at("> deux"), false, true, 0., room));
+    assert_eq!(of(&l, at("> une")), (at("> une"), false, false, gap, 0.));
+    assert_eq!(of(&l, at("> deux")), (at("> deux"), false, true, gap, room));
     assert!(of(&l, at("```\nx")).1);
     // Two callouts in a row are two shapes; a callout of a single line has both ends.
     assert_eq!(
         of(&l, at("> seule")),
-        (at("> seule"), false, true, 0., room)
+        (at("> seule"), false, true, gap, room)
     );
     assert_eq!(
         of(&l, at("> [!WARNING]")),
-        (at("> [!WARNING]"), true, false, room, 0.)
+        (at("> [!WARNING]"), true, false, room + gap, 0.)
     );
-    // A plain quote has the ends of its bar but no room.
-    assert_eq!(of(&l, at("> simple")), (at("> simple"), true, true, 0., 0.));
+    // A plain quote has the ends of its bar but no room: only its gap.
+    assert_eq!(of(&l, at("> simple")), (at("> simple"), true, true, gap, 0.));
     // A ``` that closes nothing: one line.
     let orphan = note.rfind("```").unwrap();
     assert_eq!(of(&l, orphan), (orphan, true, true, room, room));
