@@ -29,3 +29,12 @@ also `start_line` and `end_line`). The tests read `markdown`, `example` and `sec
 Replace a file only with a newer official version, then regenerate `expected-failures.txt`
 (`INKUNO_SPEC_WRITE=1 cargo test -p inkuno-logic --test conformance --locked`) and review the diff:
 the list may only shrink without a reason.
+
+## Where GFM overrides CommonMark
+
+The expected-failures list only shrinks, with one kind of exception: a CommonMark example that GFM
+deliberately changes. Inkuno follows GFM there, so the CommonMark example stays listed.
+
+| Entry | Why |
+|--|--|
+| `cm:612` | `foo@bar.example.com` is plain text in CommonMark; GFM's extended autolinks make it a `mailto:` link (gfm 629). |

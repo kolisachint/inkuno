@@ -411,6 +411,14 @@ alerts), **edit like Typora** (the caret's line shows its source; every other li
 Score 2026-11-21: CommonMark 334/652, GFM extensions 9/24 (`tests/conformance.rs`; the failing
 examples are listed in `crates/inkuno-logic/tests/spec/expected-failures.txt`).
 
+Score 2026-11-21, after the first fixes of §11.5: CommonMark 384/652, GFM extensions 20/24. Gains by
+section: Emphasis and strong emphasis 57 to 82/132, Links 22 to 32/90, Setext headings 9 to 12/27,
+Autolinks 5 to 6/19, Images 15 to 16/22, Tabs 2 to 3/11, Code spans 8 to 9/22; GFM Autolinks
+(extension) 0 to 11/11. Unchanged: Indented code blocks 3/12, List items 26/48, HTML blocks 23/44.
+One example newly fails and is listed as an explained conflict: cm 612 (`foo@bar.example.com` is
+plain text in CommonMark, but GFM example 629 requires the same form to be a `mailto:` link; Inkuno
+ships both, so it reads GFM).
+
 Worst sections, top 8 by failures:
 
 | Spec | Section | Passed | Failing |
@@ -438,13 +446,14 @@ Worst sections, top 8 by failures:
 
 Found by the first conformance run (2026-11-21), folded into the order above as quick wins first:
 
-- Quick wins: `__strong__`; empty ATX heading `#`; spaced rules `- - -` / `* * *`; four-space indent
-  stops a heading or rule; relative links `[x](/path)` styled (not only `http(s)`); Unicode-aware
-  intraword `_` (cm 362).
+- Quick wins: `__strong__` (done 2026-11-21); empty ATX heading `#` (done 2026-11-21); spaced rules
+  `- - -` / `* * *` (done 2026-11-21); four-space indent stops a heading or rule (done 2026-11-21);
+  relative links `[x](/path)` styled, not clickable, not only `http(s)` (done 2026-11-21); Unicode-aware
+  intraword `_` (cm 362) (done 2026-11-21).
 - Indented code blocks (four spaces) recognised as code.
 - GFM tables: rows without a leading pipe; a delimiter row with the wrong column count is not a table
   (gfm 203).
-- GFM extended autolinks (`www.`, e-mail, bare URLs with trailing punctuation rules): 0/11 today.
+- GFM extended autolinks (`www.`, e-mail, bare URLs with trailing punctuation rules): 0/11 today (done 2026-11-21: 11/11).
 - **Multi-line inline spans** (emphasis, code or a link crossing a line break, e.g. cm 121, 405) fail
   by construction of the per-line classifier. Report them as a separate count, not as rendering
   failures, until the editor's inline pass can look across soft breaks.
@@ -453,3 +462,13 @@ Found by the first conformance run (2026-11-21), folded into the order above as 
 
 `docs/user/src/writing.md` opens with one line: Inkuno writes CommonMark with GitHub's extensions,
 so every note reads the same on github.com. The README says the same.
+
+Follow-ups decided 2026-11-21 (orchestrator):
+
+- Relative links `[x](Note.md)`, `[x](/path)`, `[x](#heading)` must also be **clickable** and hide
+  their brackets off the live line like web links: they replace `[[wiki]]` links (prototype decision
+  #16), so they need the same treatment. App crate: `links()` callers and `layout.rs` bracket hiding.
+- Indented code and pipe-less tables need a **block-level classifier API** (previous-line state and a
+  one-line lookahead) that both the editor and the conformance test call; the editor already keeps
+  this state in `views/editor/listing.rs` (`starts_indented_code`). Move that logic into
+  `inkuno-logic` rather than duplicating it.

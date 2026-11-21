@@ -232,12 +232,19 @@ pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
         None if is_fence(line) => return (Kind::Fence, line.len()),
         None => {}
     }
+    // Four columns of indent or more: no heading and no rule (indented code, or a continuation).
+    let shallow = indent_columns(line) < 4;
     let hashes = rest.bytes().take_while(|&b| b == b'#').count();
-    if (1..=6).contains(&hashes) && rest[hashes..].starts_with(' ') {
-        return (Kind::Heading(hashes as u8), indent + hashes + 1);
+    // An empty heading (`#`, `## `) is a heading too: its marker is the whole line then.
+    if shallow && (1..=6).contains(&hashes) && (rest[hashes..].is_empty() || rest[hashes..].starts_with(' ')) {
+        return (Kind::Heading(hashes as u8), (indent + hashes + 1).min(line.len()));
     }
+    // A rule: three or more of one mark, spaces and tabs between them; it wins over a list item (`- - -`).
     let t = rest.trim_end();
-    if t.len() >= 3 && ['-', '*', '_'].iter().any(|&c| t.chars().all(|x| x == c)) {
+    if let Some(c) = t.chars().next().filter(|c| shallow && ['-', '*', '_'].contains(c))
+        && t.chars().all(|x| x == c || x == ' ' || x == '\t')
+        && t.matches(c).count() >= 3
+    {
         return (Kind::Rule, line.len());
     }
     if rest.starts_with('|') {
@@ -491,7 +498,8 @@ pub fn web_link(rest: &str) -> Option<(Range<usize>, Range<usize>)> {
     let (text, url) = (1..close, close + 2..end);
     let ok = rest.starts_with('[')
         && !rest[text.clone()].contains(['[', ']'])
-        && is_url(&rest[url.clone()]);
+        && !rest[url.clone()].is_empty()
+        && !rest[url.clone()].contains(char::is_whitespace);
     ok.then_some((text, url))
 }
 
@@ -517,18 +525,23 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
         if b[i] == b'['
             && (i == 0 || b[i - 1] != b'!')
             && let Some((_, url)) = web_link(rest)
+            && is_url(&rest[url.clone()])
         {
             out.push((i..i + url.end + 1, Link::Url(rest[url.clone()].to_string())));
             i += url.end + 1;
             continue;
         }
-        if rest.starts_with("http://") || rest.starts_with("https://") {
-            let end = rest
-                .find(|c: char| c.is_whitespace() || c == ')')
-                .unwrap_or(rest.len());
-            out.push((i..i + end, Link::Url(rest[..end].to_string())));
-            i += end;
-            continue;
+        // Extended autolinks (GFM): a bare address, or `www.` (which opens as `http://`).
+        let www = rest.starts_with("www.") && (i == 0 || b"\t *_~(".contains(&b[i - 1]) || b[i - 1].is_ascii_whitespace());
+        if ["http://", "https://", "ftp://"].iter().any(|p| rest.starts_with(p)) || www {
+            let end = autolink_end(rest);
+            let bare = if www { 4 } else { 0 };
+            if end > bare {
+                let url = if www { format!("http://{}", &rest[..end]) } else { rest[..end].to_string() };
+                out.push((i..i + end, Link::Url(url)));
+                i += end;
+                continue;
+            }
         }
         if b[i] == b'#' && (i == 0 || b[i - 1].is_ascii_whitespace()) {
             let n: usize = rest[1..]
@@ -545,6 +558,22 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
         }
         i += rest.chars().next().map_or(1, char::len_utf8);
     }
+    // E-mail addresses (GFM), where no range above takes them: `mailto:` links.
+    for (at, _) in line.match_indices('@') {
+        let local = line[..at].char_indices().rev().take_while(|&(_, c)| is_local(c)).last();
+        // A local part after a backslash (`\+@`) is escaped text, not an address.
+        let Some((start, _)) = local.filter(|&(k, _)| !line[..k].ends_with('\\')) else { continue };
+        let rest = &line[at + 1..];
+        let dom = rest.find(|c: char| !(c.is_ascii_alphanumeric() || "-_.".contains(c))).unwrap_or(rest.len());
+        let dom = rest[..dom].trim_end_matches('.');
+        let valid = dom.contains('.')
+            && !dom.ends_with(['-', '_'])
+            && dom.split('.').all(|seg| !seg.is_empty());
+        let range = start..at + 1 + dom.len();
+        if valid && !out.iter().any(|(r, _)| r.start < range.end && range.start < r.end) {
+            out.push((range.clone(), Link::Url(format!("mailto:{}", &line[range]))));
+        }
+    }
     // Footnote references, found separately (they skip code spans and wikilinks): merged in
     // text order. They never overlap the ranges above (see `footnote_ref`).
     if line.contains("[^") {
@@ -553,9 +582,46 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
             .map(|(r, label)| (r, Link::Footnote(label)))
             .collect();
         out.append(&mut feet);
-        out.sort_by_key(|(r, _)| r.start);
     }
+    out.sort_by_key(|(r, _)| r.start);
     out
+}
+
+/// Length of the raw HTML tag at the start of `rest` (`<name …>` or `</name>`), if it holds no `<`.
+fn html_tag(rest: &str) -> Option<usize> {
+    let name = rest.strip_prefix("</").or_else(|| rest.strip_prefix('<'))?;
+    if !name.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let end = rest.find('>')?;
+    (!rest[1..end].contains('<')).then_some(end + 1)
+}
+
+/// Characters of the local part of an e-mail address (GFM).
+fn is_local(c: char) -> bool {
+    c.is_ascii_alphanumeric() || ".!#$%&'*+/=?^_`{|}~-".contains(c)
+}
+
+/// The end of the extended autolink at the start of `rest` (GFM): up to a space or a `<`, without the
+/// trailing punctuation, without an entity's `;` (`&hl;`), and without a `)` that closes no `(` of it.
+fn autolink_end(rest: &str) -> usize {
+    let mut end = rest.find(|c: char| c.is_whitespace() || c == '<').unwrap_or(rest.len());
+    loop {
+        let t = &rest[..end];
+        if t.ends_with(|c: char| "?!.,:*_~'\"".contains(c))
+            || t.ends_with(')') && t.matches(')').count() > t.matches('(').count()
+        {
+            end -= 1;
+        } else if t.ends_with(';')
+            && let Some(amp) = t.rfind('&')
+            && t[amp + 1..t.len() - 1].chars().all(|c| c.is_ascii_alphanumeric())
+            && amp + 1 < t.len() - 1
+        {
+            end = amp;
+        } else {
+            return end;
+        }
+    }
 }
 
 /// The `[ ]` and `[x]` of the line from byte `from`, alone between spaces, `|` or
@@ -636,9 +702,27 @@ pub fn inline(line: &str, from: usize, flags: &mut [u32]) {
 /// the marks are `DIM`. Texts that are not notes (a diagram's) read only this part.
 pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
     let b = line.as_bytes();
-    let alnum = |i: Option<usize>| {
-        i.and_then(|i| b.get(i))
-            .is_some_and(u8::is_ascii_alphanumeric)
+    // Word characters, Unicode letters and digits included: the character starting at `at`, or ending before it.
+    let after = |at: usize| line.get(at..).and_then(|s| s.chars().next()).is_some_and(char::is_alphanumeric);
+    let before = |at: usize| line[..at].chars().next_back().is_some_and(char::is_alphanumeric);
+    // Raw inline HTML tags: no delimiter inside one opens or closes a run (`<a href="__">`). The highlight
+    // and underline tags are marks of this pass, not raw HTML.
+    let tags: Vec<Range<usize>> = line
+        .match_indices('<')
+        .filter(|(k, _)| !["<u>", "</u>", "<mark", "</mark>"].iter().any(|t| line[*k..].starts_with(t)))
+        .filter_map(|(k, _)| html_tag(&line[k..]).map(|n| k..k + n))
+        .collect();
+    let inside = |at: usize| tags.iter().any(|t| t.contains(&at));
+    // CommonMark's flanking of the `_` run holding byte `at`: (it can open, it can close).
+    let flank = |at: usize| {
+        let s = (0..at).rev().take_while(|&k| b[k] == b'_').last().unwrap_or(at);
+        let e = (at..b.len()).take_while(|&k| b[k] == b'_').last().map_or(at + 1, |k| k + 1);
+        let punct = |c: char| !c.is_alphanumeric() && !c.is_whitespace();
+        let prev = line[..s].chars().next_back().unwrap_or(' ');
+        let next = line[e..].chars().next().unwrap_or(' ');
+        let left = !next.is_whitespace() && (!punct(next) || prev.is_whitespace() || punct(prev));
+        let right = !prev.is_whitespace() && (!punct(prev) || next.is_whitespace() || punct(next));
+        (left && (!right || punct(prev)), right && (!left || punct(next)))
     };
     let mut active = 0u32;
     // The current highlight opened with `<mark>` (otherwise with `==`): it closes the same way.
@@ -646,6 +730,11 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
     let mut i = from;
     while i < b.len() {
         let rest = &line[i..];
+        if let Some(t) = tags.iter().find(|t| t.start == i) {
+            flags[t.clone()].iter_mut().for_each(|f| *f |= active);
+            i = t.end;
+            continue;
+        }
         if b[i] == b'`'
             && let Some(end) = rest[1..].find('`')
         {
@@ -661,6 +750,8 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
             (2, BOLD)
         } else if rest.starts_with("~~") {
             (2, STRIKE)
+        } else if rest.starts_with("__") {
+            (2, BOLD)
         } else if let Some(n) = if active & HIGHLIGHT != 0 {
             mark_tag(rest, true).filter(|_| tagged)
         } else {
@@ -678,20 +769,21 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
         } else {
             (0, 0)
         };
-        if flag != 0 {
+        // Whether the delimiter `flag` of `n` bytes at `i` opens or closes here.
+        let ok = |n: usize, flag: u32| {
             let underscore = b[i] == b'_';
             // `==`: not stuck to a word (`abc==` of an address), nor the `{==` `==}` of a comment.
             let sound = |at: usize| {
                 b.get(at.wrapping_sub(1)) != Some(&b'{') && b.get(at + 2) != Some(&b'}')
             };
-            let ok = if flag == UNDER {
+            if flag == UNDER {
                 n == 4 || rest[n..].contains("</u>")
             } else if flag == HIGHLIGHT && rest.starts_with('<') {
                 // `<mark>`: an opening one that has its closing one, or the closing one of the one that opened.
                 active & flag != 0 || rest[n..].contains("</mark>")
             } else if flag == HIGHLIGHT {
                 if active & flag == 0 {
-                    !alnum(i.checked_sub(1))
+                    !before(i)
                         && sound(i)
                         && rest[2..]
                             .chars()
@@ -699,26 +791,36 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
                             .is_some_and(|c| !c.is_whitespace() && c != '=')
                         && rest[2..]
                             .match_indices("==")
-                            .any(|(j, _)| sound(i + 2 + j) && !alnum(Some(i + 4 + j)))
+                            .any(|(j, _)| sound(i + 2 + j) && !after(i + 4 + j))
                 } else {
-                    sound(i) && !alnum(Some(i + 2))
+                    sound(i) && !after(i + 2)
+                }
+            } else if underscore {
+                if active & flag == 0 {
+                    flank(i).0 && rest[n..].match_indices(&rest[..n]).any(|(j, _)| !inside(i + n + j) && flank(i + n + j).1)
+                } else {
+                    flank(i).1
                 }
             } else if active & flag == 0 {
                 rest[n..].chars().next().is_some_and(|c| !c.is_whitespace())
-                    && rest[n..].contains(&rest[..n])
-                    && !(underscore && alnum(i.checked_sub(1)))
+                    && rest[n..].match_indices(&rest[..n]).any(|(j, _)| !inside(i + n + j))
             } else {
-                !(underscore && alnum(Some(i + 1)))
-            };
-            if ok {
-                flags[i..i + n].iter_mut().for_each(|f| *f |= DIM | active);
-                if flag == HIGHLIGHT && active & flag == 0 {
-                    tagged = rest.starts_with('<');
-                }
-                active ^= flag;
-                i += n;
-                continue;
+                true
             }
+        };
+        // A `__` that neither opens nor closes is a single `_`.
+        let (mut n, mut flag) = (n, flag);
+        if flag == BOLD && b[i] == b'_' && !ok(n, flag) {
+            (n, flag) = (1, ITALIC);
+        }
+        if flag != 0 && ok(n, flag) {
+            flags[i..i + n].iter_mut().for_each(|f| *f |= DIM | active);
+            if flag == HIGHLIGHT && active & flag == 0 {
+                tagged = rest.starts_with('<');
+            }
+            active ^= flag;
+            i += n;
+            continue;
         }
         let n = rest.chars().next().map_or(1, char::len_utf8);
         flags[i..i + n].iter_mut().for_each(|f| *f |= active);
@@ -766,6 +868,34 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
                     .iter_mut()
                     .for_each(|f| *f |= LINK);
             }
+        }
+    }
+    // `[text](address)` with another address (`/path`, `note.md`, `#top`): styled like a web link, but
+    // not in `links`, so that a click never hands it to the browser.
+    for (at, _) in line.match_indices('[') {
+        let rest = &line[at..];
+        if at < from || at > 0 && line.as_bytes()[at - 1] == b'!' || flags[at] & CODE != 0 {
+            continue;
+        }
+        // Not a link when a code span cuts it, the address has unbalanced parentheses or starts with `<`,
+        // or the text holds a tag (`<a title="](x)">`).
+        let plain = |(text, url): &(Range<usize>, Range<usize>)| {
+            let address = &rest[url.clone()];
+            !is_url(address)
+                && !address.starts_with('<')
+                && address.matches('(').count() == address.matches(')').count()
+                && !rest[text.clone()].contains('<')
+                && !flags[at..at + url.end + 1].iter().any(|f| f & CODE != 0)
+        };
+        if let Some((text, url)) = web_link(rest).filter(plain) {
+            let whole = at..at + url.end + 1;
+            flags[whole].iter_mut().for_each(|f| *f |= DIM);
+            flags[at + text.start..at + text.end]
+                .iter_mut()
+                .for_each(|f| *f = *f & !DIM | LINK);
+            flags[at + url.start..at + url.end]
+                .iter_mut()
+                .for_each(|f| *f |= QUIET);
         }
     }
     // A comment: its text keeps its styles (the editor highlights it), the rest fades.
@@ -858,7 +988,8 @@ pub const STYLES: [u32; 6] = [BOLD, ITALIC, UNDER, STRIKE, HIGHLIGHT, CODE];
 /// The ways a style is written: `(opening, closing)`, the first is the one applied.
 pub fn delimiters(flag: u32) -> &'static [(&'static str, &'static str)] {
     match flag {
-        BOLD => &[("**", "**")],
+        // The first pair is the one written; `__` is also read back (see `emphasis`).
+        BOLD => &[("**", "**"), ("__", "__")],
         ITALIC => &[("*", "*"), ("_", "_")],
         STRIKE => &[("~~", "~~")],
         HIGHLIGHT => &[("==", "==")],
@@ -1646,6 +1777,125 @@ mod tests {
     }
 
     use super::*;
+
+    /// One character per byte: `b` for the bytes that are strong text, `.` for the rest.
+    fn strong(line: &str) -> String {
+        flags(line, 0)
+            .iter()
+            .map(|&f| if f & BOLD != 0 && f & DIM == 0 { 'b' } else { '.' })
+            .collect()
+    }
+
+    #[test]
+    fn double_underscores_are_strong_with_the_intraword_rule() {
+        assert_eq!(strong("__a b__"), "..bbb..");
+        assert_eq!(strong("**a** __b__"), "..b.....b..");
+        // Inside a word, `_` neither opens nor closes.
+        assert_eq!(strong("foo__bar__"), "..........");
+        assert_eq!(strong("__foo__bar"), "..........");
+    }
+
+    #[test]
+    fn an_empty_atx_heading_is_a_heading() {
+        assert_eq!(classify("#", false), (Kind::Heading(1), 1));
+        assert_eq!(classify("## ", false), (Kind::Heading(2), 3));
+        assert_eq!(classify("###", false), (Kind::Heading(3), 3));
+        assert_eq!(classify("#######", false), (Kind::Para, 0));
+        assert_eq!(classify("#a", false), (Kind::Para, 0));
+        assert_eq!(headings("# \n#\n"), [(1, "", 0), (1, "", 3)]);
+    }
+
+    #[test]
+    fn spaced_thematic_breaks_are_rules_not_items() {
+        for line in ["- - -", "* * *", "_ _ _", "-  -\t-  ", "***", "- - - -    "] {
+            assert_eq!(classify(line, false).0, Kind::Rule, "{line:?}");
+        }
+        assert_eq!(classify("- foo", false).0, Kind::Bullet);
+        assert_eq!(classify("- - foo", false).0, Kind::Bullet);
+        assert_eq!(classify("- -", false).0, Kind::Bullet);
+        assert_eq!(classify("-*-", false).0, Kind::Para);
+    }
+
+    #[test]
+    fn four_columns_of_indent_stop_a_heading_and_a_rule() {
+        assert_eq!(classify("   # a", false), (Kind::Heading(1), 5));
+        assert_eq!(classify("    # a", false).0, Kind::Para);
+        assert_eq!(classify("\t# a", false).0, Kind::Para);
+        assert_eq!(classify("   ---", false).0, Kind::Rule);
+        assert_eq!(classify("    ***", false).0, Kind::Para);
+        assert_ne!(classify("    - - -", false).0, Kind::Rule);
+    }
+
+    #[test]
+    fn local_link_destinations_are_links_but_not_clickable() {
+        for line in ["[x](/path)", "[x](foo.md)", "[x](#anchor)", "[x](mailto:a@b.c)"] {
+            let url = web_link(line).map(|(_, u)| line[u].to_string());
+            assert!(url.is_some(), "{line}");
+            // Only the web addresses are clickable.
+            let clickable = !links(line).is_empty();
+            assert_eq!(clickable, is_url(&url.unwrap()), "{line}");
+        }
+        let f = flags("see [x](/path) now", 0);
+        assert!(f[5] & LINK != 0 && f[6] & LINK == 0 && f[12] & QUIET != 0, "{f:?}");
+        assert_eq!(f.iter().filter(|&&x| x & LINK != 0).count(), 1);
+        assert!(web_link("[x](a b)").is_none() && web_link("[x]()").is_none());
+        assert!(links("![x](/img.png)").is_empty());
+        // Not links at all: unbalanced parentheses, a `<` destination, a code span across the link.
+        for line in ["[x](a(b)", "[x](<a>)", "[`a](/b)`"] {
+            assert!(flags(line, 0).iter().all(|f| f & LINK == 0), "{line}");
+        }
+    }
+
+    #[test]
+    fn intraword_underscores_follow_unicode_letters() {
+        let italic = |line: &str| flags(line, 0).iter().any(|f| f & ITALIC != 0 && f & DIM == 0);
+        assert!(!italic("пристаням_стремятся_"));
+        assert!(!italic("__пристаням__стремятся"));
+        assert!(!italic("café_au_lait_"));
+        assert!(italic("_é_"));
+        assert!(italic("_пристань_ с"));
+        assert!(!strong("пристаням__стремятся__").contains('b'));
+    }
+
+    #[test]
+    fn extended_autolinks_follow_the_gfm_trailing_rules() {
+        let urls = |line: &str| -> Vec<String> {
+            links(line)
+                .into_iter()
+                .filter_map(|(_, l)| match l {
+                    Link::Url(u) => Some(u),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(urls("Visit www.commonmark.org/help."), ["http://www.commonmark.org/help"]);
+        assert_eq!(urls("(www.google.com/search?q=Markup+(business))"), ["http://www.google.com/search?q=Markup+(business)"]);
+        assert_eq!(urls("www.google.com/search?q=commonmark&hl;"), ["http://www.google.com/search?q=commonmark"]);
+        assert_eq!(urls("www.commonmark.org/he<lp"), ["http://www.commonmark.org/he"]);
+        assert_eq!(urls("ftp://foo.bar.baz."), ["ftp://foo.bar.baz"]);
+        assert_eq!(urls("hello@mail+xyz.example and hello+xyz@mail.example."), ["mailto:hello+xyz@mail.example"]);
+        assert_eq!(urls("a.b-c_d@a.b."), ["mailto:a.b-c_d@a.b"]);
+        assert!(urls("a.b-c_d@a.b-").is_empty() && urls("www.").is_empty() && urls("awww.x.org").is_empty());
+        assert!(urls(r"<foo\+@bar.example.com>").is_empty());
+    }
+
+    #[test]
+    fn bold_can_be_removed_from_underscores() {
+        let line = "a __b__ c";
+        let f = flags(line, 0);
+        let sel = 4..5;
+        assert_eq!(unmark(line, &f, sel, BOLD), Some((2..4, 5..7)));
+    }
+
+    #[test]
+    fn delimiters_inside_raw_html_tags_do_not_count() {
+        assert!(!strong("__<a href=\"__\">").contains('b'));
+        assert!(!flags("*<img title=\"*\"/>", 0).iter().any(|f| f & ITALIC != 0 && f & DIM == 0));
+        assert_eq!(html_tag("<a href=\"x\">y"), Some(12));
+        assert_eq!(html_tag("</b> x"), Some(4));
+        assert_eq!(html_tag("< b>"), None);
+        assert_eq!(html_tag("<a <b>"), None);
+    }
 
     #[test]
     fn classifies_lines() {
