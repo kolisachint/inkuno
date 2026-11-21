@@ -97,3 +97,28 @@ All twenty decisions are clickable. Approximations, to settle in v3 or in the ap
 - Key rebinding in Settings › Shortcuts has no conflict check.
 - Pending changes are shown as written into the file (CriticMarkup), as today; Q2 is still open.
 - The window title (vault — Inkuno) is not drawn; the folder path is the tab's tooltip.
+
+### v2 approved (owner, 2026-11-21) — Phase 2 build plan
+
+The owner approved v2 as the spec for the window. The three open questions take the recommended
+answers (owner may overturn any of them):
+
+- **Q1 Comments:** `passage<!-- comment: text -->`, hidden on GitHub. Existing CriticMarkup comments
+  are read and rewritten to the new form when a note is saved.
+- **Q2 Pending changes:** held beside the note (in `.inkuno/`), never written into the `.md`; the
+  file on disk is always clean Markdown.
+- **Q3 Preview tabs:** kept, shown in italics.
+
+Build packages, in order (each: Quiet themes only where it is styling, Inkuno themes unchanged, full
+tests green except the two sandbox-as-root tests, screenshots against `v2.html`):
+
+| # | Package | Main files | Status |
+|--|--|--|--|
+| P1 | Title band and tabs: Quiet tab pills, preview tabs in italics, dimmed unfocused pane, hidden-band peek on hover, focus mode surface | `shell/tabs.rs`, `shell/render.rs`, `shell/pane.rs` | started 2026-11-21 |
+| P2 | Left sidebar, files only: Search and Today rows, tree, Scratch section, Settings at the foot; Quiet rows | `shell/sidebar.rs`, `views/nav.rs` | |
+| P3 | One right panel: icon switcher with Outline, Comments, Versions, Assistant; versions and assistant leave the left; the comments column becomes the Comments view | `shell/sidebar.rs`, `shell/render.rs`, `shell/versions.rs`, `shell/assistant.rs` | |
+| P4 | Settings tab with Appearance, Editor, Files, Shortcuts (F1), About | new `views/settings*`, `shell/settings.rs`, `shell/help.rs` | |
+| P5 | Menus and palette in the Quiet popover; snippets in search; slash menu with the icon grid; selection toolbar with Comment | `views/palette.rs`, `views/editor/completion.rs`, new toolbar | |
+| P6 | Links: `[[`/`@` pickers write relative links; relative links clickable with hidden brackets | `views/editor/completion.rs`, `links.rs`, `layout.rs` | |
+| P7 | Comments syntax (Q1) and pending changes beside the file (Q2) | `inkuno-logic` markdown + pending, `views/editor/changes.rs` | |
+| P8 | Empty pane cards, dark-mode pass, docs (`app-ui.md`, user guide) | `shell/render.rs`, `docs/` | |
