@@ -1043,11 +1043,24 @@ pub fn free_path(dir: &Path, name: &str, extension: &str) -> PathBuf {
     numbered.into_iter().find(|p| !p.exists()).unwrap()
 }
 
+/// The line with its comment markup taken out and the commented text kept: `# Plan<!-- comment: x -->`
+/// reads `# Plan`, so a commented title does not put the comment into the file name.
+fn without_comments(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut at = 0;
+    for (whole, noted, _) in markdown::comments(line) {
+        out.push_str(&line[at..noted.end]);
+        at = whole.end;
+    }
+    out.push_str(&line[at..]);
+    out
+}
+
 /// File name (without extension) taken from the first non-empty line.
 pub fn title_of(content: &str) -> String {
     let content = &content[markdown::front_matter(content)..];
     let first = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-    clean_name(first.trim().trim_start_matches('#'))
+    clean_name(without_comments(first).trim().trim_start_matches('#'))
         .unwrap_or_else(|| tr("Untitled", "Sans titre").to_string())
 }
 
@@ -1055,7 +1068,7 @@ pub fn title_of(content: &str) -> String {
 pub fn h1_of(content: &str) -> Option<String> {
     let content = &content[markdown::front_matter(content)..];
     let first = content.lines().find(|l| !l.trim().is_empty())?;
-    clean_name(first.trim_start().strip_prefix("# ")?)
+    clean_name(without_comments(first.trim_start()).strip_prefix("# ")?)
 }
 
 /// A dropped item, stored in the vault: where it is, whether it is a folder, how many files it holds.
@@ -1344,6 +1357,10 @@ mod tests {
         assert_eq!(title_of("  [[x]] / y  "), "x  y");
         assert_eq!(title_of("\n\n"), "Untitled");
         assert_eq!(title_of("# .."), "Untitled");
+        // A comment on the title is not part of the name: its text stays out, its passage stays in.
+        assert_eq!(title_of("# Plan<!-- comment: check -->\nx"), "Plan");
+        assert_eq!(title_of("<!-- comment: check -->\nx"), "Untitled");
+        assert_eq!(h1_of("# Plan<!-- comment: check -->"), Some("Plan".into()));
         assert_eq!(h1_of("\n# Courses: lundi\n"), Some("Courses lundi".into()));
         assert_eq!(
             (h1_of("## Sous-titre"), h1_of("texte"), h1_of("# ")),
