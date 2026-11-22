@@ -1806,13 +1806,39 @@ fn critic_comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)
 /// Comments of the line: the range of the whole (the passage and its marker), that of the
 /// commented text and that of the comment. A comment on its own, `<!-- comment: text -->` with
 /// nothing before it, has an empty commented text, at its start. A CriticMarkup comment is read
-/// too (`critic_comments`).
+/// too (`critic_comments`). Inline code is not a comment, and neither is what is inside an HTML
+/// comment of another text on this line. Indented and fenced code, and HTML comments over several
+/// lines, need the note: `all_comments` reads them.
 pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
+    comments_in(line, &plain_html_ranges(line, &[]))
+}
+
+/// The HTML comments of `text`, outside code, that are not in the new form: a `<!-- … -->` of any
+/// other text. What is inside one is not a comment.
+fn plain_html_ranges(text: &str, code: &[Range<usize>]) -> Vec<Range<usize>> {
+    html_comment_ranges(text, code)
+        .into_iter()
+        .filter(|r| !text[r.start..].starts_with(COMMENT_OPEN))
+        .collect()
+}
+
+/// `comments` of a line, given the ranges of the line (in its own bytes) that hide what is in them:
+/// a comment whose markers are in one of them is not read.
+fn comments_in(
+    line: &str,
+    hidden: &[Range<usize>],
+) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
+    let inside = |at: usize| hidden.iter().any(|r| r.contains(&at));
     let mut found = critic_comments(line);
+    found.retain(|(whole, noted, said)| {
+        ![whole.start, noted.end, said.end]
+            .iter()
+            .any(|&p| inside(p))
+    });
     let spans = code_spans(line);
     let mut from = 0;
     while let Some(open) = line[from..].find(COMMENT_OPEN).map(|i| i + from) {
-        if spans.iter().any(|s| s.contains(&open)) {
+        if inside(open) || spans.iter().any(|s| s.contains(&open)) {
             from = open + COMMENT_OPEN.len();
             continue;
         }
@@ -2078,8 +2104,10 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
     let mut row: Option<usize> = None;
     // Where the next prose line starts: after a fence or a code line the table is over.
     let mut next = 0;
-    // Indented code is not a comment (the fenced blocks are not prose lines at all).
+    // Indented code, and what is in an HTML comment of another text (over lines), is not a comment:
+    // the fenced blocks are not prose lines at all.
     let code = code_ranges(text);
+    let plain = plain_html_ranges(text, &code);
     for (at, line) in prose_lines(text) {
         if at != next {
             row = None;
@@ -2089,12 +2117,18 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
             row = None;
             continue;
         }
+        let end = at + line.len();
+        let hidden: Vec<Range<usize>> = plain
+            .iter()
+            .filter(|r| r.start <= end && r.end > at)
+            .map(|r| r.start.max(at) - at..r.end.min(end) - at)
+            .collect();
         row = line
             .trim_start()
             .starts_with('|')
             .then(|| row.map_or(0, |r| r + 1));
         let cells = row.map(|_| cells(line));
-        for (whole, noted, said) in comments(line) {
+        for (whole, noted, said) in comments_in(line, &hidden) {
             let mut note = Note {
                 noted: &line[noted.clone()],
                 said: &line[said.clone()],
@@ -2197,6 +2231,27 @@ mod tests {
         let listed = all_comments("- item\n\n    <!-- comment: z -->\n");
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].said, "z");
+    }
+
+    #[test]
+    fn an_html_comment_of_another_text_hides_what_is_in_it() {
+        // A `<!-- … -->` that is not in the new form is not a comment, over one line or several, and
+        // neither is anything inside it.
+        assert_eq!(comments("<!-- note <!-- comment: y --> z"), []);
+        assert_eq!(comments("<!-- note {>>x<<} -->"), []);
+        assert_eq!(all_comments("<!-- draft\n<!-- comment: a -->\n-->\n"), []);
+        assert_eq!(all_comments("<!--\n{==a==}{>>b<<}\n-->\n"), []);
+        // The comments after it are read, and so is one before it on its line.
+        let after = all_comments("<!-- draft\nline\n--> <!-- comment: b -->\n");
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].said, "b");
+        assert_eq!(comments("<!-- comment: ok --> <!-- plain -->").len(), 1);
+        // A comment in the new form is not hidden by a comment inside it, and a fenced block is code.
+        assert_eq!(comments("<!-- comment: a --> b").len(), 1);
+        assert_eq!(
+            all_comments("```\n<!-- draft\n```\n<!-- comment: c -->\n").len(),
+            1
+        );
     }
 
     #[test]
