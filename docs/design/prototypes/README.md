@@ -142,3 +142,20 @@ tests green except the two sandbox-as-root tests, screenshots against `v2.html`)
   the composed text as before.
 - Not yet: a move or trash of a note leaves its pending list behind in `.inkuno/pending` (a rename by its title
   moves it); a note outside the vault and the scratch folder keeps its list beside its own file's folder.
+
+## Where to pick up (handoff, 2026-11-22)
+
+- **The built app matches v2.** P1–P9 and three review rounds are merged (PR kolisachint/inkuno#17).
+- **Working on the prototype:** copy `v2.html` to `v3.html`, edit, and log each decision here under a new
+  "v3" heading. It is self-contained HTML/CSS/JS: open it in a browser. The published copy is the
+  claude.ai artifact linked in the table above (republish the new file to the same link).
+- **Known follow-ups, candidates for v3 or the app:**
+  - folder renames do not rewrite relative links;
+  - a title rename scans the vault on the UI thread;
+  - the editor's per-line comment highlight can mark a comment-like line inside indented code;
+  - comment cards show no author or time, and comments have no replies;
+  - code fences, rules and tables inside a block quote render as text;
+  - the remaining CommonMark gaps listed in `markdown_renderer.md` §11.5 (indented code and pipe-less
+    tables need a block-level classifier).
+- **Screenshots:** `scripts/visual-check.sh` renders every fixture on Xvfb; pin a theme by writing
+  `theme=Quiet Dark` (or any theme name) into the temporary config it creates.
