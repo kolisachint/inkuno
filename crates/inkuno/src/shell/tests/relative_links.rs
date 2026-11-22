@@ -106,3 +106,50 @@ fn a_renamed_note_takes_its_relative_links_along(cx: &mut TestAppContext) {
     let up = fs::read_to_string(root.join("sub/Up.md")).unwrap();
     assert_eq!(up, "# Up\n\n[back](../Home.md)\n");
 }
+
+/// Every note and file of the vault with its bytes, by path (the app's own state is hidden).
+fn snapshot(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with('.'))
+        {
+            continue;
+        }
+        if path.is_dir() {
+            out.extend(snapshot(&path));
+        } else {
+            out.push((path.clone(), fs::read(&path).unwrap()));
+        }
+    }
+    out.sort();
+    out
+}
+
+#[gpui::test]
+fn open_then_open_leaves_every_file_byte_identical(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "links-untouched");
+    fixtures(&root);
+    // Spellings a rewrite must keep: `./`, a `.` in the middle, a percent-encoded name.
+    fs::write(
+        root.join("Other.md"),
+        "# Other\n\n[t](./sub/Target.md) [u](sub/./Target.md) [a](./Caf%C3%A9.md)\n",
+    )
+    .unwrap();
+    fs::write(root.join("Café.md"), "# Café\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    let before = snapshot(&root);
+    for note in [
+        "sub/Target.md",
+        "Home.md",
+        "Other.md",
+        "Café.md",
+        "sub/Up.md",
+    ] {
+        shell.update(cx, |s, cx| s.open_note(&root.join(note), cx));
+        cx.run_until_parked();
+    }
+    assert_eq!(snapshot(&root), before);
+}

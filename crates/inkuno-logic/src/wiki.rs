@@ -94,15 +94,38 @@ pub fn note_at(root: &Path, from: &Path, address: &str) -> PathBuf {
     out
 }
 
+/// The components of a path, as strings (`/` first for an absolute one).
+fn names(p: &Path) -> Vec<String> {
+    p.components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect()
+}
+
+/// Percent-encodes what would end an address early or change its meaning: spaces, `%`, `#`, brackets,
+/// parentheses, `<`, `>` and `?`. With `full` (the address already writes its names escaped), every
+/// byte but the unreserved ones is encoded, so the name keeps the style of the address.
+fn encode(text: &str, full: bool) -> String {
+    let mut out = String::new();
+    for c in text.chars() {
+        let plain = match full {
+            true => c.is_ascii_alphanumeric() || "-._~".contains(c),
+            false => !" %#()[]<>?".contains(c),
+        };
+        if plain {
+            out.push(c);
+        } else {
+            for byte in c.to_string().bytes() {
+                out += &format!("%{byte:02X}");
+            }
+        }
+    }
+    out
+}
+
 /// The address that names note `target` from note `from` of the vault `root`, as `note_at` reads it:
-/// from the root with a leading `/` when `absolute`, else relative to the folder of `from`. Spaces
-/// are written `%20`.
+/// from the root with a leading `/` when `absolute`, else relative to the folder of `from`. Names are
+/// percent-encoded (see `encode`).
 fn address_of(root: &Path, from: &Path, target: &Path, absolute: bool) -> String {
-    let names = |p: &Path| -> Vec<String> {
-        p.components()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned())
-            .collect()
-    };
     let address = if absolute {
         format!(
             "/{}",
@@ -118,19 +141,97 @@ fn address_of(root: &Path, from: &Path, target: &Path, absolute: bool) -> String
             .concat()
             .join("/")
     };
-    address.replace(' ', "%20")
+    encode(&address, false)
 }
 
 /// The Markdown link `[title](address)` that a picker writes: the address to note `target` from the
-/// folder `folder` of the vault `root`, as `address_of` writes it (relative, spaces as `%20`).
+/// folder `folder` of the vault `root`, as `address_of` writes it (relative, names encoded). The
+/// brackets of the title are escaped, so that the label holds them.
 pub fn link_to(title: &str, root: &Path, folder: &Path, target: &Path) -> String {
     let from = folder.join("_");
-    format!("[{title}]({})", address_of(root, &from, target, false))
+    let label = title.replace('[', "\\[").replace(']', "\\]");
+    format!("[{label}]({})", address_of(root, &from, target, false))
+}
+
+/// The address `written` (a path part of a link, anchor excluded) with the note it names moved to
+/// `new`, seen from note `linker` of the vault `root`. Each segment that still names the same folder or
+/// file keeps its spelling (`./`, a doubled `.`, `%20`); the changed ones take the new names, written
+/// in the style of the address.
+fn respell(root: &Path, linker: &Path, written: &str, new: &Path) -> String {
+    let absolute = written.starts_with('/');
+    let base = match absolute {
+        true => root,
+        false => linker.parent().unwrap_or(root),
+    };
+    let parts: Vec<&str> = written.split('/').collect();
+    // The walk of `written` from the base, each entry with the index of its part when it has one.
+    let mut walk: Vec<(String, Option<usize>)> =
+        names(base).into_iter().map(|name| (name, None)).collect();
+    let base_len = walk.len();
+    for (i, part) in parts.iter().enumerate() {
+        match *part {
+            "" | "." => {}
+            ".." => {
+                walk.pop();
+            }
+            part => walk.push((markdown::percent_decode(part), Some(i))),
+        }
+    }
+    // As `note_at` reads it: a name without `.md` is a note all the same.
+    let mut walked: Vec<String> = walk.iter().map(|(name, _)| name.clone()).collect();
+    if let Some(last) = walked
+        .last_mut()
+        .filter(|name| !name.to_lowercase().ends_with(".md"))
+    {
+        last.push_str(".md");
+    }
+    let target = names(new);
+    let common = walked
+        .iter()
+        .zip(&target)
+        .take_while(|(a, b)| a == b)
+        .count();
+    if common >= walked.len() {
+        return written.to_string();
+    }
+    let full = written.contains('%');
+    let (mut out, from) = match common < base_len {
+        // Up from the base to the common folder, then down to the note.
+        true => (vec![String::from(".."); base_len - common], common),
+        // The folders above the first changed part keep their spelling.
+        false => (
+            parts[..walk[common].1.unwrap_or(0)]
+                .iter()
+                .map(|part| part.to_string())
+                .collect(),
+            common,
+        ),
+    };
+    let last_written = parts
+        .last()
+        .is_some_and(|part| part.to_lowercase().ends_with(".md"));
+    for (p, name) in target.iter().enumerate().skip(from) {
+        let kept = match walked.get(p) == Some(name) {
+            true => walk[p].1,
+            false => None,
+        };
+        out.push(match kept {
+            Some(i) => parts[i].to_string(),
+            None => {
+                let name = match p + 1 == target.len() && !last_written {
+                    true => name.strip_suffix(".md").unwrap_or(name),
+                    false => name.as_str(),
+                };
+                encode(name, full)
+            }
+        });
+    }
+    out.join("/")
 }
 
 /// The text where the relative links of note `linker` (in the vault `root`) that name the file `old`
-/// name `new` instead: a note moved or renamed. The address keeps its form, `/` or relative, and its
-/// anchor. `None` if no link changes.
+/// name `new` instead: a note moved or renamed. Each address keeps its spelling except the parts that
+/// changed (see `respell`), and its anchor. `None` if no link changes.
 // ponytail: only Markdown links are rewritten here; the `[[name]]` links follow `markdown::relink`.
 pub fn relink_file(
     text: &str,
@@ -139,11 +240,14 @@ pub fn relink_file(
     old: &Path,
     new: &Path,
 ) -> Option<String> {
+    if old == new {
+        return None;
+    }
     let meta = markdown::front_matter(text);
     let mut edits: Vec<(Range<usize>, String)> = Vec::new();
     for (at, line) in markdown::prose_lines(&text[meta..]) {
         for (r, link) in markdown::links(line) {
-            let Link::Note { path, anchor } = link else {
+            let Link::Note { path, .. } = link else {
                 continue;
             };
             if note_at(root, linker, &path) != old {
@@ -152,13 +256,14 @@ pub fn relink_file(
             let Some((_, url)) = markdown::web_link(&line[r.clone()]) else {
                 continue;
             };
-            let address = address_of(root, linker, new, path.starts_with('/'));
-            let anchor = anchor.map_or(String::new(), |a| format!("#{}", a.replace(' ', "%20")));
             let whole = meta + at + r.start;
-            edits.push((
-                whole + url.start..whole + url.end,
-                format!("{address}{anchor}"),
-            ));
+            let address = &text[whole + url.start..whole + url.end];
+            let written = address.split('#').next().unwrap_or(address);
+            let fresh = respell(root, linker, written, new);
+            if fresh != written {
+                let start = whole + url.start;
+                edits.push((start..start + written.len(), fresh));
+            }
         }
     }
     if edits.is_empty() {
@@ -753,7 +858,7 @@ mod embed_tests {
         let (old, new) = (Path::new("/v/sous/Vieux.md"), Path::new("/v/sous/Neuf.md"));
         let text = "# A\n[x](Vieux.md) [y](/sous/Vieux.md#Titre) [z](../sous/Vieux.md) [w](Autre.md)\n\
                     ```\n[c](Vieux.md)\n```\n";
-        let want = "# A\n[x](Neuf.md) [y](/sous/Neuf.md#Titre) [z](Neuf.md) [w](Autre.md)\n\
+        let want = "# A\n[x](Neuf.md) [y](/sous/Neuf.md#Titre) [z](../sous/Neuf.md) [w](Autre.md)\n\
                     ```\n[c](Vieux.md)\n```\n";
         assert_eq!(
             relink_file(text, root, from, old, new).as_deref(),
@@ -764,5 +869,88 @@ mod embed_tests {
         let got = relink_file("[x](Vieux.md) [y](Vieux.md#a%20b)", root, from, old, moved).unwrap();
         assert_eq!(got, "[x](../Dossier/Neuf.md) [y](../Dossier/Neuf.md#a%20b)");
         assert_eq!(relink_file("[w](Autre.md)", root, from, old, new), None);
+        // The same name on both sides changes nothing, whatever the links say.
+        assert_eq!(relink_file("[x](Vieux.md)", root, from, old, old), None);
+    }
+
+    #[test]
+    fn a_rename_keeps_the_spelling_of_the_address() {
+        let root = Path::new("/v");
+        let from = Path::new("/v/Lien.md");
+        let (old, new) = (
+            Path::new("/v/sub/Target.md"),
+            Path::new("/v/sub/Renamed.md"),
+        );
+        let text = "[t](./sub/Target.md) [u](sub/./Target.md) [a](<sub/Target.md>)";
+        assert_eq!(
+            relink_file(text, root, from, old, new).as_deref(),
+            Some("[t](./sub/Renamed.md) [u](sub/./Renamed.md) [a](<sub/Target.md>)")
+        );
+        // Percent-encoded names stay encoded; the other segments keep their spelling.
+        let (old, new) = (Path::new("/v/Café.md"), Path::new("/v/Café 2.md"));
+        assert_eq!(
+            relink_file("[a](./Caf%C3%A9.md#Un%20titre)", root, from, old, new).as_deref(),
+            Some("[a](./Caf%C3%A9%202.md#Un%20titre)")
+        );
+        // A folder that moves keeps the spelling of the folders that stay.
+        let (old, new) = (
+            Path::new("/v/sub/Target.md"),
+            Path::new("/v/other/Target.md"),
+        );
+        assert_eq!(
+            relink_file("[t](./sub/Target)", root, from, old, new).as_deref(),
+            Some("[t](./other/Target)")
+        );
+    }
+
+    #[test]
+    fn a_picker_link_resolves_to_its_note() {
+        let root = Path::new("/v");
+        let names = [
+            "C# tips",
+            "Plan (v2",
+            "Plan (v2)",
+            "a]b[c",
+            "100% done",
+            "x y",
+            "é?",
+        ];
+        for name in names {
+            let target = root.join("sub").join(format!("{name}.md"));
+            for folder in [root.join("sub"), root.join("sub/deep"), root.join("other")] {
+                let line = link_to(name, root, &folder, &target);
+                let linker = folder.join("Lien.md");
+                let found = markdown::links(&line)
+                    .into_iter()
+                    .find_map(|(_, link)| match link {
+                        Link::Note { path, .. } => Some(note_at(root, &linker, &path)),
+                        _ => None,
+                    });
+                assert_eq!(found.as_deref(), Some(target.as_path()), "{line}");
+            }
+        }
+        assert_eq!(
+            link_to("C# tips", root, root, &root.join("C# tips.md")),
+            "[C# tips](C%23%20tips.md)"
+        );
+    }
+
+    #[test]
+    fn a_rename_writes_a_link_that_resolves_to_the_new_note() {
+        let root = Path::new("/v");
+        let from = Path::new("/v/Lien.md");
+        let (old, new) = (
+            Path::new("/v/Vieux.md"),
+            Path::new("/v/Plan (v2) [x] 100%.md"),
+        );
+        let text = "[v](Vieux.md)";
+        let fresh = relink_file(text, root, from, old, new).unwrap();
+        let found = markdown::links(&fresh)
+            .into_iter()
+            .find_map(|(_, link)| match link {
+                Link::Note { path, .. } => Some(note_at(root, from, &path)),
+                _ => None,
+            });
+        assert_eq!(found.as_deref(), Some(new));
     }
 }

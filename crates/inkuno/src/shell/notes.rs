@@ -3,6 +3,74 @@
 use super::*;
 use std::sync::Arc;
 
+/// A note a rename may rewrite the links of: its path on disk now, its path after the rename, and
+/// whether it links to the old name by `[[name]]`.
+pub(super) struct LinkedNote {
+    disk: PathBuf,
+    post: PathBuf,
+    wiki: bool,
+}
+
+/// What a rename does to the notes that link to it (see `Shell::link_scan`). Owned, so that it can run
+/// off the UI thread.
+pub(super) struct LinkScan {
+    root: Option<PathBuf>,
+    notes: Vec<LinkedNote>,
+    old: String,
+    new: String,
+    moved: Option<(PathBuf, PathBuf)>,
+    shown: Option<(PathBuf, String)>,
+}
+
+/// The result of a scan: whether a pending change refuses the rename, and the notes to write, each
+/// with its path after the rename.
+#[derive(Default)]
+pub(super) struct LinkPlan {
+    pub(super) refused: bool,
+    pub(super) rewrites: Vec<(PathBuf, String)>,
+}
+
+impl LinkScan {
+    /// Reads each note once. The rewrite of its disk text is planned; the rename is refused when the
+    /// rewrite of the text its editor or its pending changes show would change a pending change.
+    pub(super) fn run(&self) -> LinkPlan {
+        let mut plan = LinkPlan::default();
+        let (root, moved) = (
+            self.root.as_deref(),
+            self.moved
+                .as_ref()
+                .map(|(from, to)| (from.as_path(), to.as_path())),
+        );
+        for note in &self.notes {
+            let Ok(disk) = fs::read_to_string(&note.disk) else {
+                continue;
+            };
+            let linker = note.post.as_path();
+            let rewrite = |text: &str| {
+                logic::wiki::rewrite_links(
+                    text, root, linker, &self.old, &self.new, note.wiki, moved,
+                )
+            };
+            let current = match &self.shown {
+                Some((path, text)) if *path == note.disk => text.clone(),
+                _ => {
+                    let home = platform::revisions::home_of(&note.disk, root);
+                    platform::sidecar::display(home.as_ref(), &note.disk, &disk)
+                }
+            };
+            if rewrite(&current)
+                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
+            {
+                plan.refused = true;
+            }
+            if let Some(fresh) = rewrite(&disk) {
+                plan.rewrites.push((note.post.clone(), fresh));
+            }
+        }
+        plan
+    }
+}
+
 impl Shell {
     /// Shows a Mermaid figure or a picture of the note large, in its place.
     pub(super) fn show_figure(
@@ -281,8 +349,11 @@ impl Shell {
     pub(super) fn follow_title(&mut self, cx: &mut Context<Self>) {
         if let (Some(old), Some(path)) = (self.pane_mut().origin.take(), self.pane().path.clone()) {
             let new = vault::stem(&path);
-            let from = path.with_file_name(format!("{old}.md"));
-            self.relink(&old, &new, Some((&from, &path)), cx);
+            // Only a note that changed its name moved: opening a note never rewrites another.
+            if old != new {
+                let from = path.with_file_name(format!("{old}.md"));
+                self.relink(&old, &new, Some((&from, &path)), cx);
+            }
             // Still open in its tab: a later title follows from this name.
             self.pane_mut().origin = Some(new);
         }
@@ -316,8 +387,8 @@ impl Shell {
     /// moved from `moved.0` to `moved.1`; true if the shown note was rewritten. No effect on the
     /// `[[links]]` if another note is still called `old`: the links may be meant for it.
     // ponytail: synchronous rewrite, the `[[links]]` limited to the notes the index says link to
-    // `old`; a note moved reads every note of the vault, as a relative link names its file. Move to
-    // a background task if either gets slow.
+    // `old`; a note moved reads every note of the vault, as a relative link names its file. The
+    // rename menu runs the same scan off the UI thread (see `link_scan`).
     pub(super) fn relink(
         &mut self,
         old: &str,
@@ -325,25 +396,64 @@ impl Shell {
         moved: Option<(&Path, &Path)>,
         cx: &mut Context<Self>,
     ) -> bool {
-        let wiki: Vec<PathBuf> = logic::wiki::relink_set(&self.notes, old, new)
-            .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
-            .unwrap_or_default();
-        let paths: Vec<PathBuf> = match moved {
-            Some(_) => self.notes.iter().map(|n| n.path.clone()).collect(),
-            None => wiki.clone(),
-        };
-        let (root, mut changed) = (self.vault.clone(), Vec::new());
-        for note in self.notes.iter_mut().filter(|n| paths.contains(&n.path)) {
-            let Ok(text) = fs::read_to_string(&note.path) else {
-                continue;
-            };
-            let linker = note.path.clone();
-            let wiki = wiki.contains(&linker);
-            let rewritten =
-                logic::wiki::rewrite_links(&text, root.as_deref(), &linker, old, new, wiki, moved);
-            if let Some(text) = rewritten.filter(|text| vault::write(&note.path, text).is_ok()) {
-                (note.tags, note.links) = Note::index(&text);
-                changed.push(note.path.clone());
+        let plan = self.link_scan(old, new, moved, None).run();
+        self.apply_links(plan, cx)
+    }
+
+    /// The scan of the notes that a rename of `old` to `new` rewrites links in, to run off the UI
+    /// thread (see `LinkScan::run`). `moved`: a note file that moves from its path to the other, whose
+    /// relative addresses any note may hold, so every note is read; otherwise only the notes the index
+    /// says link to `old`. `shown`: the text an editor holds for a note, read in place of its file.
+    /// Note that the moved note may still bear its old name here (a rename not done yet).
+    pub(super) fn link_scan(
+        &self,
+        old: &str,
+        new: &str,
+        moved: Option<(&Path, &Path)>,
+        shown: Option<(&Path, &str)>,
+    ) -> LinkScan {
+        let moved = moved.filter(|(from, to)| from != to);
+        let key = old.to_lowercase();
+        // As `logic::wiki::relink_set`: nothing is rewritten when the names match ignoring case, or
+        // when another note is still called `old`.
+        let kept = key == new.to_lowercase()
+            || self.notes.iter().any(|n| {
+                n.name.to_lowercase() == key && moved.is_none_or(|(from, _)| n.path != from)
+            });
+        let wiki = |n: &Note| !kept && n.links.contains(&key);
+        let notes = self
+            .notes
+            .iter()
+            .filter(|n| moved.is_some() || wiki(n))
+            .map(|n| LinkedNote {
+                post: match moved {
+                    Some((from, to)) if n.path == from => to.to_path_buf(),
+                    _ => n.path.clone(),
+                },
+                wiki: wiki(n),
+                disk: n.path.clone(),
+            })
+            .collect();
+        LinkScan {
+            root: self.vault.clone(),
+            notes,
+            old: old.to_string(),
+            new: new.to_string(),
+            moved: moved.map(|(from, to)| (from.to_path_buf(), to.to_path_buf())),
+            shown: shown.map(|(path, text)| (path.to_path_buf(), text.to_string())),
+        }
+    }
+
+    /// Writes the rewrites of a scan and reloads the other pane when it shows a rewritten note. True
+    /// when the shown note was rewritten: the caller decides what its editor does (it may be leaving).
+    pub(super) fn apply_links(&mut self, plan: LinkPlan, cx: &mut Context<Self>) -> bool {
+        let mut changed = Vec::new();
+        for (path, text) in plan.rewrites {
+            if vault::write(&path, &text).is_ok() {
+                if let Some(note) = self.notes.iter_mut().find(|n| n.path == path) {
+                    (note.tags, note.links) = Note::index(&text);
+                }
+                changed.push(path);
             }
         }
         // The other pane's note is reloaded here; the active pane's is up to the caller
@@ -364,8 +474,7 @@ impl Shell {
     /// The check before the note (or image) at `moved` is renamed from `old` to `new`: when a link
     /// rewrite would change a pending change of a linking note, nothing may be renamed, and a notice
     /// says so. True then. `text` is the text `moved` is about to hold, when it is not on disk yet;
-    /// a linking note is read from disk, as `relink` reads it. Shares the per-line check with the
-    /// command line (`pending::rewrite_refused`).
+    /// a linking note is read from disk, as `relink` reads it.
     pub(super) fn links_pending(
         &mut self,
         moved: &Path,
@@ -374,51 +483,18 @@ impl Shell {
         text: Option<&str>,
         cx: &mut Context<Self>,
     ) -> bool {
-        // The renamed note bears `new` already, as `relink_set` expects.
-        let notes: Vec<Note> = self
-            .notes
-            .iter()
-            .map(|note| {
-                let mut note = note.clone();
-                if note.path == moved {
-                    note.name = new.to_string();
-                }
-                note
-            })
-            .collect();
-        let wiki: Vec<PathBuf> = logic::wiki::relink_set(&notes, old, new)
-            .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
-            .unwrap_or_default();
-        // A note file moved by its name: the relative addresses of every note may follow it.
         let renamed = moved.with_file_name(format!("{new}.md"));
-        let by_address = moved.extension().is_some_and(|e| e == "md");
-        let paths: Vec<PathBuf> = match by_address {
-            true => notes.iter().map(|n| n.path.clone()).collect(),
-            false => wiki.clone(),
-        };
-        let refused = paths.iter().any(|path| {
-            let current = match text {
-                Some(text) if path == moved => text.to_string(),
-                _ => match fs::read_to_string(path) {
-                    Ok(disk) => {
-                        let home = platform::revisions::home_of(path, self.vault.as_deref());
-                        platform::sidecar::display(home.as_ref(), path, &disk)
-                    }
-                    Err(_) => return false,
-                },
-            };
-            let moves = by_address.then_some((moved, renamed.as_path()));
-            logic::wiki::rewrite_links(
-                &current,
-                self.vault.as_deref(),
-                path,
-                old,
-                new,
-                wiki.contains(path),
-                moves,
-            )
-            .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
-        });
+        let scan = self.link_scan(
+            old,
+            new,
+            Some((moved, renamed.as_path())),
+            text.map(|t| (moved, t)),
+        );
+        self.links_refused(scan.run().refused, cx)
+    }
+
+    /// The notice of a refused rename: true when `refused`.
+    pub(super) fn links_refused(&mut self, refused: bool, cx: &mut Context<Self>) -> bool {
         if refused {
             self.say(
                 Tone::Failed,
