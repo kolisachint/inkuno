@@ -229,11 +229,11 @@ setup_10-slash-menu()     { setup_01-default; key ctrl+End; key Return; key Retu
 setup_11-selection-toolbar() { setup_01-default; xdotool mousemove 300 300; sleep 0.4; xdotool click --repeat 2 --delay 80 1; sleep 0.8; }
 setup_12-context-menu-file() { setup_01-default; right_click_at 120 300; }
 setup_13-context-menu-note() { setup_01-default; right_click_at 500 500; }
-setup_14-settings()       { setup_01-default; key ctrl+comma; }
-setup_14a-settings-editor()    { setup_14-settings; click_at 278 116; }
-setup_14b-settings-files()     { setup_14-settings; click_at 278 150; }
-setup_14c-settings-shortcuts() { setup_14-settings; click_at 278 186; }
-setup_14d-settings-about()     { setup_14-settings; click_at 278 222; }
+setup_14-settings()       { setup_01-default; key ctrl+comma; sleep 1; }  # settings page nav: screen coordinates = window + (50,20)
+setup_14a-settings-editor()    { setup_14-settings; click_at 328 136; }
+setup_14b-settings-files()     { setup_14-settings; click_at 328 170; }
+setup_14c-settings-shortcuts() { setup_14-settings; click_at 328 206; }
+setup_14d-settings-about()     { setup_14-settings; click_at 328 242; }
 setup_15-focus-mode()     { setup_01-default; key F9; }
 setup_16-split()          { setup_01-default; key ctrl+backslash; typ "week-plan"; key Return; sleep 1; }
 setup_17-titlebar-hidden() { setup_01-default; key ctrl+shift+s; }
