@@ -2390,8 +2390,7 @@ impl Editor {
                                 strikethrough: None,
                             }];
                             let text = shape(name, px(14. * quiet_scale), &runs, None);
-                            let width =
-                                name_at + text.as_ref().map_or(px(0.), |l| l.width());
+                            let width = name_at + text.as_ref().map_or(px(0.), |l| l.width());
                             Some(Lead {
                                 line: text,
                                 len: 0,
