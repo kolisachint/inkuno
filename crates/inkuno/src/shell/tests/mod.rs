@@ -5,6 +5,7 @@
 mod assistant;
 mod benches;
 mod chrome;
+mod comments;
 mod current_file;
 mod editing;
 mod end_to_end;

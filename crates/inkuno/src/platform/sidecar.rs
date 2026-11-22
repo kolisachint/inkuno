@@ -109,14 +109,18 @@ pub fn display(home: Option<&Home>, note: &Path, disk: &str) -> String {
 }
 
 /// The text of `display` as the note's file holds it, and its pending changes, for saving. New
-/// changes take `author` when they have none. Without a home, the display is the file.
+/// changes take `author` when they have none. Without a home, the display is the file, marks and
+/// all: there is no list beside it.
 pub fn split(
     home: Option<&Home>,
     note: &Path,
     display: &str,
     author: &str,
 ) -> (String, Vec<Entry>) {
-    let known = home.map(|home| read(home, note)).unwrap_or_default();
+    let Some(home) = home else {
+        return (display.to_string(), Vec::new());
+    };
+    let known = read(home, note);
     let (base, mut entries) = pending::split(display, &known);
     for entry in &mut entries {
         if entry.author.is_empty() {
@@ -271,6 +275,19 @@ pub fn restore_along(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn without_a_home_the_marks_stay_in_the_text() {
+        // A note outside the vault has no list beside it: its marks are its text, shown and saved as
+        // they are, the same for the app and the command line.
+        let text = "keep\n{++\nnew\n++}\n";
+        let note = Path::new("/elsewhere/Note.md");
+        assert_eq!(display(None, note, text), text);
+        assert_eq!(
+            split(None, note, text, "me"),
+            (text.to_string(), Vec::new())
+        );
+    }
 
     #[test]
     fn the_lists_follow_a_move_a_trash_and_a_restore() {

@@ -300,19 +300,13 @@ pub fn read_text(path: &Path) -> Result<(String, String), String> {
     Ok((text, token))
 }
 
-/// The home of a note: its vault or scratch folder; a file outside both keeps its changes in the
-/// `.inkuno` folder of its own folder.
-fn home_for(root: Option<&Path>, path: &Path) -> revisions::Home {
-    revisions::home_of(path, root).unwrap_or_else(|| {
-        revisions::Home::Vault(path.parent().unwrap_or(Path::new("")).to_path_buf())
-    })
-}
-
 /// The note's text as the editor shows it (its pending changes marked, the comments in the new
-/// form), and its token. The token is of this text: `write` checks it.
+/// form), and its token. The token is of this text: `write` checks it. A note outside the vault
+/// and its scratch folder has no home: its marks are shown as its file holds them.
 pub fn read_shown(root: Option<&Path>, path: &Path) -> Result<(String, String), String> {
     let (disk, _) = read_text(path)?;
-    let shown = sidecar::display(Some(&home_for(root, path)), path, &disk);
+    let home = revisions::home_of(path, root);
+    let shown = sidecar::display(home.as_ref(), path, &disk);
     let token = token(shown.as_bytes());
     Ok((shown, token))
 }
@@ -325,7 +319,8 @@ pub fn write_shown(
     shown: &str,
     author: &str,
 ) -> Result<(), String> {
-    sidecar::save(Some(&home_for(root, path)), path, shown, author).map_err(disk)
+    let home = revisions::home_of(path, root);
+    sidecar::save(home.as_ref(), path, shown, author).map_err(disk)
 }
 
 /// A file of this name, ignoring case, already in `dir`.

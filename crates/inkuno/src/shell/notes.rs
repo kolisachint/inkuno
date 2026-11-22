@@ -640,14 +640,13 @@ impl Shell {
     /// the editor takes the new form too (one undo step).
     pub(super) fn migrated_text(&mut self, cx: &mut Context<Self>) -> String {
         let shown = self.pane().editor.read(cx).text().to_string();
-        let migrated = markdown::migrate_comments(&shown);
-        if migrated != shown {
-            let whole = 0..shown.len();
-            self.pane()
-                .editor
-                .update(cx, |e, cx| e.absorb(&[(whole, migrated.clone())], cx));
+        // One edit per comment: the cursors keep their places around the ones that do not move.
+        let edits = markdown::migration_edits(&shown);
+        if edits.is_empty() {
+            return shown;
         }
-        migrated
+        self.pane().editor.update(cx, |e, cx| e.absorb(&edits, cx));
+        markdown::apply_edits(&shown, &edits)
     }
 
     /// Writes the pane's note to disk if it changed.
