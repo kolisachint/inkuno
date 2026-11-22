@@ -2337,14 +2337,19 @@ impl Shell {
                     .on_click(cx.listener(|this, _, window, cx| this.toggle_full(window, cx))),
                 )
             });
-        // A vault that cannot be read is not an empty one: whatever the mode, the panel says so, why and
-        // where, and offers another vault rather than a note that could not be written.
-        let unreadable = self.vault.as_ref().and_then(|root| {
-            self.unreadable
-                .iter()
-                .find(|(dir, _)| dir == root)
-                .map(|(_, why)| (root.clone(), *why))
-        });
+        // A vault that cannot be read is not an empty one: the tree says so, why and where, and offers
+        // another vault rather than a note that could not be written.
+        // Scratch notes are no vault's: the scratch section never says the vault cannot be read.
+        let unreadable = self
+            .vault
+            .as_ref()
+            .filter(|_| mode != Mode::Scratch)
+            .and_then(|root| {
+                self.unreadable
+                    .iter()
+                    .find(|(dir, _)| dir == root)
+                    .map(|(_, why)| (root.clone(), *why))
+            });
         let nothing = self.nav.rows.is_empty().then(|| {
             if let Some((root, why)) = &unreadable {
                 return div()
