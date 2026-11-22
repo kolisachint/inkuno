@@ -374,10 +374,11 @@ pub fn get(home: &Home, note: &Path, number: u32) -> io::Result<Revision> {
 /// Nothing is overwritten: a history already at the new path is an error and nothing moves. A
 /// history on another disk is copied, then removed.
 pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()> {
-    move_history(vault, from, to)?;
-    // The pending changes move with it, when they can: a list left behind waits inert (`sidecar`).
+    let history = move_history(vault, from, to);
+    // The pending changes move all the same, even when the history cannot: a list left behind waits
+    // inert (`sidecar`). The history's error is reported after them.
     let _ = super::sidecar::move_along(vault, from, to);
-    Ok(())
+    history
 }
 
 fn move_history(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()> {
@@ -805,6 +806,27 @@ mod tests {
                 .count(),
             1
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_history_at_the_new_name_still_moves_the_pending_changes() {
+        let root = temp("history-collision");
+        let home = Home::Vault(root.clone());
+        let old = root.join("plan.md");
+        fs::write(&old, "# plan\nline\nend\n").unwrap();
+        save(&home, &old, "ana", None, "one\n", 0).unwrap();
+        let marked = "# plan\nline\n{++\nadded\n++}\nend\n";
+        crate::platform::sidecar::save(Some(&home), &old, marked, "assistant").unwrap();
+        assert_eq!(crate::platform::sidecar::read(&home, &old).len(), 1);
+        // A history already at the new name refuses the move, and the history stays where it is.
+        let new = root.join("Idea.md");
+        save(&home, &new, "ana", None, "stale\n", 0).unwrap();
+        assert!(move_along(Some(&root), &old, &new).is_err());
+        assert_eq!(all(&home, &old).unwrap().len(), 1);
+        // The pending changes move all the same: the error is reported after them.
+        assert!(crate::platform::sidecar::read(&home, &old).is_empty());
+        assert_eq!(crate::platform::sidecar::read(&home, &new).len(), 1);
         let _ = fs::remove_dir_all(root);
     }
 

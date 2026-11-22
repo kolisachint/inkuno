@@ -325,8 +325,11 @@ fn a_rename_that_only_rewrites_a_link_outside_the_change_goes_through(cx: &mut T
     cx.simulate_input("2");
     cx.simulate_keystrokes("enter");
     assert!(root.join("Alpha2.md").exists() && !alpha.exists());
+    // The link is rewritten in the file, and the pending change waits beside it, composed back in.
+    let home = crate::platform::revisions::home_of(&link, Some(&root)).unwrap();
+    let raw = fs::read_to_string(&link).unwrap();
     assert_eq!(
-        fs::read_to_string(&link).unwrap(),
+        crate::platform::sidecar::display(Some(&home), &link, &raw),
         "see [[Alpha2]]\n{++\nnew\n++}\n"
     );
     assert!(!link_notice_shown(&shell, cx));
@@ -354,5 +357,118 @@ fn a_title_change_that_would_rewrite_a_link_in_a_pending_change_is_refused(
     assert_eq!(fs::read_to_string(&link).unwrap(), linking);
     assert!(shell.read_with(cx, |s, _| s.pane().dirty));
     assert!(link_notice_shown(&shell, cx));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// The notice of a link that a rename could not rewrite (its note changed while the rename was planned).
+const MISSED_LINK: &str =
+    "A note that links here changed while the rename ran: its link was not rewritten.";
+
+fn missed_link_shown(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> bool {
+    shell.read_with(cx, |s, _| s.toasts.iter().any(|t| t.text == MISSED_LINK))
+}
+
+#[gpui::test]
+fn a_write_made_while_the_links_are_planned_survives_the_rename(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "rename-plan-write");
+    let alpha = root.join("Alpha.md");
+    let alpha2 = root.join("Alpha2.md");
+    let link = root.join("Link.md");
+    fs::write(&alpha, "# Alpha\n\ntext\n").unwrap();
+    fs::write(&link, "see [[Alpha]]\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    // The scan reads the linking note; a write lands in it before the rename is applied.
+    let plan = shell.update(cx, |s, _| {
+        s.link_scan("Alpha", "Alpha2", Some((&alpha, &alpha2)), None)
+            .run()
+    });
+    fs::write(&link, "see [[Alpha]]\ntyped meanwhile\n").unwrap();
+    let renamed = crate::platform::vault::rename_note(&alpha, "Alpha2").unwrap();
+    shell.update(cx, |s, cx| {
+        s.relocate(&alpha, &renamed, true, cx);
+        s.apply_links(plan, cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(&link).unwrap(),
+        "see [[Alpha2]]\ntyped meanwhile\n"
+    );
+    assert!(!missed_link_shown(&shell, cx));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_link_that_went_while_the_rename_was_planned_is_reported_not_written(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "rename-plan-gone");
+    let alpha = root.join("Alpha.md");
+    let alpha2 = root.join("Alpha2.md");
+    let link = root.join("Link.md");
+    fs::write(&alpha, "# Alpha\n\ntext\n").unwrap();
+    fs::write(&link, "see [[Alpha]]\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    let plan = shell.update(cx, |s, _| {
+        s.link_scan("Alpha", "Alpha2", Some((&alpha, &alpha2)), None)
+            .run()
+    });
+    fs::write(&link, "nothing here\n").unwrap();
+    let renamed = crate::platform::vault::rename_note(&alpha, "Alpha2").unwrap();
+    shell.update(cx, |s, cx| {
+        s.relocate(&alpha, &renamed, true, cx);
+        s.apply_links(plan, cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&link).unwrap(), "nothing here\n");
+    assert!(missed_link_shown(&shell, cx));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_rename_keeps_the_autosave_of_the_open_linking_note_and_its_link(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "rename-plan-autosave");
+    let alpha = root.join("Alpha.md");
+    let alpha2 = root.join("Alpha2.md");
+    let link = root.join("Link.md");
+    fs::write(&alpha, "# Alpha\n\ntext\n").unwrap();
+    fs::write(&link, "see [[Alpha]]\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &link);
+    let plan = shell.update(cx, |s, _| {
+        s.link_scan("Alpha", "Alpha2", Some((&alpha, &alpha2)), None)
+            .run()
+    });
+    // The open note is typed in and autosaved while the rename is planned.
+    cx.simulate_input("typed ");
+    shell.update(cx, |s, cx| s.flush(cx));
+    let renamed = crate::platform::vault::rename_note(&alpha, "Alpha2").unwrap();
+    shell.update(cx, |s, cx| {
+        s.relocate(&alpha, &renamed, true, cx);
+        if s.apply_links(plan, cx) {
+            s.reload(cx);
+        }
+        s.flush(cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&link).unwrap(), "see [[Alpha2]]\ntyped ");
+    let shown = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string());
+    assert_eq!(shown, "see [[Alpha2]]\ntyped ");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_rename_of_a_note_that_links_to_itself_keeps_its_new_title(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "rename-self-link");
+    let alpha = root.join("Alpha.md");
+    fs::write(&alpha, "# Alpha\n\nsee [[Alpha]]\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.menu_do(nav::Do::Rename, Some(alpha.clone()), window, cx)
+    });
+    cx.run_until_parked();
+    cx.simulate_input("2");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        fs::read_to_string(root.join("Alpha2.md")).unwrap(),
+        "# Alpha2\n\nsee [[Alpha2]]\n"
+    );
     let _ = fs::remove_dir_all(root);
 }

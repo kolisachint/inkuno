@@ -13,6 +13,7 @@ pub(super) struct LinkedNote {
 
 /// What a rename does to the notes that link to it (see `Shell::link_scan`). Owned, so that it can run
 /// off the UI thread.
+#[derive(Default)]
 pub(super) struct LinkScan {
     root: Option<PathBuf>,
     notes: Vec<LinkedNote>,
@@ -22,55 +23,58 @@ pub(super) struct LinkScan {
     shown: Option<(PathBuf, String)>,
 }
 
-/// The result of a scan: whether a pending change refuses the rename, and the notes to write, each
-/// with its path after the rename and its text as the editor shows it (pending changes marked). A
-/// text is written through `sidecar::save`, which places the changes beside the note again.
+/// The result of a scan: whether a pending change refuses the rename, and the notes that hold a link to
+/// rewrite (indexes into `scan.notes`). The rewrites are planned again when they are applied, from the
+/// text each note holds then (see `Shell::apply_links`); the scan keeps what it needs for that.
 #[derive(Default)]
 pub(super) struct LinkPlan {
     pub(super) refused: bool,
-    pub(super) rewrites: Vec<(PathBuf, String)>,
+    scan: LinkScan,
+    notes: Vec<usize>,
 }
 
 impl LinkScan {
-    /// Reads each note once. The rewrite of the text each note shows (its file with its pending changes
-    /// composed in, or the editor's text) is planned, so a pending change keeps its place; the rename is
-    /// refused when that rewrite would change a pending change.
-    pub(super) fn run(&self) -> LinkPlan {
-        let mut plan = LinkPlan::default();
-        let (root, moved) = (
+    /// The text `text` of a note (its file with its pending changes composed in, or the editor's text)
+    /// with its links rewritten, or None when it holds none.
+    fn rewrite(&self, note: &LinkedNote, text: &str) -> Option<String> {
+        let moved = self
+            .moved
+            .as_ref()
+            .map(|(from, to)| (from.as_path(), to.as_path()));
+        logic::wiki::rewrite_links(
+            text,
             self.root.as_deref(),
-            self.moved
-                .as_ref()
-                .map(|(from, to)| (from.as_path(), to.as_path())),
-        );
-        for note in &self.notes {
+            note.post.as_path(),
+            &self.old,
+            &self.new,
+            note.wiki,
+            moved,
+        )
+    }
+
+    /// Reads each note once and chooses the notes whose links the rename rewrites. The rename is refused
+    /// when a rewrite would change a pending change.
+    pub(super) fn run(self) -> LinkPlan {
+        let mut plan = LinkPlan::default();
+        for (index, note) in self.notes.iter().enumerate() {
             let Ok(disk) = fs::read_to_string(&note.disk) else {
                 continue;
-            };
-            let linker = note.post.as_path();
-            let rewrite = |text: &str| {
-                logic::wiki::rewrite_links(
-                    text, root, linker, &self.old, &self.new, note.wiki, moved,
-                )
             };
             let current = match &self.shown {
                 Some((path, text)) if *path == note.disk => text.clone(),
                 _ => {
-                    let home = platform::revisions::home_of(&note.disk, root);
+                    let home = platform::revisions::home_of(&note.disk, self.root.as_deref());
                     platform::sidecar::display(home.as_ref(), &note.disk, &disk)
                 }
             };
-            let fresh = rewrite(&current);
-            if fresh
-                .as_ref()
-                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, fresh))
-            {
-                plan.refused = true;
-            }
-            if let Some(fresh) = fresh {
-                plan.rewrites.push((note.post.clone(), fresh));
+            if let Some(fresh) = self.rewrite(note, &current) {
+                if logic::pending::rewrite_refused(&current, &fresh) {
+                    plan.refused = true;
+                }
+                plan.notes.push(index);
             }
         }
+        plan.scan = self;
         plan
     }
 }
@@ -450,18 +454,47 @@ impl Shell {
 
     /// Writes the rewrites of a scan and reloads the other pane when it shows a rewritten note. True
     /// when the shown note was rewritten: the caller decides what its editor does (it may be leaving).
+    /// The scan ran off the UI thread, so each note is read again here, at its path after the rename,
+    /// and its rewrite is planned from the text it holds now: an edit made since (an autosave, an
+    /// agent's write) is kept. A note whose link is gone, or whose rewrite would change a pending
+    /// change, is left as it is and reported.
     pub(super) fn apply_links(&mut self, plan: LinkPlan, cx: &mut Context<Self>) -> bool {
         let mut changed = Vec::new();
-        for (path, text) in plan.rewrites {
+        let mut missed = false;
+        for index in plan.notes {
+            let note = &plan.scan.notes[index];
+            let path = &note.post;
+            let Ok(raw) = fs::read_to_string(path) else {
+                continue;
+            };
+            let home = platform::revisions::home_of(path, self.vault.as_deref());
+            let current = platform::sidecar::display(home.as_ref(), path, &raw);
+            let fresh = plan.scan.rewrite(note, &current);
+            let refused = fresh
+                .as_ref()
+                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, fresh));
+            let Some(text) = fresh.filter(|_| !refused) else {
+                missed = true;
+                continue;
+            };
             // The text as the editor shows it goes back as the file and its pending changes beside it.
-            let home = platform::revisions::home_of(&path, self.vault.as_deref());
-            if platform::sidecar::save(home.as_ref(), &path, &text, "").is_ok() {
-                if let Some(note) = self.notes.iter_mut().find(|n| n.path == path) {
-                    let disk = fs::read_to_string(&path).unwrap_or_default();
+            if platform::sidecar::save(home.as_ref(), path, &text, "").is_ok() {
+                if let Some(note) = self.notes.iter_mut().find(|n| n.path == *path) {
+                    let disk = fs::read_to_string(path).unwrap_or_default();
                     (note.tags, note.links) = Note::index(&disk);
                 }
-                changed.push(path);
+                changed.push(path.clone());
             }
+        }
+        if missed {
+            self.say(
+                Tone::Failed,
+                tr(
+                    "A note that links here changed while the rename ran: its link was not rewritten.",
+                    "Une note qui pointe ici a changé pendant le renommage : son lien n'a pas été réécrit.",
+                ),
+                cx,
+            );
         }
         // The other pane's note is reloaded here; the active pane's is up to the caller
         // (it may be leaving it).
