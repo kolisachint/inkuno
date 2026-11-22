@@ -4,21 +4,30 @@
 use super::*;
 
 impl Shell {
-    /// The changes of the note in the pane that its text does not place (orphans): their count. They
-    /// are shown nowhere, so the pill is the only place that says so. The list is read only when the
-    /// note keeps one.
+    /// The changes of the note in the pane that its text does not place (orphans): their count, as
+    /// last counted (`count_unplaced_changes`). They are shown nowhere, so the pill is the only place
+    /// that says so.
     pub(super) fn unplaced_changes(&self) -> usize {
-        let Some(path) = self.pane().path.as_deref() else {
-            return 0;
-        };
-        let Some(home) = platform::revisions::home_of(path, self.vault.as_deref()) else {
-            return 0;
-        };
-        if platform::sidecar::read(&home, path).is_empty() {
-            return 0;
-        }
-        let disk = std::fs::read_to_string(path).unwrap_or_default();
-        platform::sidecar::unplaced(&home, path, &disk).len()
+        self.pane().orphans
+    }
+
+    /// Counts the orphans of the note in the pane from its list and its file, when it is loaded, saved
+    /// or discarded, and when the file may have changed: the pill then reads the count, not the disk.
+    pub(super) fn count_unplaced_changes(&mut self) {
+        let count = self
+            .pane()
+            .path
+            .as_deref()
+            .and_then(|path| {
+                let home = platform::revisions::home_of(path, self.vault.as_deref())?;
+                if platform::sidecar::read(&home, path).is_empty() {
+                    return None;
+                }
+                let disk = std::fs::read_to_string(path).unwrap_or_default();
+                Some(platform::sidecar::unplaced(&home, path, &disk).len())
+            })
+            .unwrap_or(0);
+        self.pane_mut().orphans = count;
     }
 
     /// Discard: the orphans of the note in the pane leave its list beside it. The text is not touched,
@@ -32,7 +41,10 @@ impl Shell {
         };
         let disk = std::fs::read_to_string(&path).unwrap_or_default();
         match platform::sidecar::discard_unplaced(&home, &path, &disk) {
-            Ok(_) => cx.notify(),
+            Ok(_) => {
+                self.count_unplaced_changes();
+                cx.notify()
+            }
             Err(e) => self.say(
                 Tone::Failed,
                 format!("{}: {}", path.display(), crate::lang::io_reason(&e)),

@@ -437,6 +437,44 @@ fn a_review_of_a_note_whose_tab_closed_writes_the_file(cx: &mut TestAppContext) 
 }
 
 #[gpui::test]
+fn a_review_of_a_closed_note_keeps_a_pending_change_placed(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-review-closed-pending", cx);
+    click_button(cx);
+    click_review(cx);
+    shell.update_in(cx, |s, window, cx| {
+        assert!(s.close_now(window, cx));
+    });
+    settle(cx);
+    // A change proposed under the heading waits beside the note, and is placed in its text.
+    let home = crate::platform::revisions::Home::Vault(root.clone());
+    let plan = root.join("Plan.md");
+    crate::platform::sidecar::save(
+        Some(&home),
+        &plan,
+        "# Plan\n{++\nnew\n++}\n\nun peu de texte\n",
+        "assistant",
+    )
+    .unwrap();
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text(ONE_FINDING_AND_ONE_MISS.into()),
+            Event::Ended,
+        ],
+    );
+    let disk = fs::read_to_string(&plan).unwrap();
+    assert_eq!(
+        disk,
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
+    );
+    assert!(crate::platform::sidecar::unplaced(&home, &plan, &disk).is_empty());
+    assert_eq!(crate::platform::sidecar::read(&home, &plan).len(), 1);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
 fn a_refused_prompt_shows_the_error_and_the_login_hint(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-refused", cx);
     click_button(cx);

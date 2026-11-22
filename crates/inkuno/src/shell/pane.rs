@@ -68,6 +68,9 @@ pub(super) struct Pane {
     /// The note was created in this pane: left empty, its file does not stay in the vault.
     pub(super) fresh: bool,
     pub(super) dirty: bool,
+    /// The changes of the note that its file text does not place (`Shell::count_unplaced_changes`),
+    /// counted when the note is loaded, saved or discarded: the pill reads this, not the disk.
+    pub(super) orphans: usize,
     /// The note's file as last read or written here: what another program changed since is
     /// merged into what is typed (`Shell::take_outside`), not overwritten.
     pub(super) base: String,
@@ -216,6 +219,7 @@ impl Shell {
             new_dir: None,
             fresh: false,
             dirty: false,
+            orphans: 0,
             base: String::new(),
             listing: None,
             peek: false,

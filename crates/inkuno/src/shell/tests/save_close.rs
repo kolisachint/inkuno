@@ -383,7 +383,8 @@ fn a_write_made_while_the_links_are_planned_survives_the_rename(cx: &mut TestApp
             .run()
     });
     fs::write(&link, "see [[Alpha]]\ntyped meanwhile\n").unwrap();
-    let renamed = crate::platform::vault::rename_note(&alpha, "Alpha2").unwrap();
+    let renamed =
+        crate::platform::vault::rename_note(Some(root.as_path()), &alpha, "Alpha2").unwrap();
     shell.update(cx, |s, cx| {
         s.relocate(&alpha, &renamed, true, cx);
         s.apply_links(plan, cx);
@@ -411,7 +412,8 @@ fn a_link_that_went_while_the_rename_was_planned_is_reported_not_written(cx: &mu
             .run()
     });
     fs::write(&link, "nothing here\n").unwrap();
-    let renamed = crate::platform::vault::rename_note(&alpha, "Alpha2").unwrap();
+    let renamed =
+        crate::platform::vault::rename_note(Some(root.as_path()), &alpha, "Alpha2").unwrap();
     shell.update(cx, |s, cx| {
         s.relocate(&alpha, &renamed, true, cx);
         s.apply_links(plan, cx);
@@ -439,7 +441,8 @@ fn a_rename_keeps_the_autosave_of_the_open_linking_note_and_its_link(cx: &mut Te
     // The open note is typed in and autosaved while the rename is planned.
     cx.simulate_input("typed ");
     shell.update(cx, |s, cx| s.flush(cx));
-    let renamed = crate::platform::vault::rename_note(&alpha, "Alpha2").unwrap();
+    let renamed =
+        crate::platform::vault::rename_note(Some(root.as_path()), &alpha, "Alpha2").unwrap();
     shell.update(cx, |s, cx| {
         s.relocate(&alpha, &renamed, true, cx);
         if s.apply_links(plan, cx) {

@@ -691,6 +691,8 @@ fn an_orphan_is_counted_in_the_pill_and_discard_removes_it(cx: &mut TestAppConte
         orphan_since: None,
     };
     crate::platform::sidecar::store(&home, &note, std::slice::from_ref(&orphan)).unwrap();
+    // The list changed outside the app: the note is reloaded, and the pill counts again.
+    shell.update(cx, |s, cx| s.reload(cx));
     settle(cx);
     assert!(
         cx.debug_bounds("pending-hint").is_some(),

@@ -129,6 +129,12 @@ impl Shell {
 
     /// Loads the note into the editor; false if the file is unreadable.
     pub(super) fn load_note(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
+        let shown = self.load_note_from_disk(path, cx);
+        self.count_unplaced_changes();
+        shown
+    }
+
+    fn load_note_from_disk(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
         // Already in the other pane: two editors on the same file would overwrite each other.
         // Input moves there; a mere preview does not move it.
         if let Some(other) = self
@@ -576,13 +582,18 @@ impl Shell {
             .iter_mut()
             .filter(|n| n.path != path && n.links.contains(&key))
         {
-            let fresh = fs::read_to_string(&note.path)
-                .ok()
-                .map(|text| wiki::rename_heading(&text, &name, was.1.trim(), now.1.trim()))
-                .filter(|(_, count)| *count > 0)
-                .filter(|(text, _)| vault::write(&note.path, text).is_ok());
-            if let Some((text, _)) = fresh {
-                (note.tags, note.links) = Note::index(&text);
+            // Written as the editor shows the note, so its pending changes stay placed. A rewrite that
+            // would change a pending change is left out, as `apply_links` leaves it.
+            let home = platform::revisions::home_of(&note.path, self.vault.as_deref());
+            let saved = platform::sidecar::edit(home.as_ref(), &note.path, "", |shown| {
+                let (text, count) = wiki::rename_heading(shown, &name, was.1.trim(), now.1.trim());
+                let refused = logic::pending::rewrite_refused(shown, &text)
+                    || platform::sidecar::rewrite_unplaces(home.as_ref(), &note.path, shown, &text);
+                (count > 0 && !refused).then_some(text)
+            });
+            if let Ok(true) = saved {
+                let disk = fs::read_to_string(&note.path).unwrap_or_default();
+                (note.tags, note.links) = Note::index(&disk);
                 rewritten.push(note.path.clone());
             }
         }
@@ -693,6 +704,12 @@ impl Shell {
     // ponytail: synchronous write on the UI thread (a few KB, < 1 ms);
     // move to a background task if notes get very large.
     pub(super) fn flush_one(&mut self, cx: &mut Context<Self>) -> bool {
+        let done = self.flush_one_text(cx);
+        self.count_unplaced_changes();
+        done
+    }
+
+    fn flush_one_text(&mut self, cx: &mut Context<Self>) -> bool {
         if self.pane().scratch {
             return self.flush_scratch(cx);
         }
