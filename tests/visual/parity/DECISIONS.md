@@ -19,3 +19,20 @@ IDs refer to `findings/<area>.md`.
 | RP-26 | fix | literal backticks in the missing-assistant message |
 | RP-27/28 | keep | pending changes keep the app-ui §17 flow; v3 draws it |
 | other L | fix when the file is open anyway | |
+
+## Popovers, menus, settings
+| id | decision | note |
+|--|--|--|
+| P-09 | fix | palette: matching notes and commands first, the "Create «…»" row always last |
+| P-01 | fix | palette input carries the search icon in every mode |
+| P-06 | fix | the active palette/menu row is the neutral hover wash, not accent |
+| SET-10 | fix | shortcuts: description left (flex), keys right as chips (v2 `.keys`: 1fr auto); page max width 640 px; in a narrow pane the keys wrap under the description, never the words one per line |
+| SET-04 | fix | modifier names follow the platform (Ctrl on Linux/Windows, ⌘ on macOS) everywhere a key is shown |
+| SET-06 | fix | text fields: ground fill + `line` border + 2 px accent focus ring, both themes |
+| SET-07 | fix (v3 too) | dark segmented: the active chip is lighter than the track (elevated surface), v2 had it inverted |
+| C-01 | fix | context menu items carry their 16 px icon, as v2 `.mi` |
+| TO-01/02 | fix | toast: dark pill, bottom centre, one action button (Undo…); a sticky error keeps its × |
+| T-01 | fix | selection toolbar Comment: icon with tooltip, like the other buttons |
+| SET-05 | keep | the Editor page keeps the app's real settings (no new settings without an issue, CONTRIBUTING); v3 draws the real set |
+| SET-13 | later | Files page buttons |
+| other L | fix when the file is open anyway | |
