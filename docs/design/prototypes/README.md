@@ -16,6 +16,7 @@ Ground rules for every version:
 |--|--|--|--|
 | v1 | 2026-11-21 | `v1.html` | https://claude.ai/artifact/JoPD7oYaJom8B39UeCn8eV |
 | v2 | 2026-11-21 | `v2.html` | same link, artifact version 2 |
+| v3 | 2026-11-22 | `v3.html` | same link, artifact version 3 |
 
 The artifact link always shows the newest version; older versions stay in this folder and in the
 artifact's own version history.
@@ -159,3 +160,36 @@ tests green except the two sandbox-as-root tests, screenshots against `v2.html`)
     tables need a block-level classifier).
 - **Screenshots:** `scripts/visual-check.sh` renders every fixture on Xvfb; pin a theme by writing
   `theme=Quiet Dark` (or any theme name) into the temporary config it creates.
+
+---
+
+## v3: parity with the built app (2026-11-22)
+
+Built from `v2.html` (frozen). Each row is a decision from the owner's list. Keys follow the app's keymap.
+
+| # | Area | v2 | v3 | Why |
+|--|--|--|--|--|
+| 1 | Tabs | Every tab shows a cross | An unsaved note shows a 6 px accent dot in place of the cross. Hover shows the cross. Ctrl+S clears the dot and toasts "Saved" | The app marks unsaved tabs (app-ui C23). The dot reads faster |
+| 2 | Tabs | No way to reopen a closed tab | Ctrl+Shift+T reopens the last closed tab | The app has it |
+| 3 | Empty pane | Cards only | A "Write here…" line sits above the cards. Key chords are chips on one line | The app shows the line (app-ui C21). Chips stop chords wrapping |
+| 4 | Right panel | Open on first load | Closed on first load. The band button opens it on Outline | The app starts closed (app-ui C03). The note gets the room first |
+| 5 | Palette key | Ctrl+K | Ctrl+P (⌘P on mac) everywhere it shows. Ctrl+K stays the note's Link key, as in the app | Matches the app keymap. One search key |
+| 6 | Palette ranking | Open notes ranked first, so "road" + Enter opened another note | Name matches rank above content matches. Open notes lead within each group. "Create «…»" is always the last row | Fixes a v2 inconsistency: "road" + Enter now opens Roadmap |
+| 7 | Command mode | One flat list | The ">" stays in the field. Commands sit under This block, Formatting, Notes and Window | Matches the app. Easier to scan |
+| 8 | Palette rows | No age | Note rows show an age at the right ("today", "2 d") in faint text | An age helps tell apart notes with similar names |
+| 9 | Slash menu | Block added at the end of the note | Block goes in after the caret line | Fixes a v2 inconsistency: the block landed far from the caret |
+| 10 | Segmented control | Dark active chip barely lighter than the track | Dark: track #202022, active chip #3a3a3c | The active choice reads at a glance |
+| 11 | Text fields | Faint border, weak focus | 1 px border at 3:1 against the sheet in both themes. 2 px accent focus ring | Field edges and focus meet contrast needs |
+| 12 | Switch | Off track faint | Off track is ink at 22 % (light) or 28 % (dark) | Off state reads against the sheet |
+| 13 | Toasts | Centred on the window, under the right panel | Centred at the bottom of the note sheet | Feedback sits over the note it is about. Fixes a v2 inconsistency |
+| 14 | Outline | Flat list | Rows with children get a 20 px fold chevron. Clicking it folds the rows below | The app has the fold (app-ui RP-09) |
+| 15 | Comments | Draft card at the top of the view | Kept as v2: passage quote, field, Comment and Cancel at the top | Already matches. No change |
+| 16 | Comment anchor | Passage taken from the selection | Passage runs from the line start (or the previous comment) to the marker | Follows the app's passage rule (README P7). The selection could cover text the comment does not anchor |
+| 17 | Compare | Replaces the note view | Opens as its own read-only tab named "<note> · <version time>", with the compare bar on top (Restore, Close) | The app does this (app-ui §19). The note stays open beside it |
+| 18 | Pending changes | Inline Accept and Reject pills | Washes: green for an addition, red for a removal. Ctrl+Enter accepts and Ctrl+Backspace rejects the change at the caret. The foot pill moves the caret to the first change. Accept all and Reject all are palette commands | The app draws washes and uses chords, not pills (app-ui §17) |
+| 19 | Text measure | Normal 720 px | Normal 800 px (`--measure:800px`) | The app landed 800 px as Normal (app-ui §14) |
+
+Notes:
+
+- Palette commands for the block types and the change actions were added with items 7 and 18. They use the app's names.
+- The design log window still shows the v2 decisions. It is a record, not a spec.

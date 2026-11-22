@@ -1,4 +1,5 @@
-// Screenshot harness for docs/design/prototypes/v2.html.
+// Screenshot harness for the prototype HTML (PROTO env, default v2.html).
+// The right panel starts closed (v3); states that need it open it themselves.
 // Each shot opens a fresh page (no state carried over), sets the theme,
 // performs the actions that reach the state, then captures the window
 // (#app) or the full viewport for dialogs that live outside it.
@@ -64,9 +65,9 @@ const STATES = [
   { id: '04-panel-comments', pre: p => p.keyboard.press('Control+Alt+2'), check: '#rpanel .cc' },
   { id: '05-panel-versions', pre: p => p.keyboard.press('Control+Alt+3'), check: '#rpanel .vrow' },
   { id: '06-panel-assistant', pre: p => p.keyboard.press('Control+Alt+4'), check: '#rpanel .ask' },
-  { id: '07-panel-closed', pre: p => p.click('#band [data-act="rtog"]'), check: '.app.rhide' },
-  { id: '08-palette', pre: p => p.keyboard.press('Control+k'), check: '.pal' },
-  { id: '09-palette-commands', pre: async p => { await p.keyboard.press('Control+k'); await p.keyboard.type('>'); }, check: '.pal .pr' },
+  { id: '07-panel-closed', pre: async p => { await p.click('#band [data-act="rtog"]'); await p.click('#band [data-act="rtog"]'); }, check: '.app.rhide' },
+  { id: '08-palette', pre: p => p.keyboard.press('Control+p'), check: '.pal' },
+  { id: '09-palette-commands', pre: async p => { await p.keyboard.press('Control+p'); await p.keyboard.type('>'); }, check: '.pal .pr' },
   { id: '10-slash-menu', pre: p => p.click('[data-act="slash"]'), check: '.slash' },
   { id: '11-selection-toolbar', pre: p => selectText(p, 'Everything in this note is GitHub Markdown'), check: '.fbar' },
   { id: '12-context-menu-file', pre: p => p.click('#side [data-ctx="road"]', { button: 'right' }), check: '.pop[role="menu"]' },
@@ -153,7 +154,7 @@ const STATES = [
     },
     check: '#cdraft'
   },
-  { id: '38-palette-query', pre: async p => { await p.keyboard.press('Control+k'); await p.keyboard.type('road'); }, check: '.pal .pr' },
+  { id: '38-palette-query', pre: async p => { await p.keyboard.press('Control+p'); await p.keyboard.type('road'); }, check: '.pal .pr' },
   {
     id: '39-shortcuts-listening',
     pre: async p => { await settingsPage('Shortcuts')(p); await p.click('.kchip[data-key="0"]'); },
@@ -187,7 +188,11 @@ const STATES = [
       const file = `${st.id}-${theme}.png`;
       const page = await ctxs[theme].newPage();
       const r = { file, check: '', error: '' };
+      const errs = [];
       try {
+        page.on('pageerror', e => errs.push('pageerror: ' + e.message));
+        page.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
+        page.on('requestfailed', q => { if (!q.url().includes('fonts.googleapis') && !q.url().includes('fonts.gstatic')) errs.push('requestfailed: ' + q.url()); });
         await loadPage(page);
         await page.evaluate(t => { document.documentElement.dataset.theme = t; }, theme);
         await ready(page);
@@ -208,7 +213,9 @@ const STATES = [
       } finally {
         await page.close();
       }
+      r.errs = errs;
       results.push(r);
+      if (errs.length) console.log('  console:', file, errs.join(' | '));
       console.log(`${r.error ? 'ERR ' : ''}${file} ${r.check}${r.error ? ' ' + r.error : ''}`);
     }
   }
@@ -217,7 +224,8 @@ const STATES = [
   const pngs = fs.readdirSync(OUT).filter(f => f.endsWith('.png')).length;
   console.log(`\nPNG count: ${pngs}`);
   console.log('Skipped:', JSON.stringify(skipped));
-  const bad = results.filter(r => r.error || (r.check && !r.check.startsWith('ok')));
+  const bad = results.filter(r => r.error || (r.check && !r.check.startsWith('ok')) || r.errs.length);
+  console.log(`Console errors: ${results.reduce((n, r) => n + r.errs.length, 0)}`);
   console.log(`Problems: ${bad.length}`);
   bad.forEach(b => console.log('  ', b.file, b.check, b.error));
 })().catch(e => { console.error(e); process.exit(1); });
