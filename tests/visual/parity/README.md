@@ -29,3 +29,5 @@ Scripts and logs that compare the real app (driven on Xvfb) with `docs/design/pr
   the slash menu's query line; the compare bar on the compare tab.
 - Comment replies (RP-13) need a format decision; Files page buttons (SET-13).
 - `ui-check.sh`: settings pages need a 4 s settle; `40-titlebar-peek` in `proto-shots.js` reports a false miss.
+- Undoing a written comment takes three steps (resolve, text, empty marker); the draft's marker and its text should be one undo step.
+- `layout.rs` (4,100+ lines), `sidebar.rs` and `inkuno-platform/src/vault.rs` are past the 1,500-line rule: split by subject.

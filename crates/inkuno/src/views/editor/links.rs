@@ -84,7 +84,7 @@ impl Editor {
         let lr = self.line_range(at);
         let line = self.content[lr.clone()].to_string();
         let col = at - lr.start;
-        let Some((whole, noted, _)) = md::comments(&line)
+        let Some((whole, noted, said_at)) = md::comments(&line)
             .into_iter()
             .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
         else {
@@ -92,9 +92,15 @@ impl Editor {
         };
         let kept = line[noted].to_string();
         // A table cell takes a `|` only escaped, or it would split the cell.
-        let said = match self.is_table_line(&lr) {
+        let typed = match self.is_table_line(&lr) {
             true => text.replace('|', r"\|"),
             false => text.to_string(),
+        };
+        // A scope's comment (`Column "Âge": `, written by a draft on a table) keeps its name before the text.
+        let name = line[said_at.clone()].trim_end();
+        let said = match name.ends_with(':') && said_at.end <= col {
+            true => format!("{name} {typed}"),
+            false => typed,
         };
         let range = lr.start + whole.start..lr.start + whole.end;
         let marked = format!("{kept}{}", md::comment_line(&said));
@@ -104,6 +110,8 @@ impl Editor {
         self.push_undo(true);
         self.edit(range.clone(), &marked, cx);
         self.move_to(range.start + kept.len() + COMMENT_CURSOR, cx);
+        // The text may widen the cell: the table realigns, and the cursor follows its text.
+        self.align_at(range.start, cx);
     }
 
     /// Comments the selection, or the line without one: `text<!-- comment: … -->`, the cursor in the
@@ -173,8 +181,11 @@ impl Editor {
                 self.edit(range, &text, cx);
             }
             self.move_to(first + len + COMMENT_CURSOR, cx);
+            // The marker widens its cell, so the table realigns: the cursor follows its text, and the
+            // draft is given the marker where it now is.
+            self.align_at(first, cx);
             cx.emit(EditorEvent::CommentStarted {
-                inside: first + len + COMMENT_CURSOR,
+                inside: self.cursor(),
                 noted,
             });
             return;
@@ -196,8 +207,9 @@ impl Editor {
         self.push_undo(true);
         self.edit(sel.clone(), &marked, cx);
         self.move_to(sel.start + text.len() + COMMENT_CURSOR, cx);
+        self.align_at(sel.start, cx);
         cx.emit(EditorEvent::CommentStarted {
-            inside: sel.start + text.len() + COMMENT_CURSOR,
+            inside: self.cursor(),
             noted: text,
         });
     }

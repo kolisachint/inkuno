@@ -319,7 +319,7 @@ impl Editor {
 
     /// Realigns the table holding byte `at`, as `realign` does, but the whole selection follows
     /// its text (an end that lands in padding goes to the end of its cell).
-    fn align_at(&mut self, at: usize, cx: &mut Context<Self>) {
+    pub(super) fn align_at(&mut self, at: usize, cx: &mut Context<Self>) {
         let Some((range, rows, _)) = self.table_at(at) else {
             return;
         };

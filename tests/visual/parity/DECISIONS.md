@@ -72,7 +72,7 @@ IDs refer to `findings/<area>.md`.
 | D07/D08 | fix | task box flush with the column, centred on the first line's x-height |
 | D09 | fix | code block padding 4/14/10 as v2; no extra bottom space |
 | D10 | fix | code copy button only on hover of the block |
-| D11 | fix | tables at least the text column wide (v2 `min-width:100%`) |
+| D11 | keep | a small table keeps its own size (user guide, settings.md); v3 should follow |
 | D12/D16 | — | owned by the right-panel crew (RP-17) |
 | D13 | not a bug | the harness clicks the H1, so it is the revealed line |
 | D14 | verify | if the app reveals markers per span (documented in app-ui/markdown_renderer), keep; else reveal the whole caret line as v2 |

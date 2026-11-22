@@ -100,7 +100,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert_eq!(text(cx), "1. un\n2. deux\n3. trois\n\nfin");
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("turn into a task list");
-    cx.simulate_keystrokes("down enter");
+    // The command is the first row; the "Create" row is always last (P-09), so no `down`.
+    cx.simulate_keystrokes("enter");
     assert_eq!(text(cx), "- [ ] un\n- [ ] deux\n- [ ] trois\n\nfin");
     // The same kind again: back to text. Undo brings back the previous list.
     shell.update_in(cx, |s, window, cx| {

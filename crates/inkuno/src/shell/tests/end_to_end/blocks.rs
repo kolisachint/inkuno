@@ -23,38 +23,44 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // callout's first line adds its room to that gap. Both scale with the text, as in the layout.
     let size = shell.read_with(cx, |s, _| s.theme.size);
     let gap = 9. * (size / crate::logic::prefs::Prefs::SIZE);
+    // The room inside a fill: a code block has v2's 4 px above and 10 px below (`.src`); a callout has 10 px on both
+    // sides (DECISIONS D01, layout.rs). Both scale with the text.
+    let under = 10. * (size / crate::logic::prefs::Prefs::SIZE);
+    let callout = 10. * (size / crate::logic::prefs::Prefs::SIZE);
     // Code: the room above the opening line and under the closing one only.
     assert_eq!(of(&l, 0), (0, true, false, room, 0.));
     assert_eq!(of(&l, at("let")), (at("let"), false, false, 0., 0.));
     assert_eq!(
         of(&l, at("```\n\n> [!NOTE]")),
-        (at("```\n\n> [!NOTE]"), false, true, 0., room)
+        (at("```\n\n> [!NOTE]"), false, true, 0., under)
     );
-    // Callout: from its `[!TYPE]` line to the line before the next block, a gap between it and the code block.
+    // Callout: from its `[!TYPE]` line to the line before the next block. After a blank line the gap is that line's
+    // 9 px, so the callout adds only its own room.
     assert_eq!(
         of(&l, at("> [!NOTE]")),
-        (at("> [!NOTE]"), true, false, room + gap, 0.)
+        (at("> [!NOTE]"), true, false, callout, 0.)
     );
-    assert_eq!(of(&l, at("> une")), (at("> une"), false, false, gap, 0.));
-    assert_eq!(of(&l, at("> deux")), (at("> deux"), false, true, gap, room));
+    // The body lines of a callout follow its label, and each other, with no gap (v2 `.al` and body lines).
+    assert_eq!(of(&l, at("> une")), (at("> une"), false, false, 0., 0.));
+    assert_eq!(
+        of(&l, at("> deux")),
+        (at("> deux"), false, true, 0., callout)
+    );
     assert!(of(&l, at("```\nx")).1);
     // Two callouts in a row are two shapes; a callout of a single line has both ends.
     assert_eq!(
         of(&l, at("> seule")),
-        (at("> seule"), false, true, gap, room)
+        (at("> seule"), false, true, 0., callout)
     );
     assert_eq!(
         of(&l, at("> [!WARNING]")),
-        (at("> [!WARNING]"), true, false, room + gap, 0.)
+        (at("> [!WARNING]"), true, false, callout + gap, 0.)
     );
-    // A plain quote has the ends of its bar but no room: only its gap.
-    assert_eq!(
-        of(&l, at("> simple")),
-        (at("> simple"), true, true, gap, 0.)
-    );
+    // A plain quote has the ends of its bar but no room. It follows a blank line, which gives its gap (the 9 px).
+    assert_eq!(of(&l, at("> simple")), (at("> simple"), true, true, 0., 0.));
     // A ``` that closes nothing: one line.
     let orphan = note.rfind("```").unwrap();
-    assert_eq!(of(&l, orphan), (orphan, true, true, room, room));
+    assert_eq!(of(&l, orphan), (orphan, true, true, room, under));
     // A block at the very top and a block at the very bottom of the note, and a single line block.
     for note in [
         "```\nx\n```",
@@ -131,8 +137,8 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
         ]
     );
     let lh = |n: u8| rows.iter().find(|r| r.1 == n).unwrap().3;
-    // Line heights fall with the level (H5 and H6 share the body size), room above: none on the first line, then a
-    // body line for H1 and H2, two thirds of it for the rest. H4 and H5 may round to the same pixels: 16 × 1.4 and
+    // Line heights fall with the level (H5 and H6 share the body size), room above: none on the first line, then v2's
+    // 6 px for H1, 22 px for H2 and 16 px for the rest (DECISIONS D01). H4 and H5 may round to the same pixels: 16 × 1.4 and
     // 15 × 1.47 are 22.4 and 22.05 px at the default size, so the comparison of those two is not strict.
     assert!(
         lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) >= lh(5) && lh(5) == lh(6),
@@ -141,7 +147,7 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let pad = |n: u8| rows.iter().rfind(|r| r.1 == n).unwrap().2;
     assert_eq!(rows[0].2, 0.);
     assert!(
-        pad(1) == pad(2) && pad(2) > pad(3) && pad(3) == pad(6) && pad(6) > 0.,
+        pad(1) > 0. && pad(2) > pad(1) && pad(2) > pad(3) && pad(3) == pad(6) && pad(6) > 0.,
         "{rows:?}"
     );
     // Caret and click land on the same byte: on the marker and on the first letter of each title.

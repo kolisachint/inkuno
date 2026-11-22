@@ -241,7 +241,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     shell.update(cx, |s, _| s.nav.sel = None);
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("new folder");
-    cx.simulate_keystrokes("down enter");
+    // The command is the first row; the "Create" row is always last (P-09), so no `down`.
+    cx.simulate_keystrokes("enter");
     cx.simulate_input("Archives");
     cx.simulate_keystrokes("enter");
     assert!(
