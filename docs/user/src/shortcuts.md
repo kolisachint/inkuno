@@ -76,12 +76,14 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate |
 |  | Recent notes |
 |  | Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it |
-|  | Versions of the note: the panel lists its saved versions, newest first; Enter compares one with the note as it is now |
+| `Ctrl+Alt+3` | Versions of the note: the right panel lists its saved versions, newest first; Enter compares one with the note as it is now |
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
-| `Ctrl+P › assistant` | Assistant: show or hide its panel in the right dock (also a round button at the foot of the note) |
+| `Ctrl+P › assistant` | Assistant: show or hide its view of the right panel (Ctrl+Alt+4 shows it) |
+| `Ctrl+Alt+2` | Comments of the note: the right panel lists them as cards; a click on one shows its passage, Resolve closes it |
 | `Ctrl+P › improve` | Assistant: improve the selection, or the whole note; the proposal comes back as pending changes |
-| `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note) |
+| `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right panel (also in the palette, as Outline of the note) |
+|  | Right panel: show or hide it, on the view it showed last (its switcher picks Outline, Comments, Versions or Assistant) |
 | `Ctrl+B` | Sidebar: show or hide the side panel |
 | `F9` | Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back |
 | `Ctrl+Shift+S` | Title bar: show or hide the bar the app draws (its buttons come back with it) |
