@@ -36,3 +36,27 @@ IDs refer to `findings/<area>.md`.
 | SET-05 | keep | the Editor page keeps the app's real settings (no new settings without an issue, CONTRIBUTING); v3 draws the real set |
 | SET-13 | later | Files page buttons |
 | other L | fix when the file is open anyway | |
+
+## Window chrome
+| id | decision | note |
+|--|--|--|
+| C01 | fix | the band always shows the pane's tab strip, even for one note (v2 #3); the centred label goes |
+| C02 | fix | the right-panel toggle is in the band on every platform and decoration mode |
+| C09 | fix | with two panes, the other pane's tabs are dimmed (opacity .55); no ring |
+| C03 | keep | the right panel starts closed on a first run (quiet default); v3 starts the same |
+| C06 | fix | a single click in the tree opens a preview tab (italic) that the next single click replaces; double-click or an edit keeps it (v2 #3) |
+| C07 | fix | a truncated tab truncates its title, never the "· Scratch" marker |
+| C08 | fix | tab tooltip: the note's folder path |
+| C04 | fix | the band is the sheet colour, not the ground |
+| C05 | fix | tab: gap 6 px; the cross at .7 on the shown tab, on hover otherwise |
+| C10 | fix | pane divider uses `line` |
+| C11/C12/C14 | fix | follows C01: no centred label in the band; window title stays "Note — Folder — Inkuno" |
+| C13 | fix | with the title bar hidden, the sidebar toggle stays in the sidebar's top row |
+| C15 | fix | hidden title bar hides the tab row too; the strip peeks the whole band |
+| C17 | fix | empty Scratch text fits one line ("Ctrl+N: new scratch note") |
+| C18 | fix | sidebar footer 36 px (6 + 30) |
+| C19 | fix | the sheet keeps its faint left shadow (`--shadow-note`) |
+| C20 | fix | band icon buttons 30 px, radius 8 (in `components::icon_button`) |
+| C21 | keep | an empty pane stays a live editor with the cards; v3 draws that |
+| C22 | fix | empty-pane cards never break a key chord across lines (chips) |
+| C23 | keep | unsaved dot on tabs; v3 adds it |
