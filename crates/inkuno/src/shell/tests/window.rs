@@ -1069,12 +1069,19 @@ fn the_title_bar_hides_and_comes_back_from_the_sidebar(cx: &mut TestAppContext) 
     // The bar the app draws is the tab bar of every pane, one tab or many, and it is shown while the
     // title bar is. Its window buttons are not read through `debug_bounds`: gpui keeps those of a
     // frame no longer drawn.
+    // Measured: the first pane starts under the bar (6 px below it) and at the content's top without it.
+    // gpui keeps the bounds of a bar no longer drawn, so the bar itself is not read for the hidden state.
     let drawn = |cx: &mut gpui::VisualTestContext| {
         for _ in 0..3 {
             cx.update(|window, _| window.refresh());
             cx.run_until_parked();
         }
-        shell.read_with(cx, |s, _| s.band_shown())
+        let inset = cx
+            .update(|window, _| window.client_inset())
+            .unwrap_or(px(0.))
+            + px(1.);
+        cx.debug_bounds("pane-0")
+            .is_some_and(|pane| pane.top() > inset)
     };
     assert!(drawn(cx), "the bar is drawn at first");
 
@@ -1306,7 +1313,8 @@ fn normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline(cx: &mut T
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip)
     };
     assert!(
-        shell.read_with(cx, |s, _| s.band_shown()),
+        cx.debug_bounds("tabs-0")
+            .is_some_and(|bar| bar.size.height > px(0.)),
         "the bar is drawn"
     );
 
@@ -1324,5 +1332,55 @@ fn normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline(cx: &mut T
         px(0.),
         "hidden: the note starts at the content's top"
     );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Title bar hidden: pointing at its 12 px strip peeks the band over the note, and a press on the band's top
+/// strip, on a tab, starts no window move. The test window has no move (gpui's panics), so a press that
+/// reached the strip's move handler would fail here.
+#[gpui::test]
+fn a_press_on_the_peeked_band_starts_no_window_move(cx: &mut TestAppContext) {
+    let root = std::env::temp_dir().join(format!("inkuno-peek-press-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _config = isolated_config(&root);
+    cx.update(bind_keys);
+    cx.update(init_fonts);
+    let (shell, cx) =
+        cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
+    cx.run_until_parked();
+    shell.update(cx, |s, _| s.client = true);
+    cx.simulate_keystrokes("secondary-shift-s");
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
+    let strip = cx.debug_bounds("band-strip-0").expect("the strip is drawn");
+    assert_eq!(strip.size.height, px(BAND_HIDDEN));
+
+    cx.simulate_mouse_move(strip.center(), None, gpui::Modifiers::none());
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
+    assert!(
+        shell.read_with(cx, |s, _| s.band_peek),
+        "the strip peeks the band"
+    );
+    let band = cx
+        .debug_bounds("band-peek-0")
+        .expect("the band is drawn over the note");
+    let tab = cx
+        .debug_bounds("tab-0")
+        .expect("a tab is in the peeked band");
+    assert!(tab.size.height > px(0.), "{tab:?}");
+    assert!(band.contains(&tab.center()), "{band:?} {tab:?}");
+    // The top 4 px of the tab, where the strip is under the band.
+    let at = point(tab.center().x, band.top() + px(4.));
+    cx.simulate_click(at, gpui::Modifiers::none());
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
     let _ = fs::remove_dir_all(&root);
 }

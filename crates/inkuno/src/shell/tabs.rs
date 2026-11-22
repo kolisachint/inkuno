@@ -538,8 +538,11 @@ impl Shell {
             .left_0()
             .right_0()
             .h(t.px(BAND_HIDDEN))
-            // Drawn by the app (Linux), the strip is the handle that moves the window.
-            .when(client, |d| d.map(crate::ui::widgets::drag_window))
+            // Drawn by the app (Linux), the strip is the handle that moves the window. Not while the band
+            // is peeked over it: the band is the pointer's then, and a press there starts no move.
+            .when(client && !self.band_peek, |d| {
+                d.map(crate::ui::widgets::drag_window)
+            })
             .on_hover(cx.listener(move |this, hover: &bool, _, cx| {
                 if *hover && !this.band_peek {
                     this.band_peek = true;
@@ -551,9 +554,14 @@ impl Shell {
 
     /// The band drawn over the note while the hidden title bar is peeked: the tab row of `group`. The
     /// pointer leaving it takes the peek back.
-    pub(super) fn render_peek(&mut self, group: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
+    pub(super) fn render_peek(
+        &mut self,
+        group: usize,
+        client: bool,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let t = self.theme;
-        let band = match self.render_tabs(group, false, true, cx) {
+        let band = match self.render_tabs(group, client, true, cx) {
             Some(bar) => bar.into_any_element(),
             None => div().into_any_element(),
         };
@@ -567,6 +575,8 @@ impl Shell {
             .h(t.px(BAND))
             .bg(t.bg)
             .shadow(t.floating())
+            // The band is on top: what is under it (the strip that moves the window) gets no press.
+            .occlude()
             .on_hover(cx.listener(move |this, hover: &bool, _, cx| {
                 if !*hover && this.band_peek {
                     this.band_peek = false;

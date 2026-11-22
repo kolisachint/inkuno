@@ -819,7 +819,8 @@ pub fn terminals(os: &str, dir: &str, preferred: Option<&str>) -> Vec<(String, V
 }
 
 /// Opens the system terminal in `dir`: the first of `terminals` that starts. False if
-/// none is installed. Tests open nothing.
+/// none is installed. Tests open nothing: `cfg!(test)` is true only in this crate's own tests, so the
+/// app's tests (which enable `test-support`) need the feature too.
 pub fn open_terminal(dir: &Path) -> bool {
     let preferred = env::var("TERMINAL").ok().filter(|t| !t.trim().is_empty());
     let found = terminals(
@@ -827,7 +828,7 @@ pub fn open_terminal(dir: &Path) -> bool {
         &dir.to_string_lossy(),
         preferred.as_deref(),
     );
-    !cfg!(test)
+    !cfg!(any(test, feature = "test-support"))
         && found.into_iter().any(|(program, args)| {
             // No console for the launcher (`cmd /c start`); the terminal opens its own.
             let child = crate::command(&program)

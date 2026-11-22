@@ -19,8 +19,9 @@ pub fn set_traffic_lights_hidden<W: raw_window_handle::HasWindowHandle>(window: 
     use raw_window_handle::RawWindowHandle;
 
     // The test platform's window has no native handle: gpui's `TestWindow` panics when asked for one.
-    // Tests show no real window, so there are no traffic lights to hide.
-    if cfg!(test) {
+    // Tests show no real window, so there are no traffic lights to hide. `cfg!(test)` alone is not
+    // enough: it is set only in this crate's own tests, and the app's tests enable `test-support`.
+    if cfg!(any(test, feature = "test-support")) {
         return;
     }
     let Ok(handle) = window.window_handle() else {

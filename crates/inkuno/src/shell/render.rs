@@ -27,6 +27,7 @@ pub(super) const TOGGLE_ROOM: f32 = 40.;
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
+        self.end_closed_draft();
         // The spacings of the interface are in rems: they follow its scale.
         window.set_rem_size(t.px(16.));
         // The pane holding the focus is the active one; when the code changed it without moving
@@ -141,7 +142,7 @@ impl Render for Shell {
                 // Title bar hidden: its 12 px strip at the top of the pane peeks the band over the note.
                 let hidden = !self.focus_mode && !self.nav.title_bar;
                 let strip = hidden.then(|| self.render_peek_strip(group, client, cx));
-                let peek = (hidden && self.band_peek).then(|| self.render_peek(group, cx));
+                let peek = (hidden && self.band_peek).then(|| self.render_peek(group, client, cx));
                 areas.push(Some(
                     div()
                         .size_full()
