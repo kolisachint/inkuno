@@ -2,6 +2,7 @@
 
 use super::listing::{self, Nesting};
 use super::*;
+use crate::logic::prefs::Prefs;
 use crate::ui::assets::needs_system_font;
 
 /// What the layout depends on, apart from the text: if nothing changed, it is kept.
@@ -292,6 +293,10 @@ pub(super) struct Row {
     pub(super) pend: Pend,
     /// The lists and indented code above the line, as the line leaves them (see `listing`).
     pub(super) nesting: Nesting,
+    /// Quiet's code gutter: its width, zero outside a numbered code block; and the number of a code line in it
+    /// (zero for none).
+    pub(super) gutter: Pixels,
+    pub(super) number: usize,
 }
 
 impl Row {
@@ -402,6 +407,15 @@ impl Row {
         self.grid
             .as_ref()
             .map_or_else(|| self.visual_rows(), |grid| grid.lines_at(i))
+    }
+
+    /// Quote bars drawn beside the row: one per level of its quote (none outside a quote).
+    pub(super) fn bars(&self) -> usize {
+        if self.kind == Kind::Quote {
+            self.nesting.quote.max(1)
+        } else {
+            0
+        }
     }
 
     /// A table's dash line, which is not seen.
@@ -615,7 +629,8 @@ pub(super) fn pend_of(found: &[crate::logic::pending::Area], line: usize) -> Pen
 
 /// What, in a line's style, comes from its nature rather than its text.
 pub struct RunStyle {
-    pub heading: bool,
+    /// The level of a heading (1 to 6); 0 for any other line.
+    pub heading: u8,
     /// Pending change the line belongs to: a removed line is dimmed and struck through.
     pub pending: Pend,
     /// The text is `soft` (a level 6 heading).
@@ -624,6 +639,12 @@ pub struct RunStyle {
     pub mono: bool,
     /// Color of the callout the line is part of.
     pub tint: Option<Hsla>,
+    /// The line is the live one (its source shows): Quiet underlines its links only then.
+    pub live: bool,
+    /// Inline code is drawn as a chip by paint (Quiet), not as a background run.
+    pub chip: bool,
+    /// Quiet's table header: semibold.
+    pub semi: bool,
 }
 
 /// The styles of the line `text`, `flags` (one flag word per byte), in one piece
@@ -631,7 +652,7 @@ pub struct RunStyle {
 pub fn text_runs(
     t: &Theme,
     text: &str,
-    flags: &[u16],
+    flags: &[u32],
     marked: impl Fn(usize) -> bool,
     style: &RunStyle,
 ) -> Vec<TextRun> {
@@ -645,19 +666,31 @@ pub fn text_runs(
         }
         let color = if style.pending == Pend::Mark {
             t.dim
-        } else if style.pending == Pend::Removed || f & md::QUIET != 0 {
+        } else if style.pending == Pend::Removed {
+            t.soft
+        } else if f & md::COMMENT != 0 {
+            t.syntax[syntax::COMMENT]
+        } else if f & md::QUIET != 0 {
             t.soft
         } else if f & md::DIM != 0 {
             t.dim
         } else if f & md::STRING != 0 {
-            t.string
+            t.syntax[syntax::STRING]
         } else if f & md::NUMBER != 0 {
-            t.number
+            t.syntax[syntax::NUMBER]
+        } else if f & md::TYPE != 0 {
+            t.syntax[syntax::TYPE]
+        } else if f & md::FUNCTION != 0 {
+            t.syntax[syntax::FUNCTION]
+        } else if f & md::KEYWORD != 0 {
+            t.syntax[syntax::KEYWORD]
         } else if f & md::MARK != 0
             && let Some(tint) = style.tint
         {
             t.callout_label(tint)
-        } else if f & (md::LINK | md::TAG | md::MARK | md::KEYWORD) != 0 {
+        } else if f & md::LINK != 0 {
+            t.link
+        } else if f & (md::TAG | md::MARK) != 0 {
             t.accent
         } else if style.soft {
             t.soft
@@ -668,22 +701,29 @@ pub fn text_runs(
             style.mono || f & md::CODE != 0,
             f & md::ITALIC != 0 || style.italic,
         );
-        let underline =
-            (m || f & (md::LINK | md::UNDER) != 0).then_some(UnderlineStyle {
-                thickness: px(1.),
-                color: Some(
-                    if f & md::LINK != 0 { t.accent } else { color }
-                        .opacity(if f & md::UNDER != 0 { 1. } else { 0.5 }),
-                ),
-                wavy: false,
-            });
+        // Quiet's links are underlined on the live line only.
+        let linked = f & md::LINK != 0 && (!t.quiet || style.live);
+        let underline = (m || linked || f & md::UNDER != 0).then_some(UnderlineStyle {
+            thickness: px(1.),
+            color: Some(
+                if f & md::LINK != 0 { t.link } else { color }.opacity(if f & md::UNDER != 0 {
+                    1.
+                } else {
+                    0.5
+                }),
+            ),
+            wavy: false,
+        });
         // `upright`: the characters the app's fonts lack, in the sans, not italic.
         let run = |len: usize, upright: bool| {
             let (code, slanted) = (code && !upright, slanted && !upright);
             TextRun {
                 len,
                 font: Font {
-                    weight: if style.heading {
+                    // Titles: the first two levels in bold, the others in semibold.
+                    weight: if style.heading == 1 || style.heading == 2 {
+                        FontWeight::BOLD
+                    } else if style.heading > 0 || style.semi {
                         FontWeight::SEMIBOLD
                     } else if f & md::BOLD != 0 {
                         FontWeight::BOLD
@@ -699,7 +739,7 @@ pub fn text_runs(
                     ..font(if code { mono() } else { sans() })
                 },
                 color,
-                background_color: (f & md::CODE != 0).then_some(t.code_bg),
+                background_color: (f & md::CODE != 0 && !style.chip).then_some(t.code_bg),
                 // A single underline for the whole link, brackets included: gpui 0.2 leaves
                 // a bit of underline in the margin if the underline changes style
                 // right at a wrap.
@@ -738,6 +778,34 @@ pub fn text_runs(
     runs
 }
 
+/// The lines of the indented code block that starts `rest` (its first line is indented): up to the first
+/// line that is not, blank lines at its end not counted.
+fn indented_lines(rest: &str) -> usize {
+    let (mut count, mut blank) = (0, 0);
+    for line in rest.split('\n') {
+        if line.trim().is_empty() {
+            blank += 1;
+        } else if md::indent_columns(line) < 4 {
+            break;
+        } else {
+            count += blank + 1;
+            blank = 0;
+        }
+    }
+    count
+}
+
+/// The name of a Quiet alert, from its `[!TYPE]` label.
+fn alert_name(label: &str) -> &'static str {
+    match label.to_ascii_lowercase().as_str() {
+        "[!tip]" => tr("Tip", "Astuce"),
+        "[!important]" => tr("Important", "Important"),
+        "[!warning]" => tr("Warning", "Avertissement"),
+        "[!caution]" => tr("Caution", "Attention"),
+        _ => tr("Note", "Note"),
+    }
+}
+
 /// Byte ranges of `line` hidden when it is not the live one, from `marker` on: its inline style
 /// markers (`**`, backticks…) and the address of a `[text](url)` link (`[` and `](url)` hide,
 /// the label alone stays, Typora-style; the clicked or edited line shows its source again).
@@ -745,7 +813,7 @@ pub fn text_runs(
 /// task keeps its (struck) text; code stays as is. A quote's prefix is hidden here, from `marker`;
 /// a list item's prefix is hidden by its layout instead (see `item_prefix`). The caller only asks
 /// for the kinds it hides.
-pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Vec<(usize, usize)> {
+pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u32]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     if kind == Kind::Quote {
         let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
@@ -759,7 +827,7 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Ve
     }
     // What stays readable: links, images, comments, callouts, footnote labels.
     // (A footnote's brackets fade like other markers; only its label is kept.)
-    // Of a `[text](url)` link, only the label stays, its `[` and `](url)` hide (the address
+    // Of a `[text](url)` link, only the label stays, its `[` and `](url)` hide, relative ones too (the address
     // reads `QUIET`, so the loops below name those bytes explicitly).
     let mut links: Vec<Range<usize>> = Vec::new();
     let mut urls: Vec<Range<usize>> = Vec::new();
@@ -767,8 +835,10 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Ve
         if matches!(link, md::Link::Footnote(_)) {
             continue;
         }
-        if matches!(link, md::Link::Url(_))
-            && let Some((text, _)) = md::web_link(&line[r.clone()])
+        if matches!(
+            link,
+            md::Link::Url(_) | md::Link::Note { .. } | md::Link::Heading(_)
+        ) && let Some((text, _)) = md::web_link(&line[r.clone()])
         {
             urls.push(r.start..r.start + text.start);
             urls.push(r.start + text.end..r.end);
@@ -780,7 +850,12 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u16]) -> Ve
         .map(|(r, _)| r.start + 2..r.end - 1)
         .collect();
     let image = md::image(line).map(|(r, _)| r);
-    let comments: Vec<Range<usize>> = md::comments(line).into_iter().map(|(w, ..)| w).collect();
+    // The earlier CriticMarkup comments show their source; the new form hides its marker (`DIM`).
+    let comments: Vec<Range<usize>> = md::comments(line)
+        .into_iter()
+        .map(|(w, ..)| w)
+        .filter(|w| !md::is_html_comment(&line[w.clone()]))
+        .collect();
     let callout = md::callout(line);
     let addressed = |i: usize| urls.iter().any(|r| r.contains(&i));
     let kept = |i: usize| {
@@ -1276,6 +1351,18 @@ impl Editor {
             .advance(text_system.resolve_font(&font(sans())), px(16.), '≠')
             .is_ok();
         let mut lang = String::new();
+        // Quiet's code gutter: a digit of the code face, and the gutter of a block of `lines` lines (10 px each side).
+        let quiet_scale = t.size / Prefs::SIZE;
+        let digit = text_system
+            .advance(
+                text_system.resolve_font(&font(mono())),
+                px(13. * quiet_scale),
+                '0',
+            )
+            .map_or(px(8. * quiet_scale), |s| s.width);
+        let gutter_of =
+            |lines: usize| px(20. * quiet_scale) + digit * lines.max(1).to_string().len() as f32;
+        let mut gutter_now = px(0.);
         // Mermaid diagrams and LaTeX formulas: drawn once, reused afterwards.
         let rgb = |c: Hsla| {
             let c = Rgba::from(c);
@@ -1305,7 +1392,15 @@ impl Editor {
         };
         let style = {
             let mut hasher = Fast::default();
-            (key(0, "").0, hex(t.accent), mono(), has_unequal).hash(&mut hasher);
+            (
+                key(0, "").0,
+                hex(t.accent),
+                hex(t.link),
+                t.syntax.map(hex),
+                mono(),
+                has_unequal,
+            )
+                .hash(&mut hasher);
             hasher.finish()
         };
         // Figures are drawn at the page's largest width, for this screen.
@@ -1375,6 +1470,9 @@ impl Editor {
         let meta = md::front_matter(&self.content);
         // Color of a `[!TYPE]` callout: its tint tells its type.
         let tint_of = |label: &str| {
+            if let Some(c) = t.alert(label) {
+                return c;
+            }
             let h = match label.to_ascii_lowercase().as_str() {
                 "[!tip]" | "[!success]" => 0.38,
                 "[!important]" => 0.75,
@@ -1504,6 +1602,8 @@ impl Editor {
                         grid: None,
                         broken: None,
                         nesting: nesting.clone(),
+                        gutter: px(0.),
+                        number: 0,
                     });
                     y += height;
                     offset += line.len() + 1;
@@ -1556,6 +1656,39 @@ impl Editor {
                             failed(&kept, k.0).then(|| tr("Unreadable figure", "Figure illisible"));
                     }
                 }
+                // Quiet's gutter: a fenced block keeps the width of its lines from its opening fence (a Mermaid
+                // block keeps none), an indented one from its first line.
+                if !matches!(kind, Kind::Code | Kind::Fence) {
+                    gutter_now = px(0.);
+                } else if kind == Kind::Fence && opens {
+                    gutter_now = match fenced
+                        .binary_search_by_key(&offset, |b| b.open)
+                        .ok()
+                        .map(|i| fenced[i])
+                    {
+                        Some(b) if t.quiet && lang != "mermaid" => gutter_of(
+                            self.content[b.open..b.close]
+                                .matches('\n')
+                                .count()
+                                .saturating_sub(1),
+                        ),
+                        _ => px(0.),
+                    };
+                } else if kind == Kind::Code
+                    && code_now
+                    && t.quiet
+                    && !rows.last().is_some_and(|r| r.kind == Kind::Code)
+                {
+                    gutter_now = gutter_of(indented_lines(&self.content[offset..]));
+                }
+                let gutter_here = if matches!(kind, Kind::Code | Kind::Fence) {
+                    gutter_now
+                } else {
+                    px(0.)
+                };
+                if kind == Kind::Fence && !opens {
+                    gutter_now = px(0.);
+                }
                 let code = matches!(kind, Kind::Code | Kind::Fence | Kind::Meta);
                 // Formula over several lines, between two `$$` lines.
                 let mut math = false;
@@ -1594,13 +1727,36 @@ impl Editor {
                 if math {
                     (kind, marker) = (Kind::Para, 0);
                 }
+                // A paragraph line after a quoted paragraph is its lazy continuation: it stays in the quote.
+                let lazy = kind == Kind::Para
+                    && !code
+                    && !line.trim().is_empty()
+                    && above.open
+                    && above.quote > 0;
+                if lazy {
+                    (kind, marker) = (Kind::Quote, 0);
+                }
                 // Callout: the `> [!TYPE]` quote and the ones that follow it.
-                let own_tint = (kind == Kind::Quote)
+                let own_tint = (kind == Kind::Quote && !lazy)
                     .then(|| md::callout(line))
                     .flatten()
                     .map(|r| tint_of(&line[r]));
                 tint = own_tint.or(tint).filter(|_| kind == Kind::Quote);
                 let tinted = tint.is_some();
+                // A quote's content is laid out as the line it holds: `body` starts after its markers, and
+                // `ikind` is its kind (a lazy line holds a paragraph). Its markers are `marker` and below.
+                let quoted = (kind == Kind::Quote && !lazy)
+                    .then(|| md::quote(line))
+                    .flatten();
+                let ibase = quoted.map_or(0, |q| q.at);
+                let body = &line[ibase..];
+                let ikind = if lazy {
+                    Kind::Para
+                } else {
+                    quoted.map_or(kind, |q| q.inner)
+                };
+                // The checkbox of a task, as an offset of the line.
+                let task = md::task_box(body).map(|(at, done)| (at + ibase, done));
                 let last: Option<&mut Row> = rows.last_mut();
                 let after_table = last.as_ref().is_some_and(|r| r.kind == Kind::Table);
                 let header = kind == Kind::Table && !after_table;
@@ -1657,6 +1813,8 @@ impl Editor {
                                 grid: None,
                                 broken: None,
                                 nesting: nesting.clone(),
+                                gutter: px(0.),
+                                number: 0,
                             });
                             y += height;
                         }
@@ -1690,27 +1848,46 @@ impl Editor {
                 } else {
                     None
                 };
+                // A body block starts a gap below the line before it: a paragraph, list item, quote or
+                // callout line. A blank line, code, a table row, a heading, a formula and the front matter
+                // keep their spacing. The gap is part of the row's pad, so the text, its markers and its hits move together.
+                let block_gap = if offset > 0
+                    && !math
+                    && !line.trim().is_empty()
+                    && matches!(
+                        kind,
+                        Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_) | Kind::Quote
+                    ) {
+                    BLOCK_GAP * (t.size / Prefs::SIZE)
+                } else {
+                    px(0.)
+                };
+                // A body line after a table takes the larger of the table's gap and its own block gap, not their sum.
                 if kind != Kind::Table
                     && after_table
                     && let Some(last) = last
                 {
-                    last.gap = TABLE_GAP;
-                    last.height += TABLE_GAP;
-                    y += TABLE_GAP;
+                    let gap = TABLE_GAP.max(block_gap);
+                    last.gap = gap;
+                    last.height += gap;
+                    y += gap;
                 }
-                // Titles: a scale of about 1.2, about one body line of room above the first two levels
-                // and two thirds of it above the others.
-                let (font_size, pad) = match kind {
-                    Kind::Heading(1) => (px(30.), px(24.)),
-                    Kind::Heading(2) => (px(23.), px(24.)),
-                    Kind::Heading(3) => (px(19.), px(16.)),
-                    Kind::Heading(4) => (px(17.), px(16.)),
-                    Kind::Heading(_) => (px(16.), px(16.)),
-                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => (px(14.), px(0.)),
-                    _ => (px(16.), px(0.)),
+                // Titles: about one body line of room above the first two levels and two thirds of it
+                // above the others. Sizes and line heights hold for a body of `Prefs::SIZE` px (15):
+                // body 22/15, code 20/13, titles 28/21/18/16/15 (`docs/design/app-ui.md` §14).
+                let (font_size, pad, leading) = match ikind {
+                    Kind::Heading(1) => (px(28.), px(24.), 1.3),
+                    Kind::Heading(2) => (px(21.), px(24.), 1.3),
+                    Kind::Heading(3) => (px(18.), px(16.), 1.33),
+                    Kind::Heading(4) => (px(16.), px(16.), 1.4),
+                    Kind::Heading(_) => (px(15.), px(16.), 1.47),
+                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => {
+                        (px(13.), px(0.), 20. / 13.)
+                    }
+                    _ => (px(15.), px(0.), 22. / 15.),
                 };
-                // The sizes above hold for a 16 px body text.
-                let font_size = font_size * (t.size / 16.);
+                // The sizes above hold for a `Prefs::SIZE` px body text.
+                let font_size = font_size * (t.size / Prefs::SIZE);
                 // A marker line is drawn smaller, so that a change takes less room.
                 let pend = pend_of(&self.pending, offset);
                 let font_size = if pend == Pend::Mark {
@@ -1721,8 +1898,10 @@ impl Editor {
                 let pad = if offset == 0 {
                     px(0.)
                 } else {
-                    pad * (t.size / 16.)
+                    pad * (t.size / Prefs::SIZE)
                 };
+                // The table's gap above already holds this one.
+                let pad = if after_table { pad } else { pad + block_gap };
 
                 // An unchanged line, in the same context, reuses its styling from
                 // the previous frame: typing only reprocesses the touched line.
@@ -1733,14 +1912,14 @@ impl Editor {
                     .clone()
                     .filter(|m| m.start <= offset + line.len() && m.end >= offset);
                 // A list item's depth sets its marker's indent: the lines above it tell it.
-                let depth = if matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) {
-                    above.depth_of(md::indent_columns(line))
+                let depth = if matches!(ikind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) {
+                    above.depth_of(md::indent_columns(body))
                 } else {
                     0
                 };
                 // An indented paragraph after a list item continues it: it hangs at the item's text.
-                let cont = (kind == Kind::Para && !code && !math)
-                    .then(|| above.continuation(line))
+                let cont = (ikind == Kind::Para && !code && !math)
+                    .then(|| above.continuation(body))
                     .flatten();
                 let id = {
                     let near = composed
@@ -1751,7 +1930,15 @@ impl Editor {
                     let mut hasher = Fast::default();
                     // Two halves: thirteen entries do not fit in one hashed tuple.
                     (
-                        (style, line, kind, marker, math, lang, (depth, cont)),
+                        (
+                            style,
+                            line,
+                            kind,
+                            marker,
+                            math,
+                            lang,
+                            (depth, cont, nesting.quote),
+                        ),
                         (
                             live,
                             near,
@@ -1761,26 +1948,56 @@ impl Editor {
                             tinted,
                             foot,
                             pend,
+                            f32::from(gutter_here).to_bits(),
                         ),
                     )
                         .hash(&mut hasher);
                     hasher.finish()
                 };
                 // A title's lines are closer than the body's, so that it belongs to what follows.
-                let lh = (font_size
-                    * if matches!(kind, Kind::Heading(_)) {
-                        1.35
-                    } else {
-                        1.7
-                    })
-                .round();
+                let lh = (font_size * leading).round();
+                // Quiet's alert, when not live: its `[!TYPE]` marker is cut, and the line shows an icon and the kind's name.
+                // Its text is indented to the box's padding (14 px from its edge, the box lies 12 px out).
+                let alert = match own_tint.zip(md::callout(line)) {
+                    Some((tint, label)) if t.quiet && !live && kind == Kind::Quote => {
+                        let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+                        Some((
+                            tint,
+                            label.clone(),
+                            label.end - marker.saturating_sub(indent),
+                        ))
+                    }
+                    _ => None,
+                };
+                // A quote's content starts after its bars: 10 px per level beyond the first, and in Quiet a box's
+                // padding (14 px from its edge, the box lies 12 px out). The bars sit at -14 px, 10 px apart.
+                let quote_base = if kind == Kind::Quote {
+                    px(10. * quiet_scale) * nesting.quote.saturating_sub(1) as f32
+                        + if t.quiet && tinted {
+                            px(14. * quiet_scale - 12.)
+                        } else {
+                            px(0.)
+                        }
+                } else {
+                    px(0.)
+                };
+                let indent = if kind == Kind::Quote {
+                    quote_base
+                } else if t.quiet
+                    && gutter_here > px(0.)
+                    && matches!(kind, Kind::Code | Kind::Fence)
+                {
+                    gutter_here + px(14. * quiet_scale - 12.)
+                } else {
+                    px(0.)
+                };
                 let made = if grid_row.is_some() {
                     empty.clone()
                 } else {
                     cached_shape(&mut shaped, id, frame, || {
                         let mut formula = None;
-                        let mut flags = vec![0u16; line.len()];
-                        let list = matches!(kind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
+                        let mut flags = vec![0u32; line.len()];
+                        let list = matches!(ikind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
                         flags[..marker].fill(if list { md::MARK } else { md::DIM });
                         if kind == Kind::Meta {
                             flags.fill(md::DIM | md::QUIET);
@@ -1812,10 +2029,16 @@ impl Editor {
                         }
                         // A checked task (bullet or ordered) strikes its text. Its checkbox is bold,
                         // like a checkbox in the text or a table.
-                        if let Some((at, true)) = md::task_box(line) {
+                        if let Some((at, true)) = task {
+                            // Quiet: the done text is `soft` (`QUIET` takes its colour over `DIM`).
+                            let dim = if t.quiet {
+                                md::DIM | md::QUIET
+                            } else {
+                                md::DIM
+                            };
                             flags[at + 4..]
                                 .iter_mut()
-                                .for_each(|f| *f |= md::STRIKE | md::DIM);
+                                .for_each(|f| *f |= md::STRIKE | dim);
                             flags[at..at + 3].iter_mut().for_each(|f| *f |= md::BOLD);
                         }
                         if let Some(label) = md::callout(line).filter(|_| own_tint.is_some()) {
@@ -1875,9 +2098,9 @@ impl Editor {
                         // continuation's indent is hidden the same way.
                         let item = hide && (list || cont.is_some());
                         let prefix = if list {
-                            md::item_prefix(line)
+                            ibase + md::item_prefix(body)
                         } else if cont.is_some() {
-                            md::indent_len(line)
+                            ibase + md::indent_len(body)
                         } else {
                             marker
                         };
@@ -1933,16 +2156,24 @@ impl Editor {
 
                         let style = RunStyle {
                             pending: pend,
-                            heading: matches!(kind, Kind::Heading(_)),
-                            soft: kind == Kind::Heading(6),
-                            italic: kind == Kind::Quote && !tinted,
+                            heading: match ikind {
+                                Kind::Heading(level) => level,
+                                _ => 0,
+                            },
+                            soft: ikind == Kind::Heading(6),
+                            italic: kind == Kind::Quote && !tinted && !t.quiet,
                             mono: code || kind == Kind::Table,
                             tint: own_tint,
+                            live,
+                            chip: t.chip.is_some() && !math,
+                            semi: false,
                         };
                         // The source before the text: a heading's `#` (its lead shows it when live), a
                         // list item's prefix (hidden off-live: its lead draws the marker instead).
                         let cut = match kind {
                             Kind::Heading(_) => marker,
+                            // A quote's markers are elided with its inner prefix (see `elided`); an alert's label is cut.
+                            Kind::Quote => alert.as_ref().map_or(0, |a| a.2),
                             _ if item => prefix,
                             _ => 0,
                         };
@@ -1963,11 +2194,14 @@ impl Editor {
                             };
                         let marker_style = RunStyle {
                             pending: pend,
-                            heading: false,
+                            heading: 0,
                             soft: false,
                             italic: false,
                             mono: false,
                             tint: None,
+                            live: true,
+                            chip: false,
+                            semi: false,
                         };
                         let mut lead = if let Some(parent) = cont.filter(|_| item) {
                             // A continuation hangs at the text of the item it belongs to. Its source
@@ -1978,7 +2212,7 @@ impl Editor {
                             Some(Lead {
                                 line: None,
                                 len: 0,
-                                width: em * 1.875 * (parent + 1) as f32,
+                                width: em * 1.875 * (parent + 1) as f32 + quote_base,
                                 dy: px(0.),
                                 dx: px(0.),
                                 check: None,
@@ -1990,17 +2224,27 @@ impl Editor {
                             // A bullet is a shape, a number a glyph (its text colour), a task's box is painted.
                             let em = px(t.size);
                             let gutter = em * 1.875;
-                            let (gap, side, dot) = (em * 0.5, em * 0.875, em * 0.35);
+                            // Quiet: a 17 px box and 5 px bullets at size 15 (`app-ui.md` §3); the gutter logic stays.
+                            let scale = t.size / Prefs::SIZE;
+                            let (gap, side, dot) = if t.quiet {
+                                (em * 0.5, px(17. * scale), em * 0.35)
+                            } else {
+                                (em * 0.5, em * 0.875, em * 0.35)
+                            };
+                            let bullet_side = if t.quiet { px(5. * scale) } else { dot };
                             let glyph_style = RunStyle {
                                 pending: pend,
-                                heading: false,
+                                heading: 0,
                                 soft: false,
                                 italic: false,
                                 mono: false,
                                 tint: None,
+                                live: true,
+                                chip: false,
+                                semi: false,
                             };
-                            let label = (kind == Kind::Ordered).then(|| {
-                                let source = line[md::indent_len(line)..marker].trim_end();
+                            let label = (ikind == Kind::Ordered).then(|| {
+                                let source = body[md::indent_len(body)..marker - ibase].trim_end();
                                 md::number_label(source, depth)
                             });
                             let text = label.as_ref().and_then(|s| {
@@ -2017,11 +2261,10 @@ impl Editor {
                                 }
                                 _ => px(0.),
                             };
-                            let task = md::task_box(line);
-                            let bullet = (kind == Kind::Bullet).then(|| Bullet::at(depth));
+                            let bullet = (ikind == Kind::Bullet).then(|| Bullet::at(depth));
                             // The width of the marker: a shape, a number, or a box (after a number
                             // for an ordered task, with `dot` between them).
-                            let mark = match kind {
+                            let mark = match ikind {
                                 Kind::Bullet => dot,
                                 Kind::Ordered => number,
                                 _ => side,
@@ -2033,7 +2276,7 @@ impl Editor {
                             // An ordered task: its number keeps the place of the other numbers of its depth
                             // (right-aligned before the gap, or further left for a wide one), then its box,
                             // then its text. A bullet task's box sits right-aligned before its text.
-                            let (text_at, check, number_right) = match (kind, task) {
+                            let (text_at, check, number_right) = match (ikind, task) {
                                 (Kind::Ordered, Some((at, done))) => {
                                     let number_right =
                                         (gutter * (depth + 1) as f32 - gap).max(number);
@@ -2057,14 +2300,58 @@ impl Editor {
                                 }
                                 (_, None) => (text_at, None, right),
                             };
+                            // A quote's bars come first: the item and its marker sit after them.
                             Some(Lead {
                                 line: text,
                                 len: 0,
-                                width: text_at,
+                                width: text_at + quote_base,
                                 dy: px(0.),
-                                dx: number_right - number,
-                                check,
-                                bullet: bullet.map(|shape| (shape, right - dot..right)),
+                                dx: number_right - number + quote_base,
+                                check: check.map(|c| Check {
+                                    at: c.at,
+                                    x: c.x.start + quote_base..c.x.end + quote_base,
+                                    done: c.done,
+                                }),
+                                bullet: bullet.map(|shape| {
+                                    (shape, right - bullet_side + quote_base..right + quote_base)
+                                }),
+                            })
+                        } else if let Some((tint, label, _)) = alert.clone() {
+                            // The icon's room (16 px and 6 px of gap, from 14 px in), then the kind's name, semibold.
+                            let name = alert_name(&line[label]);
+                            let runs = [TextRun {
+                                len: name.len(),
+                                font: Font {
+                                    weight: FontWeight::SEMIBOLD,
+                                    ..font(sans())
+                                },
+                                color: tint,
+                                background_color: None,
+                                underline: None,
+                                strikethrough: None,
+                            }];
+                            let text = shape(name, px(14. * quiet_scale), &runs, None);
+                            let width =
+                                px(24. * quiet_scale) + text.as_ref().map_or(px(0.), |l| l.width());
+                            Some(Lead {
+                                line: text,
+                                len: 0,
+                                width,
+                                dy: px(0.),
+                                dx: px(24. * quiet_scale),
+                                check: None,
+                                bullet: None,
+                            })
+                        } else if indent > px(0.) {
+                            // A box's text, or a code block's, begins past its gutter (none outside Quiet).
+                            Some(Lead {
+                                line: None,
+                                len: 0,
+                                width: indent,
+                                dy: px(0.),
+                                dx: px(0.),
+                                check: None,
+                                bullet: None,
                             })
                         } else {
                             // The live line shows its `# ` marker; the others hide it (see `elided`).
@@ -2099,7 +2386,7 @@ impl Editor {
                         let line = shape(&shown[cut..], font_size, &runs, wrap);
                         // A heading's `#` sits on the title's baseline (a list marker is at the body size: none).
                         if let Some(lead) = &mut lead
-                            && lead.len > 0
+                            && (lead.len > 0 || alert.is_some())
                             && let Some(glyph) = &lead.line
                         {
                             // An empty title has no metrics of its own: those of a letter will do.
@@ -2248,17 +2535,20 @@ impl Editor {
                             .get(offset + line.len() + 1..)
                             .and_then(|rest| rest.split('\n').next())
                             .unwrap_or("");
+                        // The quote goes on with a quote line of its own (a callout starts another) or a lazy line.
+                        let next_kind = md::classify(next, false).0;
+                        let goes_on = (next_kind == Kind::Quote && md::callout(next).is_none())
+                            || (nesting.open && next_kind == Kind::Para && !next.trim().is_empty());
                         (
                             own_tint.is_some()
                                 || !rows.last().is_some_and(|r| r.kind == Kind::Quote),
-                            md::classify(next, false).0 != Kind::Quote
-                                || md::callout(next).is_some(),
+                            !goes_on,
                         )
                     }
                     _ => (false, false),
                 };
                 let room = if matches!(kind, Kind::Code | Kind::Fence) || tinted {
-                    BLOCK_ROOM * (t.size / 16.)
+                    BLOCK_ROOM * (t.size / Prefs::SIZE)
                 } else {
                     px(0.)
                 };
@@ -2295,11 +2585,24 @@ impl Editor {
                     broken,
                     pend,
                     nesting: nesting.clone(),
+                    gutter: gutter_here,
+                    number: 0,
                 };
                 let height = row.height + row.image_height() + row.gap;
                 rows.push(Row { height, ..row });
                 y += height;
                 offset += line.len() + 1;
+            }
+        }
+        // Quiet's code lines are numbered from 1 in their block (a block opens on its `head` row).
+        let mut number = 0;
+        for row in rows.iter_mut() {
+            if row.head {
+                number = 0;
+            }
+            if row.kind == Kind::Code && row.gutter > px(0.) {
+                number += 1;
+                row.number = number;
             }
         }
         if let Some(last) = rows
@@ -2687,7 +2990,7 @@ mod tests {
     use gpui::WindowAppearance;
 
     /// The runs of `text` as `(piece, italic, mono)`, `flags` the same on every byte.
-    fn pieces(text: &str, flag: u16, style: RunStyle) -> Vec<(String, bool, bool)> {
+    fn pieces(text: &str, flag: u32, style: RunStyle) -> Vec<(String, bool, bool)> {
         let t = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
         let (mut at, flags) = (0, vec![flag; text.len()]);
         text_runs(&t, text, &flags, |_| false, &style)
@@ -2707,11 +3010,14 @@ mod tests {
     fn plain() -> RunStyle {
         RunStyle {
             pending: Pend::Plain,
-            heading: false,
+            heading: 0,
             soft: false,
             italic: false,
             mono: false,
             tint: None,
+            live: true,
+            chip: false,
+            semi: false,
         }
     }
 
@@ -2827,10 +3133,29 @@ mod tests {
             ["[", "](https://example.com)"]
         );
         assert_eq!(hidden("see https://example.com here"), Vec::<&str>::new());
+        // A relative link hides its markers the same way: to a note, to a heading of this one.
+        assert_eq!(
+            hidden("[t](sub/Note%20A.md#Titre)"),
+            ["[", "](sub/Note%20A.md#Titre)"]
+        );
+        assert_eq!(hidden("[t](../n.md)"), ["[", "](../n.md)"]);
+        assert_eq!(hidden("[t](#titre)"), ["[", "](#titre)"]);
         assert_eq!(hidden("see [[note]] here"), Vec::<&str>::new());
         assert_eq!(hidden("a #tag b"), Vec::<&str>::new());
         assert_eq!(hidden("![a](p.png)"), Vec::<&str>::new());
         assert_eq!(hidden("a {==t==}{>>c<<} b"), Vec::<&str>::new());
+        // The new comment: its marker is hidden off the live line, its passage stays.
+        assert_eq!(hidden("a t<!-- comment: c --> b"), ["<!-- comment: c -->"]);
+        // Headings and tasks carry it too: off the live line the marker is hidden whatever the line is.
+        assert!(
+            hidden("## Tasks<!-- comment: Split this? -->")
+                .contains(&"<!-- comment: Split this? -->")
+        );
+        assert!(
+            hidden("- [ ] Settings page<!-- comment: Add it. -->")
+                .contains(&"<!-- comment: Add it. -->")
+        );
+        assert!(!hidden("## Tasks<!-- comment: Split this? -->").contains(&"Tasks"));
         assert_eq!(hidden("> [!NOTE] hi"), ["> "]);
         // An inline checkbox is not a block marker: it stays.
         assert_eq!(hidden("do [ ] it"), Vec::<&str>::new());
@@ -3193,7 +3518,7 @@ mod tests {
         };
         let (body_h, body_lh, body_font) = metrics(cx, at[0]);
         assert_eq!(body_font, body);
-        assert_eq!(body_lh, (body * 1.7).round());
+        assert_eq!(body_lh, (body * 22. / 15.).round());
         assert_eq!(body_h, body_lh);
         // A marker line is 0.8 of a body line, to a pixel of rounding.
         for line in [1, 3, 4, 6] {
@@ -3206,7 +3531,12 @@ mod tests {
                 (lh - body_lh * 0.8).abs() <= 1.0,
                 "marker {line} line height {lh}"
             );
-            assert_eq!(h, lh, "marker {line} has no room of its own");
+            // A marker line is a body block: its gap sits above the line, and it has no room of its own.
+            assert_eq!(
+                h,
+                lh + f32::from(BLOCK_GAP),
+                "marker {line} has no room of its own"
+            );
         }
         // A changed text line is drawn at the body size.
         assert_eq!(metrics(cx, at[2]).2, body);
@@ -3282,6 +3612,78 @@ mod tests {
         let _ = cx.update(|window, cx| window.draw(cx));
         cx.run_until_parked();
         (editor, cx)
+    }
+
+    /// A block quote: every marker hides off the live line, each level draws its bar (10 px apart) and its
+    /// content is laid out after the bars as its own kind (a bullet, a number, a heading, a lazy line in the quote).
+    #[gpui::test]
+    fn quote_levels_draw_bars_and_hide_their_markers(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n\n> > deep text\n>\n> - item\n> 1. one\n> # Head\n> para\nlazy\n\nafter\n\n> [!note]\n> - in alert";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let size = editor.read_with(cx, |e, _| e.theme.size);
+        // The indent of one level beyond the first, as the layout computes it.
+        let step = px(10. * (size / Prefs::SIZE));
+        let row = |cx: &mut gpui::VisualTestContext, line: usize| {
+            editor.read_with(cx, |e, _| {
+                let r = e.rows.iter().find(|r| r.start == lines[line]).unwrap();
+                (
+                    r.kind,
+                    r.bars(),
+                    r.shaped
+                        .lead
+                        .as_ref()
+                        .map(|l| (l.width, l.bullet.is_some())),
+                    r.lh,
+                )
+            })
+        };
+        let shown = |cx: &mut gpui::VisualTestContext, line: usize| {
+            editor.read_with(cx, |e, _| displayed(e, lines[line]))
+        };
+        // Two levels: two bars, and the text starts one step after the outer bar's place.
+        let (kind, bars, lead, _) = row(cx, 2);
+        assert_eq!((kind, bars), (Kind::Quote, 2));
+        assert_eq!(lead.map(|(w, _)| w), Some(step));
+        assert_eq!(shown(cx, 2), ("deep text".to_string(), false));
+        // A bare `>` is a quote line with nothing in it: its bar stays, its marker hides.
+        assert_eq!(row(cx, 3).1, 1);
+        assert_eq!(shown(cx, 3), (String::new(), false));
+        // Items and headings in a quote: a bullet is drawn, numbers and titles keep their text.
+        let (_, bars, lead, _) = row(cx, 4);
+        assert_eq!((bars, lead.map(|(_, bullet)| bullet)), (1, Some(true)));
+        assert_eq!(shown(cx, 4), ("item".to_string(), false));
+        assert_eq!(shown(cx, 5), ("1. one".to_string(), false));
+        let (kind, bars, _, title) = row(cx, 6);
+        assert_eq!(
+            (kind, bars, shown(cx, 6)),
+            (Kind::Quote, 1, ("Head".to_string(), false))
+        );
+        assert!(
+            title > row(cx, 7).3,
+            "a heading in a quote has the title's line height"
+        );
+        // A paragraph line after a quoted paragraph is lazy: it stays in the quote.
+        assert_eq!(row(cx, 8).0, Kind::Quote);
+        assert_eq!(
+            (row(cx, 8).1, shown(cx, 8)),
+            (1, ("lazy".to_string(), false))
+        );
+        // A blank line ends the quote; the list in the alert keeps its bullet.
+        assert_eq!(row(cx, 9).0, Kind::Para);
+        assert_eq!(row(cx, 9).1, 0);
+        let (kind, bars, lead, _) = row(cx, 13);
+        assert_eq!(
+            (kind, bars, lead.map(|(_, bullet)| bullet)),
+            (Kind::Quote, 1, Some(true))
+        );
+        assert_eq!(shown(cx, 13), ("in alert".to_string(), false));
+        // The live line shows its source, markers and all, with its bars.
+        editor.update(cx, |e, _| e.revealed = Some(lines[2]));
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        assert_eq!(shown(cx, 2), ("> > deep text".to_string(), true));
+        assert_eq!(row(cx, 2).1, 2);
     }
 
     /// Each item's hidden prefix, its lead's source bytes (none: decorative), its glyph, its bullet's

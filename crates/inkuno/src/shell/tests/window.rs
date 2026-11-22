@@ -268,7 +268,6 @@ fn empty_page(cx: &mut TestAppContext) {
         "empty-today",
         "empty-key-0",
         "empty-key-1",
-        "empty-key-2",
         "empty-recall-0",
         "empty-recall-1",
     ] {
@@ -344,6 +343,8 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
         shell.client = true;
         shell
     });
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     cx.run_until_parked();
     let settle = |cx: &mut gpui::VisualTestContext| {
         for _ in 0..3 {
@@ -478,9 +479,9 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Where the app draws the window buttons, no tab and no comment column goes under them: in a window of 420, 860
-/// and 1 600 px, with eight tabs of long titles and a note that has comments, the tabs' row and the column's header
-/// end before the buttons or start below them.
+/// Where the app draws the window buttons, no tab and no panel view goes under them: in a window of 420, 860
+/// and 1 600 px, with eight tabs of long titles and a note that has comments, the tabs' row and the Comments view's
+/// name end before the buttons or start below them.
 #[gpui::test]
 fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
     let root = std::env::temp_dir().join(format!("inkuno-pill-row-{}", std::process::id()));
@@ -493,7 +494,11 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
         .map(|i| root.join(format!("Une note au titre très très long numéro {i}.md")))
         .collect();
     for note in &notes {
-        fs::write(note, "# Titre\n\nUn {==mot==}{>>remarque<<} et du texte.\n").unwrap();
+        fs::write(
+            note,
+            "# Titre\n\nUn mot<!-- comment: remarque --> et du texte.\n",
+        )
+        .unwrap();
     }
     let (shell, cx) = cx.add_window_view(|window, cx| {
         let mut shell = Shell::new(Some(root.clone()), vec![notes[0].clone()], window, cx);
@@ -507,9 +512,10 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             s.open_note(note, cx);
         }
     });
-    // Shut-default (ui.md §12): the column starts closed; open it so the header geometry below is exercised.
+    // The right panel on its Comments view, so the view's header geometry below is exercised.
     shell.update_in(cx, |s, _window, cx| {
-        s.comments_shut = false;
+        s.nav.right_view = nav::Mode::Comments;
+        s.nav.right_shown = vec![nav::Mode::Comments];
         cx.notify();
     });
     cx.run_until_parked();
@@ -532,10 +538,10 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             "{width}: the tabs' row {row:?} runs under the window buttons {pill:?}"
         );
         assert!(row.size.width > px(0.), "{width}: no room left for a tab");
-        if let Some(shut) = cx.debug_bounds("comments-shut") {
+        if let Some(head) = cx.debug_bounds("view-head-comments") {
             assert!(
-                shut.top() >= pill.bottom() || shut.right() <= pill.left(),
-                "{width}: the comments' header {shut:?} under the window buttons {pill:?}"
+                head.top() >= pill.bottom() || head.right() <= pill.left(),
+                "{width}: the Comments view's name {head:?} under the window buttons {pill:?}"
             );
             seen += 1;
         }
@@ -548,7 +554,7 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             "{width}: the vault name {name:?} runs under the window buttons {pill:?}"
         );
     }
-    assert!(seen > 0, "the comments column was never open");
+    assert!(seen > 0, "the Comments view was never open");
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -564,13 +570,19 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
     cx.update(bind_keys);
     cx.update(init_fonts);
     let (one, two) = (root.join("Une.md"), root.join("Deux.md"));
-    fs::write(&one, "# Titre\n\nUn {==mot==}{>>remarque<<} et du texte.\n").unwrap();
+    fs::write(
+        &one,
+        "# Titre\n\nUn mot<!-- comment: remarque --> et du texte.\n",
+    )
+    .unwrap();
     fs::write(&two, "# Autre\n\nTexte\n").unwrap();
     let (shell, cx) = cx.add_window_view(|window, cx| {
         let mut shell = Shell::new(Some(root.clone()), vec![one.clone()], window, cx);
         shell.client = true;
         shell
     });
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     cx.run_until_parked();
     cx.simulate_resize(size(px(860.), px(720.)));
     let settle = |cx: &mut gpui::VisualTestContext| {
@@ -639,7 +651,7 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         .debug_bounds("drag-strip-0")
         .expect("the strip over the note is a handle");
     assert_eq!(strip.size.height, px(BAND), "{strip:?}");
-    // Panel open beside the note (the header's free part past the title), with the comment column open.
+    // Panel open beside the note (the header's free part past the title), with the Comments view shown.
     panel(cx, nav::Panel::Split);
     check("one tab, panel", 1, cx);
     let (head, title) = (
@@ -650,16 +662,19 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         head.right() > title.right() + px(40.) || head.size.width < title.size.width + px(40.),
         "{head:?} {title:?}"
     );
-    // Shut-default (ui.md §12): the column starts closed; open it before asserting it is drawn.
     shell.update_in(cx, |s, _window, cx| {
-        s.comments_shut = false;
+        s.nav.right_view = nav::Mode::Comments;
+        s.nav.right_shown = vec![nav::Mode::Comments];
         cx.notify();
     });
     settle(cx);
     assert!(
-        cx.debug_bounds("comments").is_some(),
-        "the comments column is open"
+        cx.debug_bounds("comments-view").is_some(),
+        "the Comments view is open"
     );
+    // The Comments view takes its room at this width: the two-tab and two-pane steps check the panes without it.
+    shell.update(cx, |s, _| s.nav.right_shown.clear());
+    settle(cx);
     // Two tabs: the bar, free past the last tab.
     shell.update_in(cx, |s, window, cx| {
         s.add_tab(window, cx);
@@ -687,6 +702,8 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
 #[gpui::test]
 fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "ground");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     let (one, two) = (root.join("Une.md"), root.join("Deux.md"));
     fs::write(&one, "# Titre\n\nTexte\n").unwrap();
     fs::write(&two, "# Autre\n\nTexte\n").unwrap();
@@ -789,9 +806,11 @@ fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) 
 #[gpui::test]
 fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "scale");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     fs::write(
         root.join("Alpha.md"),
-        "# Alpha\n\nUn {==mot==}{>>remarque<<} et beaucoup de mots pour un long compteur.\n",
+        "# Alpha\n\nUn mot<!-- comment: remarque --> et beaucoup de mots pour un long compteur.\n",
     )
     .unwrap();
     shell.update(cx, |s, cx| {
@@ -824,33 +843,35 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     };
     let base = measure(cx);
     for (keys, size, scale) in [
-        ("secondary-= ".repeat(8), 24., 1.5),
+        ("secondary-= ".repeat(9), 24., 1.5),
         ("secondary-= ".repeat(6), 30., 1.5),
-        ("secondary-0 ".into(), 16., 1.),
-        ("secondary-- ".repeat(5), 11., 0.85),
+        ("secondary-0 ".into(), 15., 1.),
+        ("secondary-- ".repeat(4), 11., 0.85),
     ] {
         cx.simulate_keystrokes(keys.trim_end());
         cx.run_until_parked();
         assert_eq!(shell.read_with(cx, |s, _| s.theme.size), size);
         let now = measure(cx);
-        // The note's foot: the comments bubble and the assistant button side by side, none over
-        // another, both inside the note.
+        // The note's foot: the comments bubble alone, inside the note. The round assistant button is gone
+        // (decision 11): the assistant is a view of the right panel.
         let pane = cx.debug_bounds("pane-0").expect("the note is drawn");
-        let foot = ["comments-toggle", "assistant-toggle"].map(|name| {
-            cx.debug_bounds(name)
-                .unwrap_or_else(|| panic!("{name} at {size}"))
-        });
-        assert!(foot[0].right() <= foot[1].left(), "at {size}: {foot:?}");
+        let foot = cx
+            .debug_bounds("comments-toggle")
+            .unwrap_or_else(|| panic!("comments-toggle at {size}"));
         assert!(
-            foot.iter().all(|b| b.left() >= pane.left()
-                && b.right() <= pane.right()
-                && b.bottom() <= pane.bottom()),
+            cx.debug_bounds("assistant-toggle").is_none(),
+            "at {size}: the round assistant button is still drawn"
+        );
+        assert!(
+            foot.left() >= pane.left()
+                && foot.right() <= pane.right()
+                && foot.bottom() <= pane.bottom(),
             "at {size}: {foot:?} outside {pane:?}"
         );
         for (i, (got, was)) in now.iter().zip(base).enumerate() {
             assert!(
                 (got / was - scale).abs() < 0.04,
-                "at {size}: measure {i} is {got}, {was} at 16 (×{scale} expected)"
+                "at {size}: measure {i} is {got}, {was} at 15 (×{scale} expected)"
             );
         }
     }
@@ -987,20 +1008,52 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             .palette
             .as_ref()
             .and_then(|p| p.read(cx).choice_at(0))),
-        Some("Default: Inkuno, light or dark like the system".to_string())
+        Some("Default: Quiet, light or dark like the system".to_string())
     );
     cx.simulate_keystrokes("escape");
 
-    // Two panes: a ring around the active one's sheet.
+    // The Settings tab goes: the note is in front again.
+    shell.update_in(cx, |s, window, cx| {
+        if let Some(tab) = s.panes.iter().position(|pane| pane.settings.is_some()) {
+            s.close_tab(tab, window, cx);
+        }
+    });
+    cx.run_until_parked();
+    // Two panes. Inkuno marks the active one with a ring around its sheet. Quiet draws no ring: its
+    // focus cue is on the tabs (`tab_cue`), the active pane's shown tab on a wash, the other pane's
+    // tabs dimmed to 55 %.
     cx.simulate_keystrokes("secondary-\\");
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
-    let ring = cx
-        .debug_bounds("pane-active")
-        .expect("the active pane is marked");
     let active = shell.read_with(cx, |s, _| s.active);
-    let pane = cx.debug_bounds(leak(format!("pane-{active}"))).unwrap();
-    assert_eq!(ring, pane, "the ring runs along the sheet's edge");
+    let other = shell.read_with(cx, |s, _| {
+        s.groups
+            .iter()
+            .find(|g| !g.tabs.contains(&active))
+            .expect("a second pane")
+            .shown
+    });
+    for theme in ["Quiet Light", "Inkuno Light"] {
+        shell.update_in(cx, |s, window, cx| {
+            s.prefs.theme = theme.into();
+            s.restyle(window, cx);
+        });
+        cx.run_until_parked();
+        let (quiet, cues) = shell.read_with(cx, |s, _| {
+            (s.theme.quiet, (s.tab_cue(active), s.tab_cue(other)))
+        });
+        if quiet {
+            assert!(cx.debug_bounds("pane-active").is_none(), "{theme}: no ring");
+            assert_eq!(cues, ((true, 1.0), (true, 0.55)), "{theme}");
+        } else {
+            let ring = cx
+                .debug_bounds("pane-active")
+                .expect("the active pane is marked");
+            let pane = cx.debug_bounds(leak(format!("pane-{active}"))).unwrap();
+            assert_eq!(ring, pane, "the ring runs along the sheet's edge");
+            assert_eq!(cues, ((false, 1.0), (false, 1.0)), "{theme}");
+        }
+    }
 }
 
 /// Ctrl+Shift+S hides the bar the app draws, with its window buttons. The sidebar keeps a button

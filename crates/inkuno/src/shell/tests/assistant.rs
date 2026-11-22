@@ -52,13 +52,10 @@ fn note_with<'a>(
     (root, shell, cx, config)
 }
 
-/// Clicks the round button, where it is drawn now.
+/// Toggles the assistant's view of the right panel, as its palette command does (the round button is
+/// gone: decision 11; its switcher button is `switch-assistant`).
 pub(super) fn click_button(cx: &mut gpui::VisualTestContext) {
-    let at = cx
-        .debug_bounds("assistant-toggle")
-        .expect("the round button is drawn")
-        .center();
-    cx.simulate_click(at, gpui::Modifiers::none());
+    cx.dispatch_action(ToggleAssistant);
     settle(cx);
 }
 
@@ -76,58 +73,73 @@ pub(super) fn entries(
 }
 
 #[gpui::test]
-fn the_round_button_opens_and_shuts_the_panel(cx: &mut TestAppContext) {
+fn the_assistant_view_opens_and_shuts_with_the_panel(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-button", cx);
-    // No counter any more; the round button sits at the note's foot, inside the note.
+    // The window's own buttons (and the band's toggle beside them) are drawn with the client's bar.
+    shell.update(cx, |s, _| s.client = true);
+    settle(cx);
+    // No counter any more, and no round button at the note's foot: the assistant is a view of the panel.
     assert!(cx.debug_bounds("counts").is_none(), "the counter is gone");
-    let pane = cx.debug_bounds("pane-0").expect("the note is drawn");
-    let button = cx
-        .debug_bounds("assistant-toggle")
-        .expect("the round button is drawn");
-    assert_eq!(button.size, size(px(30.), px(30.)));
     assert!(
-        button.right() <= pane.right() && button.bottom() <= pane.bottom(),
-        "{button:?} outside {pane:?}"
+        cx.debug_bounds("assistant-toggle").is_none(),
+        "the round button is gone"
     );
     assert!(
         cx.debug_bounds("assistant").is_none(),
         "the panel waits hidden"
     );
-
-    // A click opens the panel in the right dock; another click shuts it.
-    click_button(cx);
-    assert!(cx.debug_bounds("assistant").is_some(), "the panel is shown");
+    // The palette's action opens the view in the right panel; its switcher button shows the same view.
+    cx.dispatch_action(ToggleAssistant);
+    settle(cx);
+    let at = cx
+        .debug_bounds("switch-assistant")
+        .expect("the switcher's assistant button is drawn")
+        .center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    settle(cx);
+    assert!(cx.debug_bounds("assistant").is_some(), "the view is shown");
     assert_eq!(
         shell.read_with(cx, |s, _| s.nav.right_shown.clone()),
         [Mode::Assistant]
     );
-    click_button(cx);
-    // Bounds of an element no longer drawn keep their last place in the test harness: the state says it.
+    // The band's toggle shuts the panel and opens it again on the same view.
+    let toggle = cx
+        .debug_bounds("right-panel-toggle")
+        .expect("the band's toggle is drawn")
+        .center();
+    cx.simulate_click(toggle, gpui::Modifiers::none());
+    settle(cx);
     assert!(
         !shell.read_with(cx, |s, _| s.right_open()),
         "the panel is hidden"
     );
-
-    // The palette's action does the same, from the keys.
+    cx.simulate_click(toggle, gpui::Modifiers::none());
+    settle(cx);
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.nav.right_shown.clone()),
+        [Mode::Assistant]
+    );
+    // The palette's action shuts it, and opens it again.
+    cx.dispatch_action(ToggleAssistant);
+    settle(cx);
+    assert!(!shell.read_with(cx, |s, _| s.right_open()), "and shuts it");
     cx.dispatch_action(ToggleAssistant);
     settle(cx);
     assert!(
         shell.read_with(cx, |s, _| s.right_open()),
         "the palette action opens it"
     );
-    cx.dispatch_action(ToggleAssistant);
-    settle(cx);
-    assert!(!shell.read_with(cx, |s, _| s.right_open()), "and shuts it");
     let _ = fs::remove_dir_all(root);
 }
 
 #[gpui::test]
-fn focus_mode_hides_the_round_button(cx: &mut TestAppContext) {
+fn focus_mode_hides_the_assistant_panel(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-focus", cx);
-    assert!(cx.debug_bounds("assistant-toggle").is_some());
+    click_button(cx);
+    assert!(cx.debug_bounds("switch-assistant").is_some());
     cx.simulate_keystrokes("f9");
     settle(cx);
-    // The button is not drawn in focus mode (the harness keeps old bounds, so the state is read).
+    // The panel is not drawn in focus mode (the harness keeps old bounds, so the state is read).
     assert!(
         shell.read_with(cx, |s, _| s.focus_mode),
         "F9 gives the note the window"
@@ -135,24 +147,24 @@ fn focus_mode_hides_the_round_button(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("f9");
     settle(cx);
     assert!(shell.read_with(cx, |s, _| !s.focus_mode));
-    assert!(cx.debug_bounds("assistant-toggle").is_some());
+    assert!(cx.debug_bounds("switch-assistant").is_some());
     let _ = fs::remove_dir_all(root);
 }
 
 #[gpui::test]
-fn opening_the_assistant_keeps_the_outline_shown(cx: &mut TestAppContext) {
+fn opening_the_assistant_takes_the_place_of_the_outline(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-outline", cx);
     shell.update(cx, |s, _| s.nav.right_shown = vec![Mode::Outline]);
     settle(cx);
     click_button(cx);
     assert_eq!(
         shell.read_with(cx, |s, _| s.nav.right_shown.clone()),
-        [Mode::Outline, Mode::Assistant],
-        "the assistant stacks under the outline"
+        [Mode::Assistant],
+        "one view of the panel at a time"
     );
     assert!(
-        cx.debug_bounds("tool-title-outline").is_some(),
-        "the outline is still drawn"
+        !shell.read_with(cx, |s, _| s.nav.right_shown.contains(&Mode::Outline)),
+        "the outline is no longer shown"
     );
     assert!(cx.debug_bounds("assistant").is_some());
     let _ = fs::remove_dir_all(root);
@@ -294,6 +306,8 @@ fn the_events_stream_text_into_one_agent_line(cx: &mut TestAppContext) {
 #[gpui::test]
 fn a_run_with_the_panel_hidden_waits_as_needs_you(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-hidden", cx);
+    shell.update(cx, |s, _| s.client = true);
+    settle(cx);
     shell.update_in(cx, |s, window, cx| {
         s.assistant_prompt("Hi".into(), window, cx)
     });
@@ -308,9 +322,17 @@ fn a_run_with_the_panel_hidden_waits_as_needs_you(cx: &mut TestAppContext) {
         vec![Event::Started, Event::Text("Answer".into()), Event::Ended],
     );
     assert_eq!(status(&shell, cx), Status::NeedsYou);
-    assert!(cx.debug_bounds("assistant-badge").is_some(), "the dot");
+    assert!(
+        cx.debug_bounds("switch-dot").is_some(),
+        "the dot, on the band's toggle"
+    );
     // Showing the panel is seeing the answer.
-    click_button(cx);
+    shell.update_in(cx, |s, window, cx| s.toggle_assistant(window, cx));
+    settle(cx);
+    assert!(
+        shell.read_with(cx, |s, _| s.right_open()),
+        "the panel is shown"
+    );
     assert_eq!(status(&shell, cx), Status::Idle);
     let _ = fs::remove_dir_all(root);
 }
@@ -332,7 +354,7 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
     );
     assert_eq!(
         editor_text(&shell, cx),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     // The answer is not shown; the summary is the last line.
     let lines = entries(&shell, cx);
@@ -354,7 +376,7 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
     assert!(
         fs::read_to_string(root.join("Plan.md"))
             .unwrap()
-            .contains("{==un peu de texte==}{>>Trop court.<<}")
+            .contains("un peu de texte<!-- comment: Trop court. -->")
     );
 
     // One undo takes the whole review back.
@@ -409,8 +431,46 @@ fn a_review_of_a_note_whose_tab_closed_writes_the_file(cx: &mut TestAppContext) 
     );
     assert_eq!(
         fs::read_to_string(root.join("Plan.md")).unwrap(),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_review_of_a_closed_note_keeps_a_pending_change_placed(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("assistant-review-closed-pending", cx);
+    click_button(cx);
+    click_review(cx);
+    shell.update_in(cx, |s, window, cx| {
+        assert!(s.close_now(window, cx));
+    });
+    settle(cx);
+    // A change proposed under the heading waits beside the note, and is placed in its text.
+    let home = crate::platform::revisions::Home::Vault(root.clone());
+    let plan = root.join("Plan.md");
+    crate::platform::sidecar::save(
+        Some(&home),
+        &plan,
+        "# Plan\n{++\nnew\n++}\n\nun peu de texte\n",
+        "assistant",
+    )
+    .unwrap();
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text(ONE_FINDING_AND_ONE_MISS.into()),
+            Event::Ended,
+        ],
+    );
+    let disk = fs::read_to_string(&plan).unwrap();
+    assert_eq!(
+        disk,
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
+    );
+    assert!(crate::platform::sidecar::unplaced(&home, &plan, &disk).is_empty());
+    assert_eq!(crate::platform::sidecar::read(&home, &plan).len(), 1);
     let _ = fs::remove_dir_all(root);
 }
 
@@ -613,17 +673,18 @@ fn the_panel_is_shown_again_after_a_restart(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-restart", cx);
     click_button(cx);
     assert!(
-        vault::load_layout().contains("assistant"),
+        vault::load_layout().contains("show=assistant"),
         "{}",
         vault::load_layout()
     );
-    // Back to the stock layout: the panel is hidden again, and the file says so.
+    // Hidden, the file says so, and keeps the view it showed.
     click_button(cx);
     assert!(
-        !vault::load_layout().contains("assistant"),
+        !vault::load_layout().contains("show="),
         "{}",
         vault::load_layout()
     );
+    assert!(vault::load_layout().contains("view=assistant"));
     click_button(cx);
     assert!(shell.read_with(cx, |s, _| s.nav.right_shown.contains(&Mode::Assistant)));
     // A restart: the panel comes back shown.
@@ -655,7 +716,7 @@ fn the_first_review_of_a_session_writes_its_comment(cx: &mut TestAppContext) {
     );
     assert_eq!(
         editor_text(&shell, cx),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     assert_eq!(
         entries(&shell, cx).last(),
@@ -684,7 +745,7 @@ fn a_review_reads_the_text_of_separate_messages(cx: &mut TestAppContext) {
     );
     assert_eq!(
         editor_text(&shell, cx),
-        "# Plan\n\n{==un peu de texte==}{>>Trop court.<<}\n"
+        "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     assert_eq!(
         entries(&shell, cx).last(),
@@ -1117,10 +1178,19 @@ fn an_improvement_of_a_note_that_is_not_open_writes_its_file(cx: &mut TestAppCon
         cx,
         vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
     );
+    // The file keeps its own text; the proposal waits beside it, in `.inkuno`, until a person decides.
     assert_eq!(
         fs::read_to_string(root.join("Plan.md")).unwrap(),
-        "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
+        "# Plan\n\nun peu de texte\n"
     );
+    let changes = crate::platform::sidecar::read(
+        &crate::platform::revisions::Home::Vault(root.clone()),
+        &root.join("Plan.md"),
+    );
+    assert_eq!(changes.len(), 1, "{changes:?}");
+    assert_eq!(changes[0].old, "un peu de texte\n");
+    assert_eq!(changes[0].new, "Un peu plus clair.\n");
+    assert_eq!(changes[0].author, "assistant");
     let _ = fs::remove_dir_all(root);
 }
 

@@ -158,6 +158,7 @@ impl Editor {
     /// `splice` without the guard of the pending changes: the route of an outside change, and of
     /// accept and reject, which change the pending changes themselves.
     pub(super) fn splice_now(&mut self, range: Range<usize>, text: &str, cx: &mut Context<Self>) {
+        self.toolbar_off = true;
         self.push_undo(text.contains('\n') || text == " ");
         let scopes = self.scopes_before(&range, text);
         self.damaged(&range);

@@ -15,16 +15,18 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 ## Why Inkuno
 
 - **Fast.** The window opens in about 75 ms. A keystroke costs about a millisecond, even in a note of 5,000 lines. [Figures](docs/user/src/performance.md)
-- **Plain files.** One `.md` file per note, in an ordinary folder. Sync it with git, Syncthing or a cloud folder. An existing folder of Markdown notes works as is.
-- **Styled as you type.** Headings grow, bold and italics render, markers stay visible but dimmed. The file on disk stays plain Markdown.
+- **Plain files.** One `.md` file per note, in an ordinary folder. Sync it with git, Syncthing or a cloud folder. An existing folder of Markdown notes works as is. Inkuno writes [CommonMark](https://spec.commonmark.org/0.31.2/) and [GitHub Flavored Markdown](https://github.github.com/gfm/) only, so every note reads the same on github.com.
+- **Styled as you type.** Headings grow, bold and italics render, and the line you are editing shows its Markdown. The file on disk stays plain Markdown.
 - **Tables.** Cells wrap, `Tab` moves between them, and pasting from a spreadsheet works.
 - **Linked notes.** `[[Links]]`, tags and daily notes. The tree follows the active file, including diagrams, pictures and tables.
 - **More than notes.** List pages and Mermaid diagrams in notes.
 - **Agents.** `inkuno` on the command line lets an agent with a shell read notes, write them and add Mermaid diagrams, with Inkuno's links, trash and diagrams. [Guide](docs/user/src/agents.md)
 - **Safe tab closing.** Close a tab, the other tabs or a whole pane from a tab's right click, or every file from the palette. If saving fails, the document stays open with its edits and undo history.
 - **Local sharing.** Copy a whole note to the clipboard, or the code block under the cursor.
-- **Keyboard first.** One palette for notes and commands. Every shortcut is listed in the app (`F1`) and can be changed.
-- **Yours to dress.** 13 themes, Inter and JetBrains Mono built in, any installed font. Light and dark, in English.
+- **Keyboard first.** One palette for notes and commands. Every shortcut is listed in Settings › Shortcuts (`F1`) and can be changed.
+- **A quiet window.** A files-only sidebar, one right panel for the outline, comments, versions and the Assistant, and an empty page that starts with cards.
+- **Comments that stay plain.** A comment is an HTML comment, which GitHub hides. An agent's edits wait beside the note until you accept or reject them, so the file is always clean Markdown.
+- **Yours to dress.** 16 themes, Inter and JetBrains Mono built in, any installed font. Light and dark, in English.
 
 ![Typing a note: the title grows, styles render, a table adds up its column](docs/assets/demo.gif)
 
@@ -70,7 +72,7 @@ The [user guide](docs/user/src/introduction.md) covers everything. It is also pu
 | [Links, embeds and files](docs/user/src/links.md) | links, tags, pictures, dropped files |
 | [Comments](docs/user/src/comments.md) | annotating a passage, in a format other apps read |
 | [Daily notes](docs/user/src/daily-notes.md) | today's note |
-| [The palette and the panel](docs/user/src/navigation.md) | the tree, the trash, icons |
+| [Navigation](docs/user/src/navigation.md) | the tree, the trash, icons |
 | [Tabs, panes and docks](docs/user/src/tabs-and-panes.md) | arranging the window |
 | [Search and replace](docs/user/src/search.md) | in a note |
 | [Files on disk](docs/user/src/vault.md) | naming, front matter, backup, configuration files |

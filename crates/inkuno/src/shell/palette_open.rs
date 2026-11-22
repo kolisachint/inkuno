@@ -6,7 +6,6 @@ impl Shell {
     /// The note's comments, in the same list as its outline: the commented text, then
     /// what is said about it.
     pub(super) fn open_comments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.comments_shut = false;
         let said = markdown::all_comments(self.pane().editor.read(cx).text())
             .into_iter()
             .map(|n| {
@@ -69,7 +68,7 @@ impl Shell {
             this.pane().editor.update(cx, |e, cx| e.jump(at, top, cx));
             if !matches!(event, PaletteEvent::Preview(_)) {
                 this.palette = None;
-                window.focus(&this.pane().editor.focus_handle(cx));
+                this.focus_note(window, cx);
             }
             cx.notify();
         })
@@ -145,19 +144,20 @@ impl Shell {
         let back = window.focused(cx);
         cx.subscribe_in(&palette, window, move |this, palette, event, window, cx| {
             this.palette = None;
-            window.focus(&this.pane().editor.focus_handle(cx));
+            this.focus_note(window, cx);
             let aside = palette.read(cx).aside;
             match event {
                 PaletteEvent::Open(path) if aside => this.open_aside(path, window, cx),
                 PaletteEvent::Open(path) => this.open(path, window, cx),
                 PaletteEvent::Create(name) => this.open_wiki(name, window, cx),
                 PaletteEvent::ChangeVault => this.choose_vault(window, cx),
-                PaletteEvent::Help => this.set_help(true, window, cx),
+                PaletteEvent::Help => this.open_settings(Section::Shortcuts, window, cx),
+                PaletteEvent::Settings => this.open_settings(Section::Appearance, window, cx),
                 PaletteEvent::NewFolder => this.new_folder(window, cx),
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
                 PaletteEvent::Comments => this.open_comments(window, cx),
                 PaletteEvent::Grid(op) => {
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                     window.dispatch_action(op.action(), cx);
                 }
                 PaletteEvent::Run(name) => {
@@ -170,7 +170,7 @@ impl Shell {
                     }
                 }
                 PaletteEvent::Restyle(style) => {
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                     this.pane().editor.update(cx, |e, cx| e.restyle(*style, cx));
                 }
                 PaletteEvent::Trash => this.open_trash(window, cx),

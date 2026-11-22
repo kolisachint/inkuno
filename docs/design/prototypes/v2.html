@@ -1,0 +1,1387 @@
+<title>Inkuno Quiet Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a desktop window on the page ground. Grey sidebar straight on the window, one white sheet flush right with a faint left shadow; header, note, outline dock inside the sheet. Tokens follow Quiet.md's craft scale. */
+:root{
+  --page:#e4e5e7;
+  --ground:#eff0f1; --sheet:#ffffff; --ink:#1f2225; --side-ink:rgba(31,34,37,.85); --soft:#5d6064; --faint:#9c9fa0; --icon:#3f4143;
+  --line:rgba(0,0,0,.08); --hover:rgba(0,0,0,.045); --selected:rgba(0,0,0,.072); --pressed:rgba(0,0,0,.09);
+  --accent:#3a85f7; --sel:rgba(58,133,247,.24); --link:#105592;
+  --code-bg:#fbfbfb; --code-line:#eaebeb; --gutter:#f8f8f8; --gutter-num:#b9babc;
+  --th:#f8f8f8; --tline:rgba(0,0,0,.09); --chip:#f6f6f7; --chip-line:#e2e3e3;
+  --pop:#fafafa; --box:rgba(0,0,0,.22); --dots:rgba(31,34,37,.45); --quote:#c9cacb; --seg:#ebeced;
+  --s-com:#8a8d93; --s-kw:#b2565c; --s-str:#89713a; --s-num:#9759b3; --s-type:#3878b1; --s-fn:#5f7e43;
+  --n:#2f6fd6; --tip:#2f8a57; --imp:#7c4dd6; --warn:#a8650a; --cau:#c93a3a;
+  --toast:#1f2225; --toast-ink:#ffffff;
+  --add:rgba(46,160,90,.15);--add-ink:#1f7a43;--del:rgba(201,58,58,.11);--del-ink:#b3322f;--cmw:rgba(232,176,30,.26);--cmd:#c98a00;--hl:rgba(58,133,247,.16);
+  --scrim:rgba(0,0,0,.12);--shadow-seg:0 1px 2px rgba(0,0,0,.12);--shadow-knob:0 1px 2px rgba(0,0,0,.25);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.035),-2px 0 10px rgba(0,0,0,.045);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.10);
+  --shadow-win:0 1px 2px rgba(0,0,0,.06),0 18px 48px rgba(0,0,0,.14);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0b0b0c;
+  --ground:#141517; --sheet:#1c1c1e; --ink:#e6e6e6; --side-ink:rgba(230,230,230,.82); --soft:#a3a5a8; --faint:#6f7174; --icon:#c9cacb;
+  --line:rgba(255,255,255,.08); --hover:rgba(255,255,255,.055); --selected:rgba(255,255,255,.085); --pressed:rgba(255,255,255,.11);
+  --accent:#4b8ff8; --sel:rgba(75,143,248,.32); --link:#8ab4f8;
+  --code-bg:#212123; --code-line:#2e2f31; --gutter:#1f1f21; --gutter-num:#5b5d60;
+  --th:#232325; --tline:rgba(255,255,255,.09); --chip:#262628; --chip-line:#353638;
+  --pop:#2a2a2c; --box:rgba(255,255,255,.3); --dots:rgba(230,230,230,.4); --quote:#4a4c4f; --seg:#2a2a2c;
+  --s-com:#8d9096; --s-kw:#e06c75; --s-str:#d8b25c; --s-num:#c58af9; --s-type:#6cb6ff; --s-fn:#98c379;
+  --n:#6ea6ff; --tip:#58c48a; --imp:#a98bff; --warn:#e0a23c; --cau:#ff7b72;
+  --toast:#e6e6e6; --toast-ink:#1c1c1e;
+  --add:rgba(88,196,138,.16);--add-ink:#7fe0a6;--del:rgba(255,123,114,.15);--del-ink:#ff9d96;--cmw:rgba(232,176,30,.22);--cmd:#f0c040;--hl:rgba(75,143,248,.24);
+  --scrim:rgba(0,0,0,.45);--shadow-seg:0 1px 2px rgba(0,0,0,.4);--shadow-knob:0 1px 2px rgba(0,0,0,.5);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.3),-2px 0 12px rgba(0,0,0,.35);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.45);
+  --shadow-win:0 1px 2px rgba(0,0,0,.4),0 18px 48px rgba(0,0,0,.6);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#0b0b0c;
+  --ground:#141517; --sheet:#1c1c1e; --ink:#e6e6e6; --side-ink:rgba(230,230,230,.82); --soft:#a3a5a8; --faint:#6f7174; --icon:#c9cacb;
+  --line:rgba(255,255,255,.08); --hover:rgba(255,255,255,.055); --selected:rgba(255,255,255,.085); --pressed:rgba(255,255,255,.11);
+  --accent:#4b8ff8; --sel:rgba(75,143,248,.32); --link:#8ab4f8;
+  --code-bg:#212123; --code-line:#2e2f31; --gutter:#1f1f21; --gutter-num:#5b5d60;
+  --th:#232325; --tline:rgba(255,255,255,.09); --chip:#262628; --chip-line:#353638;
+  --pop:#2a2a2c; --box:rgba(255,255,255,.3); --dots:rgba(230,230,230,.4); --quote:#4a4c4f; --seg:#2a2a2c;
+  --s-com:#8d9096; --s-kw:#e06c75; --s-str:#d8b25c; --s-num:#c58af9; --s-type:#6cb6ff; --s-fn:#98c379;
+  --n:#6ea6ff; --tip:#58c48a; --imp:#a98bff; --warn:#e0a23c; --cau:#ff7b72;
+  --toast:#e6e6e6; --toast-ink:#1c1c1e;
+  --add:rgba(88,196,138,.16);--add-ink:#7fe0a6;--del:rgba(255,123,114,.15);--del-ink:#ff9d96;--cmw:rgba(232,176,30,.22);--cmd:#f0c040;--hl:rgba(75,143,248,.24);
+  --scrim:rgba(0,0,0,.45);--shadow-seg:0 1px 2px rgba(0,0,0,.4);--shadow-knob:0 1px 2px rgba(0,0,0,.5);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.3),-2px 0 12px rgba(0,0,0,.35);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.45);
+  --shadow-win:0 1px 2px rgba(0,0,0,.4),0 18px 48px rgba(0,0,0,.6);
+  color-scheme:dark}
+/* The app's own Appearance setting overrides the viewer theme inside the window. */
+.app[data-mode="light"]{
+  --ground:#eff0f1; --sheet:#ffffff; --ink:#1f2225; --side-ink:rgba(31,34,37,.85); --soft:#5d6064; --faint:#9c9fa0; --icon:#3f4143;
+  --line:rgba(0,0,0,.08); --hover:rgba(0,0,0,.045); --selected:rgba(0,0,0,.072); --pressed:rgba(0,0,0,.09);
+  --accent:#3a85f7; --sel:rgba(58,133,247,.24); --link:#105592;
+  --code-bg:#fbfbfb; --code-line:#eaebeb; --gutter:#f8f8f8; --gutter-num:#b9babc;
+  --th:#f8f8f8; --tline:rgba(0,0,0,.09); --chip:#f6f6f7; --chip-line:#e2e3e3;
+  --pop:#fafafa; --box:rgba(0,0,0,.22); --dots:rgba(31,34,37,.45); --quote:#c9cacb; --seg:#ebeced;
+  --s-com:#8a8d93; --s-kw:#b2565c; --s-str:#89713a; --s-num:#9759b3; --s-type:#3878b1; --s-fn:#5f7e43;
+  --n:#2f6fd6; --tip:#2f8a57; --imp:#7c4dd6; --warn:#a8650a; --cau:#c93a3a;
+  --toast:#1f2225; --toast-ink:#ffffff;
+  --add:rgba(46,160,90,.15);--add-ink:#1f7a43;--del:rgba(201,58,58,.11);--del-ink:#b3322f;--cmw:rgba(232,176,30,.26);--cmd:#c98a00;--hl:rgba(58,133,247,.16);
+  --scrim:rgba(0,0,0,.12);--shadow-seg:0 1px 2px rgba(0,0,0,.12);--shadow-knob:0 1px 2px rgba(0,0,0,.25);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.035),-2px 0 10px rgba(0,0,0,.045);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.10);
+  color-scheme:light}
+.app[data-mode="dark"]{
+  --ground:#141517; --sheet:#1c1c1e; --ink:#e6e6e6; --side-ink:rgba(230,230,230,.82); --soft:#a3a5a8; --faint:#6f7174; --icon:#c9cacb;
+  --line:rgba(255,255,255,.08); --hover:rgba(255,255,255,.055); --selected:rgba(255,255,255,.085); --pressed:rgba(255,255,255,.11);
+  --accent:#4b8ff8; --sel:rgba(75,143,248,.32); --link:#8ab4f8;
+  --code-bg:#212123; --code-line:#2e2f31; --gutter:#1f1f21; --gutter-num:#5b5d60;
+  --th:#232325; --tline:rgba(255,255,255,.09); --chip:#262628; --chip-line:#353638;
+  --pop:#2a2a2c; --box:rgba(255,255,255,.3); --dots:rgba(230,230,230,.4); --quote:#4a4c4f; --seg:#2a2a2c;
+  --s-com:#8d9096; --s-kw:#e06c75; --s-str:#d8b25c; --s-num:#c58af9; --s-type:#6cb6ff; --s-fn:#98c379;
+  --n:#6ea6ff; --tip:#58c48a; --imp:#a98bff; --warn:#e0a23c; --cau:#ff7b72;
+  --toast:#e6e6e6; --toast-ink:#1c1c1e;
+  --add:rgba(88,196,138,.16);--add-ink:#7fe0a6;--del:rgba(255,123,114,.15);--del-ink:#ff9d96;--cmw:rgba(232,176,30,.22);--cmd:#f0c040;--hl:rgba(75,143,248,.24);
+  --scrim:rgba(0,0,0,.45);--shadow-seg:0 1px 2px rgba(0,0,0,.4);--shadow-knob:0 1px 2px rgba(0,0,0,.5);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.3),-2px 0 12px rgba(0,0,0,.35);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.45);
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--page);margin:0;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));font-family:var(--sans);color:var(--ink)}
+button{font:inherit;color:inherit}
+::selection{background:var(--sel)}
+.app{--s:1;--measure:720px;container-type:inline-size;height:100%;min-height:520px;display:flex;position:relative;overflow:hidden;border-radius:12px;background:var(--ground);color:var(--ink);box-shadow:var(--shadow-win);font-size:13px;line-height:20px}
+
+/* Sidebar */
+.side{width:240px;flex:none;display:flex;flex-direction:column;padding:12px 10px 10px;gap:2px;min-height:0;background:var(--ground)}
+.app.noside .side{display:none}
+.top{display:flex;align-items:center;gap:2px;height:30px;padding:0 2px 0 6px;margin-bottom:6px}
+.lights{display:flex;gap:8px;margin-right:auto}
+.lights i{width:12px;height:12px;border-radius:50%;background:var(--tl1);display:block}
+.lights i:nth-child(2){background:var(--tl2)}.lights i:nth-child(3){background:var(--tl3)}
+.ib{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;border:0;background:none;color:var(--icon);cursor:pointer;flex:none}
+.ib:hover{background:var(--hover)} .ib:active{background:var(--pressed)} .ib.on{background:var(--selected)}
+.ib:focus-visible,.row:focus-visible,.seg button:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.ib svg{width:18px;height:18px}
+.row{height:30px;display:flex;align-items:center;gap:9px;padding:0 8px;border-radius:8px;color:var(--side-ink);cursor:default;border:0;background:none;width:100%;text-align:left;font-size:13px;white-space:nowrap;overflow:hidden}
+.row svg{width:18px;height:18px;flex:none;color:var(--icon);opacity:.85}
+.row span{overflow:hidden;text-overflow:ellipsis}
+.row kbd{margin-left:auto;font:11px var(--sans);color:var(--faint)}
+.row:hover{background:var(--hover)} .row.sel{background:var(--selected);color:var(--ink)}
+.row.sub{padding-left:28px}
+.row .chev{width:12px;height:12px;margin-left:-2px;transition:transform .15s}
+.row.closed .chev{transform:rotate(-90deg)}
+.sect{display:flex;align-items:center;height:30px;padding:0 4px 0 8px;margin-top:12px;font-size:12px;font-weight:600;color:var(--soft)}
+.sect .ib{width:24px;height:24px;margin-left:auto;opacity:0}
+.sect:hover .ib,.sect .ib:focus-visible{opacity:1}
+.tree{flex:1;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:1px}
+.foot{display:flex;flex-direction:column;gap:1px;padding-top:6px}
+
+/* Sheet */
+.sheet{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--sheet);box-shadow:var(--shadow-note);position:relative}
+.app.noside .sheet{box-shadow:none}
+.head{height:46px;flex:none;display:flex;align-items:center;gap:4px;padding:0 10px 0 16px}
+.head .lights{margin-right:10px;display:none}
+.app.noside .head .lights{display:flex}
+.head .opener{display:none}
+.app.noside .head .opener{display:grid}
+.crumb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--soft);min-width:0;white-space:nowrap;overflow:hidden}
+.crumb b{color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.crumb .sep{color:var(--faint)}
+.tabs{display:flex;gap:4px;min-width:0;overflow:hidden}
+.tab{height:28px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;border-radius:8px;border:0;background:none;color:var(--soft);font-size:13px;cursor:default;max-width:180px}
+.tab span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab:hover{background:var(--hover)}
+.tab.on{background:var(--selected);color:var(--ink)}
+.tab .x{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;opacity:0}
+.tab:hover .x,.tab.on .x{opacity:.7}
+.tab .x:hover{background:var(--hover);opacity:1}
+.tab .x svg{width:12px;height:12px}
+.spacer{flex:1}
+.saved{font-size:12px;color:var(--faint);margin-right:6px;white-space:nowrap}
+
+.body{flex:1;display:flex;min-height:0;position:relative}
+.scroll{flex:1;overflow:auto;min-width:0}
+.doc{max-width:calc(var(--measure) + 96px);margin:0 auto;padding:22px 48px 160px;font-size:calc(15px*var(--s));line-height:calc(22px*var(--s));color:var(--ink);font-feature-settings:"cv11","ss01"}
+.app.nomotion *{transition:none!important;animation:none!important}
+
+/* Blocks */
+.b{position:relative;padding-top:calc(9px*var(--s));cursor:text;border-radius:4px}
+.b:first-child{padding-top:0}
+.mk{display:none;color:var(--faint);font-weight:400}
+.reveal .live .mk{display:inline}
+.reveal .live{background:linear-gradient(90deg,transparent,transparent)}
+.caret{display:none}
+.h{font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+.h1{font-size:calc(28px*var(--s));line-height:1.3;font-weight:700}
+.h2{font-size:calc(21px*var(--s));line-height:1.3;font-weight:700}
+.h3{font-size:calc(18px*var(--s));line-height:1.33}
+.h4{font-size:calc(16px*var(--s));line-height:1.4}
+.h5,.h6{font-size:calc(15px*var(--s))} .h6{color:var(--soft)}
+.b.k-h{padding-top:calc(22px*var(--s))} .b.k-h.n1{padding-top:calc(6px*var(--s))}
+.b.k-h.n3,.b.k-h.n4{padding-top:calc(16px*var(--s))}
+.b:first-child.k-h{padding-top:0}
+p{margin:0}
+strong{font-weight:600} del{color:var(--soft)}
+a.ln{color:var(--link);text-decoration:none;cursor:pointer}
+a.ln:hover{text-decoration:underline;text-underline-offset:3px}
+code.ic{font:calc(13px*var(--s))/1 var(--mono);background:var(--chip);border:1px solid var(--chip-line);border-radius:4px;padding:1px 4px}
+.reveal .live code.ic{background:none;border-color:transparent;padding:0}
+.li{display:flex;align-items:flex-start;padding-left:calc(var(--d)*24px)}
+.lead{width:24px;flex:none;height:calc(22px*var(--s));display:flex;align-items:center;justify-content:flex-start;padding-left:4px;color:var(--ink)}
+.lead .dot{width:5px;height:5px;border-radius:50%;background:currentColor;display:block}
+.lead .dot.d1{background:none;box-shadow:inset 0 0 0 1px currentColor}
+.lead .dot.d2{border-radius:1px;width:5px;height:5px}
+.lead .num{font-variant-numeric:tabular-nums;color:var(--ink)}
+.li .tx{flex:1;min-width:0}
+.reveal .live .lead .dot,.reveal .live .lead .num,.reveal .live .lead .box{display:none}
+.reveal .live .lead{width:auto;padding-left:0;padding-right:4px}
+.box{width:17px;height:17px;border-radius:5px;border:1px solid var(--box);background:var(--sheet);display:grid;place-items:center;padding:0;cursor:pointer;color:var(--sheet)}
+.box:hover{border-color:var(--accent)}
+.box svg{width:13px;height:13px;opacity:0}
+.box.on{background:var(--accent);border-color:var(--accent)} .box.on svg{opacity:1}
+.k-task .lead{padding-left:0}
+.done{color:var(--soft);text-decoration:line-through;text-decoration-color:var(--faint)}
+.q{border-left:3px solid var(--quote);padding-left:14px;color:var(--ink)}
+.reveal .live .q{border-left-color:transparent;padding-left:0}
+.alert{border-radius:8px;padding:10px 14px;background:color-mix(in srgb,var(--tint) 7%,var(--sheet));border:1px solid color-mix(in srgb,var(--tint) 22%,var(--sheet))}
+.alert .al{display:flex;align-items:center;gap:7px;color:var(--tint);font-weight:600;font-size:calc(14px*var(--s))}
+.alert .al svg{width:16px;height:16px}
+.reveal .live .alert .al svg,.reveal .live .alert .al .lbl{display:none}
+.a-NOTE{--tint:var(--n)}.a-TIP{--tint:var(--tip)}.a-IMPORTANT{--tint:var(--imp)}.a-WARNING{--tint:var(--warn)}.a-CAUTION{--tint:var(--cau)}
+.code{border:1px solid var(--code-line);background:var(--code-bg);border-radius:8px;overflow:hidden;font:calc(13px*var(--s))/calc(20px*var(--s)) var(--mono);position:relative}
+.code .ch{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 0 12px;height:26px;font:11px/1 var(--sans);color:var(--faint);letter-spacing:.02em}
+.code .copy{opacity:0;width:24px;height:24px}
+.code:hover .copy,.copy:focus-visible{opacity:1}
+.code .cb{display:grid;grid-template-columns:auto minmax(0,1fr)}
+.nums{padding:4px 10px 10px 12px;text-align:right;color:var(--gutter-num);background:var(--gutter);border-right:1px solid var(--code-line);user-select:none;font-variant-numeric:tabular-nums}
+.app.nonums .nums{display:none}
+.app.nonums .code .cb{grid-template-columns:minmax(0,1fr)}
+.src{padding:4px 14px 10px;white-space:pre;overflow-x:auto;color:var(--ink)}
+.fence{display:none;padding:0 14px;color:var(--faint)}
+.reveal .live .fence{display:block}
+.reveal .live .ch{display:none}
+.t-com{color:var(--s-com);font-style:italic}.t-kw{color:var(--s-kw)}.t-str{color:var(--s-str)}.t-num{color:var(--s-num)}.t-type{color:var(--s-type)}.t-fn{color:var(--s-fn)}
+.tblw{overflow-x:auto;border:1px solid var(--tline);border-radius:8px}
+table{border-collapse:collapse;font-size:calc(14px*var(--s));line-height:calc(20px*var(--s));min-width:100%}
+th,td{padding:9px 12px;border-right:1px solid var(--tline);border-bottom:1px solid var(--tline);text-align:left;white-space:nowrap}
+th:last-child,td:last-child{border-right:0} tr:last-child td{border-bottom:0}
+th{background:var(--th);font-weight:600}
+.r{text-align:right}.c{text-align:center}
+.hr{height:22px;display:flex;align-items:center}
+.hr i{display:block;height:2px;width:100%;background-image:radial-gradient(circle,var(--dots) .8px,transparent 1.1px);background-size:6px 2px}
+.reveal .live .hr i{display:none}
+.math{text-align:center;font:italic calc(18px*var(--s))/1.6 "Cambria","Georgia",serif;padding:6px 0}
+.reveal .live .math{text-align:left;font:calc(13px*var(--s))/calc(20px*var(--s)) var(--mono);font-style:normal}
+.img{border:1px solid var(--line);border-radius:8px;height:120px;display:grid;place-items:center;color:var(--faint);font-size:13px;background:var(--chip)}
+.ph{color:var(--faint);padding-top:calc(9px*var(--s));cursor:text}
+.ph kbd{font:12px var(--mono);background:var(--chip);border:1px solid var(--chip-line);border-radius:4px;padding:0 4px;color:var(--soft)}
+.viewing{display:flex;align-items:center;gap:10px;margin:0 auto 14px;max-width:calc(var(--measure));padding:8px 8px 8px 14px;border-radius:10px;background:var(--chip);font-size:13px;color:var(--soft)}
+.viewing b{color:var(--ink);font-weight:500}
+.btn{height:28px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--sheet);cursor:pointer;font-size:13px}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--sheet)}
+
+/* Dock */
+.dock{width:232px;flex:none;border-left:1px solid var(--line);display:flex;flex-direction:column;padding:10px 8px;gap:2px;overflow:auto;background:var(--sheet)}
+.app:not(.dockopen) .dock{display:none}
+.dh{display:flex;align-items:center;height:28px;padding:0 6px;font-size:12px;font-weight:600;color:var(--soft);gap:4px;border:0;background:none;width:100%;cursor:pointer;border-radius:6px}
+.dh:hover{background:var(--hover)}
+.dh svg{width:12px;height:12px;transition:transform .15s}
+.dh.closed svg{transform:rotate(-90deg)}
+.ol{height:28px;display:flex;align-items:center;padding:0 8px;border-radius:6px;color:var(--soft);font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:0;background:none;width:100%;text-align:left}
+.ol:hover{background:var(--hover);color:var(--ink)}
+.ol.on{color:var(--ink);font-weight:500}
+.ask{margin:6px 4px 0;display:flex;flex-direction:column;gap:6px}
+.ask .sugg{font-size:12px;color:var(--soft);padding:4px 6px;border-radius:6px;cursor:pointer;border:0;background:none;text-align:left}
+.ask .sugg:hover{background:var(--hover);color:var(--ink)}
+.field{width:100%;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--ground);padding:0 10px;font:13px var(--sans);color:var(--ink)}
+.field:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.dsep{height:1px;background:var(--line);margin:8px 4px}
+
+/* Drawer */
+.drawer{position:absolute;right:0;top:0;bottom:0;width:300px;background:var(--sheet);border-left:1px solid var(--line);box-shadow:var(--shadow-menu);display:flex;flex-direction:column;z-index:4}
+.drawer h3{margin:0;font-size:13px;font-weight:600;padding:14px 14px 8px;display:flex;align-items:center}
+.drawer h3 .ib{margin-left:auto;width:26px;height:26px}
+.vrow{margin:0 8px;padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;gap:2px;border:0;background:none;text-align:left;width:calc(100% - 16px)}
+.vrow:hover{background:var(--hover)} .vrow.on{background:var(--selected)}
+.vrow b{font-weight:500;font-size:13px} .vrow span{font-size:12px;color:var(--soft)}
+
+/* Popovers and menus */
+.pop{position:absolute;z-index:20;background:var(--pop);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-menu);padding:5px 0;min-width:200px;color:var(--ink)}
+.mi{height:32px;display:flex;align-items:center;gap:8px;margin:0 5px;padding:0 8px;border-radius:6px;font-size:13px;cursor:default;border:0;background:none;width:calc(100% - 10px);text-align:left}
+.mi svg{width:16px;height:16px;color:var(--icon);flex:none}
+.mi kbd{margin-left:auto;font:12px var(--sans);color:var(--faint);padding-left:16px}
+.mi:hover,.mi.act{background:var(--hover)}
+.mi.danger{color:var(--cau)} .mi.danger svg{color:var(--cau)}
+.mi .ck{margin-left:auto;color:var(--accent)}
+.msep{height:1px;background:var(--line);margin:5px 10px}
+.mlabel{font-size:11px;font-weight:600;color:var(--faint);padding:6px 13px 4px;letter-spacing:.02em}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:2px 5px 4px}
+.gi{height:38px;border-radius:8px;border:0;background:none;display:grid;place-items:center;color:var(--icon);cursor:default;font:600 12px var(--sans)}
+.gi svg{width:18px;height:18px}
+.gi:hover,.gi.act{background:var(--hover)}
+.slash{width:260px;max-height:360px;overflow:auto}
+.slash .q0{padding:4px 13px 6px;font:12px var(--mono);color:var(--faint)}
+.mi .tok{margin-left:auto;font:12px var(--mono);color:var(--faint)}
+
+.pal{left:50%;top:64px;transform:translateX(-50%);width:min(560px,calc(100% - 32px));padding:0;overflow:hidden}
+.pal input{width:100%;height:46px;border:0;border-bottom:1px solid var(--line);background:none;padding:0 16px 0 42px;font:15px var(--sans);color:var(--ink)}
+.pal input:focus{outline:none}
+.pal .si{position:absolute;left:14px;top:14px;width:18px;height:18px;color:var(--faint)}
+.pal .list{max-height:330px;overflow:auto;padding:5px 0}
+.pr{display:flex;flex-direction:column;justify-content:center;gap:1px;margin:0 5px;padding:7px 10px;border-radius:8px;cursor:default;min-height:36px}
+.pr.act{background:var(--hover)}
+.pr .t{display:flex;align-items:center;gap:8px;font-size:13px}
+.pr .t svg{width:16px;height:16px;color:var(--icon);flex:none}
+.pr .t kbd{margin-left:auto;font:12px var(--sans);color:var(--faint)}
+.pr .sn{font-size:12px;color:var(--soft);padding-left:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr mark{background:color-mix(in srgb,var(--accent) 22%,transparent);color:inherit;border-radius:2px}
+.pal .ft{display:flex;gap:14px;padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
+.pal .ft kbd{font:11px var(--sans);background:var(--chip);border:1px solid var(--chip-line);border-radius:4px;padding:0 4px;color:var(--soft);margin-right:4px}
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:19}
+
+.fbar{position:fixed;z-index:30;display:flex;gap:2px;padding:4px;background:var(--pop);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-menu)}
+.fbar button{height:28px;min-width:28px;padding:0 6px;border-radius:6px;border:0;background:none;color:var(--ink);cursor:pointer;display:grid;place-items:center;font-size:13px}
+.fbar button:hover{background:var(--hover)}
+.fbar svg{width:16px;height:16px}
+.fbar .sep{width:1px;background:var(--line);margin:4px 2px}
+
+.toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:var(--toast);color:var(--toast-ink);font-size:13px;padding:8px 14px;border-radius:10px;z-index:40;box-shadow:var(--shadow-menu);display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px)}
+.toast button{border:0;background:none;color:inherit;font-weight:600;cursor:pointer;padding:0}
+
+/* Settings */
+.set{max-width:640px;margin:0 auto;padding:28px 40px 80px;display:flex;flex-direction:column;gap:18px}
+.set h1{font-size:22px;line-height:1.3;margin:0;font-weight:700}
+.grp{display:flex;flex-direction:column;gap:6px}
+.grp h2{font-size:12px;font-weight:600;color:var(--soft);margin:0 0 0 2px}
+.card{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.sr{display:flex;align-items:center;gap:16px;padding:12px 14px;min-height:52px}
+.sr+.sr{border-top:1px solid var(--line)}
+.sr .lbl{flex:1;min-width:0}
+.sr .lbl b{display:block;font-weight:500;font-size:13px}
+.sr .lbl span{display:block;font-size:12px;color:var(--soft)}
+.seg{display:inline-flex;background:var(--seg);border-radius:8px;padding:2px;gap:2px;flex:none}
+.seg button{height:26px;padding:0 10px;border-radius:6px;border:0;background:none;font-size:12px;color:var(--soft);cursor:pointer}
+.seg button.on{background:var(--sheet);color:var(--ink);box-shadow:var(--shadow-seg)}
+.sw{width:34px;height:20px;border-radius:10px;background:var(--seg);border:0;position:relative;cursor:pointer;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--sheet);box-shadow:var(--shadow-knob);transition:transform .15s}
+.sw.on{background:var(--accent)} .sw.on::after{transform:translateX(14px)}
+.sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.keys{display:grid;grid-template-columns:1fr auto;gap:0}
+.keys div{padding:9px 14px;border-top:1px solid var(--line);font-size:13px}
+.keys div:nth-child(-n+2){border-top:0}
+.keys kbd{font:12px var(--sans);background:var(--chip);border:1px solid var(--chip-line);border-radius:5px;padding:1px 6px;color:var(--soft)}
+
+/* Guide */
+.guide{position:absolute;right:16px;bottom:16px;z-index:15;width:270px;background:var(--pop);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-menu);padding:12px 14px 12px;font-size:12px;color:var(--soft)}
+.guide b{display:block;color:var(--ink);font-size:13px;margin-bottom:6px}
+.guide ul{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:3px}
+.guide kbd{font:11px var(--sans);background:var(--chip);border:1px solid var(--chip-line);border-radius:4px;padding:0 4px;color:var(--ink)}
+.guide .ib{position:absolute;right:6px;top:6px;width:24px;height:24px}
+
+/* ---- v2: unified window ---- */
+@container pane (max-width:600px){
+ .setwrap{flex-direction:column}
+ .snav{flex-direction:row;overflow-x:auto;width:auto;padding:12px 14px 0}
+ .setwrap .set{padding:22px 20px 60px}
+ .sr{flex-wrap:wrap}
+ .sr .lbl{flex:1 1 100%}
+ .doc{padding:18px 20px 140px}
+}
+html,body{height:100%}
+body{display:flex;flex-direction:column;background:var(--page);margin:0;padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(16px,env(safe-area-inset-left,0px));font-family:var(--sans);color:var(--ink);box-sizing:border-box}
+.bar0{flex:none;height:40px;display:flex;align-items:center;gap:8px;padding:0 2px 6px;font-size:13px;color:var(--soft);min-width:0}
+.bar0 b{font-weight:600;color:var(--ink);margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.bar0 .btn{height:26px;flex:none}
+.app{position:relative;flex:1;height:auto;min-height:520px;display:flex;overflow:hidden;--measure:720px}
+.side .top{height:38px;margin:0;padding:0 2px 0 6px;flex:none}
+.side .sect{margin-top:8px;flex:none}
+.side .tree{flex:1 1 auto}
+.scr{flex:none;display:flex;flex-direction:column;gap:1px}
+.foot{display:flex;flex-direction:column;gap:1px;padding-top:6px;flex:none}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:var(--sheet);box-shadow:var(--shadow-note);z-index:1}
+.band{height:38px;flex:none;display:flex;align-items:center;gap:2px;padding:0 6px 0 0;background:var(--sheet);position:relative;z-index:3;min-width:0}
+.band .ib{flex:none}
+.blights{display:none;gap:8px;padding:0 10px 0 14px;flex:none}
+.blights i{width:12px;height:12px;border-radius:50%;background:var(--tl1);display:block}
+.blights i:nth-child(2){background:var(--tl2)}.blights i:nth-child(3){background:var(--tl3)}
+.bopen{display:none}
+.app.noside .blights{display:flex}
+.app.noside .side{display:none}
+.app.noside .bopen{display:grid}
+.ptabs{flex:1 1 0;min-width:0;height:100%;display:flex;align-items:center;gap:4px;padding:0 6px;overflow:hidden;transition:opacity .15s}
+.ptabs+.ptabs{border-left:1px solid var(--line)}
+.ptabs.dim{opacity:.55}
+.tab{flex:0 1 auto;min-width:0;max-width:200px}
+.tab.prev .tt{font-style:italic}
+.tab .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.tab .x{flex:none}
+.strip{display:none;height:12px;flex:none;background:var(--sheet);position:relative;z-index:2}
+.app.bandhide .strip{display:block}
+.app.bandhide .band{position:absolute;left:0;right:0;top:0;transform:translateY(-100%);transition:transform .18s ease;box-shadow:var(--shadow-menu);z-index:6}
+.app.bandhide .band.peek{transform:none}
+.app.nomotion .band{transition:none}
+.panes{flex:1;min-height:0;display:flex;position:relative}
+.pane{flex:1 1 0;min-width:0;display:flex;flex-direction:column;position:relative}
+.pane+.pane{border-left:1px solid var(--line)}
+.pscroll{flex:1;overflow:auto;min-height:0;position:relative}
+.app.noside .main{box-shadow:none}
+.app.focus .side,.app.focus .band,.app.focus .strip,.app.focus .rpanel{display:none}
+.app.focus .main{box-shadow:none}
+.rpanel{width:280px;flex:none;display:flex;flex-direction:column;background:var(--sheet);box-shadow:var(--shadow-note);position:relative;z-index:1;min-height:0}
+.app.rhide .rpanel{display:none}
+.rsw{height:38px;flex:none;display:flex;align-items:center;gap:2px;padding:0 10px}
+.rsw .ib{position:relative;width:34px}
+.rsw .ib.on{background:var(--selected);color:var(--ink)}
+.badge{position:absolute;top:2px;right:0;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--accent);color:var(--sheet);font:600 10px/15px var(--sans);text-align:center}
+.rbody{flex:1;overflow:auto;min-height:0;padding:6px 12px 16px}
+.rh{font-size:12px;font-weight:600;color:var(--soft);padding:4px 2px 8px;display:flex;align-items:center;gap:6px}
+.rh .btn{margin-left:auto;height:24px;font-size:12px}
+.cc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 8px;display:flex;flex-direction:column;gap:6px;cursor:pointer;background:var(--sheet)}
+.cc:hover{background:var(--hover)}
+.cc.foc{outline:2px solid var(--accent);outline-offset:-2px}
+.cc .ch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--soft)}
+.cc .ch b{font-weight:600;color:var(--ink)}
+.cc .qp{border-left:3px solid var(--cmd);padding-left:8px;font-size:12px;color:var(--soft);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cc .ct{font-size:13px;line-height:19px}
+.cc .ca{display:flex;gap:6px;align-items:center}
+.cc .rp{font-size:12px;color:var(--soft);padding-left:10px;border-left:2px solid var(--line)}
+.cc .btn{height:24px;font-size:12px;padding:0 9px}
+.snav{width:160px;flex:none;padding:22px 10px;display:flex;flex-direction:column;gap:2px}
+.snav .row{width:auto;flex:none}
+.snav .row.sel{background:var(--selected);color:var(--ink)}
+.setwrap{display:flex;min-height:100%}
+.setwrap .set{flex:1;min-width:0;margin:0;max-width:640px;padding:28px 36px 80px}
+.kchip{height:24px;min-width:72px;padding:0 9px;border-radius:6px;border:1px solid var(--chip-line);background:var(--chip);font:12px var(--sans);color:var(--soft);cursor:pointer}
+.kchip:hover{color:var(--ink);border-color:var(--accent)}
+.kchip.listen{color:var(--accent);border-color:var(--accent)}
+.empty{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 24px;box-sizing:border-box}
+.ecards{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.ecard{width:190px;min-height:84px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;background:var(--sheet);cursor:default;text-align:left;color:var(--ink);font:inherit}
+.ecard:hover{background:var(--hover)}
+.ecard b{font-weight:500;font-size:13px;display:flex;align-items:center;gap:8px}
+.ecard b svg{width:16px;height:16px;color:var(--icon);flex:none}
+.ecard span{font-size:12px;color:var(--soft);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.emlab{font-size:12px;color:var(--faint);text-align:center;margin-top:8px}
+.cmpbar{position:sticky;top:0;z-index:4;display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:13px;color:var(--soft);background:var(--chip);border-bottom:1px solid var(--line);min-height:40px;box-sizing:border-box}
+.cmpbar b{color:var(--ink);font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmpbar .spacer{flex:1}
+.cmpbar .cmptx{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmpbar .btn{flex:none}
+.app:has(.pill) .toast{bottom:66px}
+.dlog .dbody>*{flex:none}
+.pane{container-name:pane;container-type:inline-size}
+.app{container-name:app}
+.wadd{background:var(--add);border-radius:4px;margin:0 -8px;padding:0 8px}
+.wdel{background:var(--del);border-radius:4px;margin:0 -8px;padding:0 8px;color:var(--soft);text-decoration:line-through;text-decoration-color:var(--del-ink)}
+.pw{background:var(--add);color:var(--add-ink);text-decoration:none;border-radius:3px;padding:0 1px}
+.pwd{background:var(--del);color:var(--del-ink);text-decoration:line-through;border-radius:3px;padding:0 1px}
+.pacts{display:inline-flex;gap:4px;vertical-align:1px;margin-left:4px;user-select:none}
+.pa{height:20px;padding:0 7px;font:500 11px var(--sans);border-radius:6px;border:1px solid var(--line);background:var(--sheet);color:var(--soft);cursor:pointer}
+.pa:hover{color:var(--ink);background:var(--hover)}
+.cm{background:var(--cmw);border-bottom:1.5px solid var(--cmd);border-radius:2px;cursor:pointer}
+.cdot{position:absolute;right:-18px;top:.6em;width:6px;height:6px;border-radius:50%;background:var(--cmd);cursor:pointer}
+.cmsrc{display:none;color:var(--faint)}
+.reveal .live .cmsrc{display:inline}
+.cm.flash{animation:flash 1.3s ease-out}
+@keyframes flash{from{background:var(--hl)}to{background:var(--cmw)}}
+.pill{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:4px 5px 4px 12px;border-radius:999px;background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow-menu);font-size:12px;color:var(--soft);white-space:nowrap;z-index:6;max-width:calc(100% - 24px)}
+.pill b{font-weight:500;color:var(--ink)}
+.pill .btn{height:24px;font-size:12px;padding:0 9px;border-radius:999px}
+.pill .sd{color:var(--faint)}
+.dlog{position:fixed;top:0;right:0;bottom:0;width:min(620px,100%);z-index:60;background:var(--sheet);color:var(--ink);box-shadow:var(--shadow-menu);display:flex;flex-direction:column;border-left:1px solid var(--line);font-size:13px;line-height:20px;box-sizing:border-box}
+.dlog header{display:flex;align-items:center;gap:8px;padding:12px 16px 12px 20px;border-bottom:1px solid var(--line);flex:none}
+.dlog header h2{margin:0;font-size:15px;font-weight:600;margin-right:auto}
+.dlog .dbody{overflow:auto;padding:14px 20px 40px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.dlog h3{font-size:13px;margin:14px 0 2px;font-weight:600}
+.dlog p,.dlog li{margin:0;color:var(--soft);font-size:12px;line-height:18px}
+.dlog ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.dlog th,.dlog td{white-space:normal;padding:6px 8px;vertical-align:top;font-size:12px;line-height:17px}
+.dlog td:first-child,.dlog th:first-child{white-space:nowrap}
+.dlog .tblw{overflow-x:auto}
+.dlog code{font:12px var(--mono);background:var(--chip);border:1px solid var(--chip-line);border-radius:4px;padding:0 3px;color:var(--ink)}
+.bar0 .btn:focus-visible{outline:2px solid var(--accent)}
+.vnew{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.vnew .field{height:30px}
+.vnew .row2{display:flex;gap:6px}
+.ptext{font-size:12px;color:var(--soft);padding:6px 2px}
+@container app (max-width:1000px){
+ .rpanel{position:absolute;right:0;top:38px;bottom:0;z-index:5;box-shadow:var(--shadow-menu)}
+}
+@container app (max-width:720px){
+ .side{position:absolute;left:0;top:0;bottom:0;z-index:12;box-shadow:var(--shadow-menu);background:var(--ground)}
+ .app:not(.sideover) .side{display:none}
+ .blights{display:flex}
+ .bopen{display:grid}
+ .doc{padding:18px 20px 140px}
+ .setwrap{flex-direction:column}
+ .snav{flex-direction:row;overflow-x:auto;width:auto;padding:12px 14px 0}
+ .setwrap .set{padding:22px 20px 60px}
+ .tab{max-width:130px}
+ .guide{left:16px;width:auto}
+ .ecard{width:100%;max-width:300px}
+}
+</style>
+<div class="bar0"><b>Inkuno prototype v2</b><button class="btn" data-act="dlog">Design log</button><button class="btn" data-act="whattry">What to try</button></div>
+<div class="app" id="app" data-mode="system">
+ <aside class="side" id="side"></aside>
+ <section class="main" id="main">
+  <div class="band" id="band"></div>
+  <div class="strip" id="strip"></div>
+  <div class="panes" id="panes"></div>
+ </section>
+ <aside class="rpanel" id="rpanel" aria-label="Right panel"></aside>
+</div>
+<script>
+const ICON={
+ sidebar:'<rect x="2.5" y="3.5" width="13" height="11" rx="2.5"/><path d="M7 3.5v11"/>',
+ rpanel:'<rect x="2.5" y="3.5" width="13" height="11" rx="2.5"/><path d="M11 3.5v11"/>',
+ split:'<rect x="2.5" y="3.5" width="13" height="11" rx="2"/><path d="M9 3.5v11"/>',
+ comment:'<path d="M4 4.5h10a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5v-2.5H4A1.5 1.5 0 0 1 2.5 12V6A1.5 1.5 0 0 1 4 4.5z"/>',
+ search:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5"/>',
+ plus:'<path d="M9 3.5v11M3.5 9h11"/>',
+ outline:'<path d="M3 4.5h12M6 9h9M6 13.5h9"/>',
+ history:'<path d="M3.2 9a5.8 5.8 0 1 0 1.7-4.1"/><path d="M3 3.5v2.8h2.8M9 6v3.2l2.2 1.4"/>',
+ settings:'<circle cx="9" cy="9" r="2.25"/><path d="M9 2.5v1.6M9 13.9v1.6M2.5 9h1.6M13.9 9h1.6M4.4 4.4l1.1 1.1M12.5 12.5l1.1 1.1M4.4 13.6l1.1-1.1M12.5 5.5l1.1-1.1"/>',
+ trash:'<path d="M3.5 5h11M7.5 5V3.5h3V5M5 5l.7 9.5h6.6L13 5"/>',
+ folder:'<path d="M2.5 5.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5H14a1.5 1.5 0 0 1 1.5 1.5v5.5A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5z"/>',
+ note:'<path d="M5 2.5h5l3.5 3.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 14V4A1.5 1.5 0 0 1 5 2.5z"/><path d="M10 2.5V6h3.5M6.5 9.5h5M6.5 12h3.5"/>',
+ today:'<rect x="2.5" y="3.5" width="13" height="11.5" rx="2"/><path d="M2.5 7h13M6 2v3M12 2v3"/>',
+ chev:'<path d="m4.5 7 4.5 4.5L13.5 7"/>',
+ x:'<path d="m5 5 8 8M13 5l-8 8"/>',
+ check:'<path d="m4 9.5 3.2 3L14 5.5" stroke-width="2.2"/>',
+ copy:'<rect x="6" y="6" width="9" height="9" rx="2"/><path d="M12 6V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v6A1.5 1.5 0 0 0 4.5 12H6"/>',
+ bold:'<path d="M5.5 3.5h4.25a2.75 2.75 0 0 1 0 5.5H5.5zM5.5 9h5a2.75 2.75 0 0 1 0 5.5h-5z" stroke-width="1.8"/>',
+ italic:'<path d="M8 3.5h5M5 14.5h5M10.5 3.5l-3 11"/>',
+ strike:'<path d="M3 9h12M12.5 5.5C12 4.3 10.8 3.5 9 3.5c-2 0-3.5 1-3.5 2.5M5.5 12.5c.5 1.3 1.7 2 3.5 2 2.2 0 3.5-1 3.5-2.5"/>',
+ code:'<path d="m6.5 5-4 4 4 4M11.5 5l4 4-4 4"/>',
+ link:'<path d="M7.5 10.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.8.8M10.5 7.5a3 3 0 0 0-4.2 0L4 9.8a3 3 0 0 0 4.2 4.2l.8-.8"/>',
+ ul:'<circle cx="4" cy="5" r="1" fill="currentColor"/><circle cx="4" cy="9" r="1" fill="currentColor"/><circle cx="4" cy="13" r="1" fill="currentColor"/><path d="M7.5 5h7M7.5 9h7M7.5 13h7"/>',
+ ol:'<path d="M3.5 3.8h1v3M3.2 6.8h1.8M3.2 10.5h1.6l-1.6 2.4h1.8M7.5 5h7M7.5 9h7M7.5 13h7"/>',
+ task:'<rect x="3" y="3" width="12" height="12" rx="3"/><path d="m6 9 2 2 4-4"/>',
+ quote:'<path d="M4 4v10M7.5 6h7M7.5 9h7M7.5 12h4.5"/>',
+ table:'<rect x="2.5" y="3.5" width="13" height="11" rx="2"/><path d="M2.5 7.5h13M7 7.5v7M11 7.5v7"/>',
+ alert:'<circle cx="9" cy="9" r="6.5"/><path d="M9 8.2v4M9 5.6v.1" stroke-width="1.8"/>',
+ hr:'<path d="M2.5 9h1M5.5 9h1M8.5 9h1M11.5 9h1M14.5 9h1" stroke-width="1.8"/>',
+ image:'<rect x="2.5" y="3.5" width="13" height="11" rx="2"/><circle cx="6.5" cy="7.5" r="1.3"/><path d="m3 13 3.8-3.8 2.7 2.7 2-2 3.5 3.5"/>',
+ math:'<path d="M13.5 4h-9l4.5 5-4.5 5h9"/>',
+ diagram:'<rect x="2.5" y="3" width="5" height="4" rx="1"/><rect x="10.5" y="11" width="5" height="4" rx="1"/><path d="M5 7v3.5a1 1 0 0 0 1 1h4.5"/>',
+ back:'<path d="M11 4 6 9l5 5"/>',
+ palette:'<circle cx="9" cy="9" r="6.5"/><circle cx="6.3" cy="7" r=".9" fill="currentColor"/><circle cx="9.5" cy="5.6" r=".9" fill="currentColor"/><circle cx="12" cy="8.2" r=".9" fill="currentColor"/><path d="M9 15.5a2 2 0 0 1 0-4h1.5"/>',
+ pen:'<path d="M3.5 14.5 4.2 11.6 11.6 4.2a1.6 1.6 0 0 1 2.2 2.2L6.4 13.8z"/>',
+ keyboard:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="M5 7.5h.1M8 7.5h.1M11 7.5h.1M5.5 10.5h7"/>',
+ info:'<circle cx="9" cy="9" r="6.5"/><path d="M9 8.2v4M9 5.6v.1" stroke-width="1.8"/>',
+ spark:'<path d="M9 2.5 10.4 7.6 15.5 9l-5.1 1.4L9 15.5 7.6 10.4 2.5 9l5.1-1.4z"/>',
+ open:'<path d="M10 3.5h4.5V8M14.5 3.5 8 10M12.5 11v2.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1H7"/>',
+ dup:'<rect x="6" y="6" width="9" height="9" rx="2"/><path d="M3 11.5v-7A1.5 1.5 0 0 1 4.5 3h7"/>',
+ move:'<path d="M2.5 9h10M9.5 5.5 13 9l-3.5 3.5M15.5 4v10"/>',
+ find:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M6 8h4"/>',
+ width:'<path d="M2.5 9h13M5 6.5 2.5 9 5 11.5M13 6.5l2.5 2.5-2.5 2.5"/>',
+ md:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="M4.5 11.5v-4l2 2 2-2v4M12.5 7.5v4M11 10l1.5 1.5L14 10"/>'
+};
+const ic=(n,extra="")=>`<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${ICON[n]}</svg>`;
+const MAC=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent);
+const MOD=MAC?"⌘":"Ctrl ";
+const $=s=>document.querySelector(s), app=$("#app");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const mk=s=>`<span class="mk">${esc(s)}</span>`;
+const pad=n=>String(n).padStart(2,"0");
+const hhmm=()=>{const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())};
+
+/* ---------- Seeded notes ---------- */
+const C_SET="- [ ] Settings page<!-- comment: Ana, 09:12: Add the shortcut list here too. -->";
+const WEEK=["# Week plan",
+ "A quiet week: ship the **Quiet theme**, then tidy the *sidebar*. Links like [the roadmap](roadmap) and `inline code` stay plain Markdown.",
+ "",
+ "> [!NOTE]",
+ "> Everything in this note is GitHub Markdown. Click any line to see its syntax.",
+ "",
+ "## Tasks<!-- comment: You, 10:02: Split this into work and home? -->",
+ "- [x] Pick the colours",
+ "- [ ] Spacing between blocks",
+ "  - [ ] Lists and quotes",
+ "  - [x] Tables",
+ C_SET,
+ "",
+ "## Code",
+ "```rust",
+ "fn main() {",
+ "    let theme = \"quiet\"; // the default",
+ "    let size: u32 = 15;",
+ "    println!(\"{theme} at {size}px\");",
+ "}",
+ "```",
+ "",
+ "## Status",
+ "| Area | Owner | State |",
+ "|:--|:--|--:|",
+ "| Theme | Ana | done |",
+ "| Typography | Ben | ~~blocked~~ review |",
+ "| Chrome | You | picking |",
+ "",
+ "> Keep the window quiet: one sheet, one accent, no borders that do not earn their place.",
+ "",
+ "---",
+ "",
+ "1. Draft",
+ "2. Review",
+ "3. Ship"].join("\n");
+const WEEK_VERS=[
+ {t:"Today, 15:42",m:"Spacing pass",md:WEEK.replace(C_SET,"- [ ] Settings page and shortcuts").replace(/> Keep the window quiet[^\n]*\n\n/,"")},
+ {t:"Today, 14:10",m:"Theme colours",md:WEEK.replace("ship the **Quiet theme**","ship the **Quiet theme** and icons").replace("- [x] Tables","- [ ] Tables")},
+ {t:"Yesterday, 18:03",m:"First draft",md:WEEK.replace("| Chrome | You | picking |","| Chrome | You | drafting |").replace("2. Review\n3. Ship","2. Review")}
+];
+const NOTES={
+ today:{title:"Saturday, 21 November",folder:"Daily",md:["# Saturday, 21 November","","- Go through the chrome picks","- [ ] Commit the spacing pass","- [x] Send the side-by-side screenshots"].join("\n")},
+ week:{title:"Week plan",folder:"Projects",md:WEEK,vers:WEEK_VERS.map(v=>({...v,id:"week"}))},
+ road:{title:"Roadmap",folder:"Projects",md:["# Roadmap","## Now","- Quiet look for the editor","- Settings page","## Next","- Selection toolbar","- iOS prototype: `inkuno-logic` already builds for iPhone","  - Text input and IME are the open question","## Later","> [!TIP]","> Revisit the home screen with document cards.","","$$","\\sum_{i=1}^{n} i = n(n+1)/2","$$"].join("\n"),vers:[]},
+ read:{title:"Reading list",folder:"",md:["# Reading list","- *The Elements of Typographic Style*","- [Practical Typography](https://practicaltypography.com)","- [ ] Re-read **Refactoring UI**","- [x] *Shape Up*"].join("\n"),vers:[]},
+ ideas:{title:"Ideas",folder:"",md:["# Ideas","Small things worth trying later.","","- Typewriter scrolling","- Focus the current paragraph","","> [!WARNING]","> Nothing here may write syntax GitHub cannot show."].join("\n"),vers:[]},
+ s1:{title:"Packing list",folder:"Scratch",md:["# Packing list","- [ ] Charger","- [ ] Notebook","- [x] Passport"].join("\n"),vers:[]},
+ s2:{title:"Sprint notes",folder:"Scratch",md:["# Sprint notes","- Ship split panes first","- Check the preview tab rules"].join("\n"),vers:[]}
+};
+const VAULT=["week","road","read","ideas"], SCRATCH=["s1","s2"];
+const DAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY0=new Date(2026,10,21);
+const dayName=d=>`${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+const isoDay=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+/* ---------- Markdown ---------- */
+const COM=/<!--\s*comment:\s*([\s\S]*?)\s*-->/;
+const COMG=/\s*<!--\s*comment:[\s\S]*?-->/g;
+const PEND=/\{--([\s\S]*?)--\}\{\+\+([\s\S]*?)\+\+\}|\{\+\+([\s\S]*?)\+\+\}/g;
+const hasP=l=>/\{\+\+|\{--/.test(l);
+let PUI=true;
+const parseC=s=>{const q=/^(\w+)(?:, (\d\d:\d\d))?: ([\s\S]*)$/.exec(s);return q?{who:q[1],time:q[2]||"",text:q[3]}:{who:"You",time:"",text:s}};
+const clean=x=>x.replace(/<!--[\s\S]*?-->/g,"").replace(/\{--[\s\S]*?--\}/g,"").replace(/\{\+\+([\s\S]*?)\+\+\}/g,"$1").replace(/^\s*(#+\s+|>\s*|([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?)/,"").replace(/\[([^\]]*)\]\([^)]*\)/g,"$1").replace(/[*_`~]/g,"").trim();
+function commentsOf(md){return md.split("\n").map((l,at)=>{const m=COM.exec(l);if(!m)return null;const a=parseC(m[1]);return{at,passage:clean(l.slice(0,m.index)),who:a.who,time:a.time,text:a.text}}).filter(Boolean)}
+function pendingLines(md){return md.split("\n").reduce((a,l,at)=>hasP(l)?a.concat([at]):a,[])}
+function resolveAt(md,at,accept){const L=md.split("\n");L[at]=L[at].replace(PEND,(m,o,n,i)=>o!==undefined?(accept?n:o):(accept?i:""));return L.join("\n")}
+function resolveComment(md,at){const L=md.split("\n");L[at]=L[at].replace(COMG,"");return L.join("\n")}
+function addComment(md,at,text){const L=md.split("\n");L[at]=L[at]+`<!-- comment: You, ${hhmm()}: ${text.replace(/-->/g,"")} -->`;return L.join("\n")}
+
+function inline(src,at=-1){
+  const P=[]; const hold=h=>{P.push(h);return "\u0000"+(P.length-1)+"\u0000"};
+  let s=src.replace(PEND,(m,o,n,i)=>hold((o!==undefined
+      ?`<del class="pwd">${esc(o)}</del><ins class="pw">${esc(n)}</ins>`
+      :`<ins class="pw">${esc(i)}</ins>`)+(PUI&&at>=0?`<span class="pacts"><button class="pa" data-pacc="${at}">Accept</button><button class="pa" data-prej="${at}">Reject</button></span>`:"")));
+  s=s.replace(/`([^`]+)`/g,(m,c)=>hold(`<code class="ic">${mk("`")}${esc(c)}${mk("`")}</code>`));
+  s=s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(m,t,u)=>hold(`<a class="ln" data-href="${esc(u)}" tabindex="0">${mk("[")}${esc(t)}${mk("]("+u+")")}</a>`));
+  s=esc(s);
+  s=s.replace(/\*\*(.+?)\*\*/g,(m,t)=>hold(`<strong>${mk("**")}${t}${mk("**")}</strong>`));
+  s=s.replace(/~~(.+?)~~/g,(m,t)=>hold(`<del>${mk("~~")}${t}${mk("~~")}</del>`));
+  s=s.replace(/(^|[^\w*])\*([^*\s][^*]*)\*(?!\*)/g,(m,a,t)=>a+hold(`<em>${mk("*")}${t}${mk("*")}</em>`));
+  s=s.replace(/(^|[^\w_])_([^_\s][^_]*)_(?!\w)/g,(m,a,t)=>a+hold(`<em>${mk("_")}${t}${mk("_")}</em>`));
+  for(let k=0;k<4&&s.includes("\u0000");k++) s=s.replace(/\u0000(\d+)\u0000/g,(m,i)=>P[i]);
+  return s;
+}
+const KW=new Set("fn let mut pub use impl struct enum return if else for in match const true false self while loop mod as where u32 i32 f64 usize String".split(" "));
+function hl(line){
+  const re=/(\/\/.*$)|("(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*!?)/g; let out="",last=0,m;
+  while((m=re.exec(line))){out+=esc(line.slice(last,m.index));const w=m[0];
+    if(m[1])out+=`<span class="t-com">${esc(w)}</span>`;else if(m[2])out+=`<span class="t-str">${esc(w)}</span>`;
+    else if(m[3])out+=`<span class="t-num">${w}</span>`;
+    else if(KW.has(w))out+=`<span class="t-kw">${w}</span>`;
+    else if(w.endsWith("!")||line[re.lastIndex]==="(")out+=`<span class="t-fn">${esc(w)}</span>`;
+    else if(/^[A-Z]/.test(w))out+=`<span class="t-type">${w}</span>`;else out+=esc(w);
+    last=re.lastIndex;}
+  return out+esc(line.slice(last));
+}
+function parse(md){
+  const L=md.split("\n"),out=[];let i=0,m;
+  while(i<L.length){const l=L[i],at=i;
+    if(/^```/.test(l)){const lang=l.slice(3).trim(),body=[];i++;while(i<L.length&&!/^```/.test(L[i]))body.push(L[i++]);i++;out.push({k:"code",lang,body,at});continue}
+    if(/^\$\$/.test(l)){const body=[];i++;while(i<L.length&&!/^\$\$/.test(L[i]))body.push(L[i++]);i++;out.push({k:"math",body,at});continue}
+    if(/^\|/.test(l)){const rows=[];while(i<L.length&&/^\|/.test(L[i]))rows.push(L[i++]);out.push({k:"table",rows,at});continue}
+    if((m=l.match(/^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/))){const body=[];i++;while(i<L.length&&/^>/.test(L[i]))body.push(L[i++].replace(/^> ?/,""));out.push({k:"alert",type:m[1],body,at});continue}
+    if((m=l.match(/^> ?(.*)/))){out.push({k:"quote",t:m[1],at});i++;continue}
+    if((m=l.match(/^(#{1,6}) (.*)/))){out.push({k:"h",n:m[1].length,t:m[2],at});i++;continue}
+    if((m=l.match(/^(\s*)[-*+] \[( |x|X)\] (.*)/))){out.push({k:"task",d:m[1].length>>1,done:m[2]!==" ",t:m[3],at});i++;continue}
+    if((m=l.match(/^(\s*)([-*+]) (.*)/))){out.push({k:"ul",d:m[1].length>>1,mark:m[2],t:m[3],at});i++;continue}
+    if((m=l.match(/^(\s*)(\d+)\. (.*)/))){out.push({k:"ol",d:m[1].length>>1,n:m[2],t:m[3],at});i++;continue}
+    if(/^(---|\*\*\*|___)\s*$/.test(l)){out.push({k:"hr",at});i++;continue}
+    if((m=l.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/))){out.push({k:"img",alt:m[1],src:m[2],at});i++;continue}
+    if(!l.trim()){i++;continue}
+    out.push({k:"p",t:l,at});i++;}
+  return out;
+}
+const TITLE={NOTE:"Note",TIP:"Tip",IMPORTANT:"Important",WARNING:"Warning",CAUTION:"Caution"};
+function txt(x,at){
+  const m=COM.exec(x); if(!m) return inline(x,at);
+  return `<span class="cm" data-cid="${at}">${inline(x.slice(0,m.index),at)}</span><span class="cmsrc">${esc(m[0])}</span><i class="cdot" data-cid="${at}" title="Comment"></i>`;
+}
+function block(b,t){
+  const i=b.at, live=t.live===i; let h="", cls="b k-"+b.k+(live?" live":"");
+  const X=x=>txt(x,i);
+  switch(b.k){
+    case"h":cls+=" n"+b.n;h=`<div class="h h${b.n}">${mk("#".repeat(b.n)+" ")}${X(b.t)}</div>`;break;
+    case"p":h=`<p>${X(b.t)}</p>`;break;
+    case"ul":h=`<div class="li" style="--d:${b.d}"><span class="lead"><i class="dot d${b.d%3}"></i>${mk(b.mark+" ")}</span><span class="tx">${X(b.t)}</span></div>`;break;
+    case"ol":h=`<div class="li" style="--d:${b.d}"><span class="lead"><span class="num">${b.n}.</span>${mk(b.n+". ")}</span><span class="tx">${X(b.t)}</span></div>`;break;
+    case"task":h=`<div class="li" style="--d:${b.d}"><span class="lead"><button class="box${b.done?" on":""}" data-at="${i}" aria-label="${b.done?"Mark not done":"Mark done"}" aria-pressed="${b.done}">${ic("check")}</button>${mk("- ["+(b.done?"x":" ")+"] ")}</span><span class="tx${b.done?" done":""}">${X(b.t)}</span></div>`;break;
+    case"quote":h=`<div class="q">${mk("> ")}${X(b.t)}</div>`;break;
+    case"alert":h=`<div class="alert a-${b.type}"><div class="al">${ic("alert")}<span class="lbl">${TITLE[b.type]}</span>${mk("> [!"+b.type+"]")}</div>${b.body.map(x=>`<div>${mk("> ")}${inline(x)}</div>`).join("")}</div>`;break;
+    case"code":h=`<div class="code"><div class="fence">${esc("```"+b.lang)}</div><div class="ch"><span>${esc(b.lang||"text")}</span><button class="ib copy" data-copy="${i}" aria-label="Copy code">${ic("copy")}</button></div><div class="cb"><div class="nums">${b.body.map((_,n)=>n+1).join("<br>")}</div><div class="src">${b.body.map(hl).join("\n")}</div></div><div class="fence">\`\`\`</div></div>`;break;
+    case"table":{const cells=r=>r.trim().replace(/^\||\|$/g,"").split("|").map(c=>c.trim());const head=cells(b.rows[0]),al=(cells(b.rows[1]||"")).map(c=>/^:.*:$/.test(c)?"c":/:$/.test(c)?"r":"");
+      h=`<div class="tblw"><table><thead><tr>${head.map((c,j)=>`<th class="${al[j]||""}">${inline(c)}</th>`).join("")}</tr></thead><tbody>${b.rows.slice(2).map(r=>`<tr>${cells(r).map((c,j)=>`<td class="${al[j]||""}">${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;break;}
+    case"hr":h=`<div class="hr"><i></i>${mk("---")}</div>`;break;
+    case"img":h=`<div class="img">${esc(b.alt||b.src)}</div>`;break;
+    case"math":h=`<div class="math">${mk("$$")}${live?"<br>":""}${esc(b.body.join(" "))}${live?"<br>":""}${mk("$$")}</div>`;break;
+  }
+  return `<div class="${cls}" data-i="${i}">${h}</div>`;
+}
+
+/* ---------- State ---------- */
+const KEYS=[["Search notes and commands",MOD+"K"],["Show or hide the sidebar",MOD+"B"],["Split pane right, or close the split",MOD+"\\"],["Focus pane 1 or 2",MOD+"1 / 2"],["Show or hide the title bar",MOD+"⇧S"],["Outline",MOD+"⇧O"],["Pick a panel view: Outline, Comments, Versions, Assistant",MOD+"⌥1–4"],["Save a version",MOD+"⌥S"],["New scratch note",MOD+"N"],["Settings",MOD+","],["Shortcuts",   "F1"],["Focus mode, leave with Esc","F9"],["Text size larger, smaller, reset",MOD+"= / − / 0"],["Close tab",MOD+"W"],["Insert a block","/"],["Toggle a task","Ctrl Enter"]];
+const mkTab=(id,pv)=>({k:"note",id,preview:!!pv,live:null,scroll:0});
+const S={panes:[{tabs:[],act:null}],focus:0,side:true,sideover:false,rhide:false,bandhide:false,focusMode:false,
+  rview:"outline",mode:"system",size:15,width:"Normal",motion:true,reveal:true,nums:true,cont:true,spell:false,
+  page:"Appearance",closed:{},listen:null,keys:KEYS.map(k=>[...k]),draft:null,vfield:false,reply:null,replies:{},review:false,fcard:null};
+{const t=mkTab("week",false);S.panes[0].tabs.push(t);S.panes[0].act=t}
+const curTab=()=>S.panes[S.focus].act;
+const curId=()=>{const t=curTab();return t&&t.id||null};
+const tabTitle=t=>t.k==="note"?NOTES[t.id].title:t.k==="set"?"Settings":`${NOTES[t.id].title} · ${t.ver.m} ↔ now`;
+const tabPath=t=>{if(t.k==="set")return "Settings";if(t.k==="cmp")return "Compare with "+t.ver.t;const n=NOTES[t.id];return `~/Documents/${n.folder==="Scratch"?"Scratch":"Notes"}/${n.folder&&n.folder!=="Scratch"?n.folder+"/":""}${n.title}.md`};
+
+function applyLayout(){
+  app.classList.toggle("noside",!S.side&&app.getBoundingClientRect().width>720);
+  app.classList.toggle("sideover",S.sideover);
+  app.classList.toggle("rhide",S.rhide);
+  app.classList.toggle("bandhide",S.bandhide);
+  app.classList.toggle("focus",S.focusMode);
+  app.classList.toggle("nomotion",!S.motion);
+  app.classList.toggle("nonums",!S.nums);
+  app.dataset.mode=S.mode;
+  app.style.setProperty("--s",S.size/15);
+  app.style.setProperty("--measure",{Narrow:"560px",Normal:"720px",Wide:"920px"}[S.width]);
+}
+
+/* ---------- Render: sidebar, band, panes, right panel ---------- */
+function renderSide(){
+  const cur=curId(), onSet=curTab()&&curTab().k==="set";
+  const r=id=>`<button class="row${NOTES[id].folder==="Projects"?" sub":""}${cur===id?" sel":""}" data-open="${id}" data-ctx="${id}">${ic("note")}<span>${esc(NOTES[id].title)}</span></button>`;
+  const proj=VAULT.filter(k=>NOTES[k].folder==="Projects"), loose=VAULT.filter(k=>NOTES[k].folder!=="Projects");
+  const sc=S.closed.Scratch;
+  $("#side").innerHTML=`<div class="top"><div class="lights"><i></i><i></i><i></i></div><button class="ib" data-act="side" aria-label="Hide sidebar" title="Hide sidebar (${MOD}B)">${ic("sidebar")}</button></div>
+    <button class="row" data-act="pal">${ic("search")}<span>Search</span><kbd>${MOD}K</kbd></button>
+    <button class="row${cur==="today"?" sel":""}" data-open="today" data-ctx="today">${ic("today")}<span>Today</span></button>
+    <div class="sect">Notes<button class="ib" data-act="new" aria-label="New note" title="New note (${MOD}⇧N)">${ic("plus")}</button></div>
+    <div class="tree">
+      <button class="row${S.closed.Projects?" closed":""}" data-fold="Projects">${ic("folder")}<span>Projects</span>${ic("chev",'class="chev"')}</button>
+      ${S.closed.Projects?"":proj.map(r).join("")}
+      ${loose.map(r).join("")}
+    </div>
+    <div class="scr">
+      <button class="sect" data-fold="Scratch" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">Scratch<span style="margin-left:auto;display:grid">${ic("chev",`width="12" height="12" style="transition:transform .15s;transform:rotate(${sc?"-90":"0"}deg)"`)}</span></button>
+      ${sc?"":SCRATCH.map(r).join("")}
+    </div>
+    <div class="foot"><button class="row${onSet?" sel":""}" data-act="settings">${ic("settings")}<span>Settings</span><kbd>${MOD},</kbd></button></div>`;
+}
+const tabHTML=(t,on,pi,ti)=>`<div class="tab${on?" on":""}${t.preview?" prev":""}" role="tab" tabindex="0" aria-selected="${on}" data-tp="${pi}" data-ti="${ti}" title="${esc(tabPath(t))}"><span class="tt">${esc(tabTitle(t))}</span><span class="x" data-close="${pi}:${ti}" role="button" aria-label="Close tab">${ic("x")}</span></div>`;
+function renderBand(){
+  $("#band").innerHTML=`<div class="blights"><i></i><i></i><i></i></div><button class="ib bopen" data-act="side" aria-label="Show sidebar" title="Show sidebar (${MOD}B)">${ic("sidebar")}</button>`
+    +S.panes.map((p,pi)=>`<div class="ptabs${pi===S.focus?"":" dim"}" data-ptabs="${pi}">${p.tabs.map((t,ti)=>tabHTML(t,p.act===t,pi,ti)).join("")}</div>`).join("")
+    +`<button class="ib${S.rhide?"":" on"}" data-act="rtog" aria-label="Right panel" title="Right panel (${MOD}⇧O)">${ic("rpanel")}</button>`;
+}
+function emptyHTML(){
+  const ago=["ideas","read"].map(id=>`<button class="ecard" data-open="${id}" data-perm="1"><b>${ic("note")}${esc(NOTES[id].title)}</b><span>${esc(clean(NOTES[id].md.split("\n").find(l=>l&&!/^#/.test(l))||""))}</span></button>`).join("");
+  return `<div class="empty"><div class="ecards">
+    <button class="ecard" data-act="today"><b>${ic("today")}Today</b><span>${esc(dayName(DAY0))} · open the daily note</span></button>
+    <button class="ecard" data-act="new"><b>${ic("plus")}New note</b><span>A vault note in ~/Documents/Notes</span></button>
+    <button class="ecard" data-act="pal"><b>${ic("search")}Search</b><span>Find a note or run a command (${MOD}K)</span></button>
+  </div><div class="emlab">From a month ago</div><div class="ecards">${ago}</div></div>`;
+}
+function noteHTML(t){
+  const blocks=parse(NOTES[t.id].md);
+  return `<div class="doc${S.reveal?" reveal":""}" data-note="${t.id}">${blocks.map(b=>block(b,t)).join("")}<div class="ph" data-act="slash">Type <kbd>/</kbd> to add a block</div></div>`;
+}
+function diffLines(a,b){
+  const n=a.length,m=b.length,L=[];for(let i=0;i<=n;i++)L.push(new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)L[i][j]=a[i]===b[j]?L[i+1][j+1]+1:Math.max(L[i+1][j],L[i][j+1]);
+  const ops=[];let i=0,j=0;
+  while(i<n&&j<m){if(a[i]===b[j]){ops.push({o:"eq",l:b[j],i,j});i++;j++}else if(L[i+1][j]>=L[i][j+1]){ops.push({o:"del",l:a[i],i});i++}else{ops.push({o:"add",l:b[j],j});j++}}
+  while(i<n){ops.push({o:"del",l:a[i],i});i++}
+  while(j<m){ops.push({o:"add",l:b[j],j});j++}
+  return ops;
+}
+function compareHTML(t){
+  PUI=false;
+  const now=NOTES[t.id].md.split("\n").map(l=>l.replace(COMG,"")), old=t.ver.md.split("\n").map(l=>l.replace(COMG,""));
+  const NB=parse(now.join("\n")), starts=new Map(NB.map(b=>[b.at,b])), NO={live:-1};
+  let body="";
+  diffLines(old,now).forEach(o=>{
+    if(o.o==="del"){body+=`<div class="wdel">${parse(o.l).map(b=>{b.at=-1;return block(b,NO)}).join("")}</div>`;return}
+    const cls=o.o==="add"?"wadd":"cl";
+    if(starts.has(o.j)) body+=`<div class="${cls}">${block(starts.get(o.j),NO)}</div>`;
+    else if(!now[o.j].trim()) body+=`<div class="${cls}" style="height:12px"></div>`;
+  });
+  PUI=true;
+  return `<div class="cmpbar"><span class="cmptx">Comparing <b>${esc(t.ver.m)}</b> with now</span><span class="spacer"></span><button class="btn" data-act="restore">Restore</button><button class="btn" data-act="cmpclose">Close</button></div><div class="doc">${body}</div>`;
+}
+function paneHTML(p,i){
+  const t=p.act; let body="",pill="";
+  if(!t) body=emptyHTML();
+  else if(t.k==="set") body=settingsHTML();
+  else if(t.k==="cmp") body=compareHTML(t);
+  else{
+    PUI=true; body=noteHTML(t);
+    const n=pendingLines(NOTES[t.id].md).length;
+    if(n) pill=`<div class="pill" role="status"><b>${n} change${n>1?"s":""} pending</b><span class="sd">·</span><button class="btn" data-act="acceptall" data-id="${t.id}">Accept all</button><button class="btn" data-act="rejectall" data-id="${t.id}">Reject all</button></div>`;
+  }
+  return `<div class="pane${i===S.focus?" foc":""}" data-pane="${i}"><div class="pscroll" data-ps="${i}">${body}</div>${pill}</div>`;
+}
+function renderPanes(){
+  const P=$("#panes"); P.innerHTML=S.panes.map(paneHTML).join("");
+  P.querySelectorAll(".pscroll").forEach((el,i)=>{const t=S.panes[i].act;if(t&&t.scroll)el.scrollTop=t.scroll});
+}
+function viewHTML(t,nid){
+  const v=S.rview;
+  if(!nid) return `<div class="ptext">Open a note to see its ${v==="outline"?"outline":v==="comments"?"comments":v==="versions"?"versions":"assistant"}.</div>`;
+  const md=NOTES[nid].md;
+  if(v==="outline"){
+    const hs=parse(md).filter(b=>b.k==="h");
+    return `<div class="rh">Outline</div>`+(hs.length?hs.map(b=>`<button class="ol" data-go="${b.at}" style="padding-left:${8+(b.n-1)*12}px">${esc(clean(b.t))}</button>`).join(""):`<div class="ptext">No headings yet.</div>`);
+  }
+  if(v==="comments"){
+    const cs=commentsOf(md);
+    let h=`<div class="rh">Comments<span style="color:var(--faint);font-weight:500">${cs.length}</span></div>`;
+    if(S.draft&&S.draft.id===nid) h+=`<div class="cc"><div class="qp">${esc(S.draft.q)}</div><input class="field" id="cdraft" placeholder="Add a comment, then press Enter"><div class="ca"><button class="btn primary" data-act="csave">Comment</button><button class="btn" data-act="ccancel">Cancel</button></div></div>`;
+    h+=cs.map(c=>{const reps=S.replies[nid+":"+c.at]||[];return `<div class="cc${S.fcard===c.at?" foc":""}" data-cc="${c.at}"><div class="ch"><b>${esc(c.who)}</b><span>${esc(c.time||"Today")}</span></div><div class="qp">${esc(c.passage)}</div><div class="ct">${esc(c.text)}</div>${reps.map(r=>`<div class="rp">${esc(r)}</div>`).join("")}${S.reply===c.at?`<input class="field" data-replyf="${c.at}" placeholder="Reply, then press Enter">`:""}<div class="ca"><button class="btn" data-act="resolve" data-at="${c.at}">Resolve</button><button class="btn" data-act="reply" data-at="${c.at}">Reply</button></div></div>`}).join("");
+    return h||(S.draft?h:`<div class="ptext">No comments on this note. Select text and choose Comment.</div>`);
+  }
+  if(v==="versions"){
+    const vs=NOTES[nid].vers||[];
+    let h=`<div class="rh">Versions</div><div class="vnew">`+(S.vfield?`<input class="field" id="vname" placeholder="Name this version, then press Enter"><div class="row2"><button class="btn primary" data-act="vsave">Save</button><button class="btn" data-act="vcancel">Cancel</button></div>`:`<button class="btn" data-act="savever" style="align-self:flex-start">Save version</button>`)+`</div>`;
+    return h+(vs.map((x,k)=>`<button class="vrow" data-ver="${k}"><b>${esc(x.m)}</b><span>${esc(x.t)}</span></button>`).join("")||`<div class="ptext">No saved versions yet.</div>`);
+  }
+  return `<div class="rh">Assistant</div><div class="ask"><button class="btn" data-act="review"${S.review?" disabled":""} style="height:30px;text-align:left;padding:0 10px">${S.review?"Reviewing this note…":"Review this note"}</button><button class="btn" data-act="tighten" style="height:30px;text-align:left;padding:0 10px">Tighten the wording</button><input class="field" id="askf" placeholder="Ask about this note, then press Enter"></div><div class="ptext">Suggestions appear in the note as pending changes you accept or reject.</div>`;
+}
+function renderRight(){
+  const t=curTab(), nid=t&&t.id||null, cnt=nid?commentsOf(NOTES[nid].md).length:0;
+  const b=(v,icn,label,key)=>`<button class="ib${S.rview===v?" on":""}" data-view="${v}" aria-label="${label}" title="${label} (${key})">${ic(icn)}${v==="comments"&&cnt?`<span class="badge">${cnt}</span>`:""}</button>`;
+  $("#rpanel").innerHTML=`<div class="rsw">${b("outline","outline","Outline",MOD+"⌥1")}${b("comments","comment","Comments",MOD+"⌥2")}${b("versions","history","Versions",MOD+"⌥3")}${b("assist","spark","Assistant",MOD+"⌥4")}</div><div class="rbody">${viewHTML(t,nid)}</div>`;
+}
+const PAGES=[["Appearance","palette"],["Editor","pen"],["Files","folder"],["Shortcuts","keyboard"],["About","info"]];
+function settingsHTML(){
+  const seg=(key,opts,cur)=>`<div class="seg" role="group">${opts.map(o=>`<button class="${String(cur)===String(o)?"on":""}" data-set="${key}" data-v="${o}">${o}</button>`).join("")}</div>`;
+  const sw=(key,on,label)=>`<button class="sw${on?" on":""}" data-toggle="${key}" role="switch" aria-checked="${on}" aria-label="${label}"></button>`;
+  const row=(b,s,c)=>`<div class="sr"><div class="lbl"><b>${b}</b>${s?`<span>${s}</span>`:""}</div>${c}</div>`;
+  let page;
+  if(S.page==="Appearance") page=`<h1>Appearance</h1><div class="grp"><div class="card">
+      ${row("Theme","Quiet, light or dark like the system",seg("mode",["System","Light","Dark"],S.mode[0].toUpperCase()+S.mode.slice(1)))}
+      ${row("Text size","Body text; headings and the interface follow",seg("size",[14,15,16,18],S.size))}
+      ${row("Page width","The width of the text column",seg("width",["Narrow","Normal","Wide"],S.width))}
+      ${row("Motion","Short fades when panels open",sw("motion",S.motion,"Motion"))}
+    </div></div><div class="grp"><h2>More themes</h2><div class="card">${row("Theme list","Inkuno Light, Inkuno Dark, Nord, Solarized and 9 more",`<button class="btn" data-act="themes">Choose…</button>`)}</div></div>`;
+  else if(S.page==="Editor") page=`<h1>Editor</h1><div class="grp"><div class="card">
+      ${row("Show Markdown on the current line","The line you are on shows its # ** and - [ ] so you can edit them",sw("reveal",S.reveal,"Show Markdown"))}
+      ${row("Line numbers in code blocks","",sw("nums",S.nums,"Line numbers"))}
+      ${row("Continue lists on Enter","A new item, or leave the list on an empty one",sw("cont",S.cont,"Continue lists"))}
+      ${row("Check spelling","",sw("spell",S.spell,"Check spelling"))}
+    </div></div>`;
+  else if(S.page==="Files") page=`<h1>Files</h1><div class="grp"><div class="card">
+      ${row("Notes folder","~/Documents/Notes · one .md file per note",`<button class="btn" data-act="folder">Change…</button>`)}
+      ${row("Scratch folder","~/Documents/Scratch · notes that stay out of the tree",`<button class="btn" data-act="folder">Change…</button>`)}
+      ${row("Trash","Deleted notes wait in .trash for 30 days",`<button class="btn" data-act="trashinfo">Open Trash</button>`)}
+    </div></div>`;
+  else if(S.page==="Shortcuts") page=`<h1>Shortcuts</h1><p class="ptext" style="padding:0">Click a key to change it. Press Esc to cancel.</p><div class="card">${S.keys.map((k,n)=>`<div class="sr"><div class="lbl"><b style="font-weight:400">${esc(k[0])}</b></div><button class="kchip${S.listen===n?" listen":""}" data-key="${n}">${S.listen===n?"Press keys…":esc(k[1])}</button></div>`).join("")}</div>`;
+  else page=`<h1>About</h1><div class="card">${row("Inkuno","Plain Markdown notes. Everything you write renders the same on GitHub.","")}${row("Design","Quiet theme · Inter and JetBrains Mono","")}</div>`;
+  return `<div class="setwrap"><nav class="snav" aria-label="Settings pages">${PAGES.map(([p,i])=>`<button class="row${S.page===p?" sel":""}" data-page="${p}">${ic(i)}<span>${p}</span></button>`).join("")}</nav><div class="set">${page}</div></div>`;
+}
+function renderAll(){applyLayout();renderSide();renderBand();renderPanes();renderRight()}
+
+/* ---------- Feedback and menus ---------- */
+function toast(msg,undo){
+  document.querySelector(".toast")?.remove();
+  const t=document.createElement("div");t.className="toast";t.setAttribute("role","status");
+  t.innerHTML=`<span>${esc(msg)}</span>${undo?`<button>Undo</button>`:""}`;
+  if(undo)t.querySelector("button").onclick=()=>{undo();t.remove()};
+  app.append(t);clearTimeout(toast.t);toast.t=setTimeout(()=>t.remove(),undo?5000:2600);
+}
+function closeMenus(){document.querySelectorAll(".pop:not(.pal),.fbar").forEach(e=>e.remove())}
+function copy(text,msg){
+  const done=()=>toast(msg);
+  try{navigator.clipboard.writeText(text).then(done,()=>toast("Copy is blocked here; select the text instead"))}catch(_){toast("Copy is blocked here; select the text instead")}
+}
+function menu(x,y,items){
+  closeMenus();const p=document.createElement("div");p.className="pop";p.setAttribute("role","menu");
+  p.innerHTML=items.map((it,k)=>it==="-"?`<div class="msep"></div>`:`<button class="mi${it.danger?" danger":""}" role="menuitem" data-k="${k}">${it.icon?ic(it.icon):""}<span>${it.t}</span>${it.kbd?`<kbd>${it.kbd}</kbd>`:""}</button>`).join("");
+  app.append(p);const r=app.getBoundingClientRect();
+  p.style.left=Math.max(8,Math.min(x-r.left,r.width-p.offsetWidth-8))+"px";p.style.top=Math.max(8,Math.min(y-r.top,r.height-p.offsetHeight-8))+"px";
+  p.onclick=e=>{const b=e.target.closest(".mi");if(!b)return;const it=items[b.dataset.k];closeMenus();it.run&&it.run()};
+}
+function placeNear(p,el){
+  if(!el)return;const r=app.getBoundingClientRect(),pr=el.getBoundingClientRect();
+  let top=pr.bottom-r.top+4;if(top+p.offsetHeight>r.height-8)top=pr.top-r.top-p.offsetHeight-4;
+  p.style.left=Math.max(8,Math.min(pr.left-r.left,r.width-p.offsetWidth-8))+"px";p.style.top=Math.max(8,top)+"px";
+}
+
+/* ---------- Tabs, panes, notes ---------- */
+function keepTabs(id){S.panes.forEach(p=>p.tabs.forEach(t=>{if(t.k==="note"&&t.id===id)t.preview=false}))}
+function openNote(id,{pv=false,pane=S.focus}={}){
+  const p=S.panes[pane];let t=p.tabs.find(x=>x.k==="note"&&x.id===id);
+  if(t){if(!pv)t.preview=false}
+  else{t=mkTab(id,pv);const pi=pv?p.tabs.findIndex(x=>x.preview):-1;if(pi>=0)p.tabs[pi]=t;else p.tabs.push(t)}
+  p.act=t;S.focus=pane;renderAll();
+}
+function openSettings(page){
+  if(page)S.page=page;
+  const p=S.panes[S.focus];let t=p.tabs.find(x=>x.k==="set");
+  if(!t){t={k:"set",preview:false,scroll:0};p.tabs.push(t)}
+  p.act=t;renderAll();
+}
+function openCompare(v){
+  const p=S.panes[S.focus];let t=p.tabs.find(x=>x.k==="cmp"&&x.ver===v);
+  if(!t){t={k:"cmp",id:v.id,ver:v,preview:false,scroll:0};p.tabs.push(t)}
+  p.act=t;renderAll();
+}
+function closeTab(pi,ti){
+  const p=S.panes[pi],t=p.tabs[ti];if(!t)return;
+  p.tabs.splice(ti,1);
+  if(p.act===t)p.act=p.tabs[Math.min(ti,p.tabs.length-1)]||null;
+  renderAll();
+}
+function closeActiveTab(){const p=S.panes[S.focus];if(p.act)closeTab(S.focus,p.tabs.indexOf(p.act))}
+function cycleTab(dir){
+  const p=S.panes[S.focus],n=p.tabs.length;if(n<2)return;
+  const i=p.tabs.indexOf(p.act);p.act=p.tabs[(i+dir+n)%n];renderAll();
+}
+function focusPane(i){
+  if(i===S.focus||!S.panes[i])return;
+  S.focus=i;
+  document.querySelectorAll(".pane").forEach((el,k)=>el.classList.toggle("foc",k===i));
+  document.querySelectorAll(".ptabs").forEach((el,k)=>el.classList.toggle("dim",k!==i));
+  renderSide();renderRight();
+}
+function split(){
+  if(S.panes.length>1)return closePane(S.focus);
+  const a=curTab(),base=(a&&a.id)||"week",t=mkTab(base,false);
+  S.panes.push({tabs:[t],act:t});S.focus=1;renderAll();
+}
+function closePane(i){
+  if(S.panes.length<2){toast("Only one pane is open");return}
+  S.panes.splice(i,1);S.focus=0;renderAll();
+}
+function setLive(pi,at){
+  const p=S.panes[pi],t=p&&p.act;if(!t||t.k!=="note")return;
+  t.live=at;
+  const pane=document.querySelector(`[data-pane="${pi}"]`);if(!pane)return;
+  pane.querySelectorAll(".b.live").forEach(x=>x.classList.remove("live"));
+  const el=at==null?null:pane.querySelector(`.b[data-i="${at}"]`);
+  if(el){el.classList.add("live");if(el.classList.contains("k-math"))renderPanes()}
+}
+function trash(id){
+  const list=VAULT.includes(id)?VAULT:SCRATCH,i=list.indexOf(id);if(i<0)return;
+  list.splice(i,1);
+  S.panes.forEach(p=>{p.tabs=p.tabs.filter(t=>!(t.k==="note"&&t.id===id));if(!p.tabs.includes(p.act))p.act=p.tabs[0]||null});
+  renderAll();toast(`Moved “${NOTES[id].title}” to Trash`,()=>{list.splice(i,0,id);renderAll()});
+}
+function newNote(title="Untitled"){
+  const k="n"+Date.now();NOTES[k]={title,folder:"",md:"# "+title+"\n",vers:[]};VAULT.push(k);
+  openNote(k);setLive(S.focus,0);toast("New note in ~/Documents/Notes");
+}
+function newScratch(){
+  const k="s"+Date.now();NOTES[k]={title:"Untitled scratch",folder:"Scratch",md:"# Untitled scratch\n",vers:[]};SCRATCH.push(k);
+  openNote(k);setLive(S.focus,0);toast("New scratch note in ~/Documents/Scratch");
+}
+function duplicate(id){
+  const k="n"+Date.now();NOTES[k]={...NOTES[id],title:NOTES[id].title+" copy",folder:"",vers:[]};VAULT.push(k);renderAll();toast("Duplicated");
+}
+function toggleSide(){
+  if(app.getBoundingClientRect().width<=720)S.sideover=!S.sideover;else S.side=!S.side;
+  renderAll();
+}
+function toggleBand(){S.bandhide=!S.bandhide;$("#band").classList.remove("peek");renderAll()}
+function toggleFocus(){S.focusMode=!S.focusMode;renderAll()}
+function panelView(v,versionField){
+  S.rview=v;S.rhide=false;if(versionField)S.vfield=true;
+  renderAll();if(versionField)document.getElementById("vname")?.focus();
+}
+function zoom(d){S.size=d===0?15:Math.max(12,Math.min(24,S.size+d));renderAll();toast(`Text size ${S.size}`)}
+function relPath(id){
+  const cur=NOTES[curId()]?.folder||"",tf=NOTES[id].folder||"",name=encodeURI(NOTES[id].title)+".md";
+  if(tf===cur)return name;if(!cur)return encodeURI(tf)+"/"+name;if(!tf)return "../"+name;return "../"+encodeURI(tf)+"/"+name;
+}
+function addParagraph(text,msg){
+  const id=curId();if(!id)return;
+  NOTES[id].md=NOTES[id].md.replace(/\n*$/,"")+"\n\n"+text;keepTabs(id);slash=null;closeMenus();
+  const bl=parse(NOTES[id].md);renderAll();
+  const sc=document.querySelector(`[data-ps="${S.focus}"]`);if(sc)sc.scrollTop=sc.scrollHeight;
+  setLive(S.focus,bl.length?bl[bl.length-1].at:null);toast(msg);
+}
+
+/* ---------- Comments ---------- */
+function startComment(sel){
+  const id=curId();if(!id)return;
+  const L=NOTES[id].md.split("\n");
+  const at=L.findIndex(l=>!hasP(l)&&l.includes(sel.trim().slice(0,40)));
+  if(at<0)return toast("Select text on one line to comment on it");
+  S.draft={id,at,q:sel.trim().slice(0,120)};S.rview="comments";S.rhide=false;
+  renderAll();document.getElementById("cdraft")?.focus();
+}
+function saveComment(){
+  const d=S.draft;if(!d)return;
+  const v=(document.getElementById("cdraft")?.value||"").trim();
+  if(!v)return toast("Write a comment first");
+  NOTES[d.id].md=addComment(NOTES[d.id].md,d.at,v);S.draft=null;keepTabs(d.id);renderAll();toast("Comment added");
+}
+function flashCm(at){
+  const el=document.querySelector(`[data-ps="${S.focus}"] .cm[data-cid="${at}"]`);if(!el)return;
+  el.scrollIntoView({block:"center",behavior:S.motion?"smooth":"auto"});
+  el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");
+}
+function focusCard(at){
+  S.fcard=at;document.querySelectorAll("[data-cc]").forEach(c=>c.classList.toggle("foc",+c.dataset.cc===at));
+  flashCm(at);
+}
+
+/* ---------- Versions and assistant ---------- */
+function saveVersion(name){
+  const id=curId();if(!id)return toast("Open a note to save a version");
+  const n=(name||"").trim()||"Untitled version";
+  NOTES[id].vers.unshift({id,t:`Today, ${hhmm()}`,m:n,md:NOTES[id].md});
+  S.vfield=false;S.rview="versions";renderRight();toast(`Saved version “${n}”`);
+}
+function restoreVersion(){
+  const t=curTab();if(!t||t.k!=="cmp")return;
+  NOTES[t.id].md=t.ver.md;closeActiveTab();toast(`Restored “${t.ver.m}”`);
+}
+function resolvePending(id,at,accept){NOTES[id].md=resolveAt(NOTES[id].md,at,accept);keepTabs(id);renderAll()}
+function resolveAll(id,accept){
+  const lines=pendingLines(NOTES[id].md);let md=NOTES[id].md;
+  lines.forEach(at=>{md=resolveAt(md,at,accept)});
+  NOTES[id].md=md;keepTabs(id);renderAll();
+  toast(`${accept?"Accepted":"Rejected"} ${lines.length} change${lines.length>1?"s":""}`);
+}
+function review(){
+  const id=curId();
+  if(!id)return toast("Open a note to review it");
+  if(hasP(NOTES[id].md))return toast("Changes are already pending");
+  S.review=true;renderRight();
+  setTimeout(()=>{
+    const L=NOTES[id].md.split("\n");
+    const pi=L.findIndex(l=>/^[A-Za-z]/.test(l)&&!COM.test(l));
+    const qi=L.findIndex(l=>/^> .*accent/.test(l));
+    if(pi>=0)L[pi]+=" {++ Review the wording before Friday.++}";
+    if(qi>=0)L[qi]=L[qi].replace("one accent","{--one accent--}{++one accent, used sparingly++}");
+    NOTES[id].md=L.join("\n");S.review=false;S.rview="assist";
+    renderAll();const n=pendingLines(NOTES[id].md).length;
+    toast(`${n} change${n>1?"s":""} pending in ${NOTES[id].title}`);
+  },1000);
+}
+
+/* ---------- Slash menu and link pickers ---------- */
+const SL=[
+ {g:1,t:"Heading 1",tok:"/h1",lab:"H1",md:"# Heading"},{g:1,t:"Heading 2",tok:"/h2",lab:"H2",md:"## Heading"},{g:1,t:"Heading 3",tok:"/h3",lab:"H3",md:"### Heading"},
+ {g:1,t:"Bullet list",tok:"/list",icon:"ul",md:"- Item"},{g:1,t:"Numbered list",tok:"/num",icon:"ol",md:"1. Item"},{g:1,t:"Task",tok:"/todo",icon:"task",md:"- [ ] To do"},
+ {g:1,t:"Quote",tok:"/quote",icon:"quote",md:"> Quote"},{g:1,t:"Code block",tok:"/code",icon:"code",md:"```rust\nfn main() {}\n```"},
+ {t:"Table",tok:"/table",icon:"table",md:"| Column | Column |\n|--|--|\n| Cell | Cell |"},
+ {t:"Note",tok:"/note",icon:"alert",md:"> [!NOTE]\n> Something worth knowing."},
+ {t:"Warning",tok:"/warning",icon:"alert",md:"> [!WARNING]\n> Something to be careful about."},
+ {t:"Divider",tok:"/hr",icon:"hr",md:"---"},{t:"Link",tok:"/link",icon:"link",md:"[link text](https://example.com)"},
+ {t:"Image",tok:"/image",icon:"image",md:"![A picture](picture.png)"},{t:"Math",tok:"/math",icon:"math",md:"$$\nE = mc^2\n$$"},
+ {t:"Link to note",tok:"/wiki",icon:"link",pick:"note"},{t:"Link to date",tok:"/date",icon:"today",pick:"date"},
+ {t:"Diagram",tok:"/mermaid",icon:"diagram",md:"```mermaid\ngraph LR\n  Idea --> Note\n```"}];
+let slash=null;
+const phEl=()=>document.querySelector(`[data-ps="${S.focus}"] .ph`);
+function openSlash(){
+  closeMenus();const ph=phEl();if(!ph)return;slash={q:"",act:0};
+  const sc=document.querySelector(`[data-ps="${S.focus}"]`);
+  sc.scrollTop+=ph.getBoundingClientRect().top-sc.getBoundingClientRect().top-sc.clientHeight*0.35;drawSlash();
+}
+function drawSlash(){
+  document.querySelector(".slash")?.remove();
+  const q=slash.q.toLowerCase(),items=SL.filter(s=>!q||s.t.toLowerCase().includes(q)||s.tok.includes(q));slash.items=items;
+  if(slash.act>=items.length)slash.act=0;
+  const p=document.createElement("div");p.className="pop slash";p.setAttribute("role","listbox");
+  const grid=!q?items.filter(s=>s.g):[],list=!q?items.filter(s=>!s.g):items;
+  let html=`<div class="q0">/${esc(slash.q)}</div>`;
+  if(grid.length)html+=`<div class="mlabel">Basic</div><div class="grid">${grid.map(s=>`<button class="gi${items.indexOf(s)===slash.act?" act":""}" data-sl="${items.indexOf(s)}" title="${s.t}  ${s.tok}" aria-label="${s.t}">${s.lab||ic(s.icon)}</button>`).join("")}</div><div class="mlabel">More</div>`;
+  html+=list.map(s=>`<button class="mi${items.indexOf(s)===slash.act?" act":""}" data-sl="${items.indexOf(s)}">${s.icon?ic(s.icon):`<b style="width:16px;font-size:11px">${s.lab}</b>`}<span>${s.t}</span><span class="tok">${s.tok}</span></button>`).join("");
+  if(!items.length)html+=`<div class="mlabel" style="padding-bottom:10px">No block matches</div>`;
+  p.innerHTML=html;app.append(p);placeNear(p,phEl());
+  p.onclick=e=>{const b=e.target.closest("[data-sl]");if(b){const it=slash.items[+b.dataset.sl];it.pick?openPicker(it.pick):insert(it)}};
+}
+function insert(s){addParagraph(s.md,`Added ${s.t.toLowerCase()}: ${s.md.split("\n")[0]}`)}
+function openPicker(kind){
+  closeMenus();slash=null;
+  const ph=phEl();if(!ph)return;
+  const items=kind==="note"
+    ?VAULT.concat(SCRATCH).filter(k=>k!==curId()).map(k=>({label:NOTES[k].title,sub:NOTES[k].folder||"Notes",k}))
+    :[0,1,2,3,4,5,6].map(n=>{const d=new Date(DAY0.getFullYear(),DAY0.getMonth(),DAY0.getDate()-n);return{label:dayName(d),sub:n?isoDay(d):"Today",d}});
+  const p=document.createElement("div");p.className="pop slash";p.setAttribute("role","listbox");
+  p.innerHTML=`<div class="mlabel">${kind==="note"?"Link to note":"Link to date"}</div>`+items.map((it,k)=>`<button class="mi" data-pick="${k}">${ic(kind==="note"?"note":"today")}<span>${esc(it.label)}</span><span class="tok">${esc(it.sub)}</span></button>`).join("");
+  app.append(p);placeNear(p,ph);
+  p.onclick=e=>{
+    const b=e.target.closest("[data-pick]");if(!b)return;const it=items[+b.dataset.pick];
+    if(kind==="note")addParagraph(`[${NOTES[it.k].title}](${relPath(it.k)})`,`Linked ${NOTES[it.k].title}`);
+    else addParagraph(`[${it.label}](Daily/${isoDay(it.d)}.md)`,`Linked ${it.label}`);
+  };
+}
+
+/* ---------- Palette ---------- */
+let pal=null;
+const CMDS=()=>{const split2=S.panes.length>1;return [
+ {t:"New note",i:"plus",k:MOD+"⇧N",run:()=>newNote()},
+ {t:"New scratch note",i:"pen",k:MOD+"N",run:newScratch},
+ {t:"Show or hide the sidebar",i:"sidebar",k:MOD+"B",run:toggleSide},
+ {t:"Show or hide the title bar",i:"sidebar",k:MOD+"⇧S",run:toggleBand},
+ {t:"Split pane right",i:"split",k:MOD+"\\",run:split,hide:split2},
+ {t:"Close pane",i:"x",k:MOD+"\\",run:()=>closePane(S.focus),hide:!split2},
+ {t:"Focus pane 1",i:"split",k:MOD+"1",run:()=>focusPane(0),hide:!split2},
+ {t:"Focus pane 2",i:"split",k:MOD+"2",run:()=>focusPane(1),hide:!split2},
+ {t:"Focus mode",i:"find",k:"F9",run:toggleFocus},
+ {t:"Outline",i:"outline",k:MOD+"⇧O",run:()=>panelView("outline")},
+ {t:"Comments",i:"comment",k:MOD+"⌥2",run:()=>panelView("comments")},
+ {t:"Versions",i:"history",k:MOD+"⌥3",run:()=>panelView("versions")},
+ {t:"Assistant",i:"spark",k:MOD+"⌥4",run:()=>panelView("assist")},
+ {t:"Show or hide the right panel",i:"rpanel",run:()=>{S.rhide=!S.rhide;renderAll()}},
+ {t:"Save version",i:"history",k:MOD+"⌥S",run:()=>panelView("versions",true)},
+ {t:"Review this note",i:"spark",run:review},
+ {t:"Close tab",i:"x",k:MOD+"W",run:closeActiveTab},
+ {t:"Settings",i:"settings",k:MOD+",",run:()=>openSettings()},
+ {t:"Settings: Appearance",i:"palette",run:()=>openSettings("Appearance")},
+ {t:"Settings: Editor",i:"pen",run:()=>openSettings("Editor")},
+ {t:"Settings: Files",i:"folder",run:()=>openSettings("Files")},
+ {t:"Settings: Shortcuts",i:"keyboard",k:"F1",run:()=>openSettings("Shortcuts")},
+ {t:"Settings: About",i:"info",run:()=>openSettings("About")},
+ {t:"Theme: System",i:"palette",run:()=>{S.mode="system";renderAll()}},
+ {t:"Theme: Light",i:"palette",run:()=>{S.mode="light";renderAll()}},
+ {t:"Theme: Dark",i:"palette",run:()=>{S.mode="dark";renderAll()}},
+ {t:"Page width: Narrow",i:"width",run:()=>{S.width="Narrow";renderAll()}},
+ {t:"Page width: Normal",i:"width",run:()=>{S.width="Normal";renderAll()}},
+ {t:"Page width: Wide",i:"width",run:()=>{S.width="Wide";renderAll()}},
+ {t:"Text size larger",i:"width",k:MOD+"=",run:()=>zoom(1)},
+ {t:"Text size smaller",i:"width",k:MOD+"−",run:()=>zoom(-1)},
+ {t:"Text size reset",i:"width",k:MOD+"0",run:()=>zoom(0)},
+ {t:"Copy as Markdown",i:"md",run:()=>{const id=curId();if(id)copy(NOTES[id].md,"Copied the note as Markdown")}},
+ {t:"Design log",i:"info",run:openDlog}].filter(c=>!c.hide)};
+function openPal(q=""){
+  closeMenus();closePal();pal={act:0,items:[]};
+  const s=document.createElement("div");s.className="scrim";s.onclick=closePal;app.append(s);
+  const p=document.createElement("div");p.className="pop pal";p.setAttribute("role","dialog");p.setAttribute("aria-label","Search");
+  p.innerHTML=`${ic("search",'class="si"')}<input id="palq" placeholder="Search notes, or type > for commands" autocomplete="off" aria-label="Search"><div class="list" id="pall" role="listbox"></div>
+    <div class="ft"><span><kbd>↵</kbd>open</span><span><kbd>${MOD.trim()} ↵</kbd>new tab</span><span><kbd>&gt;</kbd>commands</span></div>`;
+  app.append(p);const inp=$("#palq");inp.value=q;inp.oninput=()=>{pal.act=0;drawPal()};drawPal();inp.focus();
+}
+function closePal(){document.querySelectorAll(".pal,.scrim").forEach(e=>e.remove());pal=null}
+function snippet(md,q){
+  const line=md.split("\n").find(l=>!/^#/.test(l)&&l.toLowerCase().includes(q))||"";
+  const plain=clean(line);
+  if(!q)return esc(plain.slice(0,90));const k=plain.toLowerCase().indexOf(q);if(k<0)return esc(plain.slice(0,90));
+  const a=Math.max(0,k-30);return (a?"…":"")+esc(plain.slice(a,k))+"<mark>"+esc(plain.slice(k,k+q.length))+"</mark>"+esc(plain.slice(k+q.length,k+q.length+60));
+}
+function drawPal(){
+  const raw=$("#palq").value,list=$("#pall");
+  if(raw.startsWith(">")){const q=raw.slice(1).trim().toLowerCase();pal.items=CMDS().filter(c=>c.t.toLowerCase().includes(q)).map(c=>({...c,cmd:true}))}
+  else{
+    const q=raw.trim().toLowerCase(),all=[...VAULT,...SCRATCH,"today"];
+    const open=S.panes[S.focus].tabs.filter(t=>t.k==="note").map(t=>t.id);
+    const order=[...open,...all.filter(k=>!open.includes(k))];
+    pal.items=order.filter(k=>!q||NOTES[k].title.toLowerCase().includes(q)||NOTES[k].md.toLowerCase().includes(q)).map(k=>({id:k,q}));
+    if(q)pal.items.push(...CMDS().filter(c=>c.t.toLowerCase().includes(q)).slice(0,3).map(c=>({...c,cmd:true})));
+  }
+  if(pal.act>=pal.items.length)pal.act=Math.max(0,pal.items.length-1);
+  list.innerHTML=(!raw?`<div class="mlabel">Recent</div>`:"")+pal.items.map((it,k)=>it.cmd
+    ?`<div class="pr${k===pal.act?" act":""}" role="option" data-k="${k}"><div class="t">${ic(it.i)}<span>${esc(it.t)}</span>${it.k?`<kbd>${esc(it.k)}</kbd>`:""}</div></div>`
+    :`<div class="pr${k===pal.act?" act":""}" role="option" data-k="${k}"><div class="t">${ic("note")}<span>${esc(NOTES[it.id].title)}</span><kbd>${esc(NOTES[it.id].folder||"Notes")}</kbd></div>${it.q?`<div class="sn">${snippet(NOTES[it.id].md,it.q)}</div>`:""}</div>`).join("")
+    +(pal.items.length?"":`<div class="mlabel" style="padding:12px 15px">Nothing matches. Press ↵ to create a note called “${esc(raw)}”</div>`);
+  list.onclick=e=>{const r=e.target.closest(".pr");if(r)runPal(+r.dataset.k,e.metaKey||e.ctrlKey)};
+  list.querySelector(".act")?.scrollIntoView({block:"nearest"});
+}
+function runPal(k,newTab){
+  const it=pal?.items[k],raw=$("#palq")?.value||"";closePal();
+  if(!it){if(raw.trim()&&!raw.startsWith(">"))newNote(raw.trim());return}
+  it.cmd?it.run():openNote(it.id,{pv:false});
+}
+
+/* ---------- Design log and guide ---------- */
+const DLOG_HTML=`
+<h3>v2: unified window (2026-11-21)</h3>
+<p>Built from an inventory of what the app does today (<code>shell/</code>, <code>views/nav.rs</code>, <code>keymap.rs</code>).</p>
+<h3>Regions</h3>
+<ol><li>Title bar (38 px band): the tab strip of each pane, window controls, the right-panel toggle.</li><li>Left sidebar: files only.</li><li>Panes: one or two, side by side, each with its own tabs.</li><li>Right panel: one panel, four views.</li></ol>
+<h3>Decisions</h3>
+<div class="tblw"><table><thead><tr><th>#</th><th>Area</th><th>Today (code)</th><th>v2</th><th>Why</th></tr></thead><tbody>
+<tr><td>1</td><td>Title bar</td><td>Shown; Ctrl+Shift+S hides it down to a 12 px strip</td><td>Same key and strip. When hidden, pointing at the strip slides the bar back over the note until the pointer leaves</td><td>Hidden must not mean lost: tabs stay one gesture away</td></tr>
+<tr><td>2</td><td>Focus mode</td><td>F9 hides docks, tabs, title bar; Esc leaves</td><td>Same; the note alone on the sheet, centred</td><td>Unchanged behaviour, Quiet surface</td></tr>
+<tr><td>3</td><td>Tabs</td><td>Per pane; preview tab marked with a trailing •</td><td>Always a tab strip in the title bar, even for one note. Preview tab in <i>italics</i>, replaced by the next single click; editing or double-click keeps it</td><td>• usually means unsaved; italics is the common convention</td></tr>
+<tr><td>4</td><td>Breadcrumb</td><td>None</td><td>Dropped from the band; the folder shows as the tab's tooltip and in the window title</td><td>Tabs and a breadcrumb compete for one line</td></tr>
+<tr><td>5</td><td>Split panes</td><td>Ctrl+\\ right, Ctrl+Alt+\\ below, Ctrl+1/2 focus</td><td>Same keys. The focused pane's active tab is solid; the other pane's tabs are dimmed. A hairline divides the panes</td><td>Focus shown without an outline box</td></tr>
+<tr><td>6</td><td>Left sidebar modes</td><td>Tree, Recent, Search, Outline, Scratch, Versions, Assistant</td><td><b>Files only</b>: Tree, with a collapsible <i>Scratch</i> section at the bottom. Recent and search live in ⌘K/Ctrl+P. Outline, Versions and Assistant move right</td><td>One job per side: left is <i>where</i>, right is <i>about this note</i></td></tr>
+<tr><td>7</td><td>Sidebar keys</td><td>Ctrl+B toggles</td><td>Kept (v1 used ⌘\\, which is Inkuno's split key; fixed)</td><td>Keep Inkuno's keymap</td></tr>
+<tr><td>8</td><td>Right panel</td><td>Outline and Assistant stack in a dock; Versions is a left mode; comments are a column beside the note</td><td><b>One right panel</b> with an icon switcher: Outline, Comments, Versions, Assistant. One view at a time, same width (280 px). Ctrl+Shift+O opens Outline; Ctrl+Alt+1–4 pick a view; the band button toggles the panel</td><td>One place for everything about the current note</td></tr>
+<tr><td>9</td><td>Comments</td><td>CriticMarkup {==passage==}{&gt;&gt;comment&lt;&lt;}, shown raw on GitHub</td><td>Panel view lists comment cards; the passage is underlined in the note with a dot in the margin; resolve removes it. <b>Proposed syntax: <code>passage&lt;!-- comment: text --&gt;</code></b>, which GitHub hides</td><td>CriticMarkup breaks the GitHub rule. Needs owner decision (Q1)</td></tr>
+<tr><td>10</td><td>Versions</td><td>Ctrl+Alt+S saves with a name; compare opens a read-only tab; restore is a proposal</td><td>Same flow, from the Versions view: list newest first, <i>Save version</i> button, clicking one opens a compare tab <code>Week plan · v2 ↔ now</code> with additions green and removals struck red, and <i>Restore</i></td><td>Matches the app; moves the list to the right panel</td></tr>
+<tr><td>11</td><td>Assistant</td><td>Dock panel plus a round button at the note's bottom right; changes arrive as pending marks</td><td>Assistant view in the panel (actions, prompt). Its changes show in the note as pending washes with Accept / Reject on each, and a foot pill "2 changes pending · Accept all · Reject all". The round button is dropped</td><td>One entry point; pending changes stay visible where they apply</td></tr>
+<tr><td>12</td><td>Formatting</td><td>Bottom format bar removed; chords and palette only</td><td>Selection toolbar: Text ▾, Bold, Italic, Strike, Code, Link, <b>Comment</b></td><td>Discoverable without a permanent bar</td></tr>
+<tr><td>13</td><td>Settings</td><td>Palette choice lists (Theme…, Font…, Page width…)</td><td>A <b>Settings tab</b> (Ctrl+,) with Appearance, Editor, Files, Shortcuts, About. The palette entries stay and jump into it</td><td>A tab keeps the sidebar and panes as they are</td></tr>
+<tr><td>14</td><td>Shortcuts</td><td>Help overlay F1, editable keys</td><td>Settings › Shortcuts, opened by F1; keys editable there</td><td>One home for settings</td></tr>
+<tr><td>15</td><td>Empty pane</td><td>Today card and recall cards</td><td>Kept: <i>Today</i>, <i>New note</i>, <i>Search</i>, and up to three "from a month ago" cards</td><td>Already good</td></tr>
+<tr><td>16</td><td>Wiki links <code>[[ ]]</code></td><td>Writes <code>[[Note]]</code></td><td>Keep the <code>[[</code> picker, but it <b>writes a relative link</b> <code>[Note](Note.md)</code></td><td>Same gesture, GitHub-readable</td></tr>
+<tr><td>17</td><td>Date links <code>@today</code></td><td>Writes <code>@today</code></td><td>The <code>@</code> picker writes <code>[Saturday, 21 November](Daily/2026-11-21.md)</code></td><td>Same reason</td></tr>
+<tr><td>18</td><td>Tags <code>#tag</code></td><td>Plain text, filtered in the palette</td><td>Kept: GitHub shows them as plain text, nothing breaks</td><td>Compatible as is</td></tr>
+<tr><td>19</td><td>Save state</td><td>Autosave, no indicator</td><td>No indicator (v1's "Saved" removed)</td><td>Autosave is the promise; a label adds noise</td></tr>
+<tr><td>20</td><td>Zoom</td><td>Ctrl+= / Ctrl+- / Ctrl+0</td><td>Kept; changes text size, shown in Settings</td><td>—</td></tr>
+</tbody></table></div>
+<p>Prototype note: the browser prototype does not draw a window title; the folder appears as each tab's tooltip.</p>
+<h3>Open questions for the owner</h3>
+<ol>
+<li><b>Q1 Comments syntax.</b> Switch to <code>&lt;!-- comment: … --&gt;</code> (hidden on GitHub, anchored to the text just before it), or keep CriticMarkup (anchors a passage precisely, but shows as raw text on GitHub)?</li>
+<li><b>Q2 Pending changes.</b> The assistant's pending changes are written into the file as CriticMarkup until accepted. Keep that, or hold them beside the file so the <code>.md</code> is always clean?</li>
+<li><b>Q3 Preview tabs.</b> Keep preview tabs at all, or open every note as a normal tab?</li>
+</ol>`;
+function openDlog(){
+  closeDlog();
+  const d=document.createElement("aside");d.id="dlog";d.className="dlog";d.setAttribute("aria-label","Design log");
+  d.innerHTML=`<header><h2>Design log</h2><span style="font-size:12px;color:var(--faint)">v2 · 2026-11-21</span><button class="ib" data-dlog="close" aria-label="Close design log" title="Close (Esc)">${ic("x")}</button></header><div class="dbody" tabindex="0">${DLOG_HTML}</div>`;
+  document.body.append(d);d.querySelector("[data-dlog]").onclick=closeDlog;d.querySelector(".dbody").focus();
+}
+function closeDlog(){document.getElementById("dlog")?.remove()}
+function toggleGuide(){
+  const g=document.querySelector(".guide");if(g){g.remove();return}
+  const el=document.createElement("div");el.className="guide";
+  el.innerHTML=`<b>Try it</b><ul><li>Click a tree row to preview a note; double-click to keep the tab</li><li>Click a line to show its Markdown</li><li>Select text, then Comment</li><li><kbd>${MOD.trim()} \\</kbd> splits the pane; click a pane to focus it</li><li><kbd>F9</kbd> focus mode, <kbd>${MOD.trim()} ⇧S</kbd> hides the title bar</li><li>Right panel: Outline, Comments, Versions, Assistant</li><li><kbd>F1</kbd> opens Shortcuts</li></ul><button class="ib" data-act="guide" aria-label="Close">${ic("x")}</button>`;
+  app.append(el);
+}
+
+/* ---------- Selection toolbar ---------- */
+function showBar(){
+  document.querySelector(".fbar")?.remove();
+  const sel=getSelection();if(!sel.rangeCount||sel.isCollapsed)return;
+  const doc=sel.anchorNode&&(sel.anchorNode.nodeType===1?sel.anchorNode:sel.anchorNode.parentElement)?.closest(".doc");
+  if(!doc||!doc.dataset.note)return;
+  const r=sel.getRangeAt(0).getBoundingClientRect();if(!r.width)return;
+  const B=[["Text ▾","Turn into heading, list or quote",null],["bold","Bold: wraps the selection in **",MOD+"B"],["italic","Italic: wraps the selection in *",MOD+"I"],["strike","Strikethrough: wraps the selection in ~~",MOD+"⇧X"],["code","Inline code: wraps the selection in `",MOD+"E"],["link","Link: makes [selection](url)",MOD+"K"],null,["comment","Comment on the line this text sits on",null]];
+  const b=document.createElement("div");b.className="fbar";b.setAttribute("role","toolbar");b.setAttribute("aria-label","Format");
+  b.innerHTML=B.map((x,j)=>!x?`<span class="sep"></span>`:x[0]==="comment"
+    ?`<button data-fb="${j}" title="${x[1]}" aria-label="Comment" style="display:flex;align-items:center;gap:4px;padding:0 8px 0 6px">${ic("comment")}<span style="font-size:12px;font-weight:500">Comment</span></button>`
+    :`<button data-fb="${j}" title="${x[1]}${x[2]?"  "+x[2]:""}" aria-label="${x[1]}">${ICON[x[0]]?ic(x[0]):`<span style="padding:0 4px;font-weight:500">${x[0]}</span>`}</button>`).join("");
+  document.body.append(b);
+  b.style.left=Math.max(8,Math.min(innerWidth-b.offsetWidth-8,r.left+r.width/2-b.offsetWidth/2))+"px";
+  b.style.top=Math.max(8,r.top-b.offsetHeight-8)+"px";
+  b.onmousedown=e=>e.preventDefault();
+  b.onclick=e=>{
+    const k=e.target.closest("[data-fb]");if(!k)return;const j=+k.dataset.fb,x=B[j];
+    if(x[0]==="comment"){const s=getSelection().toString()||sel.toString();b.remove();startComment(s);return}
+    toast(x[1]);b.remove();
+  };
+}
+
+/* ---------- Actions ---------- */
+function act(v,el){
+  switch(v){
+    case"side":toggleSide();break;
+    case"rtog":S.rhide=!S.rhide;renderAll();break;
+    case"pal":openPal();break;
+    case"new":newNote();break;
+    case"settings":openSettings();break;
+    case"today":openNote("today",{pv:false});break;
+    case"slash":openSlash();break;
+    case"dlog":openDlog();break;
+    case"whattry":toggleGuide();break;
+    case"guide":document.querySelector(".guide")?.remove();break;
+    case"review":review();break;
+    case"tighten":toast("Tightening proposes changes you accept or reject");break;
+    case"savever":S.vfield=true;renderRight();document.getElementById("vname")?.focus();break;
+    case"vcancel":S.vfield=false;renderRight();break;
+    case"vsave":saveVersion(document.getElementById("vname")?.value);break;
+    case"restore":restoreVersion();break;
+    case"cmpclose":closeActiveTab();break;
+    case"csave":saveComment();break;
+    case"ccancel":S.draft=null;renderRight();break;
+    case"resolve":{const id=curId(),at=+el.dataset.at;NOTES[id].md=resolveComment(NOTES[id].md,at);keepTabs(id);if(S.fcard===at)S.fcard=null;renderAll();toast("Comment resolved");break}
+    case"reply":S.reply=S.reply===+el.dataset.at?null:+el.dataset.at;renderRight();document.querySelector("[data-replyf]")?.focus();break;
+    case"acceptall":resolveAll(el.dataset.id,true);break;
+    case"rejectall":resolveAll(el.dataset.id,false);break;
+    case"folder":toast("Opens a folder picker");break;
+    case"trashinfo":toast("Trash keeps notes in .trash inside your notes folder");break;
+    case"themes":openPal(">Theme");break;
+    case"new-scratch":newScratch();break;
+  }
+}
+const docId=el=>el.closest(".doc")?.dataset.note||"";
+
+/* ---------- Events ---------- */
+document.addEventListener("click",e=>{
+  const t=e.target;
+  if(!t.closest(".pop")&&!t.closest(".fbar"))closeMenus();
+  const a=t.closest("[data-act]");if(a){act(a.dataset.act,a);return}
+  const vw=t.closest("[data-view]");if(vw){S.rview=vw.dataset.view;renderRight();return}
+  const cl=t.closest("[data-close]");if(cl){const[pi,ti]=cl.dataset.close.split(":").map(Number);closeTab(pi,ti);return}
+  const tb=t.closest("[data-tp]");if(tb){const pi=+tb.dataset.tp,ti=+tb.dataset.ti,p=S.panes[pi],tab=p.tabs[ti];S.focus=pi;if(e.detail>=2&&tab.k==="note")tab.preview=false;p.act=tab;renderAll();return}
+  const o=t.closest("[data-open]");if(o){openNote(o.dataset.open,{pv:!(e.metaKey||e.ctrlKey||e.detail>=2||o.hasAttribute("data-perm"))});return}
+  const f=t.closest("[data-fold]");if(f){const k=f.dataset.fold;S.closed[k]=!S.closed[k];renderSide();return}
+  const pg=t.closest("[data-page]");if(pg){S.page=pg.dataset.page;renderPanes();return}
+  const st=t.closest("[data-set]");if(st){const k=st.dataset.set,v=st.dataset.v;if(k==="mode")S.mode=v.toLowerCase();if(k==="size")S.size=+v;if(k==="width")S.width=v;renderAll();return}
+  const sw=t.closest("[data-toggle]");if(sw){const k=sw.dataset.toggle;S[k]=!S[k];renderAll();return}
+  const kc=t.closest("[data-key]");if(kc){S.listen=+kc.dataset.key;renderPanes();return}
+  const pa=t.closest("[data-pacc]");if(pa){resolvePending(docId(pa),+pa.dataset.pacc,true);return}
+  const pj=t.closest("[data-prej]");if(pj){resolvePending(docId(pj),+pj.dataset.prej,false);return}
+  const cm=t.closest(".cm,.cdot");if(cm){S.rhide=false;S.rview="comments";S.fcard=+cm.dataset.cid;renderAll();document.querySelector(`[data-cc="${S.fcard}"]`)?.scrollIntoView({block:"nearest"});return}
+  const cc=t.closest("[data-cc]");if(cc&&!t.closest("button,input")){focusCard(+cc.dataset.cc);return}
+  const rb=t.closest("[data-replyf]");if(rb)return;
+  const vr=t.closest("[data-ver]");if(vr){openCompare(NOTES[curId()].vers[+vr.dataset.ver]);return}
+  const go=t.closest("[data-go]");if(go){document.querySelector(`[data-ps="${S.focus}"] .b[data-i="${go.dataset.go}"]`)?.scrollIntoView({behavior:S.motion?"smooth":"auto",block:"start"});return}
+  const bx=t.closest(".box");if(bx){const id=docId(bx);if(!id)return;const L=NOTES[id].md.split("\n"),at=+bx.dataset.at;L[at]=L[at].replace(/\[( |x|X)\]/,m=>m==="[ ]"?"[x]":"[ ]");NOTES[id].md=L.join("\n");keepTabs(id);renderAll();return}
+  const cp=t.closest("[data-copy]");if(cp){const blk=parse(NOTES[docId(cp)].md).find(b=>b.at===+cp.dataset.copy);if(blk)copy(blk.body.join("\n"),"Copied the code");return}
+  const ln=t.closest("a.ln");if(ln&&!(S.reveal&&t.closest(".b.live"))){e.preventDefault();const h=ln.dataset.href;const id=Object.keys(NOTES).find(k=>k===h||NOTES[k].title.toLowerCase()===h.toLowerCase());if(id){openNote(id,{pv:false});return}toast("Opens "+h+" in your browser");return}
+  const bl=t.closest(".b"),pane=t.closest(".pane");
+  if(bl&&pane&&!getSelection().toString()){const pi=+pane.dataset.pane;if(pi!==S.focus)focusPane(pi);setLive(pi,+bl.dataset.i);return}
+  if(!bl&&pane&&!getSelection().toString()&&!t.closest(".ph")&&!t.closest(".pill"))setLive(+pane.dataset.pane,null);
+});
+document.addEventListener("contextmenu",e=>{
+  const r=e.target.closest("[data-ctx]");if(!r)return;e.preventDefault();
+  const id=r.dataset.ctx;
+  menu(e.clientX,e.clientY,[
+    {t:"Open",icon:"note",run:()=>openNote(id,{pv:false})},
+    {t:"Open in new tab",icon:"open",kbd:MOD+"click",run:()=>openNote(id,{pv:false})},"-",
+    {t:"Rename",icon:"pen",run:()=>toast("Rename edits the file name in place")},
+    {t:"Duplicate",icon:"dup",run:()=>duplicate(id)},
+    {t:"Move to…",icon:"move",run:()=>toast("Pick a folder from a short list")},
+    {t:"Copy path",icon:"copy",run:()=>copy(tabPath({k:"note",id}),"Copied the file path")},"-",
+    {t:"Move to Trash",icon:"trash",danger:true,run:()=>trash(id)}]);
+});
+document.addEventListener("mousedown",e=>{
+  const pane=e.target.closest(".pane");if(pane)focusPane(+pane.dataset.pane);
+  if(e.button===1&&e.target.closest(".tab"))e.preventDefault();
+});
+document.addEventListener("auxclick",e=>{
+  const tb=e.target.closest(".tab");if(tb&&e.button===1)closeTab(+tb.dataset.tp,+tb.dataset.ti);
+});
+document.addEventListener("mouseup",()=>setTimeout(showBar,0));
+document.addEventListener("keyup",e=>{if(e.shiftKey)showBar()});
+document.addEventListener("selectionchange",()=>{if(getSelection().isCollapsed)document.querySelector(".fbar")?.remove()});
+document.addEventListener("scroll",e=>{
+  const el=e.target;if(!el.classList||!el.classList.contains("pscroll"))return;
+  const i=+el.dataset.ps,t=S.panes[i]&&S.panes[i].act;if(t)t.scroll=el.scrollTop;
+  if(i===S.focus)syncOutline();
+  document.querySelector(".fbar")?.remove();
+},true);
+function syncOutline(){
+  const sc=document.querySelector(`[data-ps="${S.focus}"]`);if(!sc)return;
+  const hs=[...sc.querySelectorAll(".b.k-h")];if(!hs.length)return;
+  const top=sc.getBoundingClientRect().top+24;let cur=hs[0];hs.forEach(h=>{if(h.getBoundingClientRect().top<=top)cur=h});
+  document.querySelectorAll(".ol").forEach(o=>o.classList.toggle("on",o.dataset.go===cur.dataset.i));
+}
+/* Keys that are being rebound take the next key press */
+document.addEventListener("keydown",e=>{
+  if(S.listen===null)return;
+  e.preventDefault();e.stopPropagation();
+  if(e.key==="Escape"){S.listen=null;renderPanes();return}
+  if(["Shift","Control","Alt","Meta"].includes(e.key))return;
+  const combo=(e.metaKey||e.ctrlKey?MOD:"")+(e.altKey?"⌥":"")+(e.shiftKey?"⇧":"")+(e.key.length===1?e.key.toUpperCase():e.key);
+  S.keys[S.listen][1]=combo;S.listen=null;renderPanes();
+},true);
+document.addEventListener("keydown",e=>{
+  const mod=e.metaKey||e.ctrlKey,inField=/INPUT|TEXTAREA/.test(document.activeElement?.tagName||"");
+  if(e.target.id==="cdraft"&&e.key==="Enter"){e.preventDefault();saveComment();return}
+  if(e.target.id==="vname"&&e.key==="Enter"){e.preventDefault();saveVersion(e.target.value);return}
+  if(e.target.id==="askf"&&e.key==="Enter"){e.preventDefault();toast("The assistant answers here once it is connected");return}
+  if(e.target.dataset&&e.target.dataset.replyf!==undefined&&e.key==="Enter"){e.preventDefault();const at=+e.target.dataset.replyf,key=curId()+":"+at,v=e.target.value.trim();if(v){(S.replies[key]=S.replies[key]||[]).push(v)}S.reply=null;renderRight();return}
+  if(pal&&$("#palq")){
+    if(e.key==="ArrowDown"){pal.act=Math.min(pal.act+1,pal.items.length-1);drawPal();e.preventDefault();return}
+    if(e.key==="ArrowUp"){pal.act=Math.max(pal.act-1,0);drawPal();e.preventDefault();return}
+    if(e.key==="Enter"){runPal(pal.act,mod);e.preventDefault();return}
+    if(e.key==="Escape"){closePal();return}
+  }
+  if(slash&&document.querySelector(".slash")){
+    if(e.key==="Escape"){slash=null;closeMenus();return}
+    if(e.key==="ArrowDown"||e.key==="ArrowRight"){slash.act=Math.min(slash.act+1,slash.items.length-1);drawSlash();e.preventDefault();return}
+    if(e.key==="ArrowUp"||e.key==="ArrowLeft"){slash.act=Math.max(slash.act-1,0);drawSlash();e.preventDefault();return}
+    if(e.key==="Enter"){const it=slash.items[slash.act];if(it)it.pick?openPicker(it.pick):insert(it);e.preventDefault();return}
+    if(e.key==="Backspace"){if(!slash.q){slash=null;closeMenus()}else{slash.q=slash.q.slice(0,-1);drawSlash()}e.preventDefault();return}
+    if(e.key.length===1&&!mod){slash.q+=e.key;drawSlash();e.preventDefault();return}
+  }
+  if(mod&&e.altKey&&/^Digit[1-4]$/.test(e.code)){e.preventDefault();panelView(["outline","comments","versions","assist"][+e.code[5]-1]);return}
+  if(mod&&e.altKey&&e.code==="KeyS"){e.preventDefault();panelView("versions",true);return}
+  if(mod&&!e.altKey&&/^Digit[12]$/.test(e.code)){if(S.panes.length>1){e.preventDefault();focusPane(+e.code[5]-1)}return}
+  if(mod&&(e.key==="k"||e.key==="p")){e.preventDefault();openPal();return}
+  if(mod&&e.key===","){e.preventDefault();openSettings();return}
+  if(mod&&!e.shiftKey&&e.key==="b"){e.preventDefault();toggleSide();return}
+  if(mod&&e.key==="\\"){e.preventDefault();split();return}
+  if(mod&&e.shiftKey&&e.code==="KeyS"){e.preventDefault();toggleBand();return}
+  if(mod&&e.shiftKey&&(e.key==="o"||e.key==="O")){e.preventDefault();panelView("outline");return}
+  if(mod&&e.shiftKey&&(e.key==="n"||e.key==="N")){e.preventDefault();newNote();return}
+  if(mod&&!e.shiftKey&&e.key==="n"){e.preventDefault();newScratch();return}
+  if(mod&&e.key==="w"){e.preventDefault();closeActiveTab();return}
+  if(mod&&(e.key==="="||e.key==="+")){e.preventDefault();zoom(1);return}
+  if(mod&&e.key==="-"){e.preventDefault();zoom(-1);return}
+  if(mod&&e.key==="0"){e.preventDefault();zoom(0);return}
+  if(mod&&e.key==="Tab"){e.preventDefault();cycleTab(e.shiftKey?-1:1);return}
+  if(e.key==="F9"){e.preventDefault();toggleFocus();return}
+  if(e.key==="F1"){e.preventDefault();openSettings("Shortcuts");return}
+  if(e.key==="Escape"){
+    if(document.getElementById("dlog")){closeDlog();return}
+    if(S.focusMode){S.focusMode=false;renderAll();return}
+    closeMenus();const t=curTab();if(t&&t.k==="note"&&t.live!=null)setLive(S.focus,null);return;
+  }
+  if(!inField&&e.key==="/"&&curTab()&&curTab().k==="note"){e.preventDefault();openSlash();return}
+  if(!inField&&curTab()&&curTab().k==="note"&&(e.key==="ArrowDown"||e.key==="ArrowUp")&&curTab().live!=null){
+    e.preventDefault();
+    const pane=document.querySelector(`[data-pane="${S.focus}"]`),bs=[...pane.querySelectorAll(".b")];
+    const cur=bs.findIndex(x=>+x.dataset.i===curTab().live);
+    const nx=bs[Math.max(0,Math.min(bs.length-1,cur+(e.key==="ArrowDown"?1:-1)))];
+    if(nx){setLive(S.focus,+nx.dataset.i);nx.scrollIntoView({block:"nearest"})}
+  }
+});
+
+/* ---------- Title band reveal and window size ---------- */
+$("#strip").addEventListener("mouseenter",()=>$("#band").classList.add("peek"));
+$("#strip").addEventListener("mouseleave",()=>setTimeout(()=>{if(!$("#band").matches(":hover"))$("#band").classList.remove("peek")},160));
+$("#band").addEventListener("mouseleave",()=>$("#band").classList.remove("peek"));
+let wide=app.getBoundingClientRect().width>=1000;
+S.rhide=!wide;
+renderAll();
+addEventListener("resize",()=>{
+  document.querySelector(".fbar")?.remove();
+  const w=app.getBoundingClientRect().width>=1000;
+  if(w!==wide){wide=w;S.rhide=!w;renderAll()}
+});
+</script>

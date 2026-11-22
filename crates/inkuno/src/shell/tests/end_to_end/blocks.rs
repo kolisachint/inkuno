@@ -19,6 +19,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = |s: &str| note.find(s).unwrap();
     let room = l[0].3;
     assert!(room > 0., "{l:?}");
+    // Each quote or callout line that is not the note's first one has a gap above it, as the body blocks do; a
+    // callout's first line adds its room to that gap. Both scale with the text, as in the layout.
+    let size = shell.read_with(cx, |s, _| s.theme.size);
+    let gap = 9. * (size / crate::logic::prefs::Prefs::SIZE);
     // Code: the room above the opening line and under the closing one only.
     assert_eq!(of(&l, 0), (0, true, false, room, 0.));
     assert_eq!(of(&l, at("let")), (at("let"), false, false, 0., 0.));
@@ -29,22 +33,25 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // Callout: from its `[!TYPE]` line to the line before the next block, a gap between it and the code block.
     assert_eq!(
         of(&l, at("> [!NOTE]")),
-        (at("> [!NOTE]"), true, false, room, 0.)
+        (at("> [!NOTE]"), true, false, room + gap, 0.)
     );
-    assert_eq!(of(&l, at("> une")), (at("> une"), false, false, 0., 0.));
-    assert_eq!(of(&l, at("> deux")), (at("> deux"), false, true, 0., room));
+    assert_eq!(of(&l, at("> une")), (at("> une"), false, false, gap, 0.));
+    assert_eq!(of(&l, at("> deux")), (at("> deux"), false, true, gap, room));
     assert!(of(&l, at("```\nx")).1);
     // Two callouts in a row are two shapes; a callout of a single line has both ends.
     assert_eq!(
         of(&l, at("> seule")),
-        (at("> seule"), false, true, 0., room)
+        (at("> seule"), false, true, gap, room)
     );
     assert_eq!(
         of(&l, at("> [!WARNING]")),
-        (at("> [!WARNING]"), true, false, room, 0.)
+        (at("> [!WARNING]"), true, false, room + gap, 0.)
     );
-    // A plain quote has the ends of its bar but no room.
-    assert_eq!(of(&l, at("> simple")), (at("> simple"), true, true, 0., 0.));
+    // A plain quote has the ends of its bar but no room: only its gap.
+    assert_eq!(
+        of(&l, at("> simple")),
+        (at("> simple"), true, true, gap, 0.)
+    );
     // A ``` that closes nothing: one line.
     let orphan = note.rfind("```").unwrap();
     assert_eq!(of(&l, orphan), (orphan, true, true, room, room));
@@ -125,9 +132,10 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     let lh = |n: u8| rows.iter().find(|r| r.1 == n).unwrap().3;
     // Line heights fall with the level (H5 and H6 share the body size), room above: none on the first line, then a
-    // body line for H1 and H2, two thirds of it for the rest.
+    // body line for H1 and H2, two thirds of it for the rest. H4 and H5 may round to the same pixels: 16 × 1.4 and
+    // 15 × 1.47 are 22.4 and 22.05 px at the default size, so the comparison of those two is not strict.
     assert!(
-        lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) > lh(5) && lh(5) == lh(6),
+        lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) >= lh(5) && lh(5) == lh(6),
         "{rows:?}"
     );
     let pad = |n: u8| rows.iter().rfind(|r| r.1 == n).unwrap().2;

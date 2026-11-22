@@ -359,15 +359,15 @@ fn tabs_are_text_that_stay_clear_of_the_window_buttons(cx: &mut TestAppContext) 
         }
     };
     for (keys, zoom) in [
-        ("secondary-- ".repeat(5), 11.),
-        ("secondary-0 ".into(), 16.),
-        ("secondary-= ".repeat(16), 32.),
+        ("secondary-- ".repeat(4), 11.),
+        ("secondary-0 ".into(), 15.),
+        ("secondary-= ".repeat(17), 32.),
     ] {
         cx.simulate_keystrokes(keys.trim_end());
         assert_eq!(shell.read_with(cx, |s, _| s.theme.size), zoom);
-        let scale = if zoom < 16. {
+        let scale = if zoom < 15. {
             0.85
-        } else if zoom > 16. {
+        } else if zoom > 15. {
             1.5
         } else {
             1.
@@ -397,8 +397,14 @@ fn tabs_are_text_that_stay_clear_of_the_window_buttons(cx: &mut TestAppContext) 
                     continue;
                 };
                 drawn += 1;
+                // Quiet's pills are 28 px high, the others 30 px (`render_tabs`).
+                let high = if shell.read_with(cx, |s, _| s.theme.quiet) {
+                    28.
+                } else {
+                    30.
+                };
                 assert!(
-                    (f32::from(pill.size.height) - 30. * scale).abs() < 1.,
+                    (f32::from(pill.size.height) - high * scale).abs() < 1.,
                     "{what}: tab {tab} is {pill:?} high"
                 );
                 assert!(
@@ -772,5 +778,102 @@ fn bulk_close_writes_pending_tables(cx: &mut TestAppContext) {
         s.pane().file.as_ref().map(|f| &f.kind),
         Some(FileKind::Image)
     )));
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Quiet sets a preview tab's title in italics with no dot; Inkuno keeps the dot and an upright title.
+#[gpui::test]
+fn a_preview_tab_is_italic_in_quiet_and_dotted_elsewhere(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "tabs-italic");
+    let note = |name: &str| root.join(format!("{name}.md"));
+    for name in ["Alpha", "Beta"] {
+        fs::write(note(name), format!("# {name}\n\n")).unwrap();
+    }
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&note("Alpha"), window, cx)
+    });
+    shell.update_in(cx, |s, window, _| window.focus(&s.nav.focus));
+    shell.update_in(cx, |s, window, cx| {
+        s.preview_note(&note("Beta"), window, cx)
+    });
+    let pane = shell.read_with(cx, |s, _| {
+        assert!(s.pane().preview);
+        s.groups[0].shown
+    });
+    for (theme, quiet) in [("Quiet Light", true), ("Inkuno Light", false)] {
+        shell.update_in(cx, |s, window, cx| {
+            s.prefs.theme = theme.into();
+            s.restyle(window, cx);
+        });
+        cx.run_until_parked();
+        let (caption, italic, is_quiet) = shell.read_with(cx, |s, _| {
+            (s.caption(pane, "Beta"), s.tab_italic(pane), s.theme.quiet)
+        });
+        assert_eq!(is_quiet, quiet, "{theme}");
+        assert_eq!(caption.contains('\u{2022}'), !quiet, "{theme}: {caption}");
+        assert!(caption.starts_with("Beta"), "{theme}: {caption}");
+        assert_eq!(italic, quiet, "{theme}");
+    }
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Title bar hidden: pointing at its 12 px strip draws the band over the note; the band stays while the
+/// pointer is on it, and goes when the pointer leaves it. Shown again, there is no strip to point at.
+#[gpui::test]
+fn pointing_at_the_hidden_strip_peeks_the_band(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "tabs-peek-hover");
+    let note = |name: &str| root.join(format!("{name}.md"));
+    for name in ["Alpha", "Beta"] {
+        fs::write(note(name), format!("# {name}\n\n")).unwrap();
+    }
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    for name in ["Alpha", "Beta"] {
+        shell.update_in(cx, |s, window, cx| s.open_from_nav(&note(name), window, cx));
+    }
+    let peeked = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.band_peek);
+    let none = gpui::Modifiers::none();
+    let settle = |cx: &mut gpui::VisualTestContext| {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    };
+
+    shell.update(cx, |s, cx| s.toggle_title_bar(cx));
+    settle(cx);
+    assert!(cx.debug_bounds("band-peek-0").is_none());
+    let strip = cx
+        .debug_bounds("band-strip-0")
+        .expect("the strip is drawn")
+        .center();
+    cx.simulate_mouse_move(strip, None, none);
+    settle(cx);
+    assert!(peeked(cx));
+    assert!(
+        cx.debug_bounds("band-peek-0").is_some(),
+        "the band is drawn"
+    );
+
+    // Still on the band (its tabs, a little lower than the strip): it stays.
+    let on_band = strip + gpui::point(gpui::px(0.), gpui::px(16.));
+    cx.simulate_mouse_move(on_band, None, none);
+    settle(cx);
+    assert!(peeked(cx));
+
+    // Off the band: it goes.
+    let away = strip + gpui::point(gpui::px(0.), gpui::px(300.));
+    cx.simulate_mouse_move(away, None, none);
+    settle(cx);
+    settle(cx);
+    // The overlay is drawn only while `band_peek` is set: `debug_bounds` keeps every selector drawn so far
+    // (GPUI's `Frame::clear` does not reset it), so absence is read from the state the renderer uses.
+    assert!(!peeked(cx));
+
+    // The title bar shown again: no strip, no peek.
+    shell.update(cx, |s, cx| s.toggle_title_bar(cx));
+    settle(cx);
+    cx.simulate_mouse_move(strip, None, none);
+    settle(cx);
+    assert!(!peeked(cx));
+    assert!(shell.read_with(cx, |s, _| s.band_shown()));
     let _ = fs::remove_dir_all(&root);
 }

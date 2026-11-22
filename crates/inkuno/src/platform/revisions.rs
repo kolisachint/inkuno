@@ -374,6 +374,14 @@ pub fn get(home: &Home, note: &Path, number: u32) -> io::Result<Revision> {
 /// Nothing is overwritten: a history already at the new path is an error and nothing moves. A
 /// history on another disk is copied, then removed.
 pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()> {
+    let history = move_history(vault, from, to);
+    // The pending changes move all the same, even when the history cannot: a list left behind waits
+    // inert (`sidecar`). The history's error is reported after them.
+    let _ = super::sidecar::move_along(vault, from, to);
+    history
+}
+
+fn move_history(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()> {
     let (Some(src), Some(dst)) = (
         home_of(from, vault).and_then(|h| h.folder(from)),
         home_of(to, vault).and_then(|h| h.folder(to)),
@@ -407,6 +415,13 @@ pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()
 /// name is in the trash) and it is moved aside under a free name, never deleted. Without this, undo
 /// of a note that had no history could bring back another note's history.
 pub fn trash_along(vault: Option<&Path>, path: &Path, trashed: &Path) -> io::Result<()> {
+    trash_history(vault, path, trashed)?;
+    // Its pending changes go to the bin with it, as its history does, when they can (`sidecar`).
+    let _ = super::sidecar::trash_along(vault, path, trashed);
+    Ok(())
+}
+
+fn trash_history(vault: Option<&Path>, path: &Path, trashed: &Path) -> io::Result<()> {
     let Some(home) = home_of(path, vault) else {
         return Ok(());
     };
@@ -444,6 +459,12 @@ fn free_in(dir: &Path, name: &str) -> PathBuf {
 /// to `to`. Only the bin entry of that exact name is used, the one `trash_along` filled for that
 /// item. Nothing is done when there is no such history; nothing is overwritten.
 pub fn restore_along(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Result<()> {
+    restore_history(vault, trashed, to)?;
+    let _ = super::sidecar::restore_along(vault, trashed, to);
+    Ok(())
+}
+
+fn restore_history(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Result<()> {
     let Some(home) = home_of(to, vault) else {
         return Ok(());
     };
@@ -785,6 +806,27 @@ mod tests {
                 .count(),
             1
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_history_at_the_new_name_still_moves_the_pending_changes() {
+        let root = temp("history-collision");
+        let home = Home::Vault(root.clone());
+        let old = root.join("plan.md");
+        fs::write(&old, "# plan\nline\nend\n").unwrap();
+        save(&home, &old, "ana", None, "one\n", 0).unwrap();
+        let marked = "# plan\nline\n{++\nadded\n++}\nend\n";
+        crate::platform::sidecar::save(Some(&home), &old, marked, "assistant").unwrap();
+        assert_eq!(crate::platform::sidecar::read(&home, &old).len(), 1);
+        // A history already at the new name refuses the move, and the history stays where it is.
+        let new = root.join("Idea.md");
+        save(&home, &new, "ana", None, "stale\n", 0).unwrap();
+        assert!(move_along(Some(&root), &old, &new).is_err());
+        assert_eq!(all(&home, &old).unwrap().len(), 1);
+        // The pending changes move all the same: the error is reported after them.
+        assert!(crate::platform::sidecar::read(&home, &old).is_empty());
+        assert_eq!(crate::platform::sidecar::read(&home, &new).len(), 1);
         let _ = fs::remove_dir_all(root);
     }
 

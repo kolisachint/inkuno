@@ -85,7 +85,7 @@ Inkuno keeps its own state in a configuration folder, outside the vault:
 | File | Holds |
 |---|---|
 | `config` | the vault, and the notes you opened, most recent first |
-| `layout` | the navigation panel and its docks |
+| `layout` | the sidebar and the right panel |
 | `panes` | the panes and their tabs |
 | `settings` | the [appearance and other choices](settings.md#the-settings-file) |
 | `keys` | the [shortcuts you changed](settings.md#changing-a-shortcut) |

@@ -13,6 +13,11 @@
 
 ## 1. Tier table (user-set contract)
 
+> **Amended 2026-11-21 (owner decision, §11): Inkuno's Markdown standard is CommonMark 0.31.2 +
+> GFM 0.29-gfm, nothing else.** The table below is the pre-amendment tiering, kept for history; §11
+> supersedes it where they differ (alerts, footnotes, math and Mermaid are GitHub.com extensions, not
+> part of the standard; `<u>`/`<mark>`/`==` are outside it).
+
 | Tier | Spec | What's in scope |
 |------|------|-----------------|
 | Core | CommonMark | Paragraphs, ATX headings (6 levels), bullet / ordered / task lists, blockquotes, fenced code blocks, thematic breaks, inline emphasis (bold, italic, code, links), autolinks, hard/soft breaks |
@@ -351,3 +356,120 @@ Follows GitHub (shapes, numbering, colour) and Typora (indent, reveal of the sou
 ### 10.5 Status note
 
 Approved 2026-11-21. The shapes, numbering, colour, indent and continuation rules of §10.3 are implemented in the editor (`layout.rs`, `paint.rs`, `lists.rs`) and checked with `scripts/visual-check.sh` on the `lists-bullet`, `lists-ordered` and `lists-task` fixtures. Remaining: none for lists from this section. Later changes to the list look go through an amendment (§8).
+
+## 11. The standard: CommonMark + GFM — DECIDED by owner 2026-11-21
+
+### 11.1 Decision
+
+Inkuno reads and writes **two specifications and no others**:
+
+| Spec | Version (pinned) | Source |
+|--|--|--|
+| CommonMark | 0.31.2 (2024-01-28) | https://spec.commonmark.org/0.31.2/ |
+| GitHub Flavored Markdown | 0.29-gfm (2019-04-06) | https://github.github.com/gfm/ |
+
+GFM is a strict superset of CommonMark; its additions are exactly five: **tables**, **task list
+items**, **strikethrough**, **autolinks (extended)** and **disallowed raw HTML** (the tag filter).
+
+Why these two (owner's brief): maximum practical compatibility; precise specifications with official
+example suites; a strong parser ecosystem, Rust included; the least implementation complexity.
+Pandoc and Jupyter come **later, as separate capabilities** (import/export), never as core syntax.
+
+The feel stays as decided in §10: **render like GitHub** (github-markdown-css shapes, numbering,
+alerts), **edit like Typora** (the caret's line shows its source; every other line renders).
+
+### 11.2 Three tiers from now on
+
+| Tier | Contents | Rule |
+|--|--|--|
+| **Standard** | Everything in CommonMark 0.31.2 and GFM 0.29-gfm | Must conform; measured by the official example suites (§11.4) |
+| **GitHub.com extensions** | Alerts `> [!NOTE]` (five kinds), footnotes `[^1]`, math `$…$` / `$$…$$`, Mermaid fences | Kept because github.com renders them. Each degrades to valid Standard Markdown (a blockquote, literal text, a fenced code block), so no file ever breaks elsewhere. No new ones without an owner decision |
+| **Outside** | `[[wiki]]` links, `@date` links, `==highlight==`, `<mark>`, `<u>`, CriticMarkup comments and pending marks, arrow substitution | Nothing new may be written in these. Existing ones are converted or retired per `prototypes/README.md` (v2 decisions #9, #16, #17) and §11.5. Arrow substitution is display-only and writes nothing, so it may stay |
+
+### 11.3 Parser strategy
+
+- **Keep Inkuno's line classifier for the editor.** It is what makes per-line reveal and incremental
+  relayout possible (`inkuno-logic/src/markdown/mod.rs`); a tree parser would re-parse the note on
+  every keystroke and lose the line identity the reveal rule needs.
+- **Use `comrak` as the conformance oracle**, as a *dev-dependency only*. comrak is a Rust port of
+  cmark-gfm, the parser github.com uses, and implements CommonMark 0.31.2 + GFM exactly. The app
+  binary does not link it.
+- Later, when export to HTML is wanted, comrak can produce it; that is a separate capability decision.
+
+### 11.4 Conformance tests
+
+- Vendor the official example suites as test data: CommonMark `spec.json` (652 examples) and the GFM
+  extension examples, under `crates/inkuno-logic/tests/spec/`, with their licences.
+- For each example, compare **block structure per source line** — Inkuno's `classify` result against
+  the block comrak assigns to that line (heading level, list item and depth, quote, code, table,
+  thematic break, paragraph, HTML block) — and **inline spans** for emphasis, strong, code, links,
+  strikethrough and autolinks.
+- Keep a checked-in **expected-failures list**. The test fails if an example in it starts passing
+  (remove it) or one not in it fails (a regression). The list only shrinks; its size is the
+  conformance score, reported in this section.
+
+Score 2026-11-21: CommonMark 334/652, GFM extensions 9/24 (`tests/conformance.rs`; the failing
+examples are listed in `crates/inkuno-logic/tests/spec/expected-failures.txt`).
+
+Score 2026-11-21, after the first fixes of §11.5: CommonMark 384/652, GFM extensions 20/24. Gains by
+section: Emphasis and strong emphasis 57 to 82/132, Links 22 to 32/90, Setext headings 9 to 12/27,
+Autolinks 5 to 6/19, Images 15 to 16/22, Tabs 2 to 3/11, Code spans 8 to 9/22; GFM Autolinks
+(extension) 0 to 11/11. Unchanged: Indented code blocks 3/12, List items 26/48, HTML blocks 23/44.
+One example newly fails and is listed as an explained conflict: cm 612 (`foo@bar.example.com` is
+plain text in CommonMark, but GFM example 629 requires the same form to be a `mailto:` link; Inkuno
+ships both, so it reads GFM).
+
+Worst sections, top 8 by failures:
+
+| Spec | Section | Passed | Failing |
+|--|--|--|--|
+| CommonMark | Emphasis and strong emphasis | 57/132 | 75 |
+| CommonMark | Links | 22/90 | 68 |
+| CommonMark | List items | 26/48 | 22 |
+| CommonMark | HTML blocks | 23/44 | 21 |
+| CommonMark | Setext headings | 9/27 | 18 |
+| CommonMark | Link reference definitions | 9/27 | 18 |
+| CommonMark | Code spans | 8/22 | 14 |
+| CommonMark | Autolinks | 5/19 | 14 |
+
+### 11.5 Known gaps to close, in order
+
+1. Setext headings (`Title` underlined with `===` / `---`).
+2. Backslash escapes and entity / numeric character references.
+3. Reference links and link reference definitions; link titles.
+4. Angle autolinks `<https://…>` and GFM extended autolinks (`www.`, e-mail).
+5. Hard line breaks (two trailing spaces, trailing backslash).
+6. List rules: interrupting a paragraph, lazy continuation, loose vs tight.
+7. HTML blocks and inline HTML: shown as dimmed source, never executed; GFM's tag filter applies.
+8. Converting the Outside tier: `[[ ]]` and `@` pickers write relative links; comments move to
+   `passage<!-- comment: … -->` (done 2026-11-21, Q1 in `prototypes/README.md`: the CriticMarkup form is still
+   read, and rewritten on save; pending changes are beside the note, Q2).
+
+Found by the first conformance run (2026-11-21), folded into the order above as quick wins first:
+
+- Quick wins: `__strong__` (done 2026-11-21); empty ATX heading `#` (done 2026-11-21); spaced rules
+  `- - -` / `* * *` (done 2026-11-21); four-space indent stops a heading or rule (done 2026-11-21);
+  relative links `[x](/path)` styled, not clickable, not only `http(s)` (done 2026-11-21); Unicode-aware
+  intraword `_` (cm 362) (done 2026-11-21).
+- Indented code blocks (four spaces) recognised as code.
+- GFM tables: rows without a leading pipe; a delimiter row with the wrong column count is not a table
+  (gfm 203).
+- GFM extended autolinks (`www.`, e-mail, bare URLs with trailing punctuation rules): 0/11 today (done 2026-11-21: 11/11).
+- **Multi-line inline spans** (emphasis, code or a link crossing a line break, e.g. cm 121, 405) fail
+  by construction of the per-line classifier. Report them as a separate count, not as rendering
+  failures, until the editor's inline pass can look across soft breaks.
+
+### 11.6 Where it is stated
+
+`docs/user/src/writing.md` opens with one line: Inkuno writes CommonMark with GitHub's extensions,
+so every note reads the same on github.com. The README says the same.
+
+Follow-ups decided 2026-11-21 (orchestrator):
+
+- Relative links `[x](Note.md)`, `[x](/path)`, `[x](#heading)` must also be **clickable** and hide
+  their brackets off the live line like web links: they replace `[[wiki]]` links (prototype decision
+  #16), so they need the same treatment. App crate: `links()` callers and `layout.rs` bracket hiding.
+- Indented code and pipe-less tables need a **block-level classifier API** (previous-line state and a
+  one-line lookahead) that both the editor and the conformance test call; the editor already keeps
+  this state in `views/editor/listing.rs` (`starts_indented_code`). Move that logic into
+  `inkuno-logic` rather than duplicating it.

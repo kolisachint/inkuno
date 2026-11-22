@@ -67,6 +67,10 @@ fn help_label() -> &'static str {
     tr("Keyboard shortcuts, about", "Raccourcis clavier, à propos")
 }
 
+fn settings_label() -> &'static str {
+    tr("Settings", "Réglages")
+}
+
 /// Appearance setting offered by the palette.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Setting {
@@ -124,6 +128,8 @@ pub enum PaletteEvent {
     Create(String),
     ChangeVault,
     Help,
+    /// The Settings tab, on its first page.
+    Settings,
     NewFolder,
     Setting(Setting),
     /// The chosen lines of the note, as a list or as text.
@@ -153,6 +159,7 @@ enum Item {
     Create,
     Vault,
     Help,
+    Settings,
     Folder,
     Comments,
     Trash,
@@ -506,7 +513,11 @@ impl Palette {
         if !q.is_empty() && !q.starts_with('#') && !exact {
             items.push(Item::Create);
         }
-        for (label, item) in [(vault_label(), Item::Vault), (help_label(), Item::Help)] {
+        for (label, item) in [
+            (vault_label(), Item::Vault),
+            (help_label(), Item::Help),
+            (settings_label(), Item::Settings),
+        ] {
             if command(&q, label) {
                 items.push(item);
             }
@@ -553,6 +564,7 @@ impl Palette {
                         name,
                         "app::OpenVault"
                             | "app::ToggleHelp"
+                            | "app::OpenSettings"
                             | "nav::NewFolder"
                             | "app::ChooseTheme"
                             | "editor::ListBullet"
@@ -611,6 +623,7 @@ impl Palette {
             Some(Item::Create) => PaletteEvent::Create(self.query.text.trim().to_string()),
             Some(Item::Vault) => PaletteEvent::ChangeVault,
             Some(Item::Help) => PaletteEvent::Help,
+            Some(Item::Settings) => PaletteEvent::Settings,
             Some(Item::Folder) => PaletteEvent::NewFolder,
             Some(&Item::Restyle(style)) => PaletteEvent::Restyle(style),
             Some(&Item::Grid(op)) => PaletteEvent::Grid(op),
@@ -817,6 +830,7 @@ impl Render for Palette {
                 let header = grouped && (i == first || !same(i.checked_sub(1).and_then(|p| self.items.get(p))));
                 return self.command_row(i, n, header, cx);
             }
+            let mut hit = None;
             let (label, detail) = match item {
                 Item::Note(n) => {
                     let e = &self.entries[*n];
@@ -832,6 +846,10 @@ impl Render for Palette {
                     let e = &self.entries[*n];
                     let word = self.query.text.trim().to_lowercase();
                     let word = word.split_whitespace().next().unwrap_or_default().to_string();
+                    // Quiet shows the line under the name, with the word marked (below).
+                    if t.quiet {
+                        hit = rank::snippet_line(&e.body, &e.lower, &word);
+                    }
                     (e.name.clone(), snippet(&e.body, &e.lower, &word))
                 }
                 Item::Create => (
@@ -840,6 +858,7 @@ impl Render for Palette {
                 ),
                 Item::Vault => (vault_label().to_string(), crate::ui::keys::of(cx, &crate::actions::OpenVault)),
                 Item::Help => (help_label().to_string(), crate::ui::keys::of(cx, &crate::actions::ToggleHelp)),
+                Item::Settings => (settings_label().to_string(), crate::ui::keys::of(cx, &crate::actions::OpenSettings)),
                 Item::Folder => (folder_label().to_string(), crate::ui::keys::of(cx, &crate::views::nav::NewFolder)),
                 Item::Comments => (comments_label().to_string(), String::new()),
                 &Item::Restyle(style) => (list_label(style).to_string(), String::new()),
@@ -853,7 +872,7 @@ impl Render for Palette {
             // Where the detail is a shortcut, not a description.
             let shortcut = matches!(
                 item,
-                Item::Vault | Item::Help | Item::Folder | Item::Grid(_)
+                Item::Vault | Item::Help | Item::Settings | Item::Folder | Item::Grid(_)
             );
             let note = matches!(item, Item::Note(_));
             let age = match item {
@@ -861,22 +880,51 @@ impl Render for Palette {
                 _ => None,
             };
             let soft = |d: gpui::Div| d.text_size(t.px(12.)).text_color(t.soft);
+            // Quiet's full-text match is two lines: the name, then the matching line with the word marked.
+            let two = t.quiet && hit.is_some();
             div()
                 .debug_selector(move || format!("palette-item-{i}"))
                 .mx(t.px(6.))
                 .px_3()
-                .h(t.px(ROW))
+                .h(t.px(if two { 48. } else { ROW }))
                 .rounded(t.large())
                 .flex()
-                .items_center()
-                .justify_between()
+                .when(two, |d| d.flex_col().justify_center().items_start())
+                .when(!two, |d| d.items_center().justify_between())
                 .gap_3()
                 .cursor_pointer()
                 .when(i == self.selected, |d| d.bg(t.selection))
                 .when(i != self.selected, |d| d.hover(|s| s.bg(t.hover)))
                 // A note: its name, its folder after it, and on the right how long ago it was written. With a
                 // text excerpt, the name keeps its place and the excerpt is shortened.
-                .when(note, |d| {
+                .when(two, |d| {
+                    let (line, range) = hit.take().unwrap_or((String::new(), 0..0));
+                    // The matching word is marked with the accent at 22 %, the rest of the line is soft.
+                    let before = line.get(..range.start).unwrap_or_default().to_string();
+                    let rest = line.get(range.start..).unwrap_or_default();
+                    let word = rest.get(..range.len()).unwrap_or(rest).to_string();
+                    let after = rest.get(word.len()..).unwrap_or_default().to_string();
+                    d.child(div().max_w_full().truncate().child(label.clone())).child(
+                        div()
+                            .flex()
+                            .w_full()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_size(t.px(12.))
+                            .text_color(t.soft)
+                            .child(div().flex_none().child(before))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .bg(t.accent.opacity(0.22))
+                                    .text_color(t.text)
+                                    .child(word),
+                            )
+                            .child(div().flex_none().child(after)),
+                    )
+                })
+                .when(!two && note, |d| {
                     d.child(
                         div()
                             .flex_1()
@@ -888,7 +936,7 @@ impl Render for Palette {
                             .child(soft(div()).debug_selector(move || format!("palette-folder-{i}")).truncate().flex_none().max_w(gpui::relative(0.4)).child(detail.clone())),
                     )
                 })
-                .when(!note, |d| {
+                .when(!note && !two, |d| {
                     d.child(
                         div()
                             .truncate()
@@ -923,13 +971,21 @@ impl Render for Palette {
                     .child(keycaps(&keys, t, false))
                     .child(what)
             };
+            // Quiet writes the return key as ↵: `↵ open · Ctrl ↵ other pane · > commands`.
+            let key = |action: &dyn gpui::Action| {
+                let keys = crate::ui::keys::of(cx, action);
+                match t.quiet {
+                    true => keys.replace("Enter", "↵").replace('+', " "),
+                    false => keys,
+                }
+            };
             let hints = if self.commands_only {
-                vec![hint(crate::ui::keys::of(cx, &Confirm), tr("run", "lancer"))]
+                vec![hint(key(&Confirm), tr("run", "lancer"))]
             } else {
                 vec![
-                    hint(crate::ui::keys::of(cx, &Confirm), tr("open", "ouvrir")),
+                    hint(key(&Confirm), tr("open", "ouvrir")),
                     hint(
-                        crate::ui::keys::of(cx, &ConfirmAside),
+                        key(&ConfirmAside),
                         tr("in the other pane", "dans l'autre volet"),
                     ),
                     hint(">".into(), tr("commands", "commandes")),
@@ -985,7 +1041,7 @@ impl Render for Palette {
         .justify_center()
         .items_start()
         .child(
-            crate::ui::widgets::floating(t)
+            crate::ui::widgets::popover(t)
                 .debug_selector(|| "palette-panel".into())
                 .mt(self.top)
                 .w(t.px(560.))

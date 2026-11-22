@@ -13,7 +13,7 @@ use crate::{
     lang::{date_name, time_name},
     logic::wiki::Anchor,
     logic::{assistant, daily, markdown, markdown::Link, pending, rank, revision},
-    platform::{clock, link, revisions, vault as files},
+    platform::{clock, link, revisions, sidecar, vault as files},
 };
 
 use super::{
@@ -259,7 +259,7 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         Ok(note) => note,
         Err(outcome) => return outcome,
     };
-    let (text, token) = match vault::read_text(&note.path) {
+    let (text, token) = match vault::read_shown(Some(&vault.root), &note.path) {
         Ok(read) => read,
         Err(message) => return Outcome::err(message),
     };
@@ -271,6 +271,14 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         None => text.clone(),
     };
     let meta = markdown::front_matter(&text);
+    // The pending changes that the note's text does not place: shown nowhere, they wait as orphans.
+    let orphans = match revisions::home_of(&note.path, Some(&vault.root)) {
+        Some(home) => {
+            let disk = fs::read_to_string(&note.path).unwrap_or_default();
+            sidecar::unplaced(&home, &note.path, &disk)
+        }
+        None => Vec::new(),
+    };
     Outcome::ok(json!({
         "path": vault::rel(&vault.root, &note.path),
         "title": note.name,
@@ -282,6 +290,16 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         "embeds": embeds(vault, &text),
         "comments": comments_of(&text),
         "token": token,
+        "unplaced": {
+            "count": orphans.len(),
+            "entries": orphans.iter().map(|e| json!({
+                "id": e.id,
+                "author": e.author,
+                "old": e.old,
+                "new": e.new,
+                "orphan_since": e.orphan_since,
+            })).collect::<Vec<Value>>(),
+        },
     }))
 }
 
@@ -485,7 +503,7 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(path) => path,
         Err(outcome) => return outcome,
     };
-    let (text, token) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (text, token) = match vault::read_shown(Some(&vault.root), &path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
@@ -534,7 +552,7 @@ pub fn edit_note(vault: &mut Vault, args: &Value) -> Outcome {
             return Outcome::err(message);
         }
     }
-    if let Err(message) = files::write(&path, &next).map_err(disk) {
+    if let Err(message) = vault::write_shown(Some(&vault.root), &path, &next, "") {
         return Outcome::err(message);
     }
     let (path, renamed, reason, rewritten) = follow_title(vault, &path, &text, &next);
@@ -619,7 +637,7 @@ fn follow_title(
         vault.rescan();
         return (path.to_path_buf(), false, Some(disk(error)), 0);
     }
-    let rewritten = vault::relink(vault, &old, &title);
+    let rewritten = vault::relink(vault, &old, &title, Some((path, &dest)));
     (dest, true, None, rewritten)
 }
 
@@ -632,7 +650,7 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(text) => text,
         Err(message) => return Outcome::err(message),
     };
-    let (body, token) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (body, token) = match vault::read_shown(Some(&vault.root), &path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
@@ -661,7 +679,7 @@ pub fn append_to_note(vault: &mut Vault, args: &Value) -> Outcome {
     if let Err(message) = guard_pending(&body, &next) {
         return Outcome::err(message);
     }
-    if let Err(message) = files::write(&path, &next).map_err(disk) {
+    if let Err(message) = vault::write_shown(Some(&vault.root), &path, &next, "") {
         return Outcome::err(message);
     }
     vault.rescan();
@@ -776,7 +794,7 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
         .get("replace")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let (current, token) = match vault::read_text(&path).map_err(Outcome::err) {
+    let (current, token) = match vault::read_shown(Some(&vault.root), &path).map_err(Outcome::err) {
         Ok(read) => read,
         Err(outcome) => return outcome,
     };
@@ -844,7 +862,7 @@ fn write_note_saving(vault: &mut Vault, args: &Value, save: Save) -> Outcome {
         Ok(number) => number,
         Err(message) => return Outcome::err(message),
     };
-    if let Err(message) = files::write(&path, &marked).map_err(disk) {
+    if let Err(message) = vault::write_shown(Some(&vault.root), &path, &marked, &author) {
         return Outcome::err(message);
     }
     // The write stands even when the proposed version cannot be saved: that is a warning, and the
@@ -993,22 +1011,32 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
             return Outcome::err(disk(error));
         }
     }
-    // A note whose title was its name keeps the title in step.
-    if dest.extension().is_some_and(|e| e == "md")
-        && old_stem != new_stem
-        && let Ok(text) = fs::read_to_string(&dest)
-        && files::h1_of(&text).as_deref() == Some(old_stem.as_str())
-    {
-        let meta = markdown::front_matter(&text);
-        let (head, body) = text.split_at(meta);
-        if let Some(first) = body.lines().find(|l| !l.trim().is_empty()) {
+    // A note whose title was its name keeps the title in step. Written as the editor shows it, so the
+    // pending changes are placed again; a first line that is a pending mark is not a title.
+    if dest.extension().is_some_and(|e| e == "md") && old_stem != new_stem {
+        let home = revisions::home_of(&dest, Some(&vault.root));
+        let _ = sidecar::edit(home.as_ref(), &dest, "", |text| {
+            if files::h1_of(text).as_deref() != Some(old_stem.as_str()) {
+                return None;
+            }
+            let (head, body) = text.split_at(markdown::front_matter(text));
+            let first = body.lines().find(|l| !l.trim().is_empty())?;
+            if !first.trim_start().starts_with('#') {
+                return None;
+            }
             let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
             let title = format!("{} {new_stem}", "#".repeat(hashes.max(1)));
-            let _ = files::write(&dest, format!("{head}{}", body.replacen(first, &title, 1)));
-        }
+            Some(format!("{head}{}", body.replacen(first, &title, 1)))
+        });
     }
     let rewritten = if old_link != new_link {
-        vault::relink(vault, &old_link, &new_link)
+        vault::relink(
+            vault,
+            &old_link,
+            &new_link,
+            (!image && dest.extension().is_some_and(|e| e == "md"))
+                .then_some((&path, dest.as_path())),
+        )
     } else {
         vault.rescan();
         0
@@ -1181,7 +1209,7 @@ pub fn add_comment(vault: &mut Vault, args: &Value) -> Outcome {
         Ok(pair) => pair,
         Err(message) => return Outcome::err(message),
     };
-    let token = match annotate(&path, &passage, &comment) {
+    let token = match annotate(Some(&vault.root), &path, &passage, &comment) {
         Ok(token) => token,
         Err(message) => return Outcome::err(message),
     };
@@ -1203,7 +1231,7 @@ pub fn add_comment_file(args: &Value) -> Outcome {
         Ok(pair) => pair,
         Err(message) => return Outcome::err(message),
     };
-    match annotate(&path, &passage, &comment) {
+    match annotate(None, &path, &passage, &comment) {
         Ok(token) => Outcome::ok(json!({"path": path.display().to_string(), "token": token})),
         Err(message) => Outcome::err(message),
     }
@@ -1219,11 +1247,16 @@ fn comment_args(args: &Value) -> Result<(String, String), String> {
 
 /// The read–annotate–write step both `comment` paths share: the text is read, the passage is
 /// wrapped, and the result is written atomically. Returns the token of the new text.
-fn annotate(path: &Path, passage: &str, comment: &str) -> Result<String, String> {
-    let (text, _) = vault::read_text(path)?;
+fn annotate(
+    root: Option<&Path>,
+    path: &Path,
+    passage: &str,
+    comment: &str,
+) -> Result<String, String> {
+    let (text, _) = vault::read_shown(root, path)?;
     let next = markdown::comment_on(&text, passage, comment)?;
     guard_pending(&text, &next)?;
-    files::write(path, &next).map_err(disk)?;
+    vault::write_shown(root, path, &next, "")?;
     Ok(vault::token(next.as_bytes()))
 }
 
@@ -1349,8 +1382,17 @@ mod tests {
             "{warning}"
         );
         assert!(!warning.contains('\n'), "{warning}");
+        // The file keeps its own text; the proposed change waits beside it, in `.inkuno`.
         let text = fs::read_to_string(dir.join("Plan.md")).unwrap();
-        assert!(text.contains("{++\n\nTwo.\n++}"), "{text}");
+        assert_eq!(text, "# Plan\n", "{text}");
+        let kept = crate::platform::sidecar::read(
+            &crate::platform::revisions::Home::Vault(dir.clone()),
+            &dir.join("Plan.md"),
+        );
+        assert!(
+            kept.iter().any(|change| change.new.contains("Two.")),
+            "{kept:?}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

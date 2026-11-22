@@ -72,18 +72,22 @@ A **Typora-inspired, document-first writing app**:
 
 | Role      | Size | Line-height | Current state |
 |-----------|------|-------------|---------------|
-| Body      | 16   | 1.7         | Default body size is 16 (`crates/inkuno-logic/src/prefs.rs:24`); line-height TBD — verify in `crates/inkuno/src/views/editor/style.rs` |
-| H1        | 30   | TBD         | TBD — verify heading scale in editor style |
-| H2        | 23   | TBD         | TBD |
-| H3        | 19   | TBD         | TBD |
-| UI chrome | 13–14| —           | UI scale follows body size: `ui = size/16` clamped 0.85–1.5 (`crates/inkuno/src/ui/theme.rs:118`, `crates/inkuno/src/ui/theme.rs:116`) |
-| Code      | 14   | TBD         | TBD — verify code run sizing |
-| Metadata (counts, hints) | 12 | — | Secondary text uses `soft` color token, WCAG AA 4.5:1 (`crates/inkuno/src/ui/theme.rs:77`) |
+| Body      | 15   | 22/15 (≈1.47) | Default body size is 15, `Prefs::SIZE` (`crates/inkuno-logic/src/prefs.rs`); the sizes below hold for it (`crates/inkuno/src/views/editor/layout.rs`) |
+| H1        | 28   | 1.3         | Bold (`layout.rs`, heading table) |
+| H2        | 21   | 1.3         | Bold |
+| H3        | 18   | 1.33        | Semibold |
+| H4        | 16   | 1.4         | Semibold |
+| H5–H6     | 15   | 1.47        | Semibold; H6 is `soft` |
+| UI chrome | 13–14| —           | UI scale follows body size: `ui = size/15` clamped 0.85–1.5 (`crates/inkuno/src/ui/theme.rs`) |
+| Code      | 13   | 20/13 (≈1.54) | Code blocks and inline code (`layout.rs`) |
+| Table cells | 14 | 20/14       | `crates/inkuno/src/views/editor/grid.rs` |
+| Block gap | 9    | —           | Above each body block's line: paragraph, list item, quote or callout line; scales with size (`BLOCK_GAP`, `crates/inkuno/src/views/editor/mod.rs`) |
+| Metadata (counts, hints) | 12 | — | Secondary text uses `soft` color token, WCAG AA 4.5:1 (`crates/inkuno/src/ui/theme.rs`) |
 
 ### Measure + spacing (target)
 
-- **Doc max-width: 800 px** at body 16.
-- **Paragraph spacing: 16 px** between blocks.
+- **Doc max-width: 800 px** at body 15.
+- **Block gap: 9 px** above each body block's line (paragraph, list item, quote or callout line); headings keep their own top pads, and code, table rows, formula lines and the front matter get none.
 - **Current state (Inkuno):** page widths are Narrow 560 / Normal 800 / Wide 960 /
   Full (`crates/inkuno/src/ui/theme.rs:49-51`), width follows zoom
   (`Page::measure`, `crates/inkuno/src/ui/theme.rs:44-54`), default Normal
@@ -109,6 +113,11 @@ A **Typora-inspired, document-first writing app**:
 - All tokens centralize in `crates/inkuno/src/ui/theme.rs` (`Theme` struct,
   `crates/inkuno/src/ui/theme.rs:100-124`); views must not hard-code colors/sizes.
   (Inkuno rule: layers depend downwards only, `docs/design/architecture.md:19-27`.)
+- **2026-11-21: Quiet theme is the default; Inkuno Light/Dark stay selectable.** `THEMES[0]` and `THEMES[1]`
+  are Quiet Dark and Quiet Light, picked by the system appearance when no theme is chosen. The Quiet extras
+  (link, ground, six code colours) are set in `quiet_extras` (`crates/inkuno/src/ui/theme.rs`); other themes derive them.
+
+- **2026-11-21: Quiet block styles** (Quiet Light and Quiet Dark only; the other themes keep theirs). A code block is a box with a 1 px `code_line` border and radius 8, its line numbers in a gutter (mono 13, `gutter_num` on `gutter`, 10 px each side, a 1 px divider), the fences showing their language alone off the live block. A table has a 1 px `table_line` frame and grid, radius 8, a `th` header in semibold, cells padded 12 × 9. An alert (`> [!NOTE]`, TIP, IMPORTANT, WARNING, CAUTION) is a radius-8 box of its tint at 7 % with a 22 % line, its first line an info icon and the kind's name in semibold 14, its `[!TYPE]` cut off the live line. An image has radius 8 and a 1 px ring. An unchecked to-do box is drawn at text 40 % on whole pixels. Tokens: `Theme::code_line`, `gutter`, `gutter_num`, `table_line`, `th`, `ring`, `alerts`, `block_radius()`.
 
 ## 4. Layout standard: three regions
 
@@ -285,6 +294,7 @@ Every Phase 1 proposal must name which mockup element it implements.
    > no shadow. The window keeps its own frame (rounding, shadow and resize margin where Inkuno draws
    > it). The comments column keeps its 8 px from the note: it is a column of cards, not a pane. The
    > rest of item 4 (page widths, pill clearance) stands.
+   > 2026-11-21: lifted for the Quiet reskin: body blocks get a 9 px gap, list items included. The gap sits above the line box, in the row's pad: the caret, selection, clicks, the block grip and the markers stay with the text.
    Normal page measure is now 800 (option (a) landed, item 5 below);
    pill clearance went PILL_CLEAR 48→56 with it. Inset crew owns
    `render.rs` + `layout.rs` + `shell/mod.rs`: any traffic math depending on
@@ -422,6 +432,8 @@ App / vault / panes (global + `Shell` / `Nav` / `Palette` contexts):
 
 ## 12. Visual spec v1 (PROPOSED 2026-11-08)
 
+> Superseded by §22 (Quiet window, 2026-11-21) wherever they differ: the regions, the sidebar (files only), the one right panel, the empty page and the Quiet tokens. Kept as history.
+
 > Status: proposal anchored to the in-repo mockup build
 > `docs/design/mockups/editor-current-v1.html` (which renders this spec; §9
 > keeps the original PNG as the vision reference). Read both side by side:
@@ -495,6 +507,8 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 ---
 
 ## 13. Strip-down v1 (user-approved 2026-11-08; supersedes §10.2)
+
+> Superseded by §22 (Quiet window, 2026-11-21): the sidebar views, the right dock with its stacked tools, the comments column and the round Assistant button are replaced by the regions of §22. Kept as history.
 
 > Direction: a calm single-pane writing app. Stripped components stay modular
 > in code — nothing deleted — so any of them can come back anytime; they are
@@ -570,6 +584,7 @@ dock-panel; tree marks the active file; arrows preview in an italic tab.
 
 > LANDED 2026-11-08 — option (a): adjust Normal 720 → 800, per user final call.
 > Detail companion: `docs/design/typography.md`.
+> 2026-11-21: Quiet.md scale: body 15/22, headings 28/21/18/16/15 (H1 to H6), code 13/20; the reference size is `Prefs::SIZE` (15), so the default UI scale stays 1.0.
 
 - [x] **Propose** — this section + `typography.md` (tokens table, bundling
       proof, 800 px migration path).
@@ -810,8 +825,9 @@ Normal 800 is the default (§10.4 lock released for this change).
 
 ## 17. Pending changes (built 2026-11-15)
 
-> Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The marks are in the note file (`logic/pending.rs`,
-> CriticMarkup in block form); this section is what the editor does with them. Chords: §17.5.
+> Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The changes are beside the note, in
+> `.inkuno/pending` (2026-11-21, `platform/sidecar.rs`); the editor shows them as marks in block form (`logic/pending.rs`),
+> composed from the file and the list, and split again on save. This section is what the editor does with them. Chords: §17.5.
 
 - [x] **Propose**, **User approves**: the flow of `revisions.md` (Decisions, 2026-11-14 and 2026-11-15).
 - [x] **Implement**: `views/editor/layout.rs` (`Pend`, `pend_of`), `paint.rs` (the wash), `text_runs` (dim and
@@ -884,7 +900,7 @@ Normal 800 is the default (§10.4 lock released for this change).
   found again by that exact text. An outside edit may have moved it meanwhile; if no change has the text any more,
   nothing is written and the message `That change is gone or changed: nothing was commented.` is shown.
   The comment is written by `markdown::comment_on` on the first added line of the change, or on its first removed
-  line when nothing is added: `{==passage==}{>>text<<}`. The passage is that whole line, so it must be unique in the
+  line when nothing is added: `passage<!-- comment: text -->` (2026-11-21, Q1). The passage is that whole line, so it must be unique in the
   note, or the reason is said and nothing changes (empty line, comment marks already there, passage not unique).
 - The change stays pending. One undo step, through `absorb`.
 
@@ -1208,3 +1224,66 @@ Owner decisions, 2026-11-21 (answered in chat; these are owner approvals):
 
 - **Lists: the north star is GitHub + Typora** (APPROVED by owner 2026-11-21). The reference table and Inkuno's target (§10.3) are in `docs/design/markdown_renderer.md` §10, both APPROVED by the owner 2026-11-21. The colour and nesting of list markers follow the owner's pick there.
 - **Visual check findings, 2026-11-21**, from `scripts/visual-check.sh` (screenshots confirmed by the owner): the list markers, `~~~` fences, 4-space indented code and table cells. The list, fence, indented-code and table-cell findings are built on this branch (crew F3). The open ones are in `docs/backlog.md`, Follow-ups: rendering R1 to R7, and window chrome W1 and W2.
+
+## 22. Quiet window (2026-11-21)
+
+The shipped design of the window, after the Quiet packages P1 to P8. The spec and its decision log are in `docs/design/prototypes/`: `v2.html` (the prototype, approved 2026-11-21) and `README.md` (its twenty decisions, the three open questions answered, the build packages and their notes). Where this section and the prototype differ, the code is the reference; the difference is recorded here.
+
+### 22.1 Regions
+
+The window has four regions and nothing else:
+
+1. **Title band** (`BAND`, 38 px; 12 px hidden): the tab strip of each pane, the window controls and the right-panel switch. The strip is the band, even for one note. Ctrl+Shift+S hides the band; a pointer on its top edge brings it back over the note.
+2. **Left sidebar, files only**: Search and Today rows, the tree, a folded Scratch section at the bottom, Settings at the foot. It sits on the window background, without a panel, border or shadow. Recent notes and search live in the palette (Ctrl+P).
+3. **Panes**: one or two, side by side, each with its own tabs. Preview tabs are in italics. The focused pane's active tab is solid; the other pane's tabs are dimmed. A hairline divides the panes.
+4. **Right panel**: one panel with four views, Outline, Comments, Versions and Assistant, chosen by an icon switcher in the band; one view at a time, 280 px wide. Ctrl+Shift+O opens the outline, Ctrl+Alt+1 to 4 pick a view.
+
+The note is a flat sheet, flush with the top, right and bottom edges of the window, without gutters, rounded corners or borders. Its left edge casts one faint shadow (the only structural exception).
+
+### 22.2 The empty page (Quiet)
+
+A centred column of three cards, **Today**, **New note** and **Search**, each 200 px wide with a 1 px border at 8 % of the text, 10 px radius, 14 px padding, 10 px gaps and the hover fill. The title is 13 px medium in the text colour; the description is 12 px in the soft colour. Under them, **From a month ago** with up to three recall cards: the title, then the note's first body line (headings skipped, Markdown markers removed, one line with an ellipsis), or the title alone when the note has none. Cards with no vault: New note creates a scratch note. The other themes keep their rows (`render_empty_rows`). Code: `shell/render.rs` (`render_empty`, `render_cards`), `inkuno-logic/src/recall.rs` (`first_line`, the cap of three).
+
+### 22.3 Quiet tokens
+
+Defined per theme in `quiet_extras` (`ui/theme.rs`), for `Quiet Light` and `Quiet Dark`. Each is a semantic token of `Theme`, and nothing else in the UI sets a colour for Quiet:
+
+| Token | Meaning |
+|---|---|
+| `link` | text of a link and a tag |
+| `ground` | the window background under the sheets |
+| `syntax` | the six code colours (comment, keyword, type, function, string, number) |
+| `todo_box` | the border of an unchecked task box (text at 40 %) |
+| `dots` | the dots of a rule (text at 40 %) |
+| `quote_bar` | the bar beside a quote |
+| `chip`, `chip_line` | the fill and the 1 px rim of inline code |
+| `code_line`, `gutter`, `gutter_num` | the box, the line-number gutter and its numbers of a code block |
+| `th` | a table's header fill |
+| `ink`, `table_alpha`, `ring_alpha` | the table's grid and outline, and an image's ring: `ink` at the alpha |
+| `alerts` | the five alert tints (NOTE, TIP, IMPORTANT, WARNING, CAUTION), made legible on their fill |
+| `popover` | the fill of menus and the palette |
+| `caution` | the red of destructive items |
+
+### 22.4 Dark pass (2026-11-21)
+
+Every fixture of `scripts/visual-check.sh` was rendered with `Quiet Dark` pinned, and the code, table and media pages were re-checked after the last change. Text must reach 4.5:1 against the sheet, the code block and the gutter. Decorative lines stay subtle hairlines, close to the light theme's (about 1.4 to 1.6:1 on the sheet), except the quote bar, which is a meaningful mark and reaches 3:1. Fixes (Quiet Dark only):
+
+| Token | Was | Now | Ratio before → after | Why |
+|---|---|---|---|---|
+| `gutter_num` | `#5b5d60` | `#868686` | 2.49 → 4.52 | line numbers are text |
+| `quote_bar` | `#4a4c4f` | `#676767` | 1.98 → 3.01 | a meaningful mark |
+| `code_line` | `#2e2f31` | `#36373a` | 1.27 → 1.43 | hairline of a code box |
+| `chip_line` | `#353638` | `#3a3b3e` | 1.41 → 1.35 | hairline rim of inline code |
+| `table_alpha` | 0.09 | 0.12 | 1.29 → 1.43 | table grid, hairline |
+| `ring_alpha` | 0.08 | 0.12 | 1.26 → 1.43 | image ring, hairline |
+
+The first pass set the decorative lines to 3:1 (`#6a6a6a`, `#6f6f6f`, alpha 0.34); the owner judged that too heavy, and they were softened to the values above. No theme test pinned the old values.
+
+Already at or above target, unchanged: body and secondary text, the five syntax colours (4.9 to 7.8), `link`, `caution`, the alert tints, the task box (`todo_box`, 3.3), the rule dots (3.3), the highlight (`Theme::highlight` enforces 4.5). Light themes were not changed.
+
+### 22.5 Status
+
+- Built: P1 (title band, tabs), P5 (menus, palette, slash menu), P6 (links), P7 (comments as `passage<!-- comment: text -->`; pending changes beside the note in `.inkuno/pending`), P8 (empty page, dark pass, these docs).
+- P4 (Settings tab: Ctrl+, opens Appearance, Editor, Files, Shortcuts, About; F1 opens Shortcuts; the help overlay is gone) is merged.
+- Not yet merged when this section was written: P2 (sidebar) and P3 (right panel). The user guide describes them as the prototype specifies, and the lines that depend on them are listed in the P8 report.
+- Open questions of the prototype (Q1 to Q3) are answered as in its log. The gap in §20.4 (sidebar and title bar both hidden) is still open in backlog W1.

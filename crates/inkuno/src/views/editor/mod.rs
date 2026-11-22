@@ -20,6 +20,7 @@ mod paint;
 mod render;
 mod style;
 mod table;
+mod toolbar;
 
 use grid::TableRow;
 
@@ -73,6 +74,7 @@ use crate::{
     ui::svg,
     ui::theme::Theme,
     ui::theme::Wide,
+    ui::theme::syntax,
     views::viewer::Source,
 };
 
@@ -198,8 +200,10 @@ const COPY_SIZE: Pixels = px(22.);
 const MATH_SCALE: f32 = 1.2;
 /// Space between a line and the image it points to.
 const IMAGE_GAP: Pixels = px(8.);
-/// Room inside the fill of a code block or callout, above its first line and under its last (at 16 px text).
+/// Room inside the fill of a code block or callout, above its first line and under its last (at 15 px text).
 const BLOCK_ROOM: Pixels = px(9.);
+/// Gap above a body block's line (paragraph, list item, quote or callout line), at 15 px text.
+const BLOCK_GAP: Pixels = px(9.);
 /// Height of the line that says a figure or a picture cannot be read.
 const BROKEN: Pixels = px(20.);
 /// `file` is inside `root`, once `..` and symbolic links are resolved: a received
@@ -244,6 +248,8 @@ pub enum EditorEvent {
     BlockMenu(Point<Pixels>),
     /// A diagram, formula or picture to view large.
     View(Source),
+    /// A click on a commented passage: the comment's start (the Comments view shows its card).
+    CommentAt(usize),
     /// A link to a heading or a block of a note, to open: the note and where in it; with Shift, aside.
     OpenAt(crate::logic::wiki::Target, bool),
     /// A short message for the shell to show once: an edit refused for a pending change, a
@@ -290,6 +296,8 @@ pub struct Editor {
     /// repeated clicks cycle through them.
     foot_jump: Option<(usize, usize)>,
     notes: Rc<[String]>,
+    /// Each note's name and aliases with its file: the links the pickers write point there.
+    targets: Rc<[(String, PathBuf)]>,
     /// Folders to look for images in: the note's, then the vault.
     dirs: Vec<PathBuf>,
     /// Vault images by file name (lowercase): wherever they are
@@ -379,6 +387,10 @@ pub struct Editor {
     bar: BarState,
     /// The note is the active pane's: a single formatting bar for the whole window.
     pub bar_here: bool,
+    /// The selection toolbar is hidden: by typing or scrolling, until the selection is made again.
+    pub(super) toolbar_off: bool,
+    /// Text ▾ of the selection toolbar is open.
+    pub(super) toolbar_text: bool,
     /// Left edge (in the window) of the window buttons floating over the top right corner, where the app draws them:
     /// a first line reaching under it starts lower (`place`).
     pub pill: Option<Pixels>,
@@ -454,6 +466,7 @@ impl Editor {
             feet_rev: u64::MAX,
             foot_jump: None,
             notes: Rc::from([]),
+            targets: Rc::from([]),
             dirs: Vec::new(),
             images: HashMap::new(),
             copied: None,
@@ -498,6 +511,8 @@ impl Editor {
             corner: 1,
             bar: BarState::default(),
             bar_here: true,
+            toolbar_off: false,
+            toolbar_text: false,
             pill: None,
             strip: px(0.),
             top: TOP,
@@ -592,6 +607,11 @@ impl Editor {
     /// Shared by every editor of the window: one list, however many tabs are open.
     pub fn set_notes(&mut self, notes: Rc<[String]>) {
         self.notes = notes;
+    }
+
+    /// The notes' names and aliases with their files, so that a picker writes a link to the right one.
+    pub fn set_targets(&mut self, targets: Rc<[(String, PathBuf)]>) {
+        self.targets = targets;
     }
 
     pub fn set_images(&mut self, images: &[PathBuf]) {

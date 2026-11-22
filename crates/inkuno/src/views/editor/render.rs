@@ -21,6 +21,9 @@ impl Render for Editor {
             _ => None,
         };
         let toggle = folded.then(|| self.bar_toggle(cx));
+        // Quiet's completion list (the slash menu and the pickers), a popover over the text.
+        let menu = self.completion_menu();
+        let toolbar = self.selection_toolbar(cx);
         // The text scrolls behind this band: it fades into the page, then hides what lies under
         // the bar. Panes are flat (edge to edge), so the band's corners are square too.
         let t = self.theme;
@@ -272,7 +275,9 @@ impl Render for Editor {
         .child(EditorElement(cx.entity()))
         .child(band)
         .children(toggle)
-        .children(bar);
+        .children(bar)
+        .children(menu)
+        .children(toolbar);
         // The find bar beside the note, not inside it: typing a search never reaches the note's keys.
         div().size_full().relative().child(el).children(find_bar)
     }

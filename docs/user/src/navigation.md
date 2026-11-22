@@ -1,31 +1,48 @@
-# The palette and the panel
+# Navigation
 
-The [palette](first-steps.md#find-anything-the-palette) (`Ctrl + P`) finds and creates notes. The panel shows the vault in three views: the tree, recent notes and vault search. The right dock holds the outline, the headings of the open note, and the [Assistant](assistant.md) panel.
+The window has four regions and nothing else: the title band, the left sidebar, the panes and the right panel.
 
-## The sidebar and its views
+- **Title band**: the tab strip of each pane, the window controls and the right-panel switch. The strip is the band itself, even for one note.
+- **Left sidebar**: files only. See below.
+- **Panes**: one or two, side by side, each with its own tabs. See [Tabs and panes](tabs-and-panes.md).
+- **Right panel**: one panel with four views, about the note that is open. See below.
 
-The sidebar runs down the left of the window, beside the note. Its top band holds, on the right, the sidebar toggle, search and new note. Its foot row holds the command palette (the logo), the vault tree and the title bar switch. With the title bar hidden, the three buttons of the top band join that foot row. The panel beside it shows one of these views:
+The [palette](first-steps.md#find-anything-the-palette) (`Ctrl + P`) finds and creates notes, and runs commands. Recent notes and search live there, not in the sidebar.
+
+## The left sidebar
+
+The sidebar sits on the window background, beside the note, without a border. From top to bottom:
+
+- **Search** (`Ctrl + P`) and **Today**, the day's note, as rows.
+- **Notes**: the vault as a tree of folders and notes. The displayed file is highlighted. Its keys are in [Keys in the sidebar](#keys-in-the-sidebar) and [The tree](#the-tree).
+- **Scratch**: a section at the bottom, folded or open, that lists the scratch notes not yet filed. See [Scratch notes](writing.md#scratch-notes).
+- **Settings** at the foot, `Ctrl + ,`: the settings tab, with Appearance, Editor, Files, Shortcuts and About. See [Settings and appearance](settings.md).
+
+Everything else is in the palette: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
+
+- **Hide**: `Ctrl + B` shows or hides the sidebar, from the note too. While it is hidden, its button sits at the left of the title band.
+- **Resize**: drag the line between the sidebar and the note. Double-click the line for the default width.
+
+## The right panel
+
+The right panel holds what is about the open note. Its switcher, an icon for each view, sits in the title band:
 
 | View | Key | Shows |
 |---|---|---|
-| Tree | `Ctrl + E` | the vault and its folders. The displayed file is highlighted. |
-| Recent | — | every note, from the most to the least recently opened (`› recent notes`; `Ctrl + P` opens on recent) |
-| Search | — | the matches of a vault search, note by note |
+| Outline | `Ctrl + Shift + O` | the headings of the note, indented by level. Click one to go to it. |
+| Comments | `Ctrl + Alt + 2` | the comments of the note, with their resolve marks. See [Comments](comments.md#the-comments-view). |
+| Versions | `Ctrl + Alt + 3` | the saved versions of the note, newest first, and *Save version*. See [Versions](writing.md#versions). |
+| Assistant | `Ctrl + Alt + 4` | the [Assistant](assistant.md): its actions and its prompt. |
 
-Everything else is in the palette, not in the sidebar: the trash (`trash`), backup (`back up`), the theme (`theme`) and this help (`shortcuts`).
+One view shows at a time, at the same width. `Ctrl + Alt + 1` shows the outline. The button of the band shows or hides the panel, and the same key as the view you show hides it again.
 
-- **Right dock**: the outline and the Assistant are tools of the right dock, hidden at first. The Assistant opens from its button or the palette (`assistant`); see [Assistant](assistant.md).
-- **Hide**: press the key of the view on display while the panel has the keys. When its last view goes, the panel hides. A click on the tree button shows the tree and never hides it.
-- **Resize**: drag the line between the panel and the note. Dragged all the way left, the panel hides. All the way right, it takes the whole window. Double-click the line for the default width.
-- **Whole window**: `Ctrl + M`, or the arrows button at the top of the panel, puts the panel on the whole window, and back.
-- **Sidebar**: `Ctrl + B` shows or hides the sidebar, and it works from the note too. Its switch is the first of the three buttons at the right of the top band; with the title bar hidden, it moves to the foot. While the sidebar is hidden, the same button sits in a strip at the top of the note. The choice is kept at the next start.
-- **Title bar**: `Ctrl + Shift + S` hides the bar Inkuno draws on Linux, with its window buttons. The switch at the foot of the sidebar, its last button, brings it back, and the choice is kept at the next start. If the sidebar is hidden as well, the keys are the only way back: `Ctrl + B`, then `Ctrl + Shift + S`. On macOS the key hides the system bar and its three window buttons, and shows them again; focus mode hides them too. On Windows the system draws the bar, so the key changes nothing there.
-- **Focus mode**: `F9`, or `› focus mode` in the palette, leaves the note alone, edge to edge: no sidebar, no right dock, no tab bar, no title bar. `F9` again, or `Esc` in the note, brings back the layout as it was.
+- **Pending changes** from the Assistant or from an agent show in the note itself, with Accept and Reject on each change. They are kept beside the note, not in the file. See [Agents](agents.md#pending-changes).
+- **Focus mode**: `F9`, or `› focus mode` in the palette, leaves the note alone, edge to edge: no sidebar, no right panel, no tab strip, no title band. `F9` again, or `Esc` in the note, brings back the layout as it was.
+- **Title band**: `Ctrl + Shift + S` hides the band, with its window buttons; a band hidden shows again when the pointer touches its top edge. On macOS the key hides the system bar and its three window buttons, and shows them again; focus mode hides them too. On Windows the system draws the bar, so the key changes nothing there. The choice is kept at the next start.
 
+## Keys in the sidebar
 
-## Keys in the panel
-
-The same keys work in every view.
+The same keys work in the tree and in the recent list.
 
 | Key | Action |
 |---|---|
@@ -37,7 +54,7 @@ The same keys work in every view.
 | `Ctrl + Shift + N` | new folder, next to the selected line of the tree |
 | `Esc` | back to the note |
 
-A previewed note only counts as opened once you click or type in it. It then moves to the top of the recent list, and its tab stays.
+A previewed note only counts as opened once you click or type in it. Its tab then stops being italic, and stays.
 
 ## The tree
 

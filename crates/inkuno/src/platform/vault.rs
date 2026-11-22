@@ -15,7 +15,7 @@ use std::{
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
-use super::scratch;
+use super::{revisions, scratch, sidecar};
 use crate::logic::note::{Note, lowered};
 use crate::{
     lang::tr,
@@ -700,24 +700,35 @@ pub fn same_file(a: &Path, b: &Path) -> bool {
 }
 
 /// Renames a note and returns its path. If its name followed its title, the
-/// first line is rewritten so they stay in step.
-pub fn rename_note(path: &Path, name: &str) -> io::Result<PathBuf> {
-    let content = fs::read_to_string(path)?;
+/// first line is rewritten so they stay in step. The note's pending changes move with it, and the
+/// new title is written as the editor shows the note (`sidecar::edit`), so a change placed under the
+/// heading stays placed, as the command line's rename does.
+pub fn rename_note(vault: Option<&Path>, path: &Path, name: &str) -> io::Result<PathBuf> {
+    fs::read_to_string(path)?;
     let to = path.with_file_name(format!("{name}.md"));
     rename(path, &to)?;
-    // The front matter stays as is: the title is the first line after it.
-    let (meta, body) = content.split_at(markdown::front_matter(&content));
-    if stem(path) == title_of(&content)
-        && let Some(first) = body.lines().find(|l| !l.trim().is_empty())
-    {
+    // The list follows the note; if it cannot, the note goes back to its name.
+    if let Err(e) = sidecar::move_along(vault, path, &to) {
+        let _ = rename(&to, path);
+        return Err(e);
+    }
+    let old = stem(path);
+    let home = revisions::home_of(&to, vault);
+    sidecar::edit(home.as_ref(), &to, "", |shown| {
+        // The front matter stays as is: the title is the first line after it.
+        let (meta, body) = shown.split_at(markdown::front_matter(shown));
+        let first = body.lines().find(|l| !l.trim().is_empty())?;
+        if old != title_of(shown) {
+            return None;
+        }
         let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
         let title = if hashes > 0 {
             format!("{} {name}", "#".repeat(hashes))
         } else {
             name.to_string()
         };
-        fs::write(&to, format!("{meta}{}", body.replacen(first, &title, 1)))?;
-    }
+        Some(format!("{meta}{}", body.replacen(first, &title, 1)))
+    })?;
     Ok(to)
 }
 
@@ -1043,11 +1054,24 @@ pub fn free_path(dir: &Path, name: &str, extension: &str) -> PathBuf {
     numbered.into_iter().find(|p| !p.exists()).unwrap()
 }
 
+/// The line with its comment markup taken out and the commented text kept: `# Plan<!-- comment: x -->`
+/// reads `# Plan`, so a commented title does not put the comment into the file name.
+fn without_comments(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut at = 0;
+    for (whole, noted, _) in markdown::comments(line) {
+        out.push_str(&line[at..noted.end]);
+        at = whole.end;
+    }
+    out.push_str(&line[at..]);
+    out
+}
+
 /// File name (without extension) taken from the first non-empty line.
 pub fn title_of(content: &str) -> String {
     let content = &content[markdown::front_matter(content)..];
     let first = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-    clean_name(first.trim().trim_start_matches('#'))
+    clean_name(without_comments(first).trim().trim_start_matches('#'))
         .unwrap_or_else(|| tr("Untitled", "Sans titre").to_string())
 }
 
@@ -1055,7 +1079,7 @@ pub fn title_of(content: &str) -> String {
 pub fn h1_of(content: &str) -> Option<String> {
     let content = &content[markdown::front_matter(content)..];
     let first = content.lines().find(|l| !l.trim().is_empty())?;
-    clean_name(first.trim_start().strip_prefix("# ")?)
+    clean_name(without_comments(first.trim_start()).strip_prefix("# ")?)
 }
 
 /// A dropped item, stored in the vault: where it is, whether it is a folder, how many files it holds.
@@ -1344,6 +1368,10 @@ mod tests {
         assert_eq!(title_of("  [[x]] / y  "), "x  y");
         assert_eq!(title_of("\n\n"), "Untitled");
         assert_eq!(title_of("# .."), "Untitled");
+        // A comment on the title is not part of the name: its text stays out, its passage stays in.
+        assert_eq!(title_of("# Plan<!-- comment: check -->\nx"), "Plan");
+        assert_eq!(title_of("<!-- comment: check -->\nx"), "Untitled");
+        assert_eq!(h1_of("# Plan<!-- comment: check -->"), Some("Plan".into()));
         assert_eq!(h1_of("\n# Courses: lundi\n"), Some("Courses lundi".into()));
         assert_eq!(
             (h1_of("## Sous-titre"), h1_of("texte"), h1_of("# ")),
@@ -1378,7 +1406,7 @@ mod tests {
             (c.clone(), h1_of(&format!("{meta}\n# Fiche\n"))),
             (root.join("Fiche.md"), Some("Fiche".into()))
         );
-        let c = rename_note(&c, "Carte").unwrap();
+        let c = rename_note(None, &c, "Carte").unwrap();
         assert_eq!(
             fs::read_to_string(&c).unwrap(),
             format!("{meta}# Carte\n---\n")
@@ -1406,13 +1434,13 @@ mod tests {
         fs::remove_file(&drawing).unwrap();
 
         // Renaming a note in step with its title rewrites that title; otherwise the text stays as is.
-        let c = rename_note(&root.join("A 2.md"), "C").unwrap();
+        let c = rename_note(None, &root.join("A 2.md"), "C").unwrap();
         assert_eq!(fs::read_to_string(&c).unwrap(), "# A\n");
         fs::write(root.join("D.md"), "\n## D\ntexte D\n").unwrap();
-        let e = rename_note(&root.join("D.md"), "E").unwrap();
+        let e = rename_note(None, &root.join("D.md"), "E").unwrap();
         assert_eq!(fs::read_to_string(&e).unwrap(), "\n## E\ntexte D\n");
         // Never overwrite.
-        assert!(rename_note(&e, "C").is_err() && e.exists());
+        assert!(rename_note(None, &e, "C").is_err() && e.exists());
 
         // Trash: nothing is destroyed, and the index does not see it.
         fs::create_dir(root.join("vide")).unwrap();
@@ -1525,6 +1553,33 @@ mod tests {
         assert!(backup(&root, &root.join(".trash"), "2026-10-09").is_err());
         assert_eq!(fs::read_dir(root.join(".trash")).unwrap().count(), 1);
         fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_sidebar_rename_keeps_a_pending_change_under_the_title() {
+        // The probe of the final check: a change right under the H1 stays placed after the rename, the
+        // list moves with the note, and the title is written as the command line writes it.
+        let root =
+            std::env::temp_dir().join(format!("inkuno-rename-pending-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let home = revisions::Home::Vault(root.clone());
+        let note = root.join("Alpha.md");
+        fs::write(&note, "# Alpha\ntext\n").unwrap();
+        sidecar::save(
+            Some(&home),
+            &note,
+            "# Alpha\n{++\nnew\n++}\ntext\n",
+            "assistant",
+        )
+        .unwrap();
+        let to = rename_note(Some(&root), &note, "Alpha2").unwrap();
+        let disk = fs::read_to_string(&to).unwrap();
+        assert_eq!(disk, "# Alpha2\ntext\n");
+        assert!(sidecar::unplaced(&home, &to, &disk).is_empty());
+        assert_eq!(sidecar::read(&home, &to).len(), 1);
+        assert!(sidecar::display(Some(&home), &to, &disk).starts_with("# Alpha2\n{++"));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

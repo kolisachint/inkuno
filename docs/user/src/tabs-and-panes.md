@@ -1,4 +1,4 @@
-# Tabs, panes and docks
+# Tabs and panes
 
 ## Tabs
 
@@ -6,7 +6,7 @@ A pane holds as many files as you like, as in a code editor.
 
 - **Opening**: a click on a file in the tree, a note chosen in the palette, a link followed, a new note: each opens in a tab of its own, right of the one shown. If the file is already open, its tab comes to the front instead. A note is open only once.
 - **Previewing**: browsing the tree with the arrows previews notes in a single tab, in italics. The next note browsed replaces it. Opening it for good keeps it.
-- **The tab bar** appears at the top of the pane as soon as it holds two tabs, each a rounded pill. A click shows a tab. Its cross, or the middle button, closes it.
+- **The tab strip** is in the title band, above each pane (see [Navigation](navigation.md)), even when it holds one tab. Each tab is a pill; a preview tab is in *italics*. A click shows a tab. Its cross, or the middle button, closes it.
 
 | Key | Action |
 |---|---|
@@ -37,7 +37,7 @@ Tabs come back at the next start. A tab out of sight keeps its text, cursor and 
 
 - A new pane opens on the palette, to choose what goes there. Each pane shows anything Inkuno can show.
 - A pane is split only if both halves keep room to write: 300 px wide, 200 px high. Otherwise a message says so. The very first split hides the sidebar when that is enough.
-- The pane with the focus is marked by a line at its top, and a thin accent ring. The palette, the tree and the shortcuts act on it.
+- The pane with the focus shows its active tab solid, and the other pane's tabs are dimmed. A hairline divides the panes. The palette, the tree and the shortcuts act on it.
 - A note already shown in one pane is not opened twice: the focus moves to it.
 - The layout comes back at the next launch.
 
@@ -66,7 +66,8 @@ The part that would receive it is tinted while you drag. `Esc` lets go without m
 
 A file dragged from the tree does the same. Dropped on the right half of a window that has a single pane, it opens a second pane.
 
-## Docks
+## The right panel
 
-The panel's tools live in a left dock beside the note. Drag a tool's title to another place in its dock, or to the right edge: a right dock opens and takes it.
-A stacked tool folds to its header with its chevron button. The header has no hide button: asking again for the shown tool hides it, first giving it the keys; the last one hides the sidebar.
+The panel holds the views about the open note: outline, comments, versions and the Assistant. There is one panel, not one per tool, and it is not a dock: the switcher in the title band picks the view, and a view's key does the same. See [Navigation](navigation.md#the-right-panel).
+
+- **Hiding**: the band's switch, or the key of the view on display.

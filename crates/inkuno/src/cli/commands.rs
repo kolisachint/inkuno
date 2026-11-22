@@ -900,7 +900,8 @@ example:
 const READ_HELP: &str = "\
 inkuno read <note> [--section HEADING|^BLOCK] [--json]
     the text of a note; with --section, only that section or block
-    --json: the path, title, tags, aliases, links, embeds, comments and the token.
+    --json: the path, title, tags, aliases, links, embeds, comments, the token and `unplaced`:
+    the pending changes the text does not place (count and entries), shown nowhere until discarded.
     Pass the token to edit or append: a note changed since it was read is refused
 
 example:
@@ -976,7 +977,8 @@ example:
 const WRITE_HELP: &str = "\
 inkuno write <note> --author NAME (--text TEXT | --text -) --token T [--replace]
     proposes the note's full new text. Each change is written into the note as a pending mark
-    ({--removed lines--} then {++added lines++}) until a person accepts or rejects it in Inkuno.
+    (removed lines, then added lines) until a person accepts or rejects it in Inkuno. The changes
+    are kept beside the note, in .inkuno/pending: the note's file never holds a mark.
     Refused while the note has pending changes, and when the text is empty.
     --replace takes back the agent's own last proposal and writes the new one in its place. It
     is refused unless the pending changes are that proposal as it was left: the same author,
@@ -1042,12 +1044,14 @@ example:
 const COMMENT_HELP: &str = "\
 inkuno comment <note> --passage P --text C [--json]
 inkuno comment --file PATH --passage P --text C [--json]
-    wraps one passage of the note in {==P==}{>>C<<}. The passage must occur once, on one line.
+    adds the comment C after the passage P: P<!-- comment: C -->, which GitHub hides. The passage
+    must occur once, on one line; it is the text from the start of its line (or of its table cell,
+    or of the comment before it) up to the comment.
     --file takes a .md file, named by its path, outside any vault: no vault is needed. A note and
     --file together, or --vault with --file, is a usage error.
     --text - reads the comment from standard input. Its line breaks become spaces.
     Prints the note's path (--file: the file's absolute path); --json: the result as JSON
-    In a table cell, a | of the comment is written \\|.
+    In a table cell, a | of the comment is written \\|. A --> in the comment is written -- >.
     A passage in a pending change is refused: accept or reject the change in Inkuno first.
 
 example:

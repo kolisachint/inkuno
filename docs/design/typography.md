@@ -7,12 +7,14 @@
 
 | Role | Face | Size (px @1x) | Line-height / spacing |
 |------|------|---------------|------------------------|
-| UI / body / headings / nav / metadata | Inter (four static cuts bundled: regular, italic, bold, bold italic) | body 16 | 1.7 |
-| Paragraph spacing | — | 16 px between blocks | — |
-| H1 / H2 / H3 | Inter | 30 / 23 / 19 | TBD (verify in editor style) |
-| Code (blocks + inline) | JetBrains Mono (variable regulars; static bold and bold italic) | 14 | TBD |
+| UI / body / headings / nav / metadata | Inter (four static cuts bundled: regular, italic, bold, bold italic) | body 15 | 22/15 (≈1.47) |
+| Block gap | — | 9 px above each body block (paragraph, list item, quote or callout line) | — |
+| H1 / H2 / H3 | Inter, bold / bold / semibold | 28 / 21 / 18 | 1.3 / 1.3 / 1.33 |
+| H4 / H5–H6 | Inter, semibold | 16 / 15 | 1.4 / 1.47 |
+| Code (blocks + inline) | JetBrains Mono (variable regulars; static bold and bold italic) | 13 | 20/13 (≈1.54) |
+| Table cells | JetBrains Mono | 14 | 20/14 |
 | Metadata (counts, hints) | Inter | 12 | `soft` token, WCAG AA 4.5:1 |
-| Measure | — | **800 px** at body 16 | follows zoom (`Page::measure`) |
+| Measure | — | **800 px** at body 15 | follows zoom (`Page::measure`) |
 
 Principles: variable fonts, **bundled locally** with OFL licence notices
 (no download, no system dependency), **user-changeable later** via the

@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// Where the cursor goes in a new comment: after `<!-- comment: `, the empty text to write.
+const COMMENT_CURSOR: usize = md::COMMENT_OPEN.len() + 1;
+
 impl Editor {
     /// Address held by the clipboard, if that is all it holds.
     pub(super) fn copied_url(cx: &mut Context<Self>) -> Option<String> {
@@ -73,7 +76,7 @@ impl Editor {
         self.comment(cx);
     }
 
-    /// Comments the selection, or the line without one: `{==text==}{>>…<<}`, the cursor in the
+    /// Comments the selection, or the line without one: `text<!-- comment: … -->`, the cursor in the
     /// comment to write. On a comment, resolves it: the markup goes, the text stays. In a table,
     /// a comment is on the text of a cell, and one per cell the selection covers; handles that took
     /// a row, a column or the table comment it on a line under the table.
@@ -92,7 +95,7 @@ impl Editor {
             .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
         {
             // A comment alone on its line takes the line with it.
-            if noted.start == whole.start && line.trim() == &line[whole.clone()] {
+            if noted.is_empty() && line.trim() == &line[whole.clone()] {
                 if self.touches_pending(&self.dropped_range(lr.clone()), "") {
                     return self.refuse_pending(cx);
                 }
@@ -114,7 +117,7 @@ impl Editor {
             return self.comment_scope(cx);
         }
         // ponytail: a comment on an empty cell is refused, there is nothing to highlight. Allow it
-        // (`{====}{>>…<<}`) if the corner mark of the issue gets drawn.
+        // (`<!-- comment: … -->`) if the corner mark of the issue gets drawn.
         if let Some(cells) = self.comment_cells(&lr) {
             let Some(first) = cells.first().map(|c| c.start) else {
                 return;
@@ -126,7 +129,7 @@ impl Editor {
                 .rev()
                 .map(|cell| {
                     let text = &self.content[cell.clone()];
-                    (cell.clone(), format!("{{=={text}==}}{{>><<}}"))
+                    (cell.clone(), format!("{text}{}", md::comment_line("")))
                 })
                 .collect();
             let checked: Vec<(Range<usize>, &str)> =
@@ -138,7 +141,7 @@ impl Editor {
             for (range, text) in marks {
                 self.edit(range, &text, cx);
             }
-            return self.move_to(first + len + 9, cx);
+            return self.move_to(first + len + COMMENT_CURSOR, cx);
         }
         let marker = md::classify(&line, false).1;
         let sel = if self.sel.is_empty() {
@@ -150,13 +153,13 @@ impl Editor {
             return;
         }
         let text = self.content[sel.clone()].to_string();
-        let marked = format!("{{=={text}==}}{{>><<}}");
+        let marked = format!("{text}{}", md::comment_line(""));
         if self.touches_pending(&sel, &marked) {
             return self.refuse_pending(cx);
         }
         self.push_undo(true);
         self.edit(sel.clone(), &marked, cx);
-        self.move_to(sel.start + text.len() + 9, cx);
+        self.move_to(sel.start + text.len() + COMMENT_CURSOR, cx);
     }
 
     /// Byte `at` is in the comment of a table cell: a `|` typed there is written `\|`, or it would split the cell.
@@ -202,7 +205,7 @@ impl Editor {
     }
 
     /// The taken row, column or table is commented on a line of its own under the table, as
-    /// `{>>Row "Léa": …<<}`: named by its content, so that a sort leaves the comment where it belongs.
+    /// `<!-- comment: Row "Léa": … -->`: named by its content, so that a sort leaves the comment where it belongs.
     fn comment_scope(&mut self, cx: &mut Context<Self>) {
         let Some((range, rows, _)) = self.table_at(self.sel.start) else {
             return;
@@ -219,7 +222,8 @@ impl Editor {
         } else {
             names[pick.rows.start].clone()
         };
-        let head = format!("{{>>{name}: ");
+        // The text ends with its separator space: the scope is kept, empty comment or not.
+        let head = format!("{} {}: ", md::COMMENT_OPEN, md::spaced(&name));
         // A blank line keeps other apps from reading the comment as one more row.
         let after = &self.content[range.end..];
         let tail = if after.is_empty() || after == "\n" || after.starts_with("\n\n") {
@@ -227,7 +231,7 @@ impl Editor {
         } else {
             "\n"
         };
-        let note = format!("\n\n{head}<<}}{tail}");
+        let note = format!("\n\n{head} -->{tail}");
         if self.touches_pending(&(range.end..range.end), &note) {
             return self.refuse_pending(cx);
         }
@@ -277,7 +281,7 @@ impl Editor {
             let line = self.content[lr.clone()].trim();
             if line.is_empty() && !blank && lr.end < self.content.len() {
                 blank = true;
-            } else if line.starts_with("{>>") && line.ends_with("<<}") {
+            } else if md::comment_line_text(line).is_some() {
                 blank = false;
                 found.push(lr.clone());
             } else {
@@ -372,7 +376,7 @@ impl Editor {
     /// The table around `at`, if comments sit under it, and the names they could use: to give
     /// back to `rename_scopes` once an edit that does not go through `splice` is done.
     pub(super) fn name_guard(&self, at: usize) -> Option<(usize, md::Scopes)> {
-        if !self.content.contains("{>>") {
+        if !self.content.contains(md::COMMENT_OPEN) {
             return None;
         }
         let (table, rows, _) = self.table_at(at)?;

@@ -11,8 +11,8 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     logic::note::Note,
-    logic::{markdown, pending, rank, wiki},
-    platform::vault,
+    logic::{pending, rank, wiki},
+    platform::{revisions, sidecar, vault},
 };
 
 use super::outcome::disk;
@@ -300,6 +300,29 @@ pub fn read_text(path: &Path) -> Result<(String, String), String> {
     Ok((text, token))
 }
 
+/// The note's text as the editor shows it (its pending changes marked, the comments in the new
+/// form), and its token. The token is of this text: `write` checks it. A note outside the vault
+/// and its scratch folder has no home: its marks are shown as its file holds them.
+pub fn read_shown(root: Option<&Path>, path: &Path) -> Result<(String, String), String> {
+    let (disk, _) = read_text(path)?;
+    let home = revisions::home_of(path, root);
+    let shown = sidecar::display(home.as_ref(), path, &disk);
+    let token = token(shown.as_bytes());
+    Ok((shown, token))
+}
+
+/// Writes the note's text as the editor shows it: the file gets its own text, and the pending
+/// changes go beside it (`sidecar`).
+pub fn write_shown(
+    root: Option<&Path>,
+    path: &Path,
+    shown: &str,
+    author: &str,
+) -> Result<(), String> {
+    let home = revisions::home_of(path, root);
+    sidecar::save(home.as_ref(), path, shown, author).map_err(disk)
+}
+
 /// A file of this name, ignoring case, already in `dir`.
 pub fn name_taken(dir: &Path, name: &str, extension: &str) -> Option<PathBuf> {
     let want = name.to_lowercase();
@@ -320,7 +343,8 @@ fn disk_kind(kind: io::ErrorKind) -> String {
 }
 
 /// The check before `old` is renamed `new` (a file move, or a title change of `moved`): nothing may
-/// be moved or written when a link rewrite would change a pending change of a linking note. `Err`
+/// be moved or written when a link rewrite would change a pending change of a linking note. The
+/// notes are read as the editor shows them, so a change kept beside its note is seen. `Err`
 /// names the first such note, by its path in the vault. `moved` is the note's file as it is now, and
 /// `edited` the text it is about to hold, when that text is not on disk yet.
 pub fn check_links_before_move(
@@ -342,24 +366,41 @@ pub fn check_links_before_move(
             note
         })
         .collect();
-    let Some(targets) = wiki::relink_set(&notes, old, new) else {
-        return Ok(());
+    // Like the app: a note file moved by its name, the relative addresses of every note may follow it.
+    let wiki: Vec<PathBuf> = wiki::relink_set(&notes, old, new)
+        .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
+        .unwrap_or_default();
+    let renamed = moved.with_file_name(format!("{new}.md"));
+    let by_address = moved.extension().is_some_and(|e| e == "md");
+    let paths: Vec<PathBuf> = match by_address {
+        true => notes.iter().map(|n| n.path.clone()).collect(),
+        false => wiki.clone(),
     };
-    for note in targets {
+    for path in paths {
+        // The note as the editor shows it: a pending change is in the text only as its marks.
         let text = match edited {
-            Some(text) if note.path == moved => text.to_string(),
-            _ => match fs::read_to_string(&note.path) {
-                Ok(text) => text,
+            Some(text) if path == moved => text.to_string(),
+            _ => match read_shown(Some(&vault.root), &path) {
+                Ok((text, _)) => text,
                 Err(_) => continue,
             },
         };
-        let Some(fresh) = markdown::relink(&text, old, new) else {
+        let moves = by_address.then_some((moved, renamed.as_path()));
+        let Some(fresh) = wiki::rewrite_links(
+            &text,
+            Some(vault.root.as_path()),
+            &path,
+            old,
+            new,
+            wiki.contains(&path),
+            moves,
+        ) else {
             continue;
         };
         if pending::rewrite_refused(&text, &fresh) {
             return Err(format!(
                 "`{}` has a pending change that links to `{old}`: accept or reject its pending changes in Inkuno first",
-                rel(&vault.root, &note.path)
+                rel(&vault.root, &path)
             ));
         }
     }
@@ -367,22 +408,40 @@ pub fn check_links_before_move(
 }
 
 /// Rewrites `[[old]]` into `[[new]]` in every note that links to it, unless another note
-/// is still called `old`. Returns how many notes changed.
-pub fn relink(vault: &mut Vault, old: &str, new: &str) -> usize {
+/// is still called `old`, and the relative addresses to the note moved from `moved.0` to `moved.1`
+/// (see `wiki::rewrite_links`). Returns how many notes changed. A note is rewritten as the editor
+/// shows it and written back the same way (`write_shown`), so its pending changes are placed again
+/// at their new offsets. A rewrite that would change a pending change is left out (`check_links_before_move`
+/// refuses such a move before anything is written).
+pub fn relink(vault: &mut Vault, old: &str, new: &str, moved: Option<(&Path, &Path)>) -> usize {
     vault.rescan();
-    let Some(targets) = wiki::relink_set(&vault.notes, old, new) else {
-        return 0;
+    let wiki: Vec<PathBuf> = wiki::relink_set(&vault.notes, old, new)
+        .map(|targets| targets.iter().map(|n| n.path.clone()).collect())
+        .unwrap_or_default();
+    let paths: Vec<PathBuf> = match moved {
+        Some(_) => vault.notes.iter().map(|n| n.path.clone()).collect(),
+        None => wiki.clone(),
     };
-    let paths: Vec<PathBuf> = targets.iter().map(|n| n.path.clone()).collect();
     let mut changed = 0;
     for path in paths {
-        let Ok(text) = fs::read_to_string(&path) else {
+        let Ok((text, _)) = read_shown(Some(&vault.root), &path) else {
             continue;
         };
-        let Some(fresh) = markdown::relink(&text, old, new) else {
+        let Some(fresh) = wiki::rewrite_links(
+            &text,
+            Some(vault.root.as_path()),
+            &path,
+            old,
+            new,
+            wiki.contains(&path),
+            moved,
+        ) else {
             continue;
         };
-        if vault::write(&path, &fresh).is_ok() {
+        if pending::rewrite_refused(&text, &fresh) {
+            continue;
+        }
+        if write_shown(Some(&vault.root), &path, &fresh, "").is_ok() {
             changed += 1;
         }
     }

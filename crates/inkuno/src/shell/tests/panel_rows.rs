@@ -14,6 +14,8 @@ fn bounds(cx: &mut gpui::VisualTestContext, name: String) -> Option<gpui::Bounds
 #[gpui::test]
 fn the_tree_lines_names_up_after_an_icon(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "panel-tree");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     fs::create_dir_all(root.join("Dossier")).unwrap();
     fs::write(root.join("Dossier/Dedans.md"), "# D\n").unwrap();
     for file in [
@@ -204,6 +206,8 @@ fn the_recent_name_keeps_its_room_before_its_folder(cx: &mut TestAppContext) {
 #[gpui::test]
 fn a_file_keeps_its_extension_whole_when_its_name_is_cut(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "panel-ext");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     fs::create_dir_all(root.join("Dossier.v2")).unwrap();
     let long = "Très longue note de réunion ".repeat(8) + ".pdf";
     let files = [

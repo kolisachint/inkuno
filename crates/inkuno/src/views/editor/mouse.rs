@@ -521,6 +521,17 @@ impl Editor {
         }
         // An ordinary click returns to a single cursor.
         self.more.clear();
+        // A click on a commented passage also shows its card in the Comments view; the caret goes where it
+        // always goes.
+        if !e.modifiers.secondary()
+            && !e.modifiers.shift
+            && let Some(at) = md::all_comments(&self.content)
+                .iter()
+                .find(|n| (n.at..=n.end).contains(&i))
+                .map(|n| n.at)
+        {
+            cx.emit(EditorEvent::CommentAt(at));
+        }
         // A footnote reference jumps to its definition, a definition's label to its
         // references; references without one are plain text. Before the click reveals its line.
         if e.modifiers.secondary()
@@ -838,6 +849,7 @@ impl Editor {
 
     pub(super) fn mouse_up(&mut self, e: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.selecting = false;
+        self.toolbar_off = false;
         self.drop_block(cx);
         if let Some(moving) = self.moving.take() {
             self.drop_part(moving, cx);
@@ -862,6 +874,7 @@ impl Editor {
             *self.table_x.entry(range.start).or_default() -= dx;
         }
         self.scroll_y -= dy;
+        self.toolbar_off = true;
         cx.notify();
     }
 }

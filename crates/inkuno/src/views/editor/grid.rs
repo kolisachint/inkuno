@@ -14,7 +14,7 @@ use gpui::{
 };
 
 use crate::{
-    logic::markdown as md,
+    logic::{markdown as md, prefs::Prefs},
     ui::theme::Theme,
     views::editor::{Fast, FastMap, RunStyle, text_runs},
 };
@@ -23,6 +23,17 @@ use crate::{
 pub const PAD_X: Pixels = px(10.);
 pub const PAD_Y: Pixels = px(5.);
 pub const LINE: Pixels = px(1.);
+
+/// Inner padding of a cell, horizontal and vertical: `PAD_X` and `PAD_Y` in the other themes, 12 × 9 at
+/// size 15 in Quiet (`app-ui.md` §3).
+pub fn pads(theme: &Theme) -> (Pixels, Pixels) {
+    if theme.quiet {
+        let scale = theme.size / Prefs::SIZE;
+        (px(12. * scale), px(9. * scale))
+    } else {
+        (PAD_X, PAD_Y)
+    }
+}
 /// Text width of a column whose cells are short or empty, and the narrowest
 /// it is given: below that, the table scrolls.
 const MIN_WIDE: f32 = 48.;
@@ -85,13 +96,13 @@ pub struct Look<'a> {
     pub style: u64,
 }
 
-/// Text size of a cell, and its line height.
+/// Text size of a cell, and its line height: 14/20 at the default body size (`docs/design/app-ui.md` §14).
 pub fn font_size(theme: &Theme) -> Pixels {
-    px(15.) * (theme.size / 16.)
+    px(14.) * (theme.size / Prefs::SIZE)
 }
 
 pub fn line_height(theme: &Theme) -> Pixels {
-    (font_size(theme) * 1.5).round()
+    (font_size(theme) * 20. / 14.).round()
 }
 
 /// Text byte → shown text byte.
@@ -337,6 +348,9 @@ pub struct TableRow {
     /// Positions of the `|` in the line, and number of cells it writes.
     bars: Vec<usize>,
     written: usize,
+    /// Inner padding of the cells (see `pads`).
+    pad_x: Pixels,
+    pad_y: Pixels,
 }
 
 impl TableRow {
@@ -356,12 +370,12 @@ impl TableRow {
 
     /// Left edge of the text of column `c`.
     fn left(&self, c: usize) -> Pixels {
-        self.xs[c] + LINE + PAD_X
+        self.xs[c] + LINE + self.pad_x
     }
 
     /// Space above the text.
     pub fn pad(&self) -> Pixels {
-        self.top + PAD_Y
+        self.top + self.pad_y
     }
 
     /// Line height, for visual lines of `lh`.
@@ -369,7 +383,7 @@ impl TableRow {
         if self.hidden() {
             px(0.)
         } else {
-            self.pad() + lh * self.lines as f32 + PAD_Y + self.bottom
+            self.pad() + lh * self.lines as f32 + self.pad_y + self.bottom
         }
     }
 
@@ -448,7 +462,7 @@ impl TableRow {
                 bottom_right: low,
                 bottom_left: low,
             };
-            window.paint_quad(fill(area, theme.code_bg).corner_radii(corners));
+            window.paint_quad(fill(area, theme.th).corner_radii(corners));
         }
     }
 
@@ -483,7 +497,7 @@ impl TableRow {
         let mut rule = |x: Pixels, y: Pixels, w: Pixels, h: Pixels| {
             window.paint_quad(fill(
                 Bounds::new(at + point(x, y), size(w, h)),
-                theme.code_bg,
+                theme.table_line,
             ));
         };
         // The table's outer edge is one rounded hairline, drawn over the lines (`Editor::paint`).
@@ -546,7 +560,7 @@ fn shape(
             subs: Vec::new(),
         };
     }
-    let mut flags = vec![0u16; text.len()];
+    let mut flags = vec![0u32; text.len()];
     md::inline(text, 0, &mut flags);
     md::footnote_flags(text, &mut flags, defined);
     let hidden = if hide {
@@ -563,7 +577,7 @@ fn shape(
 fn shape_flags(
     text_system: &WindowTextSystem,
     text: &str,
-    mut flags: Vec<u16>,
+    mut flags: Vec<u32>,
     wrap: Option<Pixels>,
     bold: bool,
     marked: &Option<Range<usize>>,
@@ -616,11 +630,15 @@ fn shape_flags(
     };
     let style = RunStyle {
         pending: Default::default(),
-        heading: false,
+        heading: 0,
         soft: false,
         italic: false,
         mono: false,
         tint: None,
+        live: true,
+        chip: look.theme.chip.is_some(),
+        // Quiet's table header is semibold.
+        semi: bold && look.theme.quiet,
     };
     let runs = text_runs(look.theme, &shown_text, &styles, is_marked, &style);
     let line = text_system
@@ -784,7 +802,8 @@ fn rows(
             }
         }
     }
-    let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(PAD_X);
+    let (pad_x, pad_y) = pads(look.theme);
+    let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(pad_x);
     let avail = (f32::from(width) - frame).max(0.);
     let widths: Vec<Pixels> = column_widths(&narrow, &wide, avail)
         .into_iter()
@@ -792,7 +811,7 @@ fn rows(
         .collect();
     let mut xs = vec![px(0.)];
     for w in &widths {
-        xs.push(xs[xs.len() - 1] + LINE + PAD_X + *w + PAD_X);
+        xs.push(xs[xs.len() - 1] + LINE + pad_x + *w + pad_x);
     }
     let xs = Rc::new(xs);
 
@@ -813,6 +832,8 @@ fn rows(
                     bottom: px(0.),
                     bars,
                     written: 0,
+                    pad_x,
+                    pad_y,
                 });
             }
             let cells: Vec<Cell> = (0..cols)
@@ -856,6 +877,8 @@ fn rows(
                 bottom: if Some(r) == last { LINE } else { px(0.) },
                 bars,
                 written: parsed[r].0.len(),
+                pad_x,
+                pad_y,
             })
         })
         .collect()
@@ -880,6 +903,8 @@ pub struct Geometry {
     aligns: Vec<TextAlign>,
     /// Index of the dash line, when there is one.
     dash: Option<usize>,
+    pad_x: Pixels,
+    pad_y: Pixels,
 }
 
 impl Geometry {
@@ -914,7 +939,10 @@ impl Geometry {
             LINE
         };
         let bottom = if last { LINE } else { px(0.) };
-        (top + PAD_Y, top + PAD_Y + lh + PAD_Y + bottom)
+        (
+            top + self.pad_y,
+            top + self.pad_y + lh + self.pad_y + bottom,
+        )
     }
 }
 
@@ -964,12 +992,13 @@ pub fn geometry(
     }
     // No wrapping: a column takes the width of its longest text, without exceeding a third
     // of the page (beyond, it is cut), plus a minimum margin.
-    let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(PAD_X);
+    let (pad_x, pad_y) = pads(look.theme);
+    let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(pad_x);
     let cap = ((f32::from(width) - frame) / 3.).max(MIN_WIDE * 2.);
     let widths: Vec<Pixels> = wide.into_iter().map(|w| px(w.min(cap))).collect();
     let mut xs = vec![px(0.)];
     for w in &widths {
-        xs.push(xs[xs.len() - 1] + LINE + PAD_X + *w + PAD_X);
+        xs.push(xs[xs.len() - 1] + LINE + pad_x + *w + pad_x);
     }
     Geometry {
         cols,
@@ -977,6 +1006,8 @@ pub fn geometry(
         xs: Rc::new(xs),
         aligns,
         dash,
+        pad_x,
+        pad_y,
     }
 }
 
@@ -1005,6 +1036,8 @@ pub fn big_row(
             bottom: px(0.),
             bars,
             written: 0,
+            pad_x: geom.pad_x,
+            pad_y: geom.pad_y,
         };
     }
     let cells: Vec<Cell> = (0..geom.cols)
@@ -1045,6 +1078,8 @@ pub fn big_row(
         bottom: if last { LINE } else { px(0.) },
         bars,
         written: ranges.len(),
+        pad_x: geom.pad_x,
+        pad_y: geom.pad_y,
     }
 }
 

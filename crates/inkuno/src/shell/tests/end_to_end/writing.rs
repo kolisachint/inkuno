@@ -62,7 +62,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("secondary-end");
     cx.simulate_input("[[te");
     cx.simulate_keystrokes("enter");
-    assert!(text(cx).ends_with("[[Test]]"));
+    assert!(text(cx).ends_with("[Test](Test.md)"));
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("Idées");
     cx.simulate_keystrokes("enter");
@@ -71,6 +71,6 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(
         fs::read_to_string(root.join("Courses.md"))
             .unwrap()
-            .ends_with("[[Test]]")
+            .ends_with("[Test](Test.md)")
     );
 }

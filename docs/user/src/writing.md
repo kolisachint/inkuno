@@ -1,6 +1,6 @@
 # Writing notes
 
-What you type is what is saved. Inkuno only changes how it looks. Off the line you are editing, Markdown markers are hidden: a list marker is drawn as a bullet, a number or a checkbox, and the line you edit shows its Markdown. The file on disk is always plain Markdown.
+What you type is what is saved. Inkuno only changes how it looks. Off the line you are editing, Markdown markers are hidden: a list marker is drawn as a bullet, a number or a checkbox, and the line you edit shows its Markdown. The file on disk is always plain Markdown: [CommonMark](https://spec.commonmark.org/0.31.2/) with [GitHub's extensions](https://github.github.com/gfm/) (tables, task lists, strikethrough, autolinks), so a note reads the same on github.com.
 
 ## Markdown
 
@@ -11,7 +11,7 @@ What you type is what is saved. Inkuno only changes how it looks. Off the line y
 | `1. ` or `1) ` | a numbered list, renumbered as you add, remove or indent items |
 | `[] ` or `- [ ] ` | a task: click the box or press `Ctrl + Enter` to check it. `- [x] ` is a ticked one, and `*` or `+` work in place of `-`. |
 | `[ ]` or `[x]` | a box on its own, in a sentence or in a table cell: click it, or press `Ctrl + Enter` next to it |
-| `> ` | a quote |
+| `> ` | a quote; `> >` nests one inside it, with one bar per level |
 | `> [!NOTE]` | a colored panel: that line and the quote lines after it |
 | `` ``` `` or `~~~`, then `Enter` | a code block, closed for you with the same mark |
 | `\| a \| b \|` | a table |
@@ -76,7 +76,7 @@ A small bar at the bottom of the note, centered, applies styles with a click: bo
 - The right-click menu and the palette (`bulleted`, `numbered`, `task`, `plain text`) go straight to the kind you want. The same kind again gives back plain text.
 - Indentation is kept. A numbered list restarts at 1 on each level. A ticked box stays ticked from one task list to another.
 - Headings, tables, quotes and code are left alone.
-- One `Ctrl + Z` undoes it. Each kind can get its own key in the help panel.
+- One `Ctrl + Z` undoes it. Each kind can get its own key on the Shortcuts page of the Settings tab.
 
 ## Slash commands
 
@@ -129,12 +129,12 @@ What you type, delete or move then applies to every cursor, and one undo undoes 
 
 ## Outline
 
-`Ctrl + Shift + O` (or **Outline of the note** in the palette) shows the outline in the right panel. It lists the headings of the note, indented by level. Press the same chord again to hide it.
+`Ctrl + Shift + O` (or **Outline of the note** in the palette) shows the Outline view of the [right panel](navigation.md#the-right-panel). It lists the headings of the note, indented by level. Press the same chord again to hide the panel.
 
 - The heading the cursor is in is highlighted.
 - Click a heading to move the cursor there.
 - The arrow beside a heading folds the part of the note under it.
-- The outline shares the right panel with the Assistant. Its chord takes the panel from the Assistant.
+- The outline is one view of the right panel, with the Comments, Versions and Assistant views. Only one shows at a time: a view's key takes the panel from the one on display.
 
 Headings inside code blocks are not listed.
 
@@ -156,7 +156,7 @@ Headings inside code blocks are not listed.
 - **Author**: `revision author…` in the palette sets the name on your versions. See [Settings](settings.md#revision-author).
 - **Where they are**: in the hidden `.inkuno` folder of the vault, next to the note's path (`.inkuno/revisions/ideas/plan.md/0002.md`). The tree, the search and the recent notes do not show them. A note that is renamed or moved takes its versions with it; a deleted one keeps them in `.inkuno/trash`.
 - **Scratch notes** keep their versions in the scratch folder, the same way.
-- **The Versions panel**: `Versions of the note` in the palette (`history` finds it too) lists the versions of the note in the active tab, newest first: `#12`, the author, a `· auto` mark for a version an agent's write left, the note's line, and the date in your local time, to the minute. Up and Down move, Enter compares, Escape goes back to the note.
+- **The Versions view**: `Versions of the note` in the palette (`history` finds it too) shows the Versions view of the right panel, which lists the versions of the note in the active tab, newest first: `#12`, the author, a `· auto` mark for a version an agent's write left, the note's line, and the date in your local time, to the minute. Up and Down move, Enter compares, Escape goes back to the note.
 - **Compare**: Enter or a click on a version, or `Compare with the note now` in its menu, opens the version in a tab of its own, titled `Note · #12 ↔ now`. The lines the version had and the note has lost are red and struck through; the new lines are green. The compare shows the note as it is now, unsaved edits included, and does not follow later edits.
 - **A compare is read-only**: you can select, copy, search and scroll it, but not type, paste, cut or accept or reject a change in it. It is never saved: closing it asks nothing, and it does not come back at the next start.
 - **Not offered**: a compare of two equal texts says `Nothing changed since version N`; one whose version or note holds pending changes asks you to accept or reject them first. `Copy this version's text` in the menu puts a version's text on the clipboard.
@@ -167,7 +167,7 @@ Headings inside code blocks are not listed.
 
 - **New scratch note**: `Ctrl + N`, or `new scratch note` in the palette. It opens in a tab of its own, the cursor in it, for a thought you do not want to file yet. No vault is needed.
 - **Where it lives**: a scratch note is a plain `.md` file in the app's own folder (`inkuno/scratch` in the config folder: `~/.config` on Linux, `~/Library/Application Support` on macOS). It is never written into your vault, and the vault's search, links and recent notes do not see it.
-- **The list**: `scratch notes` in the palette opens the Scratch panel: the notes with text, newest first, each by its first line with the date and time it was made. Click or Enter opens one in a tab. Its menu (right click) gives **Keep in vault…** and **Delete**; the `Delete` key deletes the selected notes at once. A deleted scratch note goes to the `.trash` folder inside the scratch folder, under its name (numbered when taken), so nothing is lost on disk.
+- **The list**: the Scratch section at the foot of the sidebar, and `scratch notes` in the palette, list the notes with text, newest first, each by its first line with the date and time it was made. Click or Enter opens one in a tab. Its menu (right click) gives **Keep in vault…** and **Delete**; the `Delete` key deletes the selected notes at once. A deleted scratch note goes to the `.trash` folder inside the scratch folder, under its name (numbered when taken), so nothing is lost on disk.
 - **Recognising it**: a scratch note's tab shows `· Scratch` after its title, and the window title says so. `Keep this scratch note in the vault` in the palette is offered only while one is shown.
 - **Restart**: the scratch notes open in tabs come back with the rest of the tabs when you start the app again, with or without a vault.
 - **Saved as you type**: the file is written a moment after each change, and it is named after the moment it was made, such as `2026-11-14-103200.md`.

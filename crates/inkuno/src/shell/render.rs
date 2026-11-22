@@ -16,8 +16,11 @@ pub(super) fn badge_label(count: usize) -> String {
 pub(super) const SHADOW: Pixels = px(10.);
 /// Width of the window buttons' group at scale 1: three 24 px buttons, their gaps and padding (a little over, for a border-less group).
 /// `PILL_ROOM` adds its margin to the window's edge and some air: what every top row leaves free under it.
-const PILL_W: f32 = 106.;
+const PILL_W: f32 = 142.;
 pub(super) const PILL_ROOM: f32 = 124.;
+/// What the note's band leaves free at its right end: the window buttons and the right panel's toggle beside
+/// them (`render_right_toggle`), which sits where the window buttons' margin ends.
+pub(super) const NOTE_ROOM: f32 = 160.;
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -120,19 +123,23 @@ impl Render for Shell {
             // The panes as the layout arranges them: each draws the tab it shows as if it were the
             // active one, under its tab bar. The comments panel, right of everything, is the active tab's.
             let active = self.active;
-            let (mut areas, mut comments, alone) = (Vec::new(), None, self.alone());
+            let (mut areas, alone) = (Vec::new(), self.alone());
             for group in 0..self.groups.len() {
                 if alone.is_some_and(|alone| alone != group) {
                     areas.push(None);
                     continue;
                 }
                 let pane = self.groups[group].shown;
-                let (area, said) = self.in_pane(pane, |this| {
+                let area = self.in_pane(pane, |this| {
                     this.render_pane(pane, group, pane == active, title_bar, window, cx)
                 });
-                let bar = self.render_tabs(group, client, cx);
+                let bar = self.render_tabs(group, client, false, cx);
                 // Its tab bar sits on the ground, above the sheet of the note.
                 let gap = bar.is_some();
+                // Title bar hidden: its 12 px strip at the top of the pane peeks the band over the note.
+                let hidden = !self.focus_mode && !self.nav.title_bar;
+                let strip = hidden.then(|| self.render_peek_strip(group, cx));
+                let peek = (hidden && self.band_peek).then(|| self.render_peek(group, cx));
                 areas.push(Some(
                     div()
                         .size_full()
@@ -140,14 +147,14 @@ impl Render for Shell {
                         .min_h_0()
                         .flex()
                         .flex_col()
+                        .relative()
                         .when(gap, |d| d.gap(t.px(6.)))
                         .children(bar)
                         .child(area)
+                        .children(strip)
+                        .children(peek)
                         .into_any_element(),
                 ));
-                if pane == active {
-                    comments = said;
-                }
             }
             let tree = match alone {
                 Some(group) => Node::Pane(group),
@@ -213,19 +220,25 @@ impl Render for Shell {
             body.flex()
                 .children(docks)
                 .when(focus || self.nav.panel != Panel::Full, |d| {
-                    d.child(note).children(comments).children(docked)
+                    d.child(note).children(docked)
                 })
                 .children(self.palette.clone())
                 .child(toasts)
         };
 
+        // Focus mode in Quiet: the note's sheet runs to the window's edges, so the ground is its colour.
+        let ground = if self.focus_mode && t.quiet {
+            t.bg
+        } else {
+            t.ground
+        };
         let content = div()
             .size_full()
             .relative()
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(t.ground)
+            .bg(ground)
             .text_color(t.text)
             .font_family(sans())
             .when(framed, |d| {
@@ -265,7 +278,21 @@ impl Render for Shell {
                 this.show_nav(Mode::Scratch, false, window, cx)
             }))
             .on_action(cx.listener(|this, _: &ShowVersions, window, cx| {
-                this.show_nav(Mode::Versions, false, window, cx)
+                this.show_view(Mode::Versions, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &ShowOutlineView, window, cx| {
+                this.show_view(Mode::Outline, window, cx)
+            }))
+            .on_action(
+                cx.listener(|this, _: &ShowCommentsView, window, cx| {
+                    this.show_comments(window, cx)
+                }),
+            )
+            .on_action(cx.listener(|this, _: &ShowAssistantView, window, cx| {
+                this.show_view(Mode::Assistant, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &ToggleRightPanel, window, cx| {
+                this.toggle_right_panel(window, cx)
             }))
             .on_action(
                 cx.listener(|this, _: &nav::NewFolder, window, cx| this.new_folder(window, cx)),
@@ -399,8 +426,12 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &ZoomReset, window, cx| this.resize_text(None, window, cx)),
             )
+            // F1 and Ctrl+/: the Settings tab on its shortcuts page.
             .on_action(cx.listener(|this, _: &ToggleHelp, window, cx| {
-                this.set_help(!this.help.open, window, cx)
+                this.open_settings(Section::Shortcuts, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
+                this.open_settings(Section::Appearance, window, cx)
             }))
             .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
                 this.toggle_assistant(window, cx)
@@ -447,9 +478,7 @@ impl Render for Shell {
                 this.file_do(nav::Do::MoveTo, window, cx)
             }))
             .on_action(cx.listener(|this, _: &CloseHelp, window, cx| {
-                if this.help.open {
-                    this.set_help(false, window, cx)
-                } else if this.pane().figure.is_some() {
+                if this.pane().figure.is_some() {
                     // A figure over the note (magnifier): Escape closes it, back to the note.
                     this.pane_mut().figure = None;
                     window.focus(&this.pane().editor.focus_handle(cx));
@@ -462,11 +491,11 @@ impl Render for Shell {
             .key_context("Shell")
             .child(body)
             .when(title_bar, |d| d.child(pill))
+            .when(title_bar && self.band_shown(), |d| {
+                d.child(self.render_right_toggle(cx))
+            })
             .children(self.render_menu(window, cx))
-            .children(self.render_icons(window, cx))
-            .when(self.help.open, |d| {
-                d.child(self.render_help(window.viewport_size().height < px(420.), cx))
-            });
+            .children(self.render_icons(window, cx));
 
         // The transparent margin carries the shadow and serves as resize handle.
         div()
@@ -538,6 +567,7 @@ impl Shell {
     /// that is no longer drawn go back to the note.
     pub(super) fn toggle_focus_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_mode = !self.focus_mode;
+        self.band_peek = false;
         if self.focus_mode && self.nav.focus.contains_focused(window, cx) {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
@@ -562,6 +592,7 @@ impl Shell {
     /// Where the system draws the bar (macOS, Windows) the app draws none, so nothing moves there.
     pub(super) fn toggle_title_bar(&mut self, cx: &mut Context<Self>) {
         self.nav.title_bar = !self.nav.title_bar;
+        self.band_peek = false;
         self.nav.save();
         cx.notify();
     }
@@ -710,10 +741,210 @@ impl Shell {
         recall::recall(&self.notes, today(), std::time::SystemTime::now())
     }
 
-    /// The empty page, under the line where you write: the day (which opens its note), the useful
-    /// keys, the notes to reread. Everything is clickable, wraps in a narrow pane and
+    /// The empty page: Quiet's cards, the others' lines (`render_empty_rows`). It disappears at the first keystroke.
+    pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        if self.theme.quiet {
+            self.render_cards(cx).into_any_element()
+        } else {
+            self.render_empty_rows(cx).into_any_element()
+        }
+    }
+
+    /// Quiet's empty page: a centred column of cards, Today, New note and Search, then the notes to
+    /// reread under "From a month ago". Each card is clickable and does what its title says.
+    fn render_cards(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let t = self.theme;
+        let closed = self
+            .vault
+            .as_ref()
+            .is_some_and(|root| self.unreadable.iter().any(|(dir, _)| dir == root));
+        let has_vault = self.vault.is_some() && !closed;
+        // A card: its icon and title, then what it does (`lines` of it, or one line cut with an
+        // ellipsis), and the hover of a row. Nothing is drawn for an empty line.
+        let card = |id: (&'static str, usize),
+                    icon: &'static str,
+                    title: String,
+                    line: String,
+                    lines: usize| {
+            div()
+                .id(id)
+                .debug_selector(move || {
+                    if id.0 == "empty-today" {
+                        id.0.to_string()
+                    } else {
+                        format!("{}-{}", id.0, id.1)
+                    }
+                })
+                .w(t.px(200.))
+                .min_h(t.px(84.))
+                .p(t.px(14.))
+                .flex()
+                .flex_col()
+                .gap(t.px(6.))
+                .rounded(t.card())
+                .border_1()
+                .border_color(t.text.opacity(0.08))
+                .cursor_pointer()
+                .hover(|s| s.bg(t.hover))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(t.px(8.))
+                        .text_size(t.px(13.))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(t.text)
+                        .child(
+                            svg()
+                                .path(icon)
+                                .size(t.px(16.))
+                                .flex_none()
+                                .text_color(t.soft),
+                        )
+                        .child(title),
+                )
+                .children((!line.is_empty()).then(|| {
+                    let text = div().text_size(t.px(12.)).text_color(t.soft);
+                    if lines == 1 {
+                        text.w_full().truncate().child(line)
+                    } else {
+                        text.line_clamp(lines).child(line)
+                    }
+                }))
+        };
+        let mut cards = Vec::new();
+        if has_vault {
+            cards.push(
+                card(
+                    ("empty-today", 0),
+                    "calendar.svg",
+                    tr("Today", "Aujourd'hui").into(),
+                    format!(
+                        "{} · {}",
+                        recall::long_date(today()),
+                        tr("open the daily note", "ouvrir la note du jour")
+                    ),
+                    2,
+                )
+                .on_click(cx.listener(|this, _, window, cx| this.open_today(window, cx)))
+                .into_any_element(),
+            );
+        }
+        // The vault takes the new note; without one (or with it unreadable), a scratch note.
+        let (new, what) = if has_vault {
+            (
+                Box::new(NewNote) as Box<dyn gpui::Action>,
+                tr("a note in the vault", "une note dans le coffre"),
+            )
+        } else {
+            (
+                Box::new(NewScratch) as Box<dyn gpui::Action>,
+                tr(
+                    "a scratch note, kept outside the vault",
+                    "un brouillon, hors du coffre",
+                ),
+            )
+        };
+        let new_keys = keys::of(cx, new.as_ref());
+        cards.push(
+            card(
+                ("empty-key", 1),
+                "plus.svg",
+                tr("New note", "Nouvelle note").into(),
+                format!("{what} · {new_keys}")
+                    .trim_end_matches(" · ")
+                    .to_string(),
+                2,
+            )
+            .on_click(move |_, window, cx| window.dispatch_action(new.boxed_clone(), cx))
+            .into_any_element(),
+        );
+        let search_keys = keys::of(cx, &OpenPalette);
+        cards.push(
+            card(
+                ("empty-key", 0),
+                "search.svg",
+                tr("Search", "Rechercher").into(),
+                format!(
+                    "{} · {search_keys}",
+                    tr(
+                        "find a note or run a command",
+                        "trouver une note ou lancer une commande"
+                    )
+                )
+                .trim_end_matches(" · ")
+                .to_string(),
+                2,
+            )
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenPalette), cx))
+            .into_any_element(),
+        );
+        let recalled = if self.vault.is_some() {
+            self.recalled()
+        } else {
+            Vec::new()
+        };
+        let again = (!recalled.is_empty()).then(|| {
+            let cards = recalled.into_iter().enumerate().map(|(i, note)| {
+                card(
+                    ("empty-recall", i),
+                    "note.svg",
+                    note.name.clone(),
+                    note.line.clone(),
+                    1,
+                )
+                .on_click(cx.listener(move |this, _, window, cx| this.open(&note.path, window, cx)))
+            });
+            div()
+                .flex()
+                .flex_wrap()
+                .justify_center()
+                .gap(t.px(10.))
+                .children(cards)
+        });
+        div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .left_0()
+            .right_0()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(t.px(14.))
+            .px(t.px(24.))
+            .text_size(t.px(13.))
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .justify_center()
+                    .gap(t.px(10.))
+                    .children(cards),
+            )
+            .children(again.map(|cards| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(t.px(8.))
+                    .child(
+                        div()
+                            .mt(t.px(8.))
+                            .text_size(t.px(12.))
+                            .text_color(t.soft)
+                            .child(tr("From a month ago", "Il y a un mois")),
+                    )
+                    .child(cards)
+            }))
+    }
+
+    /// The other themes' empty page, under the line where you write: the day (which opens its note),
+    /// the useful keys, the notes to reread. Everything is clickable, wraps in a narrow pane and
     /// disappears at the first keystroke.
-    pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn render_empty_rows(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = self.theme;
         // `fill`: the line is tinted on hover, like a list row.
         let row = |id: (&'static str, usize), fill: bool| {
@@ -841,80 +1072,63 @@ impl Shell {
         title_bar: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> (gpui::AnyElement, Option<gpui::AnyElement>) {
+    ) -> gpui::AnyElement {
         let t = self.theme;
         let many = self.alone().is_none() && self.groups.len() > 1;
         let barred = self.groups[group].tabs.len() > 1;
         // Copy of the whole note: a plain floating icon, outside the title bar.
-        // Comments of the note, on its right: the commented text, then what is said about it. A
-        // click leads to the comment, ready to be edited; the check mark resolves it.
+        // Comments of the note: one card each, in the Comments view of the right panel (`shell/comments.rs`).
         // ponytail: the note is reread on every render (a search for `{==`); keep the
         // list from one version of the text to the next if very long notes suffer from it.
-        let said: Vec<(String, String, usize, usize, usize, String)> =
+        let said: Vec<comments::Card> =
             match self.pane().file.is_none() && self.pane().listing.is_none() {
-                true => markdown::all_comments(self.pane().editor.read(cx).text())
-                    .into_iter()
-                    .map(|n| {
-                        (
-                            n.noted.into(),
-                            n.said.into(),
-                            n.at,
-                            n.inside,
-                            n.end,
-                            n.scope,
-                        )
-                    })
-                    .collect(),
+                true => {
+                    let text = self.pane().editor.read(cx).text().to_string();
+                    markdown::all_comments(&text)
+                        .into_iter()
+                        .map(|n| {
+                            // The CriticMarkup form starts its passage after `{==`; the HTML form starts it at the whole.
+                            let from = match text[n.at..].starts_with("{==") {
+                                true => n.at + 3,
+                                false => n.at,
+                            };
+                            let passage = match n.noted.is_empty() {
+                                true => n.at..n.end,
+                                false => from..from + n.noted.len(),
+                            };
+                            comments::Card {
+                                noted: n.noted.into(),
+                                said: n.said.into(),
+                                at: n.at,
+                                inside: n.inside,
+                                end: n.end,
+                                scope: n.scope,
+                                passage,
+                            }
+                        })
+                        .collect()
+                }
                 false => Vec::new(),
             };
-        // Calm UI (ui.md §12): one quiet dot — no icon, no count. Same hit area
-        // and corner, so the toggle, the palette (`› comments`) and the corner
-        // geometry keep working.
-        let talk = (!said.is_empty()).then(|| {
-            div()
-                .id("comments-toggle")
-                .debug_selector(|| "comments-toggle".into())
-                .tooltip(ui::widgets::tip(
-                    tr("Comments of the note", "Commentaires de la note"),
-                    badge_label(said.len()),
-                    t,
-                ))
-                .absolute()
-                .bottom_4()
-                .right(t.px(50.))
-                .size(t.px(30.))
-                .rounded(t.large())
-                .cursor_pointer()
-                .occlude()
-                // The single dot: where the badge was, at its size, without the number.
-                .child(
-                    div()
-                        .debug_selector(|| "comments-badge".into())
-                        .absolute()
-                        .top(t.px(-3.))
-                        .right(t.px(-3.))
-                        .min_w(t.px(15.))
-                        .h(t.px(15.))
-                        .rounded_full()
-                        .bg(t.accent),
-                )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.comments_shut = !this.comments_shut;
-                    cx.notify();
-                }))
-        });
-        // The assistant's round button, at the note's foot on the right (none in focus mode, where
-        // the docks are hidden). It sits beside the comments bubble, which keeps its place on the left.
-        let assistant_btn = (!self.focus_mode).then(|| self.assistant_toggle(cx));
-        let corner = assistant_btn.is_some() as usize + talk.is_some() as usize;
+        if active {
+            self.comment_cards = said.clone();
+        }
+        // The note's corner badge: a quiet dot, at the foot on the right, for a note with comments.
+        let talk = active.then(|| self.render_comments_badge(cx)).flatten();
+        let corner = talk.is_some() as usize;
         // The pending changes of the note, said quietly at its foot (none in focus mode).
         // A comparison has changes to show, not to accept: it is not counted.
         let changes = match self.pane().editor.read(cx).is_readonly() {
             true => 0,
             false => self.pane().editor.read(cx).pending_changes(),
         };
-        let hint =
-            (changes > 0 && !self.focus_mode).then(|| self.pending_hint(changes, corner, cx));
+        // The changes the note's text does not place are shown nowhere: the pill says so, with Discard.
+        let orphans = match self.pane().editor.read(cx).is_readonly() {
+            true => 0,
+            false => self.unplaced_changes(),
+        };
+        let hint = ((changes > 0 || orphans > 0) && !self.focus_mode)
+            .then(|| self.pending_hint(changes, orphans, corner, cx));
         // The list page closed with input in its filter or one of its cells: nothing
         // receives it anymore, it goes back to the note.
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {
@@ -943,153 +1157,18 @@ impl Shell {
             e.pill = pill;
             e.strip = pad;
         });
-        // The comments column takes what the panel and the note leave it, 270 px at
-        // most; short of 140 px, it does not show (its button stays, a wider window brings it back).
-        let column = (active && !said.is_empty() && !self.comments_shut && !self.focus_mode)
-            .then(|| {
-                self.nav.aside = px(270.);
-                let panel = if self.nav.panel == Panel::Split {
-                    self.split_width() + nav::DIVIDER
-                } else {
-                    px(0.)
-                };
-                (self.nav.total - panel - nav::NOTE_MIN).min(px(270.))
-            })
-            .filter(|width| *width >= px(140.));
-        if active && column.is_none() {
-            self.nav.aside = px(0.);
-        }
-        // The comment the caret is in (none past the last) is a sheet.
+        // The comment the caret is in (none past the last) is a card focused in the Comments view.
         let caret = self.pane().editor.read(cx).position();
-        let here = said.iter().position(|n| n.2 <= caret && caret <= n.4);
+        let here = said.iter().position(|n| n.at <= caret && caret <= n.end);
         if here != self.comments_seen {
             self.comments_seen = here;
             if let Some(i) = here {
-                // The title is the column's first child.
-                self.comments_scroll.scroll_to_item(i + 1);
+                self.comment_focus = Some(i);
+                if self.docked(Mode::Comments) {
+                    self.comments_scroll.scroll_to_item(i);
+                }
             }
         }
-        let cards = said.iter().filter(|_| !self.comments_shut).enumerate().map(
-            |(i, (noted, said, at, inside, _, scope))| {
-                let (at, inside) = (*at, *inside);
-                let group = format!("comment-{i}");
-                let words = |d: Div| {
-                    d.text_color(if said.is_empty() { t.soft } else { t.text })
-                        .child(if said.is_empty() {
-                            tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string()
-                        } else {
-                            said.to_string()
-                        })
-                };
-                // The quoted passage only reminds where the comment is: small, on a faint tint, two lines.
-                let quote = |text: String| {
-                    div()
-                        .min_w_0()
-                        .px_1()
-                        .rounded(t.small())
-                        .bg(t.hover)
-                        .text_size(t.px(12.))
-                        .text_color(t.soft)
-                        .line_clamp(2)
-                        .text_ellipsis()
-                        .child(text)
-                };
-                div()
-                    .id(("comment", i))
-                    .debug_selector(|| format!("comment-{i}"))
-                    .group(group.clone())
-                    .px_3()
-                    .py(t.px(10.))
-                    .rounded(t.large())
-                    // The comment under the caret is a small sheet on the ground; the others lie on it, with no line between.
-                    .when(here == Some(i), |d| d.bg(t.bg).shadow(t.lifted()))
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .cursor_pointer()
-                    // Where it is, in a table: `Cell C2`, above the commented text.
-                    .when(!scope.is_empty() && !noted.is_empty(), |d| {
-                        d.child(
-                            div()
-                                .px_1()
-                                .text_size(t.px(11.))
-                                .text_color(t.dim)
-                                .child(scope.to_string()),
-                        )
-                    })
-                    .child(
-                        div()
-                            .flex()
-                            .items_start()
-                            .gap_1()
-                            .child(match (noted.is_empty(), scope.is_empty()) {
-                                // A row, a column, the table: what it is about is the chip.
-                                (true, false) => quote(scope.to_string()).flex_1(),
-                                // A comment on its own, in the text: it takes the place.
-                                (true, true) => words(div().flex_1().min_w_0().px_1()),
-                                (false, _) => quote(noted.to_string()).flex_1(),
-                            })
-                            // Shown under the pointer and on the keys' focus; always reachable by Tab.
-                            .child(
-                                ui::widgets::button(("resolve", i), "check.svg", false, t)
-                                    .opacity(0.)
-                                    .group_hover(group, |s| s.opacity(1.))
-                                    .focus(|s| s.border_2().border_color(t.accent).opacity(1.))
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        cx.stop_propagation();
-                                        this.pane()
-                                            .editor
-                                            .update(cx, |e, cx| e.resolve_comment(at, cx));
-                                        window.focus(&this.pane().editor.focus_handle(cx));
-                                    })),
-                            ),
-                    )
-                    .when(!noted.is_empty() || !scope.is_empty(), |d| {
-                        d.child(words(div().px_1()))
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.pane()
-                            .editor
-                            .update(cx, |e, cx| e.jump(inside, false, cx));
-                        window.focus(&this.pane().editor.focus_handle(cx));
-                    }))
-            },
-        );
-        let comments = column.map(|column| {
-            let title = format!("{} ({})", tr("Comments", "Commentaires"), said.len());
-            let shut = ui::widgets::button("comments-shut", "close.svg", false, t)
-                .debug_selector(|| "comments-shut".into())
-                .tooltip(ui::widgets::tip(tr("Close", "Fermer"), String::new(), t))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.comments_shut = true;
-                    cx.notify();
-                }));
-            div()
-                .id("comments")
-                .debug_selector(|| "comments".into())
-                .w(column)
-                .flex_none()
-                .h_full()
-                // Under the window buttons, whatever the zoom.
-                .pt(t.px(48.))
-                .pl(nav::GAP)
-                .pb_3()
-                .text_size(t.px(13.))
-                .flex()
-                .flex_col()
-                .gap(nav::GAP)
-                .overflow_y_scroll()
-                .track_scroll(&self.comments_scroll)
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .px_3()
-                        .child(div().flex_1().text_color(t.soft).child(title))
-                        .child(shut),
-                )
-                .children(cards)
-        });
         // The image picked in the panel; it goes away as soon as the note takes over again.
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             if !self.set_file(None, cx) {
@@ -1113,6 +1192,7 @@ impl Shell {
         let free_top = self.pane().figure.is_none()
             && (listing.is_some() || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
+            _ if self.pane().settings.is_some() => note.child(self.render_settings(cx)),
             _ if listing.is_some() => note.children(listing),
             _ if let Some(figure) = self.pane().figure.clone() => {
                 figure.update(cx, |figure, _| figure.sync(t));
@@ -1154,7 +1234,6 @@ impl Shell {
                 note.child(self.pane().editor.clone())
                     .children(empty)
                     .children(talk)
-                    .children(assistant_btn)
                     .children(hint)
             }
         };
@@ -1247,7 +1326,7 @@ impl Shell {
                             .debug_selector(|| "window-title".into())
                             .min_w_0()
                             .truncate()
-                            .mr(t.px(PILL_ROOM))
+                            .mr(t.px(NOTE_ROOM))
                             .text_size(t.px(13.))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(t.soft)
@@ -1268,7 +1347,7 @@ impl Shell {
                         .debug_selector(|| "strip-title".into())
                         .min_w_0()
                         .truncate()
-                        .when(corner_here, |d| d.mr(t.px(PILL_ROOM)))
+                        .when(corner_here, |d| d.mr(t.px(NOTE_ROOM)))
                         .text_size(t.px(13.))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(t.soft)
@@ -1297,7 +1376,7 @@ impl Shell {
                     .children(toggle)
             })
             // The active pane of several: a 1 px ring around it, the accent at 30 %. Alone, a pane needs none.
-            .when(many && active, |d| {
+            .when(many && active && !t.quiet, |d| {
                 d.child(
                     div()
                         .debug_selector(|| "pane-active".into())
@@ -1308,10 +1387,7 @@ impl Shell {
                 )
             })
             .children(tint);
-        (
-            area.into_any_element(),
-            comments.map(IntoElement::into_any_element),
-        )
+        area.into_any_element()
     }
 
     /// The panes of `node`, each area taken from `areas` (by pane), with a border to drag between

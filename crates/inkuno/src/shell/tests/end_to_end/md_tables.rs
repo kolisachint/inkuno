@@ -283,8 +283,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     cx.simulate_keystrokes("down");
     let first = caret(cx);
+    // At 14 px a visual line holds about 84 characters: the second line starts there, and the
+    // click below (start + 140) still lands on it.
     assert!(
-        first > start && first < start + 80 && rows_of(cx, first).y > top,
+        first > start && first < start + 140 && rows_of(cx, first).y > top,
         "{first}"
     );
     cx.simulate_keystrokes("up");

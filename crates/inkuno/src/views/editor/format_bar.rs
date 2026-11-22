@@ -45,7 +45,7 @@ pub(super) enum Bar {
 #[cfg(test)]
 pub(super) struct Tools {
     /// The inline styles applied (`md::STYLES`).
-    pub(super) styles: u16,
+    pub(super) styles: u32,
 }
 
 impl Editor {
@@ -110,7 +110,7 @@ impl Editor {
 
     /// The styles applied on the selection (`md::STYLES`), to light up the formatting bar's buttons.
     #[cfg(test)]
-    pub fn styles(&mut self) -> u16 {
+    pub fn styles(&mut self) -> u32 {
         self.tools().styles
     }
 

@@ -36,6 +36,15 @@ pub enum Kind {
 pub enum Link {
     Wiki(String),
     Url(String),
+    /// `[text](path)`, `[text](path#anchor)`: a note of the vault, by its path as written
+    /// (percent-decoded), relative to the folder of the linking note, or to the vault root for a
+    /// leading `/`. An anchor is a heading, as written.
+    Note {
+        path: String,
+        anchor: Option<String>,
+    },
+    /// `[text](#heading)`: a heading of the same note.
+    Heading(String),
     Tag(String),
     /// A footnote reference `[^label]` (see `footnote_ref`): whether it is defined is known
     /// document-wide only (see `footnotes`), so per-line readers style every reference as a link
@@ -44,24 +53,27 @@ pub enum Link {
 }
 
 // Inline styles, one word of flags per byte of text.
-pub const BOLD: u16 = 1;
-pub const ITALIC: u16 = 2;
-pub const CODE: u16 = 4;
-pub const STRIKE: u16 = 8;
-pub const DIM: u16 = 16;
-pub const LINK: u16 = 32;
-pub const TAG: u16 = 64;
-pub const MARK: u16 = 128;
+pub const BOLD: u32 = 1;
+pub const ITALIC: u32 = 2;
+pub const CODE: u32 = 4;
+pub const STRIKE: u32 = 8;
+pub const DIM: u32 = 16;
+pub const LINK: u32 = 32;
+pub const TAG: u32 = 64;
+pub const MARK: u32 = 128;
 // Highlight `==text==` and underline `<u>text</u>` (Markdown has no underline: the HTML tag serves).
-pub const HIGHLIGHT: u16 = 2048;
-pub const UNDER: u16 = 4096;
+pub const HIGHLIGHT: u32 = 2048;
+pub const UNDER: u32 = 4096;
 // Text that steps back but is still read (front matter, the address of a link, comments): `DIM` for the
 // rest of the code, drawn readable.
-pub const QUIET: u16 = 8192;
+pub const QUIET: u32 = 8192;
 // Code block coloring.
-pub const KEYWORD: u16 = 256;
-pub const STRING: u16 = 512;
-pub const NUMBER: u16 = 1024;
+pub const KEYWORD: u32 = 256;
+pub const STRING: u32 = 512;
+pub const NUMBER: u32 = 1024;
+pub const COMMENT: u32 = 16384;
+pub const TYPE: u32 = 32768;
+pub const FUNCTION: u32 = 65536;
 
 pub const INDENT: &str = "    ";
 
@@ -218,6 +230,42 @@ pub fn classify(line: &str, in_code: bool) -> (Kind, usize) {
     classify_in(line, in_code.then_some(Fence { ch: b'`', len: 3 }))
 }
 
+/// A block quote line: its depth (the `>` markers), the byte where its content starts (after the last
+/// marker and one optional space, with up to three spaces before a nested marker) and the kind the
+/// content has on its own line (`Para`, `Heading`, `Bullet`, `Ordered`, `Task`, `Fence`, `Rule`, `Table`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Quoted {
+    pub depth: usize,
+    pub at: usize,
+    pub inner: Kind,
+}
+
+/// The quote of `line`, if it is a block quote line (`>` after its indent, with or without a space).
+pub fn quote(line: &str) -> Option<Quoted> {
+    let mut at = indent_len(line);
+    let mut depth = 0;
+    while line[at..].starts_with('>') {
+        depth += 1;
+        at += 1;
+        if line[at..].starts_with(' ') {
+            at += 1;
+        }
+        let gap = line[at..]
+            .bytes()
+            .take(3)
+            .take_while(|&b| b == b' ')
+            .count();
+        if line[at + gap..].starts_with('>') {
+            at += gap;
+        }
+    }
+    (depth > 0).then(|| Quoted {
+        depth,
+        at,
+        inner: classify_in(&line[at..], None).0,
+    })
+}
+
 /// Kind of the line and length (in bytes) of its marker, indentation included. `open` is the opener of
 /// the code block the line is in, if any: inside it, only the closing fence is a fence, the rest is code.
 pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
@@ -229,19 +277,42 @@ pub fn classify_in(line: &str, open: Option<Fence>) -> (Kind, usize) {
         None if is_fence(line) => return (Kind::Fence, line.len()),
         None => {}
     }
+    // Four columns of indent or more: no heading and no rule (indented code, or a continuation).
+    let shallow = indent_columns(line) < 4;
     let hashes = rest.bytes().take_while(|&b| b == b'#').count();
-    if (1..=6).contains(&hashes) && rest[hashes..].starts_with(' ') {
-        return (Kind::Heading(hashes as u8), indent + hashes + 1);
+    // An empty heading (`#`, `## `) is a heading too: its marker is the whole line then.
+    if shallow
+        && (1..=6).contains(&hashes)
+        && (rest[hashes..].is_empty() || rest[hashes..].starts_with(' '))
+    {
+        return (
+            Kind::Heading(hashes as u8),
+            (indent + hashes + 1).min(line.len()),
+        );
     }
+    // A rule: three or more of one mark, spaces and tabs between them; it wins over a list item (`- - -`).
     let t = rest.trim_end();
-    if t.len() >= 3 && ['-', '*', '_'].iter().any(|&c| t.chars().all(|x| x == c)) {
+    if let Some(c) = t
+        .chars()
+        .next()
+        .filter(|c| shallow && ['-', '*', '_'].contains(c))
+        && t.chars().all(|x| x == c || x == ' ' || x == '\t')
+        && t.matches(c).count() >= 3
+    {
         return (Kind::Rule, line.len());
     }
     if rest.starts_with('|') {
         return (Kind::Table, 0);
     }
-    if rest == ">" || rest.starts_with("> ") {
-        return (Kind::Quote, indent + rest.len().min(2));
+    if let Some(q) = quote(line) {
+        // The marker runs to the content's own marker: a list item's or a heading's prefix is hidden with the quote's.
+        let inner = match q.inner {
+            Kind::Heading(_) | Kind::Bullet | Kind::Ordered | Kind::Task(_) => {
+                classify_in(&line[q.at..], None).1
+            }
+            _ => 0,
+        };
+        return (Kind::Quote, q.at + inner);
     }
     let b = rest.as_bytes();
     if b.len() >= 2 && matches!(b[0], b'-' | b'*' | b'+') && b[1] == b' ' {
@@ -463,7 +534,7 @@ pub fn count_footnotes(text: &str) -> usize {
 /// Back to literal text for the references of `line` that `defined` does not know: only defined
 /// labels keep the link style that `links_and_comments` gives every reference. Only the brackets
 /// lose `DIM` (a label keeps its emphasis, if any); the label loses `LINK`.
-pub fn footnote_flags(line: &str, flags: &mut [u16], defined: &dyn Fn(&str) -> bool) {
+pub fn footnote_flags(line: &str, flags: &mut [u32], defined: &dyn Fn(&str) -> bool) {
     for (r, label) in footnote_ref(line) {
         if !defined(&label) {
             for f in &mut flags[r.start..r.start + 2] {
@@ -483,13 +554,99 @@ pub fn footnote_flags(line: &str, flags: &mut [u16], defined: &dyn Fn(&str) -> b
 // ponytail: only addresses with a protocol, without `)`; a link to a vault file
 // is written `[[note]]`. Count parentheses if addresses containing them show up.
 pub fn web_link(rest: &str) -> Option<(Range<usize>, Range<usize>)> {
-    let close = rest.find("](")?;
+    // A `](` that an escaping backslash holds is part of the label.
+    let close = rest
+        .match_indices("](")
+        .map(|(at, _)| at)
+        .find(|&at| !rest[..at].ends_with('\\'))?;
     let end = close + 2 + rest[close + 2..].find(')')?;
     let (text, url) = (1..close, close + 2..end);
     let ok = rest.starts_with('[')
-        && !rest[text.clone()].contains(['[', ']'])
-        && is_url(&rest[url.clone()]);
+        && !unescaped(&rest[text.clone()]).contains(['[', ']'])
+        && !rest[url.clone()].is_empty()
+        && !rest[url.clone()].contains(char::is_whitespace);
     ok.then_some((text, url))
+}
+
+/// What a `[text](address)` link with a relative address points to: a note (`Note.md`, `sub/Note.md#h`,
+/// `../Note.md`, `/Note.md`, `Note%20Name.md`) or a heading of this note (`#h`). `None` for an address
+/// with a protocol (see `is_url`), another scheme, or a `<…>` address.
+fn relative(address: &str, text: &str) -> Option<Link> {
+    let scheme = address.split_once(':').is_some_and(|(s, _)| {
+        s.starts_with(|c: char| c.is_ascii_alphabetic())
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
+    });
+    let balanced = address.matches('(').count() == address.matches(')').count();
+    if scheme
+        || !balanced
+        || address.starts_with('<')
+        || unescaped(text).contains(['<', '['])
+        || is_url(address)
+    {
+        return None;
+    }
+    let (path, anchor) = match address.split_once('#') {
+        Some((path, anchor)) => (path, Some(percent_decode(anchor)).filter(|a| !a.is_empty())),
+        None => (address, None),
+    };
+    match (path, anchor) {
+        ("", Some(anchor)) => Some(Link::Heading(anchor)),
+        ("", None) => None,
+        (path, anchor) => Some(Link::Note {
+            path: percent_decode(path),
+            anchor,
+        }),
+    }
+}
+
+/// A label without its escaping backslashes before brackets (`\[`, `\]`).
+fn unescaped(label: &str) -> String {
+    label.replace("\\[", "[").replace("\\]", "]")
+}
+
+/// The text of a percent-encoded address (`Note%20Name` is `Note Name`); bad escapes stay as written.
+pub fn percent_decode(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = b
+            .get(i + 1..i + 3)
+            .and_then(|h| std::str::from_utf8(h).ok());
+        match (b[i], hex.and_then(|h| u8::from_str_radix(h, 16).ok())) {
+            (b'%', Some(byte)) => {
+                out.push(byte);
+                i += 3;
+            }
+            _ => {
+                out.push(b[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The slug GitHub gives a heading, which its `#anchor` names: lowercase, spaces as `-`, the
+/// punctuation dropped except `-` and `_`.
+pub fn slug(heading: &str) -> String {
+    heading
+        .trim()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || c.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .map(|c| if c.is_whitespace() { '-' } else { c })
+        .collect()
+}
+
+/// The byte where the heading that `anchor` names starts in `text` (the first one with its slug).
+pub fn heading_at(text: &str, anchor: &str) -> Option<usize> {
+    let wanted = slug(anchor);
+    headings(text)
+        .into_iter()
+        .find(|(_, label, _)| slug(label) == wanted)
+        .map(|(.., at)| at)
 }
 
 /// Wikilinks, `[text](address)` links, URLs, tags and footnote references of the line, with
@@ -514,18 +671,42 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
         if b[i] == b'['
             && (i == 0 || b[i - 1] != b'!')
             && let Some((_, url)) = web_link(rest)
+            && is_url(&rest[url.clone()])
         {
             out.push((i..i + url.end + 1, Link::Url(rest[url.clone()].to_string())));
             i += url.end + 1;
             continue;
         }
-        if rest.starts_with("http://") || rest.starts_with("https://") {
-            let end = rest
-                .find(|c: char| c.is_whitespace() || c == ')')
-                .unwrap_or(rest.len());
-            out.push((i..i + end, Link::Url(rest[..end].to_string())));
-            i += end;
+        // `[text](note.md#heading)`, `[text](#heading)`: a relative address (see `relative`).
+        if b[i] == b'['
+            && (i == 0 || b[i - 1] != b'!')
+            && let Some((text, url)) = web_link(rest)
+            && let Some(link) = relative(&rest[url.clone()], &rest[text])
+        {
+            out.push((i..i + url.end + 1, link));
+            i += url.end + 1;
             continue;
+        }
+        // Extended autolinks (GFM): a bare address, or `www.` (which opens as `http://`).
+        let www = rest.starts_with("www.")
+            && (i == 0 || b"\t *_~(".contains(&b[i - 1]) || b[i - 1].is_ascii_whitespace());
+        if ["http://", "https://", "ftp://"]
+            .iter()
+            .any(|p| rest.starts_with(p))
+            || www
+        {
+            let end = autolink_end(rest);
+            let bare = if www { 4 } else { 0 };
+            if end > bare {
+                let url = if www {
+                    format!("http://{}", &rest[..end])
+                } else {
+                    rest[..end].to_string()
+                };
+                out.push((i..i + end, Link::Url(url)));
+                i += end;
+                continue;
+            }
         }
         if b[i] == b'#' && (i == 0 || b[i - 1].is_ascii_whitespace()) {
             let n: usize = rest[1..]
@@ -542,6 +723,34 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
         }
         i += rest.chars().next().map_or(1, char::len_utf8);
     }
+    // E-mail addresses (GFM), where no range above takes them: `mailto:` links.
+    for (at, _) in line.match_indices('@') {
+        let local = line[..at]
+            .char_indices()
+            .rev()
+            .take_while(|&(_, c)| is_local(c))
+            .last();
+        // A local part after a backslash (`\+@`) is escaped text, not an address.
+        let Some((start, _)) = local.filter(|&(k, _)| !line[..k].ends_with('\\')) else {
+            continue;
+        };
+        let rest = &line[at + 1..];
+        let dom = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || "-_.".contains(c)))
+            .unwrap_or(rest.len());
+        let dom = rest[..dom].trim_end_matches('.');
+        let valid = dom.contains('.')
+            && !dom.ends_with(['-', '_'])
+            && dom.split('.').all(|seg| !seg.is_empty());
+        let range = start..at + 1 + dom.len();
+        if valid
+            && !out
+                .iter()
+                .any(|(r, _)| r.start < range.end && range.start < r.end)
+        {
+            out.push((range.clone(), Link::Url(format!("mailto:{}", &line[range]))));
+        }
+    }
     // Footnote references, found separately (they skip code spans and wikilinks): merged in
     // text order. They never overlap the ranges above (see `footnote_ref`).
     if line.contains("[^") {
@@ -550,9 +759,50 @@ pub fn links(line: &str) -> Vec<(Range<usize>, Link)> {
             .map(|(r, label)| (r, Link::Footnote(label)))
             .collect();
         out.append(&mut feet);
-        out.sort_by_key(|(r, _)| r.start);
     }
+    out.sort_by_key(|(r, _)| r.start);
     out
+}
+
+/// Length of the raw HTML tag at the start of `rest` (`<name …>` or `</name>`), if it holds no `<`.
+fn html_tag(rest: &str) -> Option<usize> {
+    let name = rest.strip_prefix("</").or_else(|| rest.strip_prefix('<'))?;
+    if !name.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let end = rest.find('>')?;
+    (!rest[1..end].contains('<')).then_some(end + 1)
+}
+
+/// Characters of the local part of an e-mail address (GFM).
+fn is_local(c: char) -> bool {
+    c.is_ascii_alphanumeric() || ".!#$%&'*+/=?^_`{|}~-".contains(c)
+}
+
+/// The end of the extended autolink at the start of `rest` (GFM): up to a space or a `<`, without the
+/// trailing punctuation, without an entity's `;` (`&hl;`), and without a `)` that closes no `(` of it.
+fn autolink_end(rest: &str) -> usize {
+    let mut end = rest
+        .find(|c: char| c.is_whitespace() || c == '<')
+        .unwrap_or(rest.len());
+    loop {
+        let t = &rest[..end];
+        if t.ends_with(|c: char| "?!.,:*_~'\"".contains(c))
+            || t.ends_with(')') && t.matches(')').count() > t.matches('(').count()
+        {
+            end -= 1;
+        } else if t.ends_with(';')
+            && let Some(amp) = t.rfind('&')
+            && t[amp + 1..t.len() - 1]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric())
+            && amp + 1 < t.len() - 1
+        {
+            end = amp;
+        } else {
+            return end;
+        }
+    }
 }
 
 /// The `[ ]` and `[x]` of the line from byte `from`, alone between spaces, `|` or
@@ -569,7 +819,7 @@ fn boxes(line: &str, from: usize) -> impl Iterator<Item = Range<usize>> + '_ {
 
 /// The line's checkboxes, outside inline code.
 pub fn checkboxes(line: &str, from: usize) -> Vec<Range<usize>> {
-    let mut flags = vec![0u16; line.len()];
+    let mut flags = vec![0u32; line.len()];
     inline(line, from, &mut flags);
     boxes(line, from)
         .filter(|r| flags[r.start] & CODE == 0)
@@ -614,7 +864,7 @@ pub fn mark_signs(color: usize) -> (String, &'static str) {
 }
 
 /// Fills `flags` with the inline styles of `line` from byte `from`: all of them.
-pub fn inline(line: &str, from: usize, flags: &mut [u16]) {
+pub fn inline(line: &str, from: usize, flags: &mut [u32]) {
     emphasis(line, from, flags);
     let b = line.as_bytes();
     // A `[ ]` or `[x]` checkbox: colored, bold once checked.
@@ -631,18 +881,64 @@ pub fn inline(line: &str, from: usize, flags: &mut [u16]) {
 
 /// Fills `flags` with the styles made by marks alone (`**`, `*`, `_`, `~~`, `==`, `<u>`, `<mark>`, backticks):
 /// the marks are `DIM`. Texts that are not notes (a diagram's) read only this part.
-pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
+pub fn emphasis(line: &str, from: usize, flags: &mut [u32]) {
     let b = line.as_bytes();
-    let alnum = |i: Option<usize>| {
-        i.and_then(|i| b.get(i))
-            .is_some_and(u8::is_ascii_alphanumeric)
+    // Word characters, Unicode letters and digits included: the character starting at `at`, or ending before it.
+    let after = |at: usize| {
+        line.get(at..)
+            .and_then(|s| s.chars().next())
+            .is_some_and(char::is_alphanumeric)
     };
-    let mut active = 0u16;
+    let before = |at: usize| {
+        line[..at]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_alphanumeric)
+    };
+    // Raw inline HTML tags: no delimiter inside one opens or closes a run (`<a href="__">`). The highlight
+    // and underline tags are marks of this pass, not raw HTML.
+    let tags: Vec<Range<usize>> = line
+        .match_indices('<')
+        .filter(|(k, _)| {
+            !["<u>", "</u>", "<mark", "</mark>"]
+                .iter()
+                .any(|t| line[*k..].starts_with(t))
+        })
+        .filter_map(|(k, _)| html_tag(&line[k..]).map(|n| k..k + n))
+        .collect();
+    let inside = |at: usize| tags.iter().any(|t| t.contains(&at));
+    // CommonMark's flanking of the `_` run holding byte `at`: (it can open, it can close).
+    let flank = |at: usize| {
+        let s = (0..at)
+            .rev()
+            .take_while(|&k| b[k] == b'_')
+            .last()
+            .unwrap_or(at);
+        let e = (at..b.len())
+            .take_while(|&k| b[k] == b'_')
+            .last()
+            .map_or(at + 1, |k| k + 1);
+        let punct = |c: char| !c.is_alphanumeric() && !c.is_whitespace();
+        let prev = line[..s].chars().next_back().unwrap_or(' ');
+        let next = line[e..].chars().next().unwrap_or(' ');
+        let left = !next.is_whitespace() && (!punct(next) || prev.is_whitespace() || punct(prev));
+        let right = !prev.is_whitespace() && (!punct(prev) || next.is_whitespace() || punct(next));
+        (
+            left && (!right || punct(prev)),
+            right && (!left || punct(next)),
+        )
+    };
+    let mut active = 0u32;
     // The current highlight opened with `<mark>` (otherwise with `==`): it closes the same way.
     let mut tagged = false;
     let mut i = from;
     while i < b.len() {
         let rest = &line[i..];
+        if let Some(t) = tags.iter().find(|t| t.start == i) {
+            flags[t.clone()].iter_mut().for_each(|f| *f |= active);
+            i = t.end;
+            continue;
+        }
         if b[i] == b'`'
             && let Some(end) = rest[1..].find('`')
         {
@@ -658,6 +954,8 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
             (2, BOLD)
         } else if rest.starts_with("~~") {
             (2, STRIKE)
+        } else if rest.starts_with("__") {
+            (2, BOLD)
         } else if let Some(n) = if active & HIGHLIGHT != 0 {
             mark_tag(rest, true).filter(|_| tagged)
         } else {
@@ -675,20 +973,21 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
         } else {
             (0, 0)
         };
-        if flag != 0 {
+        // Whether the delimiter `flag` of `n` bytes at `i` opens or closes here.
+        let ok = |n: usize, flag: u32| {
             let underscore = b[i] == b'_';
             // `==`: not stuck to a word (`abc==` of an address), nor the `{==` `==}` of a comment.
             let sound = |at: usize| {
                 b.get(at.wrapping_sub(1)) != Some(&b'{') && b.get(at + 2) != Some(&b'}')
             };
-            let ok = if flag == UNDER {
+            if flag == UNDER {
                 n == 4 || rest[n..].contains("</u>")
             } else if flag == HIGHLIGHT && rest.starts_with('<') {
                 // `<mark>`: an opening one that has its closing one, or the closing one of the one that opened.
                 active & flag != 0 || rest[n..].contains("</mark>")
             } else if flag == HIGHLIGHT {
                 if active & flag == 0 {
-                    !alnum(i.checked_sub(1))
+                    !before(i)
                         && sound(i)
                         && rest[2..]
                             .chars()
@@ -696,26 +995,41 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
                             .is_some_and(|c| !c.is_whitespace() && c != '=')
                         && rest[2..]
                             .match_indices("==")
-                            .any(|(j, _)| sound(i + 2 + j) && !alnum(Some(i + 4 + j)))
+                            .any(|(j, _)| sound(i + 2 + j) && !after(i + 4 + j))
                 } else {
-                    sound(i) && !alnum(Some(i + 2))
+                    sound(i) && !after(i + 2)
+                }
+            } else if underscore {
+                if active & flag == 0 {
+                    flank(i).0
+                        && rest[n..]
+                            .match_indices(&rest[..n])
+                            .any(|(j, _)| !inside(i + n + j) && flank(i + n + j).1)
+                } else {
+                    flank(i).1
                 }
             } else if active & flag == 0 {
                 rest[n..].chars().next().is_some_and(|c| !c.is_whitespace())
-                    && rest[n..].contains(&rest[..n])
-                    && !(underscore && alnum(i.checked_sub(1)))
+                    && rest[n..]
+                        .match_indices(&rest[..n])
+                        .any(|(j, _)| !inside(i + n + j))
             } else {
-                !(underscore && alnum(Some(i + 1)))
-            };
-            if ok {
-                flags[i..i + n].iter_mut().for_each(|f| *f |= DIM | active);
-                if flag == HIGHLIGHT && active & flag == 0 {
-                    tagged = rest.starts_with('<');
-                }
-                active ^= flag;
-                i += n;
-                continue;
+                true
             }
+        };
+        // A `__` that neither opens nor closes is a single `_`.
+        let (mut n, mut flag) = (n, flag);
+        if flag == BOLD && b[i] == b'_' && !ok(n, flag) {
+            (n, flag) = (1, ITALIC);
+        }
+        if flag != 0 && ok(n, flag) {
+            flags[i..i + n].iter_mut().for_each(|f| *f |= DIM | active);
+            if flag == HIGHLIGHT && active & flag == 0 {
+                tagged = rest.starts_with('<');
+            }
+            active ^= flag;
+            i += n;
+            continue;
         }
         let n = rest.chars().next().map_or(1, char::len_utf8);
         flags[i..i + n].iter_mut().for_each(|f| *f |= active);
@@ -724,15 +1038,18 @@ pub fn emphasis(line: &str, from: usize, flags: &mut [u16]) {
 }
 
 /// Links, tags, footnote references and comments: what notes add to the styles of the marks.
-fn links_and_comments(line: &str, from: usize, flags: &mut [u16]) {
+fn links_and_comments(line: &str, from: usize, flags: &mut [u32]) {
     for (r, link) in links(line) {
-        if r.start < from {
+        // A relative address in code is text: the web addresses there keep their styles, as before.
+        let code = |r: &Range<usize>| flags[r.clone()].iter().any(|f| f & CODE != 0);
+        if r.start < from || !matches!(link, Link::Url(_)) && code(&r) {
             continue;
         }
         match link {
             Link::Tag(_) => flags[r].iter_mut().for_each(|f| *f |= TAG),
-            // `[text](address)`: the text is the link, the rest fades.
-            Link::Url(_) => match web_link(&line[r.start..]) {
+            // `[text](address)`: the text is the link, the rest fades. Relative addresses too.
+            Link::Url(_) | Link::Note { .. } | Link::Heading(_) => match web_link(&line[r.start..])
+            {
                 Some((text, address)) => {
                     flags[r.clone()].iter_mut().for_each(|f| *f |= DIM);
                     flags[r.start + text.start..r.start + text.end]
@@ -765,11 +1082,60 @@ fn links_and_comments(line: &str, from: usize, flags: &mut [u16]) {
             }
         }
     }
-    // A comment: its text keeps its styles (the editor highlights it), the rest fades.
-    for (whole, noted, said) in comments(line) {
-        if whole.start < from || flags[whole.start] & CODE != 0 {
+    // `[text](address)` with another scheme (`tel:`, `x-app:`): styled as a link, not clickable,
+    // as before relative addresses were read. The links above keep their own styles.
+    let held: Vec<usize> = links(line)
+        .iter()
+        .filter(|(_, l)| matches!(l, Link::Url(_) | Link::Note { .. } | Link::Heading(_)))
+        .map(|(r, _)| r.start)
+        .collect();
+    for (at, _) in line.match_indices('[') {
+        let rest = &line[at..];
+        if at < from
+            || at > 0 && line.as_bytes()[at - 1] == b'!'
+            || flags[at] & CODE != 0
+            || held.contains(&at)
+        {
             continue;
         }
+        // Not a link when a code span cuts it, the address has unbalanced parentheses or starts with `<`,
+        // or the text holds a tag (`<a title="](x)">`).
+        let plain = |(text, url): &(Range<usize>, Range<usize>)| {
+            let address = &rest[url.clone()];
+            !is_url(address)
+                && !address.starts_with('<')
+                && address.matches('(').count() == address.matches(')').count()
+                && !rest[text.clone()].contains('<')
+                && !flags[at..at + url.end + 1].iter().any(|f| f & CODE != 0)
+        };
+        if let Some((text, url)) = web_link(rest).filter(plain) {
+            let whole = at..at + url.end + 1;
+            flags[whole].iter_mut().for_each(|f| *f |= DIM);
+            flags[at + text.start..at + text.end]
+                .iter_mut()
+                .for_each(|f| *f = *f & !DIM | LINK);
+            flags[at + url.start..at + url.end]
+                .iter_mut()
+                .for_each(|f| *f |= QUIET);
+        }
+    }
+    for (whole, noted, said) in comments(line) {
+        // The new form's passage starts at the line's start (or a cell's, or the previous comment's), before
+        // the prefix: what counts is where its marker starts, not the whole.
+        let at = match is_html_comment(&line[whole.clone()]) {
+            true => noted.end,
+            false => whole.start,
+        };
+        if at < from || flags[at] & CODE != 0 {
+            continue;
+        }
+        // The new form: the whole marker fades, its text with it (hidden off the live line); the
+        // passage keeps its styles.
+        if is_html_comment(&line[whole.clone()]) {
+            flags[noted.end..whole.end].fill(DIM);
+            continue;
+        }
+        // The earlier form: its text keeps its styles (the editor highlights it), the rest fades.
         flags[whole.start..noted.start].fill(DIM);
         flags[noted.end..whole.end].fill(DIM);
         flags[said].fill(DIM | ITALIC | QUIET);
@@ -850,12 +1216,13 @@ pub fn tags(line: &str, table: bool) -> Vec<Range<usize>> {
 }
 
 /// The styles the formatting bar applies, in the order of its buttons.
-pub const STYLES: [u16; 6] = [BOLD, ITALIC, UNDER, STRIKE, HIGHLIGHT, CODE];
+pub const STYLES: [u32; 6] = [BOLD, ITALIC, UNDER, STRIKE, HIGHLIGHT, CODE];
 
 /// The ways a style is written: `(opening, closing)`, the first is the one applied.
-pub fn delimiters(flag: u16) -> &'static [(&'static str, &'static str)] {
+pub fn delimiters(flag: u32) -> &'static [(&'static str, &'static str)] {
     match flag {
-        BOLD => &[("**", "**")],
+        // The first pair is the one written; `__` is also read back (see `emphasis`).
+        BOLD => &[("**", "**"), ("__", "__")],
         ITALIC => &[("*", "*"), ("_", "_")],
         STRIKE => &[("~~", "~~")],
         HIGHLIGHT => &[("==", "==")],
@@ -866,8 +1233,8 @@ pub fn delimiters(flag: u16) -> &'static [(&'static str, &'static str)] {
 }
 
 /// The inline styles of `line` (see `inline`), one word per byte.
-pub fn flags(line: &str, from: usize) -> Vec<u16> {
-    let mut flags = vec![0u16; line.len()];
+pub fn flags(line: &str, from: usize) -> Vec<u32> {
+    let mut flags = vec![0u32; line.len()];
     inline(line, from.min(line.len()), &mut flags);
     flags
 }
@@ -880,9 +1247,9 @@ pub fn flags(line: &str, from: usize) -> Vec<u16> {
 // a selection straddling two spans of the same style removes neither (the style is applied again).
 pub fn unmark(
     line: &str,
-    flags: &[u16],
+    flags: &[u32],
     sel: Range<usize>,
-    flag: u16,
+    flag: u32,
 ) -> Option<(Range<usize>, Range<usize>)> {
     let has = |i: usize| flags.get(i).is_some_and(|f| f & flag != 0);
     let pivot = if sel.is_empty() {
@@ -1025,11 +1392,11 @@ const KEYWORDS: &[&str] = &[
     "yield",
 ];
 
-/// Colors a line of code: comments, strings, numbers and keywords.
+/// Colors a line of code: comments, strings, numbers, keywords, types (CamelCase) and calls (`name(`).
 // ponytail: a single line-by-line lexer for all languages, with no state from one
 // line to the next (`/* */` comments and multi-line strings ignored).
 // Move to a grammar per language (tree-sitter) if coloring becomes wrong.
-pub fn code(line: &str, lang: &str, flags: &mut [u16]) {
+pub fn code(line: &str, lang: &str, flags: &mut [u32]) {
     let comment = match lang {
         "py" | "python" | "sh" | "bash" | "zsh" | "fish" | "shell" | "yaml" | "yml" | "toml"
         | "rb" | "ruby" | "r" | "perl" | "make" | "makefile" | "dockerfile" | "conf" | "ini"
@@ -1042,7 +1409,7 @@ pub fn code(line: &str, lang: &str, flags: &mut [u16]) {
     while i < line.len() {
         let rest = &line[i..];
         if rest.starts_with(comment) {
-            flags[i..].fill(DIM | ITALIC | QUIET);
+            flags[i..].fill(DIM | ITALIC | QUIET | COMMENT);
             return;
         }
         let c = rest.chars().next().unwrap();
@@ -1074,10 +1441,16 @@ pub fn code(line: &str, lang: &str, flags: &mut [u16]) {
             let n = rest
                 .find(|x: char| !x.is_alphanumeric() && x != '_')
                 .unwrap_or(rest.len());
+            let word = &rest[..n];
             (
                 n,
-                if KEYWORDS.contains(&&rest[..n]) {
+                if KEYWORDS.contains(&word) {
                     KEYWORD
+                } else if word.starts_with(char::is_uppercase) && word.contains(char::is_lowercase)
+                {
+                    TYPE
+                } else if rest[n..].starts_with('(') {
+                    FUNCTION
                 } else {
                     0
                 },
@@ -1121,7 +1494,7 @@ const SYMBOLS: &[(&str, &str)] = &[
 
 /// Symbols to display in place of their ASCII spelling (`->` becomes `→`), outside
 /// code and links: (start byte, replaced length, symbol). The text does not change.
-pub fn symbols(line: &str, from: usize, flags: &[u16]) -> Vec<(usize, usize, &'static str)> {
+pub fn symbols(line: &str, from: usize, flags: &[u32]) -> Vec<(usize, usize, &'static str)> {
     let b = line.as_bytes();
     // A symbol stuck to another operator (`-->`, `!==`, `<--`) stays as is.
     let glued = |i: Option<usize>| {
@@ -1216,7 +1589,7 @@ pub fn index(text: &str) -> (Vec<String>, Vec<String>) {
             let (list, item) = match link {
                 Link::Tag(t) => (&mut tags, t),
                 Link::Wiki(w) => (&mut wikis, w.to_lowercase()),
-                Link::Footnote(_) | Link::Url(_) => continue,
+                Link::Footnote(_) | Link::Url(_) | Link::Note { .. } | Link::Heading(_) => continue,
             };
             if !list.contains(&item) {
                 list.push(item);
@@ -1325,10 +1698,28 @@ pub fn headings(text: &str) -> Vec<(u8, &str, usize)> {
     found
 }
 
-/// `{==passage==}{>>comment<<}`. In a table cell a `|` of the comment is written `\|`. The
+/// Opening of a comment in the note: `passage<!-- comment: text -->`. GitHub hides HTML comments,
+/// so the note reads cleanly there. The passage is the text from the start of the line (or of
+/// the cell of a table, or the end of the previous comment) up to the marker, trimmed.
+pub const COMMENT_OPEN: &str = "<!-- comment:";
+const HTML_CLOSE: &str = "-->";
+
+/// Refusal of a comment text or passage that would break the marks: a comment cannot hold `-->`,
+/// so every one is spaced out (`-- >`), and a passage cannot hold a mark of either form.
+pub fn spaced(text: &str) -> String {
+    let mut flat = text.replace("\r\n", " ").replace(['\n', '\r'], " ");
+    while flat.contains(HTML_CLOSE) {
+        flat = flat.replace(HTML_CLOSE, "-- >");
+    }
+    flat
+}
+
+/// `passage<!-- comment: text -->`. In a table cell a `|` of the comment is written `\|`. The
 /// syntax is read line by line, so the passage is one line, and the comment's line breaks become
-/// spaces; an empty comment is refused. A `<<}` in the comment gets a space inside, so that it
-/// cannot close the comment early, and a passage holding comment marks is refused.
+/// spaces; an empty comment is refused. A `-->` in the comment is spaced out, so that it cannot
+/// close the comment early, and a passage holding comment marks is refused. The comment is
+/// written after `passage`; it is anchored to the text from the start of its line (or cell, or
+/// the previous comment) up to the marker, so `passage` is the part of the line it covers.
 pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, String> {
     if passage.is_empty() {
         return Err("the passage is empty".into());
@@ -1336,19 +1727,15 @@ pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, St
     if passage.contains(['\n', '\r']) {
         return Err("the passage must be on one line".into());
     }
-    if ["{==", "==}", "{>>", "<<}"]
+    if ["{==", "==}", "{>>", "<<}", COMMENT_OPEN, HTML_CLOSE]
         .iter()
         .any(|mark| passage.contains(mark))
     {
         return Err("the passage holds comment marks".into());
     }
-    let flat = comment.replace("\r\n", " ").replace(['\n', '\r'], " ");
-    let mut flat = flat.trim().to_string();
+    let mut flat = spaced(comment).trim().to_string();
     if flat.is_empty() {
         return Err("the comment is empty".into());
-    }
-    while flat.contains("<<}") {
-        flat = flat.replace("<<}", "<< }");
     }
     let mut at = Vec::new();
     let mut from = 0;
@@ -1372,26 +1759,25 @@ pub fn comment_on(text: &str, passage: &str, comment: &str) -> Result<String, St
         .map(|i| *start + i)
         .unwrap_or(text.len());
     let in_cell = *start + passage.len() <= line_end && is_table_line(&text[line_start..line_end]);
-    let said = if in_cell {
-        flat.replace('|', "\\|")
-    } else {
-        flat.to_string()
-    };
-    let mut out = String::with_capacity(text.len() + said.len() + 12);
-    out.push_str(&text[..*start]);
-    out.push_str("{==");
-    out.push_str(passage);
-    out.push_str("==}{>>");
-    out.push_str(&said);
-    out.push_str("<<}");
-    out.push_str(&text[*start + passage.len()..]);
+    if in_cell {
+        flat = flat.replace('|', "\\|");
+    }
+    let end = *start + passage.len();
+    let mut out = String::with_capacity(text.len() + flat.len() + 20);
+    out.push_str(&text[..end]);
+    out.push_str(COMMENT_OPEN);
+    out.push(' ');
+    out.push_str(&flat);
+    out.push_str(" -->");
+    out.push_str(&text[end..]);
     Ok(out)
 }
 
-/// Comments of the line, written in CriticMarkup `{==text==}{>>comment<<}`: the range
-/// of the whole, that of the commented text and that of the comment. A comment on its own,
-/// `{>>comment<<}`, has an empty commented text, at its start.
-pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
+/// Comments written in the earlier CriticMarkup form, `{==passage==}{>>comment<<}` (or on their own,
+/// `{>>comment<<}`): read, and rewritten to the new form by `migrate_comments`. Same ranges as
+/// `comments`: the whole, the commented text and the comment. A comment on its own has an empty
+/// commented text, at its start.
+fn critic_comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
     let (mut found, mut from) = (Vec::new(), 0);
     while let Some(open) = line[from..].find("{==").map(|i| i + from) {
         let Some(mid) = line[open + 3..].find("==}{>>").map(|i| i + open + 3) else {
@@ -1417,8 +1803,247 @@ pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
         }
         from = end + 3;
     }
+    // A comment whose markers are in inline code is code: its passage may hold code, its markers not.
+    let spans = code_spans(line);
+    let in_code = |at: usize| spans.iter().any(|s| s.contains(&at));
+    found.retain(|(whole, noted, said)| {
+        !(in_code(whole.start) || in_code(noted.end) || in_code(said.end))
+    });
+    found
+}
+
+/// Comments of the line: the range of the whole (the passage and its marker), that of the
+/// commented text and that of the comment. A comment on its own, `<!-- comment: text -->` with
+/// nothing before it, has an empty commented text, at its start. A CriticMarkup comment is read
+/// too (`critic_comments`). Inline code is not a comment, and neither is what is inside an HTML
+/// comment of another text on this line. Indented and fenced code, and HTML comments over several
+/// lines, need the note: `all_comments` reads them.
+pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
+    comments_in(line, &plain_html_ranges(line, &[]))
+}
+
+/// The HTML comments of `text`, outside code, that are not in the new form: a `<!-- … -->` of any
+/// other text. What is inside one is not a comment.
+fn plain_html_ranges(text: &str, code: &[Range<usize>]) -> Vec<Range<usize>> {
+    html_comment_ranges(text, code)
+        .into_iter()
+        .filter(|r| !text[r.start..].starts_with(COMMENT_OPEN))
+        .collect()
+}
+
+/// `comments` of a line, given the ranges of the line (in its own bytes) that hide what is in them:
+/// a comment whose markers are in one of them is not read.
+fn comments_in(
+    line: &str,
+    hidden: &[Range<usize>],
+) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
+    let inside = |at: usize| hidden.iter().any(|r| r.contains(&at));
+    let mut found = critic_comments(line);
+    found.retain(|(whole, noted, said)| {
+        ![whole.start, noted.end, said.end]
+            .iter()
+            .any(|&p| inside(p))
+    });
+    // The block marker of the line (`- `, `## `, `> `, `- [ ] `) is not part of a passage.
+    let marker = match quote(line) {
+        Some(q) => q.at + classify_in(&line[q.at..], None).1,
+        None => classify(line, false).1,
+    };
+    let spans = code_spans(line);
+    let mut from = 0;
+    while let Some(open) = line[from..].find(COMMENT_OPEN).map(|i| i + from) {
+        if inside(open) || spans.iter().any(|s| s.contains(&open)) {
+            from = open + COMMENT_OPEN.len();
+            continue;
+        }
+        let said_at = open + COMMENT_OPEN.len();
+        let Some(close) = line[said_at..].find(HTML_CLOSE).map(|i| i + said_at) else {
+            break;
+        };
+        let end = close + HTML_CLOSE.len();
+        // The passage starts after the previous comment, after the last bar of a table line.
+        let mut start = found
+            .iter()
+            .filter(|(whole, ..)| whole.end <= open)
+            .map(|(whole, ..)| whole.end)
+            .max()
+            .unwrap_or(0)
+            .max(from)
+            .max(marker.min(open));
+        if is_table_line(line) {
+            let bytes = line.as_bytes();
+            if let Some(bar) = (start..open)
+                .rev()
+                .find(|&i| bytes[i] == b'|' && (i == 0 || bytes[i - 1] != b'\\'))
+            {
+                start = bar + 1;
+            }
+        }
+        let inner = said_range(&line[said_at..close]);
+        let said = said_at + inner.start..said_at + inner.end;
+        let passage = &line[start..open];
+        let lead = passage.len() - passage.trim_start().len();
+        let noted = start + lead..start + passage.trim_end().len();
+        if noted.is_empty() {
+            found.push((open..end, open..open, said));
+        } else {
+            found.push((noted.start..end, noted, said));
+        }
+        from = end;
+    }
     found.sort_by_key(|(whole, ..)| whole.start);
     found
+}
+
+/// The text of a comment line on its own, `<!-- comment: text -->` (indent allowed), if the line is
+/// one. The single space on each side of the text is the markup's, the rest is the text as written.
+pub fn comment_line_text(line: &str) -> Option<&str> {
+    let body = line
+        .trim()
+        .strip_prefix(COMMENT_OPEN)?
+        .strip_suffix(HTML_CLOSE)?;
+    Some(&body[said_range(body)])
+}
+
+/// Where the text is inside `<!-- comment: … -->` (the bytes between the marks): without the one
+/// space each side, which belongs to the markup.
+fn said_range(inner: &str) -> Range<usize> {
+    let lo = usize::from(inner.starts_with(' '));
+    let hi = inner.len() - usize::from(inner.len() > lo && inner.ends_with(' '));
+    lo..hi
+}
+
+/// A comment on its own, `<!-- comment: text -->`, the text spaced as `comment_on` spaces it. The
+/// text is written as it is given: a trailing space stays inside the marks.
+pub fn comment_line(text: &str) -> String {
+    format!("{COMMENT_OPEN} {} {HTML_CLOSE}", spaced(text))
+}
+
+/// Whether a comment's whole (as `comments` gives it) is in the new form: it ends with its marker.
+pub fn is_html_comment(whole: &str) -> bool {
+    whole.ends_with(HTML_CLOSE)
+}
+
+/// Byte ranges of `text` that are code, where text is not comment markup: the fenced blocks, and the
+/// indented code lines. An indented line is code after a blank line (or a heading, a rule, or other
+/// code), outside a list item: a list's indented lines are its paragraphs. Sorted, not overlapping.
+fn code_ranges(text: &str) -> Vec<Range<usize>> {
+    let blocks = blocks(text);
+    let mut out: Vec<Range<usize>> = blocks.iter().map(|b| b.open..b.end).collect();
+    let (mut in_list, mut gap, mut at) = (false, true, 0);
+    for line in text.split('\n') {
+        let end = at + line.len();
+        let indent = indent_columns(line);
+        let (kind, _) = classify_in(line, None);
+        if is_fence(line) || open_at(&blocks, at).is_some() || line.trim().is_empty() {
+            gap = true;
+        } else if indent >= 4 && !in_list && gap {
+            out.push(at..end);
+        } else {
+            if indent < 4 {
+                match kind {
+                    Kind::Bullet | Kind::Ordered | Kind::Task(_) => in_list = true,
+                    _ if indent == 0 && gap => in_list = false,
+                    _ => {}
+                }
+            }
+            gap = matches!(kind, Kind::Heading(_) | Kind::Rule);
+        }
+        at = end + 1;
+    }
+    out.sort_by_key(|r| r.start);
+    out
+}
+
+/// Whether `at` is inside one of `ranges`, which are sorted and do not overlap.
+fn in_ranges(ranges: &[Range<usize>], at: usize) -> bool {
+    let i = ranges.partition_point(|r| r.end <= at);
+    ranges.get(i).is_some_and(|r| r.start <= at)
+}
+
+/// Byte ranges of the HTML comments of `text` that are not code, from `<!--` to the `-->` that ends
+/// them, the end of the text if none does. A comment may run over several lines. Its text is not
+/// migrated (see `migration_edits`).
+fn html_comment_ranges(text: &str, code: &[Range<usize>]) -> Vec<Range<usize>> {
+    const OPEN: &str = "<!--";
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(open) = text[from..].find(OPEN).map(|i| i + from) {
+        let line_start = text[..open].rfind('\n').map_or(0, |i| i + 1);
+        let line_end = text[open..].find('\n').map_or(text.len(), |i| open + i);
+        let at = open - line_start;
+        let in_span = code_spans(&text[line_start..line_end])
+            .iter()
+            .any(|s| s.contains(&at));
+        if in_ranges(code, open) || in_span {
+            from = open + OPEN.len();
+            continue;
+        }
+        let end = text[open + OPEN.len()..]
+            .find(HTML_CLOSE)
+            .map_or(text.len(), |i| open + OPEN.len() + i + HTML_CLOSE.len());
+        out.push(open..end);
+        from = end;
+    }
+    out
+}
+
+/// Replacements that write the comments of `text` in the earlier CriticMarkup form in the new one,
+/// as `(range, text)` pairs in order: each replaces the bytes `range` of `text`
+/// (`apply_edits` applies them). A comment whose markers are in code (inline code, fenced or
+/// indented code) is text, and so is one that overlaps an HTML comment: both are left as they are.
+pub fn migration_edits(text: &str) -> Vec<(Range<usize>, String)> {
+    if !text.contains("{==") && !text.contains("{>>") {
+        return Vec::new();
+    }
+    let code = code_ranges(text);
+    let html = html_comment_ranges(text, &code);
+    let mut edits = Vec::new();
+    let mut at = 0;
+    for piece in text.split_inclusive('\n') {
+        let body = piece.strip_suffix('\n').unwrap_or(piece);
+        let line_start = at;
+        at += piece.len();
+        if !body.contains("{>>") || in_ranges(&code, line_start) {
+            continue;
+        }
+        for (whole, noted, said) in critic_comments(body) {
+            let span = line_start + whole.start..line_start + whole.end;
+            if html
+                .iter()
+                .any(|r| r.start < span.end && span.start < r.end)
+            {
+                continue;
+            }
+            let mut new = body[noted].to_string();
+            new.push_str(&comment_line(&body[said]));
+            edits.push((span, new));
+        }
+    }
+    edits
+}
+
+/// `text` with `edits` (from `migration_edits`, in order) applied.
+pub fn apply_edits(text: &str, edits: &[(Range<usize>, String)]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (range, new) in edits {
+        out.push_str(&text[last..range.start]);
+        out.push_str(new);
+        last = range.end;
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// The note with every comment in the earlier CriticMarkup form written in the new one, outside
+/// code and HTML comments: `{==passage==}{>>text<<}` becomes `passage<!-- comment: text -->`, and a
+/// comment on its own `{>>text<<}` becomes `<!-- comment: text -->`. The texts are kept as they are,
+/// except that a `-->` is spaced out. The passage is anchored to its line (see `comment_on`), so a
+/// passage in the middle of a line covers the text from the start of the line up to its marker.
+/// A note with no such comment is returned as it is.
+pub fn migrate_comments(text: &str) -> String {
+    apply_edits(text, &migration_edits(text))
 }
 
 /// A comment of the note, as its panel lists it.
@@ -1486,7 +2111,7 @@ pub fn split_scope(said: &str) -> Option<(String, &str)> {
 /// All the note's comments, outside code blocks.
 pub fn all_comments(text: &str) -> Vec<Note<'_>> {
     // Almost no note has any: a single search says so, without reading the lines.
-    if !text.contains("{==") && !text.contains("{>>") {
+    if !text.contains("{==") && !text.contains("{>>") && !text.contains(COMMENT_OPEN) {
         return Vec::new();
     }
     let mut found = Vec::new();
@@ -1494,17 +2119,31 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
     let mut row: Option<usize> = None;
     // Where the next prose line starts: after a fence or a code line the table is over.
     let mut next = 0;
+    // Indented code, and what is in an HTML comment of another text (over lines), is not a comment:
+    // the fenced blocks are not prose lines at all.
+    let code = code_ranges(text);
+    let plain = plain_html_ranges(text, &code);
     for (at, line) in prose_lines(text) {
         if at != next {
             row = None;
         }
         next = at + line.len() + 1;
+        if in_ranges(&code, at) {
+            row = None;
+            continue;
+        }
+        let end = at + line.len();
+        let hidden: Vec<Range<usize>> = plain
+            .iter()
+            .filter(|r| r.start <= end && r.end > at)
+            .map(|r| r.start.max(at) - at..r.end.min(end) - at)
+            .collect();
         row = line
             .trim_start()
             .starts_with('|')
             .then(|| row.map_or(0, |r| r + 1));
         let cells = row.map(|_| cells(line));
-        for (whole, noted, said) in comments(line) {
+        for (whole, noted, said) in comments_in(line, &hidden) {
             let mut note = Note {
                 noted: &line[noted.clone()],
                 said: &line[said.clone()],
@@ -1523,7 +2162,7 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
                     Some(r) => format!("Cell {}{}", column_letters(c), r.saturating_sub(1)),
                     None => String::new(),
                 };
-            } else if noted.start == whole.start
+            } else if noted.is_empty()
                 && let Some((scope, rest)) = split_scope(note.said)
             {
                 note.scope = scope;
@@ -1537,39 +2176,130 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{all_comments, comment_on};
+    use super::{
+        all_comments, apply_edits, comment_on, comments, migrate_comments, migration_edits,
+    };
+
+    #[test]
+    fn migration_keeps_the_text_of_code_and_html_comments() {
+        // Inline code, fenced code, indented code and a multi-line HTML comment keep their text.
+        let inline = "Write `{==a==}{>>b<<}` to comment.\n";
+        assert_eq!(migrate_comments(inline), inline);
+        let fenced = "```\n{==a==}{>>b<<}\n```\n";
+        assert_eq!(migrate_comments(fenced), fenced);
+        let indented = "Text\n\n    {==a==}{>>b<<}\n\nafter {==c==}{>>d<<}\n";
+        assert_eq!(
+            migrate_comments(indented),
+            "Text\n\n    {==a==}{>>b<<}\n\nafter c<!-- comment: d -->\n"
+        );
+        let html = "<!-- draft\n{==a==}{>>b<<}\n-->\n{==c==}{>>d<<}\n";
+        assert_eq!(
+            migrate_comments(html),
+            "<!-- draft\n{==a==}{>>b<<}\n-->\nc<!-- comment: d -->\n"
+        );
+        let one_line = "<!-- {==a==}{>>b<<} -->\n";
+        assert_eq!(migrate_comments(one_line), one_line);
+        // A comment in the new form keeps its text; the earlier form after it is migrated.
+        assert_eq!(
+            migrate_comments("x<!-- comment: {>>y<<} --> {==a==}{>>b<<}\n"),
+            "x<!-- comment: {>>y<<} --> a<!-- comment: b -->\n"
+        );
+        // Markers inside inline code stay; a passage holding a code span is migrated with it.
+        assert_eq!(
+            migrate_comments("{==a `x`==}{>>b<<} `{>>c<<}`\n"),
+            "a `x`<!-- comment: b --> `{>>c<<}`\n"
+        );
+        // An indented line of a list item is a paragraph of the item, not code.
+        assert_eq!(
+            migrate_comments("- item\n\n    {==a==}{>>b<<}\n"),
+            "- item\n\n    a<!-- comment: b -->\n"
+        );
+    }
+
+    #[test]
+    fn the_edits_of_a_migration_apply_to_the_text_as_migrate_comments_gives_it() {
+        let text = "{==a==}{>>b<<} c {==d==}{>>e<<}\n";
+        let edits = migration_edits(text);
+        assert_eq!(edits.len(), 2);
+        assert_eq!(edits[0].0, 0..14);
+        assert_eq!(apply_edits(text, &edits), migrate_comments(text));
+        assert_eq!(
+            apply_edits(text, &edits),
+            "a<!-- comment: b --> c d<!-- comment: e -->\n"
+        );
+        assert!(migration_edits("nothing to do\n").is_empty());
+    }
+
+    #[test]
+    fn code_and_html_comments_are_not_read_as_comments() {
+        // A comment written inside inline code is code, not a comment.
+        assert_eq!(comments("Use `<!-- comment: x -->` here"), []);
+        assert_eq!(
+            comments("`{>>x<<}` and {>>y<<}"),
+            [(14..21, 14..14, 17..18)]
+        );
+        // An indented code line is code too, a list item's indented line is not.
+        assert_eq!(
+            all_comments("Text\n\n    <!-- comment: x -->\n\n`<!-- comment: y -->`\n"),
+            []
+        );
+        let listed = all_comments("- item\n\n    <!-- comment: z -->\n");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].said, "z");
+    }
+
+    #[test]
+    fn an_html_comment_of_another_text_hides_what_is_in_it() {
+        // A `<!-- … -->` that is not in the new form is not a comment, over one line or several, and
+        // neither is anything inside it.
+        assert_eq!(comments("<!-- note <!-- comment: y --> z"), []);
+        assert_eq!(comments("<!-- note {>>x<<} -->"), []);
+        assert_eq!(all_comments("<!-- draft\n<!-- comment: a -->\n-->\n"), []);
+        assert_eq!(all_comments("<!--\n{==a==}{>>b<<}\n-->\n"), []);
+        // The comments after it are read, and so is one before it on its line.
+        let after = all_comments("<!-- draft\nline\n--> <!-- comment: b -->\n");
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].said, "b");
+        assert_eq!(comments("<!-- comment: ok --> <!-- plain -->").len(), 1);
+        // A comment in the new form is not hidden by a comment inside it, and a fenced block is code.
+        assert_eq!(comments("<!-- comment: a --> b").len(), 1);
+        assert_eq!(
+            all_comments("```\n<!-- draft\n```\n<!-- comment: c -->\n").len(),
+            1
+        );
+    }
 
     #[test]
     fn a_comment_cannot_close_its_markup_early_or_inject_markdown() {
-        // The comment would close `{>>` at `<<}` and let the link land in the note as Markdown.
+        // The comment would close `<!--` at `-->` and let the link land in the note as Markdown.
         let text = "A passage here and more.\n";
-        let said = "Fine<<} [see](https://example.com) {>>";
+        let said = "Fine --> [see](https://example.com) <!-- x";
         let out = comment_on(text, "passage here", said).unwrap();
         assert_eq!(
             out,
-            "A {==passage here==}{>>Fine<< } [see](https://example.com) {>><<} and more.\n"
+            "A passage here<!-- comment: Fine -- > [see](https://example.com) <!-- x --> and more.\n"
         );
         let notes = all_comments(&out);
         assert_eq!(notes.len(), 1, "{notes:?}");
-        assert_eq!(notes[0].noted, "passage here");
-        assert_eq!(notes[0].said, "Fine<< } [see](https://example.com) {>>");
+        assert_eq!(notes[0].noted, "A passage here");
+        assert_eq!(notes[0].said, "Fine -- > [see](https://example.com) <!-- x");
         assert_eq!(&out[notes[0].end..], " and more.\n");
     }
 
     #[test]
     fn every_closing_mark_in_a_comment_is_broken_even_when_they_overlap() {
-        let out = comment_on("alpha\n", "alpha", "a<<<}b<<}<<}c").unwrap();
+        let out = comment_on("alpha\n", "alpha", "a-->b-->-->c").unwrap();
         let notes = all_comments(&out);
         assert_eq!(notes.len(), 1);
-        assert!(!notes[0].said.contains("<<}"), "{:?}", notes[0].said);
-        assert_eq!(notes[0].said, "a<<< }b<< }<< }c");
+        assert!(!notes[0].said.contains("-->"), "{:?}", notes[0].said);
+        assert_eq!(notes[0].said, "a-- >b-- >-- >c");
         assert_eq!(&out[notes[0].end..], "\n");
     }
 
     #[test]
     fn a_passage_holding_comment_marks_is_refused() {
         let text = "a {== b ==} c {>> d <<} e\n";
-        for passage in ["{==", "==}", "{>>", "<<}"] {
+        for passage in ["{==", "==}", "{>>", "<<}", "<!-- comment:", "-->"] {
             let refused = comment_on(text, &format!("x{passage}y"), "note").unwrap_err();
             assert_eq!(refused, "the passage holds comment marks", "{passage}");
         }
@@ -1639,6 +2369,165 @@ mod tests {
 
     use super::*;
 
+    /// One character per byte: `b` for the bytes that are strong text, `.` for the rest.
+    fn strong(line: &str) -> String {
+        flags(line, 0)
+            .iter()
+            .map(|&f| {
+                if f & BOLD != 0 && f & DIM == 0 {
+                    'b'
+                } else {
+                    '.'
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn double_underscores_are_strong_with_the_intraword_rule() {
+        assert_eq!(strong("__a b__"), "..bbb..");
+        assert_eq!(strong("**a** __b__"), "..b.....b..");
+        // Inside a word, `_` neither opens nor closes.
+        assert_eq!(strong("foo__bar__"), "..........");
+        assert_eq!(strong("__foo__bar"), "..........");
+    }
+
+    #[test]
+    fn an_empty_atx_heading_is_a_heading() {
+        assert_eq!(classify("#", false), (Kind::Heading(1), 1));
+        assert_eq!(classify("## ", false), (Kind::Heading(2), 3));
+        assert_eq!(classify("###", false), (Kind::Heading(3), 3));
+        assert_eq!(classify("#######", false), (Kind::Para, 0));
+        assert_eq!(classify("#a", false), (Kind::Para, 0));
+        assert_eq!(headings("# \n#\n"), [(1, "", 0), (1, "", 3)]);
+    }
+
+    #[test]
+    fn spaced_thematic_breaks_are_rules_not_items() {
+        for line in ["- - -", "* * *", "_ _ _", "-  -\t-  ", "***", "- - - -    "] {
+            assert_eq!(classify(line, false).0, Kind::Rule, "{line:?}");
+        }
+        assert_eq!(classify("- foo", false).0, Kind::Bullet);
+        assert_eq!(classify("- - foo", false).0, Kind::Bullet);
+        assert_eq!(classify("- -", false).0, Kind::Bullet);
+        assert_eq!(classify("-*-", false).0, Kind::Para);
+    }
+
+    #[test]
+    fn four_columns_of_indent_stop_a_heading_and_a_rule() {
+        assert_eq!(classify("   # a", false), (Kind::Heading(1), 5));
+        assert_eq!(classify("    # a", false).0, Kind::Para);
+        assert_eq!(classify("\t# a", false).0, Kind::Para);
+        assert_eq!(classify("   ---", false).0, Kind::Rule);
+        assert_eq!(classify("    ***", false).0, Kind::Para);
+        assert_ne!(classify("    - - -", false).0, Kind::Rule);
+    }
+
+    #[test]
+    fn local_link_destinations_are_links() {
+        // Relative addresses (notes, headings of this note) are links, as the web ones are.
+        for line in [
+            "[x](/path)",
+            "[x](foo.md)",
+            "[x](#anchor)",
+            "[x](mailto:a@b.c)",
+        ] {
+            let url = web_link(line).map(|(_, u)| line[u].to_string());
+            assert!(url.is_some(), "{line}");
+            assert!(!links(line).is_empty(), "{line}");
+        }
+        let f = flags("see [x](/path) now", 0);
+        assert!(
+            f[5] & LINK != 0 && f[6] & LINK == 0 && f[12] & QUIET != 0,
+            "{f:?}"
+        );
+        assert_eq!(f.iter().filter(|&&x| x & LINK != 0).count(), 1);
+        assert!(web_link("[x](a b)").is_none() && web_link("[x]()").is_none());
+        assert!(links("![x](/img.png)").is_empty());
+        // Not links at all: unbalanced parentheses, a `<` destination, a code span across the link.
+        for line in ["[x](a(b)", "[x](<a>)", "[`a](/b)`"] {
+            assert!(flags(line, 0).iter().all(|f| f & LINK == 0), "{line}");
+        }
+    }
+
+    #[test]
+    fn intraword_underscores_follow_unicode_letters() {
+        let italic = |line: &str| {
+            flags(line, 0)
+                .iter()
+                .any(|f| f & ITALIC != 0 && f & DIM == 0)
+        };
+        assert!(!italic("пристаням_стремятся_"));
+        assert!(!italic("__пристаням__стремятся"));
+        assert!(!italic("café_au_lait_"));
+        assert!(italic("_é_"));
+        assert!(italic("_пристань_ с"));
+        assert!(!strong("пристаням__стремятся__").contains('b'));
+    }
+
+    #[test]
+    fn extended_autolinks_follow_the_gfm_trailing_rules() {
+        let urls = |line: &str| -> Vec<String> {
+            links(line)
+                .into_iter()
+                .filter_map(|(_, l)| match l {
+                    Link::Url(u) => Some(u),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            urls("Visit www.commonmark.org/help."),
+            ["http://www.commonmark.org/help"]
+        );
+        assert_eq!(
+            urls("(www.google.com/search?q=Markup+(business))"),
+            ["http://www.google.com/search?q=Markup+(business)"]
+        );
+        assert_eq!(
+            urls("www.google.com/search?q=commonmark&hl;"),
+            ["http://www.google.com/search?q=commonmark"]
+        );
+        assert_eq!(
+            urls("www.commonmark.org/he<lp"),
+            ["http://www.commonmark.org/he"]
+        );
+        assert_eq!(urls("ftp://foo.bar.baz."), ["ftp://foo.bar.baz"]);
+        assert_eq!(
+            urls("hello@mail+xyz.example and hello+xyz@mail.example."),
+            ["mailto:hello+xyz@mail.example"]
+        );
+        assert_eq!(urls("a.b-c_d@a.b."), ["mailto:a.b-c_d@a.b"]);
+        assert!(
+            urls("a.b-c_d@a.b-").is_empty()
+                && urls("www.").is_empty()
+                && urls("awww.x.org").is_empty()
+        );
+        assert!(urls(r"<foo\+@bar.example.com>").is_empty());
+    }
+
+    #[test]
+    fn bold_can_be_removed_from_underscores() {
+        let line = "a __b__ c";
+        let f = flags(line, 0);
+        let sel = 4..5;
+        assert_eq!(unmark(line, &f, sel, BOLD), Some((2..4, 5..7)));
+    }
+
+    #[test]
+    fn delimiters_inside_raw_html_tags_do_not_count() {
+        assert!(!strong("__<a href=\"__\">").contains('b'));
+        assert!(
+            !flags("*<img title=\"*\"/>", 0)
+                .iter()
+                .any(|f| f & ITALIC != 0 && f & DIM == 0)
+        );
+        assert_eq!(html_tag("<a href=\"x\">y"), Some(12));
+        assert_eq!(html_tag("</b> x"), Some(4));
+        assert_eq!(html_tag("< b>"), None);
+        assert_eq!(html_tag("<a <b>"), None);
+    }
+
     #[test]
     fn classifies_lines() {
         assert_eq!(classify("# Titre", false), (Kind::Heading(1), 2));
@@ -1650,10 +2539,39 @@ mod tests {
         assert_eq!(classify("- [x] a", false), (Kind::Task(true), 6));
         assert_eq!(classify("12. a", false), (Kind::Ordered, 4));
         assert_eq!(classify("> q", false), (Kind::Quote, 2));
+        assert_eq!(classify(">q", false), (Kind::Quote, 1));
+        assert_eq!(classify("> > q", false), (Kind::Quote, 4));
+        assert_eq!(classify(">", false), (Kind::Quote, 1));
+        assert_eq!(classify("> - a", false), (Kind::Quote, 4));
+        assert_eq!(classify("> 1. a", false), (Kind::Quote, 5));
+        assert_eq!(classify("> # T", false), (Kind::Quote, 4));
+        assert_eq!(classify("> - [x] a", false), (Kind::Quote, 8));
         assert_eq!(classify("---", false), (Kind::Rule, 3));
         assert_eq!(classify("```rust", false), (Kind::Fence, 7));
         assert_eq!(classify("- a", true), (Kind::Code, 0));
         assert_eq!(classify("texte", false), (Kind::Para, 0));
+    }
+
+    #[test]
+    fn quotes_read_their_depth_and_content() {
+        let q = |line: &str| quote(line).map(|q| (q.depth, q.at, q.inner));
+        assert_eq!(q("> text"), Some((1, 2, Kind::Para)));
+        assert_eq!(q(">text"), Some((1, 1, Kind::Para)));
+        assert_eq!(q(">"), Some((1, 1, Kind::Para)));
+        assert_eq!(q("> > > deep"), Some((3, 6, Kind::Para)));
+        assert_eq!(q(">>> deep"), Some((3, 4, Kind::Para)));
+        assert_eq!(q(">  > two"), Some((2, 5, Kind::Para)));
+        assert_eq!(q("  > indented"), Some((1, 4, Kind::Para)));
+        assert_eq!(q("> - item"), Some((1, 2, Kind::Bullet)));
+        assert_eq!(q("> 1. item"), Some((1, 2, Kind::Ordered)));
+        assert_eq!(q("> - [ ] todo"), Some((1, 2, Kind::Task(false))));
+        assert_eq!(q("> > # Title"), Some((2, 4, Kind::Heading(1))));
+        assert_eq!(q("> ```rust"), Some((1, 2, Kind::Fence)));
+        assert_eq!(q("> ---"), Some((1, 2, Kind::Rule)));
+        assert_eq!(q("plain > text"), None);
+        // A quote's marker is the whole prefix up to the content's own marker.
+        assert_eq!(classify("> > - a", false), (Kind::Quote, 6));
+        assert_eq!(classify("  > > # a", false), (Kind::Quote, 8));
     }
 
     #[test]
@@ -1775,12 +2693,12 @@ mod tests {
         ]);
         let new = scopes(&after);
         let lines = [
-            "{>>Row \"Léa\" (1): a<<}",
-            "{>>Row \"Léa\" (2): b<<}",
-            "{>>Column 2: c<<}",
-            "{>>Table: d<<}",
-            "{>>libre<<}",
-            "  {>>Row 4: e<<}",
+            "<!-- comment: Row \"Léa\" (1): a -->",
+            "<!-- comment: Row \"Léa\" (2): b -->",
+            "<!-- comment: Column 2: c -->",
+            "<!-- comment: Table: d -->",
+            "<!-- comment: libre -->",
+            "  <!-- comment: Row 4: e -->",
         ];
         let moved = [Some(0), None, Some(1), Some(2)];
         let kept = [Some(0), Some(1), Some(2)];
@@ -1788,11 +2706,11 @@ mod tests {
             retarget(&lines, &old, &new, (&moved, &kept), false),
             [
                 None,
-                Some("{>>Row \"Léa\": b<<}".to_string()),
+                Some("<!-- comment: Row \"Léa\": b -->".to_string()),
                 Some(lines[2].to_string()),
                 Some(lines[3].to_string()),
                 Some(lines[4].to_string()),
-                Some("  {>>Row 3: e<<}".to_string())
+                Some("  <!-- comment: Row 3: e -->".to_string())
             ]
         );
         assert_eq!(
@@ -1800,10 +2718,22 @@ mod tests {
             [None, None, None, None, Some(lines[4].to_string()), None]
         );
         // Comments: the text, the comment, and where the whole starts; not in code.
+        // The earlier CriticMarkup form is still read.
         let line = "un {==mot **fort**==}{>>à revoir<<} et {==deux==}{>><<} {==seul==}";
         assert_eq!(
             comments(line),
             [(3..36, 6..18, 24..33), (40..56, 43..47, 53..53)]
+        );
+        // The new form: the passage runs from the start of the line (or the previous comment) to its marker.
+        let fresh = "un mot<!-- comment: à revoir --> et deux<!-- comment:  --> seul";
+        assert_eq!(
+            comments(fresh),
+            [(0..33, 0..6, 20..29), (34..59, 34..41, 55..55)]
+        );
+        // A comment on its own has nothing commented, at its start.
+        assert_eq!(
+            comments("  <!-- comment: seul -->"),
+            [(2..24, 2..2, 16..20)]
         );
         let note = format!("# T\n{line}\n```\n{line}\n```");
         let found: Vec<_> = all_comments(&note)
@@ -1819,6 +2749,17 @@ mod tests {
             comments("a {>>seul<<} b {==x==}{>>y<<}"),
             [(2..12, 2..2, 5..9), (15..29, 18..19, 25..26)]
         );
+        // The earlier form is rewritten to the new one, texts kept, outside code.
+        let old = "# T\n{==mot **fort**==}{>>à revoir<<} et {==deux==}{>><<} {>>seul<<}\n```\n{>>code<<}\n```\n";
+        assert_eq!(
+            migrate_comments(old),
+            "# T\nmot **fort**<!-- comment: à revoir --> et deux<!-- comment:  --> <!-- comment: seul -->\n```\n{>>code<<}\n```\n"
+        );
+        assert_eq!(
+            migrate_comments(&migrate_comments(old)),
+            migrate_comments(old)
+        );
+        assert_eq!(migrate_comments("plain\n"), "plain\n");
         assert_eq!(comments("{>>pas fini"), []);
         // Where a comment is: in a cell, a header, or a line under a table named by what it is about.
         let table = "| a | b |\n| - | - |\n| {==x==}{>>1<<} | y |\n| u | {==v==}{>>2<<} |\n\n{>>Row \"x\" (2): trois<<}\n\n{>>Column 2: quatre<<}\n\n{>>Table: cinq<<}\n\n{>>libre<<}";
@@ -1866,7 +2807,7 @@ mod tests {
                 "AAA".into()
             )
         );
-        let mut flags = vec![0u16; line.len()];
+        let mut flags = vec![0u32; line.len()];
         inline(line, 0, &mut flags);
         assert!(flags[3..6].iter().all(|f| *f == DIM) && flags[6] == 0 && flags[12] == BOLD);
         assert!(
@@ -1926,7 +2867,12 @@ mod tests {
         assert_eq!(l[0], (5..30, Link::Url("https://a.b/c#d".into())));
         assert_eq!(l[1], (41..58, Link::Url("https://a.b/i.png".into())));
         assert_eq!(l.len(), 2);
-        assert!(links("[x](fichier.md) [y]( ) [a [b](c)").is_empty());
+        // The innermost brackets make the link: `[a [b](c)` links `c` only.
+        let l = links("[x](fichier.md) [y]( ) [a [b](c)");
+        assert_eq!(
+            l.iter().map(|(r, _)| r.clone()).collect::<Vec<_>>(),
+            [0..15, 26..32]
+        );
         assert_eq!(
             web_link("[la doc](mailto:a@b.c) suite"),
             Some((1..7, 9..21))
@@ -1937,7 +2883,7 @@ mod tests {
                 && !is_url("https://a b")
                 && !is_url("a.b")
         );
-        let mut flags = vec![0u16; 31];
+        let mut flags = vec![0u32; 31];
         inline("lire [la doc](https://a.b/c#d).", 0, &mut flags);
         assert!(
             flags[5] == DIM
@@ -1950,6 +2896,63 @@ mod tests {
         let (tags, wikis) = index("#A\n```\n#b [[z]]\n```\n#a #c [[X]] [[x|alias]] [[Y]]");
         assert_eq!(tags, vec!["a", "c"]);
         assert_eq!(wikis, vec!["x", "y"]);
+    }
+
+    #[test]
+    fn links_to_notes_and_headings() {
+        let note = |path: &str, anchor: Option<&str>| Link::Note {
+            path: path.into(),
+            anchor: anchor.map(Into::into),
+        };
+        let one = |line: &str| links(line).into_iter().map(|(_, l)| l).collect::<Vec<_>>();
+        assert_eq!(one("[x](Note.md)"), [note("Note.md", None)]);
+        assert_eq!(one("[x](sub/Note.md)"), [note("sub/Note.md", None)]);
+        assert_eq!(one("[x](../Note.md)"), [note("../Note.md", None)]);
+        assert_eq!(one("[x](Note%20Name.md)"), [note("Note Name.md", None)]);
+        assert_eq!(
+            one("[x](Note.md#Mon%20titre)"),
+            [note("Note.md", Some("Mon titre"))]
+        );
+        assert_eq!(
+            one("[x](Note%20A.md#Un%20titre)"),
+            [note("Note A.md", Some("Un titre"))]
+        );
+        assert_eq!(
+            one("[x](/abs/in/vault.md)"),
+            [note("/abs/in/vault.md", None)]
+        );
+        assert_eq!(one("[x](#heading)"), [Link::Heading("heading".into())]);
+        // Not links: an empty address, an anchor alone on an empty target, another scheme, `<…>`.
+        assert!(one("[x]()").is_empty() && one("[x](#)").is_empty());
+        assert!(one("[x](tel:0123)").is_empty() && one("[x](<a b.md>)").is_empty());
+        // Such an address styles as it did: the text is a link, not clickable, the address fades.
+        let f = flags("see [x](tel:0123) now", 0);
+        assert!(
+            f[5] & LINK != 0 && f[12] & QUIET != 0 && f[4] & DIM != 0,
+            "{f:?}"
+        );
+        // Images and wikilinks keep their own targets; the web addresses are unchanged.
+        assert!(one("![x](pic.png)").is_empty());
+        assert_eq!(
+            one("[[Note]] [x](n.md)"),
+            [Link::Wiki("Note".into()), note("n.md", None)]
+        );
+        assert_eq!(one("[x](https://a.b)"), [Link::Url("https://a.b".into())]);
+        assert_eq!(
+            one("[x](mailto:a@b.cd)"),
+            [Link::Url("mailto:a@b.cd".into())]
+        );
+        // Bad escapes stay as written; the heading slug follows GitHub.
+        assert_eq!(percent_decode("100%+%zz%2"), "100%+%zz%2");
+        assert_eq!(slug("Mon Titre, déjà!"), "mon-titre-déjà");
+        assert_eq!(slug("A_b-c d"), "a_b-c-d");
+        let text = "# Intro\n\ntexte\n## Mon Titre\n";
+        assert_eq!(
+            heading_at(text, "mon-titre"),
+            Some(text.find("## ").unwrap())
+        );
+        assert_eq!(heading_at(text, "Intro"), Some(0));
+        assert_eq!(heading_at(text, "absent"), None);
     }
 
     #[test]
@@ -1975,7 +2978,7 @@ mod tests {
     #[test]
     fn styles_inline() {
         let line = "a **b** `c*` snake_case_x *é*";
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         inline(line, 0, &mut f);
         assert_eq!(f[2], DIM);
         assert_eq!(f[4], BOLD);
@@ -2283,7 +3286,7 @@ mod tests {
     #[test]
     fn finds_the_marks_to_remove() {
         let cut =
-            |line: &str, sel: Range<usize>, flag: u16| unmark(line, &flags(line, 0), sel, flag);
+            |line: &str, sel: Range<usize>, flag: u32| unmark(line, &flags(line, 0), sel, flag);
         // A cursor in the span, at its edge, or between its marks; outside everything, nothing.
         assert_eq!(cut("a **bc** d", 5..5, BOLD), Some((2..4, 6..8)));
         assert_eq!(cut("a **bc** d", 4..4, BOLD), Some((2..4, 6..8)));
@@ -2331,18 +3334,23 @@ mod tests {
     #[test]
     fn colors_code() {
         let line = r#"let x = f("a // b", 42); // fin"#;
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         code(line, "rust", &mut f);
-        assert_eq!((f[0], f[4], f[8]), (KEYWORD, 0, 0));
+        assert_eq!((f[0], f[4], f[8]), (KEYWORD, 0, FUNCTION));
         assert!(f[10..18].iter().all(|&x| x == STRING));
-        assert_eq!((f[20], f[25]), (NUMBER, DIM | ITALIC | QUIET));
+        assert_eq!((f[20], f[25]), (NUMBER, DIM | ITALIC | QUIET | COMMENT));
         // A lifetime is not a string; `#` comments in Python, not in Rust.
         let line = "fn f<'a>(x: &'a str) # '\\n'";
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         code(line, "rust", &mut f);
         assert!(f[3..21].iter().all(|&x| x == 0) && f[23] == STRING);
         code(line, "python", &mut f);
-        assert_eq!(f[21], DIM | ITALIC | QUIET);
+        assert_eq!(f[21], DIM | ITALIC | QUIET | COMMENT);
+        // A CamelCase name is a type, a name right before `(` a call; a SHOUTED name is neither.
+        let line = "Vec::<u8>::make(MAX, log(x))";
+        let mut f = vec![0u32; line.len()];
+        code(line, "rust", &mut f);
+        assert_eq!((f[0], f[11], f[16], f[21]), (TYPE, FUNCTION, 0, FUNCTION));
     }
 
     #[test]
@@ -2364,7 +3372,7 @@ mod tests {
     #[test]
     fn finds_symbols_and_images() {
         let line = "a -> b != c `x -> y` <-> --> !== [[a->b]]";
-        let mut f = vec![0u16; line.len()];
+        let mut f = vec![0u32; line.len()];
         inline(line, 0, &mut f);
         assert_eq!(
             symbols(line, 0, &f),
@@ -3048,7 +4056,7 @@ mod tests {
         // The checkbox of a list task is the marker's, which is skipped.
         assert_eq!(checkboxes("- [ ] a [ ] b", 6).len(), 1);
         // A checked box is bold.
-        let mut flags = vec![0u16; 7];
+        let mut flags = vec![0u32; 7];
         inline("[x] [ ]", 0, &mut flags);
         assert!(flags[..3].iter().all(|f| f & (MARK | BOLD) == MARK | BOLD));
         assert!(flags[4..].iter().all(|f| f & MARK != 0 && f & BOLD == 0));
@@ -3191,5 +4199,37 @@ mod tests {
         assert!(!starts_indented_code("    ", ["", "Intro"]));
         // A list that an unindented line ended is a list no more.
         assert!(starts_indented_code("    code", ["", "Intro", "- item"]));
+    }
+
+    #[test]
+    fn a_passage_starts_after_the_block_marker() {
+        use super::comments;
+        // The passage is the words, not the bullet, heading or quote mark in front of them.
+        for (line, passage) in [
+            ("- un mot<!-- comment: x -->", "un mot"),
+            ("## Tasks<!-- comment: x -->", "Tasks"),
+            ("> citation<!-- comment: x -->", "citation"),
+            ("- [ ] Settings page<!-- comment: x -->", "Settings page"),
+            ("  1. item<!-- comment: x -->", "item"),
+        ] {
+            let found = comments(line);
+            let (_, noted, _) = &found[0];
+            assert_eq!(&line[noted.clone()], passage, "{line}");
+        }
+        // Nothing before the marker: the comment is on its own.
+        let found = comments("- <!-- comment: x -->");
+        assert!(found[0].1.is_empty());
+    }
+
+    #[test]
+    fn a_comment_marker_in_inline_code_is_text() {
+        use super::comments;
+        assert!(comments("Write `a<!-- comment: b -->` to comment.").is_empty());
+        let found = comments("`code` a<!-- comment: b --> here");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            &"`code` a<!-- comment: b --> here"[found[0].1.clone()],
+            "`code` a"
+        );
     }
 }

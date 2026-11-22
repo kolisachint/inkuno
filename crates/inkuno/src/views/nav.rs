@@ -56,10 +56,10 @@ pub const ROW: f32 = 28.;
 /// Indent of a tree row per level of depth, at scale 1: tight, so deep vaults keep room.
 pub const INDENT: f32 = 12.;
 pub const LIST_W: Pixels = px(260.);
-/// Width the panel and the comments column always leave to the note.
+/// The right panel's width when none was dragged: one panel, the same width for every view.
+pub const PANEL_W: Pixels = px(280.);
+/// Width the panel always leaves to the note.
 pub const NOTE_MIN: Pixels = px(200.);
-/// Spacing inside a column (the comments). Panes take the window edge to edge: no gap separates them.
-pub const GAP: Pixels = px(8.);
 /// The hairline between two panes or docks (owner decision 2026-11-14, app-ui.md §10 item 4): 1 px
 /// of layout. Its handle is `DIVIDER_HIT` wide on each side, drawn over the neighbours.
 pub const DIVIDER: Pixels = px(1.);
@@ -74,24 +74,35 @@ pub enum Mode {
     Recent,
     /// The vault search: the matches of a search, note by note.
     Search,
-    /// Outline: the headings of the open note, in the right dock.
+    /// Outline: the headings of the open note, a view of the right panel.
     Outline,
     /// Scratch notes: the ones not filed in the vault yet, newest first.
     Scratch,
+    /// Comments: the comments of the note as cards, a view of the right panel (`shell/comments.rs`).
+    Comments,
     /// Versions: the saved versions of the note of the active tab, newest first; Enter compares one
-    /// with the note as it is now (`shell/versions.rs`).
+    /// with the note as it is now (`shell/versions.rs`). A view of the right panel.
     Versions,
-    /// The assistant: a panel of the right dock, beside the note. It always lives there.
+    /// The assistant: a view of the right panel.
     Assistant,
 }
 
+/// The views of the right panel, in the order of its switcher. The panel shows one at a time.
+pub const VIEWS: [Mode; 4] = [
+    Mode::Outline,
+    Mode::Comments,
+    Mode::Versions,
+    Mode::Assistant,
+];
+
 impl Mode {
-    pub const ALL: [Mode; 7] = [
+    pub const ALL: [Mode; 8] = [
         Mode::Tree,
         Mode::Recent,
         Mode::Search,
         Mode::Outline,
         Mode::Scratch,
+        Mode::Comments,
         Mode::Versions,
         Mode::Assistant,
     ];
@@ -104,6 +115,7 @@ impl Mode {
             Mode::Search => "search",
             Mode::Outline => "outline",
             Mode::Scratch => "scratch",
+            Mode::Comments => "comments",
             Mode::Versions => "versions",
             Mode::Assistant => "assistant",
         }
@@ -111,6 +123,15 @@ impl Mode {
 
     pub fn named(name: &str) -> Option<Mode> {
         Mode::ALL.into_iter().find(|m| m.name() == name)
+    }
+
+    /// Tools the left sidebar never shows: their views live in the right dock. (P3 moves versions
+    /// right; until then the palette and the keys reach them there.)
+    pub fn left_banned(self) -> bool {
+        matches!(
+            self,
+            Mode::Outline | Mode::Comments | Mode::Versions | Mode::Assistant
+        )
     }
 }
 
@@ -463,8 +484,6 @@ pub struct Nav {
     // Left edge and width of the window content, at the last frame.
     pub left: Pixels,
     pub total: Pixels,
-    /// Width reserved to the right of the note (the comments column): the panel leaves it free.
-    pub aside: Pixels,
     /// The views of the tools other than the active one (`mode`).
     pub parked: HashMap<Mode, View>,
     /// The tools shown in the left dock, top to bottom (one, as the panel always was, unless more
@@ -474,6 +493,8 @@ pub struct Nav {
     /// and its width.
     pub right: Vec<Mode>,
     pub right_shown: Vec<Mode>,
+    /// The view the right panel shows, or showed last (kept while the panel is closed).
+    pub right_view: Mode,
     pub right_w: Pixels,
     pub right_dragging: bool,
     /// Tools stacked in a dock and folded down to their header.
@@ -490,6 +511,7 @@ pub struct Layout {
     pub left_shown: Vec<Mode>,
     pub right: Vec<Mode>,
     pub right_shown: Vec<Mode>,
+    pub right_view: Mode,
     pub folded: HashSet<Mode>,
     pub right_w: Pixels,
     pub panel: Panel,
@@ -497,15 +519,13 @@ pub struct Layout {
     pub title_bar: bool,
 }
 
-/// Reads a `layout` file. The assistant never lives in the left dock: a file that names it
-/// there, or names a right dock without it, gets it back on the right.
+/// Reads a `layout` file. The right panel always holds the four views (`VIEWS`); a file that names
+/// one of them on the left, or the old right dock, gets them back on the right. The panel shows one
+/// view: `show=` names it (the panel is open), `view=` the one it last showed (the panel is closed).
 pub fn read_layout(saved: &str) -> Layout {
     let mut words = saved.split_whitespace();
-    let mode = words
-        .next()
-        .and_then(Mode::named)
-        .filter(|m| *m != Mode::Assistant)
-        .unwrap_or_default();
+    let first = words.next().and_then(Mode::named);
+    let mode = first.filter(|m| !m.left_banned()).unwrap_or_default();
     // Then, in any order, what an older file does not have: the right dock.
     let (positional, keyed): (Vec<&str>, Vec<&str>) = words.partition(|w| !w.contains('='));
     let key = |name: &str| {
@@ -526,37 +546,41 @@ pub fn read_layout(saved: &str) -> Layout {
         }
         tools
     };
-    // A tool on both sides stays on the left, where it always was.
-    let mut left_shown = list("left");
-    left_shown.retain(|m| *m != Mode::Assistant);
+    // A tool on both sides stays on the left, where it always was. The views the left sidebar never
+    // shows (`Mode::left_banned`) live in the right panel.
+    let named = list("left");
+    let mut left_shown: Vec<Mode> = named.into_iter().filter(|m| !m.left_banned()).collect();
     if !left_shown.contains(&mode) {
         left_shown.insert(0, mode);
     }
-    // The outline lives in the right dock, available but hidden (the zen default): an older
-    // file, or none, leaves it there; an explicit `right=` (even an empty one) is respected.
-    let mut right: Vec<Mode> = match key("right") {
-        None => vec![Mode::Outline, Mode::Assistant],
-        Some(_) => list("right")
-            .into_iter()
-            .filter(|m| !left_shown.contains(m))
-            .collect(),
-    };
-    if !right.contains(&Mode::Assistant) {
-        right.push(Mode::Assistant);
-    }
-    let right_shown = list("show")
+    let mut right_shown: Vec<Mode> = list("show")
         .into_iter()
-        .filter(|m| right.contains(m))
+        .filter(|m| VIEWS.contains(m))
+        .take(1)
         .collect();
+    // A view named as the first word (an older file, when it was a left tool) moves to the right and shows.
+    if let Some(m) = first.filter(|m| VIEWS.contains(m))
+        && right_shown.is_empty()
+    {
+        right_shown.push(m);
+    }
+    let right_view = right_shown
+        .first()
+        .copied()
+        .or_else(|| list("view").into_iter().find(|m| VIEWS.contains(m)))
+        .unwrap_or(Mode::Outline);
     let folded = list("fold").into_iter().collect();
     let mut words = positional.into_iter();
     Layout {
         mode,
         left_shown,
-        right,
+        right: VIEWS.to_vec(),
         right_shown,
+        right_view,
         folded,
-        right_w: key("width").and_then(|w| w.parse().ok()).map_or(LIST_W, px),
+        right_w: key("width")
+            .and_then(|w| w.parse().ok())
+            .map_or(PANEL_W, px),
         panel: match words.next() {
             Some("split") => Panel::Split,
             Some("full") => Panel::Full,
@@ -585,6 +609,7 @@ impl Nav {
             right_w: saved.right_w,
             right: saved.right,
             right_shown: saved.right_shown,
+            right_view: saved.right_view,
             right_dragging: false,
             folded: saved.folded,
             outline_collapsed: HashSet::new(),
@@ -606,7 +631,6 @@ impl Nav {
             title_bar: saved.title_bar,
             left: px(0.),
             total: px(0.),
-            aside: px(0.),
         }
     }
 
@@ -624,18 +648,15 @@ impl Nav {
         if self.left_shown.len() > 1 {
             line += &format!(" left={}", names(&mut self.left_shown.iter()));
         }
-        // The stock right dock (the outline, available but hidden) is the default: older files,
-        // and fresh vaults, write no `right=` line for it.
-        let stock = self.right_shown.is_empty() && self.right == [Mode::Outline, Mode::Assistant];
-        if !stock && !self.right.is_empty() {
-            line += &format!(
-                " right={} width={}",
-                names(&mut self.right.iter()),
-                f32::from(self.right_w)
-            );
-            if !self.right_shown.is_empty() {
-                line += &format!(" show={}", names(&mut self.right_shown.iter()));
-            }
+        // The right panel: its width when dragged, the view it shows (`show=`, open) or last showed (`view=`).
+        if self.right_w != PANEL_W {
+            line += &format!(" width={}", f32::from(self.right_w));
+        }
+        if self.right_view != Mode::Outline {
+            line += &format!(" view={}", self.right_view.name());
+        }
+        if !self.right_shown.is_empty() {
+            line += &format!(" show={}", self.right_view.name());
         }
         if !self.folded.is_empty() {
             let mut folded: Vec<&Mode> = self.folded.iter().collect();
@@ -653,12 +674,6 @@ impl Nav {
     pub fn activate(&mut self, mode: Mode) {
         if self.mode == mode {
             return;
-        }
-        // The selection is shared by the panels: a version chosen in the Versions panel is not a
-        // row of the tree, and a tree row is not a version. Entering or leaving the panel drops it.
-        if self.mode == Mode::Versions || mode == Mode::Versions {
-            self.sel = None;
-            self.marked.clear();
         }
         let mut view = self.parked.remove(&mode).unwrap_or_else(|| View {
             mode,
@@ -843,49 +858,63 @@ mod tests {
     use std::{fs, time::SystemTime};
 
     #[test]
-    fn the_assistant_lives_in_the_right_dock() {
-        // No file: the outline and the assistant wait hidden on the right, the tree on the left.
+    fn the_right_panel_holds_four_views_and_shows_one() {
+        // No file: the four views wait on the right, hidden, Outline the one it shows; the tree on the left.
         let stock = read_layout("");
-        assert_eq!(stock.right, [Mode::Outline, Mode::Assistant]);
+        assert_eq!(stock.right, VIEWS);
         assert!(stock.right_shown.is_empty());
+        assert_eq!(stock.right_view, Mode::Outline);
         assert_eq!(stock.left_shown, [Mode::Tree]);
-        // An older file's right dock: the assistant joins it, on the right.
-        let older = read_layout("tree split 410 right=outline width=300 show=outline\n");
-        assert_eq!(older.right, [Mode::Outline, Mode::Assistant]);
-        assert_eq!(older.right_shown, [Mode::Outline]);
-        assert_eq!(older.left_shown, [Mode::Tree]);
-        // An explicit empty right dock still gets the assistant.
-        assert_eq!(
-            read_layout("tree split 410 right=\n").right,
-            [Mode::Assistant]
+        assert_eq!(stock.right_w, PANEL_W);
+        // An older file's right dock: the views stay on the right, and only the first one named shows.
+        let older = read_layout(
+            "tree split 410 right=outline,assistant width=300 show=outline,assistant\n",
         );
-        // Named on the left, it goes back to the right; the left dock keeps the others.
-        let left = read_layout("tree split 410 left=tree,assistant\n");
+        assert_eq!(older.right, VIEWS);
+        assert_eq!(older.right_shown, [Mode::Outline]);
+        assert_eq!(older.right_view, Mode::Outline);
+        assert_eq!(older.right_w, px(300.));
+        assert_eq!(older.left_shown, [Mode::Tree]);
+        // Views named on the left go back to the right; the left dock keeps the tree alone.
+        let left = read_layout("tree split 410 left=tree,assistant,versions,outline\n");
         assert_eq!(left.left_shown, [Mode::Tree]);
-        assert!(left.right.contains(&Mode::Assistant));
-        // Named as the first word, it is not the left dock's tool either.
+        assert_eq!(left.right, VIEWS);
+        // Named as the first word, a view is not the left dock's tool either.
         assert_eq!(read_layout("assistant rail 410\n").mode, Mode::Tree);
         // A layout saved with the old 40 px rail: its panel word is read as hidden, nothing else changes.
         let old = read_layout("recent rail 410\n");
         assert_eq!((old.mode, old.panel), (Mode::Recent, Panel::Hidden));
         assert_eq!(read_layout("recent hidden 410\n").panel, Panel::Hidden);
-        // Shown with the others, as written.
-        let shown = read_layout("tree split 410 right=outline,assistant show=assistant,outline\n");
-        assert_eq!(shown.right_shown, [Mode::Assistant, Mode::Outline]);
+        // A closed panel keeps the view it last showed; an open one shows it.
+        let closed = read_layout("tree split 410 view=comments\n");
+        assert_eq!(
+            (closed.right_view, closed.right_shown.is_empty()),
+            (Mode::Comments, true)
+        );
+        let open = read_layout("tree split 410 view=comments show=assistant\n");
+        assert_eq!(
+            (open.right_view, open.right_shown.clone()),
+            (Mode::Assistant, vec![Mode::Assistant])
+        );
         assert_eq!(Mode::named("assistant"), Some(Mode::Assistant));
+        assert_eq!(Mode::named("comments"), Some(Mode::Comments));
     }
 
     #[test]
-    fn the_versions_panel_is_a_tool_hidden_by_default() {
-        // Named in a saved layout, it is a tool of the left dock; an older file has no such word.
+    fn the_versions_view_lives_on_the_right_hidden_by_default() {
+        // Named in a saved layout, it is a view of the right panel; an older file has no such word.
         assert_eq!(Mode::named("versions"), Some(Mode::Versions));
         assert_eq!(Mode::Versions.name(), "versions");
         assert!(Mode::ALL.contains(&Mode::Versions));
         let older = read_layout("tree split 410\n");
         assert_eq!(older.left_shown, [Mode::Tree]);
+        assert!(older.right_shown.is_empty());
+        // Named on the left, it moves to the right dock and shows there (P2); the left keeps the tree.
         let shown = read_layout("versions split 410\n");
-        assert_eq!(shown.mode, Mode::Versions);
-        assert_eq!(shown.left_shown, [Mode::Versions]);
+        assert_eq!(shown.mode, Mode::Tree);
+        assert_eq!(shown.left_shown, [Mode::Tree]);
+        assert!(shown.right.contains(&Mode::Versions));
+        assert_eq!(shown.right_shown, [Mode::Versions]);
     }
 
     #[test]

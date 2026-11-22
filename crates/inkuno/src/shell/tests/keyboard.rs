@@ -211,6 +211,8 @@ fn context_menus_walk_with_the_keys(cx: &mut TestAppContext) {
 #[gpui::test]
 fn buttons_from_the_keys(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "buttons");
+    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
+    pin_inkuno(&shell, cx);
     fs::write(root.join("Note.md"), "# Note\n").unwrap();
     fs::create_dir(root.join("Dossier")).unwrap();
     fs::write(root.join("Dossier/Autre.md"), "# Autre\n").unwrap();

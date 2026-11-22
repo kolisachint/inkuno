@@ -89,7 +89,7 @@ fn md_table_scale(cx: &mut TestAppContext) {
         let file = root.join(format!("t{n}.md"));
         // `INKUNO_COMMENTS=1`: comments under the table, which each keystroke in it must keep up with.
         let notes = if std::env::var("INKUNO_COMMENTS").is_ok() {
-            "\n{>>Row \"0\": a<<}\n\n{>>Column \"id\": b<<}\n\n{>>Table: c<<}\n"
+            "\n<!-- comment: Row \"0\": a -->\n\n<!-- comment: Column \"id\": b -->\n\n<!-- comment: Table: c -->\n"
         } else {
             ""
         };
@@ -630,7 +630,7 @@ fn comments_frame(cx: &mut TestAppContext) {
     let _config = isolated_config(&root);
     let note = root.join("Cent.md");
     let lines: String = (0..100)
-        .map(|i| format!("Ligne {i} avec {{==un passage==}}{{>>commentaire {i}<<}} au milieu.\n"))
+        .map(|i| format!("Ligne {i} avec un passage<!-- comment: commentaire {i} --> au milieu.\n"))
         .collect();
     fs::write(&note, format!("# Cent\n\n{lines}")).unwrap();
     cx.update(bind_keys);
@@ -731,7 +731,9 @@ fn help_scroll(cx: &mut TestAppContext) {
     let (shell, cx) =
         cx.add_window_view(|window, cx| Shell::new(Some(root.clone()), Vec::new(), window, cx));
     cx.run_until_parked();
-    shell.update_in(cx, |s, window, cx| s.set_help(true, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_settings(Section::Shortcuts, window, cx)
+    });
     cx.run_until_parked();
     // Past the 140 ms opening animation.
     std::thread::sleep(Duration::from_millis(200));
@@ -750,10 +752,14 @@ fn help_scroll(cx: &mut TestAppContext) {
         println!("{what}: median {:?}, worst {:?}", all[20], all[39]);
     };
     time("frame without help", cx, &|cx| {
-        shell.update_in(cx, |s, window, cx| s.set_help(false, window, cx));
+        shell.update_in(cx, |s, window, cx| {
+            s.set_section(Section::About, window, cx)
+        });
         cx.update(|window, _| window.refresh());
     });
-    shell.update_in(cx, |s, window, cx| s.set_help(true, window, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_settings(Section::Shortcuts, window, cx)
+    });
     cx.run_until_parked();
     std::thread::sleep(Duration::from_millis(200));
     cx.run_until_parked();
@@ -772,7 +778,7 @@ fn help_scroll(cx: &mut TestAppContext) {
     );
     time("render_help build only", cx, &|cx| {
         shell.update(cx, |s, cx| {
-            let _ = s.render_help(false, cx);
+            let _ = s.render_shortcuts(cx);
         })
     });
     time("help frame", cx, &|cx| {

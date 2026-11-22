@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ui::assets::ICON_SET;
+use crate::ui::widgets;
 use crate::views::nav::*;
 use crate::{
     lang::tr,
@@ -117,6 +118,19 @@ impl Shell {
             (Do::CopyAddress, Some(Link::Url(url))) => {
                 return cx.write_to_clipboard(ClipboardItem::new_string(url));
             }
+            // A relative address is copied as Markdown writes it: spaces as `%20`.
+            (Do::CopyAddress, Some(Link::Note { path, anchor })) => {
+                let address = match anchor {
+                    Some(anchor) => format!("{path}#{anchor}"),
+                    None => path.clone(),
+                };
+                let address = address.replace(' ', "%20");
+                return cx.write_to_clipboard(ClipboardItem::new_string(address));
+            }
+            (Do::CopyAddress, Some(Link::Heading(anchor))) => {
+                let address = format!("#{anchor}").replace(' ', "%20");
+                return cx.write_to_clipboard(ClipboardItem::new_string(address));
+            }
             _ => None,
         };
         if let Some(action) = action {
@@ -209,50 +223,69 @@ impl Shell {
                         }
                         this.flush(cx);
                         let image = vault::is_image(&path) || vault::is_attachment(&path);
-                        // The links follow the rename: a rename that would rewrite a link inside a
-                        // pending change of a linking note is refused before anything moves.
-                        if !is_dir {
-                            let (old, new) = if image {
-                                let extension =
-                                    path.extension().unwrap_or_default().to_string_lossy();
-                                let to = path.with_file_name(format!("{name}.{extension}"));
-                                (vault::image_name(&path), vault::image_name(&to))
-                            } else {
-                                (current.clone(), name.clone())
-                            };
-                            if this.links_pending(&path, &old, &new, None, cx) {
-                                return;
-                            }
-                        }
-                        let renamed = if is_dir {
-                            let to = path.with_file_name(&name);
-                            vault::rename(&path, &to).map(|()| to)
-                        } else if image || vault::is_table(&path) {
-                            // An image or a table keeps its extension.
-                            let extension = path.extension().unwrap_or_default().to_string_lossy();
-                            let to = path.with_file_name(format!("{name}.{extension}"));
-                            vault::rename(&path, &to).map(|()| to)
+                        let table = vault::is_table(&path);
+                        // The links follow the rename. The notes that may link to it are read first,
+                        // once and off the UI thread: a rename that would rewrite a link inside a
+                        // pending change of a linking note is refused before anything moves. The
+                        // file is renamed where `to` says (as `rename_note` and the branch below do).
+                        let (old, new, to) = if is_dir {
+                            (String::new(), String::new(), path.clone())
                         } else {
-                            vault::rename_note(&path, &name)
+                            let extension = path.extension().unwrap_or_default().to_string_lossy();
+                            let to = match image || table {
+                                true => path.with_file_name(format!("{name}.{extension}")),
+                                false => path.with_file_name(format!("{name}.md")),
+                            };
+                            match image {
+                                true => (vault::image_name(&path), vault::image_name(&to), to),
+                                false => (current.clone(), name.clone(), to),
+                            }
                         };
-                        match renamed {
-                            Ok(to) => {
-                                // The title of a renamed note may have changed: reread it.
-                                this.relocate(&path, &to, !is_dir, cx);
-                                // Links follow: by note name, or by file name for an image.
-                                let (old, new) = if image {
-                                    (vault::image_name(&path), vault::image_name(&to))
-                                } else {
-                                    (current.clone(), name)
-                                };
-                                if !is_dir && this.relink(&old, &new, cx) {
-                                    this.reload(cx);
+                        let moved = (!image && !is_dir).then_some((path.as_path(), to.as_path()));
+                        let scan = (!is_dir).then(|| this.link_scan(&old, &new, moved, None));
+                        let (path, name) = (path.clone(), name.clone());
+                        cx.spawn(async move |this, cx| {
+                            let plan = match scan {
+                                Some(scan) => {
+                                    cx.background_executor()
+                                        .spawn(async move { scan.run() })
+                                        .await
                                 }
-                            }
-                            Err(e) => {
-                                this.fail(tr("Not renamed", "Renommage impossible"), &path, e, cx)
-                            }
-                        }
+                                None => super::notes::LinkPlan::default(),
+                            };
+                            this.update(cx, |this, cx| {
+                                if this.links_refused(plan.refused, cx) {
+                                    return;
+                                }
+                                let renamed = if is_dir {
+                                    let to = path.with_file_name(&name);
+                                    vault::rename(&path, &to).map(|()| to)
+                                } else if image || table {
+                                    // An image or a table keeps its extension.
+                                    vault::rename(&path, &to).map(|()| to)
+                                } else {
+                                    vault::rename_note(this.vault.as_deref(), &path, &name)
+                                };
+                                match renamed {
+                                    Ok(to) => {
+                                        // The title of a renamed note may have changed: reread it.
+                                        this.relocate(&path, &to, !is_dir, cx);
+                                        // Links follow: by note name, or by file name for an image.
+                                        if !is_dir && this.apply_links(plan, cx) {
+                                            this.reload(cx);
+                                        }
+                                    }
+                                    Err(e) => this.fail(
+                                        tr("Not renamed", "Renommage impossible"),
+                                        &path,
+                                        e,
+                                        cx,
+                                    ),
+                                }
+                            })
+                            .ok();
+                        })
+                        .detach();
                     },
                 );
             }
@@ -563,7 +596,10 @@ impl Shell {
             groups[2].push((tr("Comment", "Commenter"), Do::Comment));
             groups[3].push((BlockOp::Delete.label(), Do::Block(BlockOp::Delete)));
         } else if let Some(link) = &menu.text {
-            let web = matches!(link, Some(Link::Url(_)));
+            let web = matches!(
+                link,
+                Some(Link::Url(_) | Link::Note { .. } | Link::Heading(_))
+            );
             // Inside a pending change: its gestures, on the change under the pointer.
             if menu.change {
                 groups[0].push((
@@ -701,6 +737,27 @@ impl Shell {
         groups
     }
 
+    /// The label colour of a menu entry that is not the default: deleting is the caution red in Quiet,
+    /// and the trash is the accent in the other themes (which keep their colours otherwise).
+    pub(super) fn ink_of(what: &Do, t: Theme) -> Option<gpui::Hsla> {
+        let gone = matches!(
+            what,
+            Do::Trash
+                | Do::DeleteScratch
+                | Do::Block(editor::BlockOp::Delete)
+                | Do::Table(
+                    editor::TableOp::DeleteRow
+                        | editor::TableOp::DeleteCol
+                        | editor::TableOp::DeleteTable
+                )
+        );
+        match () {
+            _ if gone && t.quiet => Some(t.caution),
+            _ if matches!(what, Do::Trash) => Some(t.accent),
+            _ => None,
+        }
+    }
+
     /// Context menu, over the whole window: a click elsewhere closes it.
     pub(super) fn render_menu(
         &self,
@@ -716,19 +773,15 @@ impl Shell {
         let entry = |i: usize, (label, what): (&'static str, Do), cx: &mut Context<Self>| {
             let target = target.clone();
             let on = chosen == Some(i);
-            div()
+            widgets::menu_row(t)
                 .id(label)
                 .debug_selector(move || format!("menu-entry-{label}"))
-                .h(t.px(30.))
-                .mx(t.px(6.))
-                .px_2()
                 .flex()
                 .items_center()
-                .rounded(t.small())
                 .cursor_pointer()
                 .hover(|s| s.bg(t.hover))
                 .when(on, |d| d.bg(t.selection))
-                .when(matches!(what, Do::Trash), |d| d.text_color(t.accent))
+                .when_some(Self::ink_of(&what, t), |d, color| d.text_color(color))
                 // The whole label, then its shortcut, dimmer, pinned to the right: the
                 // menu takes the width they need.
                 .child(
@@ -793,7 +846,7 @@ impl Shell {
                         .position(at)
                         .snap_to_window_with_margin(t.px(8.))
                         .child(
-                            crate::ui::widgets::floating(t)
+                            widgets::popover(t)
                                 .debug_selector(|| "menu".into())
                                 .track_focus(&self.menu_focus)
                                 .key_context("Menu")
@@ -816,7 +869,7 @@ impl Shell {
                                 .max_w(room.width)
                                 .max_h(room.height)
                                 .overflow_y_scroll()
-                                .py(t.px(6.))
+                                .py(t.px(if t.quiet { 5. } else { 6. }))
                                 .text_size(t.px(13.))
                                 .children(rows)
                                 .with_animation(

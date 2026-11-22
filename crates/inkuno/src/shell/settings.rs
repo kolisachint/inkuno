@@ -41,8 +41,8 @@ impl Shell {
         // The theme's default is not one of the list: it follows the system, light or dark.
         let default = match setting {
             Setting::Theme => tr(
-                "Default: Inkuno, light or dark like the system",
-                "Par défaut : Inkuno, clair ou sombre comme le système",
+                "Default: Quiet, light or dark like the system",
+                "Par défaut : Quiet, clair ou sombre comme le système",
             ),
             _ => tr("Default", "Par défaut"),
         };
@@ -153,7 +153,7 @@ impl Shell {
             }
             if !matches!(event, PaletteEvent::Preview(_)) {
                 this.palette = None;
-                window.focus(&this.pane().editor.focus_handle(cx));
+                this.focus_note(window, cx);
                 vault::save_settings(&this.prefs.to_text());
             }
             this.restyle(window, cx);
@@ -179,11 +179,11 @@ impl Shell {
                     this.prefs.author = logic::revision::clean_author(text);
                     vault::save_settings(&this.prefs.to_text());
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 _ => {}
             }
@@ -217,11 +217,11 @@ impl Shell {
                         this.assistant_halt(cx);
                     }
                     this.assistant_check(cx);
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    this.focus_note(window, cx);
                 }
                 _ => {}
             }

@@ -3,6 +3,82 @@
 use super::*;
 use std::sync::Arc;
 
+/// A note a rename may rewrite the links of: its path on disk now, its path after the rename, and
+/// whether it links to the old name by `[[name]]`.
+pub(super) struct LinkedNote {
+    disk: PathBuf,
+    post: PathBuf,
+    wiki: bool,
+}
+
+/// What a rename does to the notes that link to it (see `Shell::link_scan`). Owned, so that it can run
+/// off the UI thread.
+#[derive(Default)]
+pub(super) struct LinkScan {
+    root: Option<PathBuf>,
+    notes: Vec<LinkedNote>,
+    old: String,
+    new: String,
+    moved: Option<(PathBuf, PathBuf)>,
+    shown: Option<(PathBuf, String)>,
+}
+
+/// The result of a scan: whether a pending change refuses the rename, and the notes that hold a link to
+/// rewrite (indexes into `scan.notes`). The rewrites are planned again when they are applied, from the
+/// text each note holds then (see `Shell::apply_links`); the scan keeps what it needs for that.
+#[derive(Default)]
+pub(super) struct LinkPlan {
+    pub(super) refused: bool,
+    scan: LinkScan,
+    notes: Vec<usize>,
+}
+
+impl LinkScan {
+    /// The text `text` of a note (its file with its pending changes composed in, or the editor's text)
+    /// with its links rewritten, or None when it holds none.
+    fn rewrite(&self, note: &LinkedNote, text: &str) -> Option<String> {
+        let moved = self
+            .moved
+            .as_ref()
+            .map(|(from, to)| (from.as_path(), to.as_path()));
+        logic::wiki::rewrite_links(
+            text,
+            self.root.as_deref(),
+            note.post.as_path(),
+            &self.old,
+            &self.new,
+            note.wiki,
+            moved,
+        )
+    }
+
+    /// Reads each note once and chooses the notes whose links the rename rewrites. The rename is refused
+    /// when a rewrite would change a pending change.
+    pub(super) fn run(self) -> LinkPlan {
+        let mut plan = LinkPlan::default();
+        for (index, note) in self.notes.iter().enumerate() {
+            let Ok(disk) = fs::read_to_string(&note.disk) else {
+                continue;
+            };
+            let current = match &self.shown {
+                Some((path, text)) if *path == note.disk => text.clone(),
+                _ => {
+                    let home = platform::revisions::home_of(&note.disk, self.root.as_deref());
+                    platform::sidecar::display(home.as_ref(), &note.disk, &disk)
+                }
+            };
+            if let Some(fresh) = self.rewrite(note, &current) {
+                if logic::pending::rewrite_refused(&current, &fresh) {
+                    plan.refused = true;
+                }
+                plan.notes.push(index);
+            }
+        }
+        plan.scan = self;
+        plan
+    }
+}
+
 impl Shell {
     /// Shows a Mermaid figure or a picture of the note large, in its place.
     pub(super) fn show_figure(
@@ -30,7 +106,11 @@ impl Shell {
         }
         let editor = self.pane().editor.read(cx);
         let code = editor.code_at_cursor().filter(|_| block);
-        let text = code.unwrap_or(editor.text()).to_string();
+        // The note's text without its pending marks: what it will say once every change is accepted.
+        let text = match code {
+            Some(code) => code.to_string(),
+            None => logic::pending::plain(editor.text()),
+        };
         cx.write_to_clipboard(ClipboardItem::new_string(text));
         self.copied = true;
         cx.notify();
@@ -49,6 +129,12 @@ impl Shell {
 
     /// Loads the note into the editor; false if the file is unreadable.
     pub(super) fn load_note(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
+        let shown = self.load_note_from_disk(path, cx);
+        self.count_unplaced_changes();
+        shown
+    }
+
+    fn load_note_from_disk(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
         // Already in the other pane: two editors on the same file would overwrite each other.
         // Input moves there; a mere preview does not move it.
         if let Some(other) = self
@@ -113,7 +199,10 @@ impl Shell {
         self.set_file(None, cx);
         cx.notify();
         match fs::read_to_string(path) {
-            Ok(text) => {
+            Ok(disk) => {
+                // The note's pending changes beside the file are shown as marked areas.
+                let home = platform::revisions::home_of(path, self.vault.as_deref());
+                let text = platform::sidecar::display(home.as_ref(), path, &disk);
                 // Second line of defence: a note never loads into a comparison (the routes open a
                 // tab of their own first). If one did, the tab becomes the note: editable, no comparison.
                 self.pane_mut().compare = None;
@@ -272,9 +361,13 @@ impl Shell {
 
     /// The links to the note follow the name its title gave it since it was opened.
     pub(super) fn follow_title(&mut self, cx: &mut Context<Self>) {
-        if let (Some(old), Some(path)) = (self.pane_mut().origin.take(), &self.pane_mut().path) {
-            let new = vault::stem(path);
-            self.relink(&old, &new, cx);
+        if let (Some(old), Some(path)) = (self.pane_mut().origin.take(), self.pane().path.clone()) {
+            let new = vault::stem(&path);
+            // Only a note that changed its name moved: opening a note never rewrites another.
+            if old != new {
+                let from = path.with_file_name(format!("{old}.md"));
+                self.relink(&old, &new, Some((&from, &path)), cx);
+            }
             // Still open in its tab: a later title follows from this name.
             self.pane_mut().origin = Some(new);
         }
@@ -304,28 +397,110 @@ impl Shell {
         }
     }
 
-    /// `[[links]]` to `old` now point to `new` in every note;
-    /// true if the shown note was rewritten. No effect if another note
-    /// is still called `old`: the links may be meant for it.
-    // ponytail: synchronous rewrite, limited to the notes the index says link to
-    // `old`; move to a background task if a note is linked from hundreds of others.
-    pub(super) fn relink(&mut self, old: &str, new: &str, cx: &mut Context<Self>) -> bool {
-        let paths: Vec<PathBuf> = {
-            let Some(targets) = logic::wiki::relink_set(&self.notes, old, new) else {
-                return false;
-            };
-            targets.iter().map(|n| n.path.clone()).collect()
-        };
+    /// `[[links]]` to `old` now point to `new` in every note, and the relative links to a note
+    /// moved from `moved.0` to `moved.1`; true if the shown note was rewritten. No effect on the
+    /// `[[links]]` if another note is still called `old`: the links may be meant for it.
+    // ponytail: synchronous rewrite, the `[[links]]` limited to the notes the index says link to
+    // `old`; a note moved reads every note of the vault, as a relative link names its file. The
+    // rename menu runs the same scan off the UI thread (see `link_scan`).
+    pub(super) fn relink(
+        &mut self,
+        old: &str,
+        new: &str,
+        moved: Option<(&Path, &Path)>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let plan = self.link_scan(old, new, moved, None).run();
+        self.apply_links(plan, cx)
+    }
+
+    /// The scan of the notes that a rename of `old` to `new` rewrites links in, to run off the UI
+    /// thread (see `LinkScan::run`). `moved`: a note file that moves from its path to the other, whose
+    /// relative addresses any note may hold, so every note is read; otherwise only the notes the index
+    /// says link to `old`. `shown`: the text an editor holds for a note, read in place of its file.
+    /// Note that the moved note may still bear its old name here (a rename not done yet).
+    pub(super) fn link_scan(
+        &self,
+        old: &str,
+        new: &str,
+        moved: Option<(&Path, &Path)>,
+        shown: Option<(&Path, &str)>,
+    ) -> LinkScan {
+        let moved = moved.filter(|(from, to)| from != to);
+        let key = old.to_lowercase();
+        // As `logic::wiki::relink_set`: nothing is rewritten when the names match ignoring case, or
+        // when another note is still called `old`.
+        let kept = key == new.to_lowercase()
+            || self.notes.iter().any(|n| {
+                n.name.to_lowercase() == key && moved.is_none_or(|(from, _)| n.path != from)
+            });
+        let wiki = |n: &Note| !kept && n.links.contains(&key);
+        let notes = self
+            .notes
+            .iter()
+            .filter(|n| moved.is_some() || wiki(n))
+            .map(|n| LinkedNote {
+                post: match moved {
+                    Some((from, to)) if n.path == from => to.to_path_buf(),
+                    _ => n.path.clone(),
+                },
+                wiki: wiki(n),
+                disk: n.path.clone(),
+            })
+            .collect();
+        LinkScan {
+            root: self.vault.clone(),
+            notes,
+            old: old.to_string(),
+            new: new.to_string(),
+            moved: moved.map(|(from, to)| (from.to_path_buf(), to.to_path_buf())),
+            shown: shown.map(|(path, text)| (path.to_path_buf(), text.to_string())),
+        }
+    }
+
+    /// Writes the rewrites of a scan and reloads the other pane when it shows a rewritten note. True
+    /// when the shown note was rewritten: the caller decides what its editor does (it may be leaving).
+    /// The scan ran off the UI thread, so each note is read again here, at its path after the rename,
+    /// and its rewrite is planned from the text it holds now: an edit made since (an autosave, an
+    /// agent's write) is kept. A note whose link is gone, or whose rewrite would change a pending
+    /// change, is left as it is and reported.
+    pub(super) fn apply_links(&mut self, plan: LinkPlan, cx: &mut Context<Self>) -> bool {
         let mut changed = Vec::new();
-        for note in self.notes.iter_mut().filter(|n| paths.contains(&n.path)) {
-            let rewritten = fs::read_to_string(&note.path)
-                .ok()
-                .and_then(|text| markdown::relink(&text, old, new))
-                .filter(|text| vault::write(&note.path, text).is_ok());
-            if let Some(text) = rewritten {
-                (note.tags, note.links) = Note::index(&text);
-                changed.push(note.path.clone());
+        let mut missed = false;
+        for index in plan.notes {
+            let note = &plan.scan.notes[index];
+            let path = &note.post;
+            let Ok(raw) = fs::read_to_string(path) else {
+                continue;
+            };
+            let home = platform::revisions::home_of(path, self.vault.as_deref());
+            let current = platform::sidecar::display(home.as_ref(), path, &raw);
+            let fresh = plan.scan.rewrite(note, &current);
+            let refused = fresh
+                .as_ref()
+                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, fresh));
+            let Some(text) = fresh.filter(|_| !refused) else {
+                missed = true;
+                continue;
+            };
+            // The text as the editor shows it goes back as the file and its pending changes beside it.
+            if platform::sidecar::save(home.as_ref(), path, &text, "").is_ok() {
+                if let Some(note) = self.notes.iter_mut().find(|n| n.path == *path) {
+                    let disk = fs::read_to_string(path).unwrap_or_default();
+                    (note.tags, note.links) = Note::index(&disk);
+                }
+                changed.push(path.clone());
             }
+        }
+        if missed {
+            self.say(
+                Tone::Failed,
+                tr(
+                    "A note that links here changed while the rename ran: its link was not rewritten.",
+                    "Une note qui pointe ici a changé pendant le renommage : son lien n'a pas été réécrit.",
+                ),
+                cx,
+            );
         }
         // The other pane's note is reloaded here; the active pane's is up to the caller
         // (it may be leaving it).
@@ -345,8 +520,7 @@ impl Shell {
     /// The check before the note (or image) at `moved` is renamed from `old` to `new`: when a link
     /// rewrite would change a pending change of a linking note, nothing may be renamed, and a notice
     /// says so. True then. `text` is the text `moved` is about to hold, when it is not on disk yet;
-    /// a linking note is read from disk, as `relink` reads it. Shares the per-line check with the
-    /// command line (`pending::rewrite_refused`).
+    /// a linking note is read from disk, as `relink` reads it.
     pub(super) fn links_pending(
         &mut self,
         moved: &Path,
@@ -355,32 +529,18 @@ impl Shell {
         text: Option<&str>,
         cx: &mut Context<Self>,
     ) -> bool {
-        // The renamed note bears `new` already, as `relink_set` expects.
-        let notes: Vec<Note> = self
-            .notes
-            .iter()
-            .map(|note| {
-                let mut note = note.clone();
-                if note.path == moved {
-                    note.name = new.to_string();
-                }
-                note
-            })
-            .collect();
-        let Some(targets) = logic::wiki::relink_set(&notes, old, new) else {
-            return false;
-        };
-        let refused = targets.iter().any(|note| {
-            let current = match text {
-                Some(text) if note.path == moved => text.to_string(),
-                _ => match fs::read_to_string(&note.path) {
-                    Ok(text) => text,
-                    Err(_) => return false,
-                },
-            };
-            markdown::relink(&current, old, new)
-                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
-        });
+        let renamed = moved.with_file_name(format!("{new}.md"));
+        let scan = self.link_scan(
+            old,
+            new,
+            Some((moved, renamed.as_path())),
+            text.map(|t| (moved, t)),
+        );
+        self.links_refused(scan.run().refused, cx)
+    }
+
+    /// The notice of a refused rename: true when `refused`.
+    pub(super) fn links_refused(&mut self, refused: bool, cx: &mut Context<Self>) -> bool {
         if refused {
             self.say(
                 Tone::Failed,
@@ -422,13 +582,18 @@ impl Shell {
             .iter_mut()
             .filter(|n| n.path != path && n.links.contains(&key))
         {
-            let fresh = fs::read_to_string(&note.path)
-                .ok()
-                .map(|text| wiki::rename_heading(&text, &name, was.1.trim(), now.1.trim()))
-                .filter(|(_, count)| *count > 0)
-                .filter(|(text, _)| vault::write(&note.path, text).is_ok());
-            if let Some((text, _)) = fresh {
-                (note.tags, note.links) = Note::index(&text);
+            // Written as the editor shows the note, so its pending changes stay placed. A rewrite that
+            // would change a pending change is left out, as `apply_links` leaves it.
+            let home = platform::revisions::home_of(&note.path, self.vault.as_deref());
+            let saved = platform::sidecar::edit(home.as_ref(), &note.path, "", |shown| {
+                let (text, count) = wiki::rename_heading(shown, &name, was.1.trim(), now.1.trim());
+                let refused = logic::pending::rewrite_refused(shown, &text)
+                    || platform::sidecar::rewrite_unplaces(home.as_ref(), &note.path, shown, &text);
+                (count > 0 && !refused).then_some(text)
+            });
+            if let Ok(true) = saved {
+                let disk = fs::read_to_string(&note.path).unwrap_or_default();
+                (note.tags, note.links) = Note::index(&disk);
                 rewritten.push(note.path.clone());
             }
         }
@@ -473,9 +638,11 @@ impl Shell {
     /// written next to the note, as a sync conflict is. False if that copy could not be written:
     /// the note is then not saved, so that nothing is lost.
     pub(super) fn take_outside(&mut self, path: &Path, cx: &mut Context<Self>) -> bool {
-        let Ok(disk) = fs::read_to_string(path) else {
+        let Ok(raw) = fs::read_to_string(path) else {
             return true;
         };
+        let home = platform::revisions::home_of(path, self.vault.as_deref());
+        let disk = platform::sidecar::display(home.as_ref(), path, &raw);
         if disk == self.pane().base {
             return true;
         }
@@ -486,7 +653,13 @@ impl Shell {
                 None => {
                     let date = date_name(today());
                     let copy = free_conflict_path(path, &date);
-                    if let Err(e) = vault::write(&copy, &disk) {
+                    // The copy is the other version: its own text, and its pending changes beside it.
+                    let (text, entries) = platform::sidecar::split(home.as_ref(), path, &disk, "");
+                    let written = vault::write(&copy, &text).and_then(|()| match &home {
+                        Some(home) => platform::sidecar::store(home, &copy, &entries),
+                        None => Ok(()),
+                    });
+                    if let Err(e) = written {
                         let what = tr(
                             "Changed here and elsewhere, and the other version could not be kept:",
                             "Modifiée ici et ailleurs, et l'autre version n'a pas pu être gardée :",
@@ -514,10 +687,29 @@ impl Shell {
         true
     }
 
+    /// The pane's text to save. A comment typed in the earlier form is written in the new one, and
+    /// the editor takes the new form too (one undo step).
+    pub(super) fn migrated_text(&mut self, cx: &mut Context<Self>) -> String {
+        let shown = self.pane().editor.read(cx).text().to_string();
+        // One edit per comment: the cursors keep their places around the ones that do not move.
+        let edits = markdown::migration_edits(&shown);
+        if edits.is_empty() {
+            return shown;
+        }
+        self.pane().editor.update(cx, |e, cx| e.absorb(&edits, cx));
+        markdown::apply_edits(&shown, &edits)
+    }
+
     /// Writes the pane's note to disk if it changed.
     // ponytail: synchronous write on the UI thread (a few KB, < 1 ms);
     // move to a background task if notes get very large.
     pub(super) fn flush_one(&mut self, cx: &mut Context<Self>) -> bool {
+        let done = self.flush_one_text(cx);
+        self.count_unplaced_changes();
+        done
+    }
+
+    fn flush_one_text(&mut self, cx: &mut Context<Self>) -> bool {
         if self.pane().scratch {
             return self.flush_scratch(cx);
         }
@@ -532,11 +724,24 @@ impl Shell {
         {
             return false;
         }
-        let content = self.pane().editor.read(cx).text().to_string();
-        if self.pane().path.is_none() && content.trim().is_empty() {
+        let shown = self.migrated_text(cx);
+        if self.pane().path.is_none() && shown.trim().is_empty() {
             self.pane_mut().dirty = false;
             return true;
         }
+        // The file's text, and the pending changes that go beside it (none in the file itself).
+        let home = self
+            .pane()
+            .path
+            .as_deref()
+            .and_then(|path| platform::revisions::home_of(path, Some(root.as_path())));
+        let old_path = self.pane().path.clone();
+        let (content, entries) = match &old_path {
+            Some(path) => {
+                platform::sidecar::split(home.as_ref(), path, &shown, &self.revision_author())
+            }
+            None => (shown.clone(), Vec::new()),
+        };
         // A `#` title added or changed at the top: the file now bears its name.
         if vault::h1_of(&content).is_some_and(|h1| self.pane().h1.as_ref() != Some(&h1)) {
             self.pane_mut().synced = true;
@@ -551,7 +756,7 @@ impl Shell {
             let renamed = current.with_file_name(format!("{title}.md"));
             if old != title
                 && !renamed.exists()
-                && self.links_pending(&current, &old, &title, Some(&content), cx)
+                && self.links_pending(&current, &old, &title, Some(&shown), cx)
             {
                 return false;
             }
@@ -564,8 +769,21 @@ impl Shell {
             &content,
         ) {
             Ok(path) => {
+                // The changes follow the note to its name; the old list goes when the name changed.
+                if let Some(home) = &home {
+                    if old_path.as_ref().is_some_and(|old| *old != path) {
+                        let _ = platform::sidecar::store(home, old_path.as_deref().unwrap(), &[]);
+                    }
+                    if let Err(e) = platform::sidecar::store(home, &path, &entries) {
+                        self.say(
+                            Tone::Failed,
+                            format!("{}: {}", path.display(), crate::lang::io_reason(&e)),
+                            cx,
+                        );
+                    }
+                }
                 self.pane_mut().dirty = false;
-                self.pane_mut().base = content.clone();
+                self.pane_mut().base = shown.clone();
                 self.calm();
                 let (tags, links) = markdown::index(&content);
                 let old = self.pane().path.clone();
@@ -645,6 +863,7 @@ impl Shell {
             self.active = pane;
         }
         match event {
+            EditorEvent::CommentAt(at) => self.comment_clicked(*at, window, cx),
             EditorEvent::Changed => {
                 self.in_pane(pane, |this| {
                     this.keep_preview();
@@ -733,6 +952,51 @@ impl Shell {
                 }
             }
             Link::Wiki(name) => self.open_wiki(name, window, cx),
+            Link::Note { path, anchor } => self.follow_note(path, anchor.as_deref(), window, cx),
+            Link::Heading(anchor) => self.jump_to_heading(anchor, cx),
+        }
+    }
+
+    /// Opens the note a relative link names, at its heading when it has one. Resolved from the note
+    /// shown (the vault root for an unsaved one); a note that is not in the vault is not created.
+    fn follow_note(
+        &mut self,
+        address: &str,
+        anchor: Option<&str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(root) = self.vault.clone() else {
+            return;
+        };
+        let from = self
+            .pane()
+            .path
+            .clone()
+            .unwrap_or_else(|| root.join("New.md"));
+        let target = logic::wiki::note_at(&root, &from, address);
+        if !self.notes.iter().any(|n| n.path == target) {
+            let shown = address.to_string();
+            return self.say(
+                Tone::Failed,
+                format!(
+                    "{} « {shown} »",
+                    tr("Note not found:", "Note introuvable :")
+                ),
+                cx,
+            );
+        }
+        self.open(&target, window, cx);
+        if let Some(anchor) = anchor {
+            self.jump_to_heading(anchor, cx);
+        }
+    }
+
+    /// Scrolls the shown note to its heading `anchor` (GitHub's slug, see `markdown::heading_at`).
+    fn jump_to_heading(&mut self, anchor: &str, cx: &mut Context<Self>) {
+        let at = markdown::heading_at(self.pane().editor.read(cx).text(), anchor);
+        if let Some(at) = at {
+            self.pane().editor.update(cx, |e, cx| e.jump(at, true, cx));
         }
     }
 

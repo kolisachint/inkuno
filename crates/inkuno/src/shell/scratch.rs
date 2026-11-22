@@ -32,22 +32,33 @@ impl Shell {
         {
             return false;
         }
-        let content = self.pane().editor.read(cx).text().to_string();
+        let shown = self.migrated_text(cx);
         let path = match self.pane().path.clone() {
             Some(path) => path,
-            None if logic::scratch::is_blank(&content) => {
+            None if logic::scratch::is_blank(&shown) => {
                 self.pane_mut().dirty = false;
                 return true;
             }
             None => platform::scratch::new_path(),
         };
+        // The file holds the note's own text; its pending changes wait beside it, in the scratch folder.
+        let home = platform::revisions::Home::Scratch(platform::scratch::dir());
+        let (content, entries) =
+            platform::sidecar::split(Some(&home), &path, &shown, &self.revision_author());
         match platform::scratch::write(&path, &content) {
             Ok(()) => {
+                if let Err(e) = platform::sidecar::store(&home, &path, &entries) {
+                    self.say(
+                        Tone::Failed,
+                        format!("{}: {}", path.display(), crate::lang::io_reason(&e)),
+                        cx,
+                    );
+                }
                 let first = self.pane().path.is_none();
                 let pane = self.pane_mut();
                 pane.path = Some(path);
                 pane.dirty = false;
-                pane.base = content;
+                pane.base = shown;
                 if first {
                     self.push_dirs(cx);
                 }

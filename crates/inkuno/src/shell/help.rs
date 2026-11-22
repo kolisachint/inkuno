@@ -2,12 +2,11 @@
 
 use super::*;
 
-/// The help panel: open or not, its search field, the row picked with the keyboard, and the
-/// shortcut being typed.
+/// The shortcuts page of the Settings tab: its search field, the row picked with the keyboard, and
+/// the shortcut being typed.
 #[derive(Default)]
 pub(super) struct Help {
-    pub(super) open: bool,
-    /// Search field of the help panel, while it is open.
+    /// Search field of the shortcuts page.
     pub(super) find: Option<Entity<field::Field>>,
     /// The help row picked with the keyboard, and the shortcut being typed.
     pub(super) sel: Option<&'static str>,
@@ -39,55 +38,6 @@ pub(super) struct KeyEdit {
 pub(super) const KOFI: &str = "https://ko-fi.com/T6T01WC5ZC";
 
 impl Shell {
-    /// Shows or hides the shortcuts panel; focus follows.
-    pub(super) fn set_help(&mut self, open: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.help.open = open;
-        self.help.find = None;
-        self.help.sel = None;
-        self.help.edit = None;
-        *self.help.laid.borrow_mut() = None;
-        if open {
-            let theme = self.theme;
-            let find = cx.new(|cx| field::Field::new("", theme, cx));
-            cx.observe(&find, |_, _, cx| cx.notify()).detach();
-            // Escape clears the field, then closes the panel.
-            cx.subscribe_in(
-                &find,
-                window,
-                |this, find, event: &field::FieldEvent, window, cx| {
-                    if let field::FieldEvent::Done = event {
-                        // Enter on the picked row: its keys are awaited.
-                        if let Some(action) = this
-                            .help
-                            .sel
-                            .filter(|sel| this.help_actions(cx).contains(sel))
-                        {
-                            this.key_edit(action, cx);
-                        }
-                    } else if let field::FieldEvent::Cancel = event {
-                        if find.read(cx).line.text.is_empty() {
-                            this.set_help(false, window, cx);
-                        } else {
-                            find.update(cx, |find, cx| {
-                                find.line = line::Line::default();
-                                cx.notify();
-                            });
-                        }
-                    }
-                },
-            )
-            .detach();
-            window.focus(&find.focus_handle(cx));
-            self.help.find = Some(find);
-        } else if self.vault.is_none() {
-            window.focus(&self.focus);
-        } else {
-            // To what the pane shows: given to the note, input would clear a table or a diagram.
-            self.focus_pane(self.active, window, cx);
-        }
-        cx.notify();
-    }
-
     /// The actions of the rows the help shows, in order.
     pub(super) fn help_actions(&self, cx: &App) -> Vec<&'static str> {
         self.help_rows(cx)
@@ -292,8 +242,9 @@ impl Shell {
         }
     }
 
-    /// `short`: the window is low, the "about" footer scrolls with the list instead of taking its place.
-    pub(super) fn render_help(&self, short: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The shortcuts page: the search, the table of contents and every section, with the keys that
+    /// can be changed (`settings_tab.rs` draws it in the Settings tab).
+    pub(super) fn render_shortcuts(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
         let rows = self.help_rows(cx);
         let none = rows.is_empty();
@@ -325,7 +276,6 @@ impl Shell {
             .child(tr("Search the shortcuts…", "Chercher un raccourci…"));
         let find = div()
             .flex_none()
-            .px_5()
             .py_3()
             .border_b_1()
             .border_color(t.border)
@@ -460,10 +410,12 @@ impl Shell {
                             .font_family(mono())
                             .text_size(t.px(12.))
                             .child(row.keys.clone()),
-                        None => div()
-                            .w(t.px(156.))
-                            .flex_none()
-                            .child(keycaps(&row.keys, t, false).flex_wrap()),
+                        None => div().w(t.px(156.)).flex_none().child(
+                            keycaps(&row.keys, t, false)
+                                .flex_wrap()
+                                .w_full()
+                                .gap_y(t.px(3.)),
+                        ),
                         Some(action) => {
                             let color = if edit.is_some() || row.changed {
                                 t.accent
@@ -478,17 +430,22 @@ impl Shell {
                             } else if row.keys.is_empty() {
                                 div().font_family(mono()).text_size(t.px(12.)).child("—")
                             } else {
-                                keycaps(&row.keys, t, false).flex_wrap()
+                                // The hover fill is the chips' own, so it hugs them: the button
+                                // (the full cell, for the click) has no fill of its own.
+                                keycaps(&row.keys, t, false)
+                                    .flex_wrap()
+                                    .gap_y(t.px(3.))
+                                    .px_1()
+                                    .rounded(t.small())
+                                    .hover(|s| s.bg(t.hover))
                             };
                             let key = div()
                                 .id(gpui::SharedString::from(format!("key-{action}")))
                                 .debug_selector(move || format!("key-{action}"))
-                                .px_1()
-                                .rounded(t.small())
-                                .bg(t.border.opacity(0.6))
+                                .when(!row.keys.is_empty() && edit.is_none(), |d| d.w_full())
+                                .flex()
                                 .cursor_pointer()
                                 .text_color(color)
-                                .hover(|s| s.bg(t.hover))
                                 .child(shown)
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.key_edit(action, cx)),
@@ -569,113 +526,36 @@ impl Shell {
                         .children(note)
                 }))
         });
-        // About, at the foot of the panel: what the app is, and where to find it.
-        let link =
-            |id: &'static str, icon: &'static str, label: &'static str, url: &'static str| {
-                div()
-                    .id(id)
-                    .px_2()
-                    .py_1()
-                    .flex()
-                    .items_center()
-                    .gap_1p5()
-                    .rounded(t.small())
-                    .cursor_pointer()
-                    .text_color(t.accent)
-                    .hover(|s| s.bg(t.hover))
-                    .child(
-                        svg()
-                            .path(icon)
-                            .size(t.px(14.))
-                            .flex_none()
-                            .text_color(t.accent),
-                    )
-                    .child(label)
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| cx.open_url(url))
-            };
-        let about = div()
-            .flex_none()
-            .map(|d| if short { d.w_full().pt_3() } else { d.px_5().py_3() })
-            .border_t_1()
-            .border_color(t.border)
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
-            .child(logo(t))
-            .child(format!("inkuno {}", env!("CARGO_PKG_VERSION")))
-            .child(div().flex_1().min_w(t.px(200.)).text_color(t.soft).child(tr(
-                "Fast, minimal Markdown notes, in plain files you own.",
-                "Des notes Markdown rapides et minimales, dans de simples fichiers qui vous appartiennent.",
-            )))
-            .child(link("about-github", "code.svg", "GitHub", env!("CARGO_PKG_REPOSITORY")))
-            .child(link("about-kofi", "heart.svg", tr("Support on Ko-fi", "Soutenir sur Ko-fi"), KOFI));
-        let (inside, below) = if short {
-            (Some(about), None)
-        } else {
-            (None, Some(about))
-        };
         div()
-            .absolute()
-            .inset_0()
-            .occlude()
-            .p_4()
+            .flex_1()
+            .min_h_0()
             .flex()
-            // Pinned at the top: the search field does not move when the list gets shorter.
-            .items_start()
-            .justify_center()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, _, window, cx| this.set_help(false, window, cx)),
-            )
+            .flex_col()
+            .on_action(cx.listener(|this, _: &palette::Prev, _, cx| this.help_step(false, cx)))
+            .on_action(cx.listener(|this, _: &palette::Next, _, cx| this.help_step(true, cx)))
+            .child(find)
+            .children(contents)
             .child(
-                crate::ui::widgets::floating(t)
-                    .id("help")
-                    // Two columns if the window is wide enough, one otherwise.
-                    .w(t.px(812.))
-                    .max_w_full()
-                    .max_h_full()
+                div()
+                    .id("help-keys")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.help.scroll)
+                    .py_5()
                     .flex()
-                    .flex_col()
-                    .overflow_hidden()
-                    .text_size(t.px(13.))
-                    // A click in the panel does not close it.
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_action(
-                        cx.listener(|this, _: &palette::Prev, _, cx| this.help_step(false, cx)),
-                    )
-                    .on_action(
-                        cx.listener(|this, _: &palette::Next, _, cx| this.help_step(true, cx)),
-                    )
-                    .child(find)
-                    .children(contents)
-                    .child(
-                        div()
-                            .id("help-keys")
-                            .flex_1()
-                            .min_h_0()
-                            .overflow_y_scroll()
-                            .track_scroll(&self.help.scroll)
-                            .p_5()
-                            .flex()
-                            .flex_wrap()
-                            .gap_x_6()
-                            .gap_y_4()
-                            .children(sections)
-                            .when(none, |d| {
-                                d.child(div().text_color(t.soft).child(tr(
-                                    "No shortcut matches.",
-                                    "Aucun raccourci ne correspond.",
-                                )))
-                            })
-                            .children(inside),
-                    )
-                    .children(below)
-                    .with_animation(
-                        "help-in",
-                        Animation::new(Duration::from_millis(140)).with_easing(ease_out_quint()),
-                        |help, delta| help.opacity(delta),
-                    ),
+                    .flex_wrap()
+                    .gap_x_6()
+                    .gap_y_4()
+                    .children(sections)
+                    .when(none, |d| {
+                        d.child(
+                            div().text_color(t.soft).child(tr(
+                                "No shortcut matches.",
+                                "Aucun raccourci ne correspond.",
+                            )),
+                        )
+                    }),
             )
     }
 }

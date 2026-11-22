@@ -1,5 +1,6 @@
-//! Pending changes: an agent's proposed text written into the note as marked areas, until a person
-//! accepts or rejects each one. The marks are CriticMarkup in block form, line by line:
+//! Pending changes: an agent's proposed text, shown in the note as marked areas until a person
+//! accepts or rejects each one. Only the editor shows the marks: on disk each note holds its own text
+//! (see below). The marks are CriticMarkup in block form, line by line:
 //!
 //! ```text
 //! unchanged line
@@ -15,6 +16,10 @@
 //! One area is an optional removed block followed at once by an optional added block. A marker
 //! line stands alone: its four strings are the only lines that count as marks, and only outside a
 //! code fence (see below). Pure: no disk here.
+//!
+//! This is the form the editor shows. On disk the marks are not written: the note's file holds its
+//! own text (`split`: the removed lines, without the added ones), and each area is an `Entry` kept
+//! beside the note; `compose` writes the marks back from the text and the entries.
 //!
 //! Line breaks at the end of a text: a text may lack its final line break. When an area ends the
 //! text, the line break just before its close mark (`\n`, or `\r\n` in a CRLF text) is not content
@@ -427,6 +432,293 @@ fn added_of(area: &Area) -> Range<usize> {
 
 fn removed_of(area: &Area) -> Range<usize> {
     area.removed.clone()
+}
+
+/// The most bytes of the note's text on each side of an entry kept to find it again: the line on
+/// that side, cut to this length.
+const CONTEXT: usize = 120;
+
+/// One pending change kept beside its note (in the `.inkuno` folder, never in the `.md`). The note
+/// holds `old` at byte `at`: the lines the change removes, which are still the note's text. `new`
+/// is what it becomes once accepted. `id` and `author` are kept as they were written.
+///
+/// `at` is only a hint: the note may change outside Inkuno after the entry was saved. `before` and
+/// `after` are the lines around the anchor when it was saved (see `CONTEXT`). `compose` finds the
+/// entry again only where both hold, and leaves it out otherwise: it is then an orphan, kept beside
+/// the note with `orphan_since` (when it was first left out, in seconds since the Unix epoch).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Entry {
+    pub id: u32,
+    pub author: String,
+    pub at: usize,
+    pub old: String,
+    pub new: String,
+    pub before: String,
+    pub after: String,
+    pub orphan_since: Option<u64>,
+}
+
+/// The note text as it is on disk, and the pending changes beside it: `display` (the text with
+/// its marks, as the editor shows it) is split into the note's own text, the removed lines
+/// (`reject_all`) and one entry per area. An entry takes the `id` and `author` of the `known`
+/// entry with the same `old` and `new`, if there is one; otherwise it is numbered after the
+/// largest id known, with no author. The note text has no mark in it. Each entry carries the text
+/// around its anchor, so `compose` can find it again.
+pub fn split(display: &str, known: &[Entry]) -> (String, Vec<Entry>) {
+    let (base, mut entries) = unmark(display);
+    let mut used = vec![false; known.len()];
+    let mut next = known.iter().map(|e| e.id).max().unwrap_or(0);
+    for entry in &mut entries {
+        let same = known
+            .iter()
+            .enumerate()
+            .find(|(i, k)| !used[*i] && k.old == entry.old && k.new == entry.new);
+        match same {
+            Some((i, k)) => {
+                used[i] = true;
+                entry.id = k.id;
+                entry.author = k.author.clone();
+            }
+            None => {
+                next += 1;
+                entry.id = next;
+            }
+        }
+        entry.before = context_before(&base, entry.at);
+        entry.after = context_after(&base, entry.at + entry.old.len());
+    }
+    (base, entries)
+}
+
+/// The note's own text and one entry per area of `display`, without ids or context.
+fn unmark(display: &str) -> (String, Vec<Entry>) {
+    let mut base = String::with_capacity(display.len());
+    let mut entries: Vec<Entry> = Vec::new();
+    let mut last = 0;
+    for area in areas(display) {
+        base.push_str(&display[last..area.range.start]);
+        let at = base.len();
+        let (old, new) = (&display[area.removed.clone()], &display[area.added.clone()]);
+        base.push_str(old);
+        entries.push(Entry {
+            at,
+            old: old.to_string(),
+            new: new.to_string(),
+            ..Entry::default()
+        });
+        last = area.range.end;
+    }
+    base.push_str(&display[last..]);
+    (base, entries)
+}
+
+/// The line of `base` before `at`, its break included and cut to `CONTEXT` bytes (from the end, on a
+/// character boundary). Empty at the start of the text.
+fn context_before(base: &str, at: usize) -> String {
+    if at == 0 {
+        return String::new();
+    }
+    let start = base.as_bytes()[..at - 1]
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map_or(0, |i| i + 1);
+    let mut from = start.max(at.saturating_sub(CONTEXT));
+    while !base.is_char_boundary(from) {
+        from += 1;
+    }
+    base.get(from..at).unwrap_or_default().to_string()
+}
+
+/// The line of `base` from `end`, its break included and cut to `CONTEXT` bytes (on a character
+/// boundary). Empty at the end of the text.
+fn context_after(base: &str, end: usize) -> String {
+    let line_end = base
+        .get(end..)
+        .and_then(|rest| rest.find('\n'))
+        .map_or(base.len(), |i| end + i + 1);
+    let mut to = line_end.min(end + CONTEXT).min(base.len());
+    while !base.is_char_boundary(to) {
+        to -= 1;
+    }
+    base.get(end..to).unwrap_or_default().to_string()
+}
+
+/// Whether a line of `text` is one of the four marks, inside a code fence or not.
+fn has_mark_line(text: &str) -> bool {
+    rows(text).iter().any(|row| is_mark(row.body))
+}
+
+/// The byte positions of `base` where a line starts outside every code fence, the end of the text
+/// included when it is outside one too. Sorted, and every one is a character boundary.
+fn clean_starts(base: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut fence: Option<(char, usize)> = None;
+    for row in rows(base) {
+        match fence {
+            None => {
+                out.push(row.start);
+                fence = fence_opens(row.body);
+            }
+            Some(open) => {
+                if fence_closes(row.body, open) {
+                    fence = None;
+                }
+            }
+        }
+    }
+    if fence.is_none() {
+        out.push(base.len());
+    }
+    out
+}
+
+/// The offset of the candidate nearest to `at`.
+fn nearest(at: usize, candidates: impl Iterator<Item = usize>) -> Option<usize> {
+    candidates.min_by_key(|p| p.abs_diff(at))
+}
+
+/// Whether a context line is blank: empty, or only white space.
+fn blank(line: &str) -> bool {
+    line.trim().is_empty()
+}
+
+/// Where `entry` is in `base`, or `None` when it cannot be placed. A removed text must be whole
+/// lines outside code fences, and an insertion must sit at a line start outside them; so a mark
+/// never splits a line or lands in a fence. An entry with context is placed only where its
+/// `before` and `after` lines both hold, the nearest to `at` of those. An empty side holds only at
+/// the edge of the text. An insertion whose context is blank on both sides has nothing to tell one
+/// blank line from another, so it is placed only at `at` itself. An entry with no context at all (one
+/// saved before context was kept) is found by its removed text, the nearest to `at`, and an
+/// insertion only at `at`.
+fn place(base: &str, clean: &[usize], entry: &Entry) -> Option<usize> {
+    if has_mark_line(&entry.old) || has_mark_line(&entry.new) {
+        return None;
+    }
+    let len = entry.old.len();
+    let at = entry.at.min(base.len());
+    let is_clean = |p: usize| clean.binary_search(&p).is_ok();
+    let text_here = |p: usize| {
+        entry.old.is_empty()
+            || (base
+                .get(p..)
+                .is_some_and(|rest| rest.starts_with(&entry.old))
+                && is_clean(p + len))
+    };
+    if entry.before.is_empty() && entry.after.is_empty() {
+        return match entry.old.is_empty() {
+            true => is_clean(at).then_some(at),
+            false => nearest(at, clean.iter().copied().filter(|&p| text_here(p))),
+        };
+    }
+    let before_holds = |p: usize| match entry.before.is_empty() {
+        true => p == 0,
+        false => base.get(..p).is_some_and(|t| t.ends_with(&entry.before)),
+    };
+    let after_holds = |p: usize| {
+        let end = p + len;
+        match entry.after.is_empty() {
+            true => end == base.len(),
+            false => base.get(end..).is_some_and(|t| t.starts_with(&entry.after)),
+        }
+    };
+    let holds = |p: usize| text_here(p) && before_holds(p) && after_holds(p);
+    if entry.old.is_empty() && blank(&entry.before) && blank(&entry.after) {
+        return (is_clean(at) && holds(at)).then_some(at);
+    }
+    nearest(at, clean.iter().copied().filter(|&p| holds(p)))
+}
+
+/// Where each entry of `entries` is placed in `base`, if it is: the `(offset, index)` pairs of the
+/// placed ones, in order. Entries are added one at a time, and an entry that would make the text
+/// `split` does not read back as `base` with these entries is left out.
+fn placements(base: &str, entries: &[Entry]) -> Vec<(usize, usize)> {
+    let clean = clean_starts(base);
+    let mut found: Vec<(usize, usize)> = entries
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| !(e.old.is_empty() && e.new.is_empty()))
+        .filter_map(|(i, e)| place(base, &clean, e).map(|at| (at, i)))
+        .collect();
+    found.sort();
+    let mut kept: Vec<(usize, usize)> = Vec::new();
+    for candidate in found {
+        kept.push(candidate);
+        if !reads_back(base, &build(base, &kept, entries), &kept, entries) {
+            kept.pop();
+        }
+    }
+    kept
+}
+
+/// Whether `text` reads back, through `unmark`, as `base` with the `kept` entries at their places.
+fn reads_back(base: &str, text: &str, kept: &[(usize, usize)], entries: &[Entry]) -> bool {
+    let (back, got) = unmark(text);
+    back == base
+        && got.len() == kept.len()
+        && got
+            .iter()
+            .zip(kept)
+            .all(|(g, &(at, i))| g.at == at && g.old == entries[i].old && g.new == entries[i].new)
+}
+
+/// The text with the `placed` entries (ordered, as `placements` gives them) written as areas.
+fn build(base: &str, placed: &[(usize, usize)], entries: &[Entry]) -> String {
+    let eol = if base.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut out = String::with_capacity(base.len() + 64);
+    let mut last = 0;
+    for &(at, i) in placed {
+        let e = &entries[i];
+        let end = at + e.old.len();
+        if at < last {
+            continue;
+        }
+        out.push_str(&base[last..at]);
+        start_line(&mut out, eol);
+        // The area ends a text that has no final line break: its last mark has none either.
+        let ends_text = end == base.len() && !base.ends_with('\n');
+        if !e.old.is_empty() {
+            let omit = ends_text && e.new.is_empty();
+            out.push_str(&block("{--", &[e.old.as_str()], "--}", omit, eol));
+        }
+        if !e.new.is_empty() {
+            out.push_str(&block("{++", &[e.new.as_str()], "++}", ends_text, eol));
+        }
+        last = end;
+    }
+    out.push_str(&base[last..]);
+    out
+}
+
+/// The text with its pending changes written as areas, as the editor shows them: the inverse of
+/// `split`. An entry that cannot be placed cleanly, or whose text is gone from `base`, is left out.
+pub fn compose(base: &str, entries: &[Entry]) -> String {
+    build(base, &placements(base, entries), entries)
+}
+
+/// Whether each of `entries` is placed in `base`, as `compose` shows it. A placed entry's marks are
+/// in the composed text; a left-out one is kept beside the note, shown nowhere.
+pub fn placed(base: &str, entries: &[Entry]) -> Vec<bool> {
+    let kept = placements(base, entries);
+    (0..entries.len())
+        .map(|i| kept.iter().any(|&(_, k)| k == i))
+        .collect()
+}
+
+/// A fragment of the editor's text as it is copied: the marks go, the removed lines go, the added
+/// lines stay, so that a copy never holds a mark and is the text the note will have once accepted.
+pub fn plain(fragment: &str) -> String {
+    let mut out = String::with_capacity(fragment.len());
+    let mut removed = false;
+    for piece in fragment.split_inclusive('\n') {
+        match bare(piece) {
+            OPEN_DEL => removed = true,
+            CLOSE_DEL => removed = false,
+            OPEN_ADD | CLOSE_ADD => {}
+            _ if removed => {}
+            _ => out.push_str(piece),
+        }
+    }
+    out
 }
 
 /// Area `index` accepted: its removed lines go, its added lines stay, the marks go.
@@ -1282,5 +1574,368 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_change_is_split_into_the_note_text_and_an_entry_and_composed_back() {
+        // Each shape: a change in the middle, at the end without a final break, a pure insertion,
+        // a pure removal, two changes, CRLF.
+        let cases = [
+            "keep\n{--\nold\n--}\n{++\nnew\n++}\nend\n",
+            "a\n{--\nb\n--}\n{++\nc\n++}",
+            "a\n{++\nadded\n++}\nb\n",
+            "a\n{--\ngone\n--}\nb\n",
+            "x\n{--\n1\n--}\n{++\n2\n++}\nm\n{--\n3\n--}\n{++\n4\n++}\n",
+            "x\r\n{--\r\n1\r\n--}\r\n{++\r\n2\r\n++}\r\nend\r\n",
+        ];
+        for display in cases {
+            let (base, entries) = split(display, &[]);
+            assert_eq!(base, reject_all(display), "{display:?}");
+            assert_eq!(compose(&base, &entries), display, "{display:?}");
+            assert!(!base.contains("{--") && !base.contains("{++"), "{base:?}");
+        }
+        let (base, entries) = split("keep\n{--\nold\n--}\n{++\nnew\n++}\nend\n", &[]);
+        assert_eq!(base, "keep\nold\nend\n");
+        assert_eq!(
+            entries,
+            [Entry {
+                id: 1,
+                author: String::new(),
+                at: 5,
+                old: "old\n".into(),
+                new: "new\n".into(),
+                before: "keep\n".into(),
+                after: "end\n".into(),
+                orphan_since: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn a_split_keeps_the_id_and_author_of_a_known_entry() {
+        let display = "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n{++\nfresh\n++}\n";
+        let known = [Entry {
+            id: 7,
+            author: "assistant".into(),
+            at: 2,
+            old: "old\n".into(),
+            new: "new\n".into(),
+            ..Entry::default()
+        }];
+        let (_, entries) = split(display, &known);
+        assert_eq!(
+            (entries[0].id, entries[0].author.as_str()),
+            (7, "assistant")
+        );
+        assert_eq!((entries[1].id, entries[1].author.as_str()), (8, ""));
+    }
+
+    #[test]
+    fn compose_finds_a_moved_removed_text_and_leaves_out_a_gone_one() {
+        let entry = Entry {
+            id: 1,
+            author: String::new(),
+            at: 0,
+            old: "two\n".into(),
+            new: "TWO\n".into(),
+            ..Entry::default()
+        };
+        // The note gained a line above: the entry follows its text.
+        assert_eq!(
+            compose("zero\none\ntwo\n", std::slice::from_ref(&entry)),
+            "zero\none\n{--\ntwo\n--}\n{++\nTWO\n++}\n"
+        );
+        // The text is gone: nothing is marked, the note is as it is.
+        assert_eq!(compose("zero\n", &[entry]), "zero\n");
+    }
+
+    #[test]
+    fn a_copy_of_marked_text_holds_no_mark() {
+        assert_eq!(plain("a\n{--\nold\n--}\n{++\nnew\n++}\nb\n"), "a\nnew\nb\n");
+        assert_eq!(plain("{--\nold\n--}\n"), "");
+        assert_eq!(plain("plain\n"), "plain\n");
+    }
+
+    /// The text `marked` (an area per change) is split into, and the entries it gives.
+    fn read_back(marked: &str) -> (String, Vec<Entry>) {
+        split(marked, &[])
+    }
+
+    #[test]
+    fn an_insertion_follows_its_line_after_an_outside_edit_above_it() {
+        let (base, entries) = read_back("a\n{++\nX\n++}\nb\nc\n");
+        assert_eq!(base, "a\nb\nc\n");
+        assert_eq!(
+            (entries[0].before.as_str(), entries[0].after.as_str()),
+            ("a\n", "b\n")
+        );
+        // A line is added above: the stored offset 2 is now inside the first line.
+        assert_eq!(
+            compose("zero\na\nb\nc\n", &entries),
+            "zero\na\n{++\nX\n++}\nb\nc\n"
+        );
+    }
+
+    #[test]
+    fn a_removed_text_whose_line_before_was_relinked_is_left_out() {
+        // The link above changed length, so the context before the removed line is gone: the line is
+        // still in the note once, but it is not where the change was saved. It is an orphan.
+        let (base, entries) = read_back("See [[Old]].\n{--\nend\n--}\n");
+        assert_eq!(base, "See [[Old]].\nend\n");
+        let fresh = "See [[Longer-name-here]].\nend\n";
+        assert_eq!(compose(fresh, &entries), fresh);
+        assert_eq!(placed(fresh, &entries), [false]);
+    }
+
+    #[test]
+    fn a_phantom_replacement_is_not_placed_where_its_context_is_gone() {
+        let (_, entries) = read_back("a\n{--\nold\n--}\n{++\nnew\n++}\nb\n");
+        // The line was edited away outside Inkuno, and a person later types the same line elsewhere.
+        let later = "p\nold\nq\n";
+        assert_eq!(compose(later, &entries), later);
+        assert_eq!(placed(later, &entries), [false]);
+        // With its context still there, the same entry is placed.
+        assert_eq!(
+            compose("a\nold\nb\n", &entries),
+            "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n"
+        );
+    }
+
+    #[test]
+    fn a_blank_context_insertion_does_not_land_at_another_blank_line() {
+        let (base, entries) = read_back("a\n\n{++\nX\n++}\n\nb\n");
+        assert_eq!(base, "a\n\n\nb\n");
+        assert_eq!(
+            (entries[0].before.as_str(), entries[0].after.as_str()),
+            ("\n", "\n")
+        );
+        assert_eq!(compose("a\n\n\nb\n", &entries), "a\n\n{++\nX\n++}\n\nb\n");
+        // A blank line pair further down, where the old rule put it: left out, as it is not the place.
+        let moved = "a\n\nc\n\n\nb\n";
+        assert_eq!(compose(moved, &entries), moved);
+        assert_eq!(placed(moved, &entries), [false]);
+    }
+
+    #[test]
+    fn a_one_sided_context_does_not_place_an_entry_on_the_other_side_alone() {
+        // The line before still reads "# Plan": the line after is now "something", not "old".
+        let (_, entries) = read_back("# Plan\n{++\nnew\n++}\nold\nend\n");
+        let fresh = "# Plan\nsomething\nend\n";
+        assert_eq!(compose(fresh, &entries), fresh);
+        assert_eq!(placed(fresh, &entries), [false]);
+    }
+
+    #[test]
+    fn an_insertion_is_placed_by_the_line_after_when_the_line_before_was_relinked() {
+        let (_, entries) = read_back("See [[Old]].\nend\n{++\nadded\n++}\nfoot\n");
+        assert_eq!(
+            compose("See [[Longer-name-here]].\nend\nfoot\n", &entries),
+            "See [[Longer-name-here]].\nend\n{++\nadded\n++}\nfoot\n"
+        );
+    }
+
+    #[test]
+    fn a_repeated_removed_line_follows_its_own_context() {
+        let (base, entries) = read_back("x\nend\ny\n{--\nend\n--}\n");
+        assert_eq!(base, "x\nend\ny\nend\n");
+        assert_eq!(
+            compose("new\nx\nend\ny\nend\n", &entries),
+            "new\nx\nend\ny\n{--\nend\n--}\n"
+        );
+    }
+
+    #[test]
+    fn a_stale_insertion_inside_a_character_is_left_out_and_never_splits_it() {
+        // Offset 1 is inside the two bytes of `é`: no panic, no mark, the text as it is.
+        let entry = Entry {
+            at: 1,
+            new: "x\n".into(),
+            ..Entry::default()
+        };
+        assert_eq!(compose("é\n", std::slice::from_ref(&entry)), "é\n");
+        assert_eq!(placed("é\n", std::slice::from_ref(&entry)), [false]);
+    }
+
+    #[test]
+    fn a_text_with_multi_byte_characters_around_the_anchor_is_found_again() {
+        let (base, entries) = read_back("Ünï\n{++\nnew\n++}\nend\n");
+        assert_eq!(base, "Ünï\nend\n");
+        assert_eq!(
+            compose("日本\nÜnï\nend\n", &entries),
+            "日本\nÜnï\n{++\nnew\n++}\nend\n"
+        );
+    }
+
+    #[test]
+    fn crlf_anchors_are_found_again_and_keep_their_line_breaks() {
+        let (_, removal) = read_back("a\r\n{--\r\nb\r\n--}\r\n");
+        assert_eq!(
+            compose("x\r\na\r\nb\r\n", &removal),
+            "x\r\na\r\n{--\r\nb\r\n--}\r\n"
+        );
+        let (_, insertion) = read_back("a\r\n{++\r\nX\r\n++}\r\nb\r\n");
+        assert_eq!(
+            compose("z\r\na\r\nb\r\n", &insertion),
+            "z\r\na\r\n{++\r\nX\r\n++}\r\nb\r\n"
+        );
+    }
+
+    #[test]
+    fn a_change_is_never_placed_inside_a_code_fence_or_mid_line() {
+        let fenced = "```\nx\n```\n";
+        let inside = Entry {
+            at: 4,
+            old: "x\n".into(),
+            new: "y\n".into(),
+            ..Entry::default()
+        };
+        assert_eq!(compose(fenced, std::slice::from_ref(&inside)), fenced);
+        let mid = Entry {
+            at: 0,
+            old: "two\n".into(),
+            new: "TWO\n".into(),
+            ..Entry::default()
+        };
+        assert_eq!(compose("network two\n", &[mid]), "network two\n");
+    }
+
+    #[test]
+    fn an_entry_holding_a_mark_line_is_left_out() {
+        let entry = Entry {
+            at: 0,
+            old: "a\n".into(),
+            new: "{--\n".into(),
+            ..Entry::default()
+        };
+        assert_eq!(compose("a\n", std::slice::from_ref(&entry)), "a\n");
+    }
+
+    /// Whatever is placed is written back exactly: `split` of a composed text is its base, with no
+    /// mark of ours in it. Every shape of line, code fences, inline code and both line breaks, with
+    /// the note changed outside Inkuno after each save.
+    #[test]
+    fn save_writes_back_the_clean_text_for_any_placement_and_any_outside_change() {
+        const LINES: [&str; 15] = [
+            "# Heading",
+            "plain prose line",
+            "- bullet item",
+            "1. numbered item",
+            "> quoted line",
+            "- [ ] task item",
+            "",
+            "```",
+            "~~~",
+            "    indented code",
+            "inline `{==x==}{>>y<<}` here",
+            "{== comment ==}{>> note <<} text",
+            "<!-- html comment -->",
+            "{++ inline, not a mark line ++}",
+            "a line with the words {-- inside --}",
+        ];
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        let (mut changes, mut outside_placed) = (0, 0);
+        let mut rng = |n: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % n as u64) as usize
+        };
+        for round in 0..400 {
+            let eol = if round % 3 == 0 { "\r\n" } else { "\n" };
+            let mut base = String::new();
+            for _ in 0..1 + rng(9) {
+                base.push_str(LINES[rng(LINES.len())]);
+                base.push_str(eol);
+            }
+            if round % 4 == 0 {
+                while base.ends_with(['\n', '\r']) {
+                    base.pop();
+                }
+            }
+            // Areas whose marks sit on clean line starts, each with whole lines and breaks.
+            let clean = clean_starts(&base);
+            let mut marked = String::new();
+            let mut last = 0;
+            let mut cut = 0;
+            while cut + 1 < clean.len() {
+                if rng(3) != 0 {
+                    cut += 1;
+                    continue;
+                }
+                let at = clean[cut];
+                let to = clean[cut + rng(clean.len() - cut - 1)];
+                let (old, next) = (&base[at..to], to);
+                let mut new = String::new();
+                for _ in 0..rng(3) {
+                    new.push_str(LINES[rng(LINES.len())]);
+                    new.push_str(eol);
+                }
+                if old.is_empty() && new.is_empty() {
+                    cut += 1;
+                    continue;
+                }
+                marked.push_str(&base[last..at]);
+                if !old.is_empty() {
+                    marked.push_str(&format!("{{--{eol}{old}--}}{eol}"));
+                }
+                if !new.is_empty() {
+                    marked.push_str(&format!("{{++{eol}{new}++}}{eol}"));
+                }
+                last = next;
+                cut = clean.binary_search(&next).unwrap_or(cut) + 1;
+            }
+            marked.push_str(&base[last..]);
+
+            let (back, entries) = read_back(&marked);
+            changes += entries.len();
+            assert_eq!(back, base, "round {round}: {marked:?}");
+            let composed = compose(&base, &entries);
+            assert_eq!(composed, marked, "round {round}");
+            let (again, _) = read_back(&composed);
+            assert_eq!(again, base, "round {round}");
+
+            // The note changed outside: whatever is placed still reads back as the note.
+            let outside = format!("outside line{eol}{base}");
+            let shown = compose(&outside, &entries);
+            let (written, _) = read_back(&shown);
+            assert_eq!(written, outside, "round {round}, outside: {shown:?}");
+            let kept = placed(&outside, &entries).iter().filter(|p| **p).count();
+            assert_eq!(areas(&shown).len(), kept, "round {round}");
+            outside_placed += kept;
+        }
+        // The rounds exercise real placements, both with the note as saved and after a change. After a
+        // change, only an entry whose context still holds on both sides is placed (about 6 in 10 here).
+        assert!(
+            changes > 200 && outside_placed > 100,
+            "{changes} {outside_placed}"
+        );
+    }
+
+    #[test]
+    fn an_insertion_at_a_text_without_final_break_is_left_out_not_given_a_line() {
+        // Composed, it would gain a line break at the end: left out, the text is kept as it is.
+        let entry = Entry {
+            at: 1,
+            new: "x\n".into(),
+            ..Entry::default()
+        };
+        assert_eq!(compose("a", std::slice::from_ref(&entry)), "a");
+        assert_eq!(placed("a", std::slice::from_ref(&entry)), [false]);
+    }
+
+    #[test]
+    fn mixed_line_breaks_read_back_exactly() {
+        let base = "a\nb\r\nc\n";
+        let entry = Entry {
+            at: 2,
+            new: "x\n".into(),
+            before: "a\n".into(),
+            after: "b\r\n".into(),
+            ..Entry::default()
+        };
+        let shown = compose(base, std::slice::from_ref(&entry));
+        let (back, got) = split(&shown, &[]);
+        assert_eq!(back, base, "{shown:?}");
+        assert_eq!((got[0].at, got[0].new.as_str()), (2, "x\n"));
     }
 }

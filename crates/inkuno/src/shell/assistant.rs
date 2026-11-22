@@ -273,26 +273,16 @@ pub(super) fn pending_words(count: usize) -> String {
 }
 
 impl Shell {
-    /// Opens the assistant's panel in the right dock, or hides it when it is shown. Opening it
-    /// stacks it under what the dock shows (the outline stays), and gives the prompt box the keys.
-    /// An answer that waited for the panel is seen now: the status goes back to Idle.
+    /// Opens the assistant view of the right panel, or hides the panel when it is shown. Opening it gives
+    /// the prompt box the keys. An answer that waited for the panel is seen now: the status goes back to Idle.
     pub(super) fn toggle_assistant(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.docked(Mode::Assistant) {
             return self.hide_tool(Mode::Assistant, window, cx);
         }
-        if self.nav.panel == Panel::Full {
-            self.nav.panel = Panel::Split;
-        }
-        self.nav.right_shown.retain(|m| *m != Mode::Assistant);
-        self.nav.right_shown.push(Mode::Assistant);
-        self.nav.folded.remove(&Mode::Assistant);
-        self.nav.activate(Mode::Assistant);
-        self.nav.reveal = true;
         if self.assistant.status == Status::NeedsYou {
             self.assistant.status = Status::Idle;
         }
-        window.focus(&self.assistant.field.focus_handle(cx));
-        self.settle_nav(window, cx);
+        self.show_view(Mode::Assistant, window, cx);
     }
 
     /// The agent is free to take a prompt: not working, and installed.
@@ -303,79 +293,6 @@ impl Shell {
     /// A note is open in the active tab (not a file, not a list): it can be reviewed.
     fn review_open(&self) -> bool {
         self.pane().path.is_some() && self.pane().file.is_none() && self.pane().listing.is_none()
-    }
-
-    /// The round button at the note's foot, on the right: its icon and its tooltip follow the status.
-    pub(super) fn assistant_toggle(&self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let t = self.theme;
-        let status = self.assistant.status;
-        let command = self.prefs.assistant_command().to_string();
-        let (label, color): (String, gpui::Hsla) = match status {
-            Status::Idle => (tr("Assistant", "Assistant").into(), t.soft),
-            Status::Working => (
-                tr("Assistant: working…", "Assistant : en cours…").into(),
-                t.accent,
-            ),
-            Status::NeedsYou => (
-                tr("Assistant: needs you", "Assistant : attend votre réponse").into(),
-                t.soft,
-            ),
-            Status::Missing => (
-                format!(
-                    "{} {command} {}",
-                    tr("Assistant:", "Assistant :"),
-                    tr("is not installed", "n'est pas installé")
-                ),
-                t.dim,
-            ),
-        };
-        let icon = svg()
-            .path("assistant.svg")
-            .size(t.px(16.))
-            .flex_none()
-            .text_color(color);
-        // A slow pulse while the agent works; none with the motion off.
-        let icon = match status == Status::Working && t.motion {
-            true => icon
-                .with_animation(
-                    "assistant-pulse",
-                    Animation::new(Duration::from_millis(1800))
-                        .repeat()
-                        .with_easing(gpui::pulsating_between(0.35, 1.)),
-                    |icon, delta| icon.opacity(delta),
-                )
-                .into_any_element(),
-            false => icon.into_any_element(),
-        };
-        div()
-            .id("assistant-toggle")
-            .debug_selector(|| "assistant-toggle".into())
-            .tooltip(ui::widgets::tip(label, keys::of(cx, &ToggleAssistant), t))
-            .absolute()
-            .bottom_4()
-            .right(t.px(12.))
-            .size(t.px(30.))
-            .rounded_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .occlude()
-            .hover(|s| s.bg(t.hover))
-            .child(icon)
-            // An answer waiting for the panel: the dot the comments bubble also draws.
-            .children((status == Status::NeedsYou).then(|| {
-                div()
-                    .debug_selector(|| "assistant-badge".into())
-                    .absolute()
-                    .top(t.px(-3.))
-                    .right(t.px(-3.))
-                    .min_w(t.px(15.))
-                    .h(t.px(15.))
-                    .rounded_full()
-                    .bg(t.accent)
-            }))
-            .on_click(cx.listener(|this, _, window, cx| this.toggle_assistant(window, cx)))
     }
 
     /// The panel in the right dock: the transcript, the review and stop buttons, and the prompt box.
@@ -887,10 +804,12 @@ impl Shell {
             .panes
             .iter()
             .position(|pane| pane.path.as_deref() == Some(review.path.as_path()));
+        let home = history::home_of(&review.path, self.vault.as_deref());
         let current = match open {
             Some(i) => self.panes[i].editor.read(cx).text().to_string(),
+            // A closed note is read as the editor would show it, so its pending changes stay placed.
             None => match fs::read_to_string(&review.path) {
-                Ok(text) => text,
+                Ok(text) => crate::platform::sidecar::display(home.as_ref(), &review.path, &text),
                 Err(e) => {
                     let what = tr(
                         "The note could not be read:",
@@ -912,14 +831,18 @@ impl Shell {
                     }
                 }
                 None => {
-                    if let Err(e) = vault::write(&review.path, &placed.text) {
+                    let saved = crate::platform::sidecar::save(
+                        home.as_ref(),
+                        &review.path,
+                        &placed.text,
+                        "assistant",
+                    );
+                    if let Err(e) = saved {
                         let why = crate::lang::io_reason(&e);
                         return self.assistant_say(Who::Note, &why, cx);
                     }
                 }
             }
-            // The comments are in the note: the column that lists them is shown.
-            self.comments_shut = false;
         }
         let summary = review_summary(placed.placed, placed.skipped);
         self.assistant_say(Who::Note, &summary, cx);
@@ -1067,7 +990,10 @@ impl Shell {
         match open {
             Some(i) => self.absorb_marked(i, &current, &marked, cx),
             None => {
-                if let Err(e) = vault::write(&improve.path, &marked) {
+                // The file keeps the note's own text; the proposal's changes wait beside it.
+                if let Err(e) =
+                    platform::sidecar::save(home.as_ref(), &improve.path, &marked, "assistant")
+                {
                     let what = tr(
                         "Not written: the proposal was not saved:",
                         "Non écrit : la proposition n'a pas été enregistrée :",

@@ -5,14 +5,29 @@ use super::*;
 pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let shell = &j.shell;
     let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
+    // The note's editor, whatever tab shows it: the Settings tab takes the front while it is open.
+    let editor = shell.read_with(cx, |s, _| s.pane().editor.clone());
+    let note = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |_, cx| editor.read(cx).text().to_string())
+    };
+    let section =
+        |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.settings_section());
+    let to_note = |cx: &mut gpui::VisualTestContext| {
+        shell.update_in(cx, |s, window, cx| {
+            if let Some(tab) = s.panes.iter().position(|pane| pane.settings.is_some()) {
+                s.close_tab(tab, window, cx);
+            }
+        });
+        cx.run_until_parked();
+    };
     // Quick copy of the whole note.
     cx.simulate_keystrokes("secondary-shift-c");
     let clipboard = cx.read_from_clipboard().and_then(|item| item.text());
     assert_eq!(clipboard.as_deref(), Some("# Idées\n\n"));
 
-    // Help panel: F1 opens it, Escape closes it and gives control back to the editor.
+    // F1 opens the Settings tab on its shortcuts page.
     cx.simulate_keystrokes("f1");
-    assert!(shell.read_with(cx, |s, _| s.help.open));
+    assert_eq!(section(cx), Some(Section::Shortcuts));
     // Typing goes to the search field, which filters the lines: keys or effect, ignoring
     // accents.
     let rows = |cx: &mut gpui::VisualTestContext| {
@@ -39,13 +54,19 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("secondary-a");
     cx.simulate_input("zzz");
     assert!(rows(cx).is_empty());
-    assert_eq!(text(cx), "# Idées\n\n", "nothing is typed in the note");
-    // Escape first clears the field, then closes the panel.
+    assert_eq!(note(cx), "# Idées\n\n", "nothing is typed in the note");
+    // Escape clears the field; the page stays. What is typed on it never reaches the note.
     cx.simulate_keystrokes("escape");
-    assert!(shell.read_with(cx, |s, _| s.help.open));
     assert_eq!(rows(cx).len(), all);
+    assert_eq!(section(cx), Some(Section::Shortcuts));
+    cx.simulate_input("ok");
+    assert_eq!(
+        note(cx),
+        "# Idées\n\n",
+        "the note gets nothing typed on the page"
+    );
     cx.simulate_keystrokes("escape");
-    assert!(!shell.read_with(cx, |s, _| s.help.open));
+    to_note(cx);
     cx.simulate_input("ok");
     assert_eq!(text(cx), "# Idées\n\nok");
 
@@ -102,7 +123,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         "editor::FindReplace=secondary-shift-y\n"
     );
     cx.simulate_keystrokes("escape escape");
-    assert!(!shell.read_with(cx, |s, _| s.help.open));
+    assert_eq!(section(cx), Some(Section::Shortcuts));
+    to_note(cx);
     // Without restarting: the old keys do nothing anymore, the new ones act.
     let finding = |cx: &mut gpui::VisualTestContext| {
         shell.read_with(cx, |s, cx| {
@@ -150,8 +172,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         shell.read_with(cx, |s, _| (s.nav.mode, s.palette.is_none())),
         (nav::Mode::Tree, true)
     );
-    // secondary-p now opens the find bar instead of the palette: close it.
+    // secondary-p now opens the find bar instead of the palette: close it, and the Settings tab with it.
     cx.simulate_keystrokes("escape");
+    to_note(cx);
     assert_eq!(finding(cx), None);
     // Backspace: no shortcut. Escape during capture cancels only it.
     cx.simulate_keystrokes("f1");
@@ -159,10 +182,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("down enter backspace");
     assert_eq!(keys_of(cx, "editor::FindReplace"), (String::new(), true));
     cx.simulate_keystrokes("enter escape");
-    assert_eq!(
-        (editing(cx), shell.read_with(cx, |s, _| s.help.open)),
-        (None, true)
-    );
+    assert_eq!((editing(cx), section(cx)), (None, Some(Section::Shortcuts)));
     assert_eq!(rows(cx).len(), 1, "the search did not move");
     // A click on the keys waits too; "default" restores the original ones.
     let at = cx.debug_bounds("key-editor::FindReplace").unwrap().center();
@@ -181,6 +201,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, gpui::Modifiers::none());
     assert!(shell.read_with(cx, |s, _| s.changes.is_empty()));
     assert_eq!(crate::ui::keys::user_lines(), "");
+    to_note(cx);
     cx.simulate_keystrokes("escape escape secondary-p");
     assert!(shell.read_with(cx, |s, _| s.palette.is_some()));
     cx.simulate_keystrokes("escape");
@@ -207,7 +228,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("escape");
     assert_eq!(look(cx), system);
     cx.dispatch_action(ChooseTheme);
-    cx.simulate_keystrokes("down down enter");
+    cx.simulate_input("inkuno light");
+    cx.simulate_keystrokes("enter");
     assert_eq!(
         look(cx),
         ("Inkuno Light".to_string(), Hsla::from(gpui::rgb(0xf5f5f2)))
@@ -220,13 +242,13 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("enter");
     assert_eq!(mono(), ".SystemUIFont");
     cx.simulate_keystrokes("secondary-= secondary-= secondary--");
-    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 17.);
+    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 16.);
     assert_eq!(
         vault::load_settings(),
-        "theme=Inkuno Light\nfont=\nmono=.SystemUIFont\nsize=17\n"
+        "prefs=2\ntheme=Inkuno Light\nfont=\nmono=.SystemUIFont\nsize=16\n"
     );
     cx.simulate_keystrokes("secondary-0");
-    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 16.);
+    assert_eq!(shell.read_with(cx, |s, _| s.theme.size), 15.);
     cx.simulate_input("!");
     assert_eq!(text(cx), "# Idées\n\nok!");
 }

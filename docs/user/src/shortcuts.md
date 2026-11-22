@@ -3,9 +3,9 @@
 <!-- Written by the test `shortcuts_page_is_current` from `help_sections` (crates/inkuno/src/shell/keymap.rs).
      Do not edit by hand: run `make docs`. -->
 
-Every line of the help panel (`F1`), with the default keys of Linux and Windows. On macOS, read `Cmd` for `Ctrl`, and `Alt` for `Ctrl` when moving by word. Moving between panes is `Cmd + Alt + arrows`, and back and forward are `Cmd + [` and `Cmd + ]`.
+Every line of the Shortcuts page of Settings (`F1`), with the default keys of Linux and Windows. On macOS, read `Cmd` for `Ctrl`, and `Alt` for `Ctrl` when moving by word. Moving between panes is `Cmd + Alt + arrows`, and back and forward are `Cmd + [` and `Cmd + ]`.
 
-`Ctrl+P › word` means: open the palette and type that word. A line without keys has no default shortcut. Any line that names an action can be given keys in the help panel: see [Changing a shortcut](settings.md#changing-a-shortcut).
+`Ctrl+P › word` means: open the palette and type that word. A line without keys has no default shortcut. Any line that names an action can be given keys on the Shortcuts page: see [Changing a shortcut](settings.md#changing-a-shortcut).
 
 ## Notes
 
@@ -32,7 +32,8 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | A cloud folder | iCloud, Dropbox, Google Drive, Syncthing: put the vault there, nothing else; never a git repository inside one |
 | `Ctrl+Shift+C` | Copy the code block, else the note |
 | `Ctrl+click` | Open a \[\[link\]\], \#tag or URL |
-| `F1` / `Ctrl+/` | This help |
+| `Ctrl+,` | Settings: appearance, editor, files, shortcuts, about |
+| `F1` / `Ctrl+/` | This shortcuts page (also F1): every shortcut, changed here |
 | `Ctrl+Q` | Save and quit; stay open if saving fails |
 
 ## Navigation
@@ -75,12 +76,14 @@ Every line of the help panel (`F1`), with the default keys of Linux and Windows.
 | Current file | The tree marks the file shown in the active tab and pane, including diagrams, pictures and tables; selection stays separate |
 |  | Recent notes |
 |  | Scratch notes: the panel lists them, newest first; Enter opens one, Delete discards it |
-|  | Versions of the note: the panel lists its saved versions, newest first; Enter compares one with the note as it is now |
+| `Ctrl+Alt+3` | Versions of the note: the right panel lists its saved versions, newest first; Enter compares one with the note as it is now |
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
-| `Ctrl+P › assistant` | Assistant: show or hide its panel in the right dock (also a round button at the foot of the note) |
+| `Ctrl+P › assistant` | Assistant: show or hide its view of the right panel (Ctrl+Alt+4 shows it) |
+| `Ctrl+Alt+2` | Comments of the note: the right panel lists them as cards; a click on one shows its passage, Resolve closes it |
 | `Ctrl+P › improve` | Assistant: improve the selection, or the whole note; the proposal comes back as pending changes |
-| `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right dock (also in the palette, as Outline of the note) |
+| `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right panel (also in the palette, as Outline of the note) |
+|  | Right panel: show or hide it, on the view it showed last (its switcher picks Outline, Comments, Versions or Assistant) |
 | `Ctrl+B` | Sidebar: show or hide the side panel |
 | `F9` | Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back |
 | `Ctrl+Shift+S` | Title bar: show or hide the bar the app draws (its buttons come back with it) |

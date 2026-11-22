@@ -62,6 +62,40 @@ fn write(root: &std::path::Path, rel: &str, text: &str) {
 }
 
 #[test]
+fn an_orphan_change_is_reported_by_read_and_shown_nowhere() {
+    use crate::{logic::pending::Entry, platform::revisions::Home};
+    let root = scratch();
+    let mut vault = open(&root);
+    write(&root, "Plan.md", "a\nz\nb\n");
+    vault.rescan();
+    let note = vault.root.join("Plan.md");
+    let home = Home::Vault(vault.root.clone());
+    // A change whose context the note no longer has: it is kept beside the note, as an orphan.
+    let orphan = Entry {
+        id: 1,
+        author: "assistant".into(),
+        at: 2,
+        old: "gone\n".into(),
+        new: "x\n".into(),
+        before: "q\n".into(),
+        after: "r\n".into(),
+        orphan_since: None,
+    };
+    crate::platform::sidecar::store(&home, &note, std::slice::from_ref(&orphan)).unwrap();
+    let read = ok(notes::read_note(&vault, &json!({"note": "Plan"})));
+    assert_eq!(read["text"], "a\nz\nb\n");
+    assert_eq!(read["unplaced"]["count"], 1);
+    assert_eq!(read["unplaced"]["entries"][0]["old"], "gone\n");
+    assert_eq!(read["unplaced"]["entries"][0]["new"], "x\n");
+    // Once the change is placed again (its context is back), nothing is unplaced.
+    write(&root, "Plan.md", "q\ngone\nr\n");
+    let read = ok(notes::read_note(&vault, &json!({"note": "Plan"})));
+    assert_eq!(read["unplaced"]["count"], 0);
+    assert_eq!(read["text"], "q\n{--\ngone\n--}\n{++\nx\n++}\nr\n");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn a_missing_vault_is_a_sentence() {
     let message = match Vault::open(scratch().join("missing")) {
         Ok(_) => panic!("a missing folder opened"),
@@ -242,11 +276,11 @@ fn a_comment_stays_on_one_line_and_its_passage_too() {
     );
     assert_eq!(
         markdown::comment_on(text, "alpha", "one\r\ntwo\nthree").unwrap(),
-        "# T\n\n{==alpha==}{>>one two three<<} beta\n"
+        "# T\n\nalpha<!-- comment: one two three --> beta\n"
     );
     assert_eq!(
         markdown::comment_on(text, "alpha", "  padded  ").unwrap(),
-        "# T\n\n{==alpha==}{>>padded<<} beta\n"
+        "# T\n\nalpha<!-- comment: padded --> beta\n"
     );
     assert_eq!(
         markdown::comment_on(text, "alpha", "").unwrap_err(),
@@ -315,7 +349,7 @@ fn editing_renames_and_comments_follow_the_app() {
         &json!({"note": "Table", "passage": "hello", "comment": "yes|no"}),
     ));
     let table = fs::read_to_string(root.join("Table.md")).unwrap();
-    assert!(table.contains("{==hello==}{>>yes\\|no<<}"), "{table}");
+    assert!(table.contains("hello<!-- comment: yes\\|no -->"), "{table}");
     write(&root, "Dup.md", "# Dup\n\none one\n");
     vault.rescan();
     assert!(
@@ -348,6 +382,37 @@ fn editing_renames_and_comments_follow_the_app() {
             .contains("leave")
     );
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_moved_note_takes_its_relative_links_along() {
+    // A relative Markdown link follows the note from any folder, as the app rewrites it: the
+    // address keeps its form, from the linking note's folder or from the vault root.
+    let root = scratch();
+    write(&root, "Solo.md", "# Solo\n\nbody\n");
+    write(&root, "Dir/Walk.md", "# Walk\n\n[s](../Solo.md#part)\n");
+    write(&root, "Plain.md", "# Plain\n\n[s](Solo.md) [r](/Solo.md)\n");
+    write(&root, "Code.md", "# Code\n\n```\n[c](Solo.md)\n```\n");
+    let mut vault = open(&root);
+    let moved = ok(notes::rename_note(
+        &mut vault,
+        &json!({"note": "Solo", "name": "Only", "folder": "Box"}),
+    ));
+    assert_eq!(moved["path"], "Box/Only.md");
+    assert_eq!(
+        fs::read_to_string(root.join("Dir/Walk.md")).unwrap(),
+        "# Walk\n\n[s](../Box/Only.md#part)\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Plain.md")).unwrap(),
+        "# Plain\n\n[s](Box/Only.md) [r](/Box/Only.md)\n"
+    );
+    // Code is text: the link in the fence stays.
+    assert!(
+        fs::read_to_string(root.join("Code.md"))
+            .unwrap()
+            .contains("[c](Solo.md)")
+    );
 }
 
 #[test]

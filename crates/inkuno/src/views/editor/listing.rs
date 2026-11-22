@@ -26,6 +26,11 @@ pub(super) struct Nesting {
     pub(super) indented: bool,
     /// The line above is blank, or there is none.
     pub(super) starts: bool,
+    /// Depth of the block quote the last line is in (0: none). A block quote's content reads as its
+    /// own line, so its items nest among the quote's lines only.
+    pub(super) quote: usize,
+    /// The last line is a quoted paragraph or item: a paragraph line after it is a lazy continuation.
+    pub(super) open: bool,
 }
 
 impl Default for Nesting {
@@ -35,6 +40,8 @@ impl Default for Nesting {
             items: None,
             indented: false,
             starts: true,
+            quote: 0,
+            open: false,
         }
     }
 }
@@ -104,10 +111,13 @@ impl Nesting {
 
     /// Advances over `line`, which is indented code when `code`.
     pub(super) fn advance(&mut self, line: &str, code: bool) {
-        let blank = line.trim().is_empty();
-        match md::classify(line, false).0 {
+        // A quote's content is read as the line it holds: its items are indented from its own start.
+        let quoted = md::quote(line);
+        let body = quoted.map_or(line, |q| &line[q.at..]);
+        let blank = body.trim().is_empty();
+        match md::classify(body, false).0 {
             Kind::Bullet | Kind::Ordered | Kind::Task(_) => {
-                let columns = md::indent_columns(line);
+                let columns = md::indent_columns(body);
                 let within = enclosing(&self.items, columns);
                 let depth = within.as_ref().map_or(0, |item| item.depth + 1);
                 self.items = Some(Rc::new(Item {
@@ -117,8 +127,24 @@ impl Nesting {
                 }));
             }
             // An unindented line that is not an item ends the list.
-            _ if !blank && md::indent_columns(line) == 0 => self.items = None,
+            _ if !blank && md::indent_columns(body) == 0 => self.items = None,
             _ => {}
+        }
+        match quoted {
+            Some(q) => {
+                self.quote = q.depth;
+                self.open = !blank
+                    && matches!(
+                        q.inner,
+                        Kind::Para | Kind::Bullet | Kind::Ordered | Kind::Task(_)
+                    );
+            }
+            // A paragraph line after a quoted paragraph is its lazy continuation: it stays in the quote.
+            None if !blank && self.open && md::classify(line, false).0 == Kind::Para => {}
+            None => {
+                self.quote = 0;
+                self.open = false;
+            }
         }
         if !blank {
             self.indented = code;
@@ -130,6 +156,8 @@ impl Nesting {
     pub(super) fn same(&self, other: &Nesting) -> bool {
         self.indented == other.indented
             && self.starts == other.starts
+            && self.quote == other.quote
+            && self.open == other.open
             && same_items(&self.items, &other.items)
     }
 

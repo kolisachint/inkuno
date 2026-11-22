@@ -4,6 +4,7 @@
 
 mod assistant;
 mod changes;
+mod comments;
 mod files;
 mod help;
 pub(crate) mod keymap;
@@ -17,6 +18,7 @@ mod render;
 mod revisions;
 mod scratch;
 mod settings;
+mod settings_tab;
 mod sidebar;
 mod tabs;
 mod toasts;
@@ -25,6 +27,7 @@ mod versions;
 use help::*;
 use keymap::*;
 use pane::*;
+use settings_tab::*;
 use toasts::*;
 
 use crate::actions::*;
@@ -58,7 +61,7 @@ use gpui::{
     Decorations, Div, Entity, FocusHandle, Focusable, KeyBinding, MouseButton, MouseMoveEvent,
     ObjectFit, PathPromptOptions, Pixels, Point, ResizeEdge, Size, Stateful, TitlebarOptions,
     Transformation, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
-    WindowOptions, div, ease_out_quint, img, percentage, point, prelude::*, px, size, svg,
+    WindowOptions, div, img, percentage, point, prelude::*, px, size, svg,
 };
 
 use editor::{Editor, EditorEvent};
@@ -135,9 +138,11 @@ struct Shell {
     icons: std::collections::HashMap<PathBuf, String>,
     /// Icon picker grid, if open.
     icon_pick: Option<IconPick>,
-    /// The comments panel was closed: it waits to be asked for again.
-    comments_shut: bool,
-    /// Scroll of the comments column, and the comment it last showed (the caret's).
+    /// The note's comments as the Comments view lists them, read with the note (`comments.rs`).
+    comment_cards: Vec<comments::Card>,
+    /// The card the Comments view focuses: the caret's comment, or the one clicked last.
+    comment_focus: Option<usize>,
+    /// Scroll of the Comments view, and the comment the caret was in last.
     comments_scroll: gpui::ScrollHandle,
     comments_seen: Option<usize>,
     /// Status messages shown, oldest to newest.
@@ -153,6 +158,8 @@ struct Shell {
     /// Focus mode (F9): the note alone, edge to edge. Not saved. Nothing of the chrome is changed
     /// to hide it, so leaving the mode shows exactly what was there.
     focus_mode: bool,
+    /// The hidden title bar is peeked: the pointer is in its 12 px strip, or on the band it drew over the note.
+    band_peek: bool,
     /// The macOS traffic lights' hidden state last applied to the window (`None` before the first frame).
     lights_hidden: Option<bool>,
     /// The scratch note whose close waits for its choice (Keep, Keep in vault, Discard), by its editor.
@@ -165,7 +172,7 @@ struct Shell {
     versions_stale: bool,
     /// Counts the reads of the list: the panel's rows are built again when it moves.
     versions_rev: u64,
-    /// The help panel, open or not.
+    /// The shortcuts page of the Settings tab (its search, the keys being changed).
     help: Help,
     /// The assistant's panel and its state (the process side is the seam in `assistant.rs`).
     assistant: assistant::Assistant,
@@ -257,7 +264,8 @@ impl Shell {
             icon_pick: None,
             // Calm UI (ui.md §12): the comments column starts collapsed to its dot;
             // the palette (`› comments`) reopens it via `open_comments`.
-            comments_shut: true,
+            comment_cards: Vec::new(),
+            comment_focus: None,
             comments_scroll: gpui::ScrollHandle::new(),
             comments_seen: None,
             toasts: Vec::new(),
@@ -268,6 +276,7 @@ impl Shell {
             edge: None,
             copied: false,
             focus_mode: false,
+            band_peek: false,
             lights_hidden: None,
             scratch_ask: None,
             scratch_rev: 0,

@@ -43,6 +43,8 @@ pub(super) fn save_version(cx: &mut gpui::VisualTestContext, memo: &str) {
 }
 
 pub(super) fn show_versions(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
+    // The versions live in the right dock (P2), which is drawn only beside a note of its own width.
+    cx.simulate_resize(size(px(1400.), px(900.)));
     shell.update_in(cx, |s, window, cx| {
         s.show_nav(Mode::Versions, false, window, cx)
     });
