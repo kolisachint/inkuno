@@ -265,8 +265,9 @@ fn keycaps_in_palette_and_empty_page(cx: &mut TestAppContext) {
     // The empty page: its cards (Search, New note), each a small box with its words.
     for i in 0..2 {
         let row = bounds_of(cx, leak(format!("empty-key-{i}")));
-        // The card's measured design height, 96 px, to within 4 px.
-        assert!((row.size.height - px(96.)).abs() <= px(4.), "{row:?}");
+        // Title, two lines of words and the shortcut on a line of its own, which never wraps (C22): 121 px.
+        // Before, the shortcut ran in the words and the card measured 96 px.
+        assert!((row.size.height - px(121.)).abs() <= px(4.), "{row:?}");
     }
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("coffre");

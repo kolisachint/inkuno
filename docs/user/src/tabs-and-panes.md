@@ -5,7 +5,7 @@
 A pane holds as many files as you like, as in a code editor.
 
 - **Opening**: a click on a file in the tree, a note chosen in the palette, a link followed, a new note: each opens in a tab of its own, right of the one shown. If the file is already open, its tab comes to the front instead. A note is open only once.
-- **Previewing**: browsing the tree with the arrows previews notes in a single tab, in italics. The next note browsed replaces it. Opening it for good keeps it.
+- **Previewing**: a single click in the tree, or the arrows, previews a note in a single tab, in italics. The next single click or arrow replaces it. A double click, or Enter on the row, opens the note for good and keeps its tab.
 - **The tab strip** is in the title band, above each pane (see [Navigation](navigation.md)), even when it holds one tab. Each tab is a pill; a preview tab is in *italics*. A click shows a tab. Its cross, or the middle button, closes it.
 
 | Key | Action |

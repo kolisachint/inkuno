@@ -113,6 +113,11 @@ fn the_assistant_view_opens_and_shuts_with_the_panel(cx: &mut TestAppContext) {
         !shell.read_with(cx, |s, _| s.right_open()),
         "the panel is hidden"
     );
+    // Shut, the toggle moves to the band's right end: its place is read again.
+    let toggle = cx
+        .debug_bounds("right-panel-toggle")
+        .expect("the band's toggle is drawn")
+        .center();
     cx.simulate_click(toggle, gpui::Modifiers::none());
     settle(cx);
     assert_eq!(

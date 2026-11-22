@@ -414,10 +414,9 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
                 "{window}/{panel}: the text starts at {top:?}, the window buttons end at {pill:?}"
             );
         } else {
-            assert_eq!(
-                top,
-                px(BAND),
-                "{window}/{panel}: a note wide enough starts under the window's band"
+            assert!(
+                pane.top() >= px(BAND),
+                "{window}/{panel}: a note wide enough starts under the window's band: {pane:?}"
             );
         }
     }
@@ -438,16 +437,15 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
                 "{window}: the text starts at {top:?}, the window buttons end at {pill:?}"
             );
         } else {
-            assert_eq!(
-                top,
-                px(BAND),
-                "{window}: a note wide enough starts under the window's band"
+            assert!(
+                pane.top() >= px(BAND),
+                "{window}: a note wide enough starts under the window's band: {pane:?}"
             );
         }
     }
     // Zed-style header: the tree panel shows no vault name — its action icons sit left, ahead of
-    // the (empty) title handle — and the folder moved to the window's title bar, drawn centered
-    // in the top row where the app draws the bar itself.
+    // the (empty) title handle — and the folder moved to the window's title, which no longer
+    // draws it in the top row (C11).
     shell.update(cx, |s, cx| {
         s.nav.panel = nav::Panel::Split;
         s.nav.show_alone(nav::Mode::Tree);
@@ -466,10 +464,6 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
     assert!(
         file.left() - head.left() < px(40.),
         "the tree icons sit at the header's left end: {file:?} {head:?}"
-    );
-    assert!(
-        cx.debug_bounds("window-title").is_some(),
-        "the vault name is drawn in the top row"
     );
     assert_eq!(
         shell.read_with(cx, |s, _| s.title.clone()),
@@ -545,13 +539,10 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             );
             seen += 1;
         }
-        // Zed-style: the vault name sits centered in the top row, clear of the window buttons.
-        let name = cx
-            .debug_bounds("window-title")
-            .expect("the vault name is drawn in the tab bar");
+        // The top row carries no vault name (C11): the tab row alone is what the window buttons sit over.
         assert!(
-            name.right() <= pill.left(),
-            "{width}: the vault name {name:?} runs under the window buttons {pill:?}"
+            cx.debug_bounds("window-title").is_none(),
+            "{width}: no centred vault name in the top row"
         );
     }
     assert!(seen > 0, "the Comments view was never open");
@@ -603,7 +594,9 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
             .flatten()
             .collect::<Vec<_>>()
     };
-    let wide = px(200.);
+    // The handle is the bar's free part beside its tabs: a pane of two at 860 px keeps 66 to 196 px of it,
+    // with the panel open or shut. 40 px is the least that is still a grip.
+    let wide = px(40.);
     let (mut seen, mut report) = (0, Vec::new());
     let mut check = |what: &str, groups: usize, cx: &mut gpui::VisualTestContext| {
         settle(cx);
@@ -638,19 +631,19 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
             cx.notify();
         });
     };
-    // One pane, one tab: no tab bar, the strip; the text starts under it.
+    // One pane, one tab: the bar is drawn like a bar of many; the text starts the usual margin under the pane.
     panel(cx, nav::Panel::Hidden);
     check("one tab, rail", 1, cx);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).top_margin()),
-        px(56.),
-        "the text starts under the strip"
+        px(20.),
+        "the text starts under the pane's top, as with many tabs"
     );
-    // Hidden, the strip over the note is the handle that moves the window: a band tall.
+    // The bar's empty part is the handle that moves the window: a band tall.
     let strip = cx
-        .debug_bounds("drag-strip-0")
-        .expect("the strip over the note is a handle");
-    assert_eq!(strip.size.height, px(BAND), "{strip:?}");
+        .debug_bounds("tabs-free-0")
+        .expect("the bar's free part is a handle");
+    assert!((strip.size.height - px(BAND)).abs() < px(1.5), "{strip:?}");
     // Panel open beside the note (the header's free part past the title), with the Comments view shown.
     panel(cx, nav::Panel::Split);
     check("one tab, panel", 1, cx);
@@ -727,11 +720,13 @@ fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) 
                         .unwrap_or_else(|| panic!("{what}: pane {i}"))
                 })
                 .collect();
+            // Every pane has its tab bar (the band) over it, 6 px of ground between: the sheet runs from there to
+            // the window's bottom, with nothing else between the band and the sheet.
+            let top = shell.read_with(cx, |s, _| s.theme.px(BAND) + s.theme.px(6.));
             for (i, sheet) in sheets.iter().enumerate() {
-                assert_eq!(
-                    (sheet.top(), sheet.bottom()),
-                    (px(0.), px(720.)),
-                    "{what}: pane {i} {sheet:?}"
+                assert!(
+                    (sheet.top() - top).abs() < px(0.5) && sheet.bottom() == px(720.),
+                    "{what}: pane {i} {sheet:?} under its bar at {top:?}"
                 );
             }
             assert_eq!(
@@ -1071,15 +1066,15 @@ fn the_title_bar_hides_and_comes_back_from_the_sidebar(cx: &mut TestAppContext) 
     cx.run_until_parked();
     // The test platform draws no bar of its own: this one is the app's, as on Linux.
     shell.update(cx, |s, _| s.client = true);
-    // The bar the app draws leaves a strip at the top of the note when it stands alone (the
-    // strip is what the frame laid out, so it says what is on screen). Its window buttons are
-    // not read through `debug_bounds`: gpui keeps those of a frame no longer drawn.
+    // The bar the app draws is the tab bar of every pane, one tab or many, and it is shown while the
+    // title bar is. Its window buttons are not read through `debug_bounds`: gpui keeps those of a
+    // frame no longer drawn.
     let drawn = |cx: &mut gpui::VisualTestContext| {
         for _ in 0..3 {
             cx.update(|window, _| window.refresh());
             cx.run_until_parked();
         }
-        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip) == px(BAND)
+        shell.read_with(cx, |s, _| s.band_shown())
     };
     assert!(drawn(cx), "the bar is drawn at first");
 
@@ -1278,10 +1273,11 @@ fn normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline(cx: &mut T
     };
     settle(cx);
 
-    // The test platform draws no frame: the content's origin is the window's corner.
+    // The test platform draws no frame: the content's origin is the window's corner. The tab bar (the band's
+    // row) sits there, and each note starts 6 px under it.
     let first = cx.debug_bounds("pane-0").expect("the first note is drawn");
     let second = cx.debug_bounds("pane-1").expect("the second note is drawn");
-    assert_eq!(first.origin.y, px(0.), "{first:?}");
+    assert_eq!(first.origin.y, px(BAND + 6.), "{first:?}");
     assert_eq!(
         second.left() - first.right(),
         nav::DIVIDER,
@@ -1293,7 +1289,7 @@ fn normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline(cx: &mut T
         "the panes share their top and bottom edges"
     );
 
-    // With the bar the app draws: the note's strip sits at the content's top.
+    // With the bar the app draws: the bar sits at the content's top and the note 6 px under it.
     shell.update(cx, |s, _| s.client = true);
     settle(cx);
     let inset = cx
@@ -1303,13 +1299,16 @@ fn normal_mode_starts_at_the_content_origin_and_tiles_with_a_hairline(cx: &mut T
     let note = cx.debug_bounds("pane-0").expect("the first note is drawn");
     assert_eq!(
         note.top(),
-        inset,
-        "the first pane starts at the content's top"
+        inset + px(BAND + 6.),
+        "the first pane starts 6 px under the bar, which is at the content's top"
     );
     let strip = |cx: &mut gpui::VisualTestContext| {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip)
     };
-    assert!(strip(cx) > px(0.), "the bar is drawn: its strip is kept");
+    assert!(
+        shell.read_with(cx, |s, _| s.band_shown()),
+        "the bar is drawn"
+    );
 
     // Hidden: no strip, and the note starts at the content's top.
     cx.simulate_keystrokes("secondary-shift-s");

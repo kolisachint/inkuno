@@ -257,6 +257,11 @@ impl Shell {
 
     /// Width of the right dock: the one it was given, as long as the panes keep `MIN_PANE`; none
     /// (the dock hides) when even 160 px would take it from them.
+    /// The right dock is on screen: open, and with the room its width needs (`render_right_dock`).
+    pub(super) fn right_dock_drawn(&self) -> bool {
+        self.right_open() && self.right_width() > px(0.)
+    }
+
     pub(super) fn right_width(&self) -> Pixels {
         let left = if self.left_open() && self.nav.panel == Panel::Split {
             self.split_width() + DIVIDER
@@ -1209,7 +1214,17 @@ impl Shell {
                             if held.secondary() || held.shift {
                                 return this.nav_mark(ix, held.shift, cx);
                             }
-                            // A click opens the note, in its tab; a second click finds it there.
+                            // A single click on a note previews it in the italic tab, which the next single click
+                            // replaces (v2 #3, as the arrows do); a second click, or Enter, opens it for good.
+                            let single = matches!(e, ClickEvent::Mouse(_)) && e.click_count() == 1;
+                            let note = this.nav.rows.get(ix).is_some_and(|r| r.dir.is_none());
+                            if single
+                                && note
+                                && this.nav.panel == Panel::Split
+                                && this.nav.mode != Mode::Versions
+                            {
+                                return this.nav_select(ix, window, cx);
+                            }
                             this.nav_activate(ix, window, cx)
                         }))
                         .on_mouse_down(
@@ -1606,7 +1621,9 @@ impl Shell {
             .debug_selector(|| "sidebar-foot".into())
             .flex_none()
             .w_full()
-            .h(t.px(BAND))
+            // v2 `.foot`: 6 px of ground over a 30 px row.
+            .h(t.px(36.))
+            .pt(t.px(6.))
             .flex()
             .items_center()
             .gap_1()
@@ -2057,17 +2074,29 @@ impl Shell {
     /// The band's right end, beside the window buttons: shows or hides the right panel.
     pub(super) fn render_right_toggle(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let t = self.theme;
+        let dock = self.right_dock_drawn();
         let shown = self.right_open();
         // An answer waiting for the person shows here too, while the panel is hidden (`switch-dot` in it).
         let needs = self.assistant.status == super::assistant::Status::NeedsYou;
+        // The band's 30 px button (v2 `.ib`) centred in the band. Open, the panel's top row holds the window
+        // buttons and its view switcher, so the toggle sits in the band just left of the panel. Shut, it sits at
+        // the band's right end: beside the window buttons when the app draws them, at 8 px with the system's.
+        let right = if dock {
+            self.right_width() + DIVIDER + px(8.)
+        } else if self.nav.native_bar {
+            t.px(8.)
+        } else {
+            t.px(crate::shell::render::PILL_ROOM)
+        };
         div()
             .absolute()
-            .top(t.px((BAND - 24.) / 2.))
-            .right(t.px(crate::shell::render::PILL_ROOM))
+            .top(t.px((BAND - 30.) / 2.))
+            .right(right)
             .child(
-                ui::components::icon_button::icon_button("right-panel", "c-rpanel.svg", t)
+                ui::components::icon_button::band_button("right-panel", "c-rpanel.svg", shown, t)
                     .debug_selector(|| "right-panel-toggle".into())
-                    .when(shown, |d| d.bg(t.selection))
+                    // It lies over the band's drag area: a press on it is not a move of the window.
+                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .tooltip(tip(
                         tr(
                             "Right panel: show or hide it",
@@ -2382,11 +2411,11 @@ impl Shell {
                         tr("New note:", "Nouvelle note :")
                     ),
                 },
-                Mode::Scratch => tr(
-                    "No scratch note: Ctrl+N makes one",
-                    "Aucun brouillon : Ctrl+N en fait un",
-                )
-                .to_string(),
+                // One line in the 240 px sidebar (C17): the shortcut and what it makes.
+                Mode::Scratch => match keys(&crate::actions::NewScratch) {
+                    key if key.is_empty() => tr("No scratch note", "Aucun brouillon").to_string(),
+                    key => format!("{key}: {}", tr("new scratch note", "nouveau brouillon")),
+                },
                 Mode::Versions => self.versions_said(),
                 _ => tr("No recent note", "Aucune note récente").to_string(),
             };
