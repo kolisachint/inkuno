@@ -186,6 +186,14 @@ impl AssetSource for Assets {
                 r#"<path d="M2.5 3.5H12.5M2.5 6.5H7M2.5 9.5H5.5"/><circle cx="10.5" cy="9.5" r="2.5"/><path d="M12.3 11.3L14 13"/>"#
             }
             "plus.svg" => r#"<path d="M8 3.5V12.5M3.5 8H12.5"/>"#,
+            // The context menus' own rows: rename, move to, duplicate, open beside.
+            "move.svg" => r#"<path d="M2.5 8H13.5M10.5 5L13.5 8L10.5 11M5.5 5L2.5 8L5.5 11"/>"#,
+            "duplicate.svg" => {
+                r#"<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5V3A1 1 0 0 0 9.5 2H3.5A1 1 0 0 0 2.5 3V9A1 1 0 0 0 3.5 10H5.5"/>"#
+            }
+            "external.svg" => {
+                r#"<path d="M9 3H13V7M13 3L7.5 8.5M11 9.5V12.5A1 1 0 0 1 10 13.5H3.5A1 1 0 0 1 2.5 12.5V6A1 1 0 0 1 3.5 5H6.5"/>"#
+            }
             // Six dots: a block's handle.
             "grip.svg" => {
                 r#"<path d="M6 3.5V3.6M10 3.5V3.6M6 8V8.1M10 8V8.1M6 12.5V12.6M10 12.5V12.6" stroke-width="2.2"/>"#

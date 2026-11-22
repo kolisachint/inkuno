@@ -392,6 +392,16 @@ impl Palette {
             .collect()
     }
 
+    /// Whether the create row is listed, and is the last row (None when it is not offered).
+    #[cfg(test)]
+    pub fn create_is_last(&self) -> Option<bool> {
+        let at = self
+            .items
+            .iter()
+            .position(|item| matches!(item, Item::Create))?;
+        Some(at + 1 == self.items.len())
+    }
+
     #[cfg(test)]
     pub fn listed(&self) -> usize {
         self.items.len()
@@ -510,9 +520,6 @@ impl Palette {
             items.extend((0..self.here.min(self.commands.len()).min(6)).map(Item::Command));
         }
         let exact = self.names.contains(&q);
-        if !q.is_empty() && !q.starts_with('#') && !exact {
-            items.push(Item::Create);
-        }
         for (label, item) in [
             (vault_label(), Item::Vault),
             (help_label(), Item::Help),
@@ -593,6 +600,10 @@ impl Palette {
             if !q.is_empty() && command(&q, setting.label()) {
                 items.push(Item::Setting(setting));
             }
+        }
+        // The create row is always the last one, under whatever matches.
+        if !q.is_empty() && !q.starts_with('#') && !exact {
+            items.push(Item::Create);
         }
         self.items = items;
         self.selected = 0;
@@ -1050,16 +1061,15 @@ impl Render for Palette {
                         // Neither the prompt nor a long pasted address overflows the frame.
                         .overflow_hidden()
                         .child(input)
-                        .when(self.commands_only, |d| {
-                            d.child(
-                                svg()
-                                    .path("search.svg")
-                                    .size(t.px(16.))
-                                    .flex_none()
-                                    .mr(t.px(10.))
-                                    .text_color(t.soft),
-                            )
-                        })
+                        // The magnifier in every mode, as v2 has it.
+                        .child(
+                            svg()
+                                .path("search.svg")
+                                .size(t.px(16.))
+                                .flex_none()
+                                .mr(t.px(10.))
+                                .text_color(t.soft),
+                        )
                         // The cursor first, the prompt after it: one writes in its place.
                         .child(
                             div()

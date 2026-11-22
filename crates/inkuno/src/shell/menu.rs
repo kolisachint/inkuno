@@ -777,15 +777,22 @@ impl Shell {
             let target = target.clone();
             let on = chosen == Some(i);
             // The whole label, then its shortcut: the menu takes the width they need.
-            menu_item(label, &what.keys(cx), Self::ink_of(&what, t), on, t)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, _, window, cx| {
-                        cx.stop_propagation();
-                        this.menu_do(what, target.clone(), window, cx)
-                    }),
-                )
-                .into_any_element()
+            menu_item(
+                label,
+                what.icon(),
+                &what.keys(cx),
+                Self::ink_of(&what, t),
+                on,
+                t,
+            )
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _, window, cx| {
+                    cx.stop_propagation();
+                    this.menu_do(what, target.clone(), window, cx)
+                }),
+            )
+            .into_any_element()
         };
         let mut rows = Vec::new();
         let mut i = 0;

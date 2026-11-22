@@ -87,7 +87,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     assert!(shell.read_with(cx, |s, _| s.notes.iter().all(|n| n.name != "Jetée")));
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("restore from the trash");
-    cx.simulate_keystrokes("down enter");
+    cx.simulate_keystrokes("enter");
     cx.simulate_input("jet");
     cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, _| s.told(Tone::Done, "Restored: Jetée.md")));
@@ -193,7 +193,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) -> PathBuf {
     // Terminal: the palette offers it; tests open no window, hence the refusal.
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("terminal");
-    cx.simulate_keystrokes("down enter");
+    cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()
         && s.told(Tone::Failed, "$TERMINAL")));
     shell.update(cx, |s, _| s.toasts.clear());

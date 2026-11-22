@@ -371,6 +371,7 @@ impl Shell {
                     )
             }));
         let body = match section {
+            // Capped like the other pages (640 px), so the description and the keys keep a reading width.
             Section::Shortcuts => div()
                 .flex_1()
                 .min_w_0()
@@ -379,8 +380,17 @@ impl Shell {
                 .flex_col()
                 .px(t.px(40.))
                 .pt(t.px(28.))
-                .child(title(t, section.label()))
-                .child(self.render_shortcuts(cx))
+                .child(
+                    div()
+                        .w_full()
+                        .max_w(t.px(640.))
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .child(title(t, section.label()))
+                        .child(self.render_shortcuts(cx)),
+                )
                 .into_any_element(),
             _ => {
                 let rows = match section {
@@ -506,7 +516,11 @@ impl Shell {
                 card_row(
                     t,
                     tr("Text size", "Taille du texte"),
-                    tr("Also ⌘+ and ⌘−", "Aussi Ctrl+ et Ctrl−"),
+                    if cfg!(target_os = "macos") {
+                        tr("Also ⌘+ and ⌘−", "Aussi ⌘+ et ⌘−")
+                    } else {
+                        tr("Also Ctrl+ and Ctrl−", "Aussi Ctrl+ et Ctrl−")
+                    },
                     size,
                 ),
                 card_row(
@@ -589,7 +603,9 @@ impl Shell {
             ),
             cx,
         );
-        let field = |field: &Entity<Field>| {
+        // A field sits on the window's ground with a line border; focused, a 2 px accent ring.
+        let field = |field: &Entity<Field>, cx: &App| {
+            let focus = field.read(cx).focus_handle(cx);
             div()
                 .w(t.px(240.))
                 .h(t.px(28.))
@@ -599,9 +615,12 @@ impl Shell {
                 .min_w_0()
                 .overflow_hidden()
                 .rounded(t.small())
+                .bg(t.ground)
                 .border_1()
-                .border_color(t.text.opacity(0.08))
+                .border_color(t.line)
                 .text_size(t.px(13.))
+                .track_focus(&focus)
+                .focus(|s| s.border_2().border_color(t.accent))
                 .child(field.clone())
         };
         vec![
@@ -653,7 +672,7 @@ impl Shell {
                             "Empty: INKUNO_AUTHOR, else your user name",
                             "Vide : INKUNO_AUTHOR, sinon votre nom d'utilisateur",
                         ),
-                        field(&page.author),
+                        field(&page.author, cx),
                     ),
                     card_row(
                         t,
@@ -662,7 +681,7 @@ impl Shell {
                             "Enter saves. Empty: hoocode",
                             "Entrée enregistre. Vide : hoocode",
                         ),
-                        field(&page.assistant),
+                        field(&page.assistant, cx),
                     ),
                 ],
             ),

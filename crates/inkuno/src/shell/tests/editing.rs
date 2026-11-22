@@ -587,7 +587,8 @@ fn formatting_journey(cx: &mut TestAppContext) {
     assert_eq!(text(cx), "un mot ici\ndeux");
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("bulleted");
-    cx.simulate_keystrokes("down enter");
+    // The matching command is the first row; the create row comes after it.
+    cx.simulate_keystrokes("enter");
     cx.run_until_parked();
     assert_eq!(text(cx), "- un mot ici\n- deux");
     cx.simulate_keystrokes("secondary-z");
@@ -621,7 +622,7 @@ fn formatting_journey(cx: &mut TestAppContext) {
     let grid = |cx: &mut gpui::VisualTestContext, typed: &str| {
         cx.simulate_keystrokes("secondary-p");
         cx.simulate_input(typed);
-        cx.simulate_keystrokes("down enter");
+        cx.simulate_keystrokes("enter");
         cx.run_until_parked();
     };
     grid(cx, "row below");

@@ -13,6 +13,6 @@ pub fn list_row(on: bool, t: Theme) -> Div {
         .px_3()
         .rounded(t.large())
         .cursor_pointer()
-        .when(on, |d| d.bg(t.selection))
+        .when(on, |d| d.bg(t.hover))
         .when(!on, |d| d.hover(|s| s.bg(t.hover)))
 }

@@ -206,7 +206,7 @@ impl Render for Shell {
                 .right_4()
                 .flex()
                 .flex_col()
-                .items_end()
+                .items_center()
                 .gap_2()
                 .children(toasts);
             // The left dock first: it settles which tool takes the keys.

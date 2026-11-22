@@ -23,6 +23,6 @@ Inkuno's interface is in English.
 
 ## Conventions in this guide
 
-- Keys are written for Linux and Windows. On macOS, read `Cmd` for `Ctrl`, and `Alt` for `Ctrl` when moving by word.
+- Keys are written for Linux and Windows. On macOS, read `⌘` for `Ctrl`, and `Alt` for `Ctrl` when moving by word.
 - The keys shown are the defaults. The Shortcuts page (`F1`) always shows the ones in effect, and lets you [change them](settings.md#changing-a-shortcut).
 - **Bold** names a button, a menu entry or a palette command, as written in the app.

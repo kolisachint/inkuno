@@ -378,11 +378,10 @@ impl Shell {
                     && (at.bottom() + shift < view.top() - margin
                         || at.top() + shift > view.bottom() + margin)
             }) {
-                return div().w(t.px(370.)).max_w_full().h(far.size.height);
+                return div().w_full().h(far.size.height);
             }
             div()
-                .w(t.px(370.))
-                .max_w_full()
+                .w_full()
                 .flex()
                 .flex_col()
                 .gap_1()
@@ -428,7 +427,12 @@ impl Shell {
                                     .text_size(t.px(12.))
                                     .child(tr("Press the keys…", "Tapez les touches…"))
                             } else if row.keys.is_empty() {
-                                div().font_family(mono()).text_size(t.px(12.)).child("—")
+                                // Nothing to show but the way to set keys: a click sets them.
+                                div()
+                                    .px_1()
+                                    .text_size(t.px(12.))
+                                    .text_color(t.soft)
+                                    .child(tr("Set…", "Définir…"))
                             } else {
                                 // The hover fill is the chips' own, so it hugs them: the button
                                 // (the full cell, for the click) has no fill of its own.
@@ -461,6 +465,7 @@ impl Shell {
                                 .flex_none()
                                 .flex()
                                 .flex_wrap()
+                                .justify_end()
                                 .items_start()
                                 .gap_1()
                                 .child(key)
@@ -515,13 +520,22 @@ impl Shell {
                         .rounded(t.small())
                         .when(chosen, |d| d.bg(t.selection.opacity(0.5)))
                         .child(
-                            div().flex().gap_3().child(keys).child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_color(if chosen { t.text } else { t.soft })
-                                    .child(row.effect),
-                            ),
+                            // The description leads, the keys sit at the right as chips. In a
+                            // narrow pane the keys wrap under the description instead.
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .items_start()
+                                .gap_x_3()
+                                .gap_y_1()
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(t.px(200.))
+                                        .text_color(if chosen { t.text } else { t.soft })
+                                        .child(row.effect),
+                                )
+                                .child(keys),
                         )
                         .children(note)
                 }))
@@ -544,8 +558,7 @@ impl Shell {
                     .track_scroll(&self.help.scroll)
                     .py_5()
                     .flex()
-                    .flex_wrap()
-                    .gap_x_6()
+                    .flex_col()
                     .gap_y_4()
                     .children(sections)
                     .when(none, |d| {
