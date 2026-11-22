@@ -13,6 +13,8 @@ pub(super) struct LayoutKey {
     pub(super) size: u32,
     pub(super) cursor: usize,
     pub(super) revealed: Option<usize>,
+    /// The selection: a blank line in it is drawn at full height.
+    pub(super) span: Range<usize>,
     pub(super) marked: Option<Range<usize>>,
     /// Version of the footnote definitions (see `Editor::foot_hash`): adding one restyles
     /// even distant references.
@@ -37,6 +39,7 @@ pub(super) struct Laid {
     pub(super) len: usize,
     pub(super) cursor: usize,
     pub(super) revealed: Option<usize>,
+    pub(super) span: Range<usize>,
     pub(super) dollars: usize,
     /// Length of the front matter.
     pub(super) meta: usize,
@@ -260,6 +263,8 @@ impl Geo {
 pub(super) struct Row {
     /// The line shows its source (its markers): the clicked or edited one.
     pub(super) live: bool,
+    /// A blank line drawn as the block gap of 9 px, with nothing painted (see `relayout`).
+    pub(super) collapsed: bool,
     pub(super) start: usize,
     pub(super) len: usize,
     pub(super) y: Pixels,
@@ -610,6 +615,8 @@ pub enum Pend {
 
 /// Size of a marker line's text, as a share of the body text.
 const MARK_SCALE: f32 = 0.8;
+/// The indent of one list level, in em: 24 px at the 15 px body (v2 `.li`, 24 px per level).
+pub(super) const LIST_STEP: f32 = 1.6;
 
 /// The pending state of the line that starts at byte `line`, from the areas of the note.
 pub(super) fn pend_of(found: &[crate::logic::pending::Area], line: usize) -> Pend {
@@ -943,23 +950,36 @@ impl Editor {
         if self.dmg.is_some() {
             let lo = rows.partition_point(|r| r.start + r.len < p);
             let hi = rows.partition_point(|r| r.start <= q + 1);
-            dirty.push(lo.min(n - 1)..hi.max(lo + 1).min(n));
+            // Two rows more: a blank line's room (`collapsed`) depends on the line before it, and the
+            // block after it on that room.
+            dirty.push(lo.min(n - 1)..(hi + 2).max(lo + 1).min(n));
         }
         // The cursor before and the one after: their line does not display the same.
-        let now = if cursor <= p {
-            cursor
-        } else if (cursor as isize - delta) as usize >= q && cursor as isize - delta >= 0 {
-            (cursor as isize - delta) as usize
-        } else {
-            p
+        let now_of = |cursor: usize| {
+            if cursor <= p {
+                cursor
+            } else if (cursor as isize - delta) as usize >= q && cursor as isize - delta >= 0 {
+                (cursor as isize - delta) as usize
+            } else {
+                p
+            }
         };
-        for c in [laid.cursor.min(laid.len), now.min(laid.len)] {
-            dirty.push(at(c)..at(c) + 1);
+        let now = now_of(cursor);
+        // The line after each one is dirty too: a blank line's room (`collapsed`) depends on the caret or the
+        // selection, and the block after it on that room.
+        let spans = [laid.span.start, laid.span.end].map(|c| c.min(laid.len));
+        let now_spans = [self.sel.start, self.sel.end].map(|c| now_of(c).min(laid.len));
+        for c in [laid.cursor.min(laid.len), now.min(laid.len)]
+            .into_iter()
+            .chain(spans)
+            .chain(now_spans)
+        {
+            dirty.push(at(c)..(at(c) + 2).min(n));
         }
         // The line showing its source changed: the old one renders again, the new one shows its markers.
         for r in [laid.revealed, self.revealed].into_iter().flatten() {
             let r = r.min(laid.len);
-            dirty.push(at(r)..at(r) + 1);
+            dirty.push(at(r)..(at(r) + 2).min(n));
         }
         // Blocks not to cut: a table holds in one piece (except the inside of a very big one),
         // a quote does not lose its callout's tint.
@@ -1211,6 +1231,7 @@ impl Editor {
             size: self.theme.size.to_bits(),
             cursor: self.cursor(),
             revealed: self.revealed,
+            span: self.sel.clone(),
             marked: self.marked.clone(),
             foot: self.foot_hash(),
         };
@@ -1316,6 +1337,7 @@ impl Editor {
                         &text_system,
                         &look,
                         room,
+                        width,
                         &lines,
                         foot,
                         &defined,
@@ -1361,7 +1383,7 @@ impl Editor {
             )
             .map_or(px(8. * quiet_scale), |s| s.width);
         let gutter_of =
-            |lines: usize| px(20. * quiet_scale) + digit * lines.max(1).to_string().len() as f32;
+            |lines: usize| px(23. * quiet_scale) + digit * lines.max(1).to_string().len() as f32;
         let mut gutter_now = px(0.);
         // Mermaid diagrams and LaTeX formulas: drawn once, reused afterwards.
         let rgb = |c: Hsla| {
@@ -1583,6 +1605,7 @@ impl Editor {
                     rows.push(Row {
                         pend: pend_of(&self.pending, offset),
                         live: false,
+                        collapsed: false,
                         start: offset,
                         len: line.len(),
                         y,
@@ -1780,6 +1803,7 @@ impl Editor {
                             &text_system,
                             &look,
                             room,
+                            width,
                             &block[..grid::SAMPLE],
                             foot,
                             &defined,
@@ -1794,6 +1818,7 @@ impl Editor {
                             rows.push(Row {
                                 pend: pend_of(&self.pending, at),
                                 live: false,
+                                collapsed: false,
                                 start: at,
                                 len: text.len(),
                                 y,
@@ -1833,6 +1858,7 @@ impl Editor {
                         &text_system,
                         &look,
                         room,
+                        width,
                         &block,
                         cursor,
                         marked.as_ref(),
@@ -1851,8 +1877,33 @@ impl Editor {
                 // A body block starts a gap below the line before it: a paragraph, list item, quote or
                 // callout line. A blank line, code, a table row, a heading, a formula and the front matter
                 // keep their spacing. The gap is part of the row's pad, so the text, its markers and its hits move together.
+                // The lines of a callout's body follow its label, and each other, with no gap (v2 `.al` and body lines).
+                let under_label = last
+                    .as_ref()
+                    .is_some_and(|r| r.tint.is_some() && r.kind == Kind::Quote);
+                // A blank line between blocks is the 9 px gap of v2 and nothing more: drawn collapsed, unless the
+                // caret or the selection is on it, or a blank line comes before it (the 2nd and later ones keep
+                // their room). A block after a collapsed line takes the gap that line gives, so it adds none.
+                let blank_before = last.as_ref().is_some_and(|r| r.collapsed);
+                let caret_on = (offset..=offset + line.len()).contains(&cursor)
+                    || (self.sel.start < self.sel.end
+                        && self.sel.start <= offset + line.len()
+                        && self.sel.end > offset);
+                let prev_blank = offset > 0
+                    && self.content[..offset - 1]
+                        .rsplit('\n')
+                        .next()
+                        .is_some_and(|l| l.trim().is_empty());
+                let collapsed = line.trim().is_empty()
+                    && ikind == Kind::Para
+                    && !code
+                    && !math
+                    && !prev_blank
+                    && !caret_on;
                 let block_gap = if offset > 0
                     && !math
+                    && !under_label
+                    && !blank_before
                     && !line.trim().is_empty()
                     && matches!(
                         kind,
@@ -1872,12 +1923,12 @@ impl Editor {
                     last.height += gap;
                     y += gap;
                 }
-                // Titles: about one body line of room above the first two levels and two thirds of it
-                // above the others. Sizes and line heights hold for a body of `Prefs::SIZE` px (15):
+                // Titles: the room above them is their pad (see below), and it does not add a block gap. Sizes and line heights hold for a body of `Prefs::SIZE` px (15):
                 // body 22/15, code 20/13, titles 28/21/18/16/15 (`docs/design/app-ui.md` §14).
                 let (font_size, pad, leading) = match ikind {
-                    Kind::Heading(1) => (px(28.), px(24.), 1.3),
-                    Kind::Heading(2) => (px(21.), px(24.), 1.3),
+                    // The room above a title is v2's (`.b.k-h`, `.n1`, `.n3`): 6, 22 and 16 px.
+                    Kind::Heading(1) => (px(28.), px(6.), 1.3),
+                    Kind::Heading(2) => (px(21.), px(22.), 1.3),
                     Kind::Heading(3) => (px(18.), px(16.), 1.33),
                     Kind::Heading(4) => (px(16.), px(16.), 1.4),
                     Kind::Heading(_) => (px(15.), px(16.), 1.47),
@@ -1901,6 +1952,12 @@ impl Editor {
                     pad * (t.size / Prefs::SIZE)
                 };
                 // The table's gap above already holds this one.
+                // A title after a collapsed blank line has the 9 px of that line already: its room is less by them.
+                let pad = if blank_before {
+                    (pad - BLOCK_GAP * (t.size / Prefs::SIZE)).max(px(0.))
+                } else {
+                    pad
+                };
                 let pad = if after_table { pad } else { pad + block_gap };
 
                 // An unchanged line, in the same context, reuses its styling from
@@ -1957,7 +2014,7 @@ impl Editor {
                 // A title's lines are closer than the body's, so that it belongs to what follows.
                 let lh = (font_size * leading).round();
                 // Quiet's alert, when not live: its `[!TYPE]` marker is cut, and the line shows an icon and the kind's name.
-                // Its text is indented to the box's padding (14 px from its edge, the box lies 12 px out).
+                // Its text is indented to the box's padding (14 px from its edge, the box is flush with the text column).
                 let alert = match own_tint.zip(md::callout(line)) {
                     Some((tint, label)) if t.quiet && !live && kind == Kind::Quote => {
                         let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
@@ -1970,11 +2027,11 @@ impl Editor {
                     _ => None,
                 };
                 // A quote's content starts after its bars: 10 px per level beyond the first, and in Quiet a box's
-                // padding (14 px from its edge, the box lies 12 px out). The bars sit at -14 px, 10 px apart.
+                // padding (14 px from its edge, the box is flush with the text column). The bars sit at -14 px, 10 px apart.
                 let quote_base = if kind == Kind::Quote {
                     px(10. * quiet_scale) * nesting.quote.saturating_sub(1) as f32
                         + if t.quiet && tinted {
-                            px(14. * quiet_scale - 12.)
+                            px(14. * quiet_scale)
                         } else {
                             px(0.)
                         }
@@ -1987,7 +2044,7 @@ impl Editor {
                     && gutter_here > px(0.)
                     && matches!(kind, Kind::Code | Kind::Fence)
                 {
-                    gutter_here + px(14. * quiet_scale - 12.)
+                    gutter_here + px(14. * quiet_scale)
                 } else {
                     px(0.)
                 };
@@ -2212,7 +2269,7 @@ impl Editor {
                             Some(Lead {
                                 line: None,
                                 len: 0,
-                                width: em * 1.875 * (parent + 1) as f32 + quote_base,
+                                width: em * LIST_STEP * (parent + 1) as f32 + quote_base,
                                 dy: px(0.),
                                 dx: px(0.),
                                 check: None,
@@ -2220,10 +2277,10 @@ impl Editor {
                             })
                         } else if item {
                             // A list item's marker sits right-aligned, 0.5em before its text, in the gutter of its
-                            // depth: a gutter is 1.875em (30px at 16px), and it grows for a number too wide for it.
+                            // depth: a gutter is LIST_STEP em, and it grows for a number too wide for it.
                             // A bullet is a shape, a number a glyph (its text colour), a task's box is painted.
                             let em = px(t.size);
-                            let gutter = em * 1.875;
+                            let gutter = em * LIST_STEP;
                             // Quiet: a 17 px box and 5 px bullets at size 15 (`app-ui.md` §3); the gutter logic stays.
                             let scale = t.size / Prefs::SIZE;
                             let (gap, side, dot) = if t.quiet {
@@ -2290,7 +2347,8 @@ impl Editor {
                                     (text_at, Some(check), number_right)
                                 }
                                 (_, Some((at, done))) => {
-                                    let from = right - side;
+                                    // The box stands flush in the gutter of its depth; its text is a gutter further.
+                                    let from = gutter * depth as f32;
                                     let check = Check {
                                         at,
                                         x: from..from + side,
@@ -2319,6 +2377,7 @@ impl Editor {
                         } else if let Some((tint, label, _)) = alert.clone() {
                             // The icon's room (16 px and 6 px of gap, from 14 px in), then the kind's name, semibold.
                             let name = alert_name(&line[label]);
+                            let name_at = px(36. * quiet_scale);
                             let runs = [TextRun {
                                 len: name.len(),
                                 font: Font {
@@ -2332,13 +2391,13 @@ impl Editor {
                             }];
                             let text = shape(name, px(14. * quiet_scale), &runs, None);
                             let width =
-                                px(24. * quiet_scale) + text.as_ref().map_or(px(0.), |l| l.width());
+                                name_at + text.as_ref().map_or(px(0.), |l| l.width());
                             Some(Lead {
                                 line: text,
                                 len: 0,
                                 width,
                                 dy: px(0.),
-                                dx: px(24. * quiet_scale),
+                                dx: name_at,
                                 check: None,
                                 bullet: None,
                             })
@@ -2381,8 +2440,14 @@ impl Editor {
                                     bullet: None,
                                 })
                         };
+                        // A callout's text keeps 14 px from the box's right edge too (Quiet).
+                        let right = if t.quiet && tinted && kind == Kind::Quote {
+                            px(14. * quiet_scale)
+                        } else {
+                            px(0.)
+                        };
                         let wrap = (kind != Kind::Table)
-                            .then(|| width - lead.as_ref().map_or(px(0.), |l| l.width));
+                            .then(|| width - right - lead.as_ref().map_or(px(0.), |l| l.width));
                         let line = shape(&shown[cut..], font_size, &runs, wrap);
                         // A heading's `#` sits on the title's baseline (a list marker is at the body size: none).
                         if let Some(lead) = &mut lead
@@ -2547,14 +2612,19 @@ impl Editor {
                     }
                     _ => (false, false),
                 };
-                let room = if matches!(kind, Kind::Code | Kind::Fence) || tinted {
-                    BLOCK_ROOM * (t.size / Prefs::SIZE)
+                // The room inside a block's fill: a code block has v2's 4 px above its lines and 10 px
+                // below them (`.src` padding); a callout keeps the block room on both sides.
+                let s = t.size / Prefs::SIZE;
+                let (room_above, room_below) = if matches!(kind, Kind::Code | Kind::Fence) {
+                    (px(4.) * s, px(10.) * s)
+                } else if tinted {
+                    (CALLOUT_ROOM * s, CALLOUT_ROOM * s)
                 } else {
-                    px(0.)
+                    (px(0.), px(0.))
                 };
                 let (above, below) = (
-                    if head { room } else { px(0.) },
-                    if foot { room } else { px(0.) },
+                    if head { room_above } else { px(0.) },
+                    if foot { room_below } else { px(0.) },
                 );
                 let (pad, lh, height) = match &grid_row {
                     Some(grid) => {
@@ -2563,8 +2633,14 @@ impl Editor {
                     }
                     None => (pad + above, lh, pad + above + text_height),
                 };
+                let (pad, height) = if collapsed {
+                    (px(0.), BLOCK_GAP * s)
+                } else {
+                    (pad, height)
+                };
                 let row = Row {
                     live,
+                    collapsed,
                     start: offset,
                     len: line.len(),
                     y,
@@ -2662,6 +2738,7 @@ impl Editor {
         self.dmg = None;
         self.laid = Some(Laid {
             epoch: self.epoch,
+            span: self.sel.clone(),
             width: f32::from(width).to_bits(),
             room: f32::from(room).to_bits(),
             size: t.size.to_bits(),
@@ -3224,6 +3301,62 @@ mod tests {
     }
 
     /// Start of each line of `text`, in order.
+    #[gpui::test]
+    fn a_blank_line_between_blocks_is_a_nine_pixel_gap(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ui::assets::init_fonts);
+        let theme = Theme::of(&Prefs::parse(""), WindowAppearance::Light);
+        let (editor, cx) = cx.add_window_view(|_, cx| Editor::new(theme, cx));
+        // Lines: 0 "First", 1 blank, 2 "Second", 3 and 4 blank, 5 "Third", 6 blank, 7 "## Head", 8 "Tail".
+        let text = "First\n\nSecond\n\n\nThird\n\n## Head\nTail".to_string();
+        editor.update(cx, |e, cx| e.load(text.clone(), 0, cx));
+        cx.run_until_parked();
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            let _ = cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        draw(cx);
+        let lines = starts(&text);
+        let at = |l: usize| lines[l];
+        let row = |cx: &mut gpui::VisualTestContext, l: usize| {
+            editor.read_with(cx, |e, _| {
+                let r = e.rows.iter().find(|r| r.start == at(l)).unwrap();
+                (r.height, r.pad, r.collapsed)
+            })
+        };
+        // The first blank line between two blocks is the 9 px gap; the next one keeps its full line.
+        let (gap, _, collapsed) = row(cx, 1);
+        assert!(
+            collapsed && (f32::from(gap) - 9.).abs() < 0.01,
+            "gap {gap:?}"
+        );
+        let (full, _, collapsed) = row(cx, 4);
+        assert!(!collapsed && f32::from(full) > 15., "second blank {full:?}");
+        // A title after a collapsed blank has its room less the 9 px of that line: 22 - 9.
+        let (_, pad, _) = row(cx, 7);
+        assert!((f32::from(pad) - 13.).abs() < 0.01, "title room {pad:?}");
+        // A click in the collapsed row places the caret on that line, and the line opens.
+        let spot = editor.read_with(cx, |e, _| {
+            let r = e.rows.iter().find(|r| r.start == at(1)).unwrap();
+            e.origin + point(px(0.), r.y + px(4.))
+        });
+        cx.simulate_click(spot, gpui::Modifiers::none());
+        cx.run_until_parked();
+        draw(cx);
+        assert_eq!(editor.read_with(cx, |e, _| e.cursor()), at(1));
+        let (open, _, collapsed) = row(cx, 1);
+        assert!(!collapsed && f32::from(open) > 15., "caret line {open:?}");
+        // Moved off it, the gap closes again.
+        let spot = editor.read_with(cx, |e, _| e.point_of(at(2) + 2).unwrap());
+        cx.simulate_click(spot, gpui::Modifiers::none());
+        cx.run_until_parked();
+        draw(cx);
+        let (gap, _, collapsed) = row(cx, 1);
+        assert!(
+            collapsed && (f32::from(gap) - 9.).abs() < 0.01,
+            "after moving off {gap:?}"
+        );
+    }
+
     fn starts(text: &str) -> Vec<usize> {
         let mut out = vec![0];
         for (i, b) in text.bytes().enumerate() {
@@ -3718,27 +3851,40 @@ mod tests {
         });
         let glyph = |s: &str| Some(s.to_string());
         // Bullets are shapes that change with the depth: a disc, a ring, then a square. The text
-        // starts at 1.875em per level (two spaces of indent is one level).
-        assert_eq!(items[0], (2, 0, None, Some(Bullet::Disc), None, em * 1.875));
-        assert_eq!(items[1], (4, 0, None, Some(Bullet::Ring), None, em * 3.75));
+        // starts at LIST_STEP em (24 px) per level (two spaces of indent is one level).
+        assert_eq!(
+            items[0],
+            (2, 0, None, Some(Bullet::Disc), None, em * LIST_STEP)
+        );
+        assert_eq!(
+            items[1],
+            (4, 0, None, Some(Bullet::Ring), None, em * LIST_STEP * 2.)
+        );
         // A number keeps its delimiter, and fits its gutter.
         assert_eq!(
-            (items[2].0, items[2].1, items[2].2.clone(), items[2].5),
-            (3, 0, glyph("7."), em * 1.875)
+            (items[2].0, items[2].1, items[2].2.clone()),
+            (3, 0, glyph("7."))
         );
+        // Its text starts at the gutter, or a little past it when the number is wider than the room.
+        assert!(items[2].5 >= em * LIST_STEP && items[2].5 < em * LIST_STEP + px(2.));
         assert_eq!(items[3].0, 4);
         assert_eq!(items[3].2, glyph("10."));
-        assert!(items[3].5 >= em * 1.875);
+        assert!(items[3].5 >= em * LIST_STEP);
         assert_eq!(items[4].0, 3);
         assert_eq!(items[4].2, glyph("1)"));
         // A task's box is painted in place of a bullet; the box holds the `[` of its source.
-        assert_eq!(items[5], (6, 0, None, None, Some((2, false)), em * 1.875));
-        assert_eq!(items[6], (6, 0, None, None, Some((2, true)), em * 1.875));
+        // Its text starts at the gutter, a half pixel past it: the box and its gap are wider by that.
+        assert_eq!(items[5].0, 6);
+        assert_eq!(items[5].4, Some((2, false)));
+        assert_eq!(items[6].0, 6);
+        assert_eq!(items[6].4, Some((2, true)));
+        assert!(items[5].5 >= em * LIST_STEP && items[5].5 < em * LIST_STEP + px(2.));
+        assert!(items[6].5 >= em * LIST_STEP && items[6].5 < em * LIST_STEP + px(2.));
         // An ordered task: a number, then its box. The number is too wide for the gutter, which grows.
         assert_eq!(items[7].0, 7);
         assert_eq!(items[7].2, glyph("1."));
         assert_eq!(items[7].4, Some((3, false)));
-        assert!(items[7].5 > em * 1.875);
+        assert!(items[7].5 > em * LIST_STEP);
     }
 
     /// Ordered items count in roman numerals one level down and in letters below, from the source
@@ -3794,10 +3940,10 @@ mod tests {
             )
         });
         let em = px(editor.read_with(cx, |e, _| e.theme.size));
-        // The text of `- a` starts at 1.875em; of `  - b`, one level further, at 3.75em.
-        assert_eq!(under_a.0, em * 1.875);
+        // The text of `- a` starts at LIST_STEP em; of `  - b`, one level further, at twice that.
+        assert_eq!(under_a.0, em * LIST_STEP);
         assert_eq!(under_a.2.as_deref(), Some("more of a"));
-        assert_eq!(under_b.0, em * 3.75);
+        assert_eq!(under_b.0, em * LIST_STEP * 2.);
         assert_eq!(under_b.1, 6);
     }
 
@@ -3821,9 +3967,14 @@ mod tests {
             (lead(lines[1]), lead(lines[2]))
         });
         let em = px(editor.read_with(cx, |e, _| e.theme.size));
-        let (gutter, gap) = (em * 1.875, em * 0.5);
-        // The plain item: its text at the gutter, its number right-aligned before the gap.
-        assert_eq!(plain.1, gutter);
+        let (gutter, gap) = (em * LIST_STEP, em * 0.5);
+        // The plain item: its text at the gutter, its number right-aligned before the gap. A number
+        // too wide for the room before the gap pushes its text a little past the gutter.
+        assert!(
+            plain.1 >= gutter && plain.1 < gutter + px(2.),
+            "text at {:?}",
+            plain.1
+        );
         // The same number, in the same place.
         assert_eq!(task.0, plain.0);
         // The box is after the number, and the text after the box.
@@ -3877,7 +4028,8 @@ mod tests {
             let y = origin.y;
             (
                 point(left + (check.x.start + check.x.end) / 2., y),
-                point(left + px(1.), y),
+                // Between the box and the text: the rest of the marker.
+                point(left + check.x.end + px(3.), y),
                 row.start,
             )
         });
@@ -3898,6 +4050,41 @@ mod tests {
             editor.read_with(cx, |e, _| e.cursor()),
             start + 6,
             "after the marker, at the item's text"
+        );
+    }
+
+    /// Hovering a task shows its block handle, which must not cover the drawn box: a click on the
+    /// box after the hover still checks the task (it is not taken for a grip drag).
+    #[gpui::test]
+    fn a_drawn_box_checks_a_hovered_task(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n- [ ] f\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let (box_at, text_at) = editor.read_with(cx, |e, _| {
+            let row = e.rows.iter().find(|r| r.start == lines[1]).unwrap();
+            let lead = row.shaped.lead.as_ref().unwrap();
+            let check = lead.check.as_ref().unwrap();
+            // The point of the line's start is the text's start: the box is left of it.
+            let text = e.point_of(row.start).unwrap();
+            let y = text.y;
+            (
+                point(text.x - lead.width + (check.x.start + check.x.end) / 2., y),
+                point(text.x + px(4.), y),
+            )
+        });
+        editor.update(cx, |e, cx| e.aim_block(text_at, cx));
+        cx.run_until_parked();
+        let grip = editor.read_with(cx, |e, _| e.handle_bounds().map(|(grip, _)| grip));
+        let grip = grip.expect("hovering the task shows its handle");
+        assert!(
+            !grip.contains(&box_at),
+            "the handle does not cover the drawn box"
+        );
+        cx.simulate_click(box_at, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.text().to_string()),
+            "Intro\n- [x] f\n"
         );
     }
 

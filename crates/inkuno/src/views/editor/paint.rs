@@ -243,7 +243,7 @@ impl Editor {
                         left: one,
                     };
                     window.paint_quad(quad(
-                        block(px(-12.), y, w + px(24.), h),
+                        block(px(0.), y, w, h),
                         corners(radius, row),
                         t.code_bg,
                         rim,
@@ -253,14 +253,14 @@ impl Editor {
                     let gutter = row.gutter;
                     let lip = |on: bool| if on { radius - one } else { px(0.) };
                     window.paint_quad(
-                        fill(block(px(-11.), y, gutter - one, h), t.gutter).corner_radii(Corners {
+                        fill(block(px(1.), y, gutter - one, h), t.gutter).corner_radii(Corners {
                             top_left: lip(row.head),
                             bottom_left: lip(row.foot),
                             top_right: px(0.),
                             bottom_right: px(0.),
                         }),
                     );
-                    window.paint_quad(fill(block(px(-12.) + gutter - one, y, one, h), t.code_line));
+                    window.paint_quad(fill(block(gutter - one, y, one, h), t.code_line));
                     if row.number > 0 {
                         let digits = row.number.to_string();
                         let size = px(13. * s);
@@ -278,14 +278,14 @@ impl Editor {
                             &[run],
                             None,
                         );
-                        let at = o.x + px(-12.) + gutter - px(10. * s) - num.width;
+                        let at = o.x + gutter - px(10. * s) - num.width;
                         num.paint(point(at, text_top), row.lh, window, cx).ok();
                     }
                 }
                 Kind::Code | Kind::Fence => {
                     let (y, h) = shape_span(row, top, clear);
                     window.paint_quad(
-                        fill(block(px(-12.), y, w + px(24.), h), t.code_bg)
+                        fill(block(px(0.), y, w, h), t.code_bg)
                             .corner_radii(corners(t.band(), row)),
                     )
                 }
@@ -295,8 +295,8 @@ impl Editor {
                         && t.quiet
                     {
                         // Quiet: 7 % of the tint, a 1 px line of 22 %, and the alert's icon on its first line (not live).
-                        let (y, h) = shape_span(row, top, clear);
                         let s = t.size / crate::logic::prefs::Prefs::SIZE;
+                        let (y, h) = callout_span(row, top, CALLOUT_ROOM * s);
                         let one = px(1.);
                         let rim = gpui::Edges {
                             top: if row.head { one } else { px(0.) },
@@ -305,18 +305,19 @@ impl Editor {
                             left: one,
                         };
                         window.paint_quad(quad(
-                            block(px(-12.), y, w + px(24.), h),
+                            block(px(0.), y, w, h),
                             corners(t.block_radius(), row),
                             tint.opacity(0.07),
                             rim,
-                            tint.opacity(0.22),
+                            // 22 % of the tint over the page, so the rim is not drawn darker over the fill.
+                            t.bg.blend(tint.opacity(0.22)),
                             BorderStyle::default(),
                         ));
                         // A quote inside the callout: its own bars, from the second level on.
                         for level in 1..row.bars() {
                             window.paint_quad(
                                 fill(
-                                    block(px(-14. + 10. * level as f32), y, px(3.), h),
+                                    block(px(-2. + 10. * level as f32), y, px(3.), h),
                                     t.quote_bar,
                                 )
                                 .corner_radii(corners(px(1.5), row)),
@@ -325,7 +326,7 @@ impl Editor {
                         if row.head && !row.live {
                             let icon = px(16. * s);
                             let at = Bounds::new(
-                                point(o.x + px(14. * s - 12.), text_top + (row.lh - icon) / 2.),
+                                point(o.x + px(14. * s), text_top + (row.lh - icon) / 2.),
                                 size(icon, icon),
                             );
                             window
@@ -684,13 +685,9 @@ impl Editor {
                         }
                         if let Some(check) = &lead.check {
                             let side = check.x.end - check.x.start;
-                            // Centered on the x-height of the first line (about a tenth of an em below the middle);
-                            // Quiet centres it on the line itself.
-                            let mid = if t.quiet {
-                                text_top + row.lh * 0.5
-                            } else {
-                                text_top + row.lh * 0.5 + px(t.size * 0.1)
-                            };
+                            // Centred on the x-height of the first line: the middle of the lowercase letters is about
+                            // a tenth of an em below the middle of the line, in Quiet as elsewhere.
+                            let mid = text_top + row.lh * 0.5 + px(t.size * 0.1);
                             // Quiet: the box sits on whole pixels, so that its 1 px border is one line, not two.
                             let origin = point(left + check.x.start, mid - side / 2.);
                             let origin = if t.quiet {
@@ -784,7 +781,7 @@ impl Editor {
                             &[run],
                             None,
                         );
-                        let at = o.x + px(14. * s - 12.) + row.gutter;
+                        let at = o.x + px(14. * s) + row.gutter;
                         name.paint(point(at, text_top), row.lh, window, cx).ok();
                     }
                 }
@@ -859,6 +856,10 @@ impl Editor {
             // Copy button of the block: the same icon as for copying the note.
             if row.opens {
                 let bounds = self.copy_bounds(row);
+                // The buttons show while the pointer is over the block (v2 `.code:hover .copy`), or
+                // while the copied check mark is shown.
+                let shown =
+                    self.copied == Some(row.start) || self.code_at(self.pointer) == Some(row.start);
                 if self.hover == Some(row.start) {
                     window.paint_quad(fill(bounds, t.border).corner_radii(px(6.)));
                 }
@@ -869,14 +870,16 @@ impl Editor {
                 };
                 let inset = (COPY_SIZE - px(16.)) / 2.;
                 let at = Bounds::new(bounds.origin + point(inset, inset), size(px(16.), px(16.)));
-                window
-                    .paint_svg(at, icon.into(), TransformationMatrix::unit(), t.text, cx)
-                    .ok();
+                if shown {
+                    window
+                        .paint_svg(at, icon.into(), TransformationMatrix::unit(), t.text, cx)
+                        .ok();
+                }
                 if let Some((_, hitbox)) = self.copy_hitboxes.iter().find(|(s, _)| *s == row.start)
                 {
                     window.set_cursor_style(CursorStyle::PointingHand, hitbox);
                 }
-                if self.views(row) {
+                if shown && self.views(row) {
                     let bounds = self.view_bounds(row);
                     if self.view_hover == Some(row.start) {
                         window.paint_quad(fill(bounds, t.border).corner_radii(px(6.)));
@@ -1330,6 +1333,17 @@ fn corners(radius: Pixels, row: &Row) -> Corners<Pixels> {
 
 /// Where a line of a filled block is drawn, from the top of the line and for its height: the first and last
 /// lines stay `clear` of their edge, so that two blocks one after the other do not touch.
+/// A callout's box: the block gap above its label stays outside it, so the room of the box (`room`) is
+/// its padding; the box runs to the bottom of the last line's room.
+fn callout_span(row: &Row, top: Pixels, room: Pixels) -> (Pixels, Pixels) {
+    let gap = if row.head {
+        (row.pad - room).max(px(0.))
+    } else {
+        px(0.)
+    };
+    (top + gap, row.height - gap)
+}
+
 fn shape_span(row: &Row, top: Pixels, clear: Pixels) -> (Pixels, Pixels) {
     let (above, below) = (
         if row.head { clear } else { px(0.) },

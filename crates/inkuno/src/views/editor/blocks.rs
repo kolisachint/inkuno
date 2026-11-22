@@ -231,16 +231,32 @@ impl Editor {
 
     /// Left edge of what the line starting at `at` occupies: the page, or its table's frame
     /// (wider than the line, and whose handles already take the near margin).
-    /// An indented item has its handle at its indent.
+    /// An indented item has its handle at its indent. A list marker drawn without source bytes
+    /// (a task's box, a bullet, a number) has no source position: its handle sits in the gutter
+    /// left of the marker, at the page edge, never over the marker itself.
     pub(super) fn block_left(&self, at: usize) -> Pixels {
         if let Some((_, frame)) = self.tables.iter().find(|(range, _)| range.contains(&at)) {
             return frame.left() - px(20.);
         }
         let line = &self.content[self.line_range(at)];
         let indent = line.len() - line.trim_start().len();
-        let lead = self
-            .row_at(at)
-            .map_or(px(0.), |r| self.rows[r].pos(indent).x);
+        let lead = self.row_at(at).map_or(px(0.), |r| {
+            let row = &self.rows[r];
+            match &row.shaped.lead {
+                // A list item's marker is drawn: its handle is in the gutter of the item's depth. The
+                // text starts a gutter past that depth, so the depth is the gutters before the text.
+                Some(lead)
+                    if indent >= lead.len
+                        && matches!(row.kind, Kind::Bullet | Kind::Ordered | Kind::Task(_)) =>
+                {
+                    let gutter = f32::from(px(self.theme.size) * LIST_STEP);
+                    let depth = (f32::from(lead.width) / gutter).floor() - 1.;
+                    px(gutter * depth.max(0.))
+                }
+                Some(lead) if indent >= lead.len => px(0.),
+                _ => row.pos(indent).x,
+            }
+        });
         self.origin.x + lead
     }
 
