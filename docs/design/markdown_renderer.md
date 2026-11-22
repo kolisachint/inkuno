@@ -329,7 +329,7 @@ Scope: bullet, ordered and task list items in the editor. The reference behaviou
 - List kinds are `Kind::Bullet`, `Kind::Ordered` and `Kind::Task(bool)` (`crates/inkuno-logic/src/markdown/mod.rs:27` region, the `Kind` enum).
 - Restyle cycles bullet → ordered → task (`crates/inkuno/src/views/editor/style.rs:75-76`).
 - Off the live line, a list item's marker is drawn in the margin of its depth, not hidden: a bullet shape, a number, or a checkbox (`lead` in `crates/inkuno/src/views/editor/layout.rs`, painted in `paint.rs`). Wrapped lines hang under the item text. The live line shows its source. Continuation paragraphs (indented lines under an item) hang at the item text too. Depth comes from `list_depth` in `crates/inkuno-logic/src/markdown/lists.rs`.
-- Line height is 1.7 times the body size for body text (`layout.rs`, the `lh` computation). The blank-line gap between paragraphs is unchanged.
+- Line height is 1.7 times the body size for body text (`layout.rs`, the `lh` computation). A blank line between blocks is drawn 9 px tall (v2's block gap) unless the caret or the selection is on it, or another blank line precedes it; then it takes its full line. A block after a collapsed blank line adds no gap of its own, and a title takes its room less those 9 px.
 
 ### 10.3 Inkuno target — APPROVED by owner 2026-11-21
 
@@ -338,7 +338,7 @@ Follows GitHub (shapes, numbering, colour) and Typora (indent, reveal of the sou
 - **Bullet shapes by depth, as GitHub:** depth 0 a filled disc, depth 1 a hollow circle (a 1px ring), depth 2 and deeper a filled square. About 0.35em across (5 to 6px at 16px), centred vertically on the first visual line of the item, in the **text colour** (not the soft colour). The shape sits 0.5em before the text of the item.
 - **Ordered numbering by depth, as GitHub's `ol`, `ol ol` and `ol ol ol`:** depth 0 decimal (`1.`), depth 1 lower-roman (`i.`), depth 2 and deeper lower-alpha (`a.`). The depth is the same list depth used for indent, so an ordered list nested in a bullet at depth 1 is roman, as GitHub's `ul ol`. The displayed value is computed from the source number (`3.` at depth 1 shows `iii.`; alpha: 1 is `a`, 26 is `z`, 27 is `aa`). The delimiter (`.` or `)`) stays. The source text never changes; the live line shows the raw source.
 - **Number and box colour:** the text colour for bullets and numbers. A checkbox's border keeps its soft colour; a checked box is an accent fill with a white check.
-- **Indent, as Typora's default theme (GitHub-derived):** each level indents 30px at a 16px body, that is 1.875em, and scales with the text size. The marker sits in that gutter, right-aligned 0.5em before the item text, so the text of an item starts at 1.875em × (depth + 1). A number too wide for the gutter (`viii.`, `100.`) makes its item's gutter grow to fit. An ordered task (`1. [ ] x`) shows its number, then its checkbox, then its text.
+- **Indent, as Typora's default theme (GitHub-derived):** each level indents 24px at a 15px body, that is 1.6em (the v2 prototype's `.li`), and scales with the text size. The marker sits in that gutter, right-aligned 0.5em before the item text, so the text of an item starts at 1.6em × (depth + 1). A number too wide for the gutter (`viii.`, `100.`) makes its item's gutter grow to fit. An ordered task (`1. [ ] x`) shows its number, then its checkbox, then its text.
 - **Checked tasks:** struck through and dimmed (kept as it is).
 - **Line spacing:** the body line height and the blank-line paragraph gap stay as they are. Tight lists are consecutive lines, loose lists have blank lines between items. No extra item spacing.
 - **Continuation paragraphs:** a non-list line indented by at least two columns under the items of a list hides its indent and hangs at the text of its item. Fenced code blocks inside an item keep their own layout.
@@ -348,7 +348,7 @@ Follows GitHub (shapes, numbering, colour) and Typora (indent, reveal of the sou
 
 1. **Nested ordered lists:** GitHub's lower-roman, then lower-alpha (`i.`, `a.`), by depth. Answer: GitHub's style (§10.3).
 2. **Checked task items:** struck through and dimmed. Answer: kept as it is (§10.3).
-3. **Indent per level:** Typora's 1.875em (30px at 16px). Answer: Typora's indent (§10.3).
+3. **Indent per level:** Typora's 1.875em (30px at 16px) was the first answer. The v2 prototype indents 24px per level, so the app uses 1.6em (24px at 15px) since the Markdown parity audit (D06).
 4. **Bullet shapes by depth:** GitHub's disc, circle, square, drawn as shapes (not glyphs). Answer: GitHub's shapes (§10.3).
 5. **Loose lists and spacing:** keep the existing spacing; no extra item spacing. Answer: existing spacing (§10.3).
 6. **Source marker:** Typora's: the live line shows its source, the other lines render. Answer: Typora's reveal (§10.3). This changes the dimmed-marker rule of `docs/user/src/writing.md`, which is updated for list markers.

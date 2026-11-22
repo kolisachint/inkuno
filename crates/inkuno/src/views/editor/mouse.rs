@@ -327,6 +327,31 @@ impl Editor {
         Bounds::new(self.origin + at, size(COPY_SIZE, COPY_SIZE))
     }
 
+    /// The code block under `at`, by the start of its opening line: its copy button shows while the
+    /// pointer is over it.
+    pub(super) fn code_at(&self, at: Point<Pixels>) -> Option<usize> {
+        let left = self.origin.x - px(24.);
+        let mut open = None;
+        for row in &self.rows {
+            if row.opens {
+                open = Some((row.start, self.origin.y + row.y));
+            }
+            if let Some((start, top)) = open
+                && matches!(row.kind, Kind::Code | Kind::Fence)
+                && row.foot
+            {
+                let bottom = self.origin.y + row.y + row.height;
+                if (left..=self.origin.x + self.width).contains(&at.x)
+                    && (top..=bottom).contains(&at.y)
+                {
+                    return Some(start);
+                }
+                open = None;
+            }
+        }
+        None
+    }
+
     /// Start of the line whose copy button is under the pointer.
     pub(super) fn copy_at(&self, at: Point<Pixels>) -> Option<usize> {
         let row = self
@@ -480,6 +505,17 @@ impl Editor {
             return self.insert_table(cols, rows, cx);
         }
         self.grid = None;
+        // A task's drawn box is a plain button: it wins over the block handle that hover may show
+        // beside the line. The box is toggled where it is drawn: the edit would show the line's
+        // source, so the line keeps the reveal it had.
+        if !e.modifiers.secondary()
+            && let Some(at) = self.checkbox_at(e.position)
+        {
+            let revealed = self.revealed;
+            self.flip_box(at, cx);
+            self.revealed = revealed;
+            return;
+        }
         // A block's handle: dragging it moves it, a click opens its menu; the "+" adds a block below.
         if let Some((grip, plus)) = self.handle_bounds()
             && let Some(block) = self.handled()
@@ -564,16 +600,6 @@ impl Editor {
             } else {
                 EditorEvent::Open(link)
             });
-        }
-        if !e.modifiers.secondary()
-            && let Some(at) = self.checkbox_at(e.position)
-        {
-            // The box is toggled where it is drawn: the edit would show the line's source, so the
-            // line keeps the reveal it had.
-            let revealed = self.revealed;
-            self.flip_box(at, cx);
-            self.revealed = revealed;
-            return;
         }
         let (kind, marker) = md::classify_in(line, self.open_fence(lr.start));
         if matches!(kind, Kind::Task(_)) && col + 4 >= marker && col < marker {
@@ -809,8 +835,9 @@ impl Editor {
             .iter()
             .map(|geo| geo.near(self.pointer))
             .collect::<Vec<_>>();
+        let code_was = self.code_at(self.pointer);
         self.pointer = e.position;
-        if part != self.part_hover || near != before {
+        if part != self.part_hover || near != before || code_was != self.code_at(e.position) {
             self.part_hover = part;
             cx.notify();
         }
