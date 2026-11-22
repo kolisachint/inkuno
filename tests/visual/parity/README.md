@@ -7,3 +7,4 @@ Scripts and logs that compare the real app (driven on Xvfb) with `docs/design/pr
 - Screenshots are not committed: the scripts write them under `target/` or a scratch folder.
 - `proto-shots.js`: every state of a prototype in both themes (`node tests/visual/parity/proto-shots.js`; `PROTO=` another prototype file, `OUT=` another folder; default `target/visual/proto`). States: `PROTO-STATES.md`.
 - `wf-proto.js`: the W1–W8 workflows in the prototype (default output `target/visual/wf-proto`); last run's log: `WF-PROTO-LOG.md`.
+- `ui-check.sh`: the app in the same states as the prototype (`--theme light|dark|both`, `--only NAME…`; `BIN=`, `OUT=`, default `target/visual/app`). Needs Xvfb, xdotool, ImageMagick, lavapipe (see `scripts/visual-check.sh`).
