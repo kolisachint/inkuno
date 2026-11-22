@@ -60,3 +60,20 @@ IDs refer to `findings/<area>.md`.
 | C21 | keep | an empty pane stays a live editor with the cards; v3 draws that |
 | C22 | fix | empty-pane cards never break a key chord across lines (chips) |
 | C23 | keep | unsaved dot on tabs; v3 adds it |
+
+## Markdown rendering
+| id | decision | note |
+|--|--|--|
+| D02 | fix | a task box (and bullet/number) wins the click: the hover grip sits in the gutter left of the lead, never over it; checkbox hit-test before the grip; test with hover |
+| D01 | fix | block spacing to v2: 9 px between blocks; above H1 6, H2 22, H3/H4 16 (at 15 px body) |
+| D03/D04 | fix | callout: 8 px radius, 10/14 padding, label-to-body as v2, border 22 % of the tint over the sheet (not over the fill) |
+| D05/D15 | fix | callouts, code boxes and tables are flush with the text column |
+| D06 | fix | list indent 24 px per level |
+| D07/D08 | fix | task box flush with the column, centred on the first line's x-height |
+| D09 | fix | code block padding 4/14/10 as v2; no extra bottom space |
+| D10 | fix | code copy button only on hover of the block |
+| D11 | fix | tables at least the text column wide (v2 `min-width:100%`) |
+| D12/D16 | — | owned by the right-panel crew (RP-17) |
+| D13 | not a bug | the harness clicks the H1, so it is the revealed line |
+| D14 | verify | if the app reveals markers per span (documented in app-ui/markdown_renderer), keep; else reveal the whole caret line as v2 |
+| D17 | keep | 800 px measure is a recorded decision (app-ui.md); v3 uses 800 |
