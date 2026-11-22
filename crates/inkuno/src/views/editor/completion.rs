@@ -304,7 +304,7 @@ impl Editor {
             .text_size(t.px(13.));
         if bare && !basic.is_empty() {
             panel = panel
-                .child(heading("Basic"))
+                .child(heading(tr("Basic", "De base")))
                 .child(
                     div()
                         .flex()
@@ -313,7 +313,7 @@ impl Editor {
                         .pb(t.px(4.))
                         .children(cells),
                 )
-                .child(heading("More"));
+                .child(heading(tr("More", "Plus")));
         }
         Some(panel.children(rows))
     }
