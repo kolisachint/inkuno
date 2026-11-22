@@ -18,6 +18,8 @@ A review by the [Assistant](assistant.md) writes its findings in this form too. 
 
 The right panel has a **Comments** view, `Ctrl + Alt + 2`, that lists the comments of the note. It shares the panel with the outline, the versions and the Assistant: see [Navigation](navigation.md#the-right-panel).
 
+A new comment opens the Comments view with a draft card at its top: the passage it is on, a field for what is said, and **Comment** and **Cancel** buttons. `Enter` writes the comment; `Escape` or **Cancel** takes it out again and the passage stays as it was.
+
 - Click a comment to go to it.
 - A comment whose text starts with `Name, HH:MM: ` shows that name and time above what is said. The text in the file is unchanged.
 - Click its check mark (it shows under the pointer) to resolve it: the markup goes, the text stays.

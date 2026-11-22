@@ -401,6 +401,28 @@ impl Shell {
                     let chosen = row.action.is_some() && row.action == self.help.sel;
                     // The keys: a button when they can be changed, text otherwise.
                     let keys = match row.action {
+                        // A palette command: its keys as badges, `›`, then the word typed in the palette.
+                        None if row.keys.contains(" › ") => {
+                            let (route, word) =
+                                row.keys.split_once(" › ").unwrap_or((&row.keys, ""));
+                            div()
+                                .w(t.px(156.))
+                                .flex_none()
+                                .flex()
+                                .flex_wrap()
+                                .justify_end()
+                                .items_center()
+                                .gap_x(t.px(4.))
+                                .gap_y(t.px(3.))
+                                .child(keycaps(route, t, false))
+                                .child(div().text_color(t.soft).child("›"))
+                                .child(
+                                    div()
+                                        .text_size(t.px(12.))
+                                        .text_color(t.soft)
+                                        .child(word.to_string()),
+                                )
+                        }
                         // Badges for real keys; a line of words ("Drag from the tree") or of
                         // alternatives ("F3 / Enter") stays text.
                         None if row.keys.contains(' ') => div()
@@ -413,6 +435,7 @@ impl Shell {
                             keycaps(&row.keys, t, false)
                                 .flex_wrap()
                                 .w_full()
+                                .justify_end()
                                 .gap_y(t.px(3.)),
                         ),
                         Some(action) => {
@@ -438,6 +461,7 @@ impl Shell {
                                 // (the full cell, for the click) has no fill of its own.
                                 keycaps(&row.keys, t, false)
                                     .flex_wrap()
+                                    .justify_end()
                                     .gap_y(t.px(3.))
                                     .px_1()
                                     .rounded(t.small())
@@ -448,6 +472,7 @@ impl Shell {
                                 .debug_selector(move || format!("key-{action}"))
                                 .when(!row.keys.is_empty() && edit.is_none(), |d| d.w_full())
                                 .flex()
+                                .justify_end()
                                 .cursor_pointer()
                                 .text_color(color)
                                 .child(shown)

@@ -76,7 +76,8 @@ pub fn band_button_turned(
         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
         .hover(|s| s.bg(t.hover))
         .active(|s| s.bg(t.pressed))
-        .when(active, |d| d.bg(t.selection))
+        // v2 `.ib.on`: the neutral pill of a selected row, the icon in ink (not the accent).
+        .when(active, |d| d.bg(t.pill))
         .child(
             svg()
                 .path(icon)
@@ -87,6 +88,6 @@ pub fn band_button_turned(
                         std::f32::consts::PI,
                     )))
                 })
-                .text_color(if active { t.accent } else { t.soft }),
+                .text_color(if active { t.text } else { t.soft }),
         )
 }
