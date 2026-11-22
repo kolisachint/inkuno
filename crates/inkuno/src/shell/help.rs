@@ -430,21 +430,22 @@ impl Shell {
                             } else if row.keys.is_empty() {
                                 div().font_family(mono()).text_size(t.px(12.)).child("—")
                             } else {
+                                // The hover fill is the chips' own, so it hugs them: the button
+                                // (the full cell, for the click) has no fill of its own.
                                 keycaps(&row.keys, t, false)
                                     .flex_wrap()
-                                    .w_full()
                                     .gap_y(t.px(3.))
+                                    .px_1()
+                                    .rounded(t.small())
+                                    .hover(|s| s.bg(t.hover))
                             };
                             let key = div()
                                 .id(gpui::SharedString::from(format!("key-{action}")))
                                 .debug_selector(move || format!("key-{action}"))
                                 .when(!row.keys.is_empty() && edit.is_none(), |d| d.w_full())
-                                .px_1()
-                                .rounded(t.small())
-                                .bg(t.border.opacity(0.6))
+                                .flex()
                                 .cursor_pointer()
                                 .text_color(color)
-                                .hover(|s| s.bg(t.hover))
                                 .child(shown)
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.key_edit(action, cx)),

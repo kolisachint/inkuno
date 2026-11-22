@@ -439,11 +439,10 @@ impl Editor {
                     0
                 };
                 let text = if bang {
-                    let path = self
-                        .images
-                        .get(&name.to_lowercase())
-                        .cloned()
-                        .unwrap_or_default();
+                    // An image the index does not hold has no path to link to: the choice inserts nothing.
+                    let Some(path) = self.images.get(&name.to_lowercase()).cloned() else {
+                        return true;
+                    };
                     format!("!{}", self.link_to(name, &path))
                 } else {
                     let path = self.note_path(name);

@@ -96,12 +96,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         .expect("the comments view shows its first card");
     cx.simulate_click(card.center(), gpui::Modifiers::none());
     cx.run_until_parked();
-    // The passage "mot" (8..11) is selected: the flash. Then the caret goes to the comment's words.
+    // The passage "un mot" (2..8, after the bullet) is selected: the flash. Then the caret goes to the comment's words.
     let flashed = shell.read_with(cx, |s, cx| {
         let e = s.pane().editor.read(cx);
         (e.position(), e.selected().to_string())
     });
-    assert_eq!(flashed, (8, "- un mot".to_string()));
+    assert_eq!(flashed, (8, "un mot".to_string()));
     cx.executor()
         .advance_clock(std::time::Duration::from_secs(1));
     cx.run_until_parked();
@@ -167,8 +167,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("down enter");
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
+    // The caret goes to the passage's start, after the bullet.
     assert!(shell.read_with(cx, |s, cx| s.palette.is_none()
-        && s.pane().editor.read(cx).position() == 0));
+        && s.pane().editor.read(cx).position() == "- ".len()));
     cx.simulate_keystrokes("secondary-shift-m");
     assert_eq!(text(cx), "- un mot ici\nfin<!-- comment: ok -->");
     cx.simulate_keystrokes("secondary-z");

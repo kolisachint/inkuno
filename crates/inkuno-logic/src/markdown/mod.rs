@@ -1844,6 +1844,11 @@ fn comments_in(
             .iter()
             .any(|&p| inside(p))
     });
+    // The block marker of the line (`- `, `## `, `> `, `- [ ] `) is not part of a passage.
+    let marker = match quote(line) {
+        Some(q) => q.at + classify_in(&line[q.at..], None).1,
+        None => classify(line, false).1,
+    };
     let spans = code_spans(line);
     let mut from = 0;
     while let Some(open) = line[from..].find(COMMENT_OPEN).map(|i| i + from) {
@@ -1863,7 +1868,8 @@ fn comments_in(
             .map(|(whole, ..)| whole.end)
             .max()
             .unwrap_or(0)
-            .max(from);
+            .max(from)
+            .max(marker.min(open));
         if is_table_line(line) {
             let bytes = line.as_bytes();
             if let Some(bar) = (start..open)
@@ -4193,5 +4199,37 @@ mod tests {
         assert!(!starts_indented_code("    ", ["", "Intro"]));
         // A list that an unindented line ended is a list no more.
         assert!(starts_indented_code("    code", ["", "Intro", "- item"]));
+    }
+
+    #[test]
+    fn a_passage_starts_after_the_block_marker() {
+        use super::comments;
+        // The passage is the words, not the bullet, heading or quote mark in front of them.
+        for (line, passage) in [
+            ("- un mot<!-- comment: x -->", "un mot"),
+            ("## Tasks<!-- comment: x -->", "Tasks"),
+            ("> citation<!-- comment: x -->", "citation"),
+            ("- [ ] Settings page<!-- comment: x -->", "Settings page"),
+            ("  1. item<!-- comment: x -->", "item"),
+        ] {
+            let found = comments(line);
+            let (_, noted, _) = &found[0];
+            assert_eq!(&line[noted.clone()], passage, "{line}");
+        }
+        // Nothing before the marker: the comment is on its own.
+        let found = comments("- <!-- comment: x -->");
+        assert!(found[0].1.is_empty());
+    }
+
+    #[test]
+    fn a_comment_marker_in_inline_code_is_text() {
+        use super::comments;
+        assert!(comments("Write `a<!-- comment: b -->` to comment.").is_empty());
+        let found = comments("`code` a<!-- comment: b --> here");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            &"`code` a<!-- comment: b --> here"[found[0].1.clone()],
+            "`code` a"
+        );
     }
 }
