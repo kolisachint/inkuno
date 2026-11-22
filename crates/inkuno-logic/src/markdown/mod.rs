@@ -554,11 +554,15 @@ pub fn footnote_flags(line: &str, flags: &mut [u32], defined: &dyn Fn(&str) -> b
 // ponytail: only addresses with a protocol, without `)`; a link to a vault file
 // is written `[[note]]`. Count parentheses if addresses containing them show up.
 pub fn web_link(rest: &str) -> Option<(Range<usize>, Range<usize>)> {
-    let close = rest.find("](")?;
+    // A `](` that an escaping backslash holds is part of the label.
+    let close = rest
+        .match_indices("](")
+        .map(|(at, _)| at)
+        .find(|&at| !rest[..at].ends_with('\\'))?;
     let end = close + 2 + rest[close + 2..].find(')')?;
     let (text, url) = (1..close, close + 2..end);
     let ok = rest.starts_with('[')
-        && !rest[text.clone()].contains(['[', ']'])
+        && !unescaped(&rest[text.clone()]).contains(['[', ']'])
         && !rest[url.clone()].is_empty()
         && !rest[url.clone()].contains(char::is_whitespace);
     ok.then_some((text, url))
@@ -577,7 +581,7 @@ fn relative(address: &str, text: &str) -> Option<Link> {
     if scheme
         || !balanced
         || address.starts_with('<')
-        || text.contains(['<', '['])
+        || unescaped(text).contains(['<', '['])
         || is_url(address)
     {
         return None;
@@ -594,6 +598,11 @@ fn relative(address: &str, text: &str) -> Option<Link> {
             anchor,
         }),
     }
+}
+
+/// A label without its escaping backslashes before brackets (`\[`, `\]`).
+fn unescaped(label: &str) -> String {
+    label.replace("\\[", "[").replace("\\]", "]")
 }
 
 /// The text of a percent-encoded address (`Note%20Name` is `Note Name`); bad escapes stay as written.

@@ -223,52 +223,69 @@ impl Shell {
                         }
                         this.flush(cx);
                         let image = vault::is_image(&path) || vault::is_attachment(&path);
-                        // The links follow the rename: a rename that would rewrite a link inside a
-                        // pending change of a linking note is refused before anything moves.
-                        if !is_dir {
-                            let (old, new) = if image {
-                                let extension =
-                                    path.extension().unwrap_or_default().to_string_lossy();
-                                let to = path.with_file_name(format!("{name}.{extension}"));
-                                (vault::image_name(&path), vault::image_name(&to))
-                            } else {
-                                (current.clone(), name.clone())
-                            };
-                            if this.links_pending(&path, &old, &new, None, cx) {
-                                return;
-                            }
-                        }
-                        let renamed = if is_dir {
-                            let to = path.with_file_name(&name);
-                            vault::rename(&path, &to).map(|()| to)
-                        } else if image || vault::is_table(&path) {
-                            // An image or a table keeps its extension.
-                            let extension = path.extension().unwrap_or_default().to_string_lossy();
-                            let to = path.with_file_name(format!("{name}.{extension}"));
-                            vault::rename(&path, &to).map(|()| to)
+                        let table = vault::is_table(&path);
+                        // The links follow the rename. The notes that may link to it are read first,
+                        // once and off the UI thread: a rename that would rewrite a link inside a
+                        // pending change of a linking note is refused before anything moves. The
+                        // file is renamed where `to` says (as `rename_note` and the branch below do).
+                        let (old, new, to) = if is_dir {
+                            (String::new(), String::new(), path.clone())
                         } else {
-                            vault::rename_note(&path, &name)
+                            let extension = path.extension().unwrap_or_default().to_string_lossy();
+                            let to = match image || table {
+                                true => path.with_file_name(format!("{name}.{extension}")),
+                                false => path.with_file_name(format!("{name}.md")),
+                            };
+                            match image {
+                                true => (vault::image_name(&path), vault::image_name(&to), to),
+                                false => (current.clone(), name.clone(), to),
+                            }
                         };
-                        match renamed {
-                            Ok(to) => {
-                                // The title of a renamed note may have changed: reread it.
-                                this.relocate(&path, &to, !is_dir, cx);
-                                // Links follow: by note name, or by file name for an image.
-                                let (old, new) = if image {
-                                    (vault::image_name(&path), vault::image_name(&to))
-                                } else {
-                                    (current.clone(), name)
-                                };
-                                let moved =
-                                    (!image && !is_dir).then_some((path.as_path(), to.as_path()));
-                                if !is_dir && this.relink(&old, &new, moved, cx) {
-                                    this.reload(cx);
+                        let moved = (!image && !is_dir).then_some((path.as_path(), to.as_path()));
+                        let scan = (!is_dir).then(|| this.link_scan(&old, &new, moved, None));
+                        let (path, name) = (path.clone(), name.clone());
+                        cx.spawn(async move |this, cx| {
+                            let plan = match scan {
+                                Some(scan) => {
+                                    cx.background_executor()
+                                        .spawn(async move { scan.run() })
+                                        .await
                                 }
-                            }
-                            Err(e) => {
-                                this.fail(tr("Not renamed", "Renommage impossible"), &path, e, cx)
-                            }
-                        }
+                                None => super::notes::LinkPlan::default(),
+                            };
+                            this.update(cx, |this, cx| {
+                                if this.links_refused(plan.refused, cx) {
+                                    return;
+                                }
+                                let renamed = if is_dir {
+                                    let to = path.with_file_name(&name);
+                                    vault::rename(&path, &to).map(|()| to)
+                                } else if image || table {
+                                    // An image or a table keeps its extension.
+                                    vault::rename(&path, &to).map(|()| to)
+                                } else {
+                                    vault::rename_note(&path, &name)
+                                };
+                                match renamed {
+                                    Ok(to) => {
+                                        // The title of a renamed note may have changed: reread it.
+                                        this.relocate(&path, &to, !is_dir, cx);
+                                        // Links follow: by note name, or by file name for an image.
+                                        if !is_dir && this.apply_links(plan, cx) {
+                                            this.reload(cx);
+                                        }
+                                    }
+                                    Err(e) => this.fail(
+                                        tr("Not renamed", "Renommage impossible"),
+                                        &path,
+                                        e,
+                                        cx,
+                                    ),
+                                }
+                            })
+                            .ok();
+                        })
+                        .detach();
                     },
                 );
             }
