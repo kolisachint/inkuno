@@ -23,7 +23,8 @@ pub(super) struct LinkScan {
 }
 
 /// The result of a scan: whether a pending change refuses the rename, and the notes to write, each
-/// with its path after the rename.
+/// with its path after the rename and its text as the editor shows it (pending changes marked). A
+/// text is written through `sidecar::save`, which places the changes beside the note again.
 #[derive(Default)]
 pub(super) struct LinkPlan {
     pub(super) refused: bool,
@@ -31,8 +32,9 @@ pub(super) struct LinkPlan {
 }
 
 impl LinkScan {
-    /// Reads each note once. The rewrite of its disk text is planned; the rename is refused when the
-    /// rewrite of the text its editor or its pending changes show would change a pending change.
+    /// Reads each note once. The rewrite of the text each note shows (its file with its pending changes
+    /// composed in, or the editor's text) is planned, so a pending change keeps its place; the rename is
+    /// refused when that rewrite would change a pending change.
     pub(super) fn run(&self) -> LinkPlan {
         let mut plan = LinkPlan::default();
         let (root, moved) = (
@@ -58,12 +60,14 @@ impl LinkScan {
                     platform::sidecar::display(home.as_ref(), &note.disk, &disk)
                 }
             };
-            if rewrite(&current)
-                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, &fresh))
+            let fresh = rewrite(&current);
+            if fresh
+                .as_ref()
+                .is_some_and(|fresh| logic::pending::rewrite_refused(&current, fresh))
             {
                 plan.refused = true;
             }
-            if let Some(fresh) = rewrite(&disk) {
+            if let Some(fresh) = fresh {
                 plan.rewrites.push((note.post.clone(), fresh));
             }
         }
@@ -449,9 +453,12 @@ impl Shell {
     pub(super) fn apply_links(&mut self, plan: LinkPlan, cx: &mut Context<Self>) -> bool {
         let mut changed = Vec::new();
         for (path, text) in plan.rewrites {
-            if vault::write(&path, &text).is_ok() {
+            // The text as the editor shows it goes back as the file and its pending changes beside it.
+            let home = platform::revisions::home_of(&path, self.vault.as_deref());
+            if platform::sidecar::save(home.as_ref(), &path, &text, "").is_ok() {
                 if let Some(note) = self.notes.iter_mut().find(|n| n.path == path) {
-                    (note.tags, note.links) = Note::index(&text);
+                    let disk = fs::read_to_string(&path).unwrap_or_default();
+                    (note.tags, note.links) = Note::index(&disk);
                 }
                 changed.push(path);
             }

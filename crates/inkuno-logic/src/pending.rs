@@ -1,5 +1,6 @@
-//! Pending changes: an agent's proposed text written into the note as marked areas, until a person
-//! accepts or rejects each one. The marks are CriticMarkup in block form, line by line:
+//! Pending changes: an agent's proposed text, shown in the note as marked areas until a person
+//! accepts or rejects each one. Only the editor shows the marks: on disk each note holds its own text
+//! (see below). The marks are CriticMarkup in block form, line by line:
 //!
 //! ```text
 //! unchanged line
@@ -1866,5 +1867,33 @@ mod tests {
             changes > 200 && outside_placed > 200,
             "{changes} {outside_placed}"
         );
+    }
+
+    #[test]
+    fn an_insertion_at_a_text_without_final_break_is_left_out_not_given_a_line() {
+        // Composed, it would gain a line break at the end: left out, the text is kept as it is.
+        let entry = Entry {
+            at: 1,
+            new: "x\n".into(),
+            ..Entry::default()
+        };
+        assert_eq!(compose("a", std::slice::from_ref(&entry)), "a");
+        assert_eq!(placed("a", std::slice::from_ref(&entry)), [false]);
+    }
+
+    #[test]
+    fn mixed_line_breaks_read_back_exactly() {
+        let base = "a\nb\r\nc\n";
+        let entry = Entry {
+            at: 2,
+            new: "x\n".into(),
+            before: "a\n".into(),
+            after: "b\r\n".into(),
+            ..Entry::default()
+        };
+        let shown = compose(base, std::slice::from_ref(&entry));
+        let (back, got) = split(&shown, &[]);
+        assert_eq!(back, base, "{shown:?}");
+        assert_eq!((got[0].at, got[0].new.as_str()), (2, "x\n"));
     }
 }
