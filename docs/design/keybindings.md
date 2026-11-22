@@ -8,9 +8,9 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
 
 - `defaults()` in `crates/inkuno/src/shell/keymap.rs:326` is the whole default table. Order
   matters: for the same context, **the last binding wins** (GPUI overlay order;
-  `line::bindings` in `crates/inkuno/src/ui/line.rs:239` is appended after, so input-line keys
+  `line::bindings` in `crates/inkuno-ui/src/line.rs:239` is appended after, so input-line keys
   take precedence over the fields that use them).
-- Display, parsing, and user overrides live in `crates/inkuno/src/ui/keys.rs`:
+- Display, parsing, and user overrides live in `crates/inkuno-ui/src/keys.rs`:
   `canon`/`spell`/`show` (§7), `meets` (`:133`), `effective` (`:153`),
   `refusal` (`:180`), `system` (`:191`), `clashes` (`:203`), `read`/`write`
   (`:227`/`:220`), `shown` (`:258`).
@@ -52,7 +52,7 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
 | Plain `Ctrl+letter` | The note itself | `Ctrl+I/U` styles, `Ctrl+Alt+B` bold, `Ctrl+F/R` find, `Ctrl+D` next occurrence, `Ctrl+K` link; `Ctrl+B` is the sidebar (§8) |
 
 **Context splits (intentional, not bugs).** Two bindings may share keys when
-their contexts never meet (`meets()`, `crates/inkuno/src/ui/keys.rs:133`: a binding with no
+their contexts never meet (`meets()`, `crates/inkuno-ui/src/keys.rs:133`: a binding with no
 context or `Shell` meets everything; two views never meet each other, except a
 `Line` field with its carrying view). Documented cases:
 
@@ -232,7 +232,7 @@ note, with an optional line on what changed; nothing is saved when the text is t
 
 ## 5. macOS translation
 
-`secondary` = `Cmd` on macOS, `Ctrl` elsewhere (`crates/inkuno/src/ui/keys.rs` `spell`/`show`;
+`secondary` = `Cmd` on macOS, `Ctrl` elsewhere (`crates/inkuno-ui/src/keys.rs` `spell`/`show`;
 `MOD` constant). This doc's `Ctrl+*` reads as `Cmd+*` on macOS, except:
 
 | Linux/Windows | macOS | Why |
@@ -243,7 +243,7 @@ note, with an optional line on what changed; nothing is saved when the text is t
 | `Cmd+Left/Right/Up/Down` etc. | line/doc ends + selection | macOS text conventions (`crates/inkuno/src/shell/keymap.rs`, `#[cfg(target_os = "macos")]` tail of `defaults()`) |
 | `Ctrl+Backspace` (trash) | `Cmd+Backspace` | macOS convention |
 
-`system()` (`crates/inkuno/src/ui/keys.rs:191`) flags OS-reserved chords to warn, not refuse.
+`system()` (`crates/inkuno-ui/src/keys.rs:191`) flags OS-reserved chords to warn, not refuse.
 
 ## 6. Palette-alias convention
 
@@ -275,7 +275,7 @@ note, with an optional line on what changed; nothing is saved when the text is t
 
 - Any help line naming an action can be re-bound in place (help `F1`, type to
   filter, `Enter` a new chord). Gate: `editable()` (`crates/inkuno/src/shell/keymap.rs:320`).
-- `refusal()` (`crates/inkuno/src/ui/keys.rs:180`): single keys / `Shift`-only letters type
+- `refusal()` (`crates/inkuno-ui/src/keys.rs:180`): single keys / `Shift`-only letters type
   text (`Types`); bare `Esc` belongs to the panel (`Panel`); unreadable stays
   unreadable. `system()` flags OS-kept chords as warnings.
 - `clashes()` (`:203`): who already has these keys where this action applies

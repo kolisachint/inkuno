@@ -20,7 +20,7 @@ use std::{
 use serde_json::{Value, json};
 
 use super::vault::Signal;
-use crate::lang::tr;
+use inkuno_logic::lang::tr;
 
 /// The flags Inkuno passes after the user's words: no saved session, and no tool that writes a
 /// file, runs a command or fetches from the web, so the agent can only read and answer.
@@ -189,14 +189,14 @@ pub struct Agent {
     /// The number of commands sent, for the ids `p<n>` and `a<n>`.
     sent: AtomicU64,
     /// Under test, an agent with no process keeps the lines sent to it here.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     written: Option<Mutex<Vec<String>>>,
 }
 
 impl Agent {
     /// An agent with no process, for the panel's tests: what is sent to it is kept (see
     /// [`Agent::written`]), and no event ever comes.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn detached() -> Agent {
         Agent {
             child: None,
@@ -208,7 +208,7 @@ impl Agent {
     }
 
     /// The lines sent to a detached agent, in order.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn written(&self) -> Vec<String> {
         self.written
             .as_ref()
@@ -269,7 +269,7 @@ impl Agent {
             stdin: Mutex::new(Some(stdin)),
             events,
             sent: AtomicU64::new(0),
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             written: None,
         })
     }
@@ -326,7 +326,7 @@ impl Agent {
     fn send(&self, line: Value) -> Result<(), String> {
         let mut bytes = line.to_string();
         bytes.push('\n');
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if let Some(lines) = &self.written {
             lock(lines).push(bytes);
             return Ok(());
@@ -672,12 +672,9 @@ mod tests {
     fn find_gives_the_path_the_child_is_started_with() {
         // A relative path with a folder part is found from the current folder, and given as an
         // absolute path: the child runs in another folder, so a relative one would not match.
-        let relative = find_in("src/platform/mod.rs --x", None).expect("a file of this crate");
+        let relative = find_in("src/lib.rs --x", None).expect("a file of this crate");
         assert!(relative.is_absolute(), "{relative:?}");
-        assert_eq!(
-            relative,
-            env::current_dir().unwrap().join("src/platform/mod.rs")
-        );
+        assert_eq!(relative, env::current_dir().unwrap().join("src/lib.rs"));
 
         // An empty entry of PATH is skipped: it is not the current folder. `Cargo.toml` is in the
         // current folder, and is not in the folder of the entry.

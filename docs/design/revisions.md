@@ -3,7 +3,7 @@
 Idea refinement: a person keeps evolving a note and saves explicit **revisions** of it. Each one is
 a complete copy of the text at that moment, with its author and an optional decision note. The
 files are plain Markdown, readable by people and by agents. Pure format and diff logic:
-`crates/inkuno-logic/src/revision.rs`. Disk: `crates/inkuno/src/platform/revisions.rs`.
+`crates/inkuno-logic/src/revision.rs`. Disk: `crates/inkuno-platform/src/revisions.rs`.
 
 ## Format
 

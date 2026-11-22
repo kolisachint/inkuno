@@ -1,0 +1,18 @@
+[package]
+name = "inkuno-ui"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.98"
+description = "The look of Inkuno: theme, fonts and icons, widgets, figures (gpui, no window logic)"
+license = "MIT"
+
+[dependencies]
+# Same versions as the app's Cargo.lock: never re-resolve, keep --locked/--offline green.
+gpui = "=0.2.2"
+inkuno-logic = { version = "0.0.1", path = "../inkuno-logic" }
+inkuno-platform = { version = "0.0.1", path = "../inkuno-platform" }
+latex-rust = "=2.1.0"
+mermaid-rs-renderer = { version = "=0.3.1", default-features = false }
+resvg = { version = "=0.45.1", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
+serde_json = "=1.0.145"
+unicode-segmentation = "=1.13.3"

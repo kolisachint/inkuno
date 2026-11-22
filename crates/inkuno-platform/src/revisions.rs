@@ -12,7 +12,7 @@ use std::{
 };
 
 use super::scratch;
-use crate::logic::revision::{self, Header, Revision};
+use inkuno_logic::revision::{self, Header, Revision};
 
 /// Where a note lives, which decides where its history is kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -504,7 +504,7 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::vault;
+    use crate::vault;
 
     fn temp(name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!("inkuno-rev-{name}-{}", std::process::id()));
@@ -817,16 +817,16 @@ mod tests {
         fs::write(&old, "# plan\nline\nend\n").unwrap();
         save(&home, &old, "ana", None, "one\n", 0).unwrap();
         let marked = "# plan\nline\n{++\nadded\n++}\nend\n";
-        crate::platform::sidecar::save(Some(&home), &old, marked, "assistant").unwrap();
-        assert_eq!(crate::platform::sidecar::read(&home, &old).len(), 1);
+        crate::sidecar::save(Some(&home), &old, marked, "assistant").unwrap();
+        assert_eq!(crate::sidecar::read(&home, &old).len(), 1);
         // A history already at the new name refuses the move, and the history stays where it is.
         let new = root.join("Idea.md");
         save(&home, &new, "ana", None, "stale\n", 0).unwrap();
         assert!(move_along(Some(&root), &old, &new).is_err());
         assert_eq!(all(&home, &old).unwrap().len(), 1);
         // The pending changes move all the same: the error is reported after them.
-        assert!(crate::platform::sidecar::read(&home, &old).is_empty());
-        assert_eq!(crate::platform::sidecar::read(&home, &new).len(), 1);
+        assert!(crate::sidecar::read(&home, &old).is_empty());
+        assert_eq!(crate::sidecar::read(&home, &new).len(), 1);
         let _ = fs::remove_dir_all(root);
     }
 

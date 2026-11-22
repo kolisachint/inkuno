@@ -23,13 +23,13 @@ pub fn fonts() -> Arc<usvg::fontdb::Database> {
         let mut db = usvg::fontdb::Database::new();
         // The app's fonts first: for an equal name, they come before the system's, which are
         // reread from disk for each piece of text (ten times slower).
-        crate::ui::assets::FONT_FILES
+        crate::assets::FONT_FILES
             .iter()
             .for_each(|data| db.load_font_data(data.to_vec()));
         db.load_system_fonts();
-        db.set_sans_serif_family(crate::ui::assets::sans());
-        db.set_serif_family(crate::ui::assets::sans());
-        db.set_monospace_family(crate::ui::assets::mono());
+        db.set_sans_serif_family(crate::assets::sans());
+        db.set_serif_family(crate::assets::sans());
+        db.set_monospace_family(crate::assets::mono());
         Arc::new(db)
     });
     DB.clone()

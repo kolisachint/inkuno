@@ -8,7 +8,8 @@ use std::{
 
 use gpui::{App, AssetSource, Hsla, SharedString, div, prelude::*, rgb, svg};
 
-use crate::{logic::prefs::Prefs, ui::theme::Theme};
+use crate::theme::Theme;
+use inkuno_logic::prefs::Prefs;
 
 /// Installed fonts, collected at startup.
 pub static FAMILIES: OnceLock<Vec<&'static str>> = OnceLock::new();
@@ -24,16 +25,16 @@ static FONTS: RwLock<(&str, &str)> = RwLock::new(("Inter", "JetBrains Mono"));
 /// Plex Mono are no longer bundled; they stay last in the `apply_fonts` chain below for
 /// whoever has them installed.
 pub const FONT_FILES: [&[u8]; 10] = [
-    include_bytes!("../../assets/fonts/Inter-Regular.otf"),
-    include_bytes!("../../assets/fonts/Inter-Italic.otf"),
-    include_bytes!("../../assets/fonts/Inter-Bold.otf"),
-    include_bytes!("../../assets/fonts/Inter-BoldItalic.otf"),
-    include_bytes!("../../assets/fonts/JetBrainsMono[wght].ttf"),
-    include_bytes!("../../assets/fonts/JetBrainsMono-Italic[wght].ttf"),
-    include_bytes!("../../assets/fonts/JetBrainsMono-Bold.ttf"),
-    include_bytes!("../../assets/fonts/JetBrainsMono-BoldItalic.ttf"),
-    include_bytes!("../../assets/fonts/IBMPlexSerif-SemiBold.ttf"),
-    include_bytes!("../../assets/fonts/IBMPlexSerif-SemiBoldItalic.ttf"),
+    include_bytes!("../assets/fonts/Inter-Regular.otf"),
+    include_bytes!("../assets/fonts/Inter-Italic.otf"),
+    include_bytes!("../assets/fonts/Inter-Bold.otf"),
+    include_bytes!("../assets/fonts/Inter-BoldItalic.otf"),
+    include_bytes!("../assets/fonts/JetBrainsMono[wght].ttf"),
+    include_bytes!("../assets/fonts/JetBrainsMono-Italic[wght].ttf"),
+    include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf"),
+    include_bytes!("../assets/fonts/JetBrainsMono-BoldItalic.ttf"),
+    include_bytes!("../assets/fonts/IBMPlexSerif-SemiBold.ttf"),
+    include_bytes!("../assets/fonts/IBMPlexSerif-SemiBoldItalic.ttf"),
 ];
 
 pub fn sans() -> &'static str {

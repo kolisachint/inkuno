@@ -46,7 +46,7 @@ pub fn local(unix: i64) -> (i32, u32, u32, u32, u32) {
 
 /// The UTC fields of a Unix time, in the order of `local`: the pure calendar, no platform call.
 pub fn utc(unix: i64) -> (i32, u32, u32, u32, u32) {
-    crate::logic::revision::utc_parts(unix)
+    inkuno_logic::revision::utc_parts(unix)
 }
 
 /// Local time, `09:05`: hours and minutes.
@@ -122,7 +122,7 @@ pub fn today() -> (i32, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lang::date_name;
+    use inkuno_logic::lang::date_name;
 
     #[test]
     fn names_the_day() {
@@ -140,11 +140,11 @@ mod tests {
     #[test]
     fn the_local_time_of_now_is_today_and_the_clock() {
         // Read around the other reads, so that a minute or a midnight between them is no failure.
-        let now = crate::platform::revisions::now();
+        let now = crate::revisions::now();
         let before = local(now);
         let (year, month, day) = today();
         let (hour, minute) = clock();
-        let after = local(crate::platform::revisions::now());
+        let after = local(crate::revisions::now());
         let same_day = |(y, m, d, _, _): (i32, u32, u32, u32, u32)| (y, m, d) == (year, month, day);
         let same_minute = |(_, _, _, h, mi): (i32, u32, u32, u32, u32)| (h, mi) == (hour, minute);
         assert!(same_day(before) || same_day(after), "{before:?} {after:?}");
@@ -165,7 +165,7 @@ mod tests {
         let (year, month, day, hour, minute) = local(unix + 60);
         let mine = format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}");
         assert_eq!(
-            crate::logic::revision::local_date(&crate::logic::revision::rfc3339(unix + 60), local),
+            inkuno_logic::revision::local_date(&inkuno_logic::revision::rfc3339(unix + 60), local),
             mine
         );
     }

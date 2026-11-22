@@ -21,7 +21,7 @@ use super::{
     revisions::{Home, home_of},
     vault,
 };
-use crate::logic::{
+use inkuno_logic::{
     markdown,
     pending::{self, Entry},
 };
@@ -415,7 +415,7 @@ pub fn restore_along(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic::wiki;
+    use inkuno_logic::wiki;
 
     #[test]
     fn without_a_home_the_marks_stay_in_the_text() {
