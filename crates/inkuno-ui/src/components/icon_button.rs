@@ -1,5 +1,5 @@
 //! Icon buttons. `.ib` in v2: a round 24 px target for panel headers and note copy (`icon_button`), and the
-//! 28 px square of the sidebar bands and the tab strip (`band_button`), which has a ring when it has the keys.
+//! 30 px square, radius 8, of the sidebar bands and the tab strip (`band_button`), which has a ring when it has the keys.
 
 use gpui::{Div, InteractiveElement, MouseButton, Stateful, div, prelude::*, svg};
 
@@ -60,12 +60,12 @@ pub fn band_button_turned(
 ) -> Stateful<Div> {
     div()
         .id(id)
-        .size(t.px(28.))
+        .size(t.px(30.))
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
-        .rounded(t.small())
+        .rounded(t.px(8.))
         .cursor_pointer()
         .tab_index(0)
         .focus(|s| s.border_2().border_color(t.accent))

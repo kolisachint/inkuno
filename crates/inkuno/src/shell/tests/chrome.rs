@@ -41,9 +41,9 @@ fn the_top_band_has_one_height_and_one_top_edge(cx: &mut TestAppContext) {
             true => (px(BAND), px(0.)),
             false => (px(BAND_HIDDEN), px(BAND_HIDDEN)),
         };
-        // The note starts under the band (its strip, or the padding alone).
+        // The note starts under the band's tab row (in the layout), or under the 12 px of a hidden band.
         let strip = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).strip);
-        assert_eq!(strip, band, "{state}: the note's top");
+        assert_eq!(strip, pad, "{state}: the note's top");
         // The right dock: its first header is the band (the switcher), padded when the bar is hidden.
         let right = cx
             .debug_bounds("dock-right")
@@ -62,15 +62,27 @@ fn the_top_band_has_one_height_and_one_top_edge(cx: &mut TestAppContext) {
             "{state}: the right header's height"
         );
         let note = cx.debug_bounds("pane-0").expect("the note is drawn");
+        // With the title bar shown, the pane sits 6 px under its tab bar, which is the band's own row (one tab
+        // or many); hidden, the note starts on the top edge the band shares.
+        let under = if title_bar { band + px(6.) } else { px(0.) };
+        if title_bar {
+            let bar = cx.debug_bounds("tabs-0").expect("the tab bar is drawn");
+            assert_eq!(bar.size.height, band, "{state}: the tab bar's height");
+            assert_eq!(
+                bar.top(),
+                right.top(),
+                "{state}: the tab bar and the right dock share a top"
+            );
+        }
         if panel == nav::Panel::Hidden {
             assert!(
                 !shell.read_with(cx, |s, _| s.left_open()),
                 "{state}: no left panel"
             );
             assert_eq!(
-                note.top(),
-                right.top(),
-                "{state}: the note and the right dock share a top"
+                note.top() - right.top(),
+                under,
+                "{state}: the note sits under the band, from the right dock's top"
             );
         } else {
             let left = cx
@@ -83,8 +95,8 @@ fn the_top_band_has_one_height_and_one_top_edge(cx: &mut TestAppContext) {
                 "{state}: the left band and the right dock"
             );
             assert_eq!(
-                left.top(),
-                note.top(),
+                note.top() - left.top(),
+                under,
                 "{state}: the left band and the note"
             );
             assert!(
@@ -93,6 +105,55 @@ fn the_top_band_has_one_height_and_one_top_edge(cx: &mut TestAppContext) {
             );
         }
     }
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The right-panel toggle is in the band. Open, it sits just left of the panel, so it never covers the panel's
+/// top row (the view switcher, the window buttons); shut, it sits at the band's right end (C02).
+#[gpui::test]
+fn the_right_toggle_sits_beside_the_open_panel(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "toggle");
+    fs::write(root.join("A.md"), "# A\n\nun\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("A.md"), window, cx)
+    });
+    shell.update(cx, |s, _| {
+        s.client = true;
+        s.nav.right_shown = vec![nav::Mode::Outline];
+    });
+    let settle = |cx: &mut gpui::VisualTestContext| {
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+    };
+    settle(cx);
+    let toggle = cx
+        .debug_bounds("right-panel-toggle")
+        .expect("the toggle is drawn");
+    let dock = cx
+        .debug_bounds("dock-right")
+        .expect("the right dock is drawn");
+    assert!(
+        toggle.right() <= dock.left() && dock.left() - toggle.right() <= px(16.),
+        "open: the toggle {toggle:?} sits just left of the panel {dock:?}"
+    );
+    assert!(
+        toggle.bottom() <= dock.top() + px(BAND),
+        "open: the toggle is in the band"
+    );
+
+    shell.update(cx, |s, _| s.nav.right_shown.clear());
+    settle(cx);
+    let note = cx.debug_bounds("pane-0").expect("the note is drawn");
+    let toggle = cx
+        .debug_bounds("right-panel-toggle")
+        .expect("the toggle is drawn");
+    assert!(
+        toggle.left() >= note.right() - px(160.) && toggle.right() <= note.right(),
+        "shut: the toggle {toggle:?} is at the band's right end, the note {note:?}"
+    );
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -152,13 +213,6 @@ fn the_lights_room_is_only_in_the_band_at_the_top_left(cx: &mut TestAppContext) 
     assert!(
         toggle.left() >= lights,
         "the toggle is past the lights: {toggle:?}"
-    );
-    let title = cx
-        .debug_bounds("strip-title")
-        .expect("the note's title, in the strip");
-    assert!(
-        title.left() >= toggle.right(),
-        "the title starts after the toggle: {title:?}"
     );
     // Title bar hidden: no lights, so no room; the band is 12 px of padding.
     shell.update(cx, |s, _| {

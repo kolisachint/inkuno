@@ -775,6 +775,27 @@ impl Theme {
         }]
     }
 
+    /// Quiet's sheet edge (v2 `--shadow-note`): a 1 px hairline and a 10 px fall on the left of the note. Fainter
+    /// on a light ground than on a dark one (the sheet's luminance tells which).
+    pub fn note_shadow(&self) -> Vec<BoxShadow> {
+        let dark = self.bg.l < 0.5;
+        let (near, far) = if dark { (0.30, 0.35) } else { (0.035, 0.045) };
+        vec![
+            BoxShadow {
+                color: hsla(0., 0., 0., near),
+                offset: point(px(-1.), px(0.)),
+                blur_radius: px(1.),
+                spread_radius: px(0.),
+            },
+            BoxShadow {
+                color: hsla(0., 0., 0., far),
+                offset: point(px(-2.), px(0.)),
+                blur_radius: px(if dark { 12. } else { 10. }),
+                spread_radius: px(0.),
+            },
+        ]
+    }
+
     /// Quiet's menu shadows: 0 1 3 at 5 % and 0 8 24 at 10 %, under a popover.
     pub fn popover_shadow(&self) -> Vec<BoxShadow> {
         let shadow = |y: f32, blur: f32, alpha: f32| BoxShadow {

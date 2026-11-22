@@ -30,12 +30,11 @@ fn tabs_open_switch_close_and_come_back(cx: &mut TestAppContext) {
     });
     cx.simulate_keystrokes("secondary-e");
     cx.run_until_parked();
-    // One page: no bar — the note starts at the top, notepad++/zed style. Opening a second tab
-    // moves the note down by the bar plus its gap (the 1↔2 shift is accepted: see `render_tabs`).
+    // One page: the band still draws its tab strip (v2 #3), so the note sits under it as with many tabs.
     let top = cx.debug_bounds("pane-0").unwrap().top();
     assert!(
-        cx.debug_bounds("tabs-0").is_none(),
-        "a single tab draws no bar"
+        cx.debug_bounds("tabs-0").is_some(),
+        "a single tab draws its bar"
     );
 
     // As in an editor: a click in the tree opens the note in a tab of its own, right of the shown
@@ -50,7 +49,21 @@ fn tabs_open_switch_close_and_come_back(cx: &mut TestAppContext) {
         cx.simulate_click(at, gpui::Modifiers::none());
         cx.run_until_parked();
     };
+    // A single click previews Beta; Enter on its row opens it for good, in a tab of its own.
     click(cx, "nav-row-Beta");
+    let open_row = |shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, name: &str| {
+        shell.update_in(cx, |s, window, cx| {
+            let ix = s
+                .nav
+                .rows
+                .iter()
+                .position(|r| r.path == note(name))
+                .expect("the row is listed");
+            s.nav_activate(ix, window, cx)
+        });
+        cx.run_until_parked();
+    };
+    open_row(&shell, cx, "Beta");
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("gamma");
     cx.simulate_keystrokes("enter");
@@ -82,8 +95,8 @@ fn tabs_open_switch_close_and_come_back(cx: &mut TestAppContext) {
         "the bar is a fixed 38 px strip at the top, then 6 of ground: {bar:?} {pane:?}"
     );
     assert!(
-        (pane.top() - top - px(44.)).abs() < px(1.5),
-        "opening tabs moved the note by the bar plus its gap: {pane:?} from {top:?}"
+        (pane.top() - top).abs() < px(1.5),
+        "opening tabs moved the note, which one tab already put under the bar: {pane:?} from {top:?}"
     );
     assert_eq!(
         shell.read_with(cx, |s, cx| s.tab_labels(0, cx)),
@@ -248,6 +261,68 @@ fn tabs_open_switch_close_and_come_back(cx: &mut TestAppContext) {
         last.right() <= bar.right() + px(0.5),
         "{last:?} out of {bar:?}"
     );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// A single click in the tree previews the note in the one italic tab, which the next single click replaces
+/// (v2 #3). A note opened for good (Enter on its row) keeps its tab, and the next preview takes a tab of its own.
+#[gpui::test]
+fn a_single_click_previews_and_the_next_click_replaces_it(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "preview-click");
+    for name in ["Alpha", "Beta", "Gamma"] {
+        fs::write(root.join(format!("{name}.md")), format!("# {name}\n\n")).unwrap();
+    }
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("Alpha.md"), window, cx)
+    });
+    // The tree is shown beside the note, as in the test above.
+    cx.simulate_keystrokes("secondary-e");
+    cx.run_until_parked();
+    let names = |list: &[&str]| {
+        list.iter()
+            .map(|n| Some(root.join(format!("{n}.md"))))
+            .collect::<Vec<_>>()
+    };
+    let click = |cx: &mut gpui::VisualTestContext, name: &str| {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+        let at = cx
+            .debug_bounds(leak(format!("nav-row-{name}")))
+            .unwrap_or_else(|| panic!("{name}"))
+            .center();
+        cx.simulate_click(at, gpui::Modifiers::none());
+        cx.run_until_parked();
+    };
+    let previewed = |shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, _| {
+            let g = &s.groups[0];
+            g.tabs.iter().filter(|&&t| s.panes[t].preview).count()
+        })
+    };
+
+    click(cx, "Beta");
+    assert_eq!(tabs(&shell, cx, 0), (names(&["Alpha", "Beta"]), 1));
+    assert_eq!(previewed(&shell, cx), 1, "Beta is the preview");
+    // The next single click replaces the preview: Beta gives its tab to Gamma.
+    click(cx, "Gamma");
+    assert_eq!(tabs(&shell, cx, 0), (names(&["Alpha", "Gamma"]), 1));
+    assert_eq!(previewed(&shell, cx), 1, "Gamma is the preview");
+    // Opened for good (as Enter does on the row), Gamma keeps its tab: the next preview takes one of its own.
+    shell.update_in(cx, |s, window, cx| {
+        let ix = s
+            .nav
+            .rows
+            .iter()
+            .position(|r| r.path == root.join("Gamma.md"))
+            .expect("the row is listed");
+        s.nav_activate(ix, window, cx)
+    });
+    cx.run_until_parked();
+    assert_eq!(previewed(&shell, cx), 0, "Gamma is kept");
+    click(cx, "Beta");
+    assert_eq!(tabs(&shell, cx, 0), (names(&["Alpha", "Gamma", "Beta"]), 2));
+    assert_eq!(previewed(&shell, cx), 1, "only Beta is the preview");
     let _ = fs::remove_dir_all(&root);
 }
 

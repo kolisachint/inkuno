@@ -57,7 +57,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | `Shift+click on a view's button, title of a view` | Shift+click stacks the view under those shown in its dock; drag its title to another place in a dock, or to the right edge to open the right dock. Escape lets go |
 | Dragging a tab | Onto a tab bar: it moves there; onto the middle of a pane: it joins it; near an edge of a pane: a new pane opens there with it. A file from the tree does the same. Escape lets go without moving anything |
 | Border between panes | Drag it to share the room; double click: even shares |
-| Opening a file | Click in the tree, choose in the palette, follow a link: the file opens in a tab of its own, or its tab comes to the front if it is already open; the arrows in the tree preview notes in a single italic tab |
+| Opening a file | Double-click or Enter in the tree, choose in the palette, follow a link: the file opens in a tab of its own, or its tab comes to the front if it is already open; a single click or the arrows in the tree preview notes in a single italic tab, which the next preview replaces |
 | `Ctrl+W` | Save and close the focused tab; keep it open if saving fails |
 |  | Close the other tabs of the pane, each saved first; one that fails to save stays open |
 |  | Close all the tabs of the pane; the other panes keep theirs |

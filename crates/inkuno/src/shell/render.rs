@@ -1,7 +1,7 @@
 //! Drawing the window: title bar, panes, empty page, badges, resize edges.
 
 use super::*;
-use crate::ui::theme::{BAND, BAND_HIDDEN, LIGHTS_ROOM};
+use crate::ui::theme::{BAND, BAND_HIDDEN};
 
 /// The number in the comments badge: "9+" beyond nine, so that it stays round.
 pub(super) fn badge_label(count: usize) -> String {
@@ -21,6 +21,8 @@ pub(super) const PILL_ROOM: f32 = 124.;
 /// What the note's band leaves free at its right end: the window buttons and the right panel's toggle beside
 /// them (`render_right_toggle`), which sits where the window buttons' margin ends.
 pub(super) const NOTE_ROOM: f32 = 160.;
+/// What the band's right end keeps clear of the right-panel toggle where no window buttons are drawn.
+pub(super) const TOGGLE_ROOM: f32 = 40.;
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -138,7 +140,7 @@ impl Render for Shell {
                 let gap = bar.is_some();
                 // Title bar hidden: its 12 px strip at the top of the pane peeks the band over the note.
                 let hidden = !self.focus_mode && !self.nav.title_bar;
-                let strip = hidden.then(|| self.render_peek_strip(group, cx));
+                let strip = hidden.then(|| self.render_peek_strip(group, client, cx));
                 let peek = (hidden && self.band_peek).then(|| self.render_peek(group, cx));
                 areas.push(Some(
                     div()
@@ -491,7 +493,7 @@ impl Render for Shell {
             .key_context("Shell")
             .child(body)
             .when(title_bar, |d| d.child(pill))
-            .when(title_bar && self.band_shown(), |d| {
+            .when(self.band_shown() || self.band_peek, |d| {
                 d.child(self.render_right_toggle(cx))
             })
             .children(self.render_menu(window, cx))
@@ -760,12 +762,14 @@ impl Shell {
             .is_some_and(|root| self.unreadable.iter().any(|(dir, _)| dir == root));
         let has_vault = self.vault.is_some() && !closed;
         // A card: its icon and title, then what it does (`lines` of it, or one line cut with an
-        // ellipsis), and the hover of a row. Nothing is drawn for an empty line.
+        // ellipsis), then its shortcut on a line of its own that never wraps (C22: a chord is not broken
+        // across lines), and the hover of a row. Nothing is drawn for an empty line.
         let card = |id: (&'static str, usize),
                     icon: &'static str,
                     title: String,
                     line: String,
-                    lines: usize| {
+                    lines: usize,
+                    keys: String| {
             div()
                 .id(id)
                 .debug_selector(move || {
@@ -812,6 +816,14 @@ impl Shell {
                         text.line_clamp(lines).child(line)
                     }
                 }))
+                .children((!keys.is_empty()).then(|| {
+                    div()
+                        .flex_none()
+                        .whitespace_nowrap()
+                        .text_size(t.px(12.))
+                        .text_color(t.soft)
+                        .child(keys)
+                }))
         };
         let mut cards = Vec::new();
         if has_vault {
@@ -826,6 +838,7 @@ impl Shell {
                         tr("open the daily note", "ouvrir la note du jour")
                     ),
                     2,
+                    String::new(),
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.open_today(window, cx)))
                 .into_any_element(),
@@ -852,10 +865,9 @@ impl Shell {
                 ("empty-key", 1),
                 "plus.svg",
                 tr("New note", "Nouvelle note").into(),
-                format!("{what} · {new_keys}")
-                    .trim_end_matches(" · ")
-                    .to_string(),
+                what.to_string(),
                 2,
+                new_keys.to_string(),
             )
             .on_click(move |_, window, cx| window.dispatch_action(new.boxed_clone(), cx))
             .into_any_element(),
@@ -866,16 +878,13 @@ impl Shell {
                 ("empty-key", 0),
                 "search.svg",
                 tr("Search", "Rechercher").into(),
-                format!(
-                    "{} · {search_keys}",
-                    tr(
-                        "find a note or run a command",
-                        "trouver une note ou lancer une commande"
-                    )
+                tr(
+                    "find a note or run a command",
+                    "trouver une note ou lancer une commande",
                 )
-                .trim_end_matches(" · ")
                 .to_string(),
                 2,
+                search_keys.to_string(),
             )
             .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenPalette), cx))
             .into_any_element(),
@@ -893,6 +902,7 @@ impl Shell {
                     note.name.clone(),
                     note.line.clone(),
                     1,
+                    String::new(),
                 )
                 .on_click(cx.listener(move |this, _, window, cx| this.open(&note.path, window, cx)))
             });
@@ -1075,7 +1085,8 @@ impl Shell {
     ) -> gpui::AnyElement {
         let t = self.theme;
         let many = self.alone().is_none() && self.groups.len() > 1;
-        let barred = self.groups[group].tabs.len() > 1;
+        // The band (the pane's tab bar, one tab or many) is drawn over the top row while it is shown.
+        let barred = self.band_shown();
         // Copy of the whole note: a plain floating icon, outside the title bar.
         // Comments of the note: one card each, in the Comments view of the right panel (`shell/comments.rs`).
         // ponytail: the note is reread on every render (a search for `{==`); keep the
@@ -1134,11 +1145,6 @@ impl Shell {
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {
             window.focus(&self.pane().editor.focus_handle(cx));
         }
-        // Without a tab bar, the top row of the pane is a handle to move the window (Linux): the note's text starts under it.
-        let strip = self.band_shown() && !barred;
-        // Under the native bar the traffic lights float over the left end of that same row:
-        // it starts past them, with no handle under the lights, and the note steps down for it.
-        let traffic = self.nav.lights && !barred;
         // A tab bar puts the note below the window buttons: its text no longer steps down for them.
         let pill = (title_bar && !barred && group == self.corner_group())
             .then(|| window.viewport_size().width - self.nav.left - px(8.) - t.px(PILL_W));
@@ -1146,8 +1152,6 @@ impl Shell {
         // hidden title bar. A tab bar is the band itself: the text steps down past it.
         let pad = if barred || self.focus_mode {
             px(0.)
-        } else if self.band_shown() {
-            t.px(BAND)
         } else {
             t.px(BAND_HIDDEN)
         };
@@ -1188,9 +1192,6 @@ impl Shell {
             .file
             .as_ref()
             .map(|file| (file.path.clone(), file.kind.clone()));
-        // The views whose top room is empty: the strip can lie over it.
-        let free_top = self.pane().figure.is_none()
-            && (listing.is_some() || matches!(file, None | Some((_, FileKind::Image))));
         let note = match file {
             _ if self.pane().settings.is_some() => note.child(self.render_settings(cx)),
             _ if listing.is_some() => note.children(listing),
@@ -1258,11 +1259,11 @@ impl Shell {
                     .border_1()
                     .border_color(t.accent.opacity(0.5))
             });
-        // The top strip's left edge: past the sidebar toggle (and the lights), where the sidebar is hidden.
-        let traffic_edge = self.strip_edge(group);
-        // Flat, edge to edge: a pane has no corners and no shadow; its neighbour is a hairline away.
+        // Flat, edge to edge: a pane has no corners; its neighbour is a hairline away. Quiet's sheet has the
+        // faint shadow of its left edge (v2 `--shadow-note`), which the sidebar's divider is drawn against.
         let area = div()
             .bg(t.bg)
+            .when(t.quiet, |d| d.shadow(t.note_shadow()))
             .overflow_hidden()
             .id(("pane", pane))
             .debug_selector(move || format!("pane-{group}"))
@@ -1309,72 +1310,6 @@ impl Shell {
                 }),
             )
             .child(note)
-            .when((strip || traffic) && free_top, |d| {
-                // Under the native bar the strip keeps its room but takes no handle: the lights
-                // stay clickable. Where the sidebar is hidden, its left edge is past the toggle.
-                let edge = traffic_edge;
-                let at_left = edge > px(0.);
-                let corner_here = group == self.corner_group();
-                // Zed-style: where the app draws the bar itself, the vault name sits centered in
-                // the window's top row, under the window buttons. Plain text: it takes no pointer, the
-                // strip stays a handle; it clears the buttons on the right.
-                let name = (strip && corner_here && !at_left)
-                    .then(|| self.vault.as_ref().map(|v| vault::stem(v)))
-                    .flatten()
-                    .map(|name| {
-                        div()
-                            .debug_selector(|| "window-title".into())
-                            .min_w_0()
-                            .truncate()
-                            .mr(t.px(NOTE_ROOM))
-                            .text_size(t.px(13.))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(t.soft)
-                            .child(name)
-                    });
-                // Sidebar hidden: the strip holds the sidebar toggle after the lights, then the note's
-                // name, centred (the note's own title, not the vault's).
-                let note = at_left.then(|| {
-                    let p = &self.panes[pane];
-                    let title = if p.scratch && p.file.is_none() {
-                        logic::scratch::title(p.editor.read(cx).text())
-                    } else {
-                        p.displayed_path()
-                            .map(|path| vault::stem(path).to_string())
-                            .unwrap_or_else(|| tr("New note", "Nouvelle note").to_string())
-                    };
-                    div()
-                        .debug_selector(|| "strip-title".into())
-                        .min_w_0()
-                        .truncate()
-                        .when(corner_here, |d| d.mr(t.px(NOTE_ROOM)))
-                        .text_size(t.px(13.))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(t.soft)
-                        .child(title)
-                });
-                let toggle = at_left.then(|| {
-                    div()
-                        .absolute()
-                        .top(t.px((BAND - 28.) / 2.))
-                        .left(t.px(if self.nav.lights { LIGHTS_ROOM } else { 8. }))
-                        .child(self.sidebar_toggle(false, cx))
-                });
-                let bare = div()
-                    .debug_selector(move || format!("drag-strip-{group}"))
-                    .absolute()
-                    .top_0()
-                    .left(edge)
-                    .right_0()
-                    .h(t.px(BAND))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .children(name)
-                    .children(note);
-                d.child(if traffic { bare } else { bare.map(drag_window) })
-                    .children(toggle)
-            })
             // The active pane of several: a 1 px ring around it, the accent at 30 %. Alone, a pane needs none.
             .when(many && active && !t.quiet, |d| {
                 d.child(
@@ -1430,10 +1365,10 @@ impl Shell {
                         .collect::<Vec<_>>()
                         .join(".")
                 );
-                // The border is a 1 px hairline between two panes (the divider colour); it turns accent
-                // while the pointer is on it or it is dragged. It is drawn by the handle below.
+                // The border is a 1 px hairline between two panes, in the `line` token (v2 `.pane+.pane`); it turns
+                // accent while the pointer is on it or it is dragged. It is drawn by the handle below.
                 let line = div()
-                    .bg(if dragged { t.accent } else { t.border })
+                    .bg(if dragged { t.accent } else { t.line })
                     .group_hover("pane-border", |s| s.bg(t.accent));
                 // The handle is wider than the line: laid over the panes on both sides, it takes the
                 // pointer there (occluding the panes under it), and it carries the listeners (gpui
