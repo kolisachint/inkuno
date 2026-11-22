@@ -444,7 +444,8 @@ const CONTEXT: usize = 120;
 ///
 /// `at` is only a hint: the note may change outside Inkuno after the entry was saved. `before` and
 /// `after` are the lines around the anchor when it was saved (see `CONTEXT`). `compose` finds the
-/// entry again by them, and leaves it out when neither is found.
+/// entry again only where both hold, and leaves it out otherwise: it is then an orphan, kept beside
+/// the note with `orphan_since` (when it was first left out, in seconds since the Unix epoch).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Entry {
     pub id: u32,
@@ -454,6 +455,7 @@ pub struct Entry {
     pub new: String,
     pub before: String,
     pub after: String,
+    pub orphan_since: Option<u64>,
 }
 
 /// The note text as it is on disk, and the pending changes beside it: `display` (the text with
@@ -575,55 +577,55 @@ fn nearest(at: usize, candidates: impl Iterator<Item = usize>) -> Option<usize> 
     candidates.min_by_key(|p| p.abs_diff(at))
 }
 
-/// Where `entry` is in `base`, or `None` when it cannot be placed cleanly. A removed text must be
-/// whole lines outside code fences, and an insertion must sit at a line start outside them; so a
-/// mark never splits a line or lands in a fence. With context, the place is one where the text
-/// before or after the anchor still holds (both, when both are kept), the nearest to `at`. Without
-/// any (an entry saved before context was kept), the removed text at `at`, or the nearest one, and
-/// an insertion only at `at`.
+/// Whether a context line is blank: empty, or only white space.
+fn blank(line: &str) -> bool {
+    line.trim().is_empty()
+}
+
+/// Where `entry` is in `base`, or `None` when it cannot be placed. A removed text must be whole
+/// lines outside code fences, and an insertion must sit at a line start outside them; so a mark
+/// never splits a line or lands in a fence. An entry with context is placed only where its
+/// `before` and `after` lines both hold, the nearest to `at` of those. An empty side holds only at
+/// the edge of the text. An insertion whose context is blank on both sides has nothing to tell one
+/// blank line from another, so it is placed only at `at` itself. An entry with no context at all (one
+/// saved before context was kept) is found by its removed text, the nearest to `at`, and an
+/// insertion only at `at`.
 fn place(base: &str, clean: &[usize], entry: &Entry) -> Option<usize> {
     if has_mark_line(&entry.old) || has_mark_line(&entry.new) {
         return None;
     }
     let len = entry.old.len();
     let at = entry.at.min(base.len());
-    let candidates = clean.iter().copied().filter(|&p| {
+    let is_clean = |p: usize| clean.binary_search(&p).is_ok();
+    let text_here = |p: usize| {
         entry.old.is_empty()
             || (base
                 .get(p..)
                 .is_some_and(|rest| rest.starts_with(&entry.old))
-                && clean.binary_search(&(p + len)).is_ok())
-    });
+                && is_clean(p + len))
+    };
     if entry.before.is_empty() && entry.after.is_empty() {
         return match entry.old.is_empty() {
-            true => clean.binary_search(&at).is_ok().then_some(at),
-            false => nearest(at, candidates),
+            true => is_clean(at).then_some(at),
+            false => nearest(at, clean.iter().copied().filter(|&p| text_here(p))),
         };
     }
-    // A removed text that is in the note once is its place, whatever became of its context.
-    if !entry.old.is_empty() {
-        let mut found = candidates.clone();
-        let first = found.next();
-        if first.is_some() && found.next().is_none() {
-            return first;
+    let before_holds = |p: usize| match entry.before.is_empty() {
+        true => p == 0,
+        false => base.get(..p).is_some_and(|t| t.ends_with(&entry.before)),
+    };
+    let after_holds = |p: usize| {
+        let end = p + len;
+        match entry.after.is_empty() {
+            true => end == base.len(),
+            false => base.get(end..).is_some_and(|t| t.starts_with(&entry.after)),
         }
+    };
+    let holds = |p: usize| text_here(p) && before_holds(p) && after_holds(p);
+    if entry.old.is_empty() && blank(&entry.before) && blank(&entry.after) {
+        return (is_clean(at) && holds(at)).then_some(at);
     }
-    // Each side holds when the context is still there on that side of the candidate.
-    let found: Vec<(usize, bool, bool)> = candidates
-        .filter_map(|p| {
-            let before = !entry.before.is_empty()
-                && base.get(..p).is_some_and(|t| t.ends_with(&entry.before));
-            let after = !entry.after.is_empty()
-                && base
-                    .get(p + len..)
-                    .is_some_and(|t| t.starts_with(&entry.after));
-            (before || after).then_some((p, before, after))
-        })
-        .collect();
-    let full = found
-        .iter()
-        .filter(|&&(_, b, a)| (entry.before.is_empty() || b) && (entry.after.is_empty() || a));
-    nearest(at, full.map(|&(p, _, _)| p)).or_else(|| nearest(at, found.iter().map(|&(p, _, _)| p)))
+    nearest(at, clean.iter().copied().filter(|&p| holds(p)))
 }
 
 /// Where each entry of `entries` is placed in `base`, if it is: the `(offset, index)` pairs of the
@@ -1604,6 +1606,7 @@ mod tests {
                 new: "new\n".into(),
                 before: "keep\n".into(),
                 after: "end\n".into(),
+                orphan_since: None,
             }]
         );
     }
@@ -1674,14 +1677,52 @@ mod tests {
     }
 
     #[test]
-    fn a_removed_text_that_is_in_the_note_once_is_found_after_a_relink_of_another_line() {
+    fn a_removed_text_whose_line_before_was_relinked_is_left_out() {
+        // The link above changed length, so the context before the removed line is gone: the line is
+        // still in the note once, but it is not where the change was saved. It is an orphan.
         let (base, entries) = read_back("See [[Old]].\n{--\nend\n--}\n");
         assert_eq!(base, "See [[Old]].\nend\n");
-        // The link above changed length: the removed line is still there, once.
+        let fresh = "See [[Longer-name-here]].\nend\n";
+        assert_eq!(compose(fresh, &entries), fresh);
+        assert_eq!(placed(fresh, &entries), [false]);
+    }
+
+    #[test]
+    fn a_phantom_replacement_is_not_placed_where_its_context_is_gone() {
+        let (_, entries) = read_back("a\n{--\nold\n--}\n{++\nnew\n++}\nb\n");
+        // The line was edited away outside Inkuno, and a person later types the same line elsewhere.
+        let later = "p\nold\nq\n";
+        assert_eq!(compose(later, &entries), later);
+        assert_eq!(placed(later, &entries), [false]);
+        // With its context still there, the same entry is placed.
         assert_eq!(
-            compose("See [[Longer-name-here]].\nend\n", &entries),
-            "See [[Longer-name-here]].\n{--\nend\n--}\n"
+            compose("a\nold\nb\n", &entries),
+            "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n"
         );
+    }
+
+    #[test]
+    fn a_blank_context_insertion_does_not_land_at_another_blank_line() {
+        let (base, entries) = read_back("a\n\n{++\nX\n++}\n\nb\n");
+        assert_eq!(base, "a\n\n\nb\n");
+        assert_eq!(
+            (entries[0].before.as_str(), entries[0].after.as_str()),
+            ("\n", "\n")
+        );
+        assert_eq!(compose("a\n\n\nb\n", &entries), "a\n\n{++\nX\n++}\n\nb\n");
+        // A blank line pair further down, where the old rule put it: left out, as it is not the place.
+        let moved = "a\n\nc\n\n\nb\n";
+        assert_eq!(compose(moved, &entries), moved);
+        assert_eq!(placed(moved, &entries), [false]);
+    }
+
+    #[test]
+    fn a_one_sided_context_does_not_place_an_entry_on_the_other_side_alone() {
+        // The line before still reads "# Plan": the line after is now "something", not "old".
+        let (_, entries) = read_back("# Plan\n{++\nnew\n++}\nold\nend\n");
+        let fresh = "# Plan\nsomething\nend\n";
+        assert_eq!(compose(fresh, &entries), fresh);
+        assert_eq!(placed(fresh, &entries), [false]);
     }
 
     #[test]
@@ -1862,9 +1903,10 @@ mod tests {
             assert_eq!(areas(&shown).len(), kept, "round {round}");
             outside_placed += kept;
         }
-        // The rounds exercise real placements, both with the note as saved and after a change.
+        // The rounds exercise real placements, both with the note as saved and after a change. After a
+        // change, only an entry whose context still holds on both sides is placed (about 6 in 10 here).
         assert!(
-            changes > 200 && outside_placed > 200,
+            changes > 200 && outside_placed > 100,
             "{changes} {outside_placed}"
         );
     }

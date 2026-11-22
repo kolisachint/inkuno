@@ -2,7 +2,9 @@
 //! wait in `.inkuno/pending/<note>.json` (a scratch note: `<scratch>/.inkuno/pending/<name>.json`),
 //! as a list of `{id, author, at, old, new}`. The editor shows them as marked areas (`pending.rs`):
 //! `display` composes the marks from the file and the list, and `split` takes them off again on
-//! save. A note file with marks written before this (CriticMarkup) is shown as it is, and its
+//! save. A change the note's text does not place (an orphan) waits in the list with `orphan_since`:
+//! it is shown nowhere, the pill counts it, and it is dropped after 30 days. A note file with marks
+//! written before this (CriticMarkup) is shown as it is, and its
 //! marks go to the list on the next save. Comments written in the earlier form are rewritten to
 //! the new one when read (`markdown::migrate_comments`), so the editor and the file agree.
 
@@ -12,6 +14,7 @@ use std::{
 };
 
 use serde_json::{Value, json};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
     revisions::{Home, home_of},
@@ -21,6 +24,16 @@ use crate::logic::{
     markdown,
     pending::{self, Entry},
 };
+
+/// How long an orphan waits beside its note before it is dropped on load: 30 days, in seconds.
+const ORPHAN_LIFETIME: u64 = 30 * 24 * 60 * 60;
+
+/// The time now, in seconds since the Unix epoch (0 when the clock is before it).
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
 
 /// The file that holds the pending changes of `note`, `None` for a note outside its home.
 fn file(home: &Home, note: &Path) -> Option<PathBuf> {
@@ -34,6 +47,7 @@ fn file(home: &Home, note: &Path) -> Option<PathBuf> {
 }
 
 /// The pending changes of `note`, as they were last saved. A missing or unreadable list is none.
+/// An orphan older than `ORPHAN_LIFETIME` is dropped here, and so is gone at the next save.
 pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
     let Some(file) = file(home, note) else {
         return Vec::new();
@@ -47,6 +61,7 @@ pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
     let Some(list) = value.get("changes").and_then(Value::as_array) else {
         return Vec::new();
     };
+    let now = now_secs();
     list.iter()
         .filter_map(|change| {
             Some(Entry {
@@ -66,9 +81,45 @@ pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_string(),
+                // Absent from a list written before orphans were kept: such a list has none.
+                orphan_since: change.get("orphan_since").and_then(Value::as_u64),
             })
         })
+        .filter(|e| {
+            e.orphan_since
+                .is_none_or(|t| now.saturating_sub(t) <= ORPHAN_LIFETIME)
+        })
         .collect()
+}
+
+/// The pending changes of `note` that its file text `disk` does not place (`pending::placed`): they
+/// are shown nowhere, and wait beside the note as orphans.
+pub fn unplaced(home: &Home, note: &Path, disk: &str) -> Vec<Entry> {
+    let known = read(home, note);
+    let placed = pending::placed(&markdown::migrate_comments(disk), &known);
+    known
+        .into_iter()
+        .zip(placed)
+        .filter_map(|(e, placed)| (!placed).then_some(e))
+        .collect()
+}
+
+/// Discards the orphans of `note` (see `unplaced`): the list keeps the changes that are placed.
+/// Returns how many were discarded. The note's text is not touched.
+pub fn discard_unplaced(home: &Home, note: &Path, disk: &str) -> io::Result<usize> {
+    let known = read(home, note);
+    let placed = pending::placed(&markdown::migrate_comments(disk), &known);
+    let kept: Vec<Entry> = known
+        .iter()
+        .zip(&placed)
+        .filter(|(_, placed)| **placed)
+        .map(|(e, _)| e.clone())
+        .collect();
+    let dropped = known.len() - kept.len();
+    if dropped > 0 {
+        store(home, note, &kept)?;
+    }
+    Ok(dropped)
 }
 
 /// Writes the pending changes of `note`: the list, or no file when there are none.
@@ -96,6 +147,7 @@ pub fn store(home: &Home, note: &Path, entries: &[Entry]) -> io::Result<()> {
                 "new": e.new,
                 "before": e.before,
                 "after": e.after,
+                "orphan_since": e.orphan_since,
             })
         })
         .collect();
@@ -149,12 +201,18 @@ pub fn split(
         let disk = fs::read_to_string(note)
             .map(|text| markdown::migrate_comments(&text))
             .unwrap_or_default();
+        let now = now_secs();
         for (entry, shown) in known.iter().zip(pending::placed(&disk, &known)) {
             let kept = entries
                 .iter()
                 .any(|e| e.old == entry.old && e.new == entry.new);
             if !shown && !kept {
-                entries.push(entry.clone());
+                // An orphan: the time it was first left out is kept, and a new one is stamped.
+                let orphan_since = entry.orphan_since.unwrap_or(now);
+                entries.push(Entry {
+                    orphan_since: Some(orphan_since),
+                    ..entry.clone()
+                });
             }
         }
     }
@@ -347,6 +405,7 @@ mod tests {
             new: "new\n".into(),
             before: String::new(),
             after: String::new(),
+            orphan_since: None,
         };
         let home = Home::Vault(root.clone());
         store(&home, &note, std::slice::from_ref(&entry)).unwrap();
@@ -390,6 +449,7 @@ mod tests {
             new: "x\n".into(),
             before: "a\n".into(),
             after: "b\n".into(),
+            orphan_since: None,
         };
         store(&home, &note, std::slice::from_ref(&entry)).unwrap();
         // A list left at the new name by a note deleted outside the app.
@@ -415,6 +475,121 @@ mod tests {
         fs::write(&note, "# Plan\nsomething else\nend\n").unwrap();
         let shown = display(Some(&home), &note, "# Plan\nsomething else\nend\n");
         assert_eq!(shown, "# Plan\nsomething else\nend\n");
+        // A new note whose first context line matches, and whose second does not: not inherited.
+        fs::write(&note, "# Plan\nold line\nother\n").unwrap();
+        assert_eq!(
+            display(Some(&home), &note, "# Plan\nold line\nother\n"),
+            "# Plan\nold line\nother\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn an_unplaced_change_is_kept_as_an_orphan_with_its_first_time() {
+        let root = vault_dir("orphan");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nold\nb\n").unwrap();
+        save(
+            Some(&home),
+            &note,
+            "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n",
+            "assistant",
+        )
+        .unwrap();
+        // The line is edited away outside the app: the change is an orphan, shown nowhere.
+        fs::write(&note, "a\nz\nb\n").unwrap();
+        assert_eq!(unplaced(&home, &note, "a\nz\nb\n").len(), 1);
+        assert_eq!(display(Some(&home), &note, "a\nz\nb\n"), "a\nz\nb\n");
+        // A save keeps it, stamped with the time it was first left out.
+        let (text, kept) = split(Some(&home), &note, "a\nz\nb edited\n", "");
+        assert_eq!(text, "a\nz\nb edited\n");
+        assert_eq!(kept.len(), 1);
+        let stamp = kept[0].orphan_since.expect("stamped");
+        assert!(stamp > 0);
+        store(&home, &note, &kept).unwrap();
+        assert_eq!(read(&home, &note)[0].orphan_since, Some(stamp));
+        // A later save keeps the first time, not the new one.
+        let (_, again) = split(Some(&home), &note, "a\nz\nb\n", "");
+        assert_eq!(again[0].orphan_since, Some(stamp));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_list_without_orphan_fields_reads_its_changes_as_placed() {
+        let root = vault_dir("old-list");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nb\n").unwrap();
+        let list = lists_root(&home).join("Plan.md.json");
+        fs::create_dir_all(list.parent().unwrap()).unwrap();
+        fs::write(
+            &list,
+            r#"{"version": 2, "changes": [{"id": 1, "author": "", "at": 2, "old": "", "new": "x\n", "before": "a\n", "after": "b\n"}]}"#,
+        )
+        .unwrap();
+        let read_back = read(&home, &note);
+        assert_eq!(read_back.len(), 1);
+        assert_eq!(read_back[0].orphan_since, None);
+        assert!(unplaced(&home, &note, "a\nb\n").is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn an_orphan_older_than_thirty_days_is_dropped_on_load() {
+        let root = vault_dir("expiry");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nb\n").unwrap();
+        let old = Entry {
+            id: 1,
+            author: String::new(),
+            at: 0,
+            old: "gone\n".into(),
+            new: "x\n".into(),
+            before: String::new(),
+            after: "a\n".into(),
+            orphan_since: Some(1),
+        };
+        let fresh = Entry {
+            id: 2,
+            orphan_since: Some(now_secs() - 29 * 24 * 60 * 60),
+            ..old.clone()
+        };
+        store(&home, &note, &[old, fresh.clone()]).unwrap();
+        assert_eq!(read(&home, &note), vec![fresh]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn discard_drops_the_orphans_and_keeps_the_placed_changes() {
+        let root = vault_dir("discard");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nb\nc\n").unwrap();
+        let placed = Entry {
+            id: 1,
+            author: String::new(),
+            at: 2,
+            old: String::new(),
+            new: "x\n".into(),
+            before: "a\n".into(),
+            after: "b\n".into(),
+            orphan_since: None,
+        };
+        let orphan = Entry {
+            id: 2,
+            old: "gone\n".into(),
+            new: "y\n".into(),
+            before: "q\n".into(),
+            after: "r\n".into(),
+            orphan_since: Some(now_secs()),
+            ..placed.clone()
+        };
+        store(&home, &note, &[placed.clone(), orphan]).unwrap();
+        assert_eq!(discard_unplaced(&home, &note, "a\nb\nc\n").unwrap(), 1);
+        assert_eq!(read(&home, &note), vec![placed]);
+        assert_eq!(discard_unplaced(&home, &note, "a\nb\nc\n").unwrap(), 0);
         let _ = fs::remove_dir_all(root);
     }
 

@@ -668,3 +668,55 @@ fn a_save_writes_the_old_comments_in_the_new_form(cx: &mut TestAppContext) {
     );
     let _ = fs::remove_dir_all(root);
 }
+
+#[gpui::test]
+fn an_orphan_is_counted_in_the_pill_and_discard_removes_it(cx: &mut TestAppContext) {
+    use crate::{logic::pending::Entry, platform::revisions::Home};
+    let (root, shell, cx, _config) = open_note("pending-orphan", "a\nz\nb\n", cx);
+    assert!(
+        cx.debug_bounds("pending-hint").is_none(),
+        "no change, no pill"
+    );
+    // A change whose context the note no longer has: it is shown nowhere, and the pill counts it.
+    let note = root.join("Plan.md");
+    let home = Home::Vault(root.clone());
+    let orphan = Entry {
+        id: 1,
+        author: "assistant".into(),
+        at: 2,
+        old: "gone\n".into(),
+        new: "x\n".into(),
+        before: "q\n".into(),
+        after: "r\n".into(),
+        orphan_since: None,
+    };
+    crate::platform::sidecar::store(&home, &note, std::slice::from_ref(&orphan)).unwrap();
+    settle(cx);
+    assert!(
+        cx.debug_bounds("pending-hint").is_some(),
+        "the pill says so"
+    );
+    let at = cx
+        .debug_bounds("pending-discard")
+        .expect("Discard is drawn")
+        .center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    settle(cx);
+    assert!(
+        crate::platform::sidecar::read(&home, &note).is_empty(),
+        "Discard removes the orphan from the list"
+    );
+    // Absence is read from the state the render gates the pill on: a stale debug bound may outlive
+    // the element (GPUI keeps the last bounds of an element drawn once).
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.unplaced_changes()),
+        0,
+        "no orphan is left to count"
+    );
+    assert_eq!(
+        text(&shell, cx),
+        "a\nz\nb\n",
+        "the note's text is untouched"
+    );
+    let _ = fs::remove_dir_all(root);
+}

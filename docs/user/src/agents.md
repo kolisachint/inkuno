@@ -51,7 +51,7 @@ Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set`
 | `inkuno vault` | the vault's folder, its counts, its folders and its most used tags |
 | `inkuno list [--folder F] [--tag T] [--kind K] [--sort name\|recent] [--limit N] [--cursor C]` | notes and files, a page at a time. `--kind` is `note`, `diagram`, `table`, `picture`, `attachment` or `all`. `--cursor` is the next value of the previous page, while that page says there is one |
 | `inkuno search <words…> [--tag T] [--folder F] [--limit N]` | notes that contain every word: names first, then text, with a snippet around the match |
-| `inkuno read <note> [--section HEADING\|^BLOCK] [--json]` | the text of a note, or of one section or block. `--json` adds the path, tags, links, embeds, comments and the `token` |
+| `inkuno read <note> [--section HEADING\|^BLOCK] [--json]` | the text of a note, or of one section or block. `--json` adds the path, tags, links, embeds, comments, the `token` and `unplaced` (the pending changes the text does not place) |
 | `inkuno links <note>` | the notes it links to, the notes that link to it with the line of each link, its tags, embeds and pictures |
 | `inkuno tags` | every tag, with how many notes carry it |
 | `inkuno show <note>` | opens the note in the Inkuno window, in a tab of its own. Changes nothing. Fails when Inkuno is not open |
