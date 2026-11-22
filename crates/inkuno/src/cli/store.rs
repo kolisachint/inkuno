@@ -343,7 +343,8 @@ fn disk_kind(kind: io::ErrorKind) -> String {
 }
 
 /// The check before `old` is renamed `new` (a file move, or a title change of `moved`): nothing may
-/// be moved or written when a link rewrite would change a pending change of a linking note. `Err`
+/// be moved or written when a link rewrite would change a pending change of a linking note. The
+/// notes are read as the editor shows them, so a change kept beside its note is seen. `Err`
 /// names the first such note, by its path in the vault. `moved` is the note's file as it is now, and
 /// `edited` the text it is about to hold, when that text is not on disk yet.
 pub fn check_links_before_move(
@@ -376,10 +377,11 @@ pub fn check_links_before_move(
         false => wiki.clone(),
     };
     for path in paths {
+        // The note as the editor shows it: a pending change is in the text only as its marks.
         let text = match edited {
             Some(text) if path == moved => text.to_string(),
-            _ => match fs::read_to_string(&path) {
-                Ok(text) => text,
+            _ => match read_shown(Some(&vault.root), &path) {
+                Ok((text, _)) => text,
                 Err(_) => continue,
             },
         };
@@ -407,7 +409,10 @@ pub fn check_links_before_move(
 
 /// Rewrites `[[old]]` into `[[new]]` in every note that links to it, unless another note
 /// is still called `old`, and the relative addresses to the note moved from `moved.0` to `moved.1`
-/// (see `wiki::rewrite_links`). Returns how many notes changed.
+/// (see `wiki::rewrite_links`). Returns how many notes changed. A note is rewritten as the editor
+/// shows it and written back the same way (`write_shown`), so its pending changes are placed again
+/// at their new offsets. A rewrite that would change a pending change is left out (`check_links_before_move`
+/// refuses such a move before anything is written).
 pub fn relink(vault: &mut Vault, old: &str, new: &str, moved: Option<(&Path, &Path)>) -> usize {
     vault.rescan();
     let wiki: Vec<PathBuf> = wiki::relink_set(&vault.notes, old, new)
@@ -419,7 +424,7 @@ pub fn relink(vault: &mut Vault, old: &str, new: &str, moved: Option<(&Path, &Pa
     };
     let mut changed = 0;
     for path in paths {
-        let Ok(text) = fs::read_to_string(&path) else {
+        let Ok((text, _)) = read_shown(Some(&vault.root), &path) else {
             continue;
         };
         let Some(fresh) = wiki::rewrite_links(
@@ -433,7 +438,10 @@ pub fn relink(vault: &mut Vault, old: &str, new: &str, moved: Option<(&Path, &Pa
         ) else {
             continue;
         };
-        if vault::write(&path, &fresh).is_ok() {
+        if pending::rewrite_refused(&text, &fresh) {
+            continue;
+        }
+        if write_shown(Some(&vault.root), &path, &fresh, "").is_ok() {
             changed += 1;
         }
     }

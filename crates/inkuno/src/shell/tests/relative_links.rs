@@ -153,3 +153,42 @@ fn open_then_open_leaves_every_file_byte_identical(cx: &mut TestAppContext) {
     }
     assert_eq!(snapshot(&root), before);
 }
+
+#[gpui::test]
+fn a_rename_keeps_a_pending_change_of_a_linking_note_in_its_place(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "links-rename-pending");
+    fs::write(root.join("Target.md"), "# Target\n\ntext\n").unwrap();
+    let other = root.join("Other.md");
+    fs::write(&other, "# Other\n\nSee [[Target]].\n").unwrap();
+    // A proposed line at the end, under the link: its change waits beside the note, as an agent's write leaves it.
+    let home = crate::platform::revisions::home_of(&other, Some(&root)).unwrap();
+    crate::platform::sidecar::save(
+        Some(&home),
+        &other,
+        "# Other\n\nSee [[Target]].\n{++\nadded\n++}\n",
+        "assistant",
+    )
+    .unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update(cx, |s, cx| s.open_note(&root.join("Target.md"), cx));
+    cx.run_until_parked();
+
+    // The rename lengthens the link on the line above the proposed one.
+    let (from, to) = (root.join("Target.md"), root.join("Longer-name-here.md"));
+    fs::rename(&from, &to).unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update(cx, |s, cx| {
+        s.relink("Target", "Longer-name-here", Some((&from, &to)), cx)
+    });
+    cx.run_until_parked();
+
+    assert_eq!(
+        fs::read_to_string(&other).unwrap(),
+        "# Other\n\nSee [[Longer-name-here]].\n"
+    );
+    let disk = fs::read_to_string(&other).unwrap();
+    assert_eq!(
+        crate::platform::sidecar::display(Some(&home), &other, &disk),
+        "# Other\n\nSee [[Longer-name-here]].\n{++\nadded\n++}\n"
+    );
+}
