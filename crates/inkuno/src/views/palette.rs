@@ -15,9 +15,9 @@ use crate::{
     lang::tr,
     logic::markdown::ListStyle,
     logic::rank::{self, contains_all, fuzzy, snippet},
+    ui::components::{kbd::keycaps, list_row::list_row, popover::popover},
     ui::line::{self, Line},
     ui::theme::Theme,
-    ui::widgets::keycaps,
     views::editor::TableOp,
 };
 
@@ -730,22 +730,16 @@ impl Palette {
                 .text_color(t.soft)
                 .child(c.group.title(n < self.here))
         });
-        let row = div()
+        let row = list_row(on, t)
             .id(("command", i))
             .debug_selector({
                 let action = c.action;
                 move || format!("command-{action}")
             })
-            .mx(t.px(6.))
-            .px_3()
             .h(t.px(ROW))
-            .rounded(t.large())
             .flex()
             .items_center()
             .gap(t.px(11.))
-            .cursor_pointer()
-            .when(on, |d| d.bg(t.selection))
-            .when(!on, |d| d.hover(|s| s.bg(t.hover)))
             .child(
                 svg()
                     .path(c.icon)
@@ -882,19 +876,13 @@ impl Render for Palette {
             let soft = |d: gpui::Div| d.text_size(t.px(12.)).text_color(t.soft);
             // Quiet's full-text match is two lines: the name, then the matching line with the word marked.
             let two = t.quiet && hit.is_some();
-            div()
+            list_row(i == self.selected, t)
                 .debug_selector(move || format!("palette-item-{i}"))
-                .mx(t.px(6.))
-                .px_3()
                 .h(t.px(if two { 48. } else { ROW }))
-                .rounded(t.large())
                 .flex()
                 .when(two, |d| d.flex_col().justify_center().items_start())
                 .when(!two, |d| d.items_center().justify_between())
                 .gap_3()
-                .cursor_pointer()
-                .when(i == self.selected, |d| d.bg(t.selection))
-                .when(i != self.selected, |d| d.hover(|s| s.bg(t.hover)))
                 // A note: its name, its folder after it, and on the right how long ago it was written. With a
                 // text excerpt, the name keeps its place and the excerpt is shortened.
                 .when(two, |d| {
@@ -1041,7 +1029,7 @@ impl Render for Palette {
         .justify_center()
         .items_start()
         .child(
-            crate::ui::widgets::popover(t)
+            popover(t)
                 .debug_selector(|| "palette-panel".into())
                 .mt(self.top)
                 .w(t.px(560.))

@@ -4,6 +4,12 @@
 //! typed here reaches a note: the tab's own editor is never shown.
 
 use super::*;
+use crate::ui::components::{
+    button::button as plain_button,
+    card::{card, card_row},
+    segmented::{segment, segmented as seg_track},
+    switch::switch as sw,
+};
 use crate::ui::theme::{Page, Wide};
 use crate::views::field::{Field, FieldEvent};
 use gpui::{FontWeight, MouseButton, Stateful};
@@ -70,59 +76,6 @@ fn pick(edit: impl Fn(&mut Prefs) + 'static) -> Pick {
     )
 }
 
-/// One row of a card: its label, a soft note under it, the control at the right.
-fn row(t: Theme, label: &str, note: &str, control: impl IntoElement) -> Div {
-    div()
-        .min_h(t.px(52.))
-        .px(t.px(14.))
-        .py(t.px(12.))
-        .flex()
-        .items_center()
-        .gap(t.px(16.))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap_0p5()
-                .child(
-                    div()
-                        .text_size(t.px(13.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(t.text)
-                        .child(label.to_string()),
-                )
-                .when(!note.is_empty(), |d| {
-                    d.child(
-                        div()
-                            .text_size(t.px(12.))
-                            .text_color(t.soft)
-                            .child(note.to_string()),
-                    )
-                }),
-        )
-        .child(control)
-}
-
-/// A card of rows, a hairline between them.
-fn card(t: Theme, rows: Vec<Div>) -> Div {
-    div()
-        .flex()
-        .flex_col()
-        .rounded(t.card())
-        .border_1()
-        .border_color(t.text.opacity(0.08))
-        .overflow_hidden()
-        .children(rows.into_iter().enumerate().map(|(i, row)| {
-            if i == 0 {
-                row
-            } else {
-                row.border_t_1().border_color(t.text.opacity(0.08))
-            }
-        }))
-}
-
 /// A segmented control: one option is chosen, a click on another one picks it.
 fn segmented(
     t: Theme,
@@ -130,82 +83,27 @@ fn segmented(
     options: Vec<(String, bool, Pick)>,
     cx: &mut Context<Shell>,
 ) -> Div {
-    div()
-        .flex_none()
-        .flex()
-        .gap(t.px(2.))
-        .p(t.px(2.))
-        .rounded(t.large())
-        .bg(t.text.opacity(0.06))
-        .children(
-            options
-                .into_iter()
-                .enumerate()
-                .map(|(i, (label, on, pick))| {
-                    let name = format!("{id}-{i}");
-                    div()
-                        .id(gpui::SharedString::from(name.clone()))
-                        .debug_selector(move || name.clone())
-                        .h(t.px(26.))
-                        .px(t.px(10.))
-                        .flex()
-                        .items_center()
-                        .rounded(t.small())
-                        .text_size(t.px(12.))
-                        .cursor_pointer()
-                        .when(on, |d| d.bg(t.bg).text_color(t.text).shadow(t.lifted()))
-                        .when(!on, |d| {
-                            d.text_color(t.soft).hover(|s| s.text_color(t.text))
-                        })
-                        .child(label)
-                        .on_click(cx.listener(move |this, _, window, cx| pick(this, window, cx)))
-                }),
-        )
+    seg_track(
+        t,
+        options
+            .into_iter()
+            .enumerate()
+            .map(|(i, (label, on, pick))| {
+                segment(format!("{id}-{i}"), label, on, t)
+                    .on_click(cx.listener(move |this, _, window, cx| pick(this, window, cx)))
+            })
+            .collect(),
+    )
 }
 
-/// A switch, 34 by 20: accent when on.
+/// A switch: its click edits the preferences.
 fn switch(t: Theme, id: &str, on: bool, pick: Pick, cx: &mut Context<Shell>) -> Stateful<Div> {
-    div()
-        .id(gpui::SharedString::from(id.to_string()))
-        .debug_selector(|| id.to_string())
-        .relative()
-        .flex_none()
-        .w(t.px(34.))
-        .h(t.px(20.))
-        .rounded_full()
-        .cursor_pointer()
-        .bg(if on { t.accent } else { t.text.opacity(0.22) })
-        .child(
-            div()
-                .absolute()
-                .top(t.px(2.))
-                .left(if on { t.px(16.) } else { t.px(2.) })
-                .size(t.px(16.))
-                .rounded_full()
-                .bg(t.bg)
-                .shadow(t.lifted()),
-        )
-        .on_click(cx.listener(move |this, _, window, cx| pick(this, window, cx)))
+    sw(id, on, t).on_click(cx.listener(move |this, _, window, cx| pick(this, window, cx)))
 }
 
 /// A button of the rows: its label, and what a click does.
 fn button(t: Theme, id: &str, label: String, pick: Pick, cx: &mut Context<Shell>) -> Stateful<Div> {
-    div()
-        .id(gpui::SharedString::from(id.to_string()))
-        .debug_selector(|| id.to_string())
-        .flex_none()
-        .h(t.px(28.))
-        .px(t.px(12.))
-        .flex()
-        .items_center()
-        .rounded(t.large())
-        .border_1()
-        .border_color(t.text.opacity(0.08))
-        .text_size(t.px(13.))
-        .text_color(t.text)
-        .cursor_pointer()
-        .hover(|s| s.bg(t.hover))
-        .child(label)
+    plain_button(id, label, t)
         .on_click(cx.listener(move |this, _, window, cx| pick(this, window, cx)))
 }
 
@@ -596,7 +494,7 @@ impl Shell {
         vec![card(
             t,
             vec![
-                row(
+                card_row(
                     t,
                     tr("Theme", "Thème"),
                     tr(
@@ -605,13 +503,13 @@ impl Shell {
                     ),
                     div().flex().gap_2().child(theme).child(more),
                 ),
-                row(
+                card_row(
                     t,
                     tr("Text size", "Taille du texte"),
                     tr("Also ⌘+ and ⌘−", "Aussi Ctrl+ et Ctrl−"),
                     size,
                 ),
-                row(
+                card_row(
                     t,
                     tr("Page width", "Largeur de page"),
                     tr(
@@ -620,7 +518,7 @@ impl Shell {
                     ),
                     width,
                 ),
-                row(
+                card_row(
                     t,
                     tr("Animations", "Animations"),
                     tr(
@@ -710,13 +608,13 @@ impl Shell {
             card(
                 t,
                 vec![
-                    row(
+                    card_row(
                         t,
                         tr("Font", "Police"),
                         tr("The text of the notes", "Le texte des notes"),
                         font,
                     ),
-                    row(
+                    card_row(
                         t,
                         tr("Code font", "Police du code"),
                         tr(
@@ -725,7 +623,7 @@ impl Shell {
                         ),
                         mono_font,
                     ),
-                    row(
+                    card_row(
                         t,
                         tr("Wide tables", "Grands tableaux"),
                         tr(
@@ -734,7 +632,7 @@ impl Shell {
                         ),
                         wide,
                     ),
-                    row(
+                    card_row(
                         t,
                         tr("Formatting bar", "Barre de mise en forme"),
                         tr(
@@ -748,7 +646,7 @@ impl Shell {
             card(
                 t,
                 vec![
-                    row(
+                    card_row(
                         t,
                         tr("Revision author", "Auteur des versions"),
                         tr(
@@ -757,7 +655,7 @@ impl Shell {
                         ),
                         field(&page.author),
                     ),
-                    row(
+                    card_row(
                         t,
                         tr("Assistant command", "Commande de l'assistant"),
                         tr(
@@ -787,7 +685,7 @@ impl Shell {
         vec![card(
             t,
             vec![
-                row(
+                card_row(
                     t,
                     tr("Vault folder", "Dossier du coffre"),
                     &vault_folder,
@@ -803,13 +701,13 @@ impl Shell {
                         cx,
                     ),
                 ),
-                row(
+                card_row(
                     t,
                     tr("Scratch folder", "Dossier des brouillons"),
                     &scratch,
                     div(),
                 ),
-                row(t, tr("Trash", "Corbeille"), &trash, div()),
+                card_row(t, tr("Trash", "Corbeille"), &trash, div()),
             ],
         )]
     }
@@ -836,20 +734,20 @@ impl Shell {
             card(
                 t,
                 vec![
-                    row(t, tr("Version", "Version"), "", div().text_size(t.px(13.)).text_color(t.soft).child(format!("inkuno {}", env!("CARGO_PKG_VERSION")))),
-                    row(t, tr("Licence", "Licence"), tr("Free software, in the repository's LICENSE file", "Logiciel libre, voir le fichier LICENSE du dépôt"), div().text_size(t.px(13.)).text_color(t.soft).child("MIT")),
+                    card_row(t, tr("Version", "Version"), "", div().text_size(t.px(13.)).text_color(t.soft).child(format!("inkuno {}", env!("CARGO_PKG_VERSION")))),
+                    card_row(t, tr("Licence", "Licence"), tr("Free software, in the repository's LICENSE file", "Logiciel libre, voir le fichier LICENSE du dépôt"), div().text_size(t.px(13.)).text_color(t.soft).child("MIT")),
                 ],
             ),
             card(
                 t,
                 vec![
-                    row(
+                    card_row(
                         t,
                         tr("Source", "Code source"),
                         tr("The code, the issues and the releases", "Le code, les demandes et les versions"),
                         link(t, "about-github", "code.svg", "GitHub", env!("CARGO_PKG_REPOSITORY")),
                     ),
-                    row(
+                    card_row(
                         t,
                         tr("Support", "Soutien"),
                         tr("Keeps the project going", "Fait vivre le projet"),

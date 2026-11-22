@@ -94,6 +94,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
 | colours, themes, page width | `crates/inkuno-ui/src/theme.rs` |
 | icons and fonts | `crates/inkuno-ui/src/assets.rs` |
+| a reusable piece of UI (button, row, menu item, switch…) | `crates/inkuno-ui/src/components/` (one file per piece, named after its v2 class) |
 | the text editor | `views/editor/`: `edit.rs` (changes, undo, the pending guard), `changes.rs` (accept, reject, comment on a pending change), `cursor.rs`, `style.rs`, `table.rs` and `grid.rs` (Markdown tables), `blocks.rs`, `find.rs`, `completion.rs`, `links.rs`, `notes.rs` (which cells of a table carry a comment), `format_bar.rs`, `mouse.rs`, `clipboard.rs`, `input.rs` (IME) |
 | what a keystroke costs | `views/editor/layout.rs` (`reuse` redoes only the damaged lines) then `paint.rs`; the test `layout_reuse_matches_full_layout` checks every reuse against a full layout |
 | the tree, recent notes, vault search, outline | `views/nav.rs` (state), `shell/sidebar.rs` (drawing) |
