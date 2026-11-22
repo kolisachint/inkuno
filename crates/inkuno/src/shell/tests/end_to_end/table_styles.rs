@@ -172,17 +172,21 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // keeps the text; a `|` typed in the comment is written `\|`.
     start(cx, grid);
     cx.simulate_keystrokes("secondary-shift-m");
+    // The text goes to the draft card's field; Enter writes it into the note (RP-19/20).
     cx.simulate_input("a|b");
+    cx.simulate_keystrokes("enter");
     assert_eq!(
         flat(cx),
         "Nom|Âge/Léa<!-- comment: a\\|b -->|31/Max|7",
         "{:?}",
         text(cx)
     );
-    assert!(aligned(cx));
+    assert!(aligned(cx), "{:?}", text(cx));
     assert_eq!(markdown::all_comments(&text(cx)).len(), 1);
     cx.simulate_keystrokes("secondary-shift-m");
     assert_eq!(flat(cx), "Nom|Âge/Léa|31/Max|7");
+    // Three steps: the resolve, the written text (Enter in the draft card), and the marker.
+    cx.simulate_keystrokes("secondary-z");
     cx.simulate_keystrokes("secondary-z");
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(text(cx), grid, "typing and the comment are undone");
@@ -208,6 +212,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
     cx.simulate_input("en années");
+    cx.simulate_keystrokes("enter");
     assert_eq!(
         text(cx),
         format!(
@@ -236,7 +241,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         "{:?}",
         text(cx)
     );
-    cx.simulate_keystrokes("secondary-z");
+    // The draft is still open and has the keys: Escape cancels it, its marker goes with it.
+    cx.simulate_keystrokes("escape");
+    assert_eq!(text(cx), grid, "cancelling the draft removes its line");
     let at = center(cx, Part::Corner);
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
@@ -269,6 +276,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             .join(" ")
     };
     j.load(cx, note, note.find("Léa").unwrap());
+    shell.update_in(cx, |s, window, cx| {
+        window.focus(&s.pane().editor.focus_handle(cx))
+    });
+    cx.run_until_parked();
     cx.simulate_keystrokes("shift-right shift-right shift-right");
     cx.simulate_input("Zoé");
     assert_eq!(

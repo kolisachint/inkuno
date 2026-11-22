@@ -16,15 +16,17 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // leaves the status message the clicks below dismiss.
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("comments");
-    cx.simulate_keystrokes("down enter");
+    // The matching command is the first row: the "Create" row is always last (P-09), so no `down`.
+    cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()
         && s.told(Tone::Info, "no comments")));
     // Status messages: a click removes the one it targets, the others go by themselves after four
     // seconds; the one of an operation in progress stays, until the message that gives its outcome.
     shell.update(cx, |s, cx| s.say(Tone::Busy, "Working", cx));
     let view = cx.update(|window, _| window.viewport_size());
+    // The toast is a bottom-centre pill (TO-01/02), so the click is on its middle.
     cx.simulate_click(
-        point(view.width - px(60.), view.height - px(70.)),
+        point(view.width / 2., view.height - px(70.)),
         gpui::Modifiers::none(),
     );
     assert!(shell.read_with(cx, |s, _| s.told(Tone::Info, "no comments")

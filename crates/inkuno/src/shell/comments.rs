@@ -76,9 +76,13 @@ fn own_marker(text: &str, at: usize) -> bool {
     let end = text[at..].find('\n').map_or(text.len(), |i| at + i);
     let line = &text[start..end];
     let col = at - start;
-    markdown::comments(line)
-        .iter()
-        .any(|(whole, _, said)| (whole.start..=whole.end).contains(&col) && said.is_empty())
+    markdown::comments(line).iter().any(|(whole, _, said)| {
+        // A comment on a table, a row or a column starts with its scope's name (`Column "Âge": `), and
+        // its empty text follows that name: the name ends in a colon, and the text is at or after it.
+        let written = line[said.clone()].trim_end();
+        (whole.start..=whole.end).contains(&col)
+            && (written.is_empty() || (written.ends_with(':') && col >= said.end))
+    })
 }
 
 /// One comment of the note, as the Comments view draws it (`markdown::all_comments`).

@@ -249,7 +249,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).in_table()));
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("column on the right");
-    cx.simulate_keystrokes("down enter");
+    // The command is the first row; the "Create" row is always last (P-09), so no `down`.
+    cx.simulate_keystrokes("enter");
     assert_eq!(flat(cx), "Nom||Âge/---|---|---/Léa||31/Max||7");
     // The whole table grabbed (the corner): the column comes right of the last one.
     cx.simulate_keystrokes("secondary-z");
@@ -258,7 +259,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("column on the right");
-    cx.simulate_keystrokes("down enter");
+    cx.simulate_keystrokes("enter");
     assert_eq!(flat(cx), "Nom|Âge|/---|---|---/Léa|31|/Max|7|");
     // The note open here does not exist on disk: saving fails, and its notice clears.
     cx.executor().advance_clock(Duration::from_secs(5));

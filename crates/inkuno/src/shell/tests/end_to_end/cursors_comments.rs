@@ -61,10 +61,13 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // the palette lists them and leads there, the same shortcut on a comment resolves it.
     j.load(cx, "- un mot ici\nfin", 5);
     cx.simulate_keystrokes("shift-right shift-right shift-right secondary-shift-m");
+    // The text goes to the draft card's field; Enter writes it into the note (RP-19/20).
     cx.simulate_input("à revoir");
+    cx.simulate_keystrokes("enter");
     assert_eq!(text(cx), "- un mot<!-- comment: à revoir --> ici\nfin");
     cx.simulate_keystrokes("down secondary-shift-m");
     cx.simulate_input("ok");
+    cx.simulate_keystrokes("enter");
     assert_eq!(
         text(cx),
         "- un mot<!-- comment: à revoir --> ici\nfin<!-- comment: ok -->"
@@ -164,7 +167,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // The palette lists the comments and leads to the one named.
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("comments");
-    cx.simulate_keystrokes("down enter");
+    // The matching command is the first row (P-09 puts Create last), so no `down`.
+    cx.simulate_keystrokes("enter");
     cx.simulate_input("revoir");
     cx.simulate_keystrokes("enter");
     // The caret goes to the passage's start, after the bullet.
@@ -288,7 +292,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     j.load(cx, "rien", 0);
     cx.simulate_keystrokes("secondary-p");
     cx.simulate_input("comments");
-    cx.simulate_keystrokes("down enter");
+    cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()
         && s.told(Tone::Info, "has no comments")));
     shell.update(cx, |s, _| s.toasts.clear());

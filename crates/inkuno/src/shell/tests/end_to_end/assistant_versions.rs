@@ -61,15 +61,17 @@ fn open_note(j: &Journey, cx: &mut gpui::VisualTestContext, name: &str, content:
     path
 }
 
-/// The assistant's panel, shown. Its round button toggles it, so it is clicked only when it is shut.
+/// The assistant's panel, shown. Its round button toggles it, so it is clicked only when it is shut. Another tool
+/// may hold the right dock (the Comments view of an earlier chapter), and then the assistant is not shown yet.
 fn show_assistant(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
-    if !shell.read_with(cx, |s, _| s.right_open()) {
+    if !shell.read_with(cx, |s, _| s.docked(Mode::Assistant)) {
         asst::click_button(cx);
     }
 }
 
 /// The palette, typed and chosen with Enter. The keys are the note's when the palette opens, as when a
-/// person types in it. The command is chosen with `down` as many times as `downs` says, then Enter.
+/// person types in it. The command is the first row (the Create row is always last, P-09), so `downs` is 0; it
+/// moves the choice down as many times as `downs` says, then Enter.
 fn palette(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, query: &str, downs: usize) {
     asst::focus_note(shell, cx);
     cx.simulate_keystrokes("secondary-p");
@@ -178,7 +180,7 @@ fn the_chords_decide_the_change_under_the_caret(j: &Journey, cx: &mut gpui::Visu
     show_assistant(shell, cx);
 
     // An answer that says NO CHANGE proposes nothing, and the panel says so.
-    palette(shell, cx, "improve", 1);
+    palette(shell, cx, "improve", 0);
     asst::feed(
         shell,
         cx,
@@ -196,7 +198,7 @@ fn the_chords_decide_the_change_under_the_caret(j: &Journey, cx: &mut gpui::Visu
     assert_eq!(pending_count(shell, cx), 0);
 
     // The real answer: two separate places change, the line between them is kept.
-    palette(shell, cx, "improve", 1);
+    palette(shell, cx, "improve", 0);
     asst::feed(
         shell,
         cx,
@@ -269,7 +271,7 @@ fn the_chords_decide_the_change_under_the_caret(j: &Journey, cx: &mut gpui::Visu
     }
     assert_eq!(pending_count(shell, cx), 2, "the changes stay pending");
     // Rejected from the palette, so that the next walk starts from a note with no change.
-    palette(shell, cx, "reject all", 1);
+    palette(shell, cx, "reject all", 0);
     assert_eq!(pending_count(shell, cx), 0);
 }
 
@@ -284,7 +286,7 @@ fn improving_the_whole_note_then_accept_all_and_reject_all(
     let original = j.text(cx);
     show_assistant(shell, cx);
     // No selection: the palette's improvement is the whole note.
-    palette(shell, cx, "improve", 1);
+    palette(shell, cx, "improve", 0);
     assert!(
         asst::sent(shell, cx)
             .last()
@@ -304,7 +306,7 @@ fn improving_the_whole_note_then_accept_all_and_reject_all(
     assert!(marked.contains("Un peu plus clair."), "{marked}");
 
     // Accept all from the palette: the note is the proposed text, nothing pending.
-    palette(shell, cx, "accept all", 1);
+    palette(shell, cx, "accept all", 0);
     assert_eq!(
         j.text(cx),
         "# Plan\n\nUn peu plus clair.\nentre les deux\nLa fin, nette."
@@ -318,7 +320,7 @@ fn improving_the_whole_note_then_accept_all_and_reject_all(
     assert_eq!((j.text(cx), pending_count(shell, cx)), (marked, 2));
 
     // Reject all: the note is as it was, byte for byte, on disk too.
-    palette(shell, cx, "reject all", 1);
+    palette(shell, cx, "reject all", 0);
     assert_eq!(j.text(cx), original);
     assert_eq!(pending_count(shell, cx), 0);
     shell.update(cx, |s, cx| s.flush(cx));
@@ -347,7 +349,7 @@ fn the_versions_panel_lists_the_saves_and_compares_one(
     cx.simulate_keystrokes("secondary-end");
     cx.simulate_input("troisième ligne\n");
     vers::settle(cx);
-    palette(shell, cx, "improve", 1);
+    palette(shell, cx, "improve", 0);
     asst::feed(
         shell,
         cx,
@@ -360,7 +362,7 @@ fn the_versions_panel_lists_the_saves_and_compares_one(
         ],
     );
     assert_eq!(pending_count(shell, cx), 1);
-    palette(shell, cx, "reject all", 1);
+    palette(shell, cx, "reject all", 0);
     assert_eq!(j.text(cx), UNSAVED);
 
     // The panel, newest first; the two automatic versions say so. The Versions list takes the keys
@@ -369,7 +371,7 @@ fn the_versions_panel_lists_the_saves_and_compares_one(
         cx.dispatch_action(ToggleAssistant);
         asst::settle(cx);
     }
-    palette(shell, cx, "versions", 1);
+    palette(shell, cx, "versions", 0);
     vers::frame(cx);
     let me = shell.read_with(cx, |s, _| s.revision_author());
     let names = vers::names(shell, cx);
@@ -497,7 +499,7 @@ fn restore_a_version_on_the_note_as_pending_changes(j: &Journey, cx: &mut gpui::
     assert_eq!(pending_count(shell, cx), 1);
 
     // Accepted, the note is exactly that version's text.
-    palette(shell, cx, "accept all", 1);
+    palette(shell, cx, "accept all", 0);
     assert_eq!(j.text(cx), SECOND_SAVE);
     assert_eq!(pending_count(shell, cx), 0);
 

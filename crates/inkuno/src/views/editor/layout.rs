@@ -1342,7 +1342,6 @@ impl Editor {
                         &text_system,
                         &look,
                         room,
-                        width,
                         &lines,
                         foot,
                         &defined,
@@ -1808,7 +1807,6 @@ impl Editor {
                             &text_system,
                             &look,
                             room,
-                            width,
                             &block[..grid::SAMPLE],
                             foot,
                             &defined,
@@ -1863,7 +1861,6 @@ impl Editor {
                         &text_system,
                         &look,
                         room,
-                        width,
                         &block,
                         cursor,
                         marked.as_ref(),
@@ -1884,7 +1881,9 @@ impl Editor {
                 // keep their spacing. The gap is part of the row's pad, so the text, its markers and its hits move together.
                 // The lines of a callout's body follow its label, and each other, with no gap (v2 `.al` and body lines).
                 // Only a quote line goes on under the label: a list or a paragraph after the callout keeps its gap.
+                // A `> [!TYPE]` label opens a block of its own, so the next callout keeps its gap too.
                 let under_label = kind == Kind::Quote
+                    && own_tint.is_none()
                     && last
                         .as_ref()
                         .is_some_and(|r| r.tint.is_some() && r.kind == Kind::Quote);

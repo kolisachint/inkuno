@@ -177,19 +177,6 @@ fn longest(line: &WrappedLine) -> Pixels {
     widths.fold(px(0.), |a, b| a.max(b))
 }
 
-/// A table is at least as wide as the text column (v2 `table{min-width:100%}`), and never
-/// wider than its content needs: when the columns are narrower than the column `text` less
-/// `frame`, they share the room left, in proportion to their content. `frame`: the cells'
-/// rules and padding, which the text column also holds.
-fn grow_to_text(widths: &mut [f32], text: f32, frame: f32) {
-    let room = (text - frame).max(0.);
-    let total: f32 = widths.iter().sum();
-    if total > 0. && total < room {
-        let grow = room / total;
-        widths.iter_mut().for_each(|w| *w *= grow);
-    }
-}
-
 /// Content width of each column, like an HTML table: all the text on one
 /// line if the page allows it; otherwise short columns keep their width and long ones
 /// share the rest, without going below their longest word; and if even the words do not
@@ -688,7 +675,6 @@ pub fn build(
     text_system: &WindowTextSystem,
     look: &Look,
     width: Pixels,
-    column: Pixels,
     lines: &[(usize, &str)],
     cursor: usize,
     marked: Option<&Range<usize>>,
@@ -710,7 +696,6 @@ pub fn build(
     (
         look.style,
         f32::from(width).to_bits(),
-        f32::from(column).to_bits(),
         touched,
         composing.map(|m| (m.start - first.min(m.start), m.end)),
         lines.len(),
@@ -737,7 +722,6 @@ pub fn build(
             text_system,
             look,
             width,
-            column,
             lines,
             cursor,
             marked,
@@ -758,7 +742,6 @@ fn rows(
     text_system: &WindowTextSystem,
     look: &Look,
     width: Pixels,
-    column: Pixels,
     lines: &[(usize, &str)],
     cursor: usize,
     marked: Option<&Range<usize>>,
@@ -822,9 +805,10 @@ fn rows(
     let (pad_x, pad_y) = pads(look.theme);
     let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(pad_x);
     let avail = (f32::from(width) - frame).max(0.);
-    let mut sized = column_widths(&narrow, &wide, avail);
-    grow_to_text(&mut sized, f32::from(column), frame);
-    let widths: Vec<Pixels> = sized.into_iter().map(px).collect();
+    let widths: Vec<Pixels> = column_widths(&narrow, &wide, avail)
+        .into_iter()
+        .map(px)
+        .collect();
     let mut xs = vec![px(0.)];
     for w in &widths {
         xs.push(xs[xs.len() - 1] + LINE + pad_x + *w + pad_x);
@@ -964,13 +948,11 @@ impl Geometry {
 
 /// Sets the columns of a very big table from its first lines. `foot` versions the footnote
 /// definitions in the shape cache (measurements do not depend on it).
-#[allow(clippy::too_many_arguments)]
 pub fn geometry(
     cache: &mut Cache,
     text_system: &WindowTextSystem,
     look: &Look,
     width: Pixels,
-    column: Pixels,
     lines: &[(usize, &str)],
     foot: u64,
     defined: &dyn Fn(&str) -> bool,
@@ -1013,9 +995,7 @@ pub fn geometry(
     let (pad_x, pad_y) = pads(look.theme);
     let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(pad_x);
     let cap = ((f32::from(width) - frame) / 3.).max(MIN_WIDE * 2.);
-    let mut widths: Vec<f32> = wide.into_iter().map(|w| w.min(cap)).collect();
-    grow_to_text(&mut widths, f32::from(column), frame);
-    let widths: Vec<Pixels> = widths.into_iter().map(px).collect();
+    let widths: Vec<Pixels> = wide.into_iter().map(|w| px(w.min(cap))).collect();
     let mut xs = vec![px(0.)];
     for w in &widths {
         xs.push(xs[xs.len() - 1] + LINE + pad_x + *w + pad_x);
@@ -1108,17 +1088,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_table_grows_to_the_text_column_but_not_past_it() {
-        // Content narrower than the column: the columns share the room of the column, not of the pane.
-        let mut narrow = vec![100., 50.];
-        grow_to_text(&mut narrow, 400., 20.);
-        // The room of the column is 400 - 20: the columns fill it, in proportion (2:1).
-        assert!((narrow[0] + narrow[1] - 380.).abs() < 1e-3);
-        assert!((narrow[0] / narrow[1] - 2.).abs() < 1e-3);
-        // Content already wider than the column keeps its width (it scrolls, as before).
-        let mut wide = vec![400., 300.];
-        grow_to_text(&mut wide, 400., 20.);
-        assert_eq!(wide, [400., 300.]);
+    fn a_small_table_keeps_its_own_size() {
+        // Content narrower than the room: each column keeps its natural width, not the column's.
+        let content = vec![100., 50.];
+        assert_eq!(column_widths(&content, &content, 800.), [100., 50.]);
     }
 
     #[test]
