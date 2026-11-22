@@ -586,15 +586,35 @@ impl Editor {
                 }) {
                     mark(other, t.selection, window);
                 }
-                // Text that carries a comment is tinted, stronger when the caret is in that comment.
+                // Text that carries a comment (v2 `.cm`): a yellow wash, a 1.5 px gold underline under each piece of
+                // it on the line, and a 6 px gold dot in the right margin of the line.
                 if !matches!(row.kind, Kind::Code | Kind::Fence) {
-                    for (whole, noted, _) in md::comments(&self.content[row.start..end]) {
-                        let on =
-                            (row.start + whole.start..=row.start + whole.end).contains(&cursor);
+                    for (_, noted, _) in md::comments(&self.content[row.start..end]) {
                         mark(
                             &(row.start + noted.start..row.start + noted.end),
-                            crate::ui::widgets::passage_tint(t, on),
+                            crate::ui::widgets::passage_tint(t),
                             window,
+                        );
+                        // A comment on its own has no passage to underline.
+                        if !noted.is_empty() {
+                            for (x, y, width) in spans_of(noted.clone()) {
+                                window.paint_quad(fill(
+                                    block(x, text_top + y + row.lh * 0.88, width, px(1.5)),
+                                    t.comment_gold,
+                                ));
+                            }
+                        }
+                        window.paint_quad(
+                            fill(
+                                block(
+                                    w + px(12.),
+                                    text_top + row.lh * 0.5 - px(3.),
+                                    px(6.),
+                                    px(6.),
+                                ),
+                                t.comment_gold,
+                            )
+                            .corner_radii(px(3.)),
                         );
                     }
                 }

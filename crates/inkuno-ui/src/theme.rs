@@ -167,6 +167,10 @@ pub struct Theme {
     pub added: Hsla,
     /// Background of a line the agent removed, pending: a red wash, quiet. Its text is `soft`.
     pub removed: Hsla,
+    /// The wash behind a commented passage (v2 `--cmw`): yellow, a little stronger on dark.
+    pub comment_wash: Hsla,
+    /// The gold of a comment: the underline and dot in the note, the quote bar on its card (v2 `--cmd`).
+    pub comment_gold: Hsla,
     /// Size of the note's body text, in pixels.
     pub size: f32,
     /// Scale of the interface around the note (panel, menus, help, palette): it follows the note's size,
@@ -657,6 +661,20 @@ impl Theme {
             }
             None => (border, code_bg, soft, code_bg, code_bg, border, None),
         };
+        // The comment tokens of v2 (`--cmw`, `--cmd`) by theme lightness. The wash is v2's share, lowered
+        // until the text and the accent read on it at 4.5:1 (a light text on a dark theme is lifted by it).
+        let dark = bg.l < 0.5;
+        let yellow = Hsla::from(rgb(0xe8b01e));
+        let wash = (0..=12)
+            .map(|i| if dark { 0.22 } else { 0.26 } - i as f32 * 0.01)
+            .find(|&a| {
+                [bg, panel].iter().all(|b| {
+                    [text, accent_read]
+                        .iter()
+                        .all(|c| contrast(*c, blend(yellow, *b, a)) >= 4.5)
+                })
+            })
+            .unwrap_or(0.12);
         let (popover, caution) = match &quiet {
             Some(extras) => (
                 Hsla::from(rgb(extras.popover)),
@@ -694,6 +712,8 @@ impl Theme {
             pill: text.opacity(0.072),
             added: pending_wash(GREEN, bg, [text, soft]),
             removed: pending_wash(RED, bg, [text, soft]),
+            comment_wash: yellow.opacity(wash),
+            comment_gold: Hsla::from(rgb(if dark { 0xf0c040 } else { 0xc98a00 })),
             code_bg,
             panel,
             border,
@@ -1237,7 +1257,7 @@ mod tests {
         assert!(fails.is_empty(), "{}", fails.join("\n"));
     }
 
-    /// A commented passage shows on the sheet, the one under the caret shows more, and neither is taken for the selection.
+    /// A commented passage shows on the sheet, reads under the text, and is not taken for the selection.
     #[test]
     fn commented_passages_differ_from_the_selection() {
         let mut fails = Vec::new();
@@ -1246,23 +1266,31 @@ mod tests {
                 &Prefs::parse(&format!("theme={name}\n")),
                 WindowAppearance::Light,
             );
-            let tint = |on| over(crate::widgets::passage_tint(t, on), t.bg);
-            let (quiet, active, picked) = (tint(false), tint(true), over(t.selection, t.bg));
-            let ratios = [
-                ("quiet/sheet", contrast(quiet, t.bg), 1.03),
-                ("active/quiet", contrast(active, quiet), 1.03),
-                ("active/selection", contrast(active, picked), 1.02),
-            ];
-            for (what, got, least) in ratios {
-                if got < least {
-                    fails.push(format!("{name}: {what} {got:.3} < {least}"));
-                }
+            let passage = over(crate::widgets::passage_tint(t), t.bg);
+            let picked = over(t.selection, t.bg);
+            // Told from the selection by its hue or its lightness, as the two read on the same sheet. A yellow
+            // accent (Gruvbox) is near the wash in hue, so the bar is low there.
+            let apart = (passage.h - picked.h)
+                .abs()
+                .min(1. - (passage.h - picked.h).abs())
+                + (passage.s - picked.s).abs()
+                + (passage.l - picked.l).abs();
+            if contrast(passage, t.bg) < 1.03 {
+                fails.push(format!(
+                    "{name}: passage/sheet {:.3} < 1.03",
+                    contrast(passage, t.bg)
+                ));
+            }
+            if apart < 0.03 {
+                fails.push(format!(
+                    "{name}: passage is the selection's colour ({apart:.3})"
+                ));
             }
             for (what, color) in [("text", t.text), ("accent", t.accent)] {
-                if contrast(color, active) < 4.5 {
+                if contrast(color, passage) < 4.5 {
                     fails.push(format!(
-                        "{name}: {what} does not read on the active passage ({:.2})",
-                        contrast(color, active)
+                        "{name}: {what} does not read on the commented passage ({:.2})",
+                        contrast(color, passage)
                     ));
                 }
             }

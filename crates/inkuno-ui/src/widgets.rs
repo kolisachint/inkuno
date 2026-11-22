@@ -68,18 +68,10 @@ pub fn pill_tint(t: Theme) -> gpui::Hsla {
     t.accent.opacity(0.1)
 }
 
-/// The tint of a commented passage: `pill_tint`, stronger for the one the caret is in, still under the selection's
-/// share (the text and the accent read on it) and told from it.
-pub fn passage_tint(t: Theme, on: bool) -> gpui::Hsla {
-    if on {
-        t.accent.opacity(PASSAGE_ON)
-    } else {
-        pill_tint(t)
-    }
+/// The wash of a commented passage: v2's yellow `--cmw`, told from the selection and read under the text.
+pub fn passage_tint(t: Theme) -> gpui::Hsla {
+    t.comment_wash
 }
-
-/// The share of the accent behind the commented passage under the caret.
-const PASSAGE_ON: f32 = 0.12;
 
 /// Turns an element into a window handle, where the app draws its title bar
 /// (Linux): dragging moves it, double-click maximizes it, right-click opens the system menu.

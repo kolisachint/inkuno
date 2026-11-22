@@ -337,8 +337,9 @@ impl Shell {
             .collect::<Vec<_>>();
         let empty = (self.assistant.entries.is_empty()).then(|| {
             let said = match status {
+                // A plain text line: the command's name, not Markdown, so no backticks.
                 Status::Missing => format!(
-                    "`{command}` {}",
+                    "{command} {}",
                     tr(
                         "is not installed or not on the PATH. Set another command with “assistant command…” in the palette.",
                         "n'est pas installé ou pas sur le PATH. Choisissez une autre commande avec « commande de l'assistant… » dans la palette."
