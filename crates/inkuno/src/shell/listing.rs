@@ -170,7 +170,7 @@ impl Shell {
         // The open note is saved first: it is the file being rewritten.
         self.flush(cx);
         let value = field.read(cx).line.text.clone();
-        let Ok(old) = fs::read_to_string(&path) else {
+        if fs::read_to_string(&path).is_err() {
             return self.say(
                 super::Tone::Failed,
                 format!(
@@ -180,23 +180,32 @@ impl Shell {
                 ),
                 cx,
             );
+        }
+        // The note's text as the editor shows it, its pending changes kept in place (`sidecar::edit`).
+        let home = crate::platform::revisions::home_of(&path, self.vault.as_deref());
+        let written = crate::platform::sidecar::edit(home.as_ref(), &path, "", |shown| {
+            let new = markdown::set_front(shown, &key, &value);
+            (new != shown).then_some(new)
+        });
+        let written = match written {
+            Ok(written) => written,
+            Err(e) => {
+                return self.say(
+                    super::Tone::Failed,
+                    format!(
+                        "{} {} : {}",
+                        tr("Not rewritten:", "Non réécrite :"),
+                        path.display(),
+                        crate::lang::io_reason(&e)
+                    ),
+                    cx,
+                );
+            }
         };
-        let new = markdown::set_front(&old, &key, &value);
-        if new == old {
+        if !written {
             return;
         }
-        if let Err(e) = vault::write(&path, &new) {
-            return self.say(
-                super::Tone::Failed,
-                format!(
-                    "{} {} : {}",
-                    tr("Not rewritten:", "Non réécrite :"),
-                    path.display(),
-                    crate::lang::io_reason(&e)
-                ),
-                cx,
-            );
-        }
+        let new = fs::read_to_string(&path).unwrap_or_default();
         if let Some(note) = self.notes.iter_mut().find(|note| note.path == path) {
             (note.tags, note.links) = crate::logic::note::Note::index(&new);
             note.aliases = markdown::aliases(&new).into();

@@ -804,10 +804,12 @@ impl Shell {
             .panes
             .iter()
             .position(|pane| pane.path.as_deref() == Some(review.path.as_path()));
+        let home = history::home_of(&review.path, self.vault.as_deref());
         let current = match open {
             Some(i) => self.panes[i].editor.read(cx).text().to_string(),
+            // A closed note is read as the editor would show it, so its pending changes stay placed.
             None => match fs::read_to_string(&review.path) {
-                Ok(text) => text,
+                Ok(text) => crate::platform::sidecar::display(home.as_ref(), &review.path, &text),
                 Err(e) => {
                     let what = tr(
                         "The note could not be read:",
@@ -829,7 +831,13 @@ impl Shell {
                     }
                 }
                 None => {
-                    if let Err(e) = vault::write(&review.path, &placed.text) {
+                    let saved = crate::platform::sidecar::save(
+                        home.as_ref(),
+                        &review.path,
+                        &placed.text,
+                        "assistant",
+                    );
+                    if let Err(e) = saved {
                         let why = crate::lang::io_reason(&e);
                         return self.assistant_say(Who::Note, &why, cx);
                     }

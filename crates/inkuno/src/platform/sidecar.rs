@@ -3,7 +3,8 @@
 //! as a list of `{id, author, at, old, new}`. The editor shows them as marked areas (`pending.rs`):
 //! `display` composes the marks from the file and the list, and `split` takes them off again on
 //! save. A change the note's text does not place (an orphan) waits in the list with `orphan_since`:
-//! it is shown nowhere, the pill counts it, and it is dropped after 30 days. A note file with marks
+//! it is shown nowhere, the pill counts it, and it is dropped at the first save after 30 days. An
+//! orphan the text places again is shown, and loses its stamp at that save. A note file with marks
 //! written before this (CriticMarkup) is shown as it is, and its
 //! marks go to the list on the next save. Comments written in the earlier form are rewritten to
 //! the new one when read (`markdown::migrate_comments`), so the editor and the file agree.
@@ -46,8 +47,13 @@ fn file(home: &Home, note: &Path) -> Option<PathBuf> {
     Some(root.join(".inkuno").join("pending").join(name))
 }
 
+/// Whether an orphan stamped `since` is past its lifetime at `now` (it is dropped at the next save).
+fn expired(since: Option<u64>, now: u64) -> bool {
+    since.is_some_and(|t| now.saturating_sub(t) > ORPHAN_LIFETIME)
+}
+
 /// The pending changes of `note`, as they were last saved. A missing or unreadable list is none.
-/// An orphan older than `ORPHAN_LIFETIME` is dropped here, and so is gone at the next save.
+/// Expired orphans are read too: a change the text places again is shown, whatever its stamp.
 pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
     let Some(file) = file(home, note) else {
         return Vec::new();
@@ -61,7 +67,6 @@ pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
     let Some(list) = value.get("changes").and_then(Value::as_array) else {
         return Vec::new();
     };
-    let now = now_secs();
     list.iter()
         .filter_map(|change| {
             Some(Entry {
@@ -85,22 +90,20 @@ pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
                 orphan_since: change.get("orphan_since").and_then(Value::as_u64),
             })
         })
-        .filter(|e| {
-            e.orphan_since
-                .is_none_or(|t| now.saturating_sub(t) <= ORPHAN_LIFETIME)
-        })
         .collect()
 }
 
 /// The pending changes of `note` that its file text `disk` does not place (`pending::placed`): they
-/// are shown nowhere, and wait beside the note as orphans.
+/// are shown nowhere, and wait beside the note as orphans. An expired one is not counted: the next
+/// save drops it.
 pub fn unplaced(home: &Home, note: &Path, disk: &str) -> Vec<Entry> {
     let known = read(home, note);
     let placed = pending::placed(&markdown::migrate_comments(disk), &known);
+    let now = now_secs();
     known
         .into_iter()
         .zip(placed)
-        .filter_map(|(e, placed)| (!placed).then_some(e))
+        .filter_map(|(e, placed)| (!placed && !expired(e.orphan_since, now)).then_some(e))
         .collect()
 }
 
@@ -197,16 +200,16 @@ pub fn split(
         }
     }
     if !known.is_empty() {
+        let now = now_secs();
         // The text the editor was given: the note as it is on disk, with comments in the new form.
         let disk = fs::read_to_string(note)
             .map(|text| markdown::migrate_comments(&text))
             .unwrap_or_default();
-        let now = now_secs();
         for (entry, shown) in known.iter().zip(pending::placed(&disk, &known)) {
             let kept = entries
                 .iter()
                 .any(|e| e.old == entry.old && e.new == entry.new);
-            if !shown && !kept {
+            if !shown && !kept && !expired(entry.orphan_since, now) {
                 // An orphan: the time it was first left out is kept, and a new one is stamped.
                 let orphan_since = entry.orphan_since.unwrap_or(now);
                 entries.push(Entry {
@@ -217,6 +220,42 @@ pub fn split(
         }
     }
     (base, entries)
+}
+
+/// Whether rewriting the shown text of `note` from `shown` into `fresh` would take a pending change off
+/// its place: one that the text places, by its context lines, and that `fresh` no longer places. The
+/// rewrite of a link on such a line is refused, as the rewrite inside a change is (`rewrite_refused`).
+pub fn rewrite_unplaces(home: Option<&Home>, note: &Path, shown: &str, fresh: &str) -> bool {
+    let Some(home) = home else {
+        return false;
+    };
+    let known = read(home, note);
+    if known.is_empty() {
+        return false;
+    }
+    let placed = |text: &str| pending::placed(&pending::split(text, &known).0, &known);
+    placed(shown)
+        .into_iter()
+        .zip(placed(fresh))
+        .any(|(before, after)| before && !after)
+}
+
+/// Edits the text `path` shows, as `display` composes it, and saves the result as `save` does: the
+/// pending changes keep their place. `edit` gets the shown text and returns the new one, or `None`
+/// to leave the note as it is. Returns whether the note was written. The app and the command line
+/// both edit notes this way.
+pub fn edit(
+    home: Option<&Home>,
+    path: &Path,
+    author: &str,
+    edit: impl FnOnce(&str) -> Option<String>,
+) -> io::Result<bool> {
+    let disk = fs::read_to_string(path)?;
+    let shown = display(home, path, &disk);
+    match edit(&shown) {
+        Some(next) => save(home, path, &next, author).map(|()| true),
+        None => Ok(false),
+    }
 }
 
 /// Saves `display` for `note` at `path` (the file's own text, and its pending changes beside it).
@@ -376,6 +415,7 @@ pub fn restore_along(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logic::wiki;
 
     #[test]
     fn without_a_home_the_marks_stay_in_the_text() {
@@ -536,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    fn an_orphan_older_than_thirty_days_is_dropped_on_load() {
+    fn an_orphan_older_than_thirty_days_is_dropped_at_the_next_save() {
         let root = vault_dir("expiry");
         let home = Home::Vault(root.clone());
         let note = root.join("Plan.md");
@@ -557,7 +597,91 @@ mod tests {
             ..old.clone()
         };
         store(&home, &note, &[old, fresh.clone()]).unwrap();
-        assert_eq!(read(&home, &note), vec![fresh]);
+        // Only the young orphan is counted, and only it is kept by a save.
+        assert_eq!(unplaced(&home, &note, "a\nb\n"), vec![fresh.clone()]);
+        assert_eq!(split(Some(&home), &note, "a\nb\n", "").1, vec![fresh]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn an_expired_orphan_the_text_places_again_is_shown_and_loses_its_stamp() {
+        let root = vault_dir("placed-again");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nb\n").unwrap();
+        save(Some(&home), &note, "a\n{++\nx\n++}\nb\n", "assistant").unwrap();
+        // Stamped as an orphan long ago, then the text has its context back (a checkout, an undo).
+        let mut list = read(&home, &note);
+        list[0].orphan_since = Some(1);
+        store(&home, &note, &list).unwrap();
+        let shown = display(Some(&home), &note, "a\nb\n");
+        assert_ne!(shown, "a\nb\n", "the change is shown again");
+        assert!(unplaced(&home, &note, "a\nb\n").is_empty());
+        // The next save settles it: placed, so it keeps no stamp.
+        let (_, kept) = split(Some(&home), &note, &shown, "");
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].orphan_since, None);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn edit_saves_the_shown_text_and_keeps_the_pending_change_in_place() {
+        let root = vault_dir("edit");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "# Plan\ntext\n").unwrap();
+        save(
+            Some(&home),
+            &note,
+            "# Plan\n{++\nnew\n++}\ntext\n",
+            "assistant",
+        )
+        .unwrap();
+        // A property set on the note (the list's `set_front`): the change under the heading stays placed.
+        let wrote = edit(Some(&home), &note, "", |shown| {
+            let new = markdown::set_front(shown, "title", "x");
+            (new != shown).then_some(new)
+        })
+        .unwrap();
+        assert!(wrote);
+        let disk = fs::read_to_string(&note).unwrap();
+        assert!(
+            disk.starts_with("---\n") && disk.ends_with("# Plan\ntext\n"),
+            "{disk}"
+        );
+        assert!(unplaced(&home, &note, &disk).is_empty());
+        assert_eq!(read(&home, &note).len(), 1);
+        // Declined by the closure: nothing is written.
+        assert!(!edit(Some(&home), &note, "", |_| None).unwrap());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_heading_rename_that_would_move_a_pending_change_is_refused() {
+        // The link to a renamed heading is rewritten in the shown text, unless it is the line a pending
+        // change is placed by: then the rewrite is left out, and the note is not written.
+        let root = vault_dir("heading");
+        let home = Home::Vault(root.clone());
+        let other = root.join("Other.md");
+        fs::write(&other, "# Other\n\nsee [[Plan#Old]]\nend\n").unwrap();
+        save(
+            Some(&home),
+            &other,
+            "# Other\n\nsee [[Plan#Old]]\n{++\nnew\n++}\nend\n",
+            "assistant",
+        )
+        .unwrap();
+        let before = fs::read_to_string(&other).unwrap();
+        let done = edit(Some(&home), &other, "", |shown| {
+            let (text, count) = wiki::rename_heading(shown, "Plan", "Old", "New");
+            let refused = pending::rewrite_refused(shown, &text)
+                || rewrite_unplaces(Some(&home), &other, shown, &text);
+            (count > 0 && !refused).then_some(text)
+        })
+        .unwrap();
+        assert!(!done);
+        assert_eq!(fs::read_to_string(&other).unwrap(), before);
+        assert_eq!(read(&home, &other).len(), 1);
         let _ = fs::remove_dir_all(root);
     }
 

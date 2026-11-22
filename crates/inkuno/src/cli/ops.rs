@@ -1013,21 +1013,21 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
     }
     // A note whose title was its name keeps the title in step. Written as the editor shows it, so the
     // pending changes are placed again; a first line that is a pending mark is not a title.
-    if dest.extension().is_some_and(|e| e == "md")
-        && old_stem != new_stem
-        && let Ok((text, _)) = vault::read_shown(Some(&vault.root), &dest)
-        && files::h1_of(&text).as_deref() == Some(old_stem.as_str())
-    {
-        let meta = markdown::front_matter(&text);
-        let (head, body) = text.split_at(meta);
-        if let Some(first) = body.lines().find(|l| !l.trim().is_empty())
-            && first.trim_start().starts_with('#')
-        {
+    if dest.extension().is_some_and(|e| e == "md") && old_stem != new_stem {
+        let home = revisions::home_of(&dest, Some(&vault.root));
+        let _ = sidecar::edit(home.as_ref(), &dest, "", |text| {
+            if files::h1_of(text).as_deref() != Some(old_stem.as_str()) {
+                return None;
+            }
+            let (head, body) = text.split_at(markdown::front_matter(text));
+            let first = body.lines().find(|l| !l.trim().is_empty())?;
+            if !first.trim_start().starts_with('#') {
+                return None;
+            }
             let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
             let title = format!("{} {new_stem}", "#".repeat(hashes.max(1)));
-            let fresh = format!("{head}{}", body.replacen(first, &title, 1));
-            let _ = vault::write_shown(Some(&vault.root), &dest, &fresh, "");
-        }
+            Some(format!("{head}{}", body.replacen(first, &title, 1)))
+        });
     }
     let rewritten = if old_link != new_link {
         vault::relink(

@@ -264,7 +264,7 @@ impl Shell {
                                     // An image or a table keeps its extension.
                                     vault::rename(&path, &to).map(|()| to)
                                 } else {
-                                    vault::rename_note(&path, &name)
+                                    vault::rename_note(this.vault.as_deref(), &path, &name)
                                 };
                                 match renamed {
                                     Ok(to) => {
