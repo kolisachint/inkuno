@@ -13,7 +13,7 @@ use crate::{
     lang::{date_name, time_name},
     logic::wiki::Anchor,
     logic::{assistant, daily, markdown, markdown::Link, pending, rank, revision},
-    platform::{clock, link, revisions, vault as files},
+    platform::{clock, link, revisions, sidecar, vault as files},
 };
 
 use super::{
@@ -271,6 +271,14 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         None => text.clone(),
     };
     let meta = markdown::front_matter(&text);
+    // The pending changes that the note's text does not place: shown nowhere, they wait as orphans.
+    let orphans = match revisions::home_of(&note.path, Some(&vault.root)) {
+        Some(home) => {
+            let disk = fs::read_to_string(&note.path).unwrap_or_default();
+            sidecar::unplaced(&home, &note.path, &disk)
+        }
+        None => Vec::new(),
+    };
     Outcome::ok(json!({
         "path": vault::rel(&vault.root, &note.path),
         "title": note.name,
@@ -282,6 +290,16 @@ pub fn read_note(vault: &Vault, args: &Value) -> Outcome {
         "embeds": embeds(vault, &text),
         "comments": comments_of(&text),
         "token": token,
+        "unplaced": {
+            "count": orphans.len(),
+            "entries": orphans.iter().map(|e| json!({
+                "id": e.id,
+                "author": e.author,
+                "old": e.old,
+                "new": e.new,
+                "orphan_since": e.orphan_since,
+            })).collect::<Vec<Value>>(),
+        },
     }))
 }
 

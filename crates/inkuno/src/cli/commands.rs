@@ -900,7 +900,8 @@ example:
 const READ_HELP: &str = "\
 inkuno read <note> [--section HEADING|^BLOCK] [--json]
     the text of a note; with --section, only that section or block
-    --json: the path, title, tags, aliases, links, embeds, comments and the token.
+    --json: the path, title, tags, aliases, links, embeds, comments, the token and `unplaced`:
+    the pending changes the text does not place (count and entries), shown nowhere until discarded.
     Pass the token to edit or append: a note changed since it was read is refused
 
 example:

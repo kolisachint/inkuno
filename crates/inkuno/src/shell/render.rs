@@ -1122,8 +1122,13 @@ impl Shell {
             true => 0,
             false => self.pane().editor.read(cx).pending_changes(),
         };
-        let hint =
-            (changes > 0 && !self.focus_mode).then(|| self.pending_hint(changes, corner, cx));
+        // The changes the note's text does not place are shown nowhere: the pill says so, with Discard.
+        let orphans = match self.pane().editor.read(cx).is_readonly() {
+            true => 0,
+            false => self.unplaced_changes(),
+        };
+        let hint = ((changes > 0 || orphans > 0) && !self.focus_mode)
+            .then(|| self.pending_hint(changes, orphans, corner, cx));
         // The list page closed with input in its filter or one of its cells: nothing
         // receives it anymore, it goes back to the note.
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {

@@ -62,6 +62,40 @@ fn write(root: &std::path::Path, rel: &str, text: &str) {
 }
 
 #[test]
+fn an_orphan_change_is_reported_by_read_and_shown_nowhere() {
+    use crate::{logic::pending::Entry, platform::revisions::Home};
+    let root = scratch();
+    let mut vault = open(&root);
+    write(&root, "Plan.md", "a\nz\nb\n");
+    vault.rescan();
+    let note = vault.root.join("Plan.md");
+    let home = Home::Vault(vault.root.clone());
+    // A change whose context the note no longer has: it is kept beside the note, as an orphan.
+    let orphan = Entry {
+        id: 1,
+        author: "assistant".into(),
+        at: 2,
+        old: "gone\n".into(),
+        new: "x\n".into(),
+        before: "q\n".into(),
+        after: "r\n".into(),
+        orphan_since: None,
+    };
+    crate::platform::sidecar::store(&home, &note, std::slice::from_ref(&orphan)).unwrap();
+    let read = ok(notes::read_note(&vault, &json!({"note": "Plan"})));
+    assert_eq!(read["text"], "a\nz\nb\n");
+    assert_eq!(read["unplaced"]["count"], 1);
+    assert_eq!(read["unplaced"]["entries"][0]["old"], "gone\n");
+    assert_eq!(read["unplaced"]["entries"][0]["new"], "x\n");
+    // Once the change is placed again (its context is back), nothing is unplaced.
+    write(&root, "Plan.md", "q\ngone\nr\n");
+    let read = ok(notes::read_note(&vault, &json!({"note": "Plan"})));
+    assert_eq!(read["unplaced"]["count"], 0);
+    assert_eq!(read["text"], "q\n{--\ngone\n--}\n{++\nx\n++}\nr\n");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn a_missing_vault_is_a_sentence() {
     let message = match Vault::open(scratch().join("missing")) {
         Ok(_) => panic!("a missing folder opened"),
