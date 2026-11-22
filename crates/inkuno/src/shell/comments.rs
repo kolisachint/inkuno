@@ -4,7 +4,9 @@
 
 use std::{ops::Range, time::Duration};
 
-use gpui::{Context, Div, Entity, Stateful, Subscription, Window, div, prelude::*};
+use gpui::{
+    App, Context, Div, Entity, Stateful, Subscription, WeakEntity, Window, div, prelude::*,
+};
 
 use super::*;
 use crate::lang::tr;
@@ -18,13 +20,65 @@ const FLASH: Duration = Duration::from_millis(900);
 /// said goes in the field, Enter writes it into the note (`write_comment`) and Escape or Cancel takes its
 /// markup out again (`resolve_comment`). The note holds the empty markup meanwhile, as it always did.
 pub struct Draft {
-    /// Where the caret is in the comment (a card's `inside`), and the passage, cell or row it is on.
+    /// Where the caret is in the comment (a card's `inside`), kept to the note's text as it changes, and
+    /// the passage, cell or row it is on.
     pub inside: usize,
     pub noted: String,
-    /// The note the comment is in.
-    pub editor: Entity<Editor>,
+    /// The note the comment is in. Weak: a draft never keeps a closed tab's note alive, and it ends with
+    /// the tab (`end_closed_draft`).
+    pub editor: WeakEntity<Editor>,
+    /// The note's text as the draft last saw it: what a change is measured against.
+    text: String,
     pub field: Entity<Field>,
     _subscription: Subscription,
+    _edits: Subscription,
+}
+
+/// Where byte `at` of `old` is in `new`, once the one edit that turns `old` into `new` is taken out (what they
+/// share at the start and at the end). None when `at` is inside that edit: it has no place then.
+fn shifted(old: &str, new: &str, at: usize) -> Option<usize> {
+    let mut head = old
+        .bytes()
+        .zip(new.bytes())
+        .take_while(|(a, b)| a == b)
+        .count();
+    while !old.is_char_boundary(head) || !new.is_char_boundary(head) {
+        head -= 1;
+    }
+    let room = old.len().min(new.len()) - head;
+    let mut tail = old
+        .bytes()
+        .rev()
+        .zip(new.bytes().rev())
+        .take(room)
+        .take_while(|(a, b)| a == b)
+        .count();
+    while !old.is_char_boundary(old.len() - tail) || !new.is_char_boundary(new.len() - tail) {
+        tail -= 1;
+    }
+    let (old_end, new_end) = (old.len() - tail, new.len() - tail);
+    if at <= head {
+        Some(at)
+    } else if at >= old_end {
+        Some(new_end + (at - old_end))
+    } else {
+        None
+    }
+}
+
+/// Whether the comment at byte `at` of `text` is an empty one, the marker a draft writes: the only comment
+/// a draft writes into or takes out.
+fn own_marker(text: &str, at: usize) -> bool {
+    let Some(before) = text.get(..at) else {
+        return false;
+    };
+    let start = before.rfind('\n').map_or(0, |i| i + 1);
+    let end = text[at..].find('\n').map_or(text.len(), |i| at + i);
+    let line = &text[start..end];
+    let col = at - start;
+    markdown::comments(line)
+        .iter()
+        .any(|(whole, _, said)| (whole.start..=whole.end).contains(&col) && said.is_empty())
 }
 
 /// One comment of the note, as the Comments view draws it (`markdown::all_comments`).
@@ -67,7 +121,7 @@ impl Shell {
     pub(super) fn render_comments(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let t = self.theme;
         let draft = self.comment_draft.as_ref().map(|d| {
-            let shown_here = d.editor == self.pane().editor;
+            let shown_here = d.editor.entity_id() == self.pane().editor.entity_id();
             (
                 self.comment_draft_card(d, cx),
                 shown_here.then_some(d.inside),
@@ -352,16 +406,71 @@ impl Shell {
                 crate::views::field::FieldEvent::Changed => cx.notify(),
             },
         );
+        let edits = cx.subscribe_in(
+            editor,
+            window,
+            |this, editor, event: &EditorEvent, _, cx| {
+                if matches!(event, EditorEvent::Changed) {
+                    this.comment_text_changed(editor, cx);
+                }
+            },
+        );
         self.comment_draft = Some(Draft {
             inside,
             noted,
-            editor: editor.clone(),
+            editor: editor.downgrade(),
+            text: editor.read(cx).text().to_string(),
             field: field.clone(),
             _subscription: subscription,
+            _edits: edits,
         });
         self.comment_focus = None;
         self.show_view(Mode::Comments, window, cx);
         window.focus(&field.focus_handle(cx));
+        cx.notify();
+    }
+
+    /// The note of `draft` while it is open in a pane and its own marker is still where the draft says;
+    /// None otherwise, so that nothing is written.
+    fn draft_note(&self, draft: &Draft, cx: &App) -> Option<Entity<Editor>> {
+        let id = draft.editor.entity_id();
+        let pane = self
+            .panes
+            .iter()
+            .find(|pane| pane.editor.entity_id() == id)?;
+        own_marker(pane.editor.read(cx).text(), draft.inside).then(|| pane.editor.clone())
+    }
+
+    /// A draft ends with its tab: when its note is no longer in any pane, the draft goes, its card with it.
+    /// Nothing is written.
+    pub(super) fn end_closed_draft(&mut self) {
+        let open = self.comment_draft.as_ref().is_none_or(|draft| {
+            let id = draft.editor.entity_id();
+            self.panes.iter().any(|pane| pane.editor.entity_id() == id)
+        });
+        if !open {
+            self.comment_draft = None;
+        }
+    }
+
+    /// The note's text changed while the draft is open: the draft's comment moves with the text. When the
+    /// change cannot be followed, or the marker is no longer an empty comment, the draft ends and nothing is
+    /// written: a write or a take-out only ever goes to the draft's own marker, found where it is now.
+    fn comment_text_changed(&mut self, editor: &Entity<Editor>, cx: &mut Context<Self>) {
+        let Some(draft) = self.comment_draft.as_mut() else {
+            return;
+        };
+        if draft.editor.entity_id() != editor.entity_id() {
+            return;
+        }
+        let now = editor.read(cx).text().to_string();
+        match shifted(&draft.text, &now, draft.inside).filter(|at| own_marker(&now, *at)) {
+            Some(at) => {
+                draft.inside = at;
+                draft.text = now;
+            }
+            None => self.comment_draft = None,
+        }
         cx.notify();
     }
 
@@ -377,10 +486,10 @@ impl Shell {
         let Some(draft) = self.comment_draft.take() else {
             return;
         };
-        draft
-            .editor
-            .update(cx, |e, cx| e.write_comment(draft.inside, &text, cx));
-        window.focus(&draft.editor.focus_handle(cx));
+        if let Some(editor) = self.draft_note(&draft, cx) {
+            editor.update(cx, |e, cx| e.write_comment(draft.inside, &text, cx));
+            window.focus(&editor.focus_handle(cx));
+        }
         cx.notify();
     }
 
@@ -389,10 +498,10 @@ impl Shell {
         let Some(draft) = self.comment_draft.take() else {
             return;
         };
-        draft
-            .editor
-            .update(cx, |e, cx| e.resolve_comment(draft.inside, cx));
-        window.focus(&draft.editor.focus_handle(cx));
+        if let Some(editor) = self.draft_note(&draft, cx) {
+            editor.update(cx, |e, cx| e.resolve_comment(draft.inside, cx));
+            window.focus(&editor.focus_handle(cx));
+        }
         cx.notify();
     }
 

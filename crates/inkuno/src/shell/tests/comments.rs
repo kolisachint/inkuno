@@ -114,3 +114,66 @@ fn escape_in_the_draft_takes_the_comment_out_and_keeps_the_passage(cx: &mut Test
     assert!(shell.read_with(cx, |s, _| s.comment_draft.is_none()));
     let _ = fs::remove_dir_all(root);
 }
+
+/// The draft of the shell, its field focused: what the keys reach while it is open.
+fn focus_draft_field(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
+    shell.update_in(cx, |s, window, cx| {
+        let field = s.comment_draft.as_ref().expect("a draft").field.clone();
+        window.focus(&field.focus_handle(cx));
+    });
+}
+
+#[gpui::test]
+fn typing_above_the_draft_then_escape_leaves_the_other_comments_alone(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "draft-above");
+    let note = root.join("Note.md");
+    fs::write(&note, "un<!-- comment: gardé --> mot ici\nfin\n").unwrap();
+    open(&shell, cx, &note);
+    let at = text(&shell, cx).find("mot").unwrap();
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.select_passage(at..at + 3, cx))
+    });
+    cx.simulate_keystrokes("secondary-shift-m");
+    settle(cx);
+    assert!(shell.read_with(cx, |s, _| s.comment_draft.is_some()));
+    // Typed in the note above the comment, while its draft is open: the comment moves, the draft follows it.
+    shell.update_in(cx, |s, window, cx| {
+        let editor = s.pane().editor.clone();
+        editor.update(cx, |e, cx| e.place_cursor(0, cx));
+        window.focus(&editor.focus_handle(cx));
+    });
+    cx.simulate_input("Une longue phrase ajoutée ici ");
+    focus_draft_field(&shell, cx);
+    cx.simulate_keystrokes("escape");
+    settle(cx);
+    // Only the draft's own empty marker goes; the comment before it keeps its text.
+    assert_eq!(
+        text(&shell, cx),
+        "Une longue phrase ajoutée ici un<!-- comment: gardé --> mot ici\nfin\n"
+    );
+    assert!(shell.read_with(cx, |s, _| s.comment_draft.is_none()));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn closing_the_tab_while_drafting_drops_the_draft_and_writes_nothing(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "draft-closed");
+    let note = root.join("Note.md");
+    fs::write(&note, "un mot ici\nfin\n").unwrap();
+    open(&shell, cx, &note);
+    comment_on_mot(&shell, cx);
+    cx.simulate_input("perdu");
+    assert!(shell.read_with(cx, |s, _| s.comment_draft.is_some()));
+    // A second pane, so that the drafting tab may close (the window keeps one tab).
+    let tab = shell.read_with(cx, |s, _| s.active);
+    shell.update_in(cx, |s, window, cx| s.add_pane(Side::Right, window, cx));
+    shell.update_in(cx, |s, window, cx| s.close_tab(tab, window, cx));
+    settle(cx);
+    // The draft ends with its tab: its card is gone, and what was typed in its field is never written.
+    assert!(shell.read_with(cx, |s, _| s.comment_draft.is_none()));
+    let saved = fs::read_to_string(&note).unwrap();
+    assert!(!saved.contains("perdu"), "{saved:?}");
+    let _ = fs::remove_dir_all(root);
+}
