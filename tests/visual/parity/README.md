@@ -9,3 +9,4 @@ Scripts and logs that compare the real app (driven on Xvfb) with `docs/design/pr
 - `wf-proto.js`: the W1–W8 workflows in the prototype (default output `target/visual/wf-proto`); last run's log: `WF-PROTO-LOG.md`.
 - `ui-check.sh`: the app in the same states as the prototype (`--theme light|dark|both`, `--only NAME…`; `BIN=`, `OUT=`, default `target/visual/app`). Needs Xvfb, xdotool, ImageMagick, lavapipe (see `scripts/visual-check.sh`).
 - `wf-app.sh`: the W1–W8 workflows in the real app on Xvfb (`BIN=`, `WORK=`; default `target/visual/wf-app`); last run's log: `WF-APP-LOG.md`.
+- `WF-APP-LOG-FINAL.md`: the same workflows on the finished branch (47 of 48 OK).
