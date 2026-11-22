@@ -969,13 +969,18 @@ impl Editor {
         // selection, and the block after it on that room.
         let spans = [laid.span.start, laid.span.end].map(|c| c.min(laid.len));
         let now_spans = [self.sel.start, self.sel.end].map(|c| now_of(c).min(laid.len));
-        for c in [laid.cursor.min(laid.len), now.min(laid.len)]
-            .into_iter()
-            .chain(spans)
-            .chain(now_spans)
-        {
+        for c in [laid.cursor.min(laid.len), now.min(laid.len)] {
             dirty.push(at(c)..(at(c) + 2).min(n));
         }
+        // A blank line inside the selection is drawn in full, and one at its edge is not: a selection that
+        // grows or shrinks over several lines changes every line between its old and new edges. Those
+        // lines are laid out again, and three more past the end.
+        let edges: Vec<usize> = spans.into_iter().chain(now_spans).map(at).collect();
+        let (lo, hi) = (
+            edges.iter().copied().min().unwrap_or(0),
+            edges.iter().copied().max().unwrap_or(0),
+        );
+        dirty.push(lo..(hi + 4).min(n));
         // The line showing its source changed: the old one renders again, the new one shows its markers.
         for r in [laid.revealed, self.revealed].into_iter().flatten() {
             let r = r.min(laid.len);
@@ -1878,9 +1883,11 @@ impl Editor {
                 // callout line. A blank line, code, a table row, a heading, a formula and the front matter
                 // keep their spacing. The gap is part of the row's pad, so the text, its markers and its hits move together.
                 // The lines of a callout's body follow its label, and each other, with no gap (v2 `.al` and body lines).
-                let under_label = last
-                    .as_ref()
-                    .is_some_and(|r| r.tint.is_some() && r.kind == Kind::Quote);
+                // Only a quote line goes on under the label: a list or a paragraph after the callout keeps its gap.
+                let under_label = kind == Kind::Quote
+                    && last
+                        .as_ref()
+                        .is_some_and(|r| r.tint.is_some() && r.kind == Kind::Quote);
                 // A blank line between blocks is the 9 px gap of v2 and nothing more: drawn collapsed, unless the
                 // caret or the selection is on it, or a blank line comes before it (the 2nd and later ones keep
                 // their room). A block after a collapsed line takes the gap that line gives, so it adds none.
@@ -3356,6 +3363,85 @@ mod tests {
         );
     }
 
+    /// A list right after a callout, with no blank line between, keeps its block gap: only the callout's
+    /// own body lines follow its label with none.
+    #[gpui::test]
+    fn a_list_after_a_callout_keeps_its_gap(cx: &mut gpui::TestAppContext) {
+        let text = "> [!NOTE]\n> note\n- bullet\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let pad = |cx: &mut gpui::VisualTestContext, l: usize| {
+            editor.read_with(cx, |e, _| {
+                e.rows.iter().find(|r| r.start == lines[l]).unwrap().pad
+            })
+        };
+        // The body line of the callout stays under its label.
+        assert!(
+            f32::from(pad(cx, 1)).abs() < 0.01,
+            "callout body {:?}",
+            pad(cx, 1)
+        );
+        // The bullet is a block of its own: the gap, not touching the box.
+        let gap = pad(cx, 2);
+        assert!(
+            (f32::from(gap) - f32::from(BLOCK_GAP)).abs() < 0.01,
+            "bullet after callout {gap:?}"
+        );
+    }
+
+    /// Selecting over blank lines draws them in full, and a selection that moves on over them keeps
+    /// the layout of a full pass: select all, shift-click back up, then shift-click down again.
+    #[gpui::test]
+    fn a_selection_over_blank_lines_opens_and_closes_them(cx: &mut gpui::TestAppContext) {
+        let text = "One\n\nTwo\n\nThree\n\nFour\n\nFive";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            let _ = cx.update(|window, cx| window.draw(cx));
+            cx.run_until_parked();
+        };
+        let collapsed = |cx: &mut gpui::VisualTestContext, l: usize| {
+            editor.read_with(cx, |e, _| {
+                e.rows
+                    .iter()
+                    .find(|r| r.start == lines[l])
+                    .unwrap()
+                    .collapsed
+            })
+        };
+        assert!(collapsed(cx, 1) && collapsed(cx, 3) && collapsed(cx, 5) && collapsed(cx, 7));
+        // Select all: every blank line is inside the selection, so none is collapsed.
+        editor.update(cx, |e, cx| {
+            e.move_to(0, cx);
+            e.select_to(text.len(), cx);
+        });
+        cx.run_until_parked();
+        draw(cx);
+        assert!(
+            !collapsed(cx, 1) && !collapsed(cx, 3) && !collapsed(cx, 5) && !collapsed(cx, 7),
+            "select all opens the blank lines"
+        );
+        // Shift-click on "Two" shrinks the selection: the blank line after "Two" closes again.
+        editor.update(cx, |e, cx| e.move_to(0, cx));
+        draw(cx);
+        let spot = editor.read_with(cx, |e, _| e.point_of(lines[2]).unwrap());
+        cx.simulate_click(spot, gpui::Modifiers::shift());
+        cx.run_until_parked();
+        draw(cx);
+        assert!(!collapsed(cx, 1) && collapsed(cx, 3), "shift-click up");
+        // A shift-click further down, from the start, extends over the blank lines of "Three" and "Four".
+        editor.update(cx, |e, cx| e.move_to(0, cx));
+        draw(cx);
+        let spot = editor.read_with(cx, |e, _| e.point_of(lines[6]).unwrap());
+        cx.simulate_click(spot, gpui::Modifiers::shift());
+        cx.run_until_parked();
+        draw(cx);
+        assert!(
+            !collapsed(cx, 1) && !collapsed(cx, 3) && !collapsed(cx, 5) && collapsed(cx, 7),
+            "shift-click down"
+        );
+    }
+
     fn starts(text: &str) -> Vec<usize> {
         let mut out = vec![0];
         for (i, b) in text.bytes().enumerate() {
@@ -4084,6 +4170,50 @@ mod tests {
         assert_eq!(
             editor.read_with(cx, |e, _| e.text().to_string()),
             "Intro\n- [x] f\n"
+        );
+    }
+
+    /// Shift- and Alt-click on a task's box extend a selection and add a cursor: they do not check the task.
+    #[gpui::test]
+    fn shift_and_alt_clicks_on_a_box_leave_the_task_alone(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n- [ ] f\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let box_at = editor.read_with(cx, |e, _| {
+            let row = e.rows.iter().find(|r| r.start == lines[1]).unwrap();
+            let lead = row.shaped.lead.as_ref().unwrap();
+            let check = lead.check.as_ref().unwrap();
+            let text = e.point_of(row.start).unwrap();
+            point(
+                text.x - lead.width + (check.x.start + check.x.end) / 2.,
+                text.y,
+            )
+        });
+        // Alt-click adds a cursor on the box's line, and leaves the box as it is.
+        cx.simulate_click(box_at, gpui::Modifiers::alt());
+        cx.run_until_parked();
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.text().to_string()),
+            text,
+            "alt-click leaves the box"
+        );
+        assert!(
+            editor.read_with(cx, |e, _| e.cursors() > 1),
+            "alt-click adds a cursor"
+        );
+        // Shift-click extends the selection to the box, and leaves the box as it is.
+        editor.update(cx, |e, cx| e.move_to(0, cx));
+        cx.run_until_parked();
+        cx.simulate_click(box_at, gpui::Modifiers::shift());
+        cx.run_until_parked();
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.text().to_string()),
+            text,
+            "shift-click leaves the box"
+        );
+        assert!(
+            editor.read_with(cx, |e, _| e.sel.start < e.sel.end),
+            "shift-click extends the selection"
         );
     }
 

@@ -507,8 +507,11 @@ impl Editor {
         self.grid = None;
         // A task's drawn box is a plain button: it wins over the block handle that hover may show
         // beside the line. The box is toggled where it is drawn: the edit would show the line's
-        // source, so the line keeps the reveal it had.
+        // source, so the line keeps the reveal it had. Alt and Shift clicks are for cursors and
+        // selections, so they pass the box by.
         if !e.modifiers.secondary()
+            && !e.modifiers.alt
+            && !e.modifiers.shift
             && let Some(at) = self.checkbox_at(e.position)
         {
             let revealed = self.revealed;
