@@ -250,6 +250,12 @@ pub enum EditorEvent {
     View(Source),
     /// A click on a commented passage: the comment's start (the Comments view shows its card).
     CommentAt(usize),
+    /// A comment was just started (Comment on a selection or a line, a cell, a row): where the caret is in
+    /// it (as a card's `inside`), and the passage, cell or row it is on. The shell opens its draft card.
+    CommentStarted {
+        inside: usize,
+        noted: String,
+    },
     /// A link to a heading or a block of a note, to open: the note and where in it; with Shift, aside.
     OpenAt(crate::logic::wiki::Target, bool),
     /// A short message for the shell to show once: an edit refused for a pending change, a

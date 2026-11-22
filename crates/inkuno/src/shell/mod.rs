@@ -146,6 +146,8 @@ struct Shell {
     comment_cards: Vec<comments::Card>,
     /// The card the Comments view focuses: the caret's comment, or the one clicked last.
     comment_focus: Option<usize>,
+    /// The comment being written, its draft card at the top of the Comments view (`comments.rs`).
+    comment_draft: Option<comments::Draft>,
     /// Scroll of the Comments view, and the comment the caret was in last.
     comments_scroll: gpui::ScrollHandle,
     comments_seen: Option<usize>,
@@ -270,6 +272,7 @@ impl Shell {
             // the palette (`› comments`) reopens it via `open_comments`.
             comment_cards: Vec::new(),
             comment_focus: None,
+            comment_draft: None,
             comments_scroll: gpui::ScrollHandle::new(),
             comments_seen: None,
             toasts: Vec::new(),

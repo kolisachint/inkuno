@@ -4,13 +4,28 @@
 
 use std::{ops::Range, time::Duration};
 
-use gpui::{Context, Div, Stateful, Window, div, prelude::*};
+use gpui::{Context, Div, Entity, Stateful, Subscription, Window, div, prelude::*};
 
 use super::*;
 use crate::lang::tr;
+use crate::ui::components::button::button;
+use crate::views::{editor::Editor, field::Field};
 
 /// How long a passage stays selected when its card is clicked.
 const FLASH: Duration = Duration::from_millis(900);
+
+/// A comment being written: its draft card leads the Comments view. The passage it is on is quoted, what is
+/// said goes in the field, Enter writes it into the note (`write_comment`) and Escape or Cancel takes its
+/// markup out again (`resolve_comment`). The note holds the empty markup meanwhile, as it always did.
+pub struct Draft {
+    /// Where the caret is in the comment (a card's `inside`), and the passage, cell or row it is on.
+    pub inside: usize,
+    pub noted: String,
+    /// The note the comment is in.
+    pub editor: Entity<Editor>,
+    pub field: Entity<Field>,
+    _subscription: Subscription,
+}
 
 /// One comment of the note, as the Comments view draws it (`markdown::all_comments`).
 #[derive(Clone, Debug, PartialEq)]
@@ -51,7 +66,14 @@ impl Shell {
     /// The Comments view: the cards of the note, the focused one outlined.
     pub(super) fn render_comments(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let t = self.theme;
-        if self.comment_cards.is_empty() {
+        let draft = self.comment_draft.as_ref().map(|d| {
+            let shown_here = d.editor == self.pane().editor;
+            (
+                self.comment_draft_card(d, cx),
+                shown_here.then_some(d.inside),
+            )
+        });
+        if self.comment_cards.is_empty() && draft.is_none() {
             return div()
                 .flex_1()
                 .min_h_0()
@@ -73,6 +95,8 @@ impl Shell {
         }
         let focus = self.comment_focus;
         let cards = self.comment_cards.clone();
+        // The comment being written is listed by its draft card alone, not also by its empty card.
+        let draft_inside = draft.as_ref().and_then(|(_, inside)| *inside);
         // v2 `.rbody`: 12 px at the sides, the cards 8 px apart.
         div()
             .id("comments-view")
@@ -87,10 +111,12 @@ impl Shell {
             .flex()
             .flex_col()
             .gap(t.px(8.))
+            .children(draft.map(|(card, _)| card))
             .children(
                 cards
                     .iter()
                     .enumerate()
+                    .filter(|(_, card)| Some(card.inside) != draft_inside)
                     .map(|(i, card)| self.comment_card(i, card, focus == Some(i), cx)),
             )
             .into_any_element()
@@ -215,6 +241,159 @@ impl Shell {
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.comment_go(i, inside, passage.clone(), window, cx)
             }))
+    }
+
+    /// The draft card of a comment being written: the passage in a gold bar, the field (Enter writes it),
+    /// Comment (primary) and Cancel.
+    fn comment_draft_card(&self, draft: &Draft, cx: &mut Context<Self>) -> Stateful<Div> {
+        let t = self.theme;
+        let field = draft.field.clone();
+        let blank = field.read(cx).line.text.is_empty();
+        let quote = crate::logic::rank::plain_line(&draft.noted);
+        div()
+            .id("comment-draft")
+            .debug_selector(|| "comment-draft".into())
+            .flex()
+            .flex_col()
+            .gap(t.px(6.))
+            .px(t.px(12.))
+            .py(t.px(10.))
+            .rounded(t.card())
+            .border_2()
+            .border_color(t.accent)
+            .bg(t.bg)
+            .when(!quote.is_empty(), |d| {
+                d.child(
+                    div()
+                        .min_w_0()
+                        .pl(t.px(8.))
+                        .border_l_3()
+                        .border_color(t.comment_gold)
+                        .text_size(t.px(12.))
+                        .text_color(t.soft)
+                        .line_clamp(2)
+                        .text_ellipsis()
+                        .child(quote),
+                )
+            })
+            .child(
+                div()
+                    .debug_selector(|| "comment-draft-field".into())
+                    .relative()
+                    .min_h(t.px(26.))
+                    .px(t.px(8.))
+                    .py(t.px(4.))
+                    .rounded(t.small())
+                    .border_1()
+                    .border_color(t.border)
+                    .child(field)
+                    .when(blank, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .left(t.px(8.))
+                                .top(t.px(4.))
+                                .text_size(t.px(13.))
+                                .text_color(t.soft)
+                                .child(tr(
+                                    "Add a comment, then press Enter",
+                                    "Ajoutez un commentaire, puis Entrée",
+                                )),
+                        )
+                    }),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(t.px(6.))
+                    .child(
+                        button("comment-draft-save", tr("Comment", "Commenter"), t)
+                            .h(t.px(24.))
+                            .px(t.px(9.))
+                            .text_size(t.px(12.))
+                            .bg(t.accent)
+                            .text_color(t.bg)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.comment_write(window, cx)
+                            })),
+                    )
+                    .child(
+                        button("comment-draft-cancel", tr("Cancel", "Annuler"), t)
+                            .h(t.px(24.))
+                            .px(t.px(9.))
+                            .text_size(t.px(12.))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.comment_cancel(window, cx)
+                            })),
+                    ),
+            )
+    }
+
+    /// A comment was just started in `editor` (`EditorEvent::CommentStarted`): the Comments view opens with
+    /// its draft card, the field focused. A draft still open keeps its empty markup, as any unfinished one.
+    pub(super) fn comment_started(
+        &mut self,
+        editor: &Entity<Editor>,
+        inside: usize,
+        noted: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let field = cx.new(|cx| Field::new("", self.theme, cx));
+        let subscription = cx.subscribe_in(
+            &field,
+            window,
+            |this, _, event: &crate::views::field::FieldEvent, window, cx| match event {
+                crate::views::field::FieldEvent::Done => this.comment_write(window, cx),
+                crate::views::field::FieldEvent::Cancel => this.comment_cancel(window, cx),
+                crate::views::field::FieldEvent::Changed => cx.notify(),
+            },
+        );
+        self.comment_draft = Some(Draft {
+            inside,
+            noted,
+            editor: editor.clone(),
+            field: field.clone(),
+            _subscription: subscription,
+        });
+        self.comment_focus = None;
+        self.show_view(Mode::Comments, window, cx);
+        window.focus(&field.focus_handle(cx));
+        cx.notify();
+    }
+
+    /// Enter in the draft: what is written is written into its comment. An empty text keeps the draft open.
+    pub(super) fn comment_write(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(draft) = self.comment_draft.as_ref() else {
+            return;
+        };
+        let text = draft.field.read(cx).line.text.trim().to_string();
+        if text.is_empty() {
+            return;
+        }
+        let Some(draft) = self.comment_draft.take() else {
+            return;
+        };
+        draft
+            .editor
+            .update(cx, |e, cx| e.write_comment(draft.inside, &text, cx));
+        window.focus(&draft.editor.focus_handle(cx));
+        cx.notify();
+    }
+
+    /// Escape or Cancel in the draft: its markup goes, the passage stays as it was.
+    pub(super) fn comment_cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(draft) = self.comment_draft.take() else {
+            return;
+        };
+        draft
+            .editor
+            .update(cx, |e, cx| e.resolve_comment(draft.inside, cx));
+        window.focus(&draft.editor.focus_handle(cx));
+        cx.notify();
     }
 
     /// A card was clicked: the caret goes to its comment, its passage is selected for `FLASH`, and

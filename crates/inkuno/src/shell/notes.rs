@@ -864,6 +864,9 @@ impl Shell {
         }
         match event {
             EditorEvent::CommentAt(at) => self.comment_clicked(*at, window, cx),
+            EditorEvent::CommentStarted { inside, noted } => {
+                self.comment_started(editor, *inside, noted.clone(), window, cx)
+            }
             EditorEvent::Changed => {
                 self.in_pane(pane, |this| {
                     this.keep_preview();

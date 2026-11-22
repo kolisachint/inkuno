@@ -76,6 +76,36 @@ impl Editor {
         self.comment(cx);
     }
 
+    /// Writes `text` as the said of the comment the caret is in at byte `at`, its passage kept: the markup
+    /// `comment_here` wrote, with the text its draft card holds. Nothing is written when the comment
+    /// is gone, or when the line cannot take it.
+    pub fn write_comment(&mut self, at: usize, text: &str, cx: &mut Context<Self>) {
+        let at = self.clamp(at);
+        let lr = self.line_range(at);
+        let line = self.content[lr.clone()].to_string();
+        let col = at - lr.start;
+        let Some((whole, noted, _)) = md::comments(&line)
+            .into_iter()
+            .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
+        else {
+            return;
+        };
+        let kept = line[noted].to_string();
+        // A table cell takes a `|` only escaped, or it would split the cell.
+        let said = match self.is_table_line(&lr) {
+            true => text.replace('|', r"\|"),
+            false => text.to_string(),
+        };
+        let range = lr.start + whole.start..lr.start + whole.end;
+        let marked = format!("{kept}{}", md::comment_line(&said));
+        if self.touches_pending(&range, &marked) {
+            return self.refuse_pending(cx);
+        }
+        self.push_undo(true);
+        self.edit(range.clone(), &marked, cx);
+        self.move_to(range.start + kept.len() + COMMENT_CURSOR, cx);
+    }
+
     /// Comments the selection, or the line without one: `text<!-- comment: … -->`, the cursor in the
     /// comment to write. On a comment, resolves it: the markup goes, the text stays. In a table,
     /// a comment is on the text of a cell, and one per cell the selection covers; handles that took
@@ -123,6 +153,7 @@ impl Editor {
                 return;
             };
             let len = cells[0].len();
+            let noted = self.content[cells[0].clone()].to_string();
             // All or none: every cell is checked before the first is marked.
             let marks: Vec<(Range<usize>, String)> = cells
                 .iter()
@@ -141,7 +172,12 @@ impl Editor {
             for (range, text) in marks {
                 self.edit(range, &text, cx);
             }
-            return self.move_to(first + len + COMMENT_CURSOR, cx);
+            self.move_to(first + len + COMMENT_CURSOR, cx);
+            cx.emit(EditorEvent::CommentStarted {
+                inside: first + len + COMMENT_CURSOR,
+                noted,
+            });
+            return;
         }
         let marker = md::classify(&line, false).1;
         let sel = if self.sel.is_empty() {
@@ -160,6 +196,10 @@ impl Editor {
         self.push_undo(true);
         self.edit(sel.clone(), &marked, cx);
         self.move_to(sel.start + text.len() + COMMENT_CURSOR, cx);
+        cx.emit(EditorEvent::CommentStarted {
+            inside: sel.start + text.len() + COMMENT_CURSOR,
+            noted: text,
+        });
     }
 
     /// Byte `at` is in the comment of a table cell: a `|` typed there is written `\|`, or it would split the cell.
@@ -238,6 +278,10 @@ impl Editor {
         self.push_undo(true);
         self.edit(range.end..range.end, &note, cx);
         self.move_to(range.end + 2 + head.len(), cx);
+        cx.emit(EditorEvent::CommentStarted {
+            inside: range.end + 2 + head.len(),
+            noted: name,
+        });
     }
 
     /// Deletes the line `lr` and the blank line before it, if any: the text around closes up.
