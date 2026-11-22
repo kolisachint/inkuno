@@ -1110,6 +1110,34 @@ fn comment_file_works_without_any_vault() {
 }
 
 #[test]
+fn a_note_outside_the_vault_keeps_its_pending_marks_in_its_file() {
+    let (home, folder) = loose_folder("outside-marks");
+    let note = folder.join("s.md");
+    fs::write(&note, "# S\n\nkeep\n{++\nnew\n++}\n").unwrap();
+    let run = inkuno(
+        &home,
+        &folder,
+        &[
+            "comment",
+            "--file",
+            "s.md",
+            "--passage",
+            "keep",
+            "--text",
+            "more?",
+        ],
+    );
+    assert_eq!(run.code, 0, "{}", run.err);
+    // The marks are the file's own text, as the editor shows them: nothing moves to a list beside it.
+    assert_eq!(
+        fs::read_to_string(&note).unwrap(),
+        "# S\n\nkeep<!-- comment: more? -->\n{++\nnew\n++}\n"
+    );
+    assert!(!folder.join(".inkuno").exists());
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
 fn comment_file_refusals_exit_with_their_status_and_change_nothing() {
     let (home, folder) = loose_folder("comment-refused");
     let original = "# R\n\none one\n";

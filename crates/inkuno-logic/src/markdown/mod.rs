@@ -1794,6 +1794,12 @@ fn critic_comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)
         }
         from = end + 3;
     }
+    // A comment whose markers are in inline code is code: its passage may hold code, its markers not.
+    let spans = code_spans(line);
+    let in_code = |at: usize| spans.iter().any(|s| s.contains(&at));
+    found.retain(|(whole, noted, said)| {
+        !(in_code(whole.start) || in_code(noted.end) || in_code(said.end))
+    });
     found
 }
 
@@ -1803,8 +1809,13 @@ fn critic_comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)
 /// too (`critic_comments`).
 pub fn comments(line: &str) -> Vec<(Range<usize>, Range<usize>, Range<usize>)> {
     let mut found = critic_comments(line);
+    let spans = code_spans(line);
     let mut from = 0;
     while let Some(open) = line[from..].find(COMMENT_OPEN).map(|i| i + from) {
+        if spans.iter().any(|s| s.contains(&open)) {
+            from = open + COMMENT_OPEN.len();
+            continue;
+        }
         let said_at = open + COMMENT_OPEN.len();
         let Some(close) = line[said_at..].find(HTML_CLOSE).map(|i| i + said_at) else {
             break;
@@ -1872,40 +1883,126 @@ pub fn is_html_comment(whole: &str) -> bool {
     whole.ends_with(HTML_CLOSE)
 }
 
-/// The note with every comment in the earlier CriticMarkup form written in the new one, outside
-/// code blocks: `{==passage==}{>>text<<}` becomes `passage<!-- comment: text -->`, and a comment
-/// on its own `{>>text<<}` becomes `<!-- comment: text -->`. The texts are kept as they are, except
-/// that a `-->` is spaced out. The passage is anchored to its line (see `comment_on`), so a
-/// passage in the middle of a line covers the text from the start of the line up to its marker.
-/// A note with no such comment is returned as it is.
-pub fn migrate_comments(text: &str) -> String {
-    if !text.contains("{==") && !text.contains("{>>") {
-        return text.to_string();
+/// Byte ranges of `text` that are code, where text is not comment markup: the fenced blocks, and the
+/// indented code lines. An indented line is code after a blank line (or a heading, a rule, or other
+/// code), outside a list item: a list's indented lines are its paragraphs. Sorted, not overlapping.
+fn code_ranges(text: &str) -> Vec<Range<usize>> {
+    let blocks = blocks(text);
+    let mut out: Vec<Range<usize>> = blocks.iter().map(|b| b.open..b.end).collect();
+    let (mut in_list, mut gap, mut at) = (false, true, 0);
+    for line in text.split('\n') {
+        let end = at + line.len();
+        let indent = indent_columns(line);
+        let (kind, _) = classify_in(line, None);
+        if is_fence(line) || open_at(&blocks, at).is_some() || line.trim().is_empty() {
+            gap = true;
+        } else if indent >= 4 && !in_list && gap {
+            out.push(at..end);
+        } else {
+            if indent < 4 {
+                match kind {
+                    Kind::Bullet | Kind::Ordered | Kind::Task(_) => in_list = true,
+                    _ if indent == 0 && gap => in_list = false,
+                    _ => {}
+                }
+            }
+            gap = matches!(kind, Kind::Heading(_) | Kind::Rule);
+        }
+        at = end + 1;
     }
-    let prose: std::collections::HashSet<usize> =
-        prose_lines(text).into_iter().map(|(at, _)| at).collect();
-    let mut out = String::with_capacity(text.len());
+    out.sort_by_key(|r| r.start);
+    out
+}
+
+/// Whether `at` is inside one of `ranges`, which are sorted and do not overlap.
+fn in_ranges(ranges: &[Range<usize>], at: usize) -> bool {
+    let i = ranges.partition_point(|r| r.end <= at);
+    ranges.get(i).is_some_and(|r| r.start <= at)
+}
+
+/// Byte ranges of the HTML comments of `text` that are not code, from `<!--` to the `-->` that ends
+/// them, the end of the text if none does. A comment may run over several lines. Its text is not
+/// migrated (see `migration_edits`).
+fn html_comment_ranges(text: &str, code: &[Range<usize>]) -> Vec<Range<usize>> {
+    const OPEN: &str = "<!--";
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(open) = text[from..].find(OPEN).map(|i| i + from) {
+        let line_start = text[..open].rfind('\n').map_or(0, |i| i + 1);
+        let line_end = text[open..].find('\n').map_or(text.len(), |i| open + i);
+        let at = open - line_start;
+        let in_span = code_spans(&text[line_start..line_end])
+            .iter()
+            .any(|s| s.contains(&at));
+        if in_ranges(code, open) || in_span {
+            from = open + OPEN.len();
+            continue;
+        }
+        let end = text[open + OPEN.len()..]
+            .find(HTML_CLOSE)
+            .map_or(text.len(), |i| open + OPEN.len() + i + HTML_CLOSE.len());
+        out.push(open..end);
+        from = end;
+    }
+    out
+}
+
+/// Replacements that write the comments of `text` in the earlier CriticMarkup form in the new one,
+/// as `(range, text)` pairs in order: each replaces the bytes `range` of `text`
+/// (`apply_edits` applies them). A comment whose markers are in code (inline code, fenced or
+/// indented code) is text, and so is one that overlaps an HTML comment: both are left as they are.
+pub fn migration_edits(text: &str) -> Vec<(Range<usize>, String)> {
+    if !text.contains("{==") && !text.contains("{>>") {
+        return Vec::new();
+    }
+    let code = code_ranges(text);
+    let html = html_comment_ranges(text, &code);
+    let mut edits = Vec::new();
     let mut at = 0;
     for piece in text.split_inclusive('\n') {
         let body = piece.strip_suffix('\n').unwrap_or(piece);
-        if prose.contains(&at) && body.contains("{>>") {
-            let mut last = 0;
-            for (whole, noted, said) in critic_comments(body) {
-                out.push_str(&body[last..whole.start]);
-                out.push_str(&body[noted.clone()]);
-                out.push_str(&comment_line(&body[said]));
-                last = whole.end;
-            }
-            out.push_str(&body[last..]);
-        } else {
-            out.push_str(body);
-        }
-        if piece.ends_with('\n') {
-            out.push('\n');
-        }
+        let line_start = at;
         at += piece.len();
+        if !body.contains("{>>") || in_ranges(&code, line_start) {
+            continue;
+        }
+        for (whole, noted, said) in critic_comments(body) {
+            let span = line_start + whole.start..line_start + whole.end;
+            if html
+                .iter()
+                .any(|r| r.start < span.end && span.start < r.end)
+            {
+                continue;
+            }
+            let mut new = body[noted].to_string();
+            new.push_str(&comment_line(&body[said]));
+            edits.push((span, new));
+        }
     }
+    edits
+}
+
+/// `text` with `edits` (from `migration_edits`, in order) applied.
+pub fn apply_edits(text: &str, edits: &[(Range<usize>, String)]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (range, new) in edits {
+        out.push_str(&text[last..range.start]);
+        out.push_str(new);
+        last = range.end;
+    }
+    out.push_str(&text[last..]);
     out
+}
+
+/// The note with every comment in the earlier CriticMarkup form written in the new one, outside
+/// code and HTML comments: `{==passage==}{>>text<<}` becomes `passage<!-- comment: text -->`, and a
+/// comment on its own `{>>text<<}` becomes `<!-- comment: text -->`. The texts are kept as they are,
+/// except that a `-->` is spaced out. The passage is anchored to its line (see `comment_on`), so a
+/// passage in the middle of a line covers the text from the start of the line up to its marker.
+/// A note with no such comment is returned as it is.
+pub fn migrate_comments(text: &str) -> String {
+    apply_edits(text, &migration_edits(text))
 }
 
 /// A comment of the note, as its panel lists it.
@@ -1981,11 +2078,17 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
     let mut row: Option<usize> = None;
     // Where the next prose line starts: after a fence or a code line the table is over.
     let mut next = 0;
+    // Indented code is not a comment (the fenced blocks are not prose lines at all).
+    let code = code_ranges(text);
     for (at, line) in prose_lines(text) {
         if at != next {
             row = None;
         }
         next = at + line.len() + 1;
+        if in_ranges(&code, at) {
+            row = None;
+            continue;
+        }
         row = line
             .trim_start()
             .starts_with('|')
@@ -2024,7 +2127,77 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{all_comments, comment_on, migrate_comments};
+    use super::{
+        all_comments, apply_edits, comment_on, comments, migrate_comments, migration_edits,
+    };
+
+    #[test]
+    fn migration_keeps_the_text_of_code_and_html_comments() {
+        // Inline code, fenced code, indented code and a multi-line HTML comment keep their text.
+        let inline = "Write `{==a==}{>>b<<}` to comment.\n";
+        assert_eq!(migrate_comments(inline), inline);
+        let fenced = "```\n{==a==}{>>b<<}\n```\n";
+        assert_eq!(migrate_comments(fenced), fenced);
+        let indented = "Text\n\n    {==a==}{>>b<<}\n\nafter {==c==}{>>d<<}\n";
+        assert_eq!(
+            migrate_comments(indented),
+            "Text\n\n    {==a==}{>>b<<}\n\nafter c<!-- comment: d -->\n"
+        );
+        let html = "<!-- draft\n{==a==}{>>b<<}\n-->\n{==c==}{>>d<<}\n";
+        assert_eq!(
+            migrate_comments(html),
+            "<!-- draft\n{==a==}{>>b<<}\n-->\nc<!-- comment: d -->\n"
+        );
+        let one_line = "<!-- {==a==}{>>b<<} -->\n";
+        assert_eq!(migrate_comments(one_line), one_line);
+        // A comment in the new form keeps its text; the earlier form after it is migrated.
+        assert_eq!(
+            migrate_comments("x<!-- comment: {>>y<<} --> {==a==}{>>b<<}\n"),
+            "x<!-- comment: {>>y<<} --> a<!-- comment: b -->\n"
+        );
+        // Markers inside inline code stay; a passage holding a code span is migrated with it.
+        assert_eq!(
+            migrate_comments("{==a `x`==}{>>b<<} `{>>c<<}`\n"),
+            "a `x`<!-- comment: b --> `{>>c<<}`\n"
+        );
+        // An indented line of a list item is a paragraph of the item, not code.
+        assert_eq!(
+            migrate_comments("- item\n\n    {==a==}{>>b<<}\n"),
+            "- item\n\n    a<!-- comment: b -->\n"
+        );
+    }
+
+    #[test]
+    fn the_edits_of_a_migration_apply_to_the_text_as_migrate_comments_gives_it() {
+        let text = "{==a==}{>>b<<} c {==d==}{>>e<<}\n";
+        let edits = migration_edits(text);
+        assert_eq!(edits.len(), 2);
+        assert_eq!(edits[0].0, 0..14);
+        assert_eq!(apply_edits(text, &edits), migrate_comments(text));
+        assert_eq!(
+            apply_edits(text, &edits),
+            "a<!-- comment: b --> c d<!-- comment: e -->\n"
+        );
+        assert!(migration_edits("nothing to do\n").is_empty());
+    }
+
+    #[test]
+    fn code_and_html_comments_are_not_read_as_comments() {
+        // A comment written inside inline code is code, not a comment.
+        assert_eq!(comments("Use `<!-- comment: x -->` here"), []);
+        assert_eq!(
+            comments("`{>>x<<}` and {>>y<<}"),
+            [(14..21, 14..14, 17..18)]
+        );
+        // An indented code line is code too, a list item's indented line is not.
+        assert_eq!(
+            all_comments("Text\n\n    <!-- comment: x -->\n\n`<!-- comment: y -->`\n"),
+            []
+        );
+        let listed = all_comments("- item\n\n    <!-- comment: z -->\n");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].said, "z");
+    }
 
     #[test]
     fn a_comment_cannot_close_its_markup_early_or_inject_markdown() {
