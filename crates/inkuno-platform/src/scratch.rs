@@ -8,11 +8,11 @@ use std::{
 };
 
 use super::{clock, vault};
-use crate::logic::scratch;
+use inkuno_logic::scratch;
 
 /// The folder of the scratch notes: `inkuno/scratch` under the config folder of the platform.
 pub fn dir() -> PathBuf {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     {
         if let Some(dir) = TEST_DIR.with(|dir| dir.borrow().clone()) {
             return dir;
@@ -21,7 +21,7 @@ pub fn dir() -> PathBuf {
     vault::config_dir().join("inkuno").join("scratch")
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 thread_local! {
     static TEST_DIR: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
 }
@@ -29,7 +29,7 @@ thread_local! {
 /// Tests: this thread's scratch folder, whatever the config folder becomes meanwhile. The app
 /// still writes at teardown, after the test has released its config folder (another test may hold
 /// it by then), so the folder is pinned per test thread.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub fn isolate(dir: PathBuf) {
     TEST_DIR.with(|cell| *cell.borrow_mut() = Some(dir));
 }

@@ -57,8 +57,8 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Pending changes: a fence inside a quote or a list item (`> ```) is not seen as a fence, so a proposal may write marks inside it; accept and reject stay exact (`pending.rs`, `fence_opens`).
 - Pending changes: a title change refused because of a link in another note's pending change leaves the note unsaved, and the notice may come back at each save: expected, the text is saved and only the file's rename waits (`crates/inkuno/src/shell/notes.rs`, `flush_one`, `links_pending`).
 - `inkuno write --replace`: a proposal cannot be withdrawn (the person's own text is "nothing changed"), and when the first write's proposed version could not be saved the agent cannot replace it (`crates/inkuno/src/cli/ops.rs`, `own_last_proposal`).
-- Keys: a `keybindings.json` line that takes the keys of the accept or reject chord leaves the chord without keys and says nothing at launch; the help panel asks first (`crates/inkuno/src/ui/keys.rs`, `read`).
-- Versions: dates are UTC on Windows, which has no local-time call yet (`crates/inkuno/src/platform/clock.rs`, `local`).
+- Keys: a `keybindings.json` line that takes the keys of the accept or reject chord leaves the chord without keys and says nothing at launch; the help panel asks first (`crates/inkuno-ui/src/keys.rs`, `read`).
+- Versions: dates are UTC on Windows, which has no local-time call yet (`crates/inkuno-platform/src/clock.rs`, `local`).
 - Versions: a restore saves its "before" version from the editor's text; an outside write not yet merged is in no version (`crates/inkuno/src/shell/versions.rs`, `restore_version`).
 - Pending changes: copy of the whole note (`app::CopyAll`, `shell/notes.rs`) copies the marker lines as they are: the app has no reading view or export that resolves them.
 - Pending changes: `append --under` into a section that holds a pending area is covered only by the general rule (`crates/inkuno/src/cli/ops.rs`, `append_under`): expected, a section with a change is refused by name.
@@ -72,8 +72,8 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Help-panel shortcut changes are saved to the `keys` file (`crates/inkuno/src/shell/help.rs:227`), but once `keybindings.json` exists it wins at launch and nothing reads `keys` again: they are lost at the next start.
 - GitHub Pages must be set to deploy from GitHub Actions, else the Docs deploy job fails (`.github/workflows/docs.yml:3`).
 - `shortcuts_page_is_current` is compiled out on macOS; the page cannot be regenerated on a Mac (`crates/inkuno/src/shell/tests/shortcuts_page.rs:66`).
-- Two macOS-only clippy warnings fail `-D warnings` locally (`crates/inkuno/src/platform/mod.rs:7`, `crates/inkuno/src/shell/tests/shortcuts_page.rs:7`).
-- Template machinery is reachable only through `inkuno new --template`; decide app UI or keep the command line only (`crates/inkuno/src/platform/vault.rs:254`, `crates/inkuno-logic/src/daily.rs:15`).
+- Two macOS-only clippy warnings fail `-D warnings` locally (`crates/inkuno-platform/src/mod.rs:7`, `crates/inkuno/src/shell/tests/shortcuts_page.rs:7`).
+- Template machinery is reachable only through `inkuno new --template`; decide app UI or keep the command line only (`crates/inkuno-platform/src/vault.rs:254`, `crates/inkuno-logic/src/daily.rs:15`).
 - CLI: link rewriting after a move swallows a write error on another note (`crates/inkuno/src/cli/store.rs`, `relink`), and the H1 rewrite error of a renamed note is ignored (`crates/inkuno/src/cli/ops.rs`, `rename_note`): expected, a note that cannot be written is reported, and the move says which links were left.
 - CLI: `trash` returns an error after the file has moved when the history step fails (`crates/inkuno/src/cli/ops.rs`, `trash_note`): expected, the reason says where the note is now, or the move is undone.
 - CLI: `inkuno links` lists a note embed `![[B]]` under pictures (`crates/inkuno/src/cli/ops.rs`, `note_links`): expected, an embedded note is an embed only.
@@ -99,9 +99,9 @@ Lean follow-ups only. Done work is listed once below, then dropped.
 - Assistant: the prompt box is one field without newlines: expected, a multi-line box is a later idea.
 - The Assistant cannot ask before a tool call: hoocode's RPC mode has no approval messages (its `app-server` protocol has them).
 - CLI: `inkuno comment` still matches a passage inside a code fence or inside existing comment markup: expected, those are skipped or refused.
-- macOS chrome hiding is unverified on a real Mac until the owner tries it: the window's bar is transparent and its traffic lights are hidden with `setHidden:`; check that the note's top row is clickable, that the lights come back on the next press, and that a full-screen toggle does not show them again (`crates/inkuno/src/platform/mac_chrome.rs`).
-- Assistant: the `assistant` setting splits on spaces, so a program path with spaces cannot be set (`crates/inkuno/src/platform/assistant.rs`, `program`): expected, a path with spaces works, or the limit is stated in the setting's help.
-- Assistant on Windows: only `name` and `name.exe` are looked up on `PATH`; `.cmd` and `.bat` are not (`crates/inkuno/src/platform/assistant.rs`, `find_in`): expected, the shims are found too, or the limit is written down.
+- macOS chrome hiding is unverified on a real Mac until the owner tries it: the window's bar is transparent and its traffic lights are hidden with `setHidden:`; check that the note's top row is clickable, that the lights come back on the next press, and that a full-screen toggle does not show them again (`crates/inkuno-platform/src/mac_chrome.rs`).
+- Assistant: the `assistant` setting splits on spaces, so a program path with spaces cannot be set (`crates/inkuno-platform/src/assistant.rs`, `program`): expected, a path with spaces works, or the limit is stated in the setting's help.
+- Assistant on Windows: only `name` and `name.exe` are looked up on `PATH`; `.cmd` and `.bat` are not (`crates/inkuno-platform/src/assistant.rs`, `find_in`): expected, the shims are found too, or the limit is written down.
 - Assistant Improve: a whole-note improvement sends the whole note and gets all of it back: a very long note is slow (`crates/inkuno/src/shell/assistant.rs`, `assistant_improve`; `crates/inkuno-logic/src/assistant.rs`, `rewritten`): expected, a selection of the note, or a limit with a message.
 - Assistant Improve: the proposal block ends at the last `END TEXT` line, so commentary after the block that holds that line is taken in (`crates/inkuno-logic/src/assistant.rs`, `proposal`): expected, the block is checked against the passage's own lines, or the answer is refused.
 - Assistant Improve: the right-click entry **Improve selection** has no test; the button and the palette do (`crates/inkuno/src/shell/menu.rs`).

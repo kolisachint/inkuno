@@ -1,9 +1,9 @@
 //! Shortcuts: the binding table, what the user changed in it, conflicts, the
 //! `keys` file, and what the help panel shows and searches (pure functions).
 
-use crate::lang::fold;
-use crate::lang::tr;
 use gpui::{Action, App, Keystroke};
+use inkuno_logic::lang::fold;
+use inkuno_logic::lang::tr;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -551,9 +551,9 @@ pub fn legacy_lines(text: &str) -> String {
 /// lines, so clash, refusal and readability checks stay the reader's own), else the legacy
 /// `keys` file. Lives here, not in the vault: the platform layer never sees the ui one.
 pub fn user_lines() -> String {
-    let json = crate::platform::vault::load_keybindings();
+    let json = inkuno_platform::vault::load_keybindings();
     match json.trim().is_empty() {
-        true => crate::platform::vault::load_file("keys"),
+        true => inkuno_platform::vault::load_file("keys"),
         false => legacy_lines(&json),
     }
 }

@@ -9,12 +9,13 @@ repository = "https://github.com/kolisachint/inkuno"
 
 [dependencies]
 # Déjà tirée par gpui, à la même version : l'archive de la sauvegarde.
-flate2 = "1.1.4"
 gpui = "0.2.2"
 # The pure logic (Markdown, notes, vault lists): no gpui, no disk, no window.
 inkuno-logic = { version = "0.0.1", path = "../inkuno-logic" }
-latex-rust = "2.1.0"
-mermaid-rs-renderer = { version = "0.3.1", default-features = false }
+# The outside world (vault, processes, OS) and the look (theme, fonts, figures): re-exported by
+# `platform` and `ui`, so every `crate::platform::…` and `crate::ui::…` path keeps working.
+inkuno-platform = { version = "0.0.1", path = "../inkuno-platform" }
+inkuno-ui = { version = "0.0.1", path = "../inkuno-ui" }
 # Le système signale les changements du coffre (inotify, FSEvents…). La 7 et non la 8 : celle-ci
 # exige bitflags 2.11 (via kqueue-sys) et ferait bouger le Cargo.lock de GPUI.
 notify = "7"
@@ -22,21 +23,12 @@ notify = "7"
 regex = "1.12.2"
 # Déjà tirées par gpui, aux mêmes versions : import et export des schémas.
 resvg = { version = "0.45.1", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
-roxmltree = "0.20.0"
 serde_json = "1.0.145"
 # Déjà tirée par gpui, à la même version : somme de contrôle de la mise à jour.
 sha2 = "0.10.9"
 unicode-segmentation = "1.13.3"
 unicode-width = "0.2.2"
 
-# Déjà tirée par gpui, à la même version : la date locale, que la bibliothèque standard ignore.
-[target.'cfg(unix)'.dependencies]
-libc = "0.2.177"
-
-# Already pulled in by gpui, at these same versions: the macOS window buttons (`platform::mac_chrome`).
-[target.'cfg(target_os = "macos")'.dependencies]
-objc = "0.2.7"
-raw-window-handle = "0.6.2"
-
 [dev-dependencies]
+inkuno-platform = { version = "0.0.1", path = "../inkuno-platform", features = ["test-support"] }
 gpui = { version = "0.2.2", features = ["test-support"] }

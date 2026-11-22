@@ -3,7 +3,7 @@
 
 use gpui::{BoxShadow, Hsla, Pixels, WindowAppearance, hsla, point, px, rgb};
 
-use crate::{lang::tr, logic::prefs::Prefs};
+use inkuno_logic::{lang::tr, prefs::Prefs};
 
 /// Height of the top band of the window (`app-ui.md` §20.1): the top row of the left sidebar (its
 /// buttons), of the right one (its tool switcher) and of the editor (its tab bar, or its strip). The
@@ -530,7 +530,7 @@ fn quiet_extras(name: &str) -> Option<Extras> {
 
 /// Seeds of the custom theme `name`, if `themes.json` holds it.
 fn custom_seeds(name: &str) -> Option<[u32; 7]> {
-    seeds_in(name, &crate::platform::vault::load_themes())
+    seeds_in(name, &inkuno_platform::vault::load_themes())
 }
 
 /// Seeds of the custom theme `name` in the `themes.json` text (pure half of [`custom_seeds`]).
@@ -1190,7 +1190,7 @@ mod tests {
                 WindowAppearance::Light,
             );
             let (open, picked) = (
-                over(crate::ui::widgets::pill_tint(t), t.bg),
+                over(crate::widgets::pill_tint(t), t.bg),
                 over(t.selection, t.bg),
             );
             if contrast(open, t.bg) < 1.03 {
@@ -1246,7 +1246,7 @@ mod tests {
                 &Prefs::parse(&format!("theme={name}\n")),
                 WindowAppearance::Light,
             );
-            let tint = |on| over(crate::ui::widgets::passage_tint(t, on), t.bg);
+            let tint = |on| over(crate::widgets::passage_tint(t, on), t.bg);
             let (quiet, active, picked) = (tint(false), tint(true), over(t.selection, t.bg));
             let ratios = [
                 ("quiet/sheet", contrast(quiet, t.bg), 1.03),

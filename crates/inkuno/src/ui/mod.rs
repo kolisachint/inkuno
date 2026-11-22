@@ -1,10 +1,4 @@
-//! The look shared by every view: theme and colours, fonts and icons, small widgets, and the
-//! rendering of figures and SVG pictures. Knows nothing of the shell.
+//! The look lives in the `inkuno-ui` crate and is re-exported here, so every `crate::ui::…`
+//! path keeps working.
 
-pub mod assets;
-pub mod figure;
-pub mod keys;
-pub mod line;
-pub mod svg;
-pub mod theme;
-pub mod widgets;
+pub use inkuno_ui::*;

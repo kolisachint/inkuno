@@ -1,7 +1,7 @@
 # Architecture
 
 Inkuno is a Cargo workspace built on [GPUI](https://www.gpui.rs/) (pinned at 0.2.2): the app is the
-crate `crates/inkuno`, the pure logic is `crates/inkuno-logic`, and the root manifest only lists them. This page is the
+crate `crates/inkuno`, the pure logic is `crates/inkuno-logic`, the outside world is `crates/inkuno-platform`, the look is `crates/inkuno-ui`, and the root manifest only lists them. This page is the
 map: where things live, which way the dependencies go, and the rules the code keeps.
 
 Inkuno is a rename of Bref by Andrea Larboullet Marin; its home is github.com/kolisachint/inkuno.
@@ -15,9 +15,9 @@ crates/inkuno/src/
   actions.rs   the app's actions, dispatched by shortcuts, menus and the palette
   logic/       pure functions: no gpui, no disk, no window. Most modules moved to
                crates/inkuno-logic and are re-exported here, so every `crate::logic::…` path keeps working
-  platform/    the outside world: disk, processes, network, OS (no gpui)
-  ui/          the look shared by every view: theme, fonts and icons, widgets, figures
-  views/       gpui entities: editor, side panel, palette, viewer, one-line field (its text: `ui/line.rs`)
+  platform/    re-exports the crate `crates/inkuno-platform`: the outside world, disk, processes, network, OS (no gpui)
+  ui/          re-exports the crate `crates/inkuno-ui`: the look shared by every view: theme, fonts and icons, widgets, figures
+  views/       gpui entities: editor, side panel, palette, viewer, one-line field (its text: `crates/inkuno-ui/src/line.rs`)
   shell/       the window: owns the panes and the views, routes events, runs the commands
     tests/     the whole app driven by simulated keystrokes
   cli/         the command line, no window: the vault's commands (`inkuno list`, `read`, `new`,
@@ -57,7 +57,7 @@ each, all `impl Shell`:
 | `sidebar.rs`, `files.rs`, `menu.rs`, `listing.rs` | the side panel, file operations, the context menu, list pages |
 | `palette_open.rs` | every way the palette opens: notes, commands, comments, places |
 | `help.rs`, `keymap.rs` | the help panel; the default shortcuts and their sections |
-| `assistant.rs` | the Assistant panel in the right dock: its conversation, the review, the prompt box, the state of the agent process it drives (`platform/assistant.rs`), and the writing of a review's comments into the note |
+| `assistant.rs` | the Assistant panel in the right dock: its conversation, the review, the prompt box, the state of the agent process it drives (`crates/inkuno-platform/src/assistant.rs`), and the writing of a review's comments into the note |
 | `settings.rs`, `toasts.rs` | settings, status messages |
 | `versions.rs` | the Versions panel (the saved versions of the active note) and the compare tab (`app-ui.md` §19) |
 | `render.rs` | drawing the window |
@@ -79,26 +79,26 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 |---|---|
 | how Markdown is read (headings, links, tags, styles) | `crates/inkuno-logic/src/markdown/` (`mod.rs`; `tables.rs`, `lists.rs`, `front.rs`, `dates.rs`, `search.rs`) |
 | Markdown tables (cells, paste, rows and columns, sort, format) | `crates/inkuno-logic/src/markdown/tables.rs`, drawn by `views/editor/table.rs` and `grid.rs` |
-| the vault on disk (scan, save, rename, trash, config files) | `platform/vault.rs` |
+| the vault on disk (scan, save, rename, trash, config files) | `crates/inkuno-platform/src/vault.rs` |
 | the vault commands (`inkuno list`, `read`, `new`, `edit`…) | `crates/inkuno/src/cli/commands.rs` (each command, its options and its help), `ops.rs` (the work), `store.rs` (the vault rules: nothing outside it, but `comment --file`, which reaches the one file it names), `outcome.rs` (results and disk errors in words); tests `crates/inkuno/tests/cli.rs` and `cli/check.rs`; `docs/design/cli.md` |
 | the Assistant: the panel and its state | `shell/assistant.rs`; the design in `docs/design/app-ui.md` §16 and §18 (Improve) |
 | pending changes: the washes, the read-only rule, accept, reject, comment | `views/editor/changes.rs` (the actions), `views/editor/edit.rs` (`touches_pending`), `shell/changes.rs` (the comment prompt and the hint); pure marks in `inkuno-logic/src/pending.rs`; the design in `docs/design/app-ui.md` §17 |
-| the Assistant's child process (start, lines in and out, stop) | `platform/assistant.rs` (no window code) |
+| the Assistant's child process (start, lines in and out, stop) | `crates/inkuno-platform/src/assistant.rs` (no window code) |
 | the words of the Assistant: the prompts sent, the findings read back, the placing of each comment | `crates/inkuno-logic/src/assistant.rs` (pure); one comment is placed by `markdown::comment_on` (`crates/inkuno-logic/src/markdown/mod.rs`), the same as `inkuno comment` |
 | the picture of a note, a file or a Mermaid source (`inkuno render`) | `crates/inkuno/src/cli/draw.rs`; `docs/design/cli.md` |
 | the user guide from the command line (`inkuno guide`) | `crates/inkuno/src/cli/guide.rs` (the pages of `docs/user/src/`, built in) |
 | the saved versions and the shortcuts from the command line (`inkuno rev`, `inkuno keys`) | `crates/inkuno/src/cli/rev.rs`, `keys.rs`; `docs/design/revisions.md` |
-| a note's revisions (format, diffs, the folders that follow the note) | `crates/inkuno-logic/src/revision.rs` (format, paths, diffs), `platform/revisions.rs` (disk); `docs/design/revisions.md` |
+| a note's revisions (format, diffs, the folders that follow the note) | `crates/inkuno-logic/src/revision.rs` (format, paths, diffs), `crates/inkuno-platform/src/revisions.rs` (disk); `docs/design/revisions.md` |
 | the Versions panel and the compare (a read-only tab against a version) | `shell/versions.rs`, `shell/sidebar.rs` (rows), `views/editor/` (`readonly`); `docs/design/app-ui.md` §19 |
-| the window's door for `inkuno show` | `platform/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
+| the window's door for `inkuno show` | `crates/inkuno-platform/src/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
-| colours, themes, page width | `ui/theme.rs` |
-| icons and fonts | `ui/assets.rs` |
+| colours, themes, page width | `crates/inkuno-ui/src/theme.rs` |
+| icons and fonts | `crates/inkuno-ui/src/assets.rs` |
 | the text editor | `views/editor/`: `edit.rs` (changes, undo, the pending guard), `changes.rs` (accept, reject, comment on a pending change), `cursor.rs`, `style.rs`, `table.rs` and `grid.rs` (Markdown tables), `blocks.rs`, `find.rs`, `completion.rs`, `links.rs`, `notes.rs` (which cells of a table carry a comment), `format_bar.rs`, `mouse.rs`, `clipboard.rs`, `input.rs` (IME) |
 | what a keystroke costs | `views/editor/layout.rs` (`reuse` redoes only the damaged lines) then `paint.rs`; the test `layout_reuse_matches_full_layout` checks every reuse against a full layout |
 | the tree, recent notes, vault search, outline | `views/nav.rs` (state), `shell/sidebar.rs` (drawing) |
 | the command palette | `views/palette.rs`, `shell/palette_open.rs` |
-| a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `ui/keys.rs` (how keys are read and shown) |
+| a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `crates/inkuno-ui/src/keys.rs` (how keys are read and shown) |
 | the test of a feature | `shell/tests/` (`end_to_end/` is one session, one file per chapter) |
 | the user guide | `docs/user/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
 
@@ -111,7 +111,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   one on thousands of random edits.
 - **Typing rules** (`crates/inkuno-logic/src/markdown/lists.rs`): pure functions (`on_enter`, `renumber`) decide
   what Enter does on a list line and renumber the list around the cursor.
-- **Vault** (`platform/vault.rs`): the note list, its tags and its text are indexed off the UI
+- **Vault** (`crates/inkuno-platform/src/vault.rs`): the note list, its tags and its text are indexed off the UI
   thread when the vault opens, then kept up to date on each save. Changes made elsewhere are
   reported by the `notify` crate; the vault is also rechecked on a slow timer, which becomes the
   only mechanism when watching is not possible. The watch knows the vault's root and its app
@@ -120,7 +120,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   folded and lowered once, when the vault is read, not on each keystroke.
 - **Navigation** (`views/nav.rs`, `shell/sidebar.rs`): the tree is rebuilt from the paths of the
   indexed notes, and only the visible rows are drawn.
-- **Figures and SVG** (`ui/svg.rs`, `ui/figure.rs`, `views/viewer.rs`): SVG files, Mermaid blocks
+- **Figures and SVG** (`crates/inkuno-ui/src/svg.rs`, `crates/inkuno-ui/src/figure.rs`, `views/viewer.rs`): SVG files, Mermaid blocks
   and LaTeX formulas are rasterized off the UI thread at a bounded size (at most 8,192 pixels a
   side and 16 million pixels). The viewer draws tiles of 512 pixels and keeps the last 64; a
   picture (`Source::Raster`) is not tiled, the graphics card draws it whole.
@@ -133,8 +133,8 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   rewrites links, nothing is deleted. The window is not needed; an open window sees the files
   through its watcher, and `show` is the one command that asks it something.
 - **Assistant**: the agent is a child process, the `hoocode` program in its RPC mode with no shell and no
-  write tool (`platform/assistant.rs`, `FLAGS`), started on the first prompt and stopped at quit, a vault
-  change or a new setting. `platform/assistant.rs` moves its lines; `shell/assistant.rs` shows them in the
+  write tool (`crates/inkuno-platform/src/assistant.rs`, `FLAGS`), started on the first prompt and stopped at quit, a vault
+  change or a new setting. `crates/inkuno-platform/src/assistant.rs` moves its lines; `shell/assistant.rs` shows them in the
   right dock. A review's findings are text in the agent's answer: Inkuno writes them into the note as one
   undo step. An improvement's proposal is text too, and lands as pending changes (`app-ui.md` §18). Nothing
   is linked in: hoocode is a separate program.

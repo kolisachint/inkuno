@@ -5,7 +5,7 @@ use gpui::{
     div, prelude::*, svg,
 };
 
-use crate::ui::theme::Theme;
+use crate::theme::Theme;
 
 gpui::actions!(widgets, [Press]);
 
@@ -64,7 +64,7 @@ pub fn button_turned(
 /// A shortcut ("Ctrl+Maj+C") as one badge per key, in a row; nothing when it is empty.
 /// `on`: the row behind is selected, so the badges are lighter than it.
 pub fn keycaps(keys: &str, t: Theme, on: bool) -> Div {
-    let caps = crate::logic::commands::keycaps(keys)
+    let caps = inkuno_logic::commands::keycaps(keys)
         .into_iter()
         .map(|key| {
             div()

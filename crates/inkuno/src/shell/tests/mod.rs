@@ -79,6 +79,15 @@ fn layers_only_depend_downwards() {
             "src/ui",
             &["crate::views", "crate::shell", "impl Shell", cli],
         ),
+        // The extracted platform and ui crates answer to the same rules, from their own trees.
+        (
+            "../inkuno-platform/src",
+            &["gpui", "crate::ui", "crate::views", "crate::shell", cli],
+        ),
+        (
+            "../inkuno-ui/src",
+            &["crate::views", "crate::shell", "impl Shell", cli],
+        ),
         ("src/views", &["crate::shell", "impl Shell", cli]),
         ("src/shell", &[cli]),
         // The command line reads the shortcut table of shell::keymap and the pure parts of ui,

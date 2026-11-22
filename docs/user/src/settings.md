@@ -24,7 +24,7 @@ Page titles follow your text font too, Inter by default.
 
 ## Fonts
 
-Inkuno carries Inter (text and titles) and JetBrains Mono (code), under the SIL Open Font License (`crates/inkuno/assets/fonts/`). So it looks the same everywhere, with nothing to install.
+Inkuno carries Inter (text and titles) and JetBrains Mono (code), under the SIL Open Font License (`crates/inkuno-ui/assets/fonts/`). So it looks the same everywhere, with nothing to install.
 
 - Type `font` in the palette to choose another font, for the app or for the code, among those installed on your system. Type in the list to filter it.
 - Ideograms and emoji, which the bundled fonts do not draw, come from a font of your system.

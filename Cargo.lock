@@ -2725,18 +2725,13 @@ dependencies = [
 name = "inkuno"
 version = "0.0.11"
 dependencies = [
- "flate2",
  "gpui",
  "inkuno-logic",
- "latex-rust",
- "libc",
- "mermaid-rs-renderer",
+ "inkuno-platform",
+ "inkuno-ui",
  "notify",
- "objc",
- "raw-window-handle",
  "regex",
  "resvg",
- "roxmltree",
  "serde_json",
  "sha2",
  "unicode-segmentation",
@@ -2751,6 +2746,33 @@ dependencies = [
  "regex",
  "serde_json",
  "unicode-width",
+]
+
+[[package]]
+name = "inkuno-platform"
+version = "0.0.1"
+dependencies = [
+ "flate2",
+ "inkuno-logic",
+ "libc",
+ "notify",
+ "objc",
+ "raw-window-handle",
+ "serde_json",
+]
+
+[[package]]
+name = "inkuno-ui"
+version = "0.0.1"
+dependencies = [
+ "gpui",
+ "inkuno-logic",
+ "inkuno-platform",
+ "latex-rust",
+ "mermaid-rs-renderer",
+ "resvg",
+ "serde_json",
+ "unicode-segmentation",
 ]
 
 [[package]]

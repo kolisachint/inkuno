@@ -16,11 +16,8 @@ use std::{
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
 use super::{revisions, scratch, sidecar};
-use crate::logic::note::{Note, lowered};
-use crate::{
-    lang::tr,
-    logic::{markdown, revision},
-};
+use inkuno_logic::note::{Note, lowered};
+use inkuno_logic::{lang::tr, markdown, revision};
 
 /// The user's configuration folder, per platform.
 pub fn config_dir() -> PathBuf {
@@ -237,7 +234,7 @@ pub fn image_name(path: &Path) -> String {
 const TEMPLATE_DIRS: [&str; 2] = ["templates", "modeles"];
 
 fn is_template_dir(name: &str) -> bool {
-    let name = crate::lang::fold(name);
+    let name = inkuno_logic::lang::fold(name);
     TEMPLATE_DIRS.contains(&name.as_str())
 }
 
@@ -551,7 +548,7 @@ pub fn watch(
 
 /// All the vault's notes (recursive, hidden folders ignored), most recent
 /// first, all its folders, even empty, and its other files: images and tables.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub fn scan(root: &Path) -> (Vec<Note>, Vec<PathBuf>, Vec<PathBuf>) {
     rescan(root, &[])
 }
@@ -833,7 +830,7 @@ pub fn open_terminal(dir: &Path) -> bool {
     !cfg!(test)
         && found.into_iter().any(|(program, args)| {
             // No console for the launcher (`cmd /c start`); the terminal opens its own.
-            let child = crate::platform::command(&program)
+            let child = crate::command(&program)
                 .args(args)
                 .current_dir(dir)
                 .stdin(std::process::Stdio::null())
@@ -1914,7 +1911,7 @@ mod tests {
         let root = scratch("holding");
         // The scratch folder lies inside the vault, under a config folder of its own.
         let app = root.join("Application Support/inkuno");
-        crate::platform::scratch::isolate(app.join("scratch"));
+        crate::scratch::isolate(app.join("scratch"));
         fs::create_dir_all(app.join("scratch")).unwrap();
         fs::write(app.join("scratch/2026-11-14-103200.md"), "idée\n").unwrap();
         fs::write(root.join("plan.md"), "# Plan\n").unwrap();
@@ -1963,7 +1960,7 @@ mod tests {
         let scratch_dir = vault.join("Application Support/inkuno/scratch");
         fs::create_dir_all(vault.join(".git")).unwrap();
         fs::create_dir_all(&scratch_dir).unwrap();
-        crate::platform::scratch::isolate(scratch_dir.clone());
+        crate::scratch::isolate(scratch_dir.clone());
         let link = base.join("link");
         std::os::unix::fs::symlink(&vault, &link).unwrap();
         let canonical = fs::canonicalize(&vault).unwrap();

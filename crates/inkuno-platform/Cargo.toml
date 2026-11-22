@@ -1,0 +1,27 @@
+[package]
+name = "inkuno-platform"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.98"
+description = "The outside world of Inkuno: vault on disk, processes, OS glue (no window, no gpui)"
+license = "MIT"
+
+[dependencies]
+# Same versions as the app's Cargo.lock: never re-resolve, keep --locked/--offline green.
+inkuno-logic = { version = "0.0.1", path = "../inkuno-logic" }
+flate2 = "=1.1.4"
+notify = "=7.0.0"
+serde_json = "=1.0.145"
+
+# Already pulled in by gpui, at these same versions: the local date (the standard library ignores it).
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.177"
+
+# Already pulled in by gpui, at these same versions: the macOS window buttons (`mac_chrome`).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "=0.2.7"
+raw-window-handle = "=0.6.2"
+
+[features]
+# Test helpers (a fake agent process, a scratch folder under test) for the app's tests.
+test-support = []

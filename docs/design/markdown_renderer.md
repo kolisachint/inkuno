@@ -127,7 +127,7 @@ What exists today:
   `to_diagram`); anything else (flowcharts, `graph TD`, erDiagram, …) counts
   skipped lines, not a figure. Rendering: the block reserves a figure slot
   when the cursor has left it (`layout.rs:1341-1356`), drawn off-thread via
-  `figure::mermaid` (`layout.rs:1348`, engine in `crates/inkuno/src/ui/figure.rs:41-48`);
+  `figure::mermaid` (`layout.rs:1348`, engine in `crates/inkuno-ui/src/figure.rs:41-48`);
   unreadable source shows "Figure illisible" / "Unreadable figure"
   (`layout.rs:1356`, `:1862`) — covered by `crates/inkuno/src/shell/tests/feedback.rs:150-172`
   (good diagram draws, bad/empty diagram says so, `figure_count` asserted).
@@ -142,7 +142,7 @@ What exists today:
   `Ctrl+click` jumps reference → definition and cycles definition → references
   (`crates/inkuno/src/views/editor/mouse.rs:696`, hand cursor `crates/inkuno/src/views/editor/blocks.rs:184`).
   Export: sharing passes them through literally (`crates/inkuno-logic/src/sharing.rs:286`); printing keeps
-  the label in place with no link entry (`crates/inkuno/src/ui/print.rs:279`); PDF prints them in place
+  the label in place with no link entry (`crates/inkuno-ui/src/print.rs:279`); PDF prints them in place
   with no collected section (`docs/user/src/writing.md`, "Save as PDF" limits).
 
 Gaps / **needs-eyes**:
@@ -169,7 +169,7 @@ What exists today:
   is no `Html`/`Embed` branch that interprets arbitrary tags.
 - SVG figures from elsewhere are rasterized by resvg, which *ignores*
   `<foreignObject>` HTML and `light-dark()`; `readable` substitutes SVG text
-  (`crates/inkuno/src/ui/svg.rs:1-9`). Sharing/export strips to readable plain text
+  (`crates/inkuno-ui/src/svg.rs:1-9`). Sharing/export strips to readable plain text
   (`crates/inkuno-logic/src/sharing.rs:1-34`, rules in `docs/user/src/writing.md`
   "Plain-text rules").
 
