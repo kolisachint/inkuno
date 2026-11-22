@@ -51,7 +51,7 @@ IDs refer to `findings/<area>.md`.
 | C05 | fix | tab: gap 6 px; the cross at .7 on the shown tab, on hover otherwise |
 | C10 | fix | pane divider uses `line` |
 | C11/C12/C14 | fix | follows C01: no centred label in the band; window title stays "Note — Folder — Inkuno" |
-| C13 | fix | with the title bar hidden, the sidebar toggle stays in the sidebar's top row |
+| C13 | keep | app-ui.md §20 (owner-approved) puts the toggle in the sidebar foot while the bar is hidden; tests protect it |
 | C15 | fix | hidden title bar hides the tab row too; the strip peeks the whole band |
 | C17 | fix | empty Scratch text fits one line ("Ctrl+N: new scratch note") |
 | C18 | fix | sidebar footer 36 px (6 + 30) |
