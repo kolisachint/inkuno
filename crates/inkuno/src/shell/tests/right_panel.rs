@@ -172,8 +172,9 @@ fn the_switcher_is_clear_of_the_window_buttons_at_any_panel_width(cx: &mut TestA
                 b.left() >= dock.left() && b.right() <= dock.right(),
                 "{width}: {id} {b:?} outside {dock:?}"
             );
+            // Under the window buttons, or left of them: beside them only where the panel has the room.
             assert!(
-                b.top() >= pill.bottom(),
+                b.top() >= pill.bottom() || b.right() <= pill.left(),
                 "{width}: {id} {b:?} under the window buttons {pill:?}"
             );
         }

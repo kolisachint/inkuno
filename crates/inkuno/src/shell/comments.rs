@@ -30,6 +30,23 @@ pub struct Card {
     pub passage: Range<usize>,
 }
 
+/// The byline a comment's text may open with, `Name, HH:MM: ` (the author and the time it was written):
+/// the name, the time and what is said after them. None when the text does not open with one.
+pub fn split_byline(said: &str) -> Option<(&str, &str, &str)> {
+    let head_end = said.find(": ")?;
+    let (name, time) = said[..head_end].rsplit_once(", ")?;
+    let (name, time) = (name.trim(), time.trim());
+    let clock = time.len() == 5
+        && time.is_char_boundary(2)
+        && time.as_bytes()[2] == b':'
+        && time
+            .bytes()
+            .enumerate()
+            .all(|(i, b)| i == 2 || b.is_ascii_digit());
+    (clock && !name.is_empty() && name.chars().count() <= 40 && !name.contains('\n'))
+        .then(|| (name, time, &said[head_end + 2..]))
+}
+
 impl Shell {
     /// The Comments view: the cards of the note, the focused one outlined.
     pub(super) fn render_comments(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -56,6 +73,7 @@ impl Shell {
         }
         let focus = self.comment_focus;
         let cards = self.comment_cards.clone();
+        // v2 `.rbody`: 12 px at the sides, the cards 8 px apart.
         div()
             .id("comments-view")
             .debug_selector(|| "comments-view".into())
@@ -63,11 +81,12 @@ impl Shell {
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&self.comments_scroll)
-            .px_2()
-            .pb_3()
+            .px(t.px(12.))
+            .pt(t.px(6.))
+            .pb(t.px(16.))
             .flex()
             .flex_col()
-            .gap(t.px(6.))
+            .gap(t.px(8.))
             .children(
                 cards
                     .iter()
@@ -95,11 +114,16 @@ impl Shell {
             true => card.scope.clone(),
             false => crate::logic::rank::plain_line(&card.noted),
         };
-        let said = match card.said.is_empty() {
-            true => tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string(),
-            false => card.said.clone(),
+        // A text that opens with `Name, HH:MM: ` shows the name and the time on the card's first line.
+        let (byline, body) = match split_byline(&card.said) {
+            Some((name, time, rest)) => (Some((name.to_string(), time.to_string())), rest),
+            None => (None, card.said.as_str()),
         };
-        let said_soft = card.said.is_empty();
+        let said_soft = body.trim().is_empty();
+        let said = match said_soft {
+            true => tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string(),
+            false => body.to_string(),
+        };
         div()
             .id(("comment", i))
             .debug_selector(move || format!("comment-{i}"))
@@ -109,13 +133,30 @@ impl Shell {
             .gap(t.px(6.))
             .px(t.px(12.))
             .py(t.px(10.))
-            .rounded(t.large())
+            .rounded(t.card())
             .border_1()
             .border_color(if focused { t.accent } else { t.border })
             .when(focused, |d| d.border_2())
             .bg(t.bg)
             .cursor_pointer()
             .hover(|s| s.bg(t.hover))
+            .when_some(byline, |d, (name, time)| {
+                d.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(t.px(6.))
+                        .text_size(t.px(12.))
+                        .text_color(t.soft)
+                        .child(
+                            div()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(t.text)
+                                .child(name),
+                        )
+                        .child(time),
+                )
+            })
             .when(!card.scope.is_empty() && !card.noted.is_empty(), |d| {
                 d.child(
                     div()
@@ -129,8 +170,8 @@ impl Shell {
                     div()
                         .min_w_0()
                         .pl(t.px(8.))
-                        .border_l_2()
-                        .border_color(t.accent)
+                        .border_l_3()
+                        .border_color(t.comment_gold)
                         .text_size(t.px(12.))
                         .text_color(t.soft)
                         .line_clamp(2)
@@ -141,6 +182,7 @@ impl Shell {
             .child(
                 div()
                     .text_size(t.px(13.))
+                    .line_height(t.px(19.))
                     .text_color(if said_soft { t.soft } else { t.text })
                     .child(said),
             )
@@ -269,5 +311,43 @@ impl Shell {
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.show_comments(window, cx)))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_byline;
+
+    #[test]
+    fn a_byline_is_a_name_and_a_clock_time_before_the_colon() {
+        assert_eq!(
+            split_byline("Ana, 10:02: à relire"),
+            Some(("Ana", "10:02", "à relire"))
+        );
+        // The name may hold commas; the last comma before the time separates it.
+        assert_eq!(
+            split_byline("Doe, Ana, 09:45: ok"),
+            Some(("Doe, Ana", "09:45", "ok"))
+        );
+        // An empty body is still a byline.
+        assert_eq!(split_byline("Ana, 10:02: "), Some(("Ana", "10:02", "")));
+    }
+
+    #[test]
+    fn text_without_a_byline_is_left_alone() {
+        for said in [
+            "",
+            "à relire",
+            "Note: le titre",
+            "Ana, 10h02: x",
+            "Ana, 10:02 x",
+            ", 10:02: x",
+            "Ana, 1:02: x",
+            "Ana, 10:02:30: x",
+            "Ana: 10:02: x",
+            "Ana, 10:0a: x",
+        ] {
+            assert_eq!(split_byline(said), None, "{said:?}");
+        }
     }
 }

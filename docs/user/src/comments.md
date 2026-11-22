@@ -10,7 +10,7 @@ The comment is kept in the note itself, as an HTML comment that GitHub hides:
 the text<!-- comment: the comment -->
 ```
 
-The passage is the text from the start of its line (or of its table cell, or of the comment before it) up to the comment. In Inkuno, the passage is highlighted and the comment is faded; off the line you are editing, the comment's markup is hidden. Notes written with the earlier CriticMarkup comments (`{==text==}{>>comment<<}`) are read as before, and are written in this form when the note is next saved.
+The passage is the text from the start of its line (or of its table cell, or of the comment before it) up to the comment. In Inkuno, the passage has a yellow wash, a gold underline and a gold dot in the margin of its line, and the comment is faded; off the line you are editing, the comment's markup is hidden. Notes written with the earlier CriticMarkup comments (`{==text==}{>>comment<<}`) are read as before, and are written in this form when the note is next saved.
 
 A review by the [Assistant](assistant.md) writes its findings in this form too. All the comments of one review are one undo step.
 
@@ -19,8 +19,9 @@ A review by the [Assistant](assistant.md) writes its findings in this form too. 
 The right panel has a **Comments** view, `Ctrl + Alt + 2`, that lists the comments of the note. It shares the panel with the outline, the versions and the Assistant: see [Navigation](navigation.md#the-right-panel).
 
 - Click a comment to go to it.
+- A comment whose text starts with `Name, HH:MM: ` shows that name and time above what is said. The text in the file is unchanged.
 - Click its check mark (it shows under the pointer) to resolve it: the markup goes, the text stays.
-- The comment of the passage under the caret is on a tint, and the list scrolls to it.
+- The comment of the passage under the caret is the card that is focused, and the list scrolls to it.
 - Its button in the panel's switcher counts the comments (`9+` beyond nine).
 - `comments` in the palette lists them, to jump to one from the keyboard.
 

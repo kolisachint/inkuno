@@ -885,11 +885,14 @@ impl Shell {
             .gap_1()
             .cursor_pointer()
             .text_size(t.px(13.))
+            // v2 `.ol`: soft; the open heading is ink at weight 500, not accent.
             .text_color(match active {
-                true => t.accent,
-                false => t.text,
+                true => t.text,
+                false => t.soft,
             })
-            .when(active, |d| d.bg(t.hover))
+            .when(active, |d| {
+                d.bg(t.hover).font_weight(gpui::FontWeight::MEDIUM)
+            })
             .hover(|s| s.bg(t.hover))
             .on_click(cx.listener(move |this, _, window, cx| this.outline_go(at, window, cx)))
             .child(slot)
@@ -1907,7 +1910,7 @@ impl Shell {
             .debug_selector(move || format!("view-head-{}", mode.name()))
             .flex_none()
             .h(t.px(32.))
-            .px(t.px(16.))
+            .px(t.px(14.))
             .flex()
             .items_center()
             .gap(t.px(6.))
@@ -1992,18 +1995,20 @@ impl Shell {
                     Mode::Comments if count > 0 => Some(
                         div()
                             .debug_selector(|| "switch-badge".into())
+                            // v2 `.badge`: inside the button's corner, 15 px high, 4 px at the sides.
                             .absolute()
-                            .top(t.px(-2.))
-                            .right(t.px(-2.))
+                            .top(t.px(2.))
+                            .right(t.px(0.))
                             .min_w(t.px(15.))
                             .h(t.px(15.))
-                            .px(t.px(3.))
-                            .rounded_full()
+                            .px(t.px(4.))
+                            .rounded(t.large())
                             .bg(t.accent)
                             .flex()
                             .items_center()
                             .justify_center()
                             .text_size(t.px(10.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(t.bg)
                             .child(crate::shell::render::badge_label(count)),
                     ),
@@ -2022,7 +2027,8 @@ impl Shell {
                 div()
                     .id(("switch", m as usize))
                     .debug_selector(move || format!("switch-{}", m.name()))
-                    .size(t.px(30.))
+                    .w(t.px(34.))
+                    .h(t.px(30.))
                     .flex_none()
                     .flex()
                     .items_center()
@@ -2031,7 +2037,7 @@ impl Shell {
                     .rounded(t.large())
                     .cursor_pointer()
                     .hover(|s| s.bg(t.hover))
-                    .when(on, |d| d.bg(t.selection))
+                    .when(on, |d| d.bg(t.pill))
                     .tooltip(tip(self.tool_title(m), keys, t))
                     .child(
                         svg()
@@ -2120,10 +2126,16 @@ impl Shell {
         let first = self.dock_tools(right).first() == Some(&mode);
         let folded = self.all_folded();
         let title = self.tool_title(mode);
-        // The first tool of the right dock: its header is the band, the view switcher in it (shown with the
-        // title bar hidden too: the panel's own row).
+        // The first tool of the right dock: its header is the band, the view switcher in it. Beside the window
+        // buttons and the panel's toggle (both at the band's right end) when the panel has the room for the four
+        // views before them; narrower, the switcher is a row under the band.
         let switch = right && first;
         let switcher = switch.then(|| self.switcher(cx));
+        let beside = f32::from(self.nav.right_w) >= 8. + 142. + PILL_ROOM + 28.;
+        let (inline, under) = match beside {
+            true => (switcher, None),
+            false => (None, switcher),
+        };
         let header = div()
             .flex_none()
             .h(t.px(if switch && self.band_shown() {
@@ -2143,6 +2155,7 @@ impl Shell {
             .overflow_hidden()
             .flex()
             .items_center()
+            .when_some(inline, |d, switcher| d.child(switcher))
             .when(stacked && !t.quiet, |d| {
                 d.border_t_1().border_color(t.border)
             })
@@ -2496,8 +2509,8 @@ impl Shell {
                     false => header.into_any_element(),
                 })
             })
-            // The right panel's own row of views, under the band: four 30 px buttons at the panel's left.
-            .when_some(switcher, |d, switcher| {
+            // Narrower than the switcher and the window buttons: the switcher's own row, under the band.
+            .when_some(under, |d, switcher| {
                 d.child(
                     div()
                         .debug_selector(|| "switch-row".into())
