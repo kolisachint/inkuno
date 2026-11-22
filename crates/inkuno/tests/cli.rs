@@ -784,12 +784,33 @@ fn move_renames_a_note_and_rewrites_the_links_to_it() {
     let _ = fs::remove_dir_all(home);
 }
 
+/// Proposes `proposed` for the note `name` as an agent does (`write --author claude`): the change
+/// waits in `.inkuno/pending` beside the note, and the note's file keeps its own text.
+fn propose_on(home: &Path, vault: &Path, name: &str, proposed: &str) {
+    let token = token_of(home, vault, name);
+    let run = inkuno(
+        home,
+        vault,
+        &[
+            "write", name, "--author", "claude", "--text", proposed, "--token", &token,
+        ],
+    );
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(
+        vault
+            .join(".inkuno/pending")
+            .join(format!("{name}.json"))
+            .is_file()
+    );
+}
+
 #[test]
 fn move_is_refused_when_a_link_sits_in_a_pending_change_and_moves_nothing() {
     let (home, vault) = sandbox("move-pending");
     write(&vault.join("Old.md"), "# Old\n\nbody\n");
-    let linking = "Intro.\n{--\nSee [[Old]] now.\n--}\n{++\nSee [[Old]] later.\n++}\n";
-    write(&vault.join("other.md"), linking);
+    write(&vault.join("other.md"), "Intro.\nSee [[Old]] now.\n");
+    propose_on(&home, &vault, "other.md", "Intro.\nSee [[Old]] later.\n");
+    let shown_before = shown(&home, &vault, "other.md");
     let run = inkuno(
         &home,
         &vault,
@@ -801,7 +822,8 @@ fn move_is_refused_when_a_link_sits_in_a_pending_change_and_moves_nothing() {
     assert!(run.out.is_empty(), "{}", run.out);
     assert!(vault.join("Old.md").is_file());
     assert!(!vault.join("archive").exists());
-    assert_eq!(note_text(&vault, "other.md"), linking);
+    assert_eq!(note_text(&vault, "other.md"), "Intro.\nSee [[Old]] now.\n");
+    assert_eq!(shown(&home, &vault, "other.md"), shown_before);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -809,17 +831,63 @@ fn move_is_refused_when_a_link_sits_in_a_pending_change_and_moves_nothing() {
 fn move_goes_through_when_the_links_are_outside_the_pending_changes() {
     let (home, vault) = sandbox("move-outside-area");
     write(&vault.join("Old.md"), "# Old\n\nbody\n");
-    write(
-        &vault.join("other.md"),
-        "See [[Old]].\n{--\nold line\n--}\n{++\nnew line\n++}\n",
-    );
+    write(&vault.join("other.md"), "See [[Old]].\nold line\n");
+    propose_on(&home, &vault, "other.md", "See [[Old]].\nnew line\n");
     let run = inkuno(&home, &vault, &["move", "Old", "--name", "New", "--json"]);
     assert_eq!(run.code, 0, "{}", run.err);
     let moved: Value = serde_json::from_str(&run.out).unwrap();
     assert_eq!(moved["rewritten"], 1);
+    assert_eq!(note_text(&vault, "other.md"), "See [[New]].\nold line\n");
+    assert_eq!(
+        shown(&home, &vault, "other.md"),
+        "See [[New]].\n{--\nold line\n--}\n{++\nnew line\n++}\n"
+    );
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_move_keeps_a_pending_change_of_a_linking_note_where_it_belongs() {
+    let (home, vault) = sandbox("move-anchor");
+    write(&vault.join("Old.md"), "# Old\n\nbody\n");
+    write(
+        &vault.join("other.md"),
+        "# Other\n\nSee [[Old]].\nend line\n",
+    );
+    propose_on(
+        &home,
+        &vault,
+        "other.md",
+        "# Other\n\nSee [[Old]].\nend line\nadded\n",
+    );
+    // The link rewrite changes the length of the text above the proposed line.
+    let run = inkuno(
+        &home,
+        &vault,
+        &["move", "Old", "--name", "Longer-name-here"],
+    );
+    assert_eq!(run.code, 0, "{}", run.err);
     assert_eq!(
         note_text(&vault, "other.md"),
-        "See [[New]].\n{--\nold line\n--}\n{++\nnew line\n++}\n"
+        "# Other\n\nSee [[Longer-name-here]].\nend line\n"
+    );
+    assert_eq!(
+        shown(&home, &vault, "other.md"),
+        "# Other\n\nSee [[Longer-name-here]].\nend line\n{++\nadded\n++}\n"
+    );
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_move_carries_the_pending_changes_of_the_note_itself() {
+    let (home, vault) = sandbox("move-own");
+    write(&vault.join("Old.md"), "# Old\n\nbody\n");
+    propose_on(&home, &vault, "Old.md", "# Old\n\nbody, revised\n");
+    let run = inkuno(&home, &vault, &["move", "Old", "--name", "New"]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(!vault.join(".inkuno/pending/Old.md.json").exists());
+    assert_eq!(
+        shown(&home, &vault, "New.md"),
+        "# New\n\n{--\nbody\n--}\n{++\nbody, revised\n++}\n"
     );
     let _ = fs::remove_dir_all(home);
 }
@@ -828,8 +896,9 @@ fn move_goes_through_when_the_links_are_outside_the_pending_changes() {
 fn a_title_change_is_refused_when_a_link_sits_in_a_pending_change() {
     let (home, vault) = sandbox("title-pending");
     write(&vault.join("Old.md"), "# Old\n\nbody\n");
-    let linking = "{--\nSee [[Old]].\n--}\n{++\nSee [[Old]] later.\n++}\n";
-    write(&vault.join("other.md"), linking);
+    write(&vault.join("other.md"), "See [[Old]].\n");
+    propose_on(&home, &vault, "other.md", "See [[Old]] later.\n");
+    let shown_before = shown(&home, &vault, "other.md");
     let run = inkuno(
         &home,
         &vault,
@@ -840,7 +909,8 @@ fn a_title_change_is_refused_when_a_link_sits_in_a_pending_change() {
     assert!(run.err.contains("accept or reject"), "{}", run.err);
     assert_eq!(note_text(&vault, "Old.md"), "# Old\n\nbody\n");
     assert!(!vault.join("New.md").exists());
-    assert_eq!(note_text(&vault, "other.md"), linking);
+    assert_eq!(note_text(&vault, "other.md"), "See [[Old]].\n");
+    assert_eq!(shown(&home, &vault, "other.md"), shown_before);
     let _ = fs::remove_dir_all(home);
 }
 
@@ -848,10 +918,8 @@ fn a_title_change_is_refused_when_a_link_sits_in_a_pending_change() {
 fn a_title_change_goes_through_when_the_links_are_outside_the_pending_changes() {
     let (home, vault) = sandbox("title-outside-area");
     write(&vault.join("Old.md"), "# Old\n\nbody\n");
-    write(
-        &vault.join("other.md"),
-        "See [[Old]].\n{--\nold line\n--}\n{++\nnew line\n++}\n",
-    );
+    write(&vault.join("other.md"), "See [[Old]].\nold line\n");
+    propose_on(&home, &vault, "other.md", "See [[Old]].\nnew line\n");
     let run = inkuno(
         &home,
         &vault,
@@ -860,7 +928,7 @@ fn a_title_change_goes_through_when_the_links_are_outside_the_pending_changes() 
     assert_eq!(run.code, 0, "{}", run.err);
     assert_eq!(note_text(&vault, "New.md"), "# New\n\nbody\n");
     assert_eq!(
-        note_text(&vault, "other.md"),
+        shown(&home, &vault, "other.md"),
         "See [[New]].\n{--\nold line\n--}\n{++\nnew line\n++}\n"
     );
     let _ = fs::remove_dir_all(home);
@@ -2335,7 +2403,8 @@ fn text_from_standard_input_that_is_not_utf8_fails_for_every_command() {
 #[test]
 fn edit_and_comment_refuse_a_change_of_a_pending_area() {
     let (home, vault) = sandbox("pending-refused");
-    write(&vault.join("plan.md"), PENDING);
+    write(&vault.join("plan.md"), "a\nold\nb\n");
+    propose_on(&home, &vault, "plan.md", "a\nnew\nb\n");
     let refused = [
         inkuno(
             &home,
@@ -2394,7 +2463,8 @@ fn comment_file_refuses_a_passage_in_a_pending_area() {
 #[test]
 fn edits_outside_the_areas_and_an_append_at_the_end_still_work() {
     let (home, vault) = sandbox("pending-outside");
-    write(&vault.join("plan.md"), PENDING);
+    write(&vault.join("plan.md"), "a\nold\nb\n");
+    propose_on(&home, &vault, "plan.md", "a\nnew\nb\n");
     let edit = inkuno(
         &home,
         &vault,

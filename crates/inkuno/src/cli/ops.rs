@@ -993,18 +993,22 @@ pub fn rename_note(vault: &mut Vault, args: &Value) -> Outcome {
             return Outcome::err(disk(error));
         }
     }
-    // A note whose title was its name keeps the title in step.
+    // A note whose title was its name keeps the title in step. Written as the editor shows it, so the
+    // pending changes are placed again; a first line that is a pending mark is not a title.
     if dest.extension().is_some_and(|e| e == "md")
         && old_stem != new_stem
-        && let Ok(text) = fs::read_to_string(&dest)
+        && let Ok((text, _)) = vault::read_shown(Some(&vault.root), &dest)
         && files::h1_of(&text).as_deref() == Some(old_stem.as_str())
     {
         let meta = markdown::front_matter(&text);
         let (head, body) = text.split_at(meta);
-        if let Some(first) = body.lines().find(|l| !l.trim().is_empty()) {
+        if let Some(first) = body.lines().find(|l| !l.trim().is_empty())
+            && first.trim_start().starts_with('#')
+        {
             let hashes = first.trim_start().chars().take_while(|c| *c == '#').count();
             let title = format!("{} {new_stem}", "#".repeat(hashes.max(1)));
-            let _ = files::write(&dest, format!("{head}{}", body.replacen(first, &title, 1)));
+            let fresh = format!("{head}{}", body.replacen(first, &title, 1));
+            let _ = vault::write_shown(Some(&vault.root), &dest, &fresh, "");
         }
     }
     let rewritten = if old_link != new_link {

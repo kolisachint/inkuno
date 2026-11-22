@@ -374,8 +374,13 @@ pub fn get(home: &Home, note: &Path, number: u32) -> io::Result<Revision> {
 /// Nothing is overwritten: a history already at the new path is an error and nothing moves. A
 /// history on another disk is copied, then removed.
 pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()> {
-    // The pending changes of the note or folder move with it (`sidecar`).
-    super::sidecar::move_along(vault, from, to)?;
+    move_history(vault, from, to)?;
+    // The pending changes move with it, when they can: a list left behind waits inert (`sidecar`).
+    let _ = super::sidecar::move_along(vault, from, to);
+    Ok(())
+}
+
+fn move_history(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()> {
     let (Some(src), Some(dst)) = (
         home_of(from, vault).and_then(|h| h.folder(from)),
         home_of(to, vault).and_then(|h| h.folder(to)),
@@ -409,8 +414,13 @@ pub fn move_along(vault: Option<&Path>, from: &Path, to: &Path) -> io::Result<()
 /// name is in the trash) and it is moved aside under a free name, never deleted. Without this, undo
 /// of a note that had no history could bring back another note's history.
 pub fn trash_along(vault: Option<&Path>, path: &Path, trashed: &Path) -> io::Result<()> {
-    // Its pending changes go to the bin with it, as its history does (`sidecar`).
-    super::sidecar::trash_along(vault, path, trashed)?;
+    trash_history(vault, path, trashed)?;
+    // Its pending changes go to the bin with it, as its history does, when they can (`sidecar`).
+    let _ = super::sidecar::trash_along(vault, path, trashed);
+    Ok(())
+}
+
+fn trash_history(vault: Option<&Path>, path: &Path, trashed: &Path) -> io::Result<()> {
     let Some(home) = home_of(path, vault) else {
         return Ok(());
     };
@@ -448,7 +458,12 @@ fn free_in(dir: &Path, name: &str) -> PathBuf {
 /// to `to`. Only the bin entry of that exact name is used, the one `trash_along` filled for that
 /// item. Nothing is done when there is no such history; nothing is overwritten.
 pub fn restore_along(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Result<()> {
-    super::sidecar::restore_along(vault, trashed, to)?;
+    restore_history(vault, trashed, to)?;
+    let _ = super::sidecar::restore_along(vault, trashed, to);
+    Ok(())
+}
+
+fn restore_history(vault: Option<&Path>, trashed: &Path, to: &Path) -> io::Result<()> {
     let Some(home) = home_of(to, vault) else {
         return Ok(());
     };

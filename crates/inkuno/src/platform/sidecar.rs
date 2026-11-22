@@ -55,6 +55,17 @@ pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
                 at: usize::try_from(change.get("at")?.as_u64()?).ok()?,
                 old: change.get("old")?.as_str()?.to_string(),
                 new: change.get("new")?.as_str()?.to_string(),
+                // Kept from version 2 on: a list of version 1 has none, and is found by its offset.
+                before: change
+                    .get("before")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                after: change
+                    .get("after")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
             })
         })
         .collect()
@@ -83,10 +94,12 @@ pub fn store(home: &Home, note: &Path, entries: &[Entry]) -> io::Result<()> {
                 "at": e.at,
                 "old": e.old,
                 "new": e.new,
+                "before": e.before,
+                "after": e.after,
             })
         })
         .collect();
-    let text = serde_json::to_string_pretty(&json!({ "version": 1, "changes": changes }))
+    let text = serde_json::to_string_pretty(&json!({ "version": 2, "changes": changes }))
         .map_err(io::Error::other)?;
     vault::write(&file, text + "\n")
 }
@@ -111,6 +124,10 @@ pub fn display(home: Option<&Home>, note: &Path, disk: &str) -> String {
 /// The text of `display` as the note's file holds it, and its pending changes, for saving. New
 /// changes take `author` when they have none. Without a home, the display is the file, marks and
 /// all: there is no list beside it.
+///
+/// A change of the list that the note did not show when it was read (its text is not in the note
+/// any more, so `display` cannot have it) is kept as it is: it waits beside the note, shown once
+/// its text is back. A change that was shown, and is not in `display` now, was settled: it goes.
 pub fn split(
     home: Option<&Home>,
     note: &Path,
@@ -125,6 +142,20 @@ pub fn split(
     for entry in &mut entries {
         if entry.author.is_empty() {
             entry.author = author.to_string();
+        }
+    }
+    if !known.is_empty() {
+        // The text the editor was given: the note as it is on disk, with comments in the new form.
+        let disk = fs::read_to_string(note)
+            .map(|text| markdown::migrate_comments(&text))
+            .unwrap_or_default();
+        for (entry, shown) in known.iter().zip(pending::placed(&disk, &known)) {
+            let kept = entries
+                .iter()
+                .any(|e| e.old == entry.old && e.new == entry.new);
+            if !shown && !kept {
+                entries.push(entry.clone());
+            }
         }
     }
     (base, entries)
@@ -176,17 +207,29 @@ fn json_of(path: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 
-/// Moves one list (or folder of lists) from `src` to `dst`. Nothing is overwritten: a list already
-/// at `dst` is an error. A list on another disk is copied, then removed.
+/// Moves `path` aside, under a free name next to it: a list in the way of a move is stale (no note
+/// of that name is there to own it), so it is kept, never deleted.
+fn aside(path: &Path) -> io::Result<()> {
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    let target = (1..)
+        .map(|n| path.with_file_name(format!("{name}.stale-{n}")))
+        .find(|p| fs::symlink_metadata(p).is_err())
+        .unwrap();
+    fs::rename(path, target)
+}
+
+/// Moves one list (or folder of lists) from `src` to `dst`. A list already at `dst` is stale and is
+/// moved aside first (`aside`). A list on another disk is copied, then removed.
 fn move_one(src: &Path, dst: &Path) -> io::Result<()> {
     if !src.exists() {
         return Ok(());
     }
-    if dst.exists() {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "the pending changes of that name already exist",
-        ));
+    if fs::symlink_metadata(dst).is_ok() {
+        aside(dst)?;
     }
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent)?;
@@ -302,6 +345,8 @@ mod tests {
             at: 7,
             old: "old\n".into(),
             new: "new\n".into(),
+            before: String::new(),
+            after: String::new(),
         };
         let home = Home::Vault(root.clone());
         store(&home, &note, std::slice::from_ref(&entry)).unwrap();
@@ -319,6 +364,97 @@ mod tests {
         // Restored: back at the note's place.
         restore_along(Some(&root), &trashed, &note).unwrap();
         assert_eq!(read(&home, &note), vec![entry]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// A vault folder of the test, empty.
+    fn vault_dir(name: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("inkuno-sidecar-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn a_stale_list_at_the_new_name_does_not_block_a_move() {
+        let root = vault_dir("stale-move");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nb\n").unwrap();
+        let entry = Entry {
+            id: 1,
+            author: "assistant".into(),
+            at: 2,
+            old: String::new(),
+            new: "x\n".into(),
+            before: "a\n".into(),
+            after: "b\n".into(),
+        };
+        store(&home, &note, std::slice::from_ref(&entry)).unwrap();
+        // A list left at the new name by a note deleted outside the app.
+        let other = root.join("Other.md");
+        store(&home, &other, std::slice::from_ref(&entry)).unwrap();
+        move_along(Some(&root), &note, &other).unwrap();
+        assert_eq!(read(&home, &other), vec![entry]);
+        assert!(read(&home, &note).is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_list_of_a_deleted_note_does_not_attach_to_a_new_note_of_the_same_name() {
+        let root = vault_dir("new-note");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "# Plan\nold line\nend\n").unwrap();
+        let marked = "# Plan\n{--\nold line\n--}\n{++\nnew line\n++}\nend\n";
+        save(Some(&home), &note, marked, "assistant").unwrap();
+        assert_eq!(read(&home, &note).len(), 1);
+        // The note was deleted outside the app, and a new one of that name written.
+        fs::remove_file(&note).unwrap();
+        fs::write(&note, "# Plan\nsomething else\nend\n").unwrap();
+        let shown = display(Some(&home), &note, "# Plan\nsomething else\nend\n");
+        assert_eq!(shown, "# Plan\nsomething else\nend\n");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_change_the_note_does_not_show_waits_through_a_save() {
+        let root = vault_dir("waits");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nold\nb\n").unwrap();
+        save(
+            Some(&home),
+            &note,
+            "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n",
+            "assistant",
+        )
+        .unwrap();
+        assert_eq!(read(&home, &note).len(), 1);
+        // The line is gone outside the app: the change is not shown, and a save keeps it.
+        fs::write(&note, "a\nb\nc\n").unwrap();
+        assert_eq!(display(Some(&home), &note, "a\nb\nc\n"), "a\nb\nc\n");
+        let (text, kept) = split(Some(&home), &note, "a\nb\nc edited\n", "");
+        assert_eq!(text, "a\nb\nc edited\n");
+        assert_eq!(kept.len(), 1, "{kept:?}");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_settled_change_is_dropped_on_save() {
+        let root = vault_dir("settled");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nold\nb\n").unwrap();
+        let marked = "a\n{--\nold\n--}\n{++\nnew\n++}\nb\n";
+        save(Some(&home), &note, marked, "assistant").unwrap();
+        assert_eq!(read(&home, &note).len(), 1);
+        // Shown, then accepted: the saved text has the new line and no change left.
+        let accepted = pending::accept_all(&display(Some(&home), &note, marked));
+        let (text, kept) = split(Some(&home), &note, &accepted, "");
+        assert_eq!(text, "a\nnew\nb\n");
+        assert!(kept.is_empty(), "{kept:?}");
         let _ = fs::remove_dir_all(root);
     }
 }
