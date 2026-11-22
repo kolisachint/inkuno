@@ -7,9 +7,9 @@ use inkuno_logic::lang::tr;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Shortcut key, as displayed: Cmd on macOS, Ctrl elsewhere.
+/// Shortcut key, as displayed: ⌘ on macOS, Ctrl elsewhere.
 pub const MOD: &str = if cfg!(target_os = "macos") {
-    "Cmd"
+    "⌘"
 } else {
     "Ctrl"
 };

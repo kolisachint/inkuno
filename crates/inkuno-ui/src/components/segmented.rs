@@ -1,4 +1,6 @@
-//! Segmented controls. `.seg` in v2: a track of options, the chosen one lifted on the page colour.
+//! Segmented controls. `.seg` in v2: a track of options, the chosen one lifted above it. The track
+//! sits on the ground and the chosen option is the raised panel colour, lighter than the track in
+//! both themes (a dark chip on a track reads as a hole).
 
 use gpui::{Div, InteractiveElement, IntoElement, Stateful, div, prelude::*};
 
@@ -12,7 +14,7 @@ pub fn segmented(t: Theme, options: Vec<Stateful<Div>>) -> Div {
         .gap(t.px(2.))
         .p(t.px(2.))
         .rounded(t.large())
-        .bg(t.text.opacity(0.06))
+        .bg(t.ground)
         .children(options)
 }
 
@@ -28,7 +30,9 @@ pub fn segment(name: String, label: impl IntoElement, on: bool, t: Theme) -> Sta
         .rounded(t.small())
         .text_size(t.px(12.))
         .cursor_pointer()
-        .when(on, |d| d.bg(t.bg).text_color(t.text).shadow(t.lifted()))
+        .when(on, |d| {
+            d.bg(t.popover).text_color(t.text).shadow(t.lifted())
+        })
         .when(!on, |d| {
             d.text_color(t.soft).hover(|s| s.text_color(t.text))
         })

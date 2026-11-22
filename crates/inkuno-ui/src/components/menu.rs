@@ -1,7 +1,7 @@
 //! Menu rows. `.mi` and `.msep` in v2: a row with its label and its shortcut at the right, and a hairline
 //! between groups. The hover and the press are the caller's, as is the click.
 
-use gpui::{Div, Hsla, InteractiveElement, Stateful, div, prelude::*};
+use gpui::{Div, Hsla, InteractiveElement, Stateful, div, prelude::*, svg};
 
 use super::kbd::keycaps;
 use crate::theme::Theme;
@@ -25,11 +25,12 @@ pub fn menu_row(t: Theme) -> Div {
         .flex_none()
 }
 
-/// A menu item: its label, then its shortcut, dimmer, pinned to the right; the label is ellipsized, the menu
-/// takes the width they need. `ink`: the colour of the label when the item has one (a danger item).
-/// `id` is the label, so the item is found by its name.
+/// A menu item: its icon (16 px, the slot is kept without one), its label, then its shortcut, dimmer,
+/// pinned to the right; the label is ellipsized, the menu takes the width they need. `ink`: the colour
+/// of the label when the item has one (a danger item). `id` is the label, so the item is found by its name.
 pub fn menu_item(
     label: &'static str,
+    icon: Option<&'static str>,
     keys: &str,
     ink: Option<Hsla>,
     on: bool,
@@ -42,8 +43,24 @@ pub fn menu_item(
         .items_center()
         .cursor_pointer()
         .hover(|s| s.bg(t.hover))
-        .when(on, |d| d.bg(t.selection))
+        .when(on, |d| d.bg(t.hover))
         .when_some(ink, |d, color| d.text_color(color))
+        .child(
+            div()
+                .size(t.px(16.))
+                .mr_2()
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .children(icon.map(|icon| {
+                    svg()
+                        .path(icon)
+                        .size(t.px(16.))
+                        .flex_none()
+                        .text_color(ink.unwrap_or(t.soft))
+                })),
+        )
         .child(
             div()
                 .flex_1()

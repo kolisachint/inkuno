@@ -96,12 +96,17 @@ impl Shell {
     }
 }
 
-/// Background of a status message.
+/// A status message: a dark pill (the page's ink, with the page's colour on it), as v2 draws it in
+/// both themes. It goes away by itself, so only a failure carries a cross.
 pub(super) fn status_card(t: Theme) -> Div {
-    crate::ui::widgets::floating(t)
+    div()
         .pl_3()
-        .pr_2()
+        .pr_3()
         .py_1p5()
+        .rounded(t.large())
+        .bg(t.text)
+        .text_color(t.bg)
+        .shadow(t.lifted())
         .text_size(t.px(13.))
         .flex()
         .items_center()
@@ -116,11 +121,12 @@ impl Shell {
             .iter()
             .map(|toast| {
                 let id = toast.id;
+                // The icons sit on the pill, not on the page.
                 let (icon, color) = match toast.tone {
-                    Tone::Info => ("info.svg", t.soft),
-                    Tone::Done => ("check.svg", t.hue(ui::theme::GREEN, t.bg)),
-                    Tone::Failed => ("alert.svg", t.hue(ui::theme::RED, t.bg)),
-                    Tone::Busy => ("spinner.svg", t.soft),
+                    Tone::Info => ("info.svg", t.bg),
+                    Tone::Done => ("check.svg", t.hue(ui::theme::GREEN, t.text)),
+                    Tone::Failed => ("alert.svg", t.hue(ui::theme::RED, t.text)),
+                    Tone::Busy => ("spinner.svg", t.bg),
                 };
                 let icon = svg()
                     .path(icon)
@@ -163,13 +169,14 @@ impl Shell {
                                 }),
                             )
                     }))
-                    .child(
+                    // A failure stays until it is read: its cross is the way to take it away.
+                    .children((toast.tone == Tone::Failed).then(|| {
                         svg()
                             .path("close.svg")
                             .size(t.px(14.))
                             .flex_none()
-                            .text_color(t.soft),
-                    )
+                            .text_color(t.bg)
+                    }))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _, _, cx| {

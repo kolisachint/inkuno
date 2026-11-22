@@ -378,6 +378,39 @@ pub enum Do {
 }
 
 impl Do {
+    /// The icon of this menu entry (16 px), if it has one.
+    pub fn icon(self) -> Option<&'static str> {
+        Some(match self {
+            Do::Open => "note.svg",
+            Do::OpenAside => "external.svg",
+            Do::NewNote => "plus.svg",
+            Do::NewFolder => "folder.svg",
+            Do::Rename => "pencil.svg",
+            Do::MoveTo => "move.svg",
+            Do::Duplicate => "duplicate.svg",
+            Do::Trash | Do::DeleteScratch => "trash.svg",
+            Do::CopyPath | Do::CopyRelative | Do::Copy => "copy.svg",
+            Do::Reveal => "folder-open.svg",
+            Do::CopyLink | Do::Link => "backlink.svg",
+            Do::List => "list-bullet.svg",
+            Do::Cut => "c-cut.svg",
+            Do::Paste => "c-paste.svg",
+            Do::Bold => "c-bold.svg",
+            Do::Italic => "c-italic.svg",
+            Do::Underline => "c-underline.svg",
+            Do::Strike => "c-strike.svg",
+            Do::Highlight => "c-highlight.svg",
+            Do::Code => "code.svg",
+            Do::Comment => "comment.svg",
+            Do::Bullets => "list-bullet.svg",
+            Do::Numbered => "list-number.svg",
+            Do::Tasks => "list-task.svg",
+            Do::Plain => "c-text.svg",
+            Do::CloseTab | Do::CloseOtherTabs | Do::CloseTabsInPane => "close.svg",
+            _ => return None,
+        })
+    }
+
     /// The shortcut that does the same as this menu entry, as currently in force;
     /// nothing when the action has none.
     pub fn keys(self, cx: &gpui::App) -> String {

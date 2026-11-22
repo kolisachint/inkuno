@@ -190,7 +190,16 @@ impl Editor {
             .child(button("tb-code", icon("code.svg"), Tool::Code, cx))
             .child(divider())
             .child(button("tb-link", icon("link.svg"), Tool::Link, cx))
-            .child(button("tb-comment", icon("comment.svg"), Tool::Comment, cx));
+            .child(
+                // Icon only, named by its tooltip, as the other buttons of the bar.
+                button("tb-comment", icon("comment.svg"), Tool::Comment, cx).tooltip(
+                    crate::ui::widgets::tip(
+                        tr("Comment", "Commenter"),
+                        crate::ui::keys::of(cx, &crate::views::editor::Comment),
+                        t,
+                    ),
+                ),
+            );
         let list = open.then(|| {
             let rows = TURNS.iter().map(|&(en, fr, turn)| {
                 let id = en;

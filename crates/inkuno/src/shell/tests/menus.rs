@@ -120,3 +120,25 @@ fn destructive_entries_are_red_in_quiet(cx: &mut TestAppContext) {
     assert_eq!(Shell::ink_of(&Do::Rename, t), None);
     assert_ne!(red, t.accent, "not the blue of the accent");
 }
+
+/// The palette's "Create «…»" row is always the last one, under the notes and commands that
+/// match: typing "trash" finds the restore command first, and Enter on the row is still there.
+#[gpui::test]
+fn the_create_row_is_always_last(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "menus-create-last");
+    let note = root.join("Idées.md");
+    fs::write(&note, "# Idées\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    cx.run_until_parked();
+    shell.update_in(cx, |s, window, cx| s.open(&note, window, cx));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("secondary-p");
+    cx.simulate_input("trash");
+    cx.run_until_parked();
+    let (last, listed) = shell.read_with(cx, |s, cx| {
+        let palette = s.palette.as_ref().expect("the palette is open").read(cx);
+        (palette.create_is_last(), palette.listed())
+    });
+    assert_eq!(last, Some(true), "the create row is offered and is last");
+    assert!(listed > 1, "the commands matching \"trash\" come before it");
+}
