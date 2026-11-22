@@ -2,6 +2,7 @@
 //! rendering of figures and SVG pictures. Knows nothing of the shell.
 
 pub mod assets;
+pub mod components;
 pub mod figure;
 pub mod keys;
 pub mod line;

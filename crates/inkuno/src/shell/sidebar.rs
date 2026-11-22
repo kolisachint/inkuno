@@ -5,7 +5,8 @@ use crate::{
     lang::tr,
     logic::markdown::{self},
     platform::vault,
-    ui::widgets::{button, tip},
+    ui::components::icon_button::band_button,
+    ui::widgets::tip,
     views::palette::{Palette, PaletteEvent},
 };
 use gpui::{
@@ -22,48 +23,9 @@ use std::{
 use super::render::PILL_ROOM;
 use super::*;
 use crate::ui::assets::ICON_SET;
+use crate::ui::components::nav_row::nav_row;
 use crate::ui::theme::{BAND, BAND_HIDDEN, LIGHTS_ROOM};
 use crate::views::nav::*;
-
-/// A row of the Quiet sidebar: 30 px, an 18 px icon 9 px before the 13 px label (text at 85 %), an optional
-/// key hint at the right. Selected, a neutral pill and the full text; hovered, the hover token.
-fn side_row(
-    id: &'static str,
-    icon: &'static str,
-    label: String,
-    key: String,
-    on: bool,
-    t: Theme,
-) -> Stateful<Div> {
-    let ink = if on { t.text } else { t.text.opacity(0.85) };
-    div()
-        .id(id)
-        .debug_selector(move || id.to_string())
-        .h(t.px(30.))
-        .w_full()
-        .flex_none()
-        .flex()
-        .items_center()
-        .gap(t.px(9.))
-        .px(t.px(8.))
-        .rounded(t.large())
-        .text_size(t.px(13.))
-        .text_color(ink)
-        .cursor_pointer()
-        .when(on, |d| d.bg(t.pill))
-        .when(!on, |d| d.hover(|s| s.bg(t.hover)))
-        .child(svg().path(icon).size(t.px(18.)).flex_none().text_color(ink))
-        .child(div().flex_1().min_w_0().truncate().child(label))
-        .when(!key.is_empty(), |d| {
-            d.child(
-                div()
-                    .flex_none()
-                    .text_size(t.px(11.))
-                    .text_color(t.soft)
-                    .child(key),
-            )
-        })
-}
 
 /// A view in sight is a small sheet laid under its button: the ground colour, lifted.
 fn on_sheet(b: Stateful<Div>, on: bool, t: Theme) -> Stateful<Div> {
@@ -726,7 +688,7 @@ impl Shell {
         let mine = self.icons.get(path).cloned();
         let pick =
             |i: usize, file: &'static str, name: Option<&'static str>, cx: &mut Context<Self>| {
-                button(
+                band_button(
                     ("icon", i),
                     file,
                     name.is_some() && name == mine.as_deref(),
@@ -900,7 +862,7 @@ impl Shell {
                 false => "chevron-down.svg",
             };
             slot = slot.child(
-                button(("outline-fold", ix), icon, false, t)
+                band_button(("outline-fold", ix), icon, false, t)
                     .debug_selector(move || format!("outline-fold-{ix}"))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -1345,7 +1307,7 @@ impl Shell {
         let shown: Vec<Mode> = Mode::ALL.into_iter().filter(|m| self.docked(*m)).collect();
         let mode_button = |id: &'static str, icon, m: Mode, label: &'static str, keys: String| {
             on_sheet(
-                button(id, icon, shown.contains(&m), t),
+                band_button(id, icon, shown.contains(&m), t),
                 shown.contains(&m),
                 t,
             )
@@ -1554,7 +1516,7 @@ impl Shell {
     /// The Quiet sidebar's top: the Search and Today rows, then the Notes header with its hover "+".
     fn quiet_top(&self, cx: &mut Context<Self>) -> Div {
         let t = self.theme;
-        let search = side_row(
+        let search = nav_row(
             "nav-search",
             "search.svg",
             tr("Search", "Rechercher").to_string(),
@@ -1568,7 +1530,7 @@ impl Shell {
             t,
         ))
         .on_click(cx.listener(|this, _, window, cx| this.open_palette("", window, cx)));
-        let today = side_row(
+        let today = nav_row(
             "nav-today",
             "c-calendar.svg",
             tr("Today", "Aujourd'hui").to_string(),
@@ -1594,7 +1556,7 @@ impl Shell {
             .child(tr("Notes", "Notes"))
             .child(
                 div().ml_auto().child(
-                    button("nav-new", "plus.svg", false, t)
+                    band_button("nav-new", "plus.svg", false, t)
                         .opacity(0.)
                         .group_hover("nav-notes", |s| s.opacity(1.))
                         .tooltip(tip(
@@ -1623,7 +1585,7 @@ impl Shell {
     /// title bar's toggle, which stays here so that the bar always comes back.
     fn quiet_foot(&self, band_shown: bool, cx: &mut Context<Self>) -> Stateful<Div> {
         let t = self.theme;
-        let settings = side_row(
+        let settings = nav_row(
             "nav-settings",
             "gear.svg",
             tr("Settings", "Réglages").to_string(),
@@ -1725,7 +1687,7 @@ impl Shell {
     /// the top strip of the note while the sidebar is hidden.
     pub(super) fn sidebar_toggle(&self, active: bool, cx: &mut Context<Self>) -> Stateful<Div> {
         let t = self.theme;
-        button("nav-sidebar", "c-split.svg", active, t)
+        band_button("nav-sidebar", "c-split.svg", active, t)
             .debug_selector(|| "nav-sidebar".into())
             .tooltip(tip(
                 tr(
@@ -1741,7 +1703,7 @@ impl Shell {
     /// The vault search: the palette, where a note is found or created.
     pub(super) fn search_button(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let t = self.theme;
-        button("nav-search", "search.svg", false, t)
+        band_button("nav-search", "search.svg", false, t)
             .debug_selector(|| "nav-search".into())
             .tooltip(tip(
                 tr("Find or create a note", "Chercher ou créer une note"),
@@ -1754,7 +1716,7 @@ impl Shell {
     /// A new note in the current place.
     pub(super) fn new_button(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let t = self.theme;
-        button("nav-new", "plus.svg", false, t)
+        band_button("nav-new", "plus.svg", false, t)
             .debug_selector(|| "nav-new".into())
             .tooltip(tip(
                 tr("New note", "Nouvelle note"),
@@ -1769,7 +1731,7 @@ impl Shell {
         let t = self.theme;
         let on = self.nav.title_bar;
         on_sheet(
-            button("nav-titlebar", "c-titlebar.svg", on, t)
+            band_button("nav-titlebar", "c-titlebar.svg", on, t)
                 .debug_selector(|| "nav-titlebar".into())
                 .tooltip(tip(
                     tr(
@@ -2097,7 +2059,7 @@ impl Shell {
             .top(t.px((BAND - 24.) / 2.))
             .right(t.px(crate::shell::render::PILL_ROOM))
             .child(
-                ui::widgets::icon_button("right-panel", "c-rpanel.svg", t)
+                ui::components::icon_button::icon_button("right-panel", "c-rpanel.svg", t)
                     .debug_selector(|| "right-panel-toggle".into())
                     .when(shown, |d| d.bg(t.selection))
                     .tooltip(tip(
@@ -2187,7 +2149,7 @@ impl Shell {
             // Stacked, a tool folds down to its header.
             .when(stacked && !t.quiet, |d| {
                 d.child(
-                    button(
+                    band_button(
                         ("tool-fold", mode as usize),
                         if shut {
                             "chevron-right.svg"
@@ -2217,7 +2179,7 @@ impl Shell {
             .when(mode == Mode::Tree, |d| {
                 // A note at the vault root, whatever the selection.
                 d.child(
-                    button("nav-file", "file-plus.svg", false, t)
+                    band_button("nav-file", "file-plus.svg", false, t)
                         .debug_selector(|| "nav-file".into())
                         .tooltip(tip(
                             tr("New note at the root", "Nouvelle note à la racine"),
@@ -2229,7 +2191,7 @@ impl Shell {
                         ),
                 )
                 .child(
-                    button("nav-folder", "folder-plus.svg", false, t)
+                    band_button("nav-folder", "folder-plus.svg", false, t)
                         .debug_selector(|| "nav-folder".into())
                         .tooltip(tip(
                             tr("New folder", "Nouveau dossier"),
@@ -2242,7 +2204,7 @@ impl Shell {
                 )
                 // Collapse all; if all already is, expand all.
                 .child(
-                    button(
+                    band_button(
                         "nav-fold",
                         if folded { "unfold.svg" } else { "fold.svg" },
                         false,
@@ -2318,7 +2280,7 @@ impl Shell {
             // and the palette (`hide_tool` unchanged, bring the button back below to restore it).
             .when(!right && first, |d| {
                 d.child(
-                    button(
+                    band_button(
                         "nav-full",
                         if full { "shrink.svg" } else { "expand.svg" },
                         false,

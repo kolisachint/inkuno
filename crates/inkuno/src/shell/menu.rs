@@ -2,7 +2,10 @@
 
 use super::*;
 use crate::ui::assets::ICON_SET;
-use crate::ui::widgets;
+use crate::ui::components::{
+    menu::{menu_item, menu_separator},
+    popover::popover,
+};
 use crate::views::nav::*;
 use crate::{
     lang::tr,
@@ -773,32 +776,8 @@ impl Shell {
         let entry = |i: usize, (label, what): (&'static str, Do), cx: &mut Context<Self>| {
             let target = target.clone();
             let on = chosen == Some(i);
-            widgets::menu_row(t)
-                .id(label)
-                .debug_selector(move || format!("menu-entry-{label}"))
-                .flex()
-                .items_center()
-                .cursor_pointer()
-                .hover(|s| s.bg(t.hover))
-                .when(on, |d| d.bg(t.selection))
-                .when_some(Self::ink_of(&what, t), |d, color| d.text_color(color))
-                // The whole label, then its shortcut, dimmer, pinned to the right: the
-                // menu takes the width they need.
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .whitespace_nowrap()
-                        .child(label),
-                )
-                .child(
-                    keycaps(&what.keys(cx), t, on)
-                        .debug_selector(move || format!("menu-keys-{label}"))
-                        .flex_none()
-                        .ml_4(),
-                )
+            // The whole label, then its shortcut: the menu takes the width they need.
+            menu_item(label, &what.keys(cx), Self::ink_of(&what, t), on, t)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _, window, cx| {
@@ -812,13 +791,7 @@ impl Shell {
         let mut i = 0;
         for (g, group) in groups.into_iter().enumerate() {
             if g > 0 {
-                rows.push(
-                    div()
-                        .h(t.px(1.))
-                        .my(t.px(4.))
-                        .bg(t.border)
-                        .into_any_element(),
-                );
+                rows.push(menu_separator(t).into_any_element());
             }
             for item in group {
                 rows.push(entry(i, item, cx));
@@ -846,7 +819,7 @@ impl Shell {
                         .position(at)
                         .snap_to_window_with_margin(t.px(8.))
                         .child(
-                            widgets::popover(t)
+                            popover(t)
                                 .debug_selector(|| "menu".into())
                                 .track_focus(&self.menu_focus)
                                 .key_context("Menu")

@@ -1,89 +1,22 @@
-//! Small widgets shared by the views: icon buttons, tooltips, and the window-drag handle.
+//! Small widgets shared by the views: the tooltips, the window-drag handle, the search fields. The pieces that
+//! recur (icon buttons, key hints, popovers, menu rows) live in `components`; they are re-exported here so
+//! the views keep one path.
 
 use gpui::{
     AnyView, App, Context, Div, InteractiveElement, MouseButton, SharedString, Stateful, Window,
-    div, prelude::*, svg,
+    div, prelude::*,
 };
 
 use crate::theme::Theme;
 
+pub use crate::components::icon_button::{
+    band_button as button, band_button_turned as button_turned, icon_button, icon_button_over,
+};
+pub use crate::components::kbd::keycaps;
+pub use crate::components::menu::menu_row;
+pub use crate::components::popover::{floating, popover};
+
 gpui::actions!(widgets, [Press]);
-
-/// Icon button of the sidebar bands and of panel headers. Tab reaches it, a ring shows it has the keys, Enter
-/// or Space presses it; a click does not take the focus from the note.
-pub fn button(
-    id: impl Into<gpui::ElementId>,
-    icon: &'static str,
-    active: bool,
-    t: Theme,
-) -> Stateful<Div> {
-    button_turned(id, icon, active, false, t)
-}
-
-/// The same, its icon turned half a way round: one drawing for the two ends of an arrow.
-pub fn button_turned(
-    id: impl Into<gpui::ElementId>,
-    icon: &'static str,
-    active: bool,
-    turned: bool,
-    t: Theme,
-) -> Stateful<Div> {
-    div()
-        .id(id)
-        .size(t.px(28.))
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(t.small())
-        .cursor_pointer()
-        .tab_index(0)
-        .focus(|s| s.border_2().border_color(t.accent))
-        // Enter belongs to the button that has the keys, not to the panel around it: gpui presses
-        // it when the key comes up.
-        .key_context("Button")
-        .on_action(|_: &Press, _, _| {})
-        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-        .hover(|s| s.bg(t.hover))
-        .active(|s| s.bg(t.pressed))
-        .when(active, |d| d.bg(t.selection))
-        .child(
-            svg()
-                .path(icon)
-                .size(t.px(16.))
-                .flex_none()
-                .when(turned, |s| {
-                    s.with_transformation(gpui::Transformation::rotate(gpui::radians(
-                        std::f32::consts::PI,
-                    )))
-                })
-                .text_color(if active { t.accent } else { t.soft }),
-        )
-}
-
-/// A shortcut ("Ctrl+Maj+C") as one badge per key, in a row; nothing when it is empty.
-/// `on`: the row behind is selected, so the badges are lighter than it.
-pub fn keycaps(keys: &str, t: Theme, on: bool) -> Div {
-    let caps = inkuno_logic::commands::keycaps(keys)
-        .into_iter()
-        .map(|key| {
-            div()
-                .flex_none()
-                .h(t.px(18.))
-                .min_w(t.px(20.))
-                .px(t.px(6.))
-                .rounded(t.small())
-                .flex()
-                .items_center()
-                .justify_center()
-                .whitespace_nowrap()
-                .bg(if on { t.panel.opacity(0.7) } else { t.code_bg })
-                .text_size(t.px(11.5))
-                .text_color(if on { t.text } else { t.soft })
-                .child(div().flex_none().whitespace_nowrap().child(key))
-        });
-    div().flex().items_center().gap(t.px(3.)).children(caps)
-}
 
 /// Tooltip of an icon button: what it does and, if it has one, its shortcut. Without it,
 /// a bare icon forces you to know the documentation to know where to click.
@@ -130,50 +63,6 @@ pub fn tip(
         .into()
     }
 }
-/// What floats over the page: the palette, the menus, the help, the toasts, a dragged tab. `bg`, the
-/// sheet radius, a hairline ring of `border` and the `floating` shadow. The caller sets its size and place.
-pub fn floating(t: Theme) -> Div {
-    div()
-        .bg(t.bg)
-        .rounded(t.sheet())
-        .border_1()
-        .border_color(t.border)
-        .shadow(t.floating())
-}
-
-/// A menu or the palette in Quiet: the raised `popover` fill, a 1 px line of the text at 8 %, the sheet radius
-/// and two shadows (0 1 3 at 5 %, 0 8 24 at 10 %). Other themes keep `floating`.
-pub fn popover(t: Theme) -> Div {
-    if !t.quiet {
-        return floating(t);
-    }
-    div()
-        .bg(t.popover)
-        .rounded(t.sheet())
-        .border_1()
-        .border_color(t.text.opacity(0.08))
-        .shadow(t.popover_shadow())
-}
-
-/// A row of a menu: 32 px with a 5 px side margin, 8 px padding and a 6 px radius in Quiet; the
-/// interface's 30 px row with 6 px margin elsewhere. The hover and the selection are the caller's.
-pub fn menu_row(t: Theme) -> Div {
-    if !t.quiet {
-        return div()
-            .h(t.px(30.))
-            .mx(t.px(6.))
-            .px_2()
-            .rounded(t.small())
-            .flex_none();
-    }
-    div()
-        .h(t.px(32.))
-        .mx(t.px(5.))
-        .px(t.px(8.))
-        .rounded(t.small())
-        .flex_none()
-}
-
 /// The tint of what is open (a pill, the open row of the panel): the accent at 10 %, quieter than the selection.
 pub fn pill_tint(t: Theme) -> gpui::Hsla {
     t.accent.opacity(0.1)
@@ -191,39 +80,6 @@ pub fn passage_tint(t: Theme, on: bool) -> gpui::Hsla {
 
 /// The share of the accent behind the commented passage under the caret.
 const PASSAGE_ON: f32 = 0.12;
-
-/// Round icon button: window controls, note copy; 24 px, the smallest target a finger or a shaky hand hits.
-pub fn icon_button(id: &'static str, icon: &'static str, t: Theme) -> gpui::Stateful<gpui::Div> {
-    icon_button_over(id, icon, t.hover, t)
-}
-
-/// The same, with its own colour under the pointer (the close button's red).
-pub fn icon_button_over(
-    id: &'static str,
-    icon: &'static str,
-    over: gpui::Hsla,
-    t: Theme,
-) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .debug_selector(move || id.to_string())
-        .size(t.px(24.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded_full()
-        .cursor_pointer()
-        .hover(|s| s.bg(over))
-        .active(|s| s.bg(t.pressed))
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .child(
-            svg()
-                .path(icon)
-                .size(t.px(16.))
-                .flex_none()
-                .text_color(t.text),
-        )
-}
 
 /// Turns an element into a window handle, where the app draws its title bar
 /// (Linux): dragging moves it, double-click maximizes it, right-click opens the system menu.

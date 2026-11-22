@@ -44,9 +44,13 @@ use crate::ui::keys::{self, MOD};
 use crate::ui::{
     self,
     assets::{Assets, FAMILIES, apply_fonts, init_fonts, logo, mono, sans},
+    components::{
+        icon_button::{icon_button, icon_button_over},
+        kbd::keycaps,
+    },
     line,
     theme::{Page, THEMES, Theme, Wide},
-    widgets::{drag_window, icon_button, icon_button_over, keycaps},
+    widgets::drag_window,
 };
 use crate::views::{editor, field, nav, palette, viewer};
 
