@@ -1,0 +1,14 @@
+[package]
+name = "inkuno-view"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.98"
+description = "Read-only viewer of local HTML prototypes in a native webview (no gpui)"
+license = "MIT"
+
+[dependencies]
+inkuno-platform = { version = "0.0.1", path = "../inkuno-platform" }
+notify = "7"
+open = "5.4.5"
+tao = "0.37.3"
+wry = "0.57.3"

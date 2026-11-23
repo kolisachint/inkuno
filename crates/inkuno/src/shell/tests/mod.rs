@@ -88,6 +88,19 @@ fn layers_only_depend_downwards() {
             "../inkuno-ui/src",
             &["crate::views", "crate::shell", "impl Shell", cli],
         ),
+        // The HTML viewer sits beside platform: a window of its own (tao, wry), never gpui, and
+        // nothing of the look or the layers above.
+        (
+            "../inkuno-view/src",
+            &[
+                "gpui",
+                "inkuno_ui",
+                "crate::ui",
+                "crate::views",
+                "crate::shell",
+                cli,
+            ],
+        ),
         ("src/views", &["crate::shell", "impl Shell", cli]),
         ("src/shell", &[cli]),
         // The command line reads the shortcut table of shell::keymap and the pure parts of ui,

@@ -16,6 +16,8 @@ inkuno-logic = { version = "0.0.1", path = "../inkuno-logic" }
 # `platform` and `ui`, so every `crate::platform::…` and `crate::ui::…` path keeps working.
 inkuno-platform = { version = "0.0.1", path = "../inkuno-platform" }
 inkuno-ui = { version = "0.0.1", path = "../inkuno-ui" }
+# The read-only HTML prototype viewer (`inkuno view`): a native webview, no gpui.
+inkuno-view = { version = "0.0.1", path = "../inkuno-view", optional = true }
 # Le système signale les changements du coffre (inotify, FSEvents…). La 7 et non la 8 : celle-ci
 # exige bitflags 2.11 (via kqueue-sys) et ferait bouger le Cargo.lock de GPUI.
 notify = "7"
@@ -28,6 +30,11 @@ serde_json = "1.0.145"
 sha2 = "0.10.9"
 unicode-segmentation = "1.13.3"
 unicode-width = "0.2.2"
+
+[features]
+default = ["viewer"]
+# `inkuno view <file.html>`; off, the command only says the build has no viewer.
+viewer = ["dep:inkuno-view"]
 
 [dev-dependencies]
 inkuno-platform = { version = "0.0.1", path = "../inkuno-platform", features = ["test-support"] }

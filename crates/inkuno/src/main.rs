@@ -24,6 +24,7 @@ fn help_text() -> String {
          \u{20} inkuno                  open the app\n\
          \u{20} inkuno --check-config    validate the JSON config below, exit 0/1\n\
          \u{20} inkuno --help            show this text\n\
+         \u{20} inkuno view <file.html> [--root DIR]  browse local HTML pages in a window (read-only)\n\
          \n\
          commands, which need no window (`inkuno help` gives the options):\n\
          {top}\n\
@@ -186,10 +187,69 @@ fn export_json_once() {
     }
 }
 
+/// What `inkuno view` was asked: the page, and the folder its links may reach.
+#[derive(Debug, PartialEq, Eq)]
+struct ViewArgs {
+    file: std::path::PathBuf,
+    root: Option<std::path::PathBuf>,
+}
+
+/// Parses the words after `view`: one file, and `--root DIR` or `--root=DIR`. None when the
+/// file is missing or doubled, the root has no value or is given twice, or an option is unknown.
+fn parse_view(args: &[String]) -> Option<ViewArgs> {
+    let (mut file, mut root) = (None, None);
+    let mut words = args.iter();
+    while let Some(word) = words.next() {
+        if let Some(value) = word.strip_prefix("--root=") {
+            root.replace(value.to_string()).is_none().then_some(())?;
+        } else if word == "--root" {
+            root.replace(words.next()?.clone())
+                .is_none()
+                .then_some(())?;
+        } else if word.starts_with("--") {
+            return None;
+        } else {
+            file.replace(word.clone()).is_none().then_some(())?;
+        }
+    }
+    Some(ViewArgs {
+        file: file?.into(),
+        root: root.map(Into::into),
+    })
+}
+
+/// `inkuno view`: no config, no vault, no gpui. The exit code of the process.
+fn view(args: &[String]) -> i32 {
+    let Some(view) = parse_view(args) else {
+        eprintln!("usage: inkuno view <file.html> [--root <dir>]");
+        return 2;
+    };
+    #[cfg(feature = "viewer")]
+    {
+        match inkuno_view::run(&view.file, view.root.as_deref()) {
+            Ok(()) => 0,
+            Err(error) => {
+                eprintln!("inkuno view: {error}");
+                1
+            }
+        }
+    }
+    #[cfg(not(feature = "viewer"))]
+    {
+        let _ = view;
+        eprintln!("inkuno: this build has no viewer");
+        1
+    }
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // The HTML viewer takes its own arguments, and no config, vault or gpui.
+    if args.first().map(String::as_str) == Some("view") {
+        std::process::exit(view(&args[1..]));
+    }
     // Anything but the app's own arguments is the command line (`inkuno read`, `--vault DIR list`…),
     // without a window either. A mistyped one is reported, never opened as the app.
-    let args: Vec<String> = std::env::args().skip(1).collect();
     let own = args.iter().all(|arg| {
         matches!(arg.as_str(), "--help" | "-h" | "--check-config") || arg.starts_with("-psn_")
     });
@@ -214,4 +274,43 @@ fn main() {
     }));
     export_json_once();
     shell::run();
+}
+
+#[cfg(test)]
+mod view_args_tests {
+    use super::*;
+
+    fn parse(words: &[&str]) -> Option<ViewArgs> {
+        parse_view(&words.iter().map(|w| w.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn a_file_with_or_without_a_root() {
+        let bare = parse(&["a.html"]).unwrap();
+        assert_eq!((bare.file.to_str(), bare.root), (Some("a.html"), None));
+        for words in [
+            ["a.html", "--root", "d"],
+            ["--root", "d", "a.html"],
+            ["--root=d", "a.html", ""],
+        ] {
+            let words: Vec<&str> = words.into_iter().filter(|w| !w.is_empty()).collect();
+            let parsed = parse(&words).unwrap();
+            assert_eq!(parsed.file.to_str(), Some("a.html"));
+            assert_eq!(parsed.root.as_deref().and_then(|r| r.to_str()), Some("d"));
+        }
+    }
+
+    #[test]
+    fn bad_arguments_are_refused() {
+        for words in [
+            &[][..],
+            &["--root", "d"],
+            &["a.html", "--root"],
+            &["a.html", "b.html"],
+            &["a.html", "--root", "d", "--root=e"],
+            &["a.html", "--nope"],
+        ] {
+            assert_eq!(parse(words), None, "{words:?}");
+        }
+    }
 }
