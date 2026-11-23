@@ -31,11 +31,34 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # Restore the .deb files: the webkit2gtk closure is ~67 MB and a slow
+      # mirror once consumed the whole job timeout re-downloading it. The
+      # save is a separate step after install, because actions/cache's own
+      # post-step saves only when the job succeeds, and a timed-out job
+      # would never populate the cache.
+      - name: Restore apt packages
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
       - name: Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libfontconfig-dev libfreetype-dev \
+          # --no-install-recommends keeps the install to the listed packages
+          # (build-essential and pkg-config are listed explicitly).
+          mkdir -p ~/apt-archives/partial
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::Archives="$HOME/apt-archives" \
+            build-essential pkg-config libfontconfig-dev libfreetype-dev \
             libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libwebkit2gtk-4.1-dev
+          # The cache post-step runs as the runner user; apt ran under sudo.
+          sudo chown -R "$USER" ~/apt-archives
+      - name: Save apt packages
+        if: steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
       - name: Install pinned toolchain (rust-toolchain.toml)
         run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
@@ -76,12 +99,36 @@ jobs:
       SCCACHE_CACHE_SIZE: "2G"
     steps:
       - uses: actions/checkout@v4
+      # Restore the .deb files: the webkit2gtk closure is ~67 MB and a slow
+      # mirror once consumed the whole job timeout re-downloading it. The
+      # save is a separate step after install, because actions/cache's own
+      # post-step saves only when the job succeeds, and a timed-out job
+      # would never populate the cache.
+      - name: Restore apt packages
+        id: apt-cache
+        if: runner.os == 'Linux'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libfontconfig-dev libfreetype-dev \
+          # --no-install-recommends keeps the install to the listed packages
+          # (build-essential and pkg-config are listed explicitly).
+          mkdir -p ~/apt-archives/partial
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::Archives="$HOME/apt-archives" \
+            build-essential pkg-config libfontconfig-dev libfreetype-dev \
             libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libwebkit2gtk-4.1-dev
+          # The cache post-step runs as the runner user; apt ran under sudo.
+          sudo chown -R "$USER" ~/apt-archives
+      - name: Save apt packages
+        if: runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
       - name: Install pinned toolchain (rust-toolchain.toml)
         run: rustup show active-toolchain
       - name: Enable sccache
