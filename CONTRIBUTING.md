@@ -65,7 +65,7 @@ A visible feature updates:
 - the page of the guide on its subject, or a new page listed in `docs/user/src/SUMMARY.md`;
 - the README and the feature list of `docs/index.html`, only for a feature worth a line there.
 
-Write the guide in short sentences, one idea per bullet, keys in backticks, button and command names in bold. The README stays under about 120 lines: details go to the guide. Do not add screenshots; the GIF of the README is recorded by `scripts/record-demo.sh`.
+Write the guide in short sentences, one idea per bullet, keys in backticks, button and command names in bold. The README stays under about 120 lines: details go to the guide. README images are light-theme PNG screenshots of the running app in `docs/assets/screenshot-*.png`; no GIFs.
 
 CI builds the guide and checks every link (`.github/workflows/docs.yml`); pushes to `main` publish it with the website.
 
