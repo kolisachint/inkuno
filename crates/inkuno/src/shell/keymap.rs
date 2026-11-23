@@ -42,7 +42,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
             "Notes",
             vec![
                 k(&OpenPalette, tr("Find by name or text, create, filter by #tag", "Chercher par nom ou texte, créer, filtrer par #tag")),
-                k(&ToggleCommands, tr("Command palette: every command, found by what it does (also the logo at the foot of the sidebar, or > in the palette)", "Palette des commandes : toutes les commandes, trouvées par ce qu'elles font (aussi le logo en bas de la barre latérale, ou > dans la palette)")),
+                k(&ToggleCommands, tr("Command palette: every command, found by what it does (also > in the palette)", "Palette des commandes : toutes les commandes, trouvées par ce qu'elles font (aussi > dans la palette)")),
                 k(&editor::Find, tr("Find in the note", "Chercher dans la note")),
                 k(&editor::FindReplace, tr("Find and replace in the note", "Chercher et remplacer dans la note")),
                 k(&editor::FindNext, tr("Search bar: next match (Enter too)", "Barre de recherche : passage suivant (Entrée aussi)")),

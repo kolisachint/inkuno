@@ -228,8 +228,8 @@ fn the_lights_room_is_only_in_the_band_at_the_top_left(cx: &mut TestAppContext) 
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Every action the rail held still has a button, or a key that does the same: the commands logo, the tree,
-/// search, new note, the sidebar toggle and the title bar toggle. The band keeps three of them; with the bar
+/// Every action the rail held still has a button, or a key that does the same: the tree, search, new note,
+/// the sidebar toggle and the title bar toggle (the command palette is F10, or > in the palette). The band keeps three of them; with the bar
 /// hidden the band is gone and they move to the foot.
 #[gpui::test]
 fn every_former_rail_action_is_still_a_button(cx: &mut TestAppContext) {

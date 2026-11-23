@@ -12,7 +12,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | Keys | Action |
 |---|---|
 | `Ctrl+P` | Find by name or text, create, filter by \#tag |
-| `F10` / `Ctrl+Shift+P` | Command palette: every command, found by what it does (also the logo at the foot of the sidebar, or \> in the palette) |
+| `F10` / `Ctrl+Shift+P` | Command palette: every command, found by what it does (also \> in the palette) |
 | `Ctrl+F` | Find in the note |
 | `Ctrl+R` | Find and replace in the note |
 | `F3` | Search bar: next match (Enter too) |
