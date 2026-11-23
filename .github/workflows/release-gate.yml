@@ -1,5 +1,4 @@
-# Label-gated releases for Inkuno. New files use `inkuno` names; remaining
-# `bref` asset strings elsewhere are the rename crew's lane (see docs/releasing.md).
+# Label-gated releases for Inkuno. Asset names follow crates/inkuno/Cargo.toml.
 #
 # Merging a PR into main with exactly one rust:patch, rust:minor or rust:major
 # label bumps the crates/inkuno/Cargo.toml version, commits the bump, tags main (vX.Y.Z),

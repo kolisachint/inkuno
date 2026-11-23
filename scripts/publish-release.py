@@ -20,8 +20,7 @@ def expected_assets(root: Path, tag: str) -> list[str]:
     if app not in {"inkuno", "spot", "astrolabe"}:
         raise ValueError(f"unsupported application: {app}")
     # macOS + Linux only. Windows installers/zips and Arch packages were
-    # dropped from the pipeline; the rename crew owns the remaining `bref`
-    # asset strings, so names follow crates/inkuno/Cargo.toml instead of hardcoding them.
+    # dropped from the pipeline. Names follow crates/inkuno/Cargo.toml instead of being hardcoded.
     names = [f"{app}-macos.dmg", f"{app}-linux-x86_64.tar.gz"]
     return sorted(names)
 
