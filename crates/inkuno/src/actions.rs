@@ -41,6 +41,7 @@ actions!(
         ShowVersions,
         OpenVault,
         CopyAll,
+        OpenInViewer,
         ToggleHelp,
         OpenSettings,
         ToggleAssistant,

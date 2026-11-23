@@ -256,6 +256,17 @@ impl Render for Shell {
                     _ = this.keep_in_vault(cx);
                 }))
             })
+            // Offered only while the page shown is an HTML file (the palette lists what it can do).
+            .when(
+                self.pane()
+                    .displayed_path()
+                    .is_some_and(|file| platform::viewer::is_html(file)),
+                |d| {
+                    d.on_action(
+                        cx.listener(|this, _: &OpenInViewer, _, cx| this.open_in_viewer(cx)),
+                    )
+                },
+            )
             .on_action(cx.listener(|this, _: &Quit, window, cx| {
                 cx.stop_propagation();
                 if this.may_close_window(window, cx) {
