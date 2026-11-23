@@ -17,6 +17,7 @@ Ground rules for every version:
 | v1 | 2026-11-21 | `v1.html` | https://claude.ai/artifact/JoPD7oYaJom8B39UeCn8eV |
 | v2 | 2026-11-21 | `v2.html` | same link, artifact version 2 |
 | v3 | 2026-11-22 | `v3.html` | https://claude.ai/artifact/JM2rwBkZdjCzSuN3fhQTpM (the v1/v2 link keeps showing v2) |
+| v3-ios | 2026-11-23 | `v3-ios.html` | not yet published |
 
 The artifact link always shows the newest version; older versions stay in this folder and in the
 artifact's own version history.
@@ -193,3 +194,55 @@ Notes:
 
 - Palette commands for the block types and the change actions were added with items 7 and 18. They use the app's names.
 - The design log window still shows the v2 decisions. It is a record, not a spec.
+
+---
+
+## v3-ios: iPhone app (2026-11-23)
+
+Clickable iPhone prototype for the planned SwiftUI app (`v3-ios.html`, one self-contained file). Built from v3.html's tokens, icons and Markdown approach. Deferred features are built and clickable with a Deferred or Simplified chip; the **v1 scope** switch in the design log replaces them with their v1 fallback.
+
+### Owner decisions
+
+- iPhone only. The native app is SwiftUI, built later on inkuno-logic (Rust) through UniFFI. The assistant is deferred and not shown.
+- The vault is a folder picked in the Files app (iCloud Drive, Dropbox, Working Copy). It is the same folder as on the desktop.
+- Editor: live styling as on the desktop. Only the tapped line shows its Markdown. Accessory bar above the keyboard: / # [[ task, indent, outdent, undo, hide.
+- Home is the desktop empty-page cards. The file tree is push navigation with a nav bar and no tab bar; Scratch sits at the foot of the root. Settings is reached from Home.
+- Commands: pull down (or tap search) for a sheet with note search and > commands. Long-press a row or block for the context menu.
+- The right panel is one bottom sheet with four segments (Outline, Comments, Versions, Backlinks) and half and full detents.
+
+### Decisions and complexity
+
+| # | Area | iPhone design | Complexity | v1 suggestion | Why |
+|--|--|--|--|--|--|
+| 1 | Vault | Folder picked in the Files app; the same folder as on the desktop. Placeholder downloads and conflict copies | High | Keep (foundation) | Every note reads and writes through it; placeholders and conflicts are the hard part |
+| 2 | Live-styled editor | Rendered Markdown; only the tapped line shows its syntax. Accessory bar above the keyboard | High | Keep (core; spike first) | Biggest risk: TextKit 2 with the Rust parser, IME and undo |
+| 3 | Home cards, tree, Scratch, Today | Desktop empty-page cards; push tree; Scratch at the foot of the root; Today note | Low | Keep | Mostly layout; Today is the main entry point |
+| 4 | Pull-down palette and > commands | Pull down or tap search: note names, content matches, > commands in a sheet | Med | Keep | Replaces Ctrl+P; one search surface |
+| 5 | Accessory bar and slash sheet | / # [[ task, indent, outdent, undo above the keyboard; / opens a grid sheet | Low | Keep | Native input affordance |
+| 6 | Links, backlinks, tags, @date | [[ writes relative links; backlinks list; #tags; @today | Med | Keep (logic in inkuno-logic) | Same rules as the desktop; the logic is shared through the core |
+| 7 | Outline sheet | Outline segment of the one bottom sheet | Low | Keep | Same sheet as the other panel views |
+| 8 | Comments view and resolve | Comments segment; inline badge; resolve | Med | Keep | Comment syntax already decided (v2 Q1) |
+| 9 | Adding comments | Long-press a block, then Comment. No text selection on the phone | Med | Simplify (long-press only) | Selecting text on iPhone is costly; block comments cover v1 |
+| 10 | Versions list, save, restore | Versions segment; tap a version; restore asks first | Med | Keep | The history promise |
+| 11 | Compare diff screen | Green adds, red strikes, Restore | Med | Defer (restore confirm instead) | A second screen to build; the confirm covers the need |
+| 12 | Pending changes review sheet | Pill opens a sheet; swipe right accepts, left rejects | Med | Keep | Desktop agent edits need a review path on the phone |
+| 13 | Inline washes in the editor | Green and red washes on the changed lines | High | Defer (pill and sheet only) | Needs styled change spans in TextKit; the sheet covers review |
+| 14 | Tables render | Horizontal scroll inside the note | Med | Keep | Common in notes; reads well on a phone |
+| 15 | Table cell editing | Tap a cell: sheet with the cell text | High | Defer (raw Markdown on the live line) | Needs a cell model and sync; raw editing is safe |
+| 16 | Mermaid render | Flowchart as inline SVG; full-screen view | High | Defer (code block) | Needs the Rust renderer to output SVG |
+| 17 | Math render | Formula as styled HTML; full-screen view | High | Defer (code) | Needs a formula layout engine |
+| 18 | Context menus | Long-press on tree rows and blocks (replaces right-click) | Low | Keep | Native pattern |
+| 19 | Settings | Folder, appearance, editor, files, about. Reached from Home | Low | Keep | Plain list |
+| 20 | Theme set | Light, Dark, System and Quiet only | Low | Simplify (15 more themes later) | Keeps the theme code small for v1 |
+| 21 | Focus mode | Hides the navigation bar | Low | Defer | The phone is already focused |
+| 22 | Backup tar.gz | Row in Settings › Files | Low/Med | Defer | Files already sync through iCloud |
+| 23 | Trash restore UI | Settings › Files › Trash; palette command Restore from Trash | Low/Med | Keep (palette command) | Keeps undo for deleted notes |
+
+### Suggested v1 deferrals (owner to reconsider)
+
+- Compare screen: restore asks for confirmation instead.
+- Inline washes: the pill and the review sheet only.
+- Table cells: edit as Markdown on the live line.
+- Mermaid and math: show as code blocks.
+- Focus mode and Backup (tar.gz).
+- Theme set beyond Light, Dark, System and Quiet.
