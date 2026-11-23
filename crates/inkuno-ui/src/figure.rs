@@ -73,20 +73,59 @@ pub fn mermaid(source: &str, look: &Look) -> Result<String, String> {
     }
 }
 
+/// Room around a formula's box, in em: a superscript or a fraction reaches past the box the
+/// typesetter gives it, and an SVG is cut at its own edges.
+pub const FORMULA_ROOM: f32 = 0.3;
+
 /// The LaTeX formula `source`, in colour `rgb` and size `size` (pixels);
-/// `display` for a display formula. `None` if it is invalid.
+/// `display` for a display formula. `None` if it is invalid. The figure has `FORMULA_ROOM` em
+/// of room on each side of the formula's box.
 pub fn latex(source: &str, display: bool, rgb: [u8; 3], size: f32) -> Option<Figure> {
+    // The size is in points: 3/4 of a pixel.
+    let pt = size * 0.75;
+    let room = pt * FORMULA_ROOM;
     let svg = catch_unwind(|| {
         let options = SvgOptions {
-            // The size is in points: 3/4 of a pixel.
-            font_size_pt: Dim::parse(&format!("{:.2}", size * 0.75)),
+            font_size_pt: Dim::parse(&format!("{pt:.2}")),
             color: Color::rgb(rgb[0], rgb[1], rgb[2]),
             display,
         };
         latex_to_svg(source, &MathFont::stix_two_math().ok()?, &options).ok()
     })
     .ok()??;
-    sharpen(&svg)
+    let (w, h) = dims(&svg)?;
+    // The viewBox grows by `room` on each side and its origin moves back by it. Unitless, like
+    // the user units of the figure (a length in points would be scaled again inside it).
+    let (w, h) = (w + 2. * room, h + 2. * room);
+    let start = svg.find("<svg")?;
+    let head_end = start + svg[start..].find('>')?;
+    let body = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="{} {} {w} {h}""#,
+        -room, -room,
+    ) + &svg[head_end..];
+    let wrapped = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}pt" height="{h}pt" viewBox="0 0 {w} {h}">{body}</svg>"#
+    );
+    sharpen(&wrapped)
+}
+
+/// The width and height of an SVG, in points.
+fn dims(svg: &str) -> Option<(f32, f32)> {
+    let body = &svg[svg.find("<svg")?..];
+    let head = &body[..body.find('>')?];
+    let dim = |name: &str| {
+        let value = head
+            .split(&format!(" {name}=\""))
+            .nth(1)?
+            .split('"')
+            .next()?;
+        let (value, unit) = match value.strip_suffix("pt") {
+            Some(points) => (points, 1.),
+            None => (value.trim_end_matches("px"), 0.75),
+        };
+        Some(value.parse::<f32>().ok()? * unit)
+    };
+    Some((dim("width")?, dim("height")?))
 }
 
 /// The PNG image of an SVG, `scale` times larger than life, on a white background.
@@ -159,5 +198,7 @@ mod tests {
         let (svg, w, h) = latex(r"\frac{1}{2}", true, [255, 0, 0], 16.).unwrap();
         assert!(svg.starts_with("<svg") && svg.contains("<path") && w > 4. && h > 16.);
         assert!(latex(r"\frac{1}{", false, [0, 0, 0], 16.).is_none());
+        let (_, _, inline_h) = latex("x^2", false, [0, 0, 0], 16.).unwrap();
+        assert!(inline_h > 16. * 0.6);
     }
 }

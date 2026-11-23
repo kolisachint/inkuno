@@ -10,5 +10,6 @@ pub mod list_row;
 pub mod menu;
 pub mod nav_row;
 pub mod popover;
+pub mod scroll;
 pub mod segmented;
 pub mod switch;

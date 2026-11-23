@@ -60,6 +60,7 @@ impl Editor {
         });
         self.push_undo(true);
         self.damaged(&block);
+        self.replacing(&block, new.len());
         self.content.replace_range(block, &new);
         self.sel = sel;
         self.changed(cx);

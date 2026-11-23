@@ -177,17 +177,48 @@ impl Element for EditorElement {
 }
 
 impl Editor {
-    /// Whether the caret is in the code block that row `i` belongs to (its head to its foot).
-    fn code_live(&self, i: usize, cursor: usize) -> bool {
-        let head = (0..=i).rev().find(|&r| self.rows[r].head).unwrap_or(0);
-        let foot = (i..self.rows.len())
-            .find(|&r| self.rows[r].foot)
-            .unwrap_or(i);
-        let (a, b) = (
-            self.rows[head].start,
-            self.rows[foot].start + self.rows[foot].len,
-        );
-        (a..=b).contains(&cursor)
+    /// The chip of a folded code block: its language, on a small plate at the top right of the block.
+    /// The word-wrap switch: a quiet chip with a return arrow, dark while the block wraps.
+    fn paint_wrap_chip(&self, bounds: Bounds<Pixels>, on: bool, window: &mut Window, cx: &mut App) {
+        let t = self.theme;
+        let s = t.size / crate::logic::prefs::Prefs::SIZE;
+        window.paint_quad(fill(bounds, t.gutter).corner_radii(Corners::all(px(4. * s))));
+        let run = TextRun {
+            len: "↩".len(),
+            font: font(sans()),
+            color: if on { t.text } else { t.soft },
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let glyph =
+            window
+                .text_system()
+                .shape_line(SharedString::from("↩"), px(13. * s), &[run], None);
+        let at = bounds.center() - point(glyph.width / 2., px(8. * s));
+        glyph.paint(at, px(16. * s), window, cx).ok();
+    }
+
+    fn paint_chip(&self, row: &Row, window: &mut Window, cx: &mut App) {
+        let t = self.theme;
+        let s = t.size / crate::logic::prefs::Prefs::SIZE;
+        let bounds = self.chip_bounds(row);
+        window.paint_quad(fill(bounds, t.gutter).corner_radii(Corners::all(px(4. * s))));
+        let label = self.chip_label(row);
+        let run = TextRun {
+            len: label.len(),
+            font: font(sans()),
+            color: t.soft,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let name =
+            window
+                .text_system()
+                .shape_line(SharedString::from(label), px(11. * s), &[run], None);
+        let at = bounds.origin + point(px(8. * s), px(2. * s));
+        name.paint(at, px(16. * s), window, cx).ok();
     }
 
     pub(super) fn paint(&self, focused: bool, window: &mut Window, cx: &mut App) {
@@ -218,12 +249,6 @@ impl Editor {
             let text_top = top + row.pad;
             let end = row.start + row.len;
             let has_cursor = (row.start..=end).contains(&cursor);
-            // Quiet: a fenced block shows its fences as source only while the caret is in it; off it, the
-            // opening one shows the language, the closing one nothing.
-            let fence_hidden = t.quiet
-                && row.kind == Kind::Fence
-                && row.gutter > px(0.)
-                && !self.code_live(i, cursor);
             let clear = t.px(3.);
             let block = |x: Pixels, y: Pixels, w: Pixels, h: Pixels| {
                 Bounds::new(point(o.x + x, y), size(w, h))
@@ -282,7 +307,8 @@ impl Editor {
                         num.paint(point(at, text_top), row.lh, window, cx).ok();
                     }
                 }
-                Kind::Code | Kind::Fence => {
+                // A diagram off the caret is its view alone: no band behind it.
+                Kind::Code | Kind::Fence if !row.fold.whole() => {
                     let (y, h) = shape_span(row, top, clear);
                     window.paint_quad(
                         fill(block(px(0.), y, w, h), t.code_bg)
@@ -291,10 +317,8 @@ impl Editor {
                 }
                 Kind::Quote => {
                     // A callout is its tinted shape alone, lined up with the code blocks; a plain quote keeps a thin neutral bar.
-                    if let Some(tint) = row.tint
-                        && t.quiet
-                    {
-                        // Quiet: 7 % of the tint, a 1 px line of 22 %, and the alert's icon on its first line (not live).
+                    if let Some(tint) = row.tint {
+                        // 7 % of the tint, a 1 px line of 22 %, and the alert's icon on its first line (not live).
                         let s = t.size / crate::logic::prefs::Prefs::SIZE;
                         let (y, h) = callout_span(row, top, CALLOUT_ROOM * s);
                         let one = px(1.);
@@ -339,12 +363,6 @@ impl Editor {
                                 )
                                 .ok();
                         }
-                    } else if let Some(tint) = row.tint {
-                        let (y, h) = shape_span(row, top, clear);
-                        window.paint_quad(
-                            fill(block(px(-12.), y, w + px(24.), h), tint.opacity(0.1))
-                                .corner_radii(corners(t.band(), row)),
-                        );
                     } else {
                         // One bar per level of the quote, 10 px apart: the outer one at -14 px.
                         for level in 0..row.bars() {
@@ -633,7 +651,18 @@ impl Editor {
                     }
                 }
                 if let Some(grid) = &row.grid {
-                    grid.paint_front(table_top, row.height - row.gap, row.lh, &t, window, cx);
+                    // Scrolled sideways, any column can be under the word-wrap switch: the header's
+                    // text stops short of it.
+                    let under_switch =
+                        (grid.is_header() && grid.total() > wide + px(0.5)).then(|| ContentMask {
+                            bounds: Bounds::new(
+                                point(left, top),
+                                size(wide - COPY_SIZE - px(8.), row.height),
+                            ),
+                        });
+                    window.with_content_mask(under_switch, |window| {
+                        grid.paint_front(table_top, row.height - row.gap, row.lh, &t, window, cx);
+                    });
                 } else {
                     // The lead is drawn even on an empty line: a list item's bullet or box is there.
                     let lead = row.shaped.lead.as_ref();
@@ -663,13 +692,9 @@ impl Editor {
                             let (radius, fill, edge) = match shape {
                                 Bullet::Disc => (side / 2., t.text, px(0.)),
                                 Bullet::Ring => (side / 2., Hsla::transparent_black(), px(1.)),
-                                // Quiet's square has a 1 px radius at size 15.
+                                // The square has a 1 px radius at size 15.
                                 Bullet::Square => (
-                                    if t.quiet {
-                                        px(t.size / crate::logic::prefs::Prefs::SIZE)
-                                    } else {
-                                        px(0.)
-                                    },
+                                    px(t.size / crate::logic::prefs::Prefs::SIZE),
                                     t.text,
                                     px(0.),
                                 ),
@@ -688,23 +713,15 @@ impl Editor {
                             // Centred on the x-height of the first line: the middle of the lowercase letters is about
                             // a tenth of an em below the middle of the line, in Quiet as elsewhere.
                             let mid = text_top + row.lh * 0.5 + px(t.size * 0.1);
-                            // Quiet: the box sits on whole pixels, so that its 1 px border is one line, not two.
+                            // The box sits on whole pixels, so that its 1 px border is one line, not two.
                             let origin = point(left + check.x.start, mid - side / 2.);
-                            let origin = if t.quiet {
-                                point(
-                                    px(f32::from(origin.x).round()),
-                                    px(f32::from(origin.y).round()),
-                                )
-                            } else {
-                                origin
-                            };
+                            let origin = point(
+                                px(f32::from(origin.x).round()),
+                                px(f32::from(origin.y).round()),
+                            );
                             let bounds = Bounds::new(origin, size(side, side));
-                            let (radius, edge) = if t.quiet {
-                                let scale = t.size / crate::logic::prefs::Prefs::SIZE;
-                                (px(5. * scale), px(scale))
-                            } else {
-                                (px(3.), px(t.size * 0.09375))
-                            };
+                            let scale = t.size / crate::logic::prefs::Prefs::SIZE;
+                            let (radius, edge) = (px(5. * scale), px(scale));
                             if check.done {
                                 window.paint_quad(quad(
                                     bounds,
@@ -718,11 +735,7 @@ impl Editor {
                                 let at = |x: f32, y: f32| {
                                     point(bounds.origin.x + side * x, bounds.origin.y + side * y)
                                 };
-                                let tick = if t.quiet {
-                                    [(0.13, 0.53), (0.40, 0.79), (0.89, 0.21)]
-                                } else {
-                                    [(0.24, 0.52), (0.43, 0.7), (0.77, 0.3)]
-                                };
+                                let tick = [(0.13, 0.53), (0.40, 0.79), (0.89, 0.21)];
                                 let mut mark = gpui::PathBuilder::stroke(edge * 1.3);
                                 mark.move_to(at(tick[0].0, tick[0].1));
                                 mark.line_to(at(tick[1].0, tick[1].1));
@@ -731,12 +744,8 @@ impl Editor {
                                     window.paint_path(path, gpui::white());
                                 }
                             } else {
-                                // Quiet's box is filled with the page; the other themes' is left open.
-                                let fill = if t.quiet {
-                                    t.bg
-                                } else {
-                                    Hsla::transparent_black()
-                                };
+                                // The box is filled with the page.
+                                let fill = t.bg;
                                 window.paint_quad(quad(
                                     bounds,
                                     radius,
@@ -748,42 +757,31 @@ impl Editor {
                             }
                         }
                     }
-                    if let Some(line) = row.shaped.line.as_ref().filter(|_| !fence_hidden) {
+                    if let Some(line) = row.shaped.line.as_ref().filter(|_| !row.src_hidden()) {
                         let at = lead.map_or(px(0.), |l| l.width);
-                        line.paint(
-                            point(o.x - row.dx + at, text_top),
-                            row.lh,
-                            TextAlign::Left,
-                            None,
-                            window,
-                            cx,
-                        )
-                        .ok();
+                        // A code line scrolls under its gutter, which stays in view: its text is cut there.
+                        let mask = (row.kind == Kind::Code).then(|| ContentMask {
+                            bounds: Bounds::new(
+                                point(o.x + row.gutter, top),
+                                size(self.width - row.gutter, row.height),
+                            ),
+                        });
+                        window.with_content_mask(mask, |window| {
+                            line.paint(
+                                point(o.x - row.dx + at, text_top),
+                                row.lh,
+                                TextAlign::Left,
+                                None,
+                                window,
+                                cx,
+                            )
+                            .ok();
+                        });
                     }
                 }
-                if fence_hidden && row.opens {
-                    let info = md::fence_of(&self.content[row.start..end])
-                        .map(|(_, info)| info.trim().to_string())
-                        .unwrap_or_default();
-                    if !info.is_empty() {
-                        let run = TextRun {
-                            len: info.len(),
-                            font: font(sans()),
-                            color: t.soft,
-                            background_color: None,
-                            underline: None,
-                            strikethrough: None,
-                        };
-                        let s = t.size / crate::logic::prefs::Prefs::SIZE;
-                        let name = window.text_system().shape_line(
-                            SharedString::from(info),
-                            px(11. * s),
-                            &[run],
-                            None,
-                        );
-                        let at = o.x + px(14. * s) + row.gutter;
-                        name.paint(point(at, text_top), row.lh, window, cx).ok();
-                    }
+                // Off the caret, a code block's language shows on a chip at its top right.
+                if row.opens && row.fold.edges() {
+                    self.paint_chip(row, window, cx);
                 }
                 if focused && sel.is_empty() && has_cursor {
                     let p = row.pos(cursor - row.start);
@@ -801,18 +799,58 @@ impl Editor {
                     }
                 }
             });
+            // Inline formulas: each figure over the gap its source left in the line, centred on the math axis.
+            for inline in &row.inline {
+                let p = row.pos(inline.at);
+                let top = text_top + p.y + row.lh / 2. + px(0.2 * t.size) - inline.size.height / 2.;
+                let at = block(
+                    p.x - inline.room,
+                    top,
+                    inline.size.width,
+                    inline.size.height,
+                );
+                window
+                    .paint_image(at, Corners::default(), inline.image.clone(), 0, false)
+                    .ok();
+            }
+            // Footnote references off the caret: their numbers, raised over the gap their source left.
+            for foot in &row.shaped.foots {
+                let p = row.pos(foot.at);
+                let run = TextRun {
+                    len: foot.number.len(),
+                    font: font(sans()),
+                    color: t.accent,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                let number = window.text_system().shape_line(
+                    SharedString::from(foot.number.clone()),
+                    foot.size,
+                    &[run],
+                    None,
+                );
+                // The body's baseline: `paint` centres the text's ascent and descent in the line height.
+                let baseline = match row.shaped.line.as_ref().map(|l| &l.unwrapped_layout) {
+                    Some(body) => {
+                        text_top + p.y + (row.lh - body.ascent - body.descent) / 2. + body.ascent
+                    }
+                    None => text_top + p.y + row.lh * 0.8,
+                };
+                let at = point(o.x + p.x, baseline - foot.raise - number.ascent);
+                number
+                    .paint(at, number.ascent + number.descent, window, cx)
+                    .ok();
+            }
             if let Some((image, s)) = &row.image {
                 let at = block(px(0.), o.y + row.image_top(), s.width, s.height);
-                // Quiet: radius 8 and a 1 px ring over the edge (both at size 15).
-                let radius = if t.quiet {
-                    px(8. * t.size / crate::logic::prefs::Prefs::SIZE)
-                } else {
-                    px(6.)
-                };
+                // Radius 8 and a 1 px ring over the edge (both at size 15).
+                let radius = px(8. * t.size / crate::logic::prefs::Prefs::SIZE);
                 window
                     .paint_image(at, Corners::all(radius), image.clone(), 0, false)
                     .ok();
-                if t.quiet {
+                // A picture keeps its ring; a diagram or a formula has none.
+                if !row.drawn {
                     window.paint_quad(quad(
                         at,
                         radius,
@@ -822,6 +860,27 @@ impl Editor {
                         BorderStyle::default(),
                     ));
                 }
+            } else if let Some(frame) = &row.frame {
+                let at = block(
+                    px(0.),
+                    o.y + row.image_top(),
+                    frame.size.width,
+                    frame.size.height,
+                );
+                window.paint_quad(
+                    fill(at, t.panel)
+                        .corner_radii(px(8.))
+                        .border_widths(px(1.))
+                        .border_color(t.border),
+                );
+                label(&frame_text(frame), t.soft, window)
+                    .paint(
+                        point(o.x + px(10.), o.y + row.image_top() + px(8.)),
+                        BROKEN,
+                        window,
+                        cx,
+                    )
+                    .ok();
             } else if let Some(said) = row.broken {
                 label(said, t.soft, window)
                     .paint(point(o.x, o.y + row.image_top()), BROKEN, window, cx)
@@ -909,8 +968,35 @@ impl Editor {
                 .paint(point(o.x + px(8.), o.y + px(3.)), px(22.), window, cx)
                 .ok();
         }
-        for thumb in &self.thumbs {
-            window.paint_quad(fill(*thumb, t.dim.opacity(0.5)).corner_radii(px(1.5)));
+        // A thin scrollbar under each table too wide for the page; stronger under the pointer.
+        for bar in &self.thumbs {
+            // Stronger while its thumb is dragged, and under the pointer.
+            let dragged = self.bar_drag.is_some_and(|(start, _)| start == bar.start);
+            let alpha = if dragged {
+                0.9
+            } else if bar.frame.contains(&self.pointer) {
+                0.7
+            } else {
+                0.4
+            };
+            window.paint_quad(fill(bar.thumb, t.dim.opacity(alpha)).corner_radii(px(3.)));
+        }
+        // Word-wrap switches: of each fenced code block (off by default), of each table (on by default).
+        for row in self.rows.iter().filter(|r| self.wraps_code(r)) {
+            let bounds = self.view_bounds(row);
+            if bounds.bottom() < self.viewport.top() || bounds.top() > self.viewport.bottom() {
+                continue;
+            }
+            let on = self.wraps.get(&row.start).copied().unwrap_or(false);
+            self.paint_wrap_chip(bounds, on, window, cx);
+        }
+        for (range, frame) in &self.tables {
+            let bounds = Self::table_wrap_bounds(frame);
+            if bounds.bottom() < self.viewport.top() || bounds.top() > self.viewport.bottom() {
+                continue;
+            }
+            let on = self.wraps.get(&range.start).copied().unwrap_or(true);
+            self.paint_wrap_chip(bounds, on, window, cx);
         }
         // The line where files dragged onto the note would land.
         // The edge of each table: a hairline in the header's tint, rounded like it, over the lines.
@@ -1262,57 +1348,6 @@ impl Editor {
                 cx,
             )
             .ok();
-        }
-        // Quiet's list is a popover drawn by `completion_menu`; the other themes keep this one.
-        if focused
-            && !t.quiet
-            && let Some((_, items)) = self.completion()
-        {
-            let chosen = self.ac_index.min(items.len() - 1);
-            // The list follows the choice when it goes beyond what it shows.
-            let first = chosen.saturating_sub(SHOWN - 1);
-            let shown = &items[first..items.len().min(first + SHOWN)];
-            let item_h = px(28.);
-            let panel = size(px(280.), item_h * shown.len() as f32 + px(8.));
-            let Some(at) = self.popup_at(panel) else {
-                return;
-            };
-            window.paint_quad(quad(
-                Bounds::new(at, panel),
-                px(8.),
-                t.panel,
-                px(1.),
-                t.border,
-                BorderStyle::default(),
-            ));
-            for (i, choice) in shown.iter().enumerate() {
-                let y = at.y + px(4.) + item_h * i as f32;
-                if first + i == chosen {
-                    let hl = Bounds::new(point(at.x + px(4.), y), size(px(272.), item_h));
-                    window.paint_quad(fill(hl, t.selection).corner_radii(px(5.)));
-                }
-                // The label on the left, its detail on the right, against the edge: a label too
-                // long is cut before it, never drawn under it.
-                let mut write = |text: &str, detail: &str| {
-                    let detail = label(detail, t.soft, window);
-                    let right = at.x + panel.width - px(12.) - detail.width;
-                    let room = right - at.x - px(24.);
-                    let (mut cut, mut main) = (text.to_string(), label(text, t.text, window));
-                    while main.width > room && cut.pop().is_some() {
-                        main = label(&format!("{}…", cut.trim_end()), t.text, window);
-                    }
-                    main.paint(point(at.x + px(12.), y + px(4.)), px(20.), window, cx)
-                        .ok();
-                    detail
-                        .paint(point(right, y + px(4.)), px(20.), window, cx)
-                        .ok();
-                };
-                match choice {
-                    Choice::Name(name) => write(name, ""),
-                    Choice::Command((name, en, fr, ..)) => write(tr(en, fr), &format!("/{name}")),
-                    Choice::Date(en, fr, date) => write(tr(en, fr), &crate::lang::date_name(*date)),
-                }
-            }
         }
     }
 }

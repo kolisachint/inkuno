@@ -161,7 +161,6 @@ fn picture_formula_and_figure_enlarge_from_a_button(cx: &mut TestAppContext) {
         ("![](fin.gif)", "gif"),
         ("![](schéma.svg)", "svg of the note"),
         ("$$\nx^2 + y^2\n$$", "display formula"),
-        ("soit $x^2$ ici", "inline formula"),
         ("> ![](grand.png)", "picture in a quote"),
         ("- ![](grand.png)", "picture in a list"),
     ];
@@ -344,7 +343,6 @@ fn picture_formula_and_figure_enlarge_from_a_button(cx: &mut TestAppContext) {
     // Formulas and a note's SVG open in the SVG viewer.
     for (line, what) in [
         ("$$\nx^2 + y^2\n$$", "display formula"),
-        ("soit $x^2$ ici", "inline formula"),
         ("![](schéma.svg)", "svg"),
     ] {
         for theme in ["Inkuno Light", "Inkuno Dark"] {

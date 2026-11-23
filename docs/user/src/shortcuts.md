@@ -126,7 +126,6 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 |  | Theme… |
 | `Ctrl+P › font` | Font of the app / of the code |
 | `Ctrl+P › page width` | Width of the text column: narrow, normal, wide, full |
-| `Ctrl+P › wide tables` | A table wider than the text: in the column, or centered and wider |
 | `Ctrl+P › animations` | Short fades (about 0.13 s) when the panel, the formatting bar or a folder opens; none on typing, scrolling or hover. Off: everything is instant (motion=off in settings) |
 | `Ctrl+=` / `Ctrl++` | Bigger text; the panel, menus and help follow, up to 150 % |
 | `Ctrl+-` | Smaller text; the interface follows, down to 85 % |
@@ -187,7 +186,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | Drop files | Drag files or folders from your file manager onto a note (a line shows where) or onto the tree (the folder under the pointer): they are copied, never overwritten, and a note gets a link per item |
 | `Double` / triple click | Select a word / a line; drag to extend by words / lines |
 | `` ```mermaid `` | Diagram, under its block; its magnifier shows it full size |
-| $x^2$  $$…$$ | LaTeX formula, under its line |
+| $x^2$  $$…$$ | LaTeX formula, in the sentence (\`$$…$$\`: under its line) |
 | -\> != \<= =\> | Shown as → ≠ ≤ ⇒ |
 
 ## Editing

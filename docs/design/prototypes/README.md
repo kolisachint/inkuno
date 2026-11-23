@@ -159,7 +159,7 @@ tests green except the two sandbox-as-root tests, screenshots against `v2.html`)
   - the remaining CommonMark gaps listed in `markdown_renderer.md` §11.5 (indented code and pipe-less
     tables need a block-level classifier).
 - **Screenshots:** `scripts/visual-check.sh` renders every fixture on Xvfb; pin a theme by writing
-  `theme=Quiet Dark` (or any theme name) into the temporary config it creates.
+  `theme=Dark` (or any theme name) into the temporary config it creates.
 
 ---
 

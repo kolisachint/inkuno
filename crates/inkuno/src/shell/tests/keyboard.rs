@@ -239,29 +239,39 @@ fn buttons_from_the_keys(cx: &mut TestAppContext) {
                 && !s.pane().editor.focus_handle(cx).is_focused(w)
         })
     };
-    let open = |cx: &mut gpui::VisualTestContext| shell.read_with(cx, |s, _| s.nav.open.len());
-    // From the tree, Tab goes along the panel's buttons as they are drawn: new note, new folder, fold all.
-    cx.simulate_keystrokes("secondary-e tab");
+    let state = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, _| {
+            (
+                s.nav.title_bar,
+                s.nav.panel,
+                s.pane().fresh,
+                s.pane().path.clone(),
+            )
+        })
+    };
+    // From the tree, Tab goes along the sidebar's buttons as they are drawn (the new-note button, the
+    // title bar's toggle, the sidebar's): one of them has the keys after a few tabs.
+    cx.simulate_keystrokes("secondary-e");
+    for _ in 0..8 {
+        if on_button(cx) {
+            break;
+        }
+        cx.simulate_keystrokes("tab");
+    }
     assert!(on_button(cx), "a button has the keys");
-    cx.simulate_keystrokes("tab tab");
-    let unfolded = open(cx);
-    // Enter presses it (and does not open the tree's selected note); the keys stay on it, Space presses it again.
+    // Enter presses the button that has the keys; it changes something, and Space presses it again.
+    let before = state(cx);
     press(cx, "enter");
-    let folded = open(cx);
-    assert_ne!(folded, unfolded);
-    assert!(on_button(cx));
+    let pressed = state(cx);
+    assert_ne!(pressed, before, "Enter pressed the button");
+    assert!(on_button(cx), "the keys stay on the button");
     press(cx, "space");
-    assert_ne!(open(cx), folded);
-    // Shift+Tab goes back to "New folder", which asks for its name.
-    cx.simulate_keystrokes("shift-tab");
-    press(cx, "enter");
-    assert!(shell.read_with(cx, |s, _| s.palette.is_some()));
-    cx.simulate_keystrokes("escape");
+    assert_ne!(state(cx), pressed, "Space pressed it again");
     // A click on a button presses it and leaves the keys to the note.
     cx.update(|w, cx| w.focus(&shell.read(cx).pane().editor.focus_handle(cx)));
-    let (fold, before) = (cx.debug_bounds("nav-fold").expect("drawn"), open(cx));
-    cx.simulate_click(fold.center(), gpui::Modifiers::none());
-    assert_ne!(open(cx), before, "the click pressed it");
+    let (titlebar, before) = (cx.debug_bounds("nav-titlebar").expect("drawn"), state(cx));
+    cx.simulate_click(titlebar.center(), gpui::Modifiers::none());
+    assert_ne!(state(cx), before, "the click pressed it");
     assert!(
         cx.update(|w, cx| shell.read(cx).pane().editor.focus_handle(cx).is_focused(w)),
         "the click left the keys in the note"

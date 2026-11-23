@@ -7,14 +7,31 @@
 
 | Role | Face | Size (px @1x) | Line-height / spacing |
 |------|------|---------------|------------------------|
-| UI / body / headings / nav / metadata | Inter (four static cuts bundled: regular, italic, bold, bold italic) | body 15 | 22/15 (≈1.47) |
+| Body (paragraph, list item, task, quote line) | Inter Regular | 15 | 23/15 (≈1.53) |
 | Block gap | — | 9 px above each body block (paragraph, list item, quote or callout line) | — |
-| H1 / H2 / H3 | Inter, bold / bold / semibold | 28 / 21 / 18 | 1.3 / 1.3 / 1.33 |
-| H4 / H5–H6 | Inter, semibold | 16 / 15 | 1.4 / 1.47 |
-| Code (blocks + inline) | JetBrains Mono (variable regulars; static bold and bold italic) | 13 | 20/13 (≈1.54) |
-| Table cells | JetBrains Mono | 14 | 20/14 |
+| H1 | Inter Bold (700) | 26 | 1.25 |
+| H2 | Inter SemiBold (600) | 21.5 | 1.3 |
+| H3 | Inter SemiBold (600) | 18 | 1.3 |
+| H4 | Inter SemiBold (600) | 16 | 1.35 |
+| H5 / H6 | Inter Medium (500), soft colour | 15 | 1.35 |
+| Inline code (in body) | JetBrains Mono Regular | 15 (same as the line: see below) | follows the line |
+| Inline code (in a heading) | JetBrains Mono Regular | the heading's size | follows the heading |
+| Code blocks | JetBrains Mono Regular | 13 | 20/13 (≈1.54) |
+| Table cells, table rows (source) | Inter Regular | 14 | 20/14 (≈1.43) |
+| Table header | Inter SemiBold (600) | 14 | 20/14 |
+| Quote, list, task, footnote text | Inter Regular, as body | 15 | as body |
+| Metadata, front matter, footnote lines | Inter Regular, `soft` token | 13 | 20/13 |
 | Metadata (counts, hints) | Inter | 12 | `soft` token, WCAG AA 4.5:1 |
 | Measure | — | **800 px** at body 15 | follows zoom (`Page::measure`) |
+
+Sizes scale with the text size preference (`t.size / 15`). Weights are the static Inter cuts;
+gpui 0.2.2 has no letter-spacing, so headings get no tracking.
+
+**Inline code at a smaller size is not done.** gpui 0.2.2 shapes a whole line at one font size
+(`TextRun` carries no size), so a code span inside body text draws at the line's 15 px. Its
+x-height is about the same as Inter's at equal px (JetBrains Mono's is slightly larger), so it
+reads correctly, but a true 0.87x span needs a per-run size from gpui or splitting the line.
+Headings already scale their code spans with the heading.
 
 Principles: variable fonts, **bundled locally** with OFL licence notices
 (no download, no system dependency), **user-changeable later** via the
@@ -26,12 +43,13 @@ existing `font` / `mono` prefs overrides (`apply_fonts`, `crates/inkuno-ui/src/a
 - Bundled + default faces are **Inter** (text, body, headings and page titles) and
   **JetBrains Mono** (code blocks, inline code, and any monospace use), both under
   `crates/inkuno-ui/assets/fonts/` with OFL notices.
-  - Inter: four static cuts (`Inter-Regular.otf`, `Inter-Italic.otf`, `Inter-Bold.otf`,
-    `Inter-BoldItalic.otf`). gpui 0.2 cannot embolden, so the bolds are static files.
+  - Inter: eight static cuts (`Inter-Regular.otf`, `Inter-Italic.otf`, `Inter-Medium.otf`,
+    `Inter-MediumItalic.otf`, `Inter-SemiBold.otf`, `Inter-SemiBoldItalic.otf`, `Inter-Bold.otf`,
+    `Inter-BoldItalic.otf`; Inter 3.19 desktop OTFs). gpui 0.2 cannot pick a weight from a variable font, so each weight is a static file.
   - JetBrains Mono: variable regulars (`JetBrainsMono[wght].ttf`,
     `JetBrainsMono-Italic[wght].ttf`) plus static `JetBrainsMono-Bold.ttf` and
     `JetBrainsMono-BoldItalic.ttf`.
-- All ten files are listed in `FONT_FILES` (`crates/inkuno-ui/src/assets.rs:26`) and
+- All fourteen files are listed in `FONT_FILES` (`crates/inkuno-ui/src/assets.rs:26`) and
   registered by `init_fonts` (`crates/inkuno-ui/src/assets.rs:53`).
 - Exposed as `sans()` / `mono()` (`crates/inkuno-ui/src/assets.rs:39`, `:43`). Titles draw
   with `sans()` in semibold (`crates/inkuno/src/views/editor/layout.rs:656`); code spans use `mono()`.

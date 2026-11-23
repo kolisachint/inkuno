@@ -6,17 +6,9 @@ use gpui::{Div, Hsla, InteractiveElement, Stateful, div, prelude::*, svg};
 use super::kbd::keycaps;
 use crate::theme::Theme;
 
-/// A row of a menu: 32 px with a 5 px side margin, 8 px padding and a 6 px radius in Quiet; the
-/// interface's 30 px row with 6 px margin elsewhere. The hover and the selection are the caller's.
+/// A row of a menu: 32 px with a 5 px side margin, 8 px padding and a 6 px radius. The hover and
+/// the selection are the caller's.
 pub fn menu_row(t: Theme) -> Div {
-    if !t.quiet {
-        return div()
-            .h(t.px(30.))
-            .mx(t.px(6.))
-            .px_2()
-            .rounded(t.small())
-            .flex_none();
-    }
     div()
         .h(t.px(32.))
         .mx(t.px(5.))

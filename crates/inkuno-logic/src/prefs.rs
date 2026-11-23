@@ -8,9 +8,10 @@ pub struct Prefs {
     pub mono: String,
     /// Size of the note's body text, in pixels.
     pub size: f32,
-    /// Width of the text column and placement of wide tables (keys of `editor::Page` and
-    /// `editor::Wide`); empty: the default choice.
+    /// Width of the text column (a key of `editor::Page`); empty: the default choice.
     pub page: String,
+    /// The former "Wide tables" choice. Wide blocks now always stay in the text column: the key is
+    /// still read and written back so that an older settings file loads and keeps its line.
     pub wide: String,
     /// Formatting bar at the bottom of the note: `off` hides it, anything else shows it.
     pub bar: String,
@@ -20,6 +21,12 @@ pub struct Prefs {
     pub author: String,
     /// Command that starts the assistant; empty: `hoocode` (see `assistant_command`).
     pub assistant: String,
+    /// Line spacing of the text: `compact`, `normal`, `relaxed` or `loose` (see `leading`); empty: normal.
+    pub spacing: String,
+    /// Line numbers of a code block: `off` hides them, anything else shows them.
+    pub gutter: String,
+    /// The tabs of last time come back on start: `off` starts with an empty window.
+    pub restore: String,
 }
 
 impl Prefs {
@@ -30,6 +37,19 @@ impl Prefs {
     pub const VERSION: u32 = 2;
     /// The assistant's command when the setting is empty.
     pub const ASSISTANT: &'static str = "hoocode";
+
+    /// The keys of the line spacing, from the most compact to the loosest.
+    pub const SPACINGS: [&'static str; 4] = ["compact", "normal", "relaxed", "loose"];
+
+    /// The multiplier of every line height for the spacing key: empty or unknown is normal (1).
+    pub fn leading(&self) -> f32 {
+        match self.spacing.trim() {
+            "compact" => 0.9,
+            "relaxed" => 1.15,
+            "loose" => 1.3,
+            _ => 1.,
+        }
+    }
 
     /// The command the assistant starts: the setting, trimmed; `hoocode` when it is empty.
     pub fn assistant_command(&self) -> &str {
@@ -52,11 +72,22 @@ impl Prefs {
             motion: String::new(),
             author: String::new(),
             assistant: String::new(),
+            spacing: String::new(),
+            gutter: String::new(),
+            restore: String::new(),
         };
         for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
             match key {
                 "prefs" => version = value.parse().unwrap_or(0),
-                "theme" => prefs.theme = value.into(),
+                // Settings written before the rename still name the Quiet themes.
+                "theme" => {
+                    prefs.theme = match value {
+                        "Quiet Dark" => "Dark",
+                        "Quiet Light" => "Light",
+                        other => other,
+                    }
+                    .into()
+                }
                 "font" => prefs.font = value.into(),
                 "mono" => prefs.mono = value.into(),
                 "size" => {
@@ -72,6 +103,9 @@ impl Prefs {
                 "motion" => prefs.motion = value.into(),
                 "author" => prefs.author = value.into(),
                 "assistant" => prefs.assistant = value.into(),
+                "spacing" => prefs.spacing = value.into(),
+                "gutter" => prefs.gutter = value.into(),
+                "restore" => prefs.restore = value.into(),
                 _ => {}
             }
         }
@@ -99,6 +133,9 @@ impl Prefs {
             ("motion", &self.motion),
             ("author", &self.author),
             ("assistant", &self.assistant),
+            ("spacing", &self.spacing),
+            ("gutter", &self.gutter),
+            ("restore", &self.restore),
         ] {
             if !value.is_empty() {
                 text.push_str(&format!("{key}={value}\n"));
@@ -171,5 +208,48 @@ mod tests {
             Prefs::parse("assistant=  \n").assistant_command(),
             "hoocode"
         );
+    }
+
+    #[test]
+    fn line_spacing_gutter_and_restore_round_trip() {
+        // Absent until chosen: normal spacing, numbered code, tabs restored.
+        let plain = Prefs::parse("theme=Quiet\n");
+        assert_eq!(
+            (
+                plain.spacing.as_str(),
+                plain.gutter.as_str(),
+                plain.restore.as_str()
+            ),
+            ("", "", "")
+        );
+        assert_eq!(plain.leading(), 1.);
+        assert!(
+            !plain.to_text().contains("spacing=")
+                && !plain.to_text().contains("gutter=")
+                && !plain.to_text().contains("restore=")
+        );
+        // Each key is kept and written back; the multipliers of the four choices.
+        let set = Prefs::parse("spacing=relaxed\ngutter=off\nrestore=off\n");
+        assert_eq!(Prefs::parse(&set.to_text()), set);
+        assert!(
+            set.to_text().contains("spacing=relaxed\n")
+                && set.to_text().contains("gutter=off\n")
+                && set.to_text().contains("restore=off\n")
+        );
+        assert_eq!(set.leading(), 1.15);
+        let leads: Vec<f32> = Prefs::SPACINGS
+            .iter()
+            .map(|key| Prefs::parse(&format!("spacing={key}")).leading())
+            .collect();
+        assert_eq!(leads, [0.9, 1., 1.15, 1.3]);
+        // An unknown key reads as normal.
+        assert_eq!(Prefs::parse("spacing=huge").leading(), 1.);
+    }
+
+    #[test]
+    fn quiet_theme_names_read_as_the_renamed_ones() {
+        assert_eq!(Prefs::parse("theme=Quiet Dark\n").theme, "Dark");
+        assert_eq!(Prefs::parse("theme=Quiet Light\n").theme, "Light");
+        assert_eq!(Prefs::parse("theme=Quiet\n").theme, "Quiet");
     }
 }

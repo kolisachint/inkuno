@@ -104,9 +104,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             // A hidden block prefix takes no room: a click on the line's first visible byte
             // lands on the line start (the keys can still put the caret under the prefix).
             // Here the `> ` of `> fin` is hidden in both passes: neither cursor is on its line.
-            let expected = match target == note.rfind("fin").unwrap() {
-                true => target - "> ".len(),
-                false => target,
+            // The callout's `[!NOTE]` marker is hidden too, and its kind's name is drawn in its place,
+            // so a click on the title lands at the end of that line.
+            let expected = if target == note.rfind("fin").unwrap() {
+                target - "> ".len()
+            } else if target == note.find("NOTE").unwrap() {
+                note.find("\n> fin").unwrap()
+            } else {
+                target
             };
             assert_eq!(caret, expected, "inside {inside}, click on byte {target}");
         }
@@ -138,8 +143,8 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     let lh = |n: u8| rows.iter().find(|r| r.1 == n).unwrap().3;
     // Line heights fall with the level (H5 and H6 share the body size), room above: none on the first line, then v2's
-    // 6 px for H1, 22 px for H2 and 16 px for the rest (DECISIONS D01). H4 and H5 may round to the same pixels: 16 × 1.4 and
-    // 15 × 1.47 are 22.4 and 22.05 px at the default size, so the comparison of those two is not strict.
+    // 6 px for H1, 22 px for H2 and 16 px for the rest (DECISIONS D01). H4 and H5 may round to the same pixels: 16 × 1.35 and
+    // 15 × 1.35 are 21.6 and 20.25 px at the default size, so the comparison of those two is not strict.
     assert!(
         lh(1) > lh(2) && lh(2) > lh(3) && lh(3) > lh(4) && lh(4) >= lh(5) && lh(5) == lh(6),
         "{rows:?}"
@@ -250,4 +255,71 @@ pub(super) fn tags(j: &Journey, cx: &mut gpui::VisualTestContext) {
         let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
         assert_eq!(caret, target, "click on byte {target}");
     }
+}
+
+/// The language picker of a folded code block: its chip opens it, typing filters, Down and Enter choose, and one
+/// undo takes the choice back. The caret stays where it was; Escape closes the picker without a change.
+pub(super) fn language_picker(j: &Journey, cx: &mut gpui::VisualTestContext) {
+    let shell = &j.shell;
+    // Chips are a Quiet thing: the journey's own theme is set back at the end.
+    let theme = shell.read_with(cx, |s, _| s.prefs.theme.clone());
+    shell.update_in(cx, |s, window, cx| {
+        s.prefs.theme = "Light".into();
+        s.restyle(window, cx);
+    });
+    cx.run_until_parked();
+    let text = |cx: &mut gpui::VisualTestContext| j.text(cx);
+    let position = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position())
+    };
+    let filter = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).language_filter())
+    };
+    let note = "Intro\n\n```rust {.numberLines}\nlet a = 1;\n```\n\nEnd\n";
+    let caret = note.find("End").unwrap() + 1;
+    j.load(cx, note, caret);
+    let fence = note.find("```").unwrap();
+    let chip = |cx: &mut gpui::VisualTestContext| {
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).chip_center(fence))
+    };
+    let spot = chip(cx).expect("a folded code block has its chip");
+    cx.simulate_click(spot, gpui::Modifiers::none());
+    assert_eq!(filter(cx), Some(String::new()));
+    assert_eq!(position(cx), caret, "the chip does not move the caret");
+    // Typed text filters the list, not the note; Escape closes it and changes nothing.
+    cx.simulate_input("py");
+    assert_eq!(filter(cx), Some("py".into()));
+    assert_eq!(text(cx), note);
+    cx.simulate_keystrokes("escape");
+    assert_eq!(filter(cx), None);
+    assert_eq!(text(cx), note);
+    // Down twice from the top of the list is python (text, rust, python); Enter writes it, attributes kept.
+    cx.simulate_click(spot, gpui::Modifiers::none());
+    cx.simulate_keystrokes("down down enter");
+    assert_eq!(text(cx), note.replace("```rust {", "```python {"));
+    // The caret keeps its place in the text: the two bytes of `python` over `rust` come before it.
+    assert_eq!(position(cx), caret + 2, "the caret stays with its text");
+    assert_eq!(filter(cx), None);
+    // The choice is one undo step.
+    cx.simulate_keystrokes("secondary-z");
+    assert_eq!(text(cx), note);
+    // A click on a row chooses it; typing narrows the list first.
+    cx.simulate_click(spot, gpui::Modifiers::none());
+    cx.simulate_input("pyth");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(text(cx), note.replace("```rust {", "```python {"));
+    cx.simulate_keystrokes("secondary-z");
+    assert_eq!(text(cx), note);
+    // A click outside the picker closes it.
+    cx.simulate_click(spot, gpui::Modifiers::none());
+    assert!(filter(cx).is_some());
+    let outside = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).point_of(0).unwrap());
+    cx.simulate_click(outside, gpui::Modifiers::none());
+    assert_eq!(filter(cx), None);
+    assert_eq!(text(cx), note);
+    shell.update_in(cx, |s, window, cx| {
+        s.prefs.theme = theme;
+        s.restyle(window, cx);
+    });
+    cx.run_until_parked();
 }

@@ -229,12 +229,8 @@ impl Render for Shell {
                 .child(toasts)
         };
 
-        // Focus mode in Quiet: the note's sheet runs to the window's edges, so the ground is its colour.
-        let ground = if self.focus_mode && t.quiet {
-            t.bg
-        } else {
-            t.ground
-        };
+        // Focus mode: the note's sheet runs to the window's edges, so the ground is its colour.
+        let ground = if self.focus_mode { t.bg } else { t.ground };
         let content = div()
             .size_full()
             .relative()
@@ -744,16 +740,12 @@ impl Shell {
         recall::recall(&self.notes, today(), std::time::SystemTime::now())
     }
 
-    /// The empty page: Quiet's cards, the others' lines (`render_empty_rows`). It disappears at the first keystroke.
+    /// The empty page. It disappears at the first keystroke.
     pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
-        if self.theme.quiet {
-            self.render_cards(cx).into_any_element()
-        } else {
-            self.render_empty_rows(cx).into_any_element()
-        }
+        self.render_cards(cx).into_any_element()
     }
 
-    /// Quiet's empty page: a centred column of cards, Today, New note and Search, then the notes to
+    /// The empty page: a centred column of cards, Today, New note and Search, then the notes to
     /// reread under "From a month ago". Each card is clickable and does what its title says.
     fn render_cards(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = self.theme;
@@ -952,129 +944,6 @@ impl Shell {
             }))
     }
 
-    /// The other themes' empty page, under the line where you write: the day (which opens its note),
-    /// the useful keys, the notes to reread. Everything is clickable, wraps in a narrow pane and
-    /// disappears at the first keystroke.
-    fn render_empty_rows(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let t = self.theme;
-        // `fill`: the line is tinted on hover, like a list row.
-        let row = |id: (&'static str, usize), fill: bool| {
-            div()
-                .id(id)
-                .debug_selector(move || {
-                    if id.0 == "empty-today" {
-                        id.0.to_string()
-                    } else {
-                        format!("{}-{}", id.0, id.1)
-                    }
-                })
-                .flex()
-                .items_center()
-                .gap_2()
-                .rounded(t.small())
-                .cursor_pointer()
-                .text_color(t.soft)
-                .hover(|s| {
-                    if fill {
-                        s.text_color(t.text).bg(t.hover)
-                    } else {
-                        s.text_color(t.text)
-                    }
-                })
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        };
-        // The keys in effect; an action left without a shortcut is not announced.
-        let actions: [(Box<dyn gpui::Action>, &str); 3] = [
-            (Box::new(OpenPalette), "notes"),
-            (Box::new(NewScratch), tr("scratch note", "brouillon")),
-            (Box::new(ToggleHelp), tr("shortcuts", "raccourcis")),
-        ];
-        // A vault that cannot be read takes no note: neither a new one nor the day's.
-        let closed = self
-            .vault
-            .as_ref()
-            .is_some_and(|root| self.unreadable.iter().any(|(dir, _)| dir == root));
-        let keys = actions
-            .into_iter()
-            .enumerate()
-            .filter(|(i, _)| !(closed && *i == 1))
-            .filter_map(|(i, (action, what))| {
-                let keys = keys::of(cx, action.as_ref());
-                let cap = keycaps(&keys, t, false);
-                (!keys.is_empty()).then(|| {
-                    row(("empty-key", i), false)
-                        .gap(t.px(6.))
-                        .child(cap)
-                        .child(what)
-                        .on_click(move |_, window, cx| {
-                            window.dispatch_action(action.boxed_clone(), cx)
-                        })
-                })
-            });
-        let day = (self.vault.is_some() && !closed).then(|| {
-            row(("empty-today", 0), false)
-                .child(logo(t))
-                .child(recall::long_date(today()))
-                .on_click(cx.listener(|this, _, window, cx| this.open_today(window, cx)))
-        });
-        let recalled = if self.vault.is_some() {
-            self.recalled()
-        } else {
-            Vec::new()
-        };
-        let again = (!recalled.is_empty()).then(|| {
-            let rows = recalled.into_iter().enumerate().map(|(i, note)| {
-                row(("empty-recall", i), true)
-                    .mx(t.px(-6.))
-                    .px(t.px(6.))
-                    .py(t.px(2.))
-                    .child(div().flex_1().min_w_0().truncate().child(note.name))
-                    .child(
-                        div()
-                            .flex_none()
-                            .text_size(t.px(12.))
-                            .child(recall::ago(note.days)),
-                    )
-                    .on_click(
-                        cx.listener(move |this, _, window, cx| this.open(&note.path, window, cx)),
-                    )
-            });
-            div()
-                .max_w(t.px(380.))
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .mb_1()
-                        .text_size(t.px(11.))
-                        .text_color(t.soft)
-                        .child(tr("READ AGAIN", "À RELIRE")),
-                )
-                .children(rows)
-        });
-        // In the text column, under its first line.
-        div()
-            .absolute()
-            .top(px(76.))
-            .left_0()
-            .right_0()
-            .flex()
-            .justify_center()
-            .child(
-                div()
-                    .w_full()
-                    .max_w(self.theme.page.measure(self.theme.size) + px(48.))
-                    .px(t.px(32.))
-                    .flex()
-                    .flex_col()
-                    .gap_4()
-                    .text_size(t.px(13.))
-                    .children(day)
-                    .child(div().flex().flex_wrap().gap_x_4().gap_y_1().children(keys))
-                    .children(again),
-            )
-    }
-
     pub(super) fn render_pane(
         &mut self,
         pane: usize,
@@ -1085,7 +954,6 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let t = self.theme;
-        let many = self.alone().is_none() && self.groups.len() > 1;
         // The band (the pane's tab bar, one tab or many) is drawn over the top row while it is shown.
         let barred = self.band_shown();
         // Copy of the whole note: a plain floating icon, outside the title bar.
@@ -1264,7 +1132,7 @@ impl Shell {
         // faint shadow of its left edge (v2 `--shadow-note`), which the sidebar's divider is drawn against.
         let area = div()
             .bg(t.bg)
-            .when(t.quiet, |d| d.shadow(t.note_shadow()))
+            .shadow(t.note_shadow())
             .overflow_hidden()
             .id(("pane", pane))
             .debug_selector(move || format!("pane-{group}"))
@@ -1312,16 +1180,6 @@ impl Shell {
             )
             .child(note)
             // The active pane of several: a 1 px ring around it, the accent at 30 %. Alone, a pane needs none.
-            .when(many && active && !t.quiet, |d| {
-                d.child(
-                    div()
-                        .debug_selector(|| "pane-active".into())
-                        .absolute()
-                        .inset_0()
-                        .border_1()
-                        .border_color(t.accent.opacity(0.3)),
-                )
-            })
             .children(tint);
         area.into_any_element()
     }

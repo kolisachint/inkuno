@@ -15,7 +15,7 @@ use crate::{
     lang::tr,
     logic::markdown::ListStyle,
     logic::rank::{self, contains_all, fuzzy, snippet},
-    ui::components::{kbd::keycaps, list_row::list_row, popover::popover},
+    ui::components::{kbd::keycaps, list_row::list_row, popover::popover, scroll::scroll_area},
     ui::line::{self, Line},
     ui::theme::Theme,
     views::editor::TableOp,
@@ -79,12 +79,12 @@ pub enum Setting {
     Mono,
     /// Width of the text column.
     Page,
-    /// Placement of tables wider than the text.
-    Wide,
     /// Formatting bar at the bottom of the note.
     Bar,
     /// Fades when something opens.
     Motion,
+    /// Space between the lines of the text.
+    Spacing,
     /// Name on the revisions a person saves (a typed line, not a list).
     Author,
     /// The command that starts the assistant (a typed line, not a list).
@@ -98,9 +98,9 @@ impl Setting {
             Setting::Font => tr("Font…", "Police…"),
             Setting::Mono => tr("Code font…", "Police du code…"),
             Setting::Page => tr("Page width…", "Largeur de page…"),
-            Setting::Wide => tr("Wide tables…", "Grands tableaux…"),
             Setting::Bar => tr("Formatting bar…", "Barre de mise en forme…"),
             Setting::Motion => tr("Animations…", "Animations…"),
+            Setting::Spacing => tr("Line spacing…", "Interligne…"),
             Setting::Author => tr("Revision author…", "Auteur des versions…"),
             Setting::Assistant => tr("Assistant command…", "Commande de l'assistant…"),
         }
@@ -206,6 +206,9 @@ pub struct Palette {
     /// Scroll of the input line, and the x of its cursor at the last frame:
     /// a text longer than the frame slides under it so the cursor stays in view.
     scroll: gpui::ScrollHandle,
+    /// Scroll of the choices, and the selection it last followed: a moved selection is kept in view.
+    list: gpui::ScrollHandle,
+    followed: usize,
     caret: std::rc::Rc<std::cell::Cell<Option<Pixels>>>,
     theme: Theme,
 }
@@ -281,6 +284,8 @@ impl Palette {
             context: "",
             top: px(72.),
             scroll: gpui::ScrollHandle::new(),
+            list: gpui::ScrollHandle::new(),
+            followed: 0,
             caret: Default::default(),
             theme,
         };
@@ -591,9 +596,9 @@ impl Palette {
             Setting::Font,
             Setting::Mono,
             Setting::Page,
-            Setting::Wide,
             Setting::Bar,
             Setting::Motion,
+            Setting::Spacing,
             Setting::Author,
             Setting::Assistant,
         ] {
@@ -769,7 +774,7 @@ impl Palette {
 }
 
 impl Render for Palette {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (t, top) = (self.theme, self.top);
         let focus = self.focus.clone();
         let entity = cx.entity();
@@ -821,18 +826,19 @@ impl Render for Palette {
         .absolute()
         .size_0();
 
-        // A choice list shows 14 lines at a time, around the selected choice.
-        let first = self
-            .selected
-            .saturating_sub(6)
-            .min(self.items.len().saturating_sub(14));
-        let rows = self.items.iter().enumerate().skip(first).take(14).map(|(i, item)| {
+        // The choices scroll past 60 % of the window; a moved selection is brought into view.
+        if self.followed != self.selected {
+            self.followed = self.selected;
+            self.list.scroll_to_item(self.selected);
+        }
+        let max_h = window.viewport_size().height * 0.6;
+        let rows = self.items.iter().enumerate().map(|(i, item)| {
             if let &Item::Command(n) = item {
                 // Without typing anything, commands go by group, each under its title.
                 let grouped = self.query.text.trim().is_empty();
                 let group = self.commands[n].group;
                 let same = |prev: Option<&Item>| matches!(prev, Some(&Item::Command(m)) if self.commands[m].group == group);
-                let header = grouped && (i == first || !same(i.checked_sub(1).and_then(|p| self.items.get(p))));
+                let header = grouped && (i == 0 || !same(i.checked_sub(1).and_then(|p| self.items.get(p))));
                 return self.command_row(i, n, header, cx);
             }
             let mut hit = None;
@@ -851,10 +857,8 @@ impl Render for Palette {
                     let e = &self.entries[*n];
                     let word = self.query.text.trim().to_lowercase();
                     let word = word.split_whitespace().next().unwrap_or_default().to_string();
-                    // Quiet shows the line under the name, with the word marked (below).
-                    if t.quiet {
-                        hit = rank::snippet_line(&e.body, &e.lower, &word);
-                    }
+                    // The line under the name, with the word marked (below).
+                    hit = rank::snippet_line(&e.body, &e.lower, &word);
                     (e.name.clone(), snippet(&e.body, &e.lower, &word))
                 }
                 Item::Create => (
@@ -885,8 +889,8 @@ impl Render for Palette {
                 _ => None,
             };
             let soft = |d: gpui::Div| d.text_size(t.px(12.)).text_color(t.soft);
-            // Quiet's full-text match is two lines: the name, then the matching line with the word marked.
-            let two = t.quiet && hit.is_some();
+            // A full-text match is two lines: the name, then the matching line with the word marked.
+            let two = hit.is_some();
             list_row(i == self.selected, t)
                 .debug_selector(move || format!("palette-item-{i}"))
                 .h(t.px(if two { 48. } else { ROW }))
@@ -970,13 +974,10 @@ impl Render for Palette {
                     .child(keycaps(&keys, t, false))
                     .child(what)
             };
-            // Quiet writes the return key as ↵: `↵ open · Ctrl ↵ other pane · > commands`.
+            // The return key is written as ↵: `↵ open · Ctrl ↵ other pane · > commands`.
             let key = |action: &dyn gpui::Action| {
                 let keys = crate::ui::keys::of(cx, action);
-                match t.quiet {
-                    true => keys.replace("Enter", "↵").replace('+', " "),
-                    false => keys,
-                }
+                keys.replace("Enter", "↵").replace('+', " ")
             };
             let hints = if self.commands_only {
                 vec![hint(key(&Confirm), tr("run", "lancer"))]
@@ -1125,7 +1126,10 @@ impl Render for Palette {
                             )
                         }),
                 )
-                .children(rows)
+                .child(
+                    scroll_area("palette-rows", &self.list, t, max_h, rows)
+                        .debug_selector(|| "palette-rows".into()),
+                )
                 .children(footer)
                 .children(self.nothing_to_show().map(|said| {
                     div()

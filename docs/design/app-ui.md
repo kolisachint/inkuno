@@ -113,11 +113,12 @@ A **Typora-inspired, document-first writing app**:
 - All tokens centralize in `crates/inkuno-ui/src/theme.rs` (`Theme` struct,
   `crates/inkuno-ui/src/theme.rs:100-124`); views must not hard-code colors/sizes.
   (Inkuno rule: layers depend downwards only, `docs/design/architecture.md:19-27`.)
+- **2026-11-23: one layout for every theme.** The Quiet layout (named Dark and Light now) is the only layout; the `quiet` flag and the non-Quiet branches are gone. A theme changes colours, fonts, sizes and spacing, never button placement, row heights, sidebar width, tab style or menus.
 - **2026-11-21: Quiet theme is the default; Inkuno Light/Dark stay selectable.** `THEMES[0]` and `THEMES[1]`
-  are Quiet Dark and Quiet Light, picked by the system appearance when no theme is chosen. The Quiet extras
+  are Dark and Light, picked by the system appearance when no theme is chosen. The Quiet extras
   (link, ground, six code colours) are set in `quiet_extras` (`crates/inkuno-ui/src/theme.rs`); other themes derive them.
 
-- **2026-11-21: Quiet block styles** (Quiet Light and Quiet Dark only; the other themes keep theirs). A code block is a box with a 1 px `code_line` border and radius 8, its line numbers in a gutter (mono 13, `gutter_num` on `gutter`, 10 px each side, a 1 px divider), the fences showing their language alone off the live block. A table has a 1 px `table_line` frame and grid, radius 8, a `th` header in semibold, cells padded 12 × 9. An alert (`> [!NOTE]`, TIP, IMPORTANT, WARNING, CAUTION) is a radius-8 box of its tint at 7 % with a 22 % line, its first line an info icon and the kind's name in semibold 14, its `[!TYPE]` cut off the live line. An image has radius 8 and a 1 px ring. An unchecked to-do box is drawn at text 40 % on whole pixels. Tokens: `Theme::code_line`, `gutter`, `gutter_num`, `table_line`, `th`, `ring`, `alerts`, `block_radius()`.
+- **2026-11-21: Quiet block styles** (every theme). A code block is a box with a 1 px `code_line` border and radius 8, its line numbers in a gutter (mono 13, `gutter_num` on `gutter`, 10 px each side, a 1 px divider), the fences showing their language alone off the live block. A table has a 1 px `table_line` frame and grid, radius 8, a `th` header in semibold, cells padded 12 × 9. An alert (`> [!NOTE]`, TIP, IMPORTANT, WARNING, CAUTION) is a radius-8 box of its tint at 7 % with a 22 % line, its first line an info icon and the kind's name in semibold 14, its `[!TYPE]` cut off the live line. An image has radius 8 and a 1 px ring. An unchecked to-do box is drawn at text 40 % on whole pixels. Tokens: `Theme::code_line`, `gutter`, `gutter_num`, `table_line`, `th`, `ring`, `alerts`, `block_radius()`.
 
 ## 4. Layout standard: three regions
 
@@ -1227,7 +1228,7 @@ Owner decisions, 2026-11-21 (answered in chat; these are owner approvals):
 
 ## 22. Quiet window (2026-11-21)
 
-The shipped design of the window, after the Quiet packages P1 to P8. The spec and its decision log are in `docs/design/prototypes/`: `v2.html` (the prototype, approved 2026-11-21) and `README.md` (its twenty decisions, the three open questions answered, the build packages and their notes). Where this section and the prototype differ, the code is the reference; the difference is recorded here.
+The shipped design of the window, after the Quiet packages P1 to P8. Since 2026-11-23 every theme has this layout; themes set colours, fonts, sizes and spacing only. The spec and its decision log are in `docs/design/prototypes/`: `v2.html` (the prototype, approved 2026-11-21) and `README.md` (its twenty decisions, the three open questions answered, the build packages and their notes). Where this section and the prototype differ, the code is the reference; the difference is recorded here.
 
 ### 22.1 Regions
 
@@ -1246,7 +1247,7 @@ A centred column of three cards, **Today**, **New note** and **Search**, each 20
 
 ### 22.3 Quiet tokens
 
-Defined per theme in `quiet_extras` (`ui/theme.rs`), for `Quiet Light` and `Quiet Dark`. Each is a semantic token of `Theme`, and nothing else in the UI sets a colour for Quiet:
+Defined per theme in `fixed_extras` (`ui/theme.rs`), and derived for the other themes, for `Light` and `Dark`. Each is a semantic token of `Theme`, and nothing else in the UI sets a colour for Quiet:
 
 | Token | Meaning |
 |---|---|
@@ -1266,7 +1267,7 @@ Defined per theme in `quiet_extras` (`ui/theme.rs`), for `Quiet Light` and `Quie
 
 ### 22.4 Dark pass (2026-11-21)
 
-Every fixture of `scripts/visual-check.sh` was rendered with `Quiet Dark` pinned, and the code, table and media pages were re-checked after the last change. Text must reach 4.5:1 against the sheet, the code block and the gutter. Decorative lines stay subtle hairlines, close to the light theme's (about 1.4 to 1.6:1 on the sheet), except the quote bar, which is a meaningful mark and reaches 3:1. Fixes (Quiet Dark only):
+Every fixture of `scripts/visual-check.sh` was rendered with `Dark` pinned, and the code, table and media pages were re-checked after the last change. Text must reach 4.5:1 against the sheet, the code block and the gutter. Decorative lines stay subtle hairlines, close to the light theme's (about 1.4 to 1.6:1 on the sheet), except the quote bar, which is a meaningful mark and reaches 3:1. Fixes (Quiet Dark only):
 
 | Token | Was | Now | Ratio before → after | Why |
 |---|---|---|---|---|

@@ -5,6 +5,9 @@ use super::*;
 use crate::logic::prefs::Prefs;
 use crate::ui::assets::needs_system_font;
 
+/// Space kept after the last character of a code line that scrolls sideways.
+const CODE_EDGE: f32 = 14.;
+
 /// What the layout depends on, apart from the text: if nothing changed, it is kept.
 #[derive(PartialEq)]
 pub(super) struct LayoutKey {
@@ -259,7 +262,89 @@ impl Geo {
     }
 }
 
+/// The end of the `$$` line that closes a formula, the first one after `from` (the end of its opening
+/// line); `from` when there is none.
+fn dollar_block_end(content: &str, from: usize) -> usize {
+    let mut at = from;
+    // A `$$` line between the fences of a code block is code, not the end of the formula.
+    let mut in_fence = false;
+    for line in content[from..].split('\n').skip(1) {
+        let end = at + 1 + line.len();
+        if md::is_fence(line) {
+            in_fence = !in_fence;
+        } else if !in_fence && line.trim() == "$$" {
+            return end;
+        }
+        at = end;
+    }
+    from
+}
+
+#[cfg(test)]
+mod dollar_tests {
+    use super::dollar_block_end;
+
+    #[test]
+    fn a_dollar_line_inside_a_fence_does_not_close_the_formula() {
+        let c = "$$\na\n```\n$$\n```\nb\n$$";
+        assert_eq!(dollar_block_end(c, 2), c.len());
+        assert_eq!(dollar_block_end("$$\na\n$$\nz", 2), 7);
+        assert_eq!(dollar_block_end("$$\na", 2), 2);
+    }
+}
+
+/// How a code block, a diagram or a formula shows its source off the caret. The span is
+/// the block's bytes, from its opening line to the end of its closing one.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) enum Fold {
+    /// Not in such a block.
+    #[default]
+    None,
+    /// In such a block, shown with its source: the caret is in it, or nothing is folded.
+    Show(Range<usize>),
+    /// A code block off the caret: its fence lines show as the chip and the closing edge alone.
+    Edges(Range<usize>),
+    /// A diagram or a formula off the caret: its rendered view alone.
+    Whole(Range<usize>),
+}
+
+impl Fold {
+    pub(super) fn span(&self) -> Option<&Range<usize>> {
+        match self {
+            Fold::None => None,
+            Fold::Show(span) | Fold::Edges(span) | Fold::Whole(span) => Some(span),
+        }
+    }
+
+    pub(super) fn whole(&self) -> bool {
+        matches!(self, Fold::Whole(_))
+    }
+
+    pub(super) fn edges(&self) -> bool {
+        matches!(self, Fold::Edges(_))
+    }
+}
+
 /// A laid out logical line (it may take several visual lines).
+/// Gap after an inline formula, in em.
+const INLINE_GAP: f32 = 0.05;
+
+/// Size of a footnote's number off the caret, in the size of the text, and how far it is raised, in em.
+const FOOT_SCALE: f32 = 0.75;
+const FOOT_RAISE: f32 = 0.35;
+
+/// Spaces standing for an inline formula's figure in the line (no-break, so it never wraps).
+const GAP: &str = "                                                                                                                                                                                                                                                                ";
+
+/// A formula drawn over its gap in the line: the offset of its source in the line, its picture, the
+/// size on screen, and the room around its box (on the left, before the gap).
+pub(super) struct Inline {
+    pub(super) at: usize,
+    pub(super) image: Arc<RenderImage>,
+    pub(super) size: Size<Pixels>,
+    pub(super) room: Pixels,
+}
+
 pub(super) struct Row {
     /// The line shows its source (its markers): the clicked or edited one.
     pub(super) live: bool,
@@ -279,6 +364,10 @@ pub(super) struct Row {
     pub(super) image: Option<(Arc<RenderImage>, Size<Pixels>)>,
     /// What the viewer shows when that image is enlarged (its button appears on hover).
     pub(super) enlarge: Option<Source>,
+    /// The image is a diagram or formula drawn here (not a picture of the note): it has no ring.
+    pub(super) drawn: bool,
+    /// Inline formulas, drawn over their gaps in the line.
+    pub(super) inline: Vec<Inline>,
     /// The line opens a code block: it carries the copy button.
     pub(super) opens: bool,
     /// Room left under the last line of a table, or inside the fill of a code block or callout.
@@ -294,10 +383,14 @@ pub(super) struct Row {
     pub(super) grid: Option<Rc<TableRow>>,
     /// The figure or the picture of the line cannot be read: what is said under it, in place of the picture.
     pub(super) broken: Option<&'static str>,
+    /// The box drawn in place of a picture that is not drawn (loading, not found, not loaded).
+    pub(super) frame: Option<Frame>,
     /// Its place in a pending change: the wash of an added or removed line is drawn behind it.
     pub(super) pend: Pend,
     /// The lists and indented code above the line, as the line leaves them (see `listing`).
     pub(super) nesting: Nesting,
+    /// The folding of the block the line is in (see `Fold`).
+    pub(super) fold: Fold,
     /// Quiet's code gutter: its width, zero outside a numbered code block; and the number of a code line in it
     /// (zero for none).
     pub(super) gutter: Pixels,
@@ -305,6 +398,15 @@ pub(super) struct Row {
 }
 
 impl Row {
+    /// The line's own source is not drawn: a folded diagram or formula, or the fence lines of a folded code block.
+    pub(super) fn src_hidden(&self) -> bool {
+        match self.fold {
+            Fold::Whole(_) => true,
+            Fold::Edges(_) => self.kind == Kind::Fence,
+            _ => false,
+        }
+    }
+
     /// Position on screen, relative to the left edge of the page.
     pub(super) fn pos(&self, i: usize) -> Point<Pixels> {
         let p = match &self.grid {
@@ -344,9 +446,10 @@ impl Row {
     }
 
     pub(super) fn image_height(&self) -> Pixels {
-        match (&self.image, self.broken) {
-            (Some((_, s)), _) => s.height.max(COPY_SIZE) + IMAGE_GAP,
-            (None, Some(_)) => BROKEN + IMAGE_GAP,
+        match (&self.image, self.broken, &self.frame) {
+            (Some((_, s)), _, _) => s.height.max(COPY_SIZE) + IMAGE_GAP,
+            (None, _, Some(frame)) => frame.size.height + IMAGE_GAP,
+            (None, Some(_), None) => BROKEN + IMAGE_GAP,
             _ => px(0.),
         }
     }
@@ -542,6 +645,15 @@ pub(super) struct Check {
     pub(super) done: bool,
 }
 
+/// A footnote reference drawn off the caret as its number: raised, smaller, over the gap its source left.
+/// `at` is the offset of the reference in the line, `size` the size of the number.
+pub(super) struct Foot {
+    pub(super) at: usize,
+    pub(super) number: String,
+    pub(super) size: Pixels,
+    pub(super) raise: Pixels,
+}
+
 /// What a line displays, as long as neither it nor its context change.
 pub(super) struct Shaped {
     pub(super) line: Option<WrappedLine>,
@@ -553,10 +665,13 @@ pub(super) struct Shaped {
     /// Signs displayed in place of their ASCII spelling: (start byte,
     /// length in the text, displayed length).
     pub(super) subs: Vec<(usize, usize, usize)>,
-    /// Formula on the line: its source, and whether it is display (block) math.
-    pub(super) formula: Option<(String, bool)>,
+    /// Inline formulas drawn over the gap their source left (off the caret): the offset of each
+    /// source in the line, its source, whether it is display math, and the scale of its figure.
+    pub(super) formulas: Vec<(usize, String, bool, f32)>,
+    /// Footnote references drawn off the caret as their numbers (see `Foot`).
+    pub(super) foots: Vec<Foot>,
     /// Path of the picture the line points to.
-    pub(super) picture: Option<String>,
+    pub(super) picture: Option<md::Picture>,
 }
 
 /// Figure ready to draw (`None`: invalid source) and its size.
@@ -708,8 +823,8 @@ pub fn text_runs(
             style.mono || f & md::CODE != 0,
             f & md::ITALIC != 0 || style.italic,
         );
-        // Quiet's links are underlined on the live line only.
-        let linked = f & md::LINK != 0 && (!t.quiet || style.live);
+        // Links are underlined on the live line only.
+        let linked = f & md::LINK != 0 && style.live;
         let underline = (m || linked || f & md::UNDER != 0).then_some(UnderlineStyle {
             thickness: px(1.),
             color: Some(
@@ -727,11 +842,13 @@ pub fn text_runs(
             TextRun {
                 len,
                 font: Font {
-                    // Titles: the first two levels in bold, the others in semibold.
-                    weight: if style.heading == 1 || style.heading == 2 {
+                    // Titles: H1 bold, H2-H4 semibold, H5-H6 medium (`docs/design/typography.md`).
+                    weight: if style.heading == 1 {
                         FontWeight::BOLD
-                    } else if style.heading > 0 || style.semi {
+                    } else if (2..=4).contains(&style.heading) || style.semi {
                         FontWeight::SEMIBOLD
+                    } else if style.heading > 0 {
+                        FontWeight::MEDIUM
                     } else if f & md::BOLD != 0 {
                         FontWeight::BOLD
                     } else {
@@ -856,7 +973,7 @@ pub(super) fn elided(line: &str, marker: usize, kind: Kind, flags: &[u32]) -> Ve
         .into_iter()
         .map(|(r, _)| r.start + 2..r.end - 1)
         .collect();
-    let image = md::image(line).map(|(r, _)| r);
+    let image = md::picture(line).map(|p| p.range);
     // The earlier CriticMarkup comments show their source; the new form hides its marker (`DIM`).
     let comments: Vec<Range<usize>> = md::comments(line)
         .into_iter()
@@ -1037,6 +1154,18 @@ impl Editor {
                     r.end = r.end.max(block.end);
                 };
                 for i in before.clone() {
+                    // A folded block shows its source or not as a whole: its rows are laid out together.
+                    if let Some(span) = rows[i].fold.span() {
+                        let block = rows.partition_point(|r| r.start < span.start)
+                            ..rows.partition_point(|r| r.start <= span.end).min(n);
+                        if rows[block.clone()]
+                            .iter()
+                            .any(|r| matches!(r.kind, Kind::Code | Kind::Fence))
+                        {
+                            return None;
+                        }
+                        whole(r, block);
+                    }
                     match rows[i].kind {
                         Kind::Code | Kind::Fence => return None,
                         Kind::Table => match big_of(i) {
@@ -1308,7 +1437,9 @@ impl Editor {
         let width = (bounds.size.width - SIDE * 2.)
             .min(t.page.measure(t.size))
             .max(px(40.));
-        let room = table_room(t.wide, bounds.size.width, width);
+        // Every wide block (table, code, figure) stays inside the text column: what does not fit
+        // scrolls sideways within it.
+        let room = width;
         let text_system = window.text_system().clone();
         // What can be reused from the previous layout, when only a few lines changed.
         // The first lines of a very big table set its columns: if they move, redo everything.
@@ -1464,7 +1595,8 @@ impl Editor {
             skip: 0,
             lead: None,
             subs: Vec::new(),
-            formula: None,
+            formulas: Vec::new(),
+            foots: Vec::new(),
             picture: None,
         });
         let mut shaped = std::mem::take(&mut self.shaped);
@@ -1477,18 +1609,30 @@ impl Editor {
         // or removed restyles every reference, so the style ids below carry their version.
         let foot = self.foot_hash();
         let keys: Vec<String> = self.feet.iter().map(|d| d.label.to_lowercase()).collect();
+        let numbers: Vec<(String, usize)> = self
+            .feet
+            .iter()
+            .map(|d| (d.label.to_lowercase(), d.display))
+            .collect();
         let defined = |label: &str| {
             let key = label.to_lowercase();
             keys.iter().any(|k| k == &key)
         };
         // Mermaid or `$$` block in progress: its start and its source.
         let mut block: Option<(usize, String)> = None;
+        // The block in progress, its bytes and whether it is a diagram or a formula (folded whole).
+        let mut fold_span: Option<(Range<usize>, bool)> = None;
         let marked = self.marked.clone();
         let mut rows = Vec::with_capacity(self.rows.len() + 16);
         let mut y = px(0.);
         let mut offset;
         // The opener of the fenced code block in progress, if any.
         let mut in_code: Option<md::Fence> = None;
+        // The start of the block the line is in (its opening fence, or its first indented line).
+        let mut code_key = 0usize;
+        // The block of `code_key` and the widest of its lines so far: wider than the page, it scrolls
+        // and keeps room under its last line for the scrollbar.
+        let mut code_wide = (usize::MAX, px(0.));
         // The lists and the indented code above the line (see `listing`): each zone starts from the
         // row above it, set before the first line of the zone.
         let mut nesting: Nesting;
@@ -1610,6 +1754,7 @@ impl Editor {
                         pend: pend_of(&self.pending, offset),
                         live: false,
                         collapsed: false,
+                        fold: Fold::None,
                         start: offset,
                         len: line.len(),
                         y,
@@ -1620,6 +1765,8 @@ impl Editor {
                         shaped: empty.clone(),
                         image: None,
                         enlarge: None,
+                        drawn: false,
+                        inline: Vec::new(),
                         opens: false,
                         gap: px(0.),
                         head: false,
@@ -1628,6 +1775,7 @@ impl Editor {
                         dx: px(0.),
                         grid: None,
                         broken: None,
+                        frame: None,
                         nesting: nesting.clone(),
                         gutter: px(0.),
                         number: 0,
@@ -1649,6 +1797,9 @@ impl Editor {
                 if code_now {
                     kind = Kind::Code;
                     marker = 0;
+                    if !rows.last().is_some_and(|r| r.kind == Kind::Code) {
+                        code_key = offset;
+                    }
                 }
                 // The nesting the line itself reads (its depth, its continuation), before it is advanced.
                 let above = nesting.clone();
@@ -1662,10 +1813,16 @@ impl Editor {
                     let fence = md::fence_of(line);
                     opens =
                         !was_in_code && fenced.binary_search_by_key(&offset, |b| b.open).is_ok();
+                    if opens {
+                        code_key = offset;
+                    }
                     in_code = if opens { fence.map(|(f, _)| f) } else { None };
                     if opens {
                         lang = fence.map_or_else(String::new, |(_, info)| info.to_lowercase());
                         block = (lang == "mermaid").then(|| (offset, String::new()));
+                        if let Ok(i) = fenced.binary_search_by_key(&offset, |b| b.open) {
+                            fold_span = Some((fenced[i].open..fenced[i].end, lang == "mermaid"));
+                        }
                     } else if let Some((start, source)) = block.take() {
                         // A diagram is drawn once the cursor has left the block, in a background task.
                         let editing = (start..=offset + line.len()).contains(&cursor);
@@ -1693,7 +1850,7 @@ impl Editor {
                         .ok()
                         .map(|i| fenced[i])
                     {
-                        Some(b) if t.quiet && lang != "mermaid" => gutter_of(
+                        Some(b) if t.numbered && lang != "mermaid" => gutter_of(
                             self.content[b.open..b.close]
                                 .matches('\n')
                                 .count()
@@ -1703,7 +1860,7 @@ impl Editor {
                     };
                 } else if kind == Kind::Code
                     && code_now
-                    && t.quiet
+                    && t.numbered
                     && !rows.last().is_some_and(|r| r.kind == Kind::Code)
                 {
                     gutter_now = gutter_of(indented_lines(&self.content[offset..]));
@@ -1743,7 +1900,11 @@ impl Editor {
                             enlarge = drawing.is_some().then_some(Source::Formula(source, true));
                         }
                         // As for ```: a `$$` without a closing one opens nothing.
-                        None if dollars > 0 => block = Some((offset, String::new())),
+                        None if dollars > 0 => {
+                            block = Some((offset, String::new()));
+                            let end = dollar_block_end(&self.content, offset + line.len());
+                            fold_span = Some((offset..end, true));
+                        }
                         None => {}
                     }
                 } else if !code && let Some((_, source)) = &mut block {
@@ -1822,6 +1983,7 @@ impl Editor {
                                 pend: pend_of(&self.pending, at),
                                 live: false,
                                 collapsed: false,
+                                fold: Fold::None,
                                 start: at,
                                 len: text.len(),
                                 y,
@@ -1832,6 +1994,8 @@ impl Editor {
                                 shaped: empty.clone(),
                                 image: None,
                                 enlarge: None,
+                                drawn: false,
+                                inline: Vec::new(),
                                 opens: false,
                                 gap: px(0.),
                                 head: false,
@@ -1840,6 +2004,7 @@ impl Editor {
                                 dx: px(0.),
                                 grid: None,
                                 broken: None,
+                                frame: None,
                                 nesting: nesting.clone(),
                                 gutter: px(0.),
                                 number: 0,
@@ -1856,6 +2021,7 @@ impl Editor {
                         continue;
                     }
                     let look = grid::Look { theme: &t, style };
+                    let fit = self.wraps.get(&block[0].0).copied().unwrap_or(true);
                     pending = grid::build(
                         &mut cells,
                         &text_system,
@@ -1865,6 +2031,7 @@ impl Editor {
                         cursor,
                         marked.as_ref(),
                         foot,
+                        fit,
                         &defined,
                     )
                     .iter()
@@ -1930,18 +2097,17 @@ impl Editor {
                     y += gap;
                 }
                 // Titles: the room above them is their pad (see below), and it does not add a block gap. Sizes and line heights hold for a body of `Prefs::SIZE` px (15):
-                // body 22/15, code 20/13, titles 28/21/18/16/15 (`docs/design/app-ui.md` §14).
+                // body 23/15, code 20/13, table cells 20/14, titles 26/21.5/18/16/15 on a ~1.2 scale (`docs/design/typography.md`).
                 let (font_size, pad, leading) = match ikind {
                     // The room above a title is v2's (`.b.k-h`, `.n1`, `.n3`): 6, 22 and 16 px.
-                    Kind::Heading(1) => (px(28.), px(6.), 1.3),
-                    Kind::Heading(2) => (px(21.), px(22.), 1.3),
-                    Kind::Heading(3) => (px(18.), px(16.), 1.33),
-                    Kind::Heading(4) => (px(16.), px(16.), 1.4),
-                    Kind::Heading(_) => (px(15.), px(16.), 1.47),
-                    Kind::Code | Kind::Fence | Kind::Table | Kind::Meta => {
-                        (px(13.), px(0.), 20. / 13.)
-                    }
-                    _ => (px(15.), px(0.), 22. / 15.),
+                    Kind::Heading(1) => (px(26.), px(6.), 1.25),
+                    Kind::Heading(2) => (px(21.5), px(22.), 1.3),
+                    Kind::Heading(3) => (px(18.), px(16.), 1.3),
+                    Kind::Heading(4) => (px(16.), px(16.), 1.35),
+                    Kind::Heading(_) => (px(15.), px(16.), 1.35),
+                    Kind::Code | Kind::Fence | Kind::Meta => (px(13.), px(0.), 20. / 13.),
+                    Kind::Table => (px(14.), px(0.), 20. / 14.),
+                    _ => (px(15.), px(0.), 23. / 15.),
                 };
                 // The sizes above hold for a `Prefs::SIZE` px body text.
                 let font_size = font_size * (t.size / Prefs::SIZE);
@@ -1984,6 +2150,9 @@ impl Editor {
                 let cont = (ikind == Kind::Para && !code && !math)
                     .then(|| above.continuation(body))
                     .flatten();
+                // A code block's lines wrap when its switch says so; otherwise they scroll.
+                let code_wrap =
+                    kind == Kind::Code && self.wraps.get(&code_key).copied().unwrap_or(false);
                 let id = {
                     let near = composed
                         .as_ref()
@@ -2012,17 +2181,18 @@ impl Editor {
                             foot,
                             pend,
                             f32::from(gutter_here).to_bits(),
+                            code_wrap,
                         ),
                     )
                         .hash(&mut hasher);
                     hasher.finish()
                 };
                 // A title's lines are closer than the body's, so that it belongs to what follows.
-                let lh = (font_size * leading).round();
+                let lh = (font_size * leading * t.leading).round();
                 // Quiet's alert, when not live: its `[!TYPE]` marker is cut, and the line shows an icon and the kind's name.
                 // Its text is indented to the box's padding (14 px from its edge, the box is flush with the text column).
                 let alert = match own_tint.zip(md::callout(line)) {
-                    Some((tint, label)) if t.quiet && !live && kind == Kind::Quote => {
+                    Some((tint, label)) if !live && kind == Kind::Quote => {
                         let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
                         Some((
                             tint,
@@ -2036,7 +2206,7 @@ impl Editor {
                 // padding (14 px from its edge, the box is flush with the text column). The bars sit at -14 px, 10 px apart.
                 let quote_base = if kind == Kind::Quote {
                     px(10. * quiet_scale) * nesting.quote.saturating_sub(1) as f32
-                        + if t.quiet && tinted {
+                        + if tinted {
                             px(14. * quiet_scale)
                         } else {
                             px(0.)
@@ -2046,10 +2216,7 @@ impl Editor {
                 };
                 let indent = if kind == Kind::Quote {
                     quote_base
-                } else if t.quiet
-                    && gutter_here > px(0.)
-                    && matches!(kind, Kind::Code | Kind::Fence)
-                {
+                } else if gutter_here > px(0.) && matches!(kind, Kind::Code | Kind::Fence) {
                     gutter_here + px(14. * quiet_scale)
                 } else {
                     px(0.)
@@ -2058,7 +2225,7 @@ impl Editor {
                     empty.clone()
                 } else {
                     cached_shape(&mut shaped, id, frame, || {
-                        let mut formula = None;
+                        let mut formulas: Vec<(Range<usize>, String, bool)> = Vec::new();
                         let mut flags = vec![0u32; line.len()];
                         let list = matches!(ikind, Kind::Bullet | Kind::Ordered | Kind::Task(_));
                         flags[..marker].fill(if list { md::MARK } else { md::DIM });
@@ -2081,24 +2248,19 @@ impl Editor {
                             md::inline(line, marker, &mut flags);
                             // Footnotes: references without a definition stay literal.
                             md::footnote_flags(line, &mut flags, &defined);
-                            // Formula on the line: its source stays readable, like code.
-                            if let Some((range, source, display)) = md::math(line)
-                                && range.start >= marker
-                                && flags[range.start] & md::CODE == 0
-                            {
-                                flags[range].fill(md::CODE);
-                                formula = Some((source.to_string(), display));
+                            // Formulas of the line: their source stays readable, like code, on the caret's line.
+                            for (range, source, display) in md::maths(line) {
+                                if range.start >= marker && flags[range.start] & md::CODE == 0 {
+                                    flags[range.clone()].fill(md::CODE);
+                                    formulas.push((range, source.to_string(), display));
+                                }
                             }
                         }
                         // A checked task (bullet or ordered) strikes its text. Its checkbox is bold,
                         // like a checkbox in the text or a table.
                         if let Some((at, true)) = task {
-                            // Quiet: the done text is `soft` (`QUIET` takes its colour over `DIM`).
-                            let dim = if t.quiet {
-                                md::DIM | md::QUIET
-                            } else {
-                                md::DIM
-                            };
+                            // The done text is `soft` (`QUIET` takes its colour over `DIM`).
+                            let dim = md::DIM | md::QUIET;
                             flags[at + 4..]
                                 .iter_mut()
                                 .for_each(|f| *f |= md::STRIKE | dim);
@@ -2126,11 +2288,12 @@ impl Editor {
                         }
                         let picture =
                             (!code)
-                                .then(|| md::image(line))
+                                .then(|| md::picture(line))
                                 .flatten()
-                                .map(|(range, path)| {
-                                    flags[range].iter_mut().for_each(|f| *f |= md::DIM);
-                                    path
+                                .inspect(|picture| {
+                                    flags[picture.range.clone()]
+                                        .iter_mut()
+                                        .for_each(|f| *f |= md::DIM);
                                 });
                         // Outside the live line, `->`, `!=`… display as signs;
                         // the text itself does not change.
@@ -2167,6 +2330,108 @@ impl Editor {
                         } else {
                             marker
                         };
+                        // Off the caret, each formula's source is a gap of spaces as wide as its figure, and the
+                        // figure is drawn over it (`Row::inline`). The gap is plain text, so its style is plain
+                        // too. A formula that is invalid, or too wide for the gap, keeps its source.
+                        let mut placed = Vec::new();
+                        if hide && !formulas.is_empty() {
+                            let text_system = window.text_system();
+                            let space = text_system
+                                .advance(text_system.resolve_font(&font(sans())), font_size, ' ')
+                                .map_or(f32::from(font_size) * 0.25, |a| f32::from(a.width));
+                            let (lh_px, em) = (f32::from(lh), t.size * MATH_SCALE);
+                            for (range, source, display) in &formulas {
+                                let Some((_, w, h)) = figure::latex(source, *display, [0; 3], em)
+                                else {
+                                    continue;
+                                };
+                                // The figure's room is part of its box: the gap takes the formula's own width,
+                                // and a figure taller than 1.6 line heights shrinks to that.
+                                let scale = (1.6 * lh_px / h).min(1.);
+                                let room = figure::FORMULA_ROOM * em;
+                                let width = (w - 2. * room) * scale + INLINE_GAP * t.size;
+                                let spaces = (width / space).round() as usize;
+                                if spaces == 0 || spaces > GAP.len() / 2 {
+                                    continue;
+                                }
+                                placed.push((
+                                    range.clone(),
+                                    spaces,
+                                    source.clone(),
+                                    *display,
+                                    scale,
+                                ));
+                            }
+                            for (range, _, _, _, _) in &placed {
+                                flags[range.clone()].fill(0);
+                            }
+                            signs.retain(|(at, len, _)| {
+                                !placed
+                                    .iter()
+                                    .any(|(r, ..)| *at < r.end && r.start < at + len)
+                            });
+                            signs.extend(placed.iter().map(|(range, spaces, ..)| {
+                                (range.start, range.len(), &GAP[..spaces * 2])
+                            }));
+                            signs.sort_unstable_by_key(|sign| sign.0);
+                        }
+                        // Off the caret, a footnote reference is its number, raised and smaller, drawn over a gap of
+                        // spaces as wide as the number (`Shaped::foots`); its brackets go with the gap. A reference
+                        // the note does not define stays literal, and so does the definition's own marker.
+                        let mut foots = Vec::new();
+                        if hide && !numbers.is_empty() {
+                            let text_system = window.text_system();
+                            let face = text_system.resolve_font(&font(sans()));
+                            let space = text_system
+                                .advance(face, font_size, ' ')
+                                .map_or(f32::from(font_size) * 0.25, |a| f32::from(a.width));
+                            let small = font_size * FOOT_SCALE;
+                            let def = md::footnote_def(line).map(|(_, marker, _)| marker);
+                            for (range, label) in md::footnote_ref(line) {
+                                if def
+                                    .as_ref()
+                                    .is_some_and(|m| m.start <= range.start && range.end <= m.end)
+                                {
+                                    continue;
+                                }
+                                let key = label.to_lowercase();
+                                let Some(number) = numbers
+                                    .iter()
+                                    .find(|(k, n)| *k == key && *n > 0)
+                                    .map(|(_, n)| *n)
+                                else {
+                                    continue;
+                                };
+                                let text = number.to_string();
+                                let width: f32 = text
+                                    .chars()
+                                    .map(|c| {
+                                        text_system
+                                            .advance(face, small, c)
+                                            .map_or(f32::from(small) * 0.5, |a| f32::from(a.width))
+                                    })
+                                    .sum();
+                                let spaces = (width / space).ceil() as usize;
+                                if spaces == 0 || spaces > GAP.len() / 2 {
+                                    continue;
+                                }
+                                flags[range.clone()].fill(0);
+                                signs.push((range.start, range.len(), &GAP[..spaces * 2]));
+                                foots.push(Foot {
+                                    at: range.start,
+                                    number: text,
+                                    size: small,
+                                    raise: font_size * FOOT_RAISE,
+                                });
+                            }
+                            signs.sort_unstable_by_key(|sign| sign.0);
+                        }
+                        let placed: Vec<(usize, String, bool, f32)> = placed
+                            .into_iter()
+                            .map(|(range, _, source, display, scale)| {
+                                (range.start, source, display, scale)
+                            })
+                            .collect();
                         let elide = if hide {
                             elided(line, prefix, kind, &flags)
                         } else {
@@ -2223,9 +2488,10 @@ impl Editor {
                                 Kind::Heading(level) => level,
                                 _ => 0,
                             },
-                            soft: ikind == Kind::Heading(6),
-                            italic: kind == Kind::Quote && !tinted && !t.quiet,
-                            mono: code || kind == Kind::Table,
+                            soft: matches!(ikind, Kind::Heading(5 | 6)),
+                            // Quotes stay upright in the one layout.
+                            italic: false,
+                            mono: code && kind != Kind::Meta,
                             tint: own_tint,
                             live,
                             chip: t.chip.is_some() && !math,
@@ -2287,14 +2553,10 @@ impl Editor {
                             // A bullet is a shape, a number a glyph (its text colour), a task's box is painted.
                             let em = px(t.size);
                             let gutter = em * LIST_STEP;
-                            // Quiet: a 17 px box and 5 px bullets at size 15 (`app-ui.md` §3); the gutter logic stays.
+                            // A 17 px box and 5 px bullets at size 15 (`app-ui.md` §3); the gutter logic stays.
                             let scale = t.size / Prefs::SIZE;
-                            let (gap, side, dot) = if t.quiet {
-                                (em * 0.5, px(17. * scale), em * 0.35)
-                            } else {
-                                (em * 0.5, em * 0.875, em * 0.35)
-                            };
-                            let bullet_side = if t.quiet { px(5. * scale) } else { dot };
+                            let (gap, side, dot) = (em * 0.5, px(17. * scale), em * 0.35);
+                            let bullet_side = px(5. * scale);
                             let glyph_style = RunStyle {
                                 pending: pend,
                                 heading: 0,
@@ -2445,13 +2707,14 @@ impl Editor {
                                     bullet: None,
                                 })
                         };
-                        // A callout's text keeps 14 px from the box's right edge too (Quiet).
-                        let right = if t.quiet && tinted && kind == Kind::Quote {
+                        // A callout's text keeps 14 px from the box's right edge too.
+                        let right = if tinted && kind == Kind::Quote {
                             px(14. * quiet_scale)
                         } else {
                             px(0.)
                         };
-                        let wrap = (kind != Kind::Table)
+                        // A code line does not wrap: a block wider than the page scrolls sideways.
+                        let wrap = (kind != Kind::Table && (kind != Kind::Code || code_wrap))
                             .then(|| width - right - lead.as_ref().map_or(px(0.), |l| l.width));
                         let line = shape(&shown[cut..], font_size, &runs, wrap);
                         // A heading's `#` sits on the title's baseline (a list marker is at the body size: none).
@@ -2483,34 +2746,61 @@ impl Editor {
                             skip: cut,
                             lead,
                             subs,
-                            formula,
+                            formulas: placed,
+                            foots,
                             picture,
                         })
                     })
                 };
-                if let Some((source, display)) = &made.formula {
-                    drawing = cached(
-                        &mut old,
-                        &mut kept,
-                        key(1 + *display as u8, source),
-                        false,
-                        || {
-                            vector(figure::latex(
-                                source,
-                                *display,
-                                rgb(t.text),
-                                t.size * MATH_SCALE,
-                            ))
-                        },
-                    );
+                // The inline formulas, each over its gap in the line (none on the caret's line).
+                // ponytail: an inline formula has no "enlarge" button yet: the button sits beside a figure
+                // under its line, and a formula in its sentence has no such place.
+                let mut inline = Vec::new();
+                for (at, source, display, scale) in &made.formulas {
+                    let k = key(1 + *display as u8, source);
+                    let drawn = cached(&mut old, &mut kept, k, false, || {
+                        vector(figure::latex(
+                            source,
+                            *display,
+                            rgb(t.text),
+                            t.size * MATH_SCALE,
+                        ))
+                    });
+                    broken = broken
+                        .or(failed(&kept, k.0)
+                            .then(|| tr("Unreadable formula", "Formule illisible")));
+                    let Some((image, s)) = drawn else {
+                        continue;
+                    };
+                    let Some(rendered) = image.use_render_image(window, cx) else {
+                        loading = true;
+                        continue;
+                    };
+                    inline.push(Inline {
+                        at: *at,
+                        image: rendered,
+                        size: size(s.width * *scale, s.height * *scale),
+                        room: px(figure::FORMULA_ROOM * t.size * MATH_SCALE * scale),
+                    });
                 }
+                // A figure taller than the line makes the line taller, centred on its text.
+                let grow = inline
+                    .iter()
+                    .fold(px(0.), |grow, i| grow.max(i.size.height - lh));
                 // ponytail: one picture per line, looked up in the note's folder, at the
-                // vault root, then by its name in the whole vault; inline
-                // pictures (http) are not loaded.
-                let file = made
+                // vault root, then by its name in the whole vault. A web picture is fetched
+                // first, and drawn in a box while it loads (`images`).
+                let fetched = made
                     .picture
                     .as_ref()
-                    .and_then(|path| find_picture(&self.dirs, &self.images, path));
+                    .filter(|p| md::is_remote(&p.src))
+                    .map(|p| fetch(&p.src, window, cx));
+                let mut pending = matches!(fetched, Some(Fetch::Loading));
+                let file = match (&made.picture, &fetched) {
+                    (_, Some(Fetch::Ready(path))) => Some(path.clone()),
+                    (Some(picture), None) => find_picture(&self.dirs, &self.images, &picture.src),
+                    _ => None,
+                };
                 let svg = file
                     .as_ref()
                     .is_some_and(|f| f.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg")));
@@ -2524,12 +2814,7 @@ impl Editor {
                             Source::Raster(f.clone())
                         }
                     })
-                    .or(enlarge)
-                    .or_else(|| {
-                        made.formula
-                            .clone()
-                            .map(|(source, display)| Source::Formula(source, display))
-                    });
+                    .or(enlarge);
                 // An SVG is redrawn in the theme's colors, and every time its file
                 // changes: its date is part of its key. It is made readable
                 // (HTML text, `light-dark()`).
@@ -2559,10 +2844,15 @@ impl Editor {
                         .or(failed(&kept, k).then(|| tr("Unreadable figure", "Figure illisible")));
                     drawing = own.or(drawing);
                 }
+                let file_is_none = file.is_none();
+                pending |= svg && drawing.is_none() && broken.is_none();
+                let found = file.is_some();
                 let image = file.filter(|_| drawing.is_none() && !svg).and_then(|file| {
                     let loaded =
                         window.use_asset::<ImgResourceLoader>(&Resource::Path(file.into()), cx);
                     loading |= loaded.is_none();
+                    pending |= loaded.is_none();
+                    // Not an image this app reads: reported, and the box says so.
                     let image = match loaded? {
                         Ok(image) => image,
                         Err(_) => {
@@ -2572,18 +2862,46 @@ impl Editor {
                     };
                     let natural = |d: gpui::DevicePixels| d.0 as f32;
                     let (w, h) = (natural(image.size(0).width), natural(image.size(0).height));
-                    let scale = (f32::from(width) / w.max(1.)).min(1.);
-                    Some((image, size(px(w * scale), px(h * scale))))
+                    let attrs = made
+                        .picture
+                        .as_ref()
+                        .map_or((None, None), |p| (p.width, p.height));
+                    let (w, h) = fit((w, h), attrs, f32::from(width));
+                    Some((image, size(px(w), px(h))))
                 });
                 let image = image.or_else(|| {
                     let (image, s) = drawing?;
                     let rendered = image.use_render_image(window, cx);
                     loading |= rendered.is_none();
+                    pending |= rendered.is_none();
                     let image = rendered?;
                     let scale = (width / s.width).min(1.);
                     Some((image, size(s.width * scale, s.height * scale)))
                 });
                 let enlarge = enlarge.filter(|_| image.is_some());
+                // A diagram or a formula drawn here, not a picture of the note: it has no ring.
+                let drawn = file_is_none && image.is_some();
+                // The box in place of a picture that is not drawn: loading, not found, or not read.
+                let frame = made
+                    .picture
+                    .as_ref()
+                    .filter(|_| image.is_none())
+                    .map(|picture| {
+                        let small = (f32::from(width).min(360.), 48.);
+                        let (said, (w, h)) = match (&fetched, found) {
+                            _ if pending => ("", loading_size(f32::from(width))),
+                            (Some(Fetch::Failed), _) => {
+                                (tr("Image not loaded", "Image non chargée"), small)
+                            }
+                            (_, false) => (tr("Image not found", "Image introuvable"), small),
+                            _ => (tr("Image not loaded", "Image non chargée"), small),
+                        };
+                        Frame {
+                            size: size(px(w), px(h)),
+                            alt: alt_of(picture),
+                            said,
+                        }
+                    });
 
                 let text_height = made.line.as_ref().map_or(lh, |l| l.size(lh).height);
                 // A code block and a callout have room inside their fill, above the first line and under the last.
@@ -2638,14 +2956,45 @@ impl Editor {
                     }
                     None => (pad + above, lh, pad + above + text_height),
                 };
+                // Off the caret, a folded block keeps none of its source: a diagram or a formula is its view
+                // alone, and a code block its chip and its closing edge.
+                let fold = match &fold_span {
+                    None => Fold::None,
+                    Some((span, whole)) => {
+                        let shown = (span.start..=span.end).contains(&cursor);
+                        if shown {
+                            Fold::Show(span.clone())
+                        } else if *whole {
+                            Fold::Whole(span.clone())
+                        } else if kind == Kind::Fence {
+                            Fold::Edges(span.clone())
+                        } else {
+                            Fold::Show(span.clone())
+                        }
+                    }
+                };
+                if fold_span
+                    .as_ref()
+                    .is_some_and(|(span, _)| span.end <= offset + line.len())
+                {
+                    fold_span = None;
+                }
                 let (pad, height) = if collapsed {
                     (px(0.), BLOCK_GAP * s)
+                } else if fold.whole() || (fold.edges() && kind == Kind::Fence && !opens) {
+                    (px(0.), px(0.))
+                } else if fold.edges() && opens {
+                    // The strip's band: the room above its box, and the chip, switch and copy button on one
+                    // centre line inside it, in place of the fence line.
+                    (px(0.), super::strip_height(&t, s))
                 } else {
                     (pad, height)
                 };
-                let row = Row {
+                let (pad, height) = (pad + grow / 2., height + grow);
+                let mut row = Row {
                     live,
                     collapsed,
+                    fold: fold.clone(),
                     start: offset,
                     len: line.len(),
                     y,
@@ -2656,6 +3005,8 @@ impl Editor {
                     shaped: made,
                     image,
                     enlarge,
+                    drawn,
+                    inline,
                     opens,
                     gap: below,
                     head,
@@ -2664,11 +3015,25 @@ impl Editor {
                     dx: px(0.),
                     grid: grid_row,
                     broken,
+                    frame,
                     pend,
                     nesting: nesting.clone(),
                     gutter: gutter_here,
                     number: 0,
                 };
+                if row.kind == Kind::Code && !row.fold.whole() {
+                    if code_wide.0 != code_key {
+                        code_wide = (code_key, px(0.));
+                    }
+                    code_wide.1 = code_wide.1.max(row.content_width());
+                }
+                if row.foot
+                    && matches!(row.kind, Kind::Code | Kind::Fence)
+                    && code_wide.0 == code_key
+                    && code_wide.1 + px(CODE_EDGE) > width + px(0.5)
+                {
+                    row.gap += grid::SCROLL_ROOM;
+                }
                 let height = row.height + row.image_height() + row.gap;
                 rows.push(Row { height, ..row });
                 y += height;
@@ -2765,6 +3130,28 @@ impl Editor {
         self.opening = (0..self.rows.len())
             .filter(|&i| self.rows[i].opens)
             .collect();
+        self.code_meta.clear();
+        let mut i = 0;
+        while i < self.rows.len() {
+            let n = self.rows[i..]
+                .iter()
+                .take_while(|r| r.kind == Kind::Code)
+                .count();
+            // A folded diagram or formula is drawn whole: no scrollbar over it.
+            if n > 0 && !self.rows[i].fold.whole() {
+                let wide = self.rows[i..i + n]
+                    .iter()
+                    .map(Row::content_width)
+                    .fold(px(0.), |a, b| a.max(b));
+                let (first, last) = (&self.rows[i], &self.rows[i + n - 1]);
+                self.code_meta.push(TableMeta {
+                    range: first.start..last.start + last.len,
+                    rows: i..i + n,
+                    wide,
+                });
+            }
+            i += n.max(1);
+        }
         self.table_meta.clear();
         let mut i = 0;
         while i < self.rows.len() {
@@ -2951,23 +3338,102 @@ impl Editor {
         self.frames(reveal, window);
     }
 
+    /// The frame of each code block of the layout: its lines keep their length and scroll
+    /// sideways when the block is wider than the page; the gutter stays where it is.
+    fn code_frames(&mut self, reveal: bool, scrolled: &HashMap<usize, Pixels>) {
+        let (cursor, width) = (self.cursor(), self.width);
+        for meta in &self.code_meta {
+            let (start, end) = (meta.range.start, meta.range.end);
+            let wide = meta.wide;
+            // Less than half a pixel over is rounding, not a block to scroll (as in the layout).
+            let over = wide + px(CODE_EDGE) - width;
+            let overflow = if over > px(0.5) { over } else { px(0.) };
+            let mut dx = scrolled
+                .get(&start)
+                .copied()
+                .unwrap_or_default()
+                .max(px(0.))
+                .min(overflow);
+            if reveal && (start..=end).contains(&cursor) {
+                let at = self
+                    .row_at(cursor)
+                    .unwrap_or(meta.rows.start)
+                    .clamp(meta.rows.start, meta.rows.end - 1);
+                let row = &self.rows[at];
+                // Where the cursor would be without scrolling.
+                let x = row.pos(cursor - row.start).x + row.dx;
+                let margin = px(24.);
+                if x - dx < margin {
+                    dx = x - margin;
+                } else if x - dx > width - margin {
+                    dx = x - width + margin;
+                }
+                dx = dx.max(px(0.)).min(overflow);
+            }
+            if overflow > px(0.) {
+                self.table_x.insert(start, dx);
+            }
+            if self.rows[meta.rows.start].dx != dx {
+                self.rows[meta.rows.clone()]
+                    .iter_mut()
+                    .for_each(|r| r.dx = dx);
+            }
+            let (first, last) = (&self.rows[meta.rows.start], &self.rows[meta.rows.end - 1]);
+            let top = first.y;
+            let frame = Bounds::new(
+                self.origin + point(px(0.), top),
+                size(width, last.y + last.height - last.gap - top),
+            );
+            if overflow > px(0.) {
+                // Same thin bar as a table's: its length is the share of the block that shows. It
+                // sits in the room the layout keeps under the block's last line (its closing fence,
+                // when shown), centered there: never over the code.
+                let foot = self
+                    .rows
+                    .get(meta.rows.end)
+                    .filter(|r| r.kind == Kind::Fence && r.foot)
+                    .unwrap_or(last);
+                let bottom = self.origin.y + foot.y + foot.height;
+                let thumb = (width * (width / (wide + px(CODE_EDGE)))).max(px(24.));
+                let at = (width - thumb) * (dx / overflow);
+                let bar = Bounds::new(
+                    point(frame.left() + at, bottom - foot.gap / 2. - px(3.)),
+                    size(thumb, px(6.)),
+                );
+                self.thumbs.push(ScrollBar {
+                    thumb: bar,
+                    frame,
+                    start,
+                    overflow,
+                });
+            }
+            self.code_boxes.push((start..end, frame));
+        }
+    }
+
     /// The frame of each table of the layout, and the zones of its handles.
     fn frames(&mut self, reveal: bool, window: &mut Window) {
-        let (cursor, width, room) = (self.cursor(), self.width, self.room);
+        let (cursor, room) = (self.cursor(), self.room);
         // Frame of each table: its lines, at the width of the longest without
         // going past the page; beyond that, it scrolls and follows the cursor.
         let scrolled = std::mem::take(&mut self.table_x);
         self.tables.clear();
         self.geos.clear();
         self.thumbs.clear();
+        self.code_boxes.clear();
+        self.code_frames(reveal, &scrolled);
         let starts: Vec<usize> = self.table_meta.iter().map(|m| m.range.start).collect();
         let marks = self.note_marks(&starts);
         for meta in &self.table_meta {
             let (start, end) = (meta.range.start, meta.range.end);
             let wide = meta.wide;
             let frame_w = wide.min(room);
-            let overflow = (wide - room).max(px(0.));
-            let lead = table_lead(self.theme.wide, frame_w, width);
+            // Less than half a pixel over is rounding, not a table to scroll (as in `grid`).
+            let overflow = if wide > room + px(0.5) {
+                wide - room
+            } else {
+                px(0.)
+            };
             let mut dx = scrolled
                 .get(&start)
                 .copied()
@@ -2993,25 +3459,31 @@ impl Editor {
             if overflow > px(0.) {
                 self.table_x.insert(start, dx);
             }
-            if self.rows[meta.rows.start].dx != dx + lead {
+            if self.rows[meta.rows.start].dx != dx {
                 self.rows[meta.rows.clone()]
                     .iter_mut()
-                    .for_each(|r| r.dx = dx + lead);
+                    .for_each(|r| r.dx = dx);
             }
             let (first, last) = (&self.rows[meta.rows.start], &self.rows[meta.rows.end - 1]);
             let top = first.y + first.pad;
             let frame = Bounds::new(
-                self.origin + point(-lead, top),
+                self.origin + point(px(0.), top),
                 size(frame_w, last.y + last.height - last.gap - top),
             );
             if overflow > px(0.) {
+                // Its length is the share of the table that shows; its place, the scroll.
                 let thumb = (frame_w * (frame_w / wide)).max(px(24.));
                 let at = (frame_w - thumb) * (dx / overflow);
                 let bar = Bounds::new(
-                    point(frame.left() + at, frame.bottom() - px(5.)),
-                    size(thumb, px(3.)),
+                    point(frame.left() + at, frame.bottom() - px(10.)),
+                    size(thumb, px(6.)),
                 );
-                self.thumbs.push(bar);
+                self.thumbs.push(ScrollBar {
+                    thumb: bar,
+                    frame,
+                    start,
+                    overflow,
+                });
             }
             self.tables.push((start..end, frame));
             // A very big table has no handles: its gestures do not rewrite it as a whole.
@@ -3621,8 +4093,17 @@ mod tests {
         cx.run_until_parked();
         draw(cx);
         let rows = shown(cx);
-        // Defined references hide their brackets off-live; the label stays.
-        assert_eq!(rows[0], ("See a and a again.".to_string(), false));
+        // Defined references hide their brackets off-live: each is its number, raised, over a gap.
+        assert_eq!(rows[0], ("See \u{a0} and \u{a0} again.".to_string(), false));
+        let numbers = editor.read_with(cx, |e, _| {
+            let r = e.rows.iter().find(|r| r.start == at(0)).unwrap();
+            r.shaped
+                .foots
+                .iter()
+                .map(|f| f.number.clone())
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(numbers, ["1", "1"]);
         // An undefined reference stays literal, even revealed.
         assert_eq!(rows[6], ("But [^x] stays.".to_string(), true));
         // The definition shows its label where it is.
@@ -3704,7 +4185,7 @@ mod tests {
         let at = starts(&edited);
         assert_eq!(
             editor.read_with(cx, |e, _| displayed(e, at[2]).0),
-            "See a here.".to_string()
+            "See \u{a0} here.".to_string()
         );
     }
 
@@ -3735,7 +4216,7 @@ mod tests {
         };
         let (body_h, body_lh, body_font) = metrics(cx, at[0]);
         assert_eq!(body_font, body);
-        assert_eq!(body_lh, (body * 22. / 15.).round());
+        assert_eq!(body_lh, (body * 23. / 15.).round());
         assert_eq!(body_h, body_lh);
         // A marker line is 0.8 of a body line, to a pixel of rounding.
         for line in [1, 3, 4, 6] {
@@ -3829,6 +4310,255 @@ mod tests {
         let _ = cx.update(|window, cx| window.draw(cx));
         cx.run_until_parked();
         (editor, cx)
+    }
+
+    /// Lays out the editor again after a change of its switches.
+    fn redraw(cx: &mut gpui::VisualTestContext) {
+        cx.run_until_parked();
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+    }
+
+    /// A block's word-wrap switch follows the block through an edit above it, goes when the note
+    /// is loaded again, and the language picker closes when its fence changes.
+    #[gpui::test]
+    fn wrap_switches_and_the_language_picker_follow_their_block(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n\n```text\nshort\n```\n";
+        let (editor, cx) = laid_out(cx, text);
+        let open = text.find("```text").unwrap();
+        editor.update(cx, |e, cx| e.toggle_wrap(open, false, cx));
+        editor.update(cx, |e, cx| e.open_language(open, cx));
+        editor.update(cx, |e, cx| e.splice(0..0, "More\n", cx));
+        editor.read_with(cx, |e, _| {
+            assert_eq!(e.wraps.get(&open), None);
+            assert_eq!(e.wraps.get(&(open + 5)), Some(&true));
+            assert!(e.lang.is_none(), "the picker closes on an edit");
+        });
+        editor.update(cx, |e, cx| e.load(text.to_string(), 0, cx));
+        editor.read_with(cx, |e, _| assert!(e.wraps.is_empty()));
+    }
+
+    /// A code block's long line scrolls by default; its switch wraps it, and back.
+    #[gpui::test]
+    fn a_code_block_scrolls_or_wraps_by_its_switch(cx: &mut gpui::TestAppContext) {
+        let long = "x".repeat(400);
+        let text = format!("Intro\n\n```text\nshort\n{long}\n```\n");
+        let (editor, cx) = laid_out(cx, &text);
+        let open = text.find("```text").unwrap();
+        let long_at = text.find(&long).unwrap();
+        let short_at = text.find("short").unwrap();
+        // (height of the long line, its width, width of the page)
+        let state = |editor: &gpui::Entity<Editor>, cx: &mut gpui::VisualTestContext| {
+            editor.read_with(cx, |e, _| {
+                let row = |start| e.rows.iter().find(|r| r.start == start).unwrap();
+                (
+                    row(long_at).height,
+                    row(long_at).content_width(),
+                    e.width,
+                    row(short_at).height,
+                )
+            })
+        };
+        let (tall, wide, page, short) = state(&editor, cx);
+        assert_eq!(tall, short, "scrolls: one line");
+        assert!(wide > page, "scrolls: wider than the page");
+        editor.update(cx, |e, cx| e.toggle_wrap(open, false, cx));
+        redraw(cx);
+        let (tall, wide, page, short) = state(&editor, cx);
+        assert!(tall > short, "wraps: several lines");
+        assert!(wide <= page + px(0.5), "wraps: inside the page");
+        editor.update(cx, |e, cx| e.toggle_wrap(open, false, cx));
+        redraw(cx);
+        let (tall, _, _, short) = state(&editor, cx);
+        assert_eq!(tall, short, "back to scrolling");
+    }
+
+    /// A table fits its page by default, cutting its words; its switch lets it scroll sideways.
+    #[gpui::test]
+    fn a_table_fits_or_scrolls_by_its_switch(cx: &mut gpui::TestAppContext) {
+        let head: Vec<String> = (0..12).map(|k| format!("alpha_beta_gamma_{k}")).collect();
+        let row: Vec<String> = (0..12).map(|k| format!("delta_epsilon_{k}")).collect();
+        let text = format!(
+            "Intro\n\n| {} |\n|{}\n| {} |\n",
+            head.join(" | "),
+            "---|".repeat(12),
+            row.join(" | ")
+        );
+        let (editor, cx) = laid_out(cx, &text);
+        let at = text.find('|').unwrap();
+        // (frame width, room of the page, width of the table's text)
+        let wide = |editor: &gpui::Entity<Editor>, cx: &mut gpui::VisualTestContext| {
+            editor.read_with(cx, |e, _| {
+                let (range, frame) = e.tables.first().unwrap();
+                assert_eq!(range.start, at);
+                (frame.size.width, e.room, e.table_meta[0].wide)
+            })
+        };
+        let (frame, page, _) = wide(&editor, cx);
+        assert!(frame <= page + px(0.5), "fits: {frame:?} in {page:?}");
+        editor.update(cx, |e, cx| e.toggle_wrap(at, true, cx));
+        redraw(cx);
+        let (_, page, text) = wide(&editor, cx);
+        assert!(text > page, "scrolls: {text:?} wider than {page:?}");
+    }
+
+    /// The thumb of a table's bar drags the table sideways: a press on it, a move and a release scroll
+    /// the table to where the pointer is, one pixel of pointer for the overflow's share of the bar's
+    /// room, clamped to its overflow; a move after the release changes nothing.
+    #[gpui::test]
+    fn a_bar_thumb_drags_its_table_sideways(cx: &mut gpui::TestAppContext) {
+        let cells: Vec<String> = (0..12).map(|k| format!("alpha_beta_gamma_{k}")).collect();
+        let text = format!(
+            "Intro\n\n| {} |\n|{}\n| {} |\n",
+            cells.join(" | "),
+            "---|".repeat(12),
+            cells.join(" | ")
+        );
+        let (editor, cx) = laid_out(cx, &text);
+        let at = text.find('|').unwrap();
+        editor.update(cx, |e, cx| e.toggle_wrap(at, true, cx));
+        redraw(cx);
+        // The bar's grip, the room the thumb moves in, and the table's overflow.
+        let (grip, room, overflow) = editor.read_with(cx, |e, _| {
+            let bar = e
+                .thumbs
+                .iter()
+                .find(|b| b.start == at)
+                .expect("the table's bar");
+            let room = bar.frame.size.width - bar.thumb.size.width;
+            (Editor::grip(&bar.thumb).center(), room, bar.overflow)
+        });
+        let offset = |cx: &mut gpui::VisualTestContext| {
+            editor.read_with(cx, |e, _| e.table_x.get(&at).copied().unwrap_or_default())
+        };
+        assert_eq!(offset(cx), px(0.));
+        cx.simulate_mouse_down(grip, gpui::MouseButton::Left, gpui::Modifiers::none());
+        let pulled = grip + point(px(50.), px(0.));
+        cx.simulate_mouse_move(pulled, gpui::MouseButton::Left, gpui::Modifiers::none());
+        redraw(cx);
+        let moved = offset(cx);
+        let want = (px(50.) * (overflow / room)).min(overflow);
+        assert!((moved - want).abs() < px(1.), "{moved:?} for {want:?}");
+        // Past the end of the bar, the table stops at its overflow.
+        // Moves reach the editor while the pointer is in it: its right edge stands for the far end.
+        let (left, right) = editor.read_with(cx, |e, _| (e.viewport.left(), e.viewport.right()));
+        let far = point(right - px(2.), grip.y);
+        cx.simulate_mouse_move(far, gpui::MouseButton::Left, gpui::Modifiers::none());
+        redraw(cx);
+        assert_eq!(offset(cx), overflow);
+        cx.simulate_mouse_up(far, gpui::MouseButton::Left, gpui::Modifiers::none());
+        // Released: the pointer no longer moves the table.
+        let back = point(left + px(2.), grip.y);
+        cx.simulate_mouse_move(back, gpui::MouseButton::Left, gpui::Modifiers::none());
+        redraw(cx);
+        assert_eq!(offset(cx), overflow);
+    }
+
+    /// Every table and code block stays inside the text column, whatever the window, the zoom and
+    /// the word-wrap switches: what does not fit scrolls inside the column, its bar in a room of its
+    /// own under the last line, and the table's switch never covers its header's text.
+    #[gpui::test]
+    fn wide_blocks_stay_in_the_text_column(cx: &mut gpui::TestAppContext) {
+        let ten: Vec<String> = (1..=10).map(|k| format!("Column {k}")).collect();
+        let many: Vec<String> = (0..22).map(|k| format!("alpha_beta_gamma_{k}")).collect();
+        let table = |cells: &[String]| {
+            format!(
+                "| {} |\n|{}\n| {} |\n",
+                cells.join(" | "),
+                "---|".repeat(cells.len()),
+                cells.join(" | ")
+            )
+        };
+        let url = "| Link | Note |\n|---|---|\n| https://example.com/a/very/long/path/that/goes/on/and/on/without/any/spaces/at/all/and/more/and/more | short |\n";
+        let text = format!(
+            "Intro\n\n{}\n{url}\n{}\n```text\n{}\n```\n\nEnd\n",
+            table(&ten),
+            table(&many),
+            "x".repeat(300)
+        );
+        let (editor, cx) = laid_out(cx, &text);
+        let starts: Vec<usize> = editor.read_with(cx, |e, _| {
+            e.table_meta.iter().map(|m| m.range.start).collect()
+        });
+        assert_eq!(starts.len(), 3);
+        for (width, zoom) in [
+            (1400., 15.),
+            (900., 15.),
+            (500., 15.),
+            (1400., 32.),
+            (700., 11.),
+        ] {
+            cx.simulate_resize(size(px(width), px(900.)));
+            editor.update(cx, |e, cx| {
+                let theme = Theme {
+                    size: zoom,
+                    ..e.theme
+                };
+                e.set_theme(theme, cx)
+            });
+            for wrap in [true, false] {
+                redraw(cx);
+                editor.read_with(cx, |e, _| {
+                    let (left, right) = (e.origin.x, e.origin.x + e.width);
+                    let what = format!("window {width}, size {zoom}, wrap {wrap}");
+                    assert_eq!(e.room, e.width, "{what}");
+                    assert!(e.width <= px(width) - SIDE * 2. + px(0.5), "{what}");
+                    assert!(
+                        e.thumbs.len() >= 2,
+                        "{what}: the wide table and the code scroll"
+                    );
+                    for (_, frame) in e.tables.iter().chain(&e.code_boxes) {
+                        assert!(
+                            frame.left() >= left - px(0.5) && frame.right() <= right + px(0.5),
+                            "{what}: {frame:?} outside {left:?}..{right:?}"
+                        );
+                    }
+                    for (meta, (_, frame)) in e.table_meta.iter().zip(&e.tables) {
+                        let rows = &e.rows[meta.rows.clone()];
+                        let head = rows[0].grid.as_ref().unwrap();
+                        let last = rows.iter().rev().find_map(|r| r.grid.as_ref()).unwrap();
+                        let scrolls = meta.wide > frame.size.width + px(0.5);
+                        // The switch never covers the header's text: at the end of a table that fits,
+                        // or of one scrolled to its end.
+                        let switch = Editor::table_wrap_bounds(frame);
+                        let end =
+                            frame.left() + head.last_text_right() - (meta.wide - frame.size.width);
+                        assert!(end <= switch.left(), "{what}: {end:?} under {switch:?}");
+                        // A table that scrolls keeps room for its bar under its last line.
+                        let bar = e.thumbs.iter().find(|b| b.frame == *frame).map(|b| b.thumb);
+                        assert_eq!(bar.is_some(), scrolls, "{what}");
+                        assert_eq!(last.scroll() > px(0.), scrolls, "{what}");
+                        if let Some(bar) = bar {
+                            assert!(
+                                bar.top() >= frame.bottom() - last.scroll()
+                                    && bar.bottom() <= frame.bottom(),
+                                "{what}: {bar:?} in {frame:?}"
+                            );
+                        }
+                    }
+                    // The code block's bar sits under its last line of code.
+                    let code = e.rows.iter().rfind(|r| r.kind == Kind::Code).unwrap();
+                    let bottom = e.origin.y + code.y + code.height - code.gap;
+                    for bar in e
+                        .thumbs
+                        .iter()
+                        .filter(|b| e.code_boxes.iter().any(|(_, c)| *c == b.frame))
+                    {
+                        assert!(
+                            bar.thumb.top() >= bottom,
+                            "{what}: {:?} over the code ({bottom:?})",
+                            bar.thumb
+                        );
+                    }
+                });
+                // Wrap off for every table, then back on.
+                editor.update(cx, |e, cx| {
+                    for at in &starts {
+                        e.toggle_wrap(*at, true, cx);
+                    }
+                });
+            }
+        }
     }
 
     /// A block quote: every marker hides off the live line, each level draws its bar (10 px apart) and its
@@ -4066,6 +4796,103 @@ mod tests {
         let check = task.2.clone().expect("a box");
         assert!(check.start > plain_right, "box {check:?} under the number");
         assert!(task.1 > check.end, "text {:?} before its box", task.1);
+    }
+
+    /// Off the caret, a code block shows its chip and its code: its fence lines draw nothing, the closing
+    /// one takes no line of its own. The caret in the block brings the fences back.
+    #[gpui::test]
+    fn a_code_block_folds_its_fences_off_the_caret(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n\n```rust\nfn x() {}\n```\n\nOutro\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let row = |e: &Editor, start: usize| {
+            let r = e.rows.iter().find(|r| r.start == start).unwrap();
+            (r.src_hidden(), r.height, r.lh)
+        };
+        editor.read_with(cx, |e, _| {
+            let (open, code, close) = (row(e, lines[2]), row(e, lines[3]), row(e, lines[4]));
+            assert!(open.0 && close.0, "fences hidden off the caret");
+            assert!(!code.0, "the code shows");
+            assert!(
+                close.1 < close.2,
+                "the closing fence takes no line: {:?}",
+                close.1
+            );
+        });
+        editor.update(cx, |e, cx| e.move_to(lines[3], cx));
+        cx.run_until_parked();
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        editor.read_with(cx, |e, _| {
+            let (open, close) = (row(e, lines[2]), row(e, lines[4]));
+            assert!(
+                !open.0 && !close.0,
+                "the caret in the block shows its fences"
+            );
+        });
+    }
+
+    /// Off the caret, a formula keeps its view alone: its `$$` lines and its source draw nothing.
+    #[gpui::test]
+    fn a_formula_folds_its_source_off_the_caret(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n\n$$\nx^2\n$$\n\nOutro\n";
+        let (editor, cx) = laid_out(cx, text);
+        let lines = starts(text);
+        let hidden = |e: &Editor| {
+            [lines[2], lines[3], lines[4]].map(|start| {
+                e.rows
+                    .iter()
+                    .find(|r| r.start == start)
+                    .unwrap()
+                    .src_hidden()
+            })
+        };
+        editor.read_with(cx, |e, _| assert_eq!(hidden(e), [true; 3]));
+        editor.update(cx, |e, cx| e.move_to(lines[3], cx));
+        cx.run_until_parked();
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        editor.read_with(cx, |e, _| assert_eq!(hidden(e), [false; 3]));
+    }
+
+    /// Off the caret, every inline formula of a line hides its source, and is drawn over the gap
+    /// it leaves in the sentence; on the caret, the source shows and nothing is drawn.
+    #[gpui::test]
+    fn inline_formulas_fold_their_source_and_draw_in_the_line(cx: &mut gpui::TestAppContext) {
+        let text = "Intro\n\nSoit $x^2$ et $E = mc^2$ ici.\n\nOutro\n";
+        let (editor, cx) = laid_out(cx, text);
+        let line = starts(text)[2];
+        // (formulas, cut spans, figures drawn in the line)
+        let state = |e: &Editor| {
+            let r = e.rows.iter().find(|r| r.start == line).unwrap();
+            (r.shaped.formulas.len(), r.shaped.subs.len(), r.inline.len())
+        };
+        editor.read_with(cx, |e, _| {
+            let (formulas, cut, drawn) = state(e);
+            assert_eq!(
+                (formulas, cut, drawn),
+                (2, 2, 2),
+                "both formulas, their sources cut"
+            );
+            let r = e.rows.iter().find(|r| r.start == line).unwrap();
+            assert!(r.image.is_none(), "no figure under the line");
+            assert!(r.inline.iter().all(|i| f32::from(i.size.height) > 0.));
+        });
+        // Typing or clicking on the line reveals it (a plain cursor move does not).
+        editor.update(cx, |e, cx| {
+            e.revealed = Some(line);
+            e.move_to(line + 2, cx);
+        });
+        cx.run_until_parked();
+        let _ = cx.update(|window, cx| window.draw(cx));
+        cx.run_until_parked();
+        editor.read_with(cx, |e, _| {
+            assert_eq!(
+                state(e),
+                (0, 0, 0),
+                "the caret's line shows its source, drawn nowhere else"
+            );
+        });
     }
 
     /// The cells of a table hide their markers off the caret's row, as the body lines do; the row

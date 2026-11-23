@@ -68,7 +68,7 @@ fn text_size_and_theme_on_the_settings_page_write_the_preferences(cx: &mut TestA
         (16., 16.)
     );
     assert!(vault::load_settings().contains("size=16\n"));
-    // Theme: Dark is Quiet Dark, System goes back to the default.
+    // Theme: Dark is Dark, System goes back to the default.
     let at = cx
         .debug_bounds("theme-2")
         .expect("the Dark choice")
@@ -77,7 +77,7 @@ fn text_size_and_theme_on_the_settings_page_write_the_preferences(cx: &mut TestA
     cx.run_until_parked();
     assert_eq!(
         shell.read_with(cx, |s, _| (s.prefs.theme.clone(), s.theme.bg)),
-        ("Quiet Dark".to_string(), Hsla::from(gpui::rgb(0x1c1c1e)))
+        ("Dark".to_string(), Hsla::from(gpui::rgb(0x1c1c1e)))
     );
     let at = cx
         .debug_bounds("theme-0")
@@ -104,4 +104,29 @@ fn text_size_and_theme_on_the_settings_page_write_the_preferences(cx: &mut TestA
     cx.simulate_input("comment");
     let found = shell.read_with(cx, |s, cx| s.help_rows(cx).len());
     assert!(found > 0 && found < 200, "{found}");
+}
+
+#[gpui::test]
+fn line_spacing_on_the_settings_page_writes_the_preference_and_the_lines(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "settings-tab-spacing");
+    fs::write(root.join("Note.md"), "# Note\n\ntexte\n").unwrap();
+    shell.update(cx, |s, cx| {
+        s.rescan(&root, cx);
+        s.open_note(&root.join("Note.md"), cx);
+    });
+    cx.run_until_parked();
+    cx.simulate_keystrokes("secondary-,");
+    cx.run_until_parked();
+    // Relaxed is the third choice of Line spacing: the preference, the theme's multiplier, the file.
+    let at = cx
+        .debug_bounds("spacing-2")
+        .expect("the Relaxed choice of Line spacing")
+        .center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(
+        shell.read_with(cx, |s, _| (s.prefs.spacing.clone(), s.theme.leading)),
+        ("relaxed".to_string(), 1.15)
+    );
+    assert!(vault::load_settings().contains("spacing=relaxed\n"));
 }

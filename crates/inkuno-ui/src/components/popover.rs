@@ -15,12 +15,9 @@ pub fn floating(t: Theme) -> Div {
         .shadow(t.floating())
 }
 
-/// A menu or the palette in Quiet: the raised `popover` fill, a 1 px line of the text at 8 %, the sheet radius
-/// and two shadows (0 1 3 at 5 %, 0 8 24 at 10 %). Other themes keep `floating`.
+/// A menu or the palette: the raised `popover` fill, a 1 px line of the text at 8 %, the sheet radius
+/// and two shadows (0 1 3 at 5 %, 0 8 24 at 10 %).
 pub fn popover(t: Theme) -> Div {
-    if !t.quiet {
-        return floating(t);
-    }
     div()
         .bg(t.popover)
         .rounded(t.sheet())

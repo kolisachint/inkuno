@@ -219,6 +219,12 @@ impl Editor {
             self.grid_typed.clear();
             return cx.notify();
         }
+        if self.lang.is_some() {
+            if matches!(m, Motion::Up | Motion::Down) {
+                return self.language_step(m == Motion::Down, cx);
+            }
+            self.lang = None;
+        }
         if !select
             && matches!(m, Motion::Up | Motion::Down)
             && let Some((_, items)) = self.completion()

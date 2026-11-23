@@ -2,7 +2,7 @@
 # Usage: ui-check.sh [--theme light|dark|both] [--only NAME ...] [--list]
 #
 # Drives the real Inkuno desktop app on a virtual X screen (Xvfb) into many UI states, in the
-# light theme (Quiet Light) and the dark theme (Quiet Dark), and screenshots each state.
+# light theme (Light) and the dark theme (Dark), and screenshots each state.
 #
 # Env:
 #   BIN     the app binary (default: <repo>/target/debug/inkuno). Never built here.
@@ -47,7 +47,7 @@ case $theme_arg in
   *) echo "--theme takes light, dark or both" >&2; exit 2 ;;
 esac
 
-theme_value() { case $1 in light) echo "Quiet Light" ;; dark) echo "Quiet Dark" ;; esac; }
+theme_value() { case $1 in light) echo "Light" ;; dark) echo "Dark" ;; esac; }
 
 # ---------------------------------------------------------------------------------------------
 # X server and app lifecycle

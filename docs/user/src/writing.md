@@ -27,10 +27,10 @@ What you type is what is saved. Inkuno only changes how it looks. Off the line y
 Some details:
 
 - **Panels**: `NOTE`, `TIP`, `IMPORTANT`, `WARNING` and `CAUTION` each have their color, as on GitHub.
-- **Code blocks**: a line of three or more backticks or tildes (`` ``` `` or `~~~`) opens one, and `Enter` at the end of that line closes it with the same mark and length. Name the language (`` ```rust `` or `~~~rust`) to get it colored. The copy icon on the first line copies the content of the block.
+- **Code blocks**: a line of three or more backticks or tildes (`` ``` `` or `~~~`) opens one, and `Enter` at the end of that line closes it with the same mark and length. Name the language (`` ```rust `` or `~~~rust`) to get it colored. The copy icon on the first line copies the content of the block. Click the language name at its top right to pick another one from a list; typing filters it.
 - **Indented code**: four spaces, or a tab, at the start of a line make a code line, when no list item above it is being continued. The lines after it stay code while they are indented.
 - **Mermaid**: the diagram is drawn under its block once the cursor has left it. The magnifier next to the copy button shows it full size, to zoom and move around.
-- **Formulas**: a formula is drawn under its line, not within the text. Only the first one of a line is drawn.
+- **Formulas**: an inline formula (`$x^2$`) is drawn in its sentence, and its source shows on the line you are editing. A display formula (`$$…$$`) is drawn under its line.
 - **Arrows**: the symbols are shown everywhere except on the line you are editing and inside code.
 - **Footnotes**: `[^a]` refers to `[^a]: the note`. A reference that names a definition shows its label as a link; one without a definition stays as typed. Pictures given as a web address are kept as you typed them.
 

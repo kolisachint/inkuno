@@ -181,41 +181,6 @@ impl Shell {
         self.nav.activate(mode);
     }
 
-    /// Shift+click on a tool's button: the tool joins the others of its dock, at the bottom, or leaves
-    /// them if it is shown. (The graph refresh went with the graph.)
-    pub(super) fn stack_tool(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
-        if mode.left_banned() && !self.nav.right.contains(&mode) {
-            self.nav.right.push(mode);
-        }
-        let right = self.nav.right.contains(&mode);
-        match self.docked(mode) {
-            true => self.hide_tool(mode, window, cx),
-            false => {
-                // A folded left dock opens on this tool alone.
-                let fresh = !right && !self.left_open();
-                let stack = if right {
-                    &mut self.nav.right_shown
-                } else {
-                    &mut self.nav.left_shown
-                };
-                // The right panel shows one view: a second one replaces the first.
-                if fresh || right {
-                    stack.clear();
-                }
-                stack.retain(|m| *m != mode);
-                stack.push(mode);
-                if !right && self.nav.panel == Panel::Hidden {
-                    self.nav.panel = Panel::Split;
-                }
-                self.nav.folded.remove(&mode);
-                self.nav.activate(mode);
-                self.nav.reveal = true;
-                window.focus(&self.nav.focus);
-                self.settle_nav(window, cx);
-            }
-        }
-    }
-
     /// The tool leaves its dock's stack; the last one of the left dock hides the panel instead, so
     /// that it comes back the same.
     pub(super) fn hide_tool(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
@@ -342,9 +307,9 @@ impl Shell {
         }
     }
 
-    /// The width the sidebar starts at: 240 px in Quiet, the one it always had elsewhere.
+    /// The width the sidebar starts at: 240 px.
     pub(super) fn default_list_w(&self) -> Pixels {
-        if self.theme.quiet { px(240.) } else { LIST_W }
+        px(240.)
     }
 
     /// The separator follows the pointer; at the ends, one side collapses.
@@ -919,7 +884,6 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> Vec<Stateful<Div>> {
         let t = self.theme;
-        let focused = self.nav.focus.is_focused(window);
         let tree = self.nav.mode == Mode::Tree;
         let marked = &self.nav.marked;
         // Dragging a row of the multiple selection carries the whole batch.
@@ -982,17 +946,17 @@ impl Shell {
                 // Name and detail share the row by measure: a text is cut with an ellipsis only when it
                 // is given its width, so the shares are worked out here.
                 let (stem, ext) = row.split();
-                // Quiet's rows: an 18 px icon and a 9 px gap; the others' 14 px and 7 px.
-                let (icon_px, gap_px) = match t.quiet {
-                    true => (18., 9.),
-                    false => (14., 7.),
-                };
+                // The rows: an 18 px icon and a 9 px gap.
+                let (icon_px, gap_px) = (18., 9.);
                 let shown = {
                     let used = 8. + nav::INDENT * row.depth as f32 + 8. + 8.;
                     let has_icon = tree || self.icons.contains_key(&row.path);
+                    // The row's gaps after the name (the spacer, the detail) take room too.
+                    let after_name = if wide { 0. } else { 2. * gap_px };
                     let fixed = t.px(used
                         + if foldable { 21. } else { 0. }
-                        + if has_icon { icon_px + gap_px } else { 0. });
+                        + if has_icon { icon_px + gap_px } else { 0. }
+                        + after_name);
                     let avail = f32::from(room - fixed);
                     let measure = |text: &str, size: f32| -> f32 {
                         if text.is_empty() {
@@ -1044,17 +1008,10 @@ impl Shell {
                     .rounded(t.large())
                     .text_size(t.px(13.))
                     .when(!selected, |d| d.hover(|s| s.bg(t.hover)))
-                    // The displayed file: accent text and icon, no second tint; the selection wins on the same row.
-                    // Quiet: the selection is a neutral pill, and the displayed file has no accent.
+                    // The selection is a neutral pill, and the displayed file has no accent.
                     .when(selected, |d| {
                         let at = self.nav.sel_at.clone();
-                        d.bg(match (t.quiet, focused) {
-                            (true, _) => t.pill,
-                            (false, true) => t.selection,
-                            (false, false) => t.selection.opacity(0.5),
-                        })
-                        .relative()
-                        .child(
+                        d.bg(t.pill).relative().child(
                             gpui::canvas(move |bounds, _, _| at.set(Some(bounds)), |_, _, _, _| {})
                                 .absolute()
                                 .size_full(),
@@ -1083,24 +1040,13 @@ impl Shell {
                                 .iter()
                                 .find(|(file, _)| file[2..file.len() - 4] == *name)
                         });
-                        // Quiet: the icons are the text's ink at 85 %; the accent is for a user's star only.
-                        let (ink, soft) = match t.quiet {
-                            true => (t.text.opacity(0.85), t.text.opacity(0.85)),
-                            false => (t.text, t.soft),
-                        };
+                        // The icons are the text's ink at 85 %; the accent is for a user's star only.
+                        let ink = t.text.opacity(0.85);
                         let (file, tint) = match given {
-                            Some((file, _)) => (
-                                *file,
-                                if *file == "i-star.svg" || (current && !t.quiet) {
-                                    t.accent
-                                } else {
-                                    ink
-                                },
-                            ),
-                            None => (
-                                row.icon(),
-                                if current && !t.quiet { t.accent } else { soft },
-                            ),
+                            Some((file, _)) => {
+                                (*file, if *file == "i-star.svg" { t.accent } else { ink })
+                            }
+                            None => (row.icon(), ink),
                         };
                         let selector = format!("nav-icon-{}", row.name);
                         (given.is_some() || tree).then(|| {
@@ -1128,14 +1074,14 @@ impl Shell {
                                 (_, true) => d.flex_none().max_w(gpui::relative(0.7)),
                                 _ => d.flex_none().whitespace_nowrap(),
                             })
-                            .when(t.quiet, |d| {
-                                d.text_color(if selected {
-                                    t.text
-                                } else {
-                                    t.text.opacity(0.85)
-                                })
+                            // One line box for the stem and the extension: a fallback font (CJK, emoji)
+                            // must not make one of them taller than the other.
+                            .line_height(t.px(18.))
+                            .text_color(if selected {
+                                t.text
+                            } else {
+                                t.text.opacity(0.85)
                             })
-                            .when(current && !t.quiet, |d| d.text_color(t.accent))
                             .when(quiet && !current, |d| d.text_color(t.soft))
                             .child(div().when(wide, |d| d.min_w_0().truncate()).child(if wide {
                                 stem.to_string()
@@ -1148,6 +1094,7 @@ impl Shell {
                                     div()
                                         .debug_selector(move || selector.clone())
                                         .flex_none()
+                                        .line_height(t.px(18.))
                                         .text_color(t.soft)
                                         .child(ext.to_string()),
                                 )
@@ -1195,7 +1142,7 @@ impl Shell {
                         .id(ix)
                         .debug_selector(move || selector.clone())
                         .w_full()
-                        .h(t.px(if t.quiet { 30. } else { ROW }))
+                        .h(t.px(30.))
                         .px_2()
                         .cursor_pointer()
                         .child(
@@ -1314,7 +1261,6 @@ impl Shell {
         }
         let panel = self.nav.panel;
         let unfolded = self.left_open();
-        let keys = |action: &dyn Action| crate::ui::keys::of(cx, action);
         let full = panel == Panel::Full;
         let width = self.split_width();
         // The band at the top of the panel is the window's top row: its buttons when the title bar is
@@ -1322,57 +1268,6 @@ impl Shell {
         let band_shown = self.band_shown();
         let lights = self.nav.lights;
         let native = self.nav.native_bar;
-        let shown: Vec<Mode> = Mode::ALL.into_iter().filter(|m| self.docked(*m)).collect();
-        let mode_button = |id: &'static str, icon, m: Mode, label: &'static str, keys: String| {
-            on_sheet(
-                band_button(id, icon, shown.contains(&m), t),
-                shown.contains(&m),
-                t,
-            )
-            .debug_selector(move || id.to_string())
-            .tooltip(tip(label, keys, t))
-            // Shift+click: with the others of its dock, one above the other.
-            // A plain click never hides: the sidebar stays shown (hiding is on the keys
-            // and the palette; bring back by restoring `true`).
-            .on_click(cx.listener(
-                move |this, e: &ClickEvent, window, cx| match e.modifiers().shift {
-                    true => this.stack_tool(m, window, cx),
-                    false => this.show_nav(m, false, window, cx),
-                },
-            ))
-        };
-        let commands = div()
-            .id("nav-commands")
-            .debug_selector(|| "nav-commands".into())
-            .size(t.px(28.))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(t.small())
-            .cursor_pointer()
-            .tab_index(0)
-            .focus(|s| s.border_2().border_color(t.accent))
-            .hover(|s| s.bg(t.hover))
-            .active(|s| s.bg(t.pressed))
-            .child(
-                div()
-                    .debug_selector(|| "nav-logo".into())
-                    .child(crate::ui::assets::logo(t)),
-            )
-            .tooltip(tip(
-                tr("Commands", "Commandes"),
-                keys(&crate::actions::ToggleCommands),
-                t,
-            ))
-            .on_click(cx.listener(|this, _, window, cx| this.open_commands(window, cx)));
-        let tree = mode_button(
-            "nav-tree",
-            "tree.svg",
-            Mode::Tree,
-            tr("Vault tree", "Arbre du coffre"),
-            keys(&ShowTree),
-        );
         // The band: the lights' room at the left (macOS, where the system draws the bar), then the sidebar
         // toggle, search and new note, right-aligned. Narrow, the last ones are cut at the edge.
         let band = div()
@@ -1401,50 +1296,15 @@ impl Shell {
                             .when(!native, |d| d.map(crate::ui::widgets::drag_window)),
                     )
                     .child(self.sidebar_toggle(true, cx))
-                    .when(!t.quiet, |d| {
-                        d.child(self.search_button(cx)).child(self.new_button(cx))
-                    })
             });
         // The foot: the actions that have no place in the band, one compact row at the
         // bottom of the sidebar. With the title bar hidden, the band is gone and its buttons join it.
-        let foot = if t.quiet {
-            self.quiet_foot(band_shown, cx).into_any_element()
-        } else {
-            div()
-                .id("sidebar-foot")
-                .debug_selector(|| "sidebar-foot".into())
-                .flex_none()
-                .w_full()
-                .h(t.px(BAND))
-                .flex()
-                .items_center()
-                .gap_1()
-                .px_2()
-                .overflow_hidden()
-                .border_t_1()
-                .border_color(t.border)
-                .child(commands)
-                .child(tree)
-                .when(!band_shown, |d| {
-                    d.child(self.sidebar_toggle(true, cx))
-                        .child(self.search_button(cx))
-                        .child(self.new_button(cx))
-                })
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .h_full()
-                        .when(!native, |d| d.map(crate::ui::widgets::drag_window)),
-                )
-                .child(self.titlebar_button(cx))
-                .into_any_element()
-        };
+        let foot = self.quiet_foot(band_shown, cx);
         let wrapper = div().h_full().flex().min_w_0();
         if !unfolded {
             return div().flex_none();
         }
-        let top = t.quiet.then(|| self.quiet_top(cx));
+        let top = self.quiet_top(cx);
         let content = self.render_stack(false, window, cx);
         // A 1 px hairline between the panel and the note; its handle (DIVIDER_HIT each side) is laid over
         // both. Double-click: original width.
@@ -1466,12 +1326,8 @@ impl Shell {
                     div()
                         .w(DIVIDER)
                         .h_full()
-                        // Quiet: no line, the note's shadow is the edge.
-                        .bg(if t.quiet {
-                            gpui::transparent_black()
-                        } else {
-                            t.border
-                        })
+                        // No line: the note's shadow is the edge.
+                        .bg(gpui::transparent_black())
                         .when(self.nav.dragging, |d| d.bg(t.accent))
                         .group_hover("nav-divider", |s| s.bg(t.accent)),
                 )
@@ -1511,11 +1367,11 @@ impl Shell {
             .flex()
             .flex_col()
             .min_w_0()
-            // The band, the tools and the foot share the panel's background (Quiet: the ground).
-            .bg(if t.quiet { t.ground } else { t.bg })
+            // The band, the tools and the foot share the panel's background (the ground).
+            .bg(t.ground)
             .map(|d| if full { d.flex_1() } else { d.w(width) })
             .child(band)
-            .when_some(top, |d, top| d.child(top))
+            .child(top)
             .child(
                 div()
                     .flex_1()
@@ -1531,7 +1387,7 @@ impl Shell {
             .child(divider)
     }
 
-    /// The Quiet sidebar's top: the Search and Today rows, then the Notes header with its hover "+".
+    /// The sidebar's top: the Search and Today rows, then the Notes header with its hover "+".
     fn quiet_top(&self, cx: &mut Context<Self>) -> Div {
         let t = self.theme;
         let search = nav_row(
@@ -1575,6 +1431,7 @@ impl Shell {
             .child(
                 div().ml_auto().child(
                     band_button("nav-new", "plus.svg", false, t)
+                        .debug_selector(|| "nav-new".into())
                         .opacity(0.)
                         .group_hover("nav-notes", |s| s.opacity(1.))
                         .tooltip(tip(
@@ -1655,10 +1512,7 @@ impl Shell {
             0 => 2.,
             n => n.min(6) as f32,
         };
-        let (head, row) = match t.quiet {
-            true => (42., 30.),
-            false => (32., nav::ROW),
-        };
+        let (head, row) = (42., 30.);
         let view = self.render_dock(false, true, false, window, cx);
         self.nav.activate(prev);
         div()
@@ -1718,32 +1572,6 @@ impl Shell {
                 t,
             ))
             .on_click(cx.listener(|this, _, window, cx| this.toggle_sidebar(window, cx)))
-    }
-
-    /// The vault search: the palette, where a note is found or created.
-    pub(super) fn search_button(&self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let t = self.theme;
-        band_button("nav-search", "search.svg", false, t)
-            .debug_selector(|| "nav-search".into())
-            .tooltip(tip(
-                tr("Find or create a note", "Chercher ou créer une note"),
-                crate::ui::keys::of(cx, &crate::actions::OpenPalette),
-                t,
-            ))
-            .on_click(cx.listener(|this, _, window, cx| this.open_palette("", window, cx)))
-    }
-
-    /// A new note in the current place.
-    pub(super) fn new_button(&self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let t = self.theme;
-        band_button("nav-new", "plus.svg", false, t)
-            .debug_selector(|| "nav-new".into())
-            .tooltip(tip(
-                tr("New note", "Nouvelle note"),
-                crate::ui::keys::of(cx, &crate::actions::NewNote),
-                t,
-            ))
-            .on_click(cx.listener(|this, _, window, cx| this.new_note_here(window, cx)))
     }
 
     /// The title bar's toggle (Ctrl+Shift+S), at the foot of the sidebar, so that the bar always comes back.
@@ -1890,10 +1718,7 @@ impl Shell {
         // Flat, edge to edge: no card and no shadow. Its one hairline is on the left panel's side (the left
         // panel) or none (the right dock, whose divider with the note is the line).
         div()
-            .bg(if !right && t.quiet { t.ground } else { t.bg })
-            .when(!right && !t.quiet, |d| {
-                d.border_l_1().border_color(t.border)
-            })
+            .bg(if right { t.bg } else { t.ground })
             // The right band hidden (title bar off): what is left of it is its padding.
             .when(right && !self.band_shown(), |d| d.pt(t.px(BAND_HIDDEN)))
             .overflow_hidden()
@@ -2185,35 +2010,6 @@ impl Shell {
             .flex()
             .items_center()
             .when_some(inline, |d, switcher| d.child(switcher))
-            .when(stacked && !t.quiet, |d| {
-                d.border_t_1().border_color(t.border)
-            })
-            // Stacked, a tool folds down to its header.
-            .when(stacked && !t.quiet, |d| {
-                d.child(
-                    band_button(
-                        ("tool-fold", mode as usize),
-                        if shut {
-                            "chevron-right.svg"
-                        } else {
-                            "chevron-down.svg"
-                        },
-                        false,
-                        t,
-                    )
-                    .debug_selector(move || format!("tool-fold-{}", mode.name()))
-                    .tooltip(tip(
-                        if shut {
-                            tr("Unfold", "Déplier")
-                        } else {
-                            tr("Fold", "Replier")
-                        },
-                        String::new(),
-                        t,
-                    ))
-                    .on_click(cx.listener(move |this, _, _, cx| this.fold_tool(mode, cx))),
-                )
-            })
             // Zed-style tree header: the panel shows no vault name (it moved to the window's
             // title bar), so the tree's action icons sit at the header's left end, ahead of the
             // title handle — which stays, empty for the tree, as the drag handle and the
@@ -2532,8 +2328,8 @@ impl Shell {
                 window.focus(&this.pane().editor.focus_handle(cx));
                 this.settle_nav(window, cx);
             }))
-            .when(!(t.quiet && mode == Mode::Tree), |d| {
-                d.child(match t.quiet && mode == Mode::Scratch {
+            .when(mode != Mode::Tree, |d| {
+                d.child(match mode == Mode::Scratch {
                     true => self.quiet_section(mode, shut, cx).into_any_element(),
                     false => header.into_any_element(),
                 })

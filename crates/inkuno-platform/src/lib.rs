@@ -4,6 +4,7 @@ pub mod assistant;
 pub mod clock;
 pub mod link;
 pub mod mac_chrome;
+pub mod remote;
 pub mod revisions;
 pub mod scratch;
 pub mod sidecar;

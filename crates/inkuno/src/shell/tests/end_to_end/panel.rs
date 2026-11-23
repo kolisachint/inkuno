@@ -52,8 +52,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         cx.simulate_mouse_move(at(to), MouseButton::Left, gpui::Modifiers::none());
         cx.simulate_mouse_up(at(to), MouseButton::Left, gpui::Modifiers::none());
     };
-    // The divider sits at the panel's width, from the window's left edge (no rail beside it).
-    drag(cx, 262., 410.);
+    // The divider sits at the panel's width (240 px in the one layout), from the window's left edge.
+    drag(cx, 242., 410.);
     assert_eq!(vault::load_layout(), "tree split 410\n");
     drag(cx, 412., 60.);
     assert_eq!(shell.read_with(cx, |s, _| s.nav.panel), Panel::Hidden);

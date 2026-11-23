@@ -472,12 +472,8 @@ fn tabs_are_text_that_stay_clear_of_the_window_buttons(cx: &mut TestAppContext) 
                     continue;
                 };
                 drawn += 1;
-                // Quiet's pills are 28 px high, the others 30 px (`render_tabs`).
-                let high = if shell.read_with(cx, |s, _| s.theme.quiet) {
-                    28.
-                } else {
-                    30.
-                };
+                // The pills are 28 px high (`render_tabs`).
+                let high = 28.;
                 assert!(
                     (f32::from(pill.size.height) - high * scale).abs() < 1.,
                     "{what}: tab {tab} is {pill:?} high"
@@ -856,9 +852,9 @@ fn bulk_close_writes_pending_tables(cx: &mut TestAppContext) {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Quiet sets a preview tab's title in italics with no dot; Inkuno keeps the dot and an upright title.
+/// A preview tab's title is set in italics with no dot, in every theme: the colours change, the layout does not.
 #[gpui::test]
-fn a_preview_tab_is_italic_in_quiet_and_dotted_elsewhere(cx: &mut TestAppContext) {
+fn a_preview_tab_is_italic_in_every_theme(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "tabs-italic");
     let note = |name: &str| root.join(format!("{name}.md"));
     for name in ["Alpha", "Beta"] {
@@ -876,19 +872,17 @@ fn a_preview_tab_is_italic_in_quiet_and_dotted_elsewhere(cx: &mut TestAppContext
         assert!(s.pane().preview);
         s.groups[0].shown
     });
-    for (theme, quiet) in [("Quiet Light", true), ("Inkuno Light", false)] {
+    for theme in ["Light", "Inkuno Light"] {
         shell.update_in(cx, |s, window, cx| {
             s.prefs.theme = theme.into();
             s.restyle(window, cx);
         });
         cx.run_until_parked();
-        let (caption, italic, is_quiet) = shell.read_with(cx, |s, _| {
-            (s.caption(pane, "Beta"), s.tab_italic(pane), s.theme.quiet)
-        });
-        assert_eq!(is_quiet, quiet, "{theme}");
-        assert_eq!(caption.contains('\u{2022}'), !quiet, "{theme}: {caption}");
+        let (caption, italic) =
+            shell.read_with(cx, |s, _| (s.caption(pane, "Beta"), s.tab_italic(pane)));
+        assert!(!caption.contains('\u{2022}'), "{theme}: {caption}");
         assert!(caption.starts_with("Beta"), "{theme}: {caption}");
-        assert_eq!(italic, quiet, "{theme}");
+        assert!(italic, "{theme}");
     }
     let _ = fs::remove_dir_all(&root);
 }

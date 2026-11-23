@@ -1,6 +1,7 @@
 //! The mouse: clicks, drags, the scroll wheel, and picking table rows and columns.
 
 use super::*;
+use crate::ui::components::scroll::drag_distance;
 
 /// Rows and columns (visible indices) taken by a handle. Valid as long as the text and the
 /// selection are those of then: nothing else to undo.
@@ -319,12 +320,76 @@ impl Editor {
         self.rows_revision != self.revision
     }
 
+    /// The area that grabs a bar's thumb: the thumb, and a few pixels around it.
+    pub(super) fn grip(thumb: &Bounds<Pixels>) -> Bounds<Pixels> {
+        Bounds::new(
+            thumb.origin - point(px(0.), px(4.)),
+            thumb.size + size(px(0.), px(8.)),
+        )
+    }
+
+    /// Scale of the editor's text: the badges and the strip of a code block grow with it.
+    fn scale(&self) -> f32 {
+        self.theme.size / crate::logic::prefs::Prefs::SIZE
+    }
+
+    /// The badges of a folded code block (its chip, switch and copy button) sit in its opening strip, on one
+    /// centre line: the strip is the band `strip_height` makes, under the top border of the box.
+    pub(super) fn in_strip(row: &Row) -> bool {
+        row.opens && row.fold.edges()
+    }
+
     pub(super) fn copy_bounds(&self, row: &Row) -> Bounds<Pixels> {
-        let at = point(
-            self.width - COPY_SIZE,
-            row.y + row.pad + (row.lh - COPY_SIZE) / 2.,
-        );
+        let top = if Self::in_strip(row) {
+            row.y + self.theme.px(3.) + px(BADGE_INSET * self.scale())
+        } else {
+            row.y + row.pad + (row.lh - COPY_SIZE) / 2.
+        };
+        let at = point(self.width - COPY_SIZE - px(BADGE_INSET * self.scale()), top);
         Bounds::new(self.origin + at, size(COPY_SIZE, COPY_SIZE))
+    }
+
+    /// The language a folded code block shows on its chip: its info string, or "text".
+    pub(super) fn chip_label(&self, row: &Row) -> String {
+        md::fence_of(&self.content[row.start..row.start + row.len])
+            .map(|(_, info)| info.trim().to_lowercase())
+            .filter(|info| !info.is_empty())
+            .unwrap_or_else(|| "text".to_string())
+    }
+
+    /// The chip of a folded code block: in its opening strip, on the centre line of the copy button, left
+    /// of the word-wrap switch (or of the copy button).
+    pub(super) fn chip_bounds(&self, row: &Row) -> Bounds<Pixels> {
+        let s = self.scale();
+        let width = px(6.8 * s) * self.chip_label(row).chars().count() as f32 + px(16. * s);
+        let copy = self.copy_bounds(row);
+        let mut right = copy.left() - px(BADGE_GAP * s);
+        if self.wraps_code(row) {
+            right -= COPY_SIZE + px(BADGE_GAP * s);
+        }
+        let top = copy.center().y - px(8. * s);
+        Bounds::new(point(right - width, top), size(width, px(16. * s)))
+    }
+
+    /// Start of the opening line whose chip is under the pointer: a click puts the caret there, to type the language.
+    pub(super) fn chip_at(&self, at: Point<Pixels>) -> Option<usize> {
+        self.rows
+            .iter()
+            .find(|r| r.opens && r.fold.edges() && self.chip_bounds(r).contains(&at))
+            .map(|r| r.start)
+    }
+
+    /// Start of the block whose folded view (diagram or formula) is under the pointer: a click shows its source.
+    pub(super) fn folded_view_at(&self, at: Point<Pixels>) -> Option<usize> {
+        self.rows
+            .iter()
+            .find(|r| {
+                r.fold.whole()
+                    && r.height > px(0.)
+                    && Bounds::new(self.origin + point(px(0.), r.y), size(self.width, r.height))
+                        .contains(&at)
+            })
+            .and_then(|r| r.fold.span().map(|span| span.start))
     }
 
     /// The code block under `at`, by the start of its opening line: its copy button shows while the
@@ -352,6 +417,44 @@ impl Editor {
         None
     }
 
+    /// Whether a fenced code block's opening line carries the word-wrap switch: every fenced
+    /// block but Mermaid (it has its own view button).
+    pub(super) fn wraps_code(&self, row: &Row) -> bool {
+        row.opens
+            && md::fence_of(&self.content[row.start..row.start + row.len]).is_some()
+            && !self.views(row)
+    }
+
+    /// The word-wrap switch of a table: top right, inside its frame.
+    pub(super) fn table_wrap_bounds(frame: &Bounds<Pixels>) -> Bounds<Pixels> {
+        let at = frame.top_right() - point(COPY_SIZE + px(4.), px(-4.));
+        Bounds::new(at, size(COPY_SIZE, px(18.)))
+    }
+
+    /// Key of the block whose word-wrap switch is under `at`, and whether it is a table.
+    pub(super) fn wrap_at(&self, at: Point<Pixels>) -> Option<(usize, bool)> {
+        self.rows
+            .iter()
+            .find(|r| self.wraps_code(r) && self.view_bounds(r).contains(&at))
+            .map(|r| (r.start, false))
+            .or_else(|| {
+                self.tables
+                    .iter()
+                    .find(|(_, frame)| Self::table_wrap_bounds(frame).contains(&at))
+                    .map(|(range, _)| (range.start, true))
+            })
+    }
+
+    /// Flips a block's word-wrap: a table fits its page by default, a code block scrolls.
+    pub(super) fn toggle_wrap(&mut self, key: usize, table: bool, cx: &mut Context<Self>) {
+        let on = self.wraps.get(&key).copied().unwrap_or(table);
+        self.wraps.insert(key, !on);
+        // The layout is redone: its key moves with the epoch and the version.
+        self.version += 1;
+        self.epoch += 1;
+        cx.notify();
+    }
+
     /// Start of the line whose copy button is under the pointer.
     pub(super) fn copy_at(&self, at: Point<Pixels>) -> Option<usize> {
         let row = self
@@ -374,7 +477,8 @@ impl Editor {
 
     pub(super) fn view_bounds(&self, row: &Row) -> Bounds<Pixels> {
         let copy = self.copy_bounds(row);
-        Bounds::new(copy.origin - point(COPY_SIZE + px(4.), px(0.)), copy.size)
+        let gap = px(BADGE_GAP * self.scale());
+        Bounds::new(copy.origin - point(COPY_SIZE + gap, px(0.)), copy.size)
     }
 
     /// Start of the line whose "enlarge" button is under the pointer.
@@ -470,6 +574,20 @@ impl Editor {
         if self.stale() {
             return;
         }
+        // A press elsewhere closes the language picker; the chip of a code block opens it again.
+        if self.lang.take().is_some() {
+            cx.notify();
+        }
+        // The thumb of a bar under a table or a code block: a press grabs it, and the drag scrolls the block.
+        if let Some(bar) = self
+            .thumbs
+            .iter()
+            .find(|b| Self::grip(&b.thumb).contains(&e.position))
+        {
+            self.bar_drag = Some((bar.start, e.position.x - bar.thumb.left()));
+            cx.notify();
+            return;
+        }
         // Picture, formula or figure enlarged, in the viewer.
         if let Some(source) = self.big_source(e.position) {
             return cx.emit(EditorEvent::View(source));
@@ -481,6 +599,11 @@ impl Editor {
             return cx.emit(EditorEvent::View(Source::Mermaid(
                 self.content[block].to_string(),
             )));
+        }
+        // Word-wrap switch of a code block or a table.
+        if let Some((key, table)) = self.wrap_at(e.position) {
+            self.toggle_wrap(key, table, cx);
+            return;
         }
         // Copy button, right of a code block's opening.
         if let Some(start) = self.copy_at(e.position)
@@ -503,6 +626,14 @@ impl Editor {
         }
         if let Some((cols, rows)) = self.grid_at(e.position) {
             return self.insert_table(cols, rows, cx);
+        }
+        // A folded code block's chip opens the language picker under it.
+        if let Some(start) = self.chip_at(e.position) {
+            return self.open_language(start, cx);
+        }
+        // A folded diagram or formula: the caret goes to the block's opening line, where its source shows.
+        if let Some(start) = self.folded_view_at(e.position) {
+            return self.move_to(start, cx);
         }
         self.grid = None;
         // A task's drawn box is a plain button: it wins over the block handle that hover may show
@@ -694,9 +825,10 @@ impl Editor {
             self.foot_jump = Some((def_at, next));
             return Some(refs[next]);
         }
+        // A reference drawn as its number maps a click on the number to the end of its source.
         let hit = md::footnote_ref(&line)
             .into_iter()
-            .find(|(r, _)| r.contains(&col))
+            .find(|(r, _)| (r.start..=r.end).contains(&col))
             .and_then(|(_, label)| {
                 let key = label.to_lowercase();
                 self.feet()
@@ -725,7 +857,7 @@ impl Editor {
             .or_else(|| {
                 md::footnote_ref(line)
                     .into_iter()
-                    .find(|(r, _)| r.contains(&col))
+                    .find(|(r, _)| (r.start..=r.end).contains(&col))
                     .map(|(_, label)| label)
             });
         label.is_some_and(|l| self.foot_defined(&l))
@@ -798,6 +930,24 @@ impl Editor {
         }
         // A button released outside the window sends no `mouse_up`: we do not
         // keep selecting with the pointer free.
+        if let Some((start, grab)) = self.bar_drag {
+            if e.pressed_button != Some(MouseButton::Left) {
+                self.bar_drag = None;
+            } else if let Some(bar) = self.thumbs.iter().find(|b| b.start == start).copied() {
+                // The thumb follows the pointer; the block scrolls to where it is, clamped to its overflow.
+                let dx = drag_distance(
+                    f32::from(e.position.x),
+                    f32::from(grab),
+                    f32::from(bar.frame.left()),
+                    f32::from(bar.frame.size.width),
+                    f32::from(bar.thumb.size.width),
+                    f32::from(bar.overflow),
+                );
+                self.table_x.insert(start, px(dx));
+            }
+            cx.notify();
+            return;
+        }
         if self.selecting && e.pressed_button != Some(MouseButton::Left) {
             self.selecting = false;
         }
@@ -879,6 +1029,9 @@ impl Editor {
 
     pub(super) fn mouse_up(&mut self, e: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.selecting = false;
+        if self.bar_drag.take().is_some() {
+            cx.notify();
+        }
         self.toolbar_off = false;
         self.drop_block(cx);
         if let Some(moving) = self.moving.take() {
@@ -896,11 +1049,12 @@ impl Editor {
         } else {
             (delta.x, delta.y)
         };
-        if let Some((range, _)) = self
+        let block = self
             .tables
             .iter()
-            .find(|(_, frame)| frame.contains(&e.position))
-        {
+            .chain(&self.code_boxes)
+            .find(|(_, frame)| frame.contains(&e.position));
+        if let Some((range, _)) = block {
             *self.table_x.entry(range.start).or_default() -= dx;
         }
         self.scroll_y -= dy;

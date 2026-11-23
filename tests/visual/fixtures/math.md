@@ -23,3 +23,13 @@ Inline math inside a list item:
 - The quadratic formula is $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$.
 
 Inline math in a heading is out of scope; this paragraph ends the note.
+
+A diagram, drawn from its source:
+
+```mermaid
+flowchart TD
+    A[Start] --> B[Write]
+    B --> C[Done]
+```
+
+End of the math fixture.

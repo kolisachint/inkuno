@@ -3,12 +3,14 @@
 mod dates;
 mod front;
 mod lists;
+mod pictures;
 mod search;
 mod tables;
 
 pub use dates::*;
 pub use front::*;
 pub use lists::*;
+pub use pictures::*;
 pub use search::*;
 pub use tables::*;
 
@@ -1543,6 +1545,13 @@ pub fn image(line: &str) -> Option<(Range<usize>, String)> {
 /// First formula of the line, `$$…$$` or `$…$`: its range, its source, and
 /// whether it is display math (`$$`).
 pub fn math(line: &str) -> Option<(Range<usize>, &str, bool)> {
+    maths(line).into_iter().next()
+}
+
+/// The formulas of the line, `$$…$$` or `$…$`, in order: each one's range, source, and whether
+/// it is display math (`$$`).
+pub fn maths(line: &str) -> Vec<(Range<usize>, &str, bool)> {
+    let mut found = Vec::new();
     let mut from = 0;
     while let Some(i) = line[from..].find('$') {
         let start = from + i;
@@ -1561,11 +1570,13 @@ pub fn math(line: &str) -> Option<(Range<usize>, &str, bool)> {
                     || body[..len].ends_with(' ')
                     || body[len + 1..].starts_with(|c: char| c.is_ascii_digit())))
         {
-            return Some((start..start + len + 2 * n, body[..len].trim(), n == 2));
+            found.push((start..start + len + 2 * n, body[..len].trim(), n == 2));
+            from = start + len + 2 * n;
+            continue;
         }
         from = start + n;
     }
-    None
+    found
 }
 
 fn file_name(path: &str) -> &str {
@@ -3388,6 +3399,13 @@ mod tests {
         );
         assert_eq!((image("![]()"), image("[lien](a.png)")), (None, None));
         assert_eq!(math("soit $x^2$ et $y$"), Some((5..10, "x^2", false)));
+        assert_eq!(
+            maths("soit $x^2$ et $y$")
+                .iter()
+                .map(|(r, s, _)| (r.clone(), *s))
+                .collect::<Vec<_>>(),
+            [(5..10, "x^2"), (14..17, "y")]
+        );
         assert_eq!(
             math("$$ \\frac{1}{2} $$"),
             Some((0..17, "\\frac{1}{2}", true))

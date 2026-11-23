@@ -7,9 +7,6 @@ use crate::ui::theme::{BAND, BAND_HIDDEN, LIGHTS_ROOM};
 
 /// Height of the tab bar, at scale 1: the band (`app-ui.md` §20.1), the same as the sidebars' top rows.
 pub(super) const TAB_BAR: f32 = BAND;
-/// Height of a tab row in the bar, at scale 1: fits 13 px text, the dot and the hover cross.
-const TAB_ROW: f32 = 30.;
-
 /// A tab being dragged: a small card with its name follows the pointer.
 #[derive(Clone)]
 pub(super) struct TabDragged {
@@ -88,27 +85,24 @@ impl Shell {
     pub(super) fn caption_parts(&self, tab: usize, label: &str) -> (String, String) {
         let pane = &self.panes[tab];
         let rest = match (pane.preview, pane.scratch) {
-            (true, _) if self.theme.quiet => String::new(),
-            (true, _) => " \u{2022}".to_string(),
+            (true, _) => String::new(),
             (false, true) => format!(" · {}", tr("Scratch", "Brouillon")),
             (false, false) => String::new(),
         };
         (label.to_string(), rest)
     }
 
-    /// A preview tab's title is set in italics in Quiet (the others: the dot, see `caption`).
+    /// A preview tab's title is set in italics.
     pub(super) fn tab_italic(&self, tab: usize) -> bool {
-        self.theme.quiet && self.panes[tab].preview
+        self.panes[tab].preview
     }
 
-    /// The focus cue on a tab, as `render_tabs` paints it: in Quiet, the shown tab carries a wash and
-    /// the tabs of a pane not in focus dim to 55 %. Returns (washed, opacity). Inkuno's cue is the
-    /// ring around the active pane (`render.rs`), so its tabs carry neither.
+    /// The focus cue on a tab, as `render_tabs` paints it: the shown tab carries a wash and
+    /// the tabs of a pane not in focus dim to 55 %. Returns (washed, opacity).
     pub(super) fn tab_cue(&self, tab: usize) -> (bool, f32) {
-        let quiet = self.theme.quiet;
         let focused = self.group_of(self.active) == self.group_of(tab);
         let shown = self.groups[self.group_of(tab)].shown == tab;
-        (quiet && shown, if quiet && !focused { 0.55 } else { 1.0 })
+        (shown, if !focused { 0.55 } else { 1.0 })
     }
 
     /// The labels of a pane's tabs, in order; two tabs of the same name (two folders) say their folder.
@@ -218,9 +212,8 @@ impl Shell {
     /// not saved yet carries an accent dot; the cross appears on hover only, for any tab; a
     /// preview tab is marked by a suffix, never italics.
     ///
-    /// Quiet (`Theme::quiet`) draws the band on the ground, 28 px pills of radius 8 with the shown
-    /// tab on a 7 % wash, a cross of 18 px on the shown tab too, and a pane not in focus dimmed to
-    /// 55 %; a preview tab is italic. `peek` draws the same bar as the overlay of a hidden title bar.
+    /// The band draws on the ground, 28 px pills of radius 8 with the shown tab on a 7 % wash, a cross
+    /// of 18 px on the shown tab too, and a pane not in focus dimmed to 55 %; a preview tab is italic. `peek` draws the same bar as the overlay of a hidden title bar.
     pub(super) fn render_tabs(
         &mut self,
         group: usize,
@@ -235,8 +228,7 @@ impl Shell {
         if self.focus_mode || !(self.band_shown() || peek) {
             return None;
         }
-        let quiet = t.quiet;
-        let row = if quiet { 28. } else { TAB_ROW };
+        let row = 28.;
         let shown = self.groups[group].shown;
         // Brought into view once when it changes, so the wheel stays free afterwards. gpui scrolls with
         // the places of the last frame: a bar not drawn yet (at startup) asks for one more frame.
@@ -295,8 +287,8 @@ impl Shell {
                 let pane = &self.panes[tab];
                 let (on, over) = (tab == shown, hovered == Some(tab));
                 let (wash, dim) = self.tab_cue(tab);
-                // Quiet: the cross shows on the shown tab too, in an 18 px box.
-                let box_px = if quiet { 18. } else { 14. };
+                // The cross shows on the shown tab too, in an 18 px box.
+                let box_px = 18.;
                 let slot = div()
                     .size(t.px(box_px))
                     .flex_none()
@@ -312,7 +304,7 @@ impl Shell {
                 // The slot at the row's end: the close cross on hover only, for any tab; an
                 // accent dot for a tab not saved yet otherwise; empty space to keep the row's
                 // width steady.
-                let slot = match (over || (quiet && on), dirty) {
+                let slot = match (over || on, dirty) {
                     // The cross appears on hover only; an unsaved tab keeps its dot until then.
                     (true, _) => slot.child(
                         div()
@@ -346,19 +338,18 @@ impl Shell {
                         d.tooltip(ui::widgets::tip(dir, String::new(), t))
                     })
                     .h(t.px(row))
-                    .pl(t.px(if quiet { 10. } else { 8. }))
-                    .pr(t.px(if quiet { 6. } else { 4. }))
-                    .when(quiet, |d| d.rounded(t.large()))
+                    .pl(t.px(10.))
+                    .pr(t.px(6.))
+                    .rounded(t.large())
                     .flex()
                     .items_center()
-                    .gap(t.px(if quiet { 6. } else { 4. }))
+                    .gap(t.px(6.))
                     .cursor_pointer()
                     .text_color(if on || over { t.text } else { t.soft })
                     // The tab shown sits on a flat panel fill — no pill, no shadow, no underline —
                     // the others are bare text that the pointer tints, on a flat hover. Quiet's
                     // shown tab is a neutral wash of the text (the sidebar's selected row).
                     .when(wash, |d| d.bg(t.text.opacity(0.072)))
-                    .when(on && !quiet, |d| d.bg(t.panel))
                     .when(!on, |d| d.hover(|s| s.bg(t.hover)))
                     // Quiet: the pane not in focus is dimmed as a whole.
                     .when(dim < 1., |d| d.opacity(dim))
@@ -464,9 +455,8 @@ impl Shell {
                 .h(t.px(TAB_BAR))
                 .flex()
                 .text_size(t.px(13.))
-                // Quiet: the band is the sheet's colour (v2 `.band`), with no hairline under it. A peeked band is opaque over the note.
-                .when(quiet || peek, |d| d.bg(t.bg))
-                .when(!quiet, |d| d.border_b_1().border_color(t.border))
+                // The band is the sheet's colour (v2 `.band`), with no hairline under it. A peeked band is opaque over the note.
+                .bg(t.bg)
                 // Under a native title bar the traffic lights float over the window's top left:
                 // the first tab starts right of them, measured from the window's edge once — the
                 // bar already starts past the sidebar, so it pads only what the sidebar leaves.
@@ -505,7 +495,7 @@ impl Shell {
                         .h_full()
                         .flex()
                         .items_center()
-                        .gap(t.px(if quiet { 4. } else { 0. }))
+                        .gap(t.px(4.))
                         .overflow_x_scroll()
                         .track_scroll(&self.groups[group].scroll)
                         .children(cells)

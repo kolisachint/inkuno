@@ -5,6 +5,7 @@ use crate::ui::assets::ICON_SET;
 use crate::ui::components::{
     menu::{menu_item, menu_separator},
     popover::popover,
+    scroll::scroll_area,
 };
 use crate::views::nav::*;
 use crate::{
@@ -422,6 +423,8 @@ impl Shell {
             .and_then(|old| old.back)
             .or_else(|| window.focused(cx));
         self.menu = Some(Menu { back, ..menu });
+        // A new menu opens at its top.
+        self.menu_scroll.set_offset(gpui::point(px(0.), px(0.)));
         window.focus(&self.menu_focus);
         cx.notify();
     }
@@ -474,12 +477,9 @@ impl Shell {
 
     /// Arrows, Home, End, Enter and Escape in the open menu.
     fn menu_key(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let entries: Vec<Do> = self
-            .menu_groups(cx)
-            .into_iter()
-            .flatten()
-            .map(|(_, what)| what)
-            .collect();
+        let groups = self.menu_groups(cx);
+        let lens: Vec<usize> = groups.iter().map(Vec::len).collect();
+        let entries: Vec<Do> = groups.into_iter().flatten().map(|(_, what)| what).collect();
         let (Some(menu), n) = (self.menu.as_mut(), entries.len()) else {
             return false;
         };
@@ -506,6 +506,9 @@ impl Shell {
             }
             _ => return false,
         };
+        if let Some(i) = menu.chosen {
+            self.menu_scroll.scroll_to_item(menu_child(&lens, i));
+        }
         cx.notify();
         true
     }
@@ -755,7 +758,7 @@ impl Shell {
                 )
         );
         match () {
-            _ if gone && t.quiet => Some(t.caution),
+            _ if gone => Some(t.caution),
             _ if matches!(what, Do::Trash) => Some(t.accent),
             _ => None,
         }
@@ -807,6 +810,7 @@ impl Shell {
         }
         // Never larger than the window minus the anchor margin: long labels are ellipsized, the list scrolls.
         let room = window.viewport_size() - gpui::size(t.px(16.), t.px(16.));
+        let pad = t.px(5.);
         let close = || {
             cx.listener(|this: &mut Self, _: &MouseDownEvent, window, cx| {
                 this.close_menu(window, cx)
@@ -847,11 +851,16 @@ impl Shell {
                                 .id("menu-list")
                                 .min_w(t.px(230.).min(room.width))
                                 .max_w(room.width)
-                                .max_h(room.height)
-                                .overflow_y_scroll()
-                                .py(t.px(if t.quiet { 5. } else { 6. }))
+                                .py(pad)
                                 .text_size(t.px(13.))
-                                .children(rows)
+                                // The entries scroll within the room left by the padding.
+                                .child(scroll_area(
+                                    "menu-rows",
+                                    &self.menu_scroll,
+                                    t,
+                                    room.height - pad * 2.,
+                                    rows,
+                                ))
                                 .with_animation(
                                     "menu-in",
                                     Animation::new(Duration::from_millis(110))
@@ -861,5 +870,33 @@ impl Shell {
                         ),
                 ),
         )
+    }
+}
+
+/// The row of the menu's list that shows entry `i`, given how many entries each group has: a separator
+/// line sits before every group but the first.
+fn menu_child(lens: &[usize], i: usize) -> usize {
+    let mut start = 0;
+    for (g, n) in lens.iter().enumerate() {
+        if i < start + n {
+            return i + g;
+        }
+        start += n;
+    }
+    i + lens.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::menu_child;
+
+    #[test]
+    fn a_separator_counts_before_each_group_but_the_first() {
+        // Two groups of two and three entries: rows are a a | b b b.
+        let lens = [2, 3];
+        assert_eq!(menu_child(&lens, 0), 0);
+        assert_eq!(menu_child(&lens, 1), 1);
+        assert_eq!(menu_child(&lens, 2), 3);
+        assert_eq!(menu_child(&lens, 4), 5);
     }
 }

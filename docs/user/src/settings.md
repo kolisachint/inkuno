@@ -6,12 +6,12 @@ Every choice is in the **Settings** tab, `Ctrl + ,` (also the foot of the sideba
 
 Type `theme` in the palette.
 
-- 16 themes: Quiet Dark and Quiet Light, Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light), Sepia.
+- 16 themes: Dark and Light, Inkuno Dark and Inkuno Light, Dracula, One Dark, Gruvbox (dark and light), Nord, Catppuccin (Mocha and Latte), Tokyo Night, Rosé Pine, Solarized (dark and light), Sepia.
 - Each theme is applied as you move through the list, so you see it before choosing. `Enter` keeps it, `Esc` goes back to the one you had.
-- `Default` follows the light or dark setting of your system, with Quiet Light or Quiet Dark.
+- `Default` follows the light or dark setting of your system, with Light or Dark.
 - In every theme, links, secondary text and the titles of colored panels are adjusted to a contrast of at least 4.5:1 (WCAG AA).
 
-**The look, Quiet.** The Quiet themes (the default) are flat. The sidebar sits on the window itself, with no panel, border or shadow. The note is a flat sheet, flush with the top, right and bottom edges of the window, without rounded corners or borders; its left edge has one faint shadow to set it apart from the sidebar. Tables and code blocks have a fine line; the lines of a table, a code block and an image are drawn at least 3:1 against what is under them.
+**The look.** Every theme has the same layout, and it is flat. Themes change only colours, fonts and sizes. The sidebar sits on the window itself, with no panel, border or shadow. The note is a flat sheet, flush with the top, right and bottom edges of the window, without rounded corners or borders; its left edge has one faint shadow to set it apart from the sidebar. Tables and code blocks have a fine line; the lines of a table, a code block and an image are drawn at least 3:1 against what is under them.
 
 **The look, other themes.** The window is a warm ground, a little darker than the page. The note, the panel and the right dock lie on it as rounded sheets, eight pixels apart.
 
@@ -36,16 +36,22 @@ Inkuno carries Inter (text and titles) and JetBrains Mono (code), under the SIL 
 
 Headings, code and the width of the text column scale with it. The interface around the note (sidebar, panel, menus, palette, help) follows too, from 85 % to 150 %, so it stays usable at either end.
 
+## Line spacing
+
+- **Settings > Appearance > Line spacing**, or `line spacing…` in the palette: **Compact** (0.9), **Normal** (the default), **Relaxed** (1.15) or **Loose** (1.3), times the line height of the text.
+- It applies to the text, the headings, the code blocks and the rows of tables.
+
+## Code line numbers and restored tabs
+
+- **Settings > Editor > Code line numbers**: the numbers beside the lines of a code block. On by default.
+- **Settings > Files > Open last notes on start**: when off, Inkuno starts with one empty pane instead of the tabs of last time. On by default.
+- **Settings > Files > Config files**: **Show folder** opens the configuration folder, with `themes.json` and `keybindings.json`. Both are reloaded as soon as they are saved.
+
 ## Page width
 
 `page width` in the palette sets how wide the text column is: narrow, normal, wide, or the full window.
 
-`wide tables` in the palette chooses what a table wider than the text does:
-
-- **center** (the default): it spills out on both sides of the column, centered on the window;
-- **column**: it stays in the column, and scrolls sideways.
-
-A small table keeps its own size, and nothing goes past the window.
+Tables, code blocks and figures always stay inside the text column, never wider. A small table keeps its own size. A wide one fits the column: its cells wrap and long words break; only when even its narrowest columns do not fit does it scroll sideways inside the column, with a thin bar under its last line. Each table and code block has a word-wrap switch (`↩`) at its top right: off, its lines keep their length and the block scrolls sideways inside the column.
 
 ## Formatting bar and animations
 
@@ -76,7 +82,7 @@ These choices are kept in a file named `settings`, in the [configuration folder]
 | `font`, `mono` | the font of the app, of the code | `font` |
 | `size` | the text size | `Ctrl + +`, `Ctrl + -`, `Ctrl + 0` |
 | `page` | `narrow`, `normal`, `wide`, `full` | `page width` |
-| `wide` | `column`, `center` | `wide tables` |
+| `wide` | `column`, `center` (no longer used: wide blocks always stay in the column; an older file that has it still loads) | — |
 | `bar` | `on`, `off` | `formatting bar` |
 | `motion` | `on`, `off` | `animations` |
 | `author` | any line of text | `revision author…` (empty: the default) |
@@ -100,7 +106,7 @@ The Shortcuts page of the Settings tab (`F1`, or `Ctrl+,` then Shortcuts) lists 
 The Shortcuts page is the easy way. A JSON file does the same, for every action, and can be edited with any text editor.
 
 - **Where**: `keybindings.json` in the [configuration folder](vault.md#configuration-files): `~/.config/inkuno/` on Linux, `~/Library/Application Support/inkuno/` on macOS.
-- **Which file wins**: when `keybindings.json` is there and not empty, it is the one read, and it is read at launch: restart Inkuno to apply an edit. The older `keys` file is only read while it is absent. The Shortcuts page saves its changes to `keys`, so once `keybindings.json` exists, edit that file to change shortcuts.
+- **Which file wins**: when `keybindings.json` is there and not empty, it is the one read. It is reloaded while the app runs, so an edit applies as soon as the file is saved. The older `keys` file is only read while it is absent. The Shortcuts page saves its changes to `keys`, so once `keybindings.json` exists, edit that file to change shortcuts.
 - **Shape**:
 
 ```json
@@ -114,3 +120,7 @@ The Shortcuts page is the easy way. A JSON file does the same, for every action,
 - **Action names**: `group::Name`, as the code names them: `app::` for the window (`app::OpenPalette`, `app::ToggleFocus`), `editor::` for the note (`editor::Bold`), `nav::` for the panel (`nav::ShowTree`). Only an action that has a line on the Shortcuts page can be changed. The code keeps the list (`help_sections` in `crates/inkuno/src/shell/keymap.rs`).
 - **Chords**: one chord per action, in the form `secondary-shift-p`, `alt-left`, `ctrl-tab` or `f9`. `secondary` is `Cmd` on macOS and `Ctrl` elsewhere. `""` or `[]` leaves the action with no shortcut. `reset` restores the default keys of the actions it names.
 - **Faults**: an entry that cannot be used is ignored on its own, and the default stays. `inkuno --check-config` reports an unreadable chord, or a chord given to two actions, and exits with `1`. An unknown action name is not caught there: the app reports it when it starts.
+
+## Editing the config files live
+
+`keybindings.json`, `themes.json` and `settings` (in the [configuration folder](vault.md#configuration-files)) are reloaded while Inkuno runs: save the file, and the shortcuts, the themes and the appearance update in the window, with no restart. A file that does not parse keeps the state in force and a message names it; fix the file and save again. `inkuno --check-config` lists what is wrong with each file.

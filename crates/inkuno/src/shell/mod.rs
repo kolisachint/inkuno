@@ -5,6 +5,7 @@
 mod assistant;
 mod changes;
 mod comments;
+mod config;
 mod files;
 mod help;
 pub(crate) mod keymap;
@@ -49,7 +50,7 @@ use crate::ui::{
         kbd::keycaps,
     },
     line,
-    theme::{Page, THEMES, Theme, Wide},
+    theme::{Page, THEMES, Theme},
     widgets::drag_window,
 };
 use crate::views::{editor, field, nav, palette, viewer};
@@ -135,6 +136,8 @@ struct Shell {
     menu: Option<nav::Menu>,
     /// The open menu has the keys: arrows, Enter, Escape.
     menu_focus: FocusHandle,
+    /// Scroll of the open menu's entries: a long menu scrolls, and the entry the keys choose stays in view.
+    menu_scroll: gpui::ScrollHandle,
     /// Open notes, most recent first.
     recent: Vec<PathBuf>,
     save_gen: usize,
@@ -157,6 +160,8 @@ struct Shell {
     toasted: usize,
     title: String,
     prefs: Prefs,
+    /// The last text of each config file read or written by the app: a reload of the same text is skipped.
+    seen: config::Seen,
     theme: Theme,
     /// Hovered window edge (resizing without system decorations).
     edge: Option<ResizeEdge>,
@@ -256,6 +261,7 @@ impl Shell {
 
             focus: cx.focus_handle(),
             menu_focus: cx.focus_handle(),
+            menu_scroll: gpui::ScrollHandle::new(),
             nav,
             palette: None,
             vault: None,
@@ -278,6 +284,7 @@ impl Shell {
             toasts: Vec::new(),
             toasted: 0,
             title: String::new(),
+            seen: config::Seen::read(),
             prefs,
             theme,
             edge: None,
@@ -304,12 +311,18 @@ impl Shell {
                     .collect();
                 // The tabs of last time, those whose file is still there; the older formats left
                 // the first pane to the most recent note.
+                // `restore=off`: the window starts with one empty pane, as if nothing was saved.
+                let restore = this.prefs.restore != "off";
                 let panes = vault::load_file("panes");
-                let (tree, saved) = read_panes(&panes);
+                let (tree, saved) = if restore {
+                    read_panes(&panes)
+                } else {
+                    (None, Vec::new())
+                };
                 this.restore_panes(
                     tree,
                     saved,
-                    panes.starts_with("v3 "),
+                    !restore || panes.starts_with("v3 "),
                     Some(&root),
                     window,
                     cx,
@@ -326,7 +339,7 @@ impl Shell {
                 let scratch = saved
                     .iter()
                     .any(|(tabs, _)| tabs.iter().any(|tab| platform::scratch::holds(tab)));
-                if scratch {
+                if scratch && this.prefs.restore != "off" {
                     this.restore_panes(tree, saved, panes.starts_with("v3 "), None, window, cx);
                 } else {
                     window.focus(&this.focus);
@@ -356,32 +369,8 @@ impl Shell {
             }
         }));
         // Changed shortcuts; a faulty line of the file is dropped and reported.
-        let open = editable();
-        let (changes, faults) = keys::read(&keys::user_lines(), &this.bound, &|action| {
-            open.contains(action)
-        });
-        if !changes.is_empty() {
-            this.changes = changes;
-            this.rebind(cx);
-        }
-        if let Some(first) = faults.first() {
-            let more = if faults.len() > 1 {
-                format!(" (+{})", faults.len() - 1)
-            } else {
-                String::new()
-            };
-            this.say(
-                Tone::Failed,
-                format!(
-                    "{} {first}{more}",
-                    tr(
-                        "Shortcut ignored in the keys file:",
-                        "Raccourci ignoré dans le fichier keys :"
-                    )
-                ),
-                cx,
-            );
-        }
+        this.read_keys(cx);
+        this.watch_config(window, cx);
         this
     }
 }

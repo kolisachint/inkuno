@@ -355,7 +355,7 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
     let top = |cx: &mut gpui::VisualTestContext| {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).top_margin())
     };
-    // The panel on the whole window: its four buttons end where the window buttons begin, from a phone width to a very wide window.
+    // The panel on the whole window: its rows start under the window buttons, from a phone width to a very wide window.
     shell.update(cx, |s, cx| {
         s.nav.show_alone(nav::Mode::Tree);
         s.nav.panel = nav::Panel::Full;
@@ -367,20 +367,15 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
         let pill = cx
             .debug_bounds("window-pill")
             .expect("the window buttons are drawn");
-        let mut last = px(0.);
-        for button in ["nav-file", "nav-folder", "nav-fold", "nav-full"] {
+        // The sidebar's rows (Search, then the Notes header) sit under the band, which holds the buttons.
+        for row in ["nav-search", "nav-notes"] {
             let bounds = cx
-                .debug_bounds(button)
-                .unwrap_or_else(|| panic!("{width}: {button} absent"));
+                .debug_bounds(row)
+                .unwrap_or_else(|| panic!("{width}: {row} absent"));
             assert!(
-                bounds.right() <= pill.left(),
-                "{width}: {button} {bounds:?} under the window buttons {pill:?}"
+                bounds.top() >= pill.bottom() - px(1.),
+                "{width}: {row} {bounds:?} under the window buttons {pill:?}"
             );
-            assert!(
-                bounds.left() >= last,
-                "{width}: {button} overlaps the one before"
-            );
-            last = bounds.right();
         }
     }
     // The panel beside the note: a note narrowed by the panel (120, 260, 600 px) starts under the window buttons; in a window wide
@@ -443,27 +438,21 @@ fn window_buttons_leave_the_header_and_the_title_clear(cx: &mut TestAppContext) 
             );
         }
     }
-    // Zed-style header: the tree panel shows no vault name — its action icons sit left, ahead of
-    // the (empty) title handle — and the folder moved to the window's title, which no longer
-    // draws it in the top row (C11).
+    // The Quiet sidebar has no tree header: its Notes header carries the new-note button at its right end,
+    // and the folder moved to the window's title, which no longer draws it in the top row (C11).
     shell.update(cx, |s, cx| {
         s.nav.panel = nav::Panel::Split;
         s.nav.show_alone(nav::Mode::Tree);
         cx.notify();
     });
     settle(cx);
-    let (head, title, file) = (
-        cx.debug_bounds("tool-head-tree").unwrap(),
-        cx.debug_bounds("tool-title-tree").unwrap(),
-        cx.debug_bounds("nav-file").unwrap(),
+    let (notes, new) = (
+        cx.debug_bounds("nav-notes").unwrap(),
+        cx.debug_bounds("nav-new").unwrap(),
     );
     assert!(
-        file.right() <= title.left() + px(1.),
-        "the tree icons sit left of the title handle: {file:?} {title:?}"
-    );
-    assert!(
-        file.left() - head.left() < px(40.),
-        "the tree icons sit at the header's left end: {file:?} {head:?}"
+        new.right() <= notes.right() + px(1.) && new.left() >= notes.left(),
+        "the new-note button sits at the Notes header's end: {new:?} {notes:?}"
     );
     assert_eq!(
         shell.read_with(cx, |s, _| s.title.clone()),
@@ -647,14 +636,11 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
     // Panel open beside the note (the header's free part past the title), with the Comments view shown.
     panel(cx, nav::Panel::Split);
     check("one tab, panel", 1, cx);
-    let (head, title) = (
-        cx.debug_bounds("tool-head-tree").unwrap(),
-        cx.debug_bounds("tool-title-tree").unwrap(),
-    );
-    assert!(
-        head.right() > title.right() + px(40.) || head.size.width < title.size.width + px(40.),
-        "{head:?} {title:?}"
-    );
+    // The sidebar's band is drawn at the window's top, where the tree's header used to be (inset 11 px).
+    let band = cx
+        .debug_bounds("sidebar-band")
+        .expect("the sidebar's band is drawn");
+    assert!(band.top() <= px(12.), "{band:?}");
     shell.update_in(cx, |s, _window, cx| {
         s.nav.right_view = nav::Mode::Comments;
         s.nav.right_shown = vec![nav::Mode::Comments];
@@ -747,12 +733,15 @@ fn sheets_tile_the_window_edge_to_edge_with_a_hairline(cx: &mut TestAppContext) 
                     panel.left() <= px(10.),
                     "{what}: the panel touches the window's left side {panel:?}"
                 );
-                // The band scales with the note's zoom: its height is the theme's, not the token.
+                // The sidebar's rows sit between the band at the top and the foot at the bottom, which
+                // lies on the window's bottom edge. The band scales with the note's zoom: its height is the theme's.
                 let band = shell.read_with(cx, |s, _| s.theme.px(BAND));
+                let foot = cx.debug_bounds("sidebar-foot").expect("the foot is drawn");
                 assert!(
-                    (panel.top() - band).abs() < px(0.5)
-                        && (panel.bottom() - (px(720.) - band)).abs() < px(0.5),
-                    "{what}: panel {panel:?}"
+                    panel.top() >= band - px(0.5)
+                        && panel.bottom() <= foot.top() + px(0.5)
+                        && (foot.bottom() - px(720.)).abs() < px(0.5),
+                    "{what}: panel {panel:?} foot {foot:?}"
                 );
                 assert_eq!(
                     sheets[0].left() - panel.right(),
@@ -817,7 +806,7 @@ fn interface_follows_the_zoom(cx: &mut TestAppContext) {
     cx.run_until_parked();
     // Sizes of a button, a row of the tree, the row's menu and an entry of the command palette.
     let measure = |cx: &mut gpui::VisualTestContext| {
-        let button = cx.debug_bounds("nav-file").unwrap().size.width;
+        let button = cx.debug_bounds("nav-search").unwrap().size.height;
         let row = cx.debug_bounds("nav-row-Alpha").unwrap().size.height;
         cx.simulate_keystrokes("shift-f10");
         cx.run_until_parked();
@@ -1028,26 +1017,16 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
             .expect("a second pane")
             .shown
     });
-    for theme in ["Quiet Light", "Inkuno Light"] {
+    for theme in ["Light", "Inkuno Light"] {
         shell.update_in(cx, |s, window, cx| {
             s.prefs.theme = theme.into();
             s.restyle(window, cx);
         });
         cx.run_until_parked();
-        let (quiet, cues) = shell.read_with(cx, |s, _| {
-            (s.theme.quiet, (s.tab_cue(active), s.tab_cue(other)))
-        });
-        if quiet {
-            assert!(cx.debug_bounds("pane-active").is_none(), "{theme}: no ring");
-            assert_eq!(cues, ((true, 1.0), (true, 0.55)), "{theme}");
-        } else {
-            let ring = cx
-                .debug_bounds("pane-active")
-                .expect("the active pane is marked");
-            let pane = cx.debug_bounds(leak(format!("pane-{active}"))).unwrap();
-            assert_eq!(ring, pane, "the ring runs along the sheet's edge");
-            assert_eq!(cues, ((false, 1.0), (false, 1.0)), "{theme}");
-        }
+        let cues = shell.read_with(cx, |s, _| (s.tab_cue(active), s.tab_cue(other)));
+        // No ring in any theme: the focus cue is the tabs' wash and dimming.
+        assert!(cx.debug_bounds("pane-active").is_none(), "{theme}: no ring");
+        assert_eq!(cues, ((true, 1.0), (true, 0.55)), "{theme}");
     }
 }
 
@@ -1383,4 +1362,58 @@ fn a_press_on_the_peeked_band_starts_no_window_move(cx: &mut TestAppContext) {
         cx.run_until_parked();
     }
     let _ = fs::remove_dir_all(&root);
+}
+
+/// One layout for every theme: a theme changes colours, fonts and sizes, never the sidebar's width, its
+/// rows, the tab bar or the tabs. Two themes, the same geometry.
+#[gpui::test]
+fn the_geometry_is_identical_across_themes(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "window-one-layout");
+    fs::write(root.join("Alpha.md"), "# Alpha\n\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    shell.update_in(cx, |s, window, cx| {
+        s.open_from_nav(&root.join("Alpha.md"), window, cx)
+    });
+    let tab = shell.read_with(cx, |s, _| s.groups[0].tabs[0]);
+    shell.update(cx, |s, _| {
+        s.client = true;
+        s.nav.panel = nav::Panel::Split;
+    });
+    let mut measured = Vec::new();
+    for theme in ["Light", "Inkuno Light"] {
+        shell.update_in(cx, |s, window, cx| {
+            s.prefs.theme = theme.into();
+            s.restyle(window, cx);
+        });
+        for _ in 0..3 {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        }
+        let sidebar = cx
+            .debug_bounds("sidebar-foot")
+            .expect("the sidebar is drawn");
+        let band = cx
+            .debug_bounds("sidebar-band")
+            .expect("the tab bar is drawn");
+        let row = cx
+            .debug_bounds("nav-search")
+            .expect("the search row is drawn");
+        let pill = cx
+            .debug_bounds(leak(format!("tab-{tab}")))
+            .expect("the tab is drawn");
+        measured.push((
+            theme,
+            [
+                sidebar.size.width,
+                band.size.height,
+                row.size.height,
+                pill.size.height,
+            ],
+        ));
+    }
+    assert_eq!(
+        measured[0].1, measured[1].1,
+        "the layout differs between themes: {measured:?}"
+    );
+    let _ = fs::remove_dir_all(root);
 }
