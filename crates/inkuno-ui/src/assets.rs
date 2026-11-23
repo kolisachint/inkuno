@@ -521,37 +521,66 @@ pub const ICON_SET: &[(&str, &str)] = &[
     ),
 ];
 
-/// The app logo: the mark of `packaging/linux/com.inkuno.Inkuno.svg` (charcoal nib
-/// with a knockout slit, cobalt wave) on a 16 px grid, at its exact colors. The mark
-/// keeps its two fixed colors, so there is no accent tint: on any theme it is
-/// `#20232B` + `#4263EB`.
-/// VISIBLE CHANGE: the sidebar mark no longer follows the theme accent; on
-/// Inkuno Dark the charcoal nib sits close to the dark ground (the cobalt
-/// stroke carries it).
+/// The app logo: the mark of `packaging/linux/com.inkuno.Inkuno.svg` (nib with a knockout
+/// slit, cobalt wave) on a 16 px grid. gpui paints an SVG as an alpha mask in a single color,
+/// hence the two layers. The wave is `#4263EB` on every theme; the nib is `#20232B` on a light
+/// theme and the theme's text colour on a dark one, where the charcoal would vanish into the
+/// ground (see `logo_nib_color`).
 ///
-/// gpui paints an SVG as an alpha mask in a single color, hence the two layers.
-/// Callers: the sidebar's commands logo button (`shell/sidebar.rs`), the empty today's
-/// row (`shell/render.rs`) and the About footer (`shell/help.rs`).
+/// Its only caller is the About page (`shell/settings_tab.rs`).
+/// The colour of the logo's nib: the charcoal `#20232B` on a light theme, the theme's text on a
+/// dark one. Dark is told as the theme does it: a background under half lightness.
+fn logo_nib_color(t: Theme) -> Hsla {
+    if t.bg.l < 0.5 {
+        t.text
+    } else {
+        Hsla::from(rgb(0x20232b))
+    }
+}
+
 pub fn logo(t: Theme) -> impl IntoElement {
-    let layer = |path: &'static str, color: u32| {
+    let layer = |path: &'static str, color: Hsla| {
         svg()
             .path(path)
             .absolute()
             .inset_0()
             .flex_none()
-            .text_color(Hsla::from(rgb(color)))
+            .text_color(color)
     };
     div()
         .size(t.px(15.))
         .flex_none()
         .relative()
-        .child(layer("logo.svg", 0x20232b))
-        .child(layer("logo-ink.svg", 0x4263eb))
+        .child(layer("logo.svg", logo_nib_color(t)))
+        .child(layer("logo-ink.svg", Hsla::from(rgb(0x4263eb))))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::FONT_FILES;
+    use super::{FONT_FILES, logo_nib_color};
+    use crate::theme::Theme;
+    use gpui::{Hsla, WindowAppearance, rgb};
+    use inkuno_logic::prefs::Prefs;
+
+    /// The nib keeps its charcoal on a light theme and turns to the text colour on a dark one,
+    /// where the charcoal would vanish into the ground.
+    #[test]
+    fn logo_nib_is_charcoal_on_light_and_text_on_dark() {
+        let theme = |name: &str| {
+            Theme::of(
+                &Prefs::parse(&format!("theme={name}\n")),
+                WindowAppearance::Light,
+            )
+        };
+        let charcoal = Hsla::from(rgb(0x20232b));
+        let light = theme("Light");
+        assert!(light.bg.l >= 0.5, "Light is not a light theme");
+        assert_eq!(logo_nib_color(light), charcoal);
+        let dark = theme("Dark");
+        assert!(dark.bg.l < 0.5, "Dark is not a dark theme");
+        assert_eq!(logo_nib_color(dark), dark.text);
+        assert_ne!(logo_nib_color(dark), charcoal);
+    }
 
     /// The bundled text and code faces are real font files: Inter (static cuts), JetBrains
     /// Mono (variable regulars, static bolds) and the Plex serif. Fourteen non-trivial files,

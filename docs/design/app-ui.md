@@ -448,7 +448,7 @@ App / vault / panes (global + `Shell` / `Nav` / `Palette` contexts):
 
 - CURRENT: tree / recent / tags / links / calendar / graph live in the
 dock-panel; tree marks the active file; arrows preview in an italic tab.
-- CURRENT (§20, built 2026-11-21): the 40 px rail is gone. The sidebar's top band holds the sidebar toggle, search and new note; its foot holds the commands logo, the tree button and the title bar switch.
+- CURRENT (§20, built 2026-11-21): the 40 px rail is gone. The sidebar's top band holds the sidebar toggle, search and new note; its foot holds the tree button and the title bar switch (the commands logo is gone; the palette is F10 or `>`).
 - Spec: narrow column, small semibold section labels, one active-row tint
   (brand 20 %); folder chevrons, tag `#` prefix, counts right-aligned.
 - TBD: exact icon set, active-row color token, preview-tab italic style —
