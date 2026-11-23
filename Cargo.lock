@@ -3365,7 +3365,7 @@ dependencies = [
 
 [[package]]
 name = "inkuno"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
