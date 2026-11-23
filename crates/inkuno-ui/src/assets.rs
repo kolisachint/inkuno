@@ -326,17 +326,21 @@ impl AssetSource for Assets {
             "gear.svg" => {
                 r#"<circle cx="8" cy="8" r="2.25"/><path d="M8 1.5V3.5M8 12.5V14.5M1.5 8H3.5M12.5 8H14.5M3.3 3.3L4.7 4.7M11.3 11.3L12.7 12.7M3.3 12.7L4.7 11.3M11.3 4.7L12.7 3.3"/>"#
             }
-            // Nib silhouette of the kit's optical 16 px mark (`svg/inkuno-mark-16.svg`:
-            // `M166 86 H346 L391 211 L256 405 L121 211 Z` on a 512 grid, ×1/32 here).
+            // Nib of the app mark, `packaging/linux/com.inkuno.Inkuno.svg` (the crafted icon's
+            // nib, slit and wave), on a 16 px grid: its 16 px-tuned geometry from the proposal
+            // (slit circle r 50, slit width 44 on a 512 grid), ×1/32 here. The slit is a knockout
+            // cut into the nib and ends above the tip, so the nib stays joined at the point. The
+            // outline is one path (exterior and slit wound oppositely), so no fill rule is needed.
             // The ink stroke is the `logo-ink.svg` layer below: gpui paints each SVG
-            // as an alpha mask in one color, so the two kit colors need two layers.
+            // as an alpha mask in one color, so the two colors need two layers.
             "logo.svg" => {
-                r##"<path fill="#20232B" d="M5.1875 2.6875H10.8125L12.21875 6.59375L8 12.65625L3.78125 6.59375Z"/>"##
+                r##"<path fill="#20232B" d="M3.78 6.59 L5.19 2.69 L10.81 2.69 L12.22 6.59 L8.00 12.66 Z M9.56 6.69 L9.56 6.59 L9.55 6.48 L9.53 6.38 L9.51 6.28 L9.48 6.19 L9.44 6.09 L9.40 6.00 L9.35 5.91 L9.30 5.82 L9.24 5.74 L9.17 5.66 L9.10 5.58 L9.03 5.51 L8.95 5.45 L8.87 5.39 L8.78 5.33 L8.69 5.29 L8.60 5.24 L8.50 5.21 L8.40 5.18 L8.30 5.16 L8.20 5.14 L8.10 5.13 L8.00 5.12 L7.90 5.13 L7.80 5.14 L7.70 5.16 L7.60 5.18 L7.50 5.21 L7.40 5.24 L7.31 5.29 L7.22 5.33 L7.13 5.39 L7.05 5.45 L6.97 5.51 L6.90 5.58 L6.83 5.66 L6.76 5.74 L6.70 5.82 L6.65 5.91 L6.60 6.00 L6.56 6.09 L6.52 6.19 L6.49 6.28 L6.47 6.38 L6.45 6.48 L6.44 6.59 L6.44 6.69 L6.44 6.79 L6.45 6.89 L6.47 6.99 L6.49 7.09 L6.52 7.19 L6.56 7.29 L6.60 7.38 L6.65 7.47 L6.70 7.56 L6.76 7.64 L6.83 7.72 L6.90 7.79 L6.97 7.86 L7.05 7.93 L7.13 7.99 L7.22 8.04 L7.31 8.09 L7.31 8.09 L7.31 10.25 L7.32 10.34 L7.34 10.43 L7.36 10.51 L7.40 10.59 L7.45 10.67 L7.51 10.74 L7.58 10.80 L7.66 10.85 L7.74 10.89 L7.82 10.91 L7.91 10.93 L8.00 10.94 L8.09 10.93 L8.18 10.91 L8.26 10.89 L8.34 10.85 L8.42 10.80 L8.49 10.74 L8.55 10.67 L8.60 10.59 L8.64 10.51 L8.66 10.43 L8.68 10.34 L8.69 10.25 L8.69 8.09 L8.69 8.09 L8.78 8.04 L8.87 7.99 L8.95 7.93 L9.03 7.86 L9.10 7.79 L9.17 7.72 L9.24 7.64 L9.30 7.56 L9.35 7.47 L9.40 7.38 L9.44 7.29 L9.48 7.19 L9.51 7.09 L9.53 6.99 L9.55 6.89 L9.56 6.79 Z"/>"##
             }
-            // Cobalt ink stroke of the kit's optical 16 px mark (`M174 446 Q255 410 338 438`,
-            // width 38 on a 512 grid, ×1/32 here). Overlaid on `logo.svg` by `logo`.
+            // Cobalt ink wave of `packaging/linux/com.inkuno.Inkuno.svg` (`M108 447 C172 414 216 415
+            // 259 429 C315 447 361 444 404 424`, width 52 on a 512 grid, ×1/32 here, round caps).
+            // Overlaid on `logo.svg` by `logo`.
             "logo-ink.svg" => {
-                r##"<path d="M5.4375 13.9375Q7.96875 12.8125 10.5625 13.6875" fill="none" stroke="#4263EB" stroke-width="1.1875" stroke-linecap="round"/>"##
+                r##"<path d="M3.375 13.96875 C5.375 12.9375 6.75 12.96875 8.09375 13.40625 C9.84375 13.96875 11.28125 13.875 12.625 13.25" fill="none" stroke="#4263EB" stroke-width="1.625" stroke-linecap="round"/>"##
             }
             // Icons given to notes and folders.
             _ => match ICON_SET.iter().find(|(file, _)| *file == path) {
@@ -517,9 +521,10 @@ pub const ICON_SET: &[(&str, &str)] = &[
     ),
 ];
 
-/// The app logo: the kit's optical 16 px mark at its exact colors, the nib in
-/// charcoal over the cobalt stroke. The kit keeps the nib+ink mark as-is, so
-/// there is no accent tint: on any theme the mark is `#20232B` + `#4263EB`.
+/// The app logo: the mark of `packaging/linux/com.inkuno.Inkuno.svg` (charcoal nib
+/// with a knockout slit, cobalt wave) on a 16 px grid, at its exact colors. The mark
+/// keeps its two fixed colors, so there is no accent tint: on any theme it is
+/// `#20232B` + `#4263EB`.
 /// VISIBLE CHANGE: the sidebar mark no longer follows the theme accent; on
 /// Inkuno Dark the charcoal nib sits close to the dark ground (the cobalt
 /// stroke carries it).
