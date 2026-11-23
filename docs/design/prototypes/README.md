@@ -17,7 +17,7 @@ Ground rules for every version:
 | v1 | 2026-11-21 | `v1.html` | https://claude.ai/artifact/JoPD7oYaJom8B39UeCn8eV |
 | v2 | 2026-11-21 | `v2.html` | same link, artifact version 2 |
 | v3 | 2026-11-22 | `v3.html` | https://claude.ai/artifact/JM2rwBkZdjCzSuN3fhQTpM (the v1/v2 link keeps showing v2) |
-| v3-ios | 2026-11-23 | `v3-ios.html` | not yet published |
+| v3-ios | 2026-11-23 | `v3-ios.html` | https://claude.ai/artifact/68n8SgCXhVCDZft9GCEbgh |
 
 The artifact link always shows the newest version; older versions stay in this folder and in the
 artifact's own version history.
