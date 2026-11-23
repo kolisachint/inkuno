@@ -4,7 +4,7 @@ Inkuno is a Cargo workspace built on [GPUI](https://www.gpui.rs/) (`gpui-pre` 0.
 crate `crates/inkuno`, the pure logic is `crates/inkuno-logic`, the outside world is `crates/inkuno-platform`, the look is `crates/inkuno-ui`, the read-only HTML viewer (`inkuno view`, tao + wry, no gpui, built when the `viewer` feature is on) is `crates/inkuno-view`, and the root manifest only lists them. This page is the
 map: where things live, which way the dependencies go, and the rules the code keeps.
 
-Inkuno is a rename of Bref by Andrea Larboullet Marin; its home is github.com/kolisachint/inkuno.
+Inkuno's home is github.com/kolisachint/inkuno.
 
 ## Layers
 

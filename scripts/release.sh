@@ -9,8 +9,7 @@
 # have a previous tag; it never creates 0.0.1.
 #
 # Inkuno naming: APP follows crates/inkuno/Cargo.toml and REPO defaults to the Inkuno home
-# below, so no edit is needed here. Remaining `bref` asset
-# strings elsewhere are the rename crew's lane (see docs/releasing.md).
+# below, so no edit is needed here.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -174,8 +174,7 @@ jobs:
       - name: Package Linux archive
         run: |
           set -euo pipefail
-          # Follows crates/inkuno/Cargo.toml so the rename needs no edit here; the rename
-          # crew owns the remaining hardcoded `bref` strings in this file.
+          # Follows crates/inkuno/Cargo.toml, so renaming the app needs no edit here.
           app=$(sed -n 's/^name = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
           mkdir -p dist
           cp "target/release/$app" "dist/$app"
