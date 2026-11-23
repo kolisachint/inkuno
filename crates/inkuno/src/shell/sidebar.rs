@@ -406,8 +406,14 @@ impl Shell {
         let (path, is_note) = (row.path.clone(), row.dir.is_none());
         self.nav.marked.clear();
         self.nav.scroll.scroll_to_item(ix, ScrollStrategy::Center);
-        // A version is not a note to preview: it is compared by Enter or a click.
-        if is_note && self.nav.panel == Panel::Split && self.nav.mode != Mode::Versions {
+        // A version is not a note to preview: it is compared by Enter or a click. An attachment is
+        // not either: a preview would open it (an HTML page in the viewer, others in the system's
+        // application), so only an explicit open does.
+        if is_note
+            && !platform::vault::is_attachment(&path)
+            && self.nav.panel == Panel::Split
+            && self.nav.mode != Mode::Versions
+        {
             self.preview_note(&path, window, cx);
         }
         self.nav.sel = Some(path);

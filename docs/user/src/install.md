@@ -22,6 +22,8 @@ tar -xzf inkuno-linux-x86_64.tar.gz
 sudo install inkuno /usr/local/bin/
 ```
 
+The binary needs the WebKitGTK 4.1 libraries, which the HTML viewer (`inkuno view`) uses. Install them first, or the program does not start: `libwebkit2gtk-4.1-0` on Debian and Ubuntu, `webkit2gtk4.1` on Fedora.
+
 ## macOS
 
 Download [`inkuno-macos.dmg`](https://github.com/kolisachint/inkuno/releases/latest/download/inkuno-macos.dmg). It runs on Apple Silicon and Intel. Open it and drag Inkuno to Applications.
@@ -76,7 +78,7 @@ Follow the [steps above](#ubuntu-linux-mint-debian) with these packages. Their n
 ```bash
 sudo dnf install gcc pkgconf-pkg-config fontconfig-devel freetype-devel \
   wayland-devel libxcb-devel libxkbcommon-devel libxkbcommon-x11-devel vulkan-loader \
-  google-noto-color-emoji-fonts
+  webkit2gtk4.1-devel google-noto-color-emoji-fonts
 ```
 
 ## Other Linux distributions
@@ -84,6 +86,7 @@ sudo dnf install gcc pkgconf-pkg-config fontconfig-devel freetype-devel \
 You need:
 
 - the development files of fontconfig, freetype, Wayland, libxcb and libxkbcommon (with its X11 part);
+- the development files of WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`, or `webkit2gtk4.1-devel` on Fedora), for the HTML viewer;
 - a Vulkan driver for your GPU;
 - an emoji font, such as Noto Color Emoji, for 🎉 in notes and names;
 - Rust.

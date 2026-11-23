@@ -224,7 +224,7 @@ fn view(args: &[String]) -> i32 {
         eprintln!("usage: inkuno view <file.html> [--root <dir>]");
         return 2;
     };
-    #[cfg(feature = "viewer")]
+    #[cfg(all(feature = "viewer", not(windows)))]
     {
         match inkuno_view::run(&view.file, view.root.as_deref()) {
             Ok(()) => 0,
@@ -234,7 +234,7 @@ fn view(args: &[String]) -> i32 {
             }
         }
     }
-    #[cfg(not(feature = "viewer"))]
+    #[cfg(not(all(feature = "viewer", not(windows))))]
     {
         let _ = view;
         eprintln!("inkuno: this build has no viewer");

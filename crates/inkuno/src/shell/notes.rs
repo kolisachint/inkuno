@@ -94,16 +94,19 @@ impl Shell {
         cx.notify();
     }
 
-    /// Opens an HTML page in `inkuno view`, a window of its own, its root the vault (else the page's
-    /// folder). The viewer is a process of its own, started and not waited for. False when this build
-    /// has no viewer or the process did not start: the caller then hands the page to the system.
+    /// Opens an HTML page in `inkuno view`, a window of its own. Its root is the page's own folder,
+    /// so the viewer reads nothing outside it. The viewer is a process of its own, started and not
+    /// waited for. False when this build has no viewer (Windows has none), the page cannot be
+    /// served from its folder, or the process did not start: the caller then hands the page to the
+    /// system.
     pub(super) fn open_html_in_viewer(&mut self, file: &Path) -> bool {
-        let root = self
-            .vault
-            .clone()
-            .or_else(|| file.parent().map(Path::to_path_buf))
-            .unwrap_or_default();
-        let Some(args) = platform::viewer::view_args(file, &root) else {
+        let Some(root) = file.parent() else {
+            return false;
+        };
+        if platform::web::url_for(root, file).is_none() {
+            return false;
+        }
+        let Some(args) = platform::viewer::view_args(file, root) else {
             return false;
         };
         #[cfg(test)]
@@ -113,7 +116,7 @@ impl Shell {
             self.viewed.push(file.to_path_buf());
             true
         }
-        #[cfg(all(not(test), feature = "viewer"))]
+        #[cfg(all(not(test), feature = "viewer", not(windows)))]
         {
             std::env::current_exe()
                 .and_then(|exe| {
@@ -130,7 +133,7 @@ impl Shell {
                 })
                 .is_ok()
         }
-        #[cfg(all(not(test), not(feature = "viewer")))]
+        #[cfg(all(not(test), not(all(feature = "viewer", not(windows)))))]
         {
             let _ = args;
             false

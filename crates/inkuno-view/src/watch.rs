@@ -1,7 +1,7 @@
 //! Live reload: a watcher on the root, its events coalesced until 150 ms of quiet.
 
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::mpsc::{self, Receiver, RecvTimeoutError},
     thread,
     time::Duration,
@@ -40,19 +40,40 @@ pub fn inside(root: &Path, path: &Path) -> bool {
     path.starts_with(root)
 }
 
+/// Whether a path lies in a folder or is named with a dot-component under `root` (`root` is
+/// canonical): `.git`, editor swap folders and the like are no page.
+pub fn hidden(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root).is_ok_and(|relative| {
+        relative
+            .components()
+            .any(|part| part.as_os_str().to_string_lossy().starts_with('.'))
+    })
+}
+
+/// Whether a file system event means the served files may have changed: a create, a change or a
+/// removal of a path under `root` that is not hidden. A read is no change: inotify reports every
+/// read as `Access`, and the viewer's own reads of the pages would reload them forever.
+pub fn is_change(root: &Path, event: &notify::Event) -> bool {
+    !event.kind.is_access()
+        && event
+            .paths
+            .iter()
+            .any(|path| inside(root, path) && !hidden(root, path))
+}
+
 /// Watches `root` recursively and calls `on_change` after each burst of changes. The watcher
 /// must be kept alive by the caller.
 pub fn start(
     root: &Path,
     on_change: impl FnMut() + Send + 'static,
 ) -> Result<RecommendedWatcher, String> {
-    let (tx, rx) = mpsc::channel::<PathBuf>();
+    let (tx, rx) = mpsc::channel::<()>();
     let base = root.to_path_buf();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if let Ok(event) = event {
-            for path in event.paths.iter().filter(|path| inside(&base, path)) {
-                let _ = tx.send(path.clone());
-            }
+        if let Ok(event) = event
+            && is_change(&base, &event)
+        {
+            let _ = tx.send(());
         }
     })
     .map_err(|error| format!("cannot watch {}: {error}", root.display()))?;
@@ -66,6 +87,7 @@ pub fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -111,5 +133,29 @@ mod tests {
         assert!(inside(root, Path::new("/site/a/b.html")));
         assert!(!inside(root, Path::new("/site2/b.html")));
         assert!(!inside(root, Path::new("/other/b.html")));
+    }
+
+    #[test]
+    fn reads_and_hidden_paths_are_no_change() {
+        use notify::{
+            Event, EventKind,
+            event::{AccessKind, AccessMode, CreateKind, DataChange, ModifyKind},
+        };
+        let root = Path::new("/site");
+        let read = Event::new(EventKind::Access(AccessKind::Open(AccessMode::Read)))
+            .add_path(PathBuf::from("/site/a.css"));
+        assert!(!is_change(root, &read));
+        let write = Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+            .add_path(PathBuf::from("/site/a.css"));
+        assert!(is_change(root, &write));
+        let created = Event::new(EventKind::Create(CreateKind::File))
+            .add_path(PathBuf::from("/site/new.html"));
+        assert!(is_change(root, &created));
+        let hidden_write = Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+            .add_path(PathBuf::from("/site/.git/index"));
+        assert!(!is_change(root, &hidden_write));
+        let outside = Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+            .add_path(PathBuf::from("/other/a.css"));
+        assert!(!is_change(root, &outside));
     }
 }

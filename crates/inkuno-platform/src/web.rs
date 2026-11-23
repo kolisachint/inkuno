@@ -13,17 +13,20 @@ pub const SCHEME: &str = "inkuno";
 /// The host of every workspace URL: `inkuno://workspace/<relative path>`.
 pub const HOST: &str = "workspace";
 
-/// The Content-Security-Policy of every response: the workspace scheme, inline code and data or
-/// blob URLs only. Nothing reaches the network.
-pub const CSP: &str = "default-src inkuno: data: blob:; script-src inkuno: 'unsafe-inline' 'unsafe-eval' data: blob:; style-src inkuno: 'unsafe-inline' data:; img-src inkuno: data: blob:; font-src inkuno: data:; media-src inkuno: data: blob:; connect-src inkuno: data: blob:; frame-src inkuno: data: blob:; form-action 'none'; base-uri inkuno:";
+/// The Content-Security-Policy of every response: the page's scripts, styles, images, fonts, media
+/// and frames come from the workspace scheme or inline (data and blob URLs for the page's own
+/// code). The page itself fetches nothing from the network (`connect-src`). Links to the outside
+/// are the only way out: a click the user makes on one opens the system's browser or mail client,
+/// which the viewer's script sends to the app (`inkuno-view`, `keys::LINKS`).
+pub const CSP: &str = "default-src inkuno: data: blob:; script-src inkuno: 'unsafe-inline' 'unsafe-eval' data: blob:; style-src inkuno: 'unsafe-inline' data:; img-src inkuno: data: blob:; font-src inkuno: data:; media-src inkuno: data: blob:; connect-src inkuno: data: blob:; frame-src inkuno:; form-action 'none'; base-uri inkuno:";
 
 /// Why a request URL is not served.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Refusal {
     /// Not an `inkuno:` URL at all: another scheme, or none.
     NotThisScheme,
-    /// A path that cannot name a file: a malformed escape, invalid UTF-8, a NUL, `..`, a backslash,
-    /// a colon (a drive or a stream name on Windows), or another host than `workspace`.
+    /// A path that cannot name a file: a malformed escape, invalid UTF-8, a NUL, `..`, a `/`, on
+    /// Windows also a backslash or a colon (a drive or a stream name), or another host than `workspace`.
     BadPath,
     /// The file lies outside the root once links are followed.
     OutsideRoot,
@@ -132,9 +135,10 @@ pub fn is_external(url: &str) -> bool {
     })
 }
 
-/// Whether a decoded name can be one file under a folder: not `..`, no separator, no colon.
+/// Whether a decoded name can be one file under a folder: not `..`, no `/`, and not `\` or `:`
+/// on Windows (a separator there, a drive or a stream name). Elsewhere those are plain characters.
 fn plain_name(name: &str) -> bool {
-    name != ".." && !name.contains(['/', '\\', ':'])
+    name != ".." && !name.contains('/') && !(cfg!(windows) && name.contains(['\\', ':']))
 }
 
 /// One path segment, percent-encoded: letters, digits and `-._~` stay, every other byte is `%XX`.
@@ -260,8 +264,6 @@ mod tests {
             "inkuno://workspace/%2e%2e/secret.txt",
             "inkuno://workspace/%2E%2E/secret.txt",
             "inkuno://workspace/..%2fsecret.txt",
-            "inkuno://workspace/..%5csecret.txt",
-            "inkuno://workspace/..\\secret.txt",
             "inkuno://workspace/%2Fetc%2Fpasswd",
         ] {
             assert_eq!(refused(&root, url), Refusal::BadPath, "{url}");
@@ -276,10 +278,39 @@ mod tests {
             "inkuno://workspace/%FF.html",
             "inkuno://workspace/index%2",
             "inkuno://workspace/index%zz.html",
-            "inkuno://workspace/C:/x.html",
             "inkuno://other/index.html",
         ] {
             assert_eq!(refused(&root, url), Refusal::BadPath, "{url}");
+        }
+    }
+
+    /// On Windows a colon or a backslash in a name is a drive or a stream: refused there.
+    #[cfg(windows)]
+    #[test]
+    fn colons_and_backslashes_are_refused_on_windows() {
+        let root = site();
+        for url in [
+            "inkuno://workspace/C:/x.html",
+            "inkuno://workspace/a%5Cb.html",
+            "inkuno://workspace/..%5csecret.txt",
+            "inkuno://workspace/..\\secret.txt",
+        ] {
+            assert_eq!(refused(&root, url), Refusal::BadPath, "{url}");
+        }
+        root.write("a:b.txt", "colon");
+        assert_eq!(url_for(&root.0, &root.0.join("a:b.txt")), None);
+    }
+
+    /// Elsewhere a colon and a backslash are plain characters: `Meeting 10:30.html` round-trips.
+    #[cfg(unix)]
+    #[test]
+    fn colons_and_backslashes_are_plain_names_on_unix() {
+        let root = site();
+        for name in ["Meeting 10:30.html", "back\\slash.html"] {
+            root.write(name, "page");
+            let file = root.canonical(name);
+            let url = url_for(&root.0, &file).unwrap_or_else(|| panic!("{name} has no URL"));
+            assert_eq!(resolve(&root.0, &url), Ok(file), "{url}");
         }
     }
 
@@ -356,8 +387,6 @@ mod tests {
         let file = outside.write("x.html", "no");
         assert_eq!(url_for(&root.0, &file), None);
         assert_eq!(url_for(&root.0, &root.0.join("missing.html")), None);
-        root.write("a:b.txt", "colon");
-        assert_eq!(url_for(&root.0, &root.0.join("a:b.txt")), None);
     }
 
     #[test]
@@ -409,5 +438,8 @@ mod tests {
         assert!(CSP.starts_with("default-src inkuno: data: blob:;"));
         assert!(CSP.ends_with("base-uri inkuno:"));
         assert!(!CSP.contains("http"));
+        // A frame of data or blob URL would be a top-level document with no policy of its own.
+        assert!(CSP.contains("frame-src inkuno:;"));
+        assert!(!CSP.contains("frame-src inkuno: data"));
     }
 }
