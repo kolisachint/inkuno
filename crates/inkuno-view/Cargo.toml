@@ -12,3 +12,6 @@ notify = "7"
 open = "5.4.5"
 tao = "0.37.3"
 wry = "0.57.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = "0.21.2"

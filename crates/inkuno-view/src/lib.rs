@@ -3,10 +3,16 @@
 //! come through the custom protocol `inkuno://workspace/` (`inkuno_platform::web`). No gpui.
 
 mod keys;
+#[cfg(target_os = "macos")]
+mod menu;
 mod protocol;
 mod watch;
 
-use std::path::{Path, PathBuf};
+use std::{
+    cell::Cell,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use inkuno_platform::web;
 use tao::{
@@ -27,42 +33,20 @@ enum UserEvent {
     Title(String),
 }
 
-/// What a navigation may do.
-#[derive(Debug, PartialEq, Eq)]
-enum Navigation {
-    /// Stay in the viewer.
-    Allow,
-    /// Hand the URL to the system browser.
-    External,
-    /// Nothing.
-    Deny,
-}
-
-/// The policy of every navigation and new-window request: the workspace scheme and
-/// `about:blank` stay, http(s) and mailto links leave, the rest is refused.
-fn navigation(url: &str) -> Navigation {
+/// The policy of every navigation and new-window request: the workspace scheme, `about:blank` and
+/// the frames of a page (`about:srcdoc`) stay; everything else is refused. Links to the outside
+/// never load here: a click on one is sent to the app by the page's script (`keys::LINKS`), and
+/// any other attempt, from a script or a redirect, opens nothing.
+fn allow(url: &str) -> bool {
     let own = url
         .get(..format!("{}://", web::SCHEME).len())
         .is_some_and(|head| head.eq_ignore_ascii_case(&format!("{}://", web::SCHEME)));
-    if own || url == "about:blank" {
-        Navigation::Allow
-    } else if web::is_external(url) {
-        Navigation::External
-    } else {
-        Navigation::Deny
-    }
+    own || url == "about:blank" || url == "about:srcdoc"
 }
 
-/// Applies the policy; true when the viewer itself may go there.
-fn allow(url: &str) -> bool {
-    match navigation(url) {
-        Navigation::Allow => true,
-        Navigation::External => {
-            let _ = open::that_detached(url);
-            false
-        }
-        Navigation::Deny => false,
-    }
+/// Whether a link may be opened now: at most one per second, so a page cannot open a flood of them.
+fn may_open(last: Option<Instant>, now: Instant) -> bool {
+    last.is_none_or(|last| now.duration_since(last) >= Duration::from_secs(1))
 }
 
 /// The root and the canonical file to show. The root defaults to the file's folder; the file
@@ -115,6 +99,15 @@ pub fn run(file: &Path, root: Option<&Path>) -> Result<(), String> {
     })?;
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    // The menu bar gives the webview its copy, paste and close keys; without it they do nothing.
+    #[cfg(target_os = "macos")]
+    let menu = match menu::install() {
+        Ok(menu) => Some(menu),
+        Err(error) => {
+            eprintln!("inkuno view: no menu bar: {error}");
+            None
+        }
+    };
     let window = WindowBuilder::new()
         .with_title(title_of(&root, &url).unwrap_or_else(|| "Inkuno".into()))
         .with_inner_size(tao::dpi::LogicalSize::new(1100.0, 800.0))
@@ -123,18 +116,26 @@ pub fn run(file: &Path, root: Option<&Path>) -> Result<(), String> {
 
     let serve_root = root.clone();
     let title_root = root.clone();
+    let last_open = Cell::new(None::<Instant>);
     let title_proxy = event_loop.create_proxy();
     let builder = WebViewBuilder::new()
         .with_url(&url)
         .with_initialization_script(keys::SCRIPT)
+        .with_initialization_script(keys::LINKS)
         .with_custom_protocol(web::SCHEME.to_string(), move |_id, request| {
             protocol::respond(&serve_root, &request.uri().to_string())
         })
-        .with_navigation_handler(|url| allow(&url))
-        .with_new_window_req_handler(|url, _| {
-            allow(&url);
-            NewWindowResponse::Deny
+        .with_ipc_handler(move |request| {
+            // The page's script sends the address of a link the user clicked.
+            let link = request.body();
+            let now = Instant::now();
+            if web::is_external(link) && may_open(last_open.get(), now) {
+                last_open.set(Some(now));
+                let _ = open::that_detached(link);
+            }
         })
+        .with_navigation_handler(|url| allow(&url))
+        .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
         .with_on_page_load_handler(move |event, url| {
             // A page that did not load (a refused or missing link) has no file name: the plain title.
             if matches!(event, PageLoadEvent::Finished) {
@@ -155,13 +156,22 @@ pub fn run(file: &Path, root: Option<&Path>) -> Result<(), String> {
     let webview = webview.map_err(|error| format!("cannot open the viewer: {error}"))?;
 
     let reload_proxy = event_loop.create_proxy();
-    let _watcher = watch::start(&root, move || {
+    // Without a watcher the page still shows; it just does not reload when the files change.
+    let watcher = match watch::start(&root, move || {
         let _ = reload_proxy.send_event(UserEvent::Reload);
-    })?;
+    }) {
+        Ok(watcher) => Some(watcher),
+        Err(error) => {
+            eprintln!("inkuno view: live reload is off: {error}");
+            None
+        }
+    };
 
     event_loop.run(move |event, _, control_flow| {
         // The watcher and the webview live as long as the loop.
-        let _keep = &_watcher;
+        let _keep = &watcher;
+        #[cfg(target_os = "macos")]
+        let _menu = &menu;
         *control_flow = ControlFlow::Wait;
         match event {
             Event::WindowEvent {
@@ -183,26 +193,36 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn the_policy_keeps_the_workspace_and_sends_links_out() {
+    fn the_policy_keeps_the_workspace_and_refuses_the_rest() {
         for url in [
             "inkuno://workspace/a.html",
             "INKUNO://workspace/",
             "about:blank",
+            "about:srcdoc",
         ] {
-            assert_eq!(navigation(url), Navigation::Allow, "{url}");
+            assert!(allow(url), "{url}");
         }
-        for url in ["https://a.org", "HTTP://a.org", "mailto:a@b.c"] {
-            assert_eq!(navigation(url), Navigation::External, "{url}");
-        }
+        // Links to the outside are refused too: a click sends them to the app, never a load here.
         for url in [
+            "https://a.org",
+            "HTTP://a.org",
+            "mailto:a@b.c",
             "file:///etc/passwd",
             "javascript:alert(1)",
             "data:text/html,x",
             "",
             "ink",
         ] {
-            assert_eq!(navigation(url), Navigation::Deny, "{url}");
+            assert!(!allow(url), "{url}");
         }
+    }
+
+    #[test]
+    fn a_link_is_opened_at_most_once_a_second() {
+        let start = Instant::now();
+        assert!(may_open(None, start));
+        assert!(!may_open(Some(start), start + Duration::from_millis(999)));
+        assert!(may_open(Some(start), start + Duration::from_secs(1)));
     }
 
     #[test]
