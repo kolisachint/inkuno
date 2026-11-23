@@ -198,7 +198,7 @@ pub(super) fn editor_text(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContex
 /// Gives the keys to the note, as a click in it would.
 pub(super) fn focus_note(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     settle(cx);
 }
@@ -835,7 +835,7 @@ fn stop_frees_the_panel_when_the_agent_does_not_end(cx: &mut TestAppContext) {
 
     // Enter works again: the next prompt starts an agent and is sent.
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.assistant.field.focus_handle(cx))
+        window.focus(&s.assistant.field.focus_handle(cx), cx)
     });
     cx.simulate_input("again");
     cx.simulate_keystrokes("enter");

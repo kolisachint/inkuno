@@ -13,9 +13,9 @@ flate2 = "=1.1.4"
 notify = "=7.0.0"
 serde_json = "=1.0.145"
 
-# Already pulled in by gpui, at these same versions: the local date (the standard library ignores it).
+# Already pulled in by gpui (libc at the version of the app's Cargo.lock): the local date (the standard library ignores it).
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.177"
+libc = "=0.2.191"
 
 # Already pulled in by gpui, at these same versions: the macOS window buttons (`mac_chrome`).
 [target.'cfg(target_os = "macos")'.dependencies]

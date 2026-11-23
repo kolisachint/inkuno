@@ -82,19 +82,19 @@ impl Shell {
             match event {
                 PaletteEvent::Submit(memo) => {
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    window.focus(&this.pane().editor.focus_handle(cx), cx);
                     this.write_revision(&path, memo, cx);
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    window.focus(&this.pane().editor.focus_handle(cx), cx);
                 }
                 _ => {}
             }
             cx.notify();
         })
         .detach();
-        window.focus(&prompt.focus_handle(cx));
+        window.focus(&prompt.focus_handle(cx), cx);
         self.palette = Some(prompt);
         cx.notify();
     }

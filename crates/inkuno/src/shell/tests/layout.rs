@@ -102,7 +102,7 @@ fn layout_reuse_matches_full_layout(cx: &mut TestAppContext) {
         });
         cx.run_until_parked();
         shell.update_in(cx, |s, window, cx| {
-            window.focus(&s.pane().editor.focus_handle(cx))
+            window.focus(&s.pane().editor.focus_handle(cx), cx)
         });
         for _ in 0..steps {
             let size = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().len());

@@ -46,7 +46,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // selects its address, to retype; Ctrl+K on a selection waits for the address.
     j.load(cx, "see the doc here", 4);
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     cx.simulate_keystrokes(
         "shift-right shift-right shift-right shift-right shift-right shift-right shift-right",

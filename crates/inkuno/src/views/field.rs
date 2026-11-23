@@ -193,7 +193,7 @@ impl Render for Field {
                 gpui::MouseButton::Left,
                 cx.listener(move |this, e: &gpui::MouseDownEvent, window, cx| {
                     cx.stop_propagation();
-                    window.focus(&this.focus);
+                    window.focus(&this.focus, cx);
                     let (Ok(at) | Err(at)) = placed.index_for_position(e.position);
                     this.line.place(at);
                     cx.notify();

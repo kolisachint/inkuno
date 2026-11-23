@@ -16,8 +16,6 @@ pub use crate::components::kbd::keycaps;
 pub use crate::components::menu::menu_row;
 pub use crate::components::popover::{floating, popover};
 
-gpui::actions!(widgets, [Press]);
-
 /// Tooltip of an icon button: what it does and, if it has one, its shortcut. Without it,
 /// a bare icon forces you to know the documentation to know where to click.
 pub struct Tip {

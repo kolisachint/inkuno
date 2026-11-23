@@ -222,7 +222,7 @@ fn buttons_from_the_keys(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     // gpui presses a button when the key comes up; the test platform only sends it down.
-    let press = |cx: &mut gpui::VisualTestContext, key: &str| {
+    let press = |cx: &mut gpui::VisualTestContext, key: &'static str| {
         cx.update(|window, _| window.refresh());
         cx.run_until_parked();
         cx.simulate_keystrokes(key);
@@ -268,7 +268,7 @@ fn buttons_from_the_keys(cx: &mut TestAppContext) {
     press(cx, "space");
     assert_ne!(state(cx), pressed, "Space pressed it again");
     // A click on a button presses it and leaves the keys to the note.
-    cx.update(|w, cx| w.focus(&shell.read(cx).pane().editor.focus_handle(cx)));
+    cx.update(|w, cx| w.focus(&shell.read(cx).pane().editor.focus_handle(cx), cx));
     let (titlebar, before) = (cx.debug_bounds("nav-titlebar").expect("drawn"), state(cx));
     cx.simulate_click(titlebar.center(), gpui::Modifiers::none());
     assert_ne!(state(cx), before, "the click pressed it");
@@ -304,7 +304,7 @@ fn ctrl_b_toggles_the_sidebar_from_the_note(cx: &mut TestAppContext) {
 
     cx.update(|window, cx| {
         let note = shell.read(cx).pane().editor.focus_handle(cx);
-        window.focus(&note);
+        window.focus(&note, cx);
     });
     assert!(in_note(cx));
     assert_eq!(panel(cx), nav::Panel::Split);

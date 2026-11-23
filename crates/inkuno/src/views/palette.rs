@@ -812,9 +812,7 @@ impl Render for Palette {
                 seen.set(Some(caret.x));
                 // Bounded to what can scroll: at the end, nothing more is requested.
                 let mut offset = scroll.offset();
-                let to = (offset.x + slide)
-                    .max(-scroll.max_offset().width)
-                    .min(t.px(0.));
+                let to = (offset.x + slide).max(-scroll.max_offset().x).min(t.px(0.));
                 if (to - offset.x).abs() > t.px(0.5) {
                     offset.x = to;
                     scroll.set_offset(offset);

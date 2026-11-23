@@ -87,7 +87,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     for inside in [false, true] {
         j.load(cx, note, if inside { note.find("fin").unwrap() } else { 0 });
         shell.update_in(cx, |s, window, cx| {
-            window.focus(&s.pane().editor.focus_handle(cx))
+            window.focus(&s.pane().editor.focus_handle(cx), cx)
         });
         cx.run_until_parked();
         for target in [
@@ -157,7 +157,7 @@ pub(super) fn headings(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     // Caret and click land on the same byte: on the marker and on the first letter of each title.
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     cx.run_until_parked();
     for target in [
@@ -214,7 +214,7 @@ pub(super) fn tags(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let geometry = |cx: &mut gpui::VisualTestContext, text: &str| {
         j.load(cx, text, 0);
         shell.update_in(cx, |s, window, cx| {
-            window.focus(&s.pane().editor.focus_handle(cx))
+            window.focus(&s.pane().editor.focus_handle(cx), cx)
         });
         cx.run_until_parked();
         shell.read_with(cx, |s, cx| {
@@ -238,7 +238,7 @@ pub(super) fn tags(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     j.load(cx, &note, 0);
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     cx.run_until_parked();
     for target in [

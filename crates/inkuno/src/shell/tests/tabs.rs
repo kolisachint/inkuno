@@ -348,7 +348,7 @@ fn the_tree_previews_in_a_single_tab(cx: &mut TestAppContext) {
     };
 
     // Beta, then Gamma, browsed from the tree: one preview tab, the opened note stays where it was.
-    shell.update_in(cx, |s, window, _| window.focus(&s.nav.focus));
+    shell.update_in(cx, |s, window, cx| window.focus(&s.nav.focus, cx));
     browse("Beta", cx);
     assert_eq!(tabs(&shell, cx, 0), (all(&["Alpha", "Beta"]), 1));
     assert!(preview(&shell, cx));
@@ -864,7 +864,7 @@ fn a_preview_tab_is_italic_in_every_theme(cx: &mut TestAppContext) {
     shell.update_in(cx, |s, window, cx| {
         s.open_from_nav(&note("Alpha"), window, cx)
     });
-    shell.update_in(cx, |s, window, _| window.focus(&s.nav.focus));
+    shell.update_in(cx, |s, window, cx| window.focus(&s.nav.focus, cx));
     shell.update_in(cx, |s, window, cx| {
         s.preview_note(&note("Beta"), window, cx)
     });
@@ -907,6 +907,9 @@ fn pointing_at_the_hidden_strip_peeks_the_band(cx: &mut TestAppContext) {
         cx.run_until_parked();
     };
 
+    // The test window starts with its pointer at the origin, which is on the hidden strip: park it away
+    // (an earlier gpui did not hover on the first frame).
+    cx.simulate_mouse_move(gpui::point(px(400.), px(300.)), None, none);
     shell.update(cx, |s, cx| s.toggle_title_bar(cx));
     settle(cx);
     assert!(cx.debug_bounds("band-peek-0").is_none());

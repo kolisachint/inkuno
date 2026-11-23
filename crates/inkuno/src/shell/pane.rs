@@ -242,21 +242,21 @@ impl Shell {
         self.active = pane.min(self.panes.len() - 1);
         self.show_active(cx);
         if let Some(figure) = &self.pane().figure {
-            window.focus(&figure.focus_handle(cx));
+            window.focus(&figure.focus_handle(cx), cx);
             return cx.notify();
         }
         if let Some(focus) = self.settings_focus(cx) {
-            window.focus(&focus);
+            window.focus(&focus, cx);
             return cx.notify();
         }
         match (
             &self.pane().listing,
             self.pane().file.as_ref().map(|file| &file.kind),
         ) {
-            (Some(listing), _) => window.focus(&listing.filter.focus_handle(cx)),
-            (None, Some(FileKind::Svg(viewer))) => window.focus(&viewer.focus_handle(cx)),
-            (None, Some(FileKind::Image)) => window.focus(&self.pane().zone),
-            (None, None) => window.focus(&self.pane().editor.focus_handle(cx)),
+            (Some(listing), _) => window.focus(&listing.filter.focus_handle(cx), cx),
+            (None, Some(FileKind::Svg(viewer))) => window.focus(&viewer.focus_handle(cx), cx),
+            (None, Some(FileKind::Image)) => window.focus(&self.pane().zone, cx),
+            (None, None) => window.focus(&self.pane().editor.focus_handle(cx), cx),
         }
         cx.notify();
     }
@@ -352,7 +352,7 @@ impl Shell {
         self.split_off(group, side, tab);
         self.push_names_to(tab..tab + 1, cx);
         self.push_dirs(cx);
-        window.focus(&self.pane().editor.focus_handle(cx));
+        window.focus(&self.pane().editor.focus_handle(cx), cx);
         cx.notify();
         true
     }

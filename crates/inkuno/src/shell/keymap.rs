@@ -386,7 +386,7 @@ pub(crate) fn defaults() -> Vec<keys::Bind> {
         // From button to button, where Tab has no other use (the note indents with it). In the window's own
         // context: a binding with none counts as the deepest and would take Tab from the views that use it.
         b("tab", &FocusNext, Some("Shell")),
-        b("enter", &ui::widgets::Press, Some("Button")),
+        b("enter", &gpui::NoAction, Some("Button")),
         b("shift-tab", &FocusPrev, Some("Shell")),
         // The context menu of the selected row or of the cursor, as on every desktop.
         b("shift-f10", &ContextMenu, None),
@@ -528,15 +528,7 @@ pub(super) fn install(cx: &mut App, binds: &[keys::Bind]) {
                     .unwrap()
                     .into()
             });
-            KeyBinding::load(
-                &bind.keys,
-                action,
-                context,
-                false,
-                None,
-                &gpui::DummyKeyboardMapper,
-            )
-            .ok()
+            KeyBinding::load(&bind.keys, action, context, false, None, cx).ok()
         })
         .collect();
     cx.clear_key_bindings();

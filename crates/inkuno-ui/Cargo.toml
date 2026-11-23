@@ -8,7 +8,7 @@ license = "MIT"
 
 [dependencies]
 # Same versions as the app's Cargo.lock: never re-resolve, keep --locked/--offline green.
-gpui = "=0.2.2"
+gpui = { package = "gpui-pre", version = "=0.3.14" }
 inkuno-logic = { version = "0.0.1", path = "../inkuno-logic" }
 inkuno-platform = { version = "0.0.1", path = "../inkuno-platform" }
 latex-rust = "=2.1.0"

@@ -99,14 +99,6 @@ pub(super) fn drawn(
 
 pub(super) struct EditorElement(pub(super) Entity<Editor>);
 
-impl IntoElement for EditorElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 impl Element for EditorElement {
     type RequestLayoutState = ();
     type PrepaintState = ();
@@ -196,7 +188,9 @@ impl Editor {
                 .text_system()
                 .shape_line(SharedString::from("↩"), px(13. * s), &[run], None);
         let at = bounds.center() - point(glyph.width / 2., px(8. * s));
-        glyph.paint(at, px(16. * s), window, cx).ok();
+        glyph
+            .paint(at, px(16. * s), TextAlign::Left, None, window, cx)
+            .ok();
     }
 
     fn paint_chip(&self, row: &Row, window: &mut Window, cx: &mut App) {
@@ -218,7 +212,8 @@ impl Editor {
                 .text_system()
                 .shape_line(SharedString::from(label), px(11. * s), &[run], None);
         let at = bounds.origin + point(px(8. * s), px(2. * s));
-        name.paint(at, px(16. * s), window, cx).ok();
+        name.paint(at, px(16. * s), TextAlign::Left, None, window, cx)
+            .ok();
     }
 
     pub(super) fn paint(&self, focused: bool, window: &mut Window, cx: &mut App) {
@@ -304,7 +299,15 @@ impl Editor {
                             None,
                         );
                         let at = o.x + gutter - px(10. * s) - num.width;
-                        num.paint(point(at, text_top), row.lh, window, cx).ok();
+                        num.paint(
+                            point(at, text_top),
+                            row.lh,
+                            TextAlign::Left,
+                            None,
+                            window,
+                            cx,
+                        )
+                        .ok();
                     }
                 }
                 // A diagram off the caret is its view alone: no band behind it.
@@ -357,6 +360,7 @@ impl Editor {
                                 .paint_svg(
                                     at,
                                     "info.svg".into(),
+                                    None,
                                     TransformationMatrix::unit(),
                                     tint,
                                     cx,
@@ -810,7 +814,7 @@ impl Editor {
                     inline.size.height,
                 );
                 window
-                    .paint_image(at, Corners::default(), inline.image.clone(), 0, false)
+                    .paint_image(at, at, Corners::default(), inline.image.clone(), 0, false)
                     .ok();
             }
             // Footnote references off the caret: their numbers, raised over the gap their source left.
@@ -839,7 +843,14 @@ impl Editor {
                 };
                 let at = point(o.x + p.x, baseline - foot.raise - number.ascent);
                 number
-                    .paint(at, number.ascent + number.descent, window, cx)
+                    .paint(
+                        at,
+                        number.ascent + number.descent,
+                        TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    )
                     .ok();
             }
             if let Some((image, s)) = &row.image {
@@ -847,7 +858,7 @@ impl Editor {
                 // Radius 8 and a 1 px ring over the edge (both at size 15).
                 let radius = px(8. * t.size / crate::logic::prefs::Prefs::SIZE);
                 window
-                    .paint_image(at, Corners::all(radius), image.clone(), 0, false)
+                    .paint_image(at, at, Corners::all(radius), image.clone(), 0, false)
                     .ok();
                 // A picture keeps its ring; a diagram or a formula has none.
                 if !row.drawn {
@@ -877,13 +888,22 @@ impl Editor {
                     .paint(
                         point(o.x + px(10.), o.y + row.image_top() + px(8.)),
                         BROKEN,
+                        TextAlign::Left,
+                        None,
                         window,
                         cx,
                     )
                     .ok();
             } else if let Some(said) = row.broken {
                 label(said, t.soft, window)
-                    .paint(point(o.x, o.y + row.image_top()), BROKEN, window, cx)
+                    .paint(
+                        point(o.x, o.y + row.image_top()),
+                        BROKEN,
+                        TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    )
                     .ok();
             }
             // "Enlarge" button, on the picture, formula or figure the pointer is over.
@@ -903,6 +923,7 @@ impl Editor {
                     .paint_svg(
                         at,
                         "c-zoom-in.svg".into(),
+                        None,
                         TransformationMatrix::unit(),
                         t.text,
                         cx,
@@ -931,7 +952,14 @@ impl Editor {
                 let at = Bounds::new(bounds.origin + point(inset, inset), size(px(16.), px(16.)));
                 if shown {
                     window
-                        .paint_svg(at, icon.into(), TransformationMatrix::unit(), t.text, cx)
+                        .paint_svg(
+                            at,
+                            icon.into(),
+                            None,
+                            TransformationMatrix::unit(),
+                            t.text,
+                            cx,
+                        )
                         .ok();
                 }
                 if let Some((_, hitbox)) = self.copy_hitboxes.iter().find(|(s, _)| *s == row.start)
@@ -949,6 +977,7 @@ impl Editor {
                         .paint_svg(
                             at,
                             "c-zoom-in.svg".into(),
+                            None,
                             TransformationMatrix::unit(),
                             t.text,
                             cx,
@@ -965,7 +994,14 @@ impl Editor {
         if self.content.is_empty() {
             // The rest of the empty page (date, keys, notes to reread) is in `Shell::render_empty`.
             label(tr("Write here…", "Écrivez ici…"), t.soft, window)
-                .paint(point(o.x + px(8.), o.y + px(3.)), px(22.), window, cx)
+                .paint(
+                    point(o.x + px(8.), o.y + px(3.)),
+                    px(22.),
+                    TextAlign::Left,
+                    None,
+                    window,
+                    cx,
+                )
                 .ok();
         }
         // A thin scrollbar under each table too wide for the page; stronger under the pointer.
@@ -1055,6 +1091,7 @@ impl Editor {
                     .paint_svg(
                         icon,
                         "plus.svg".into(),
+                        None,
                         TransformationMatrix::unit(),
                         color,
                         cx,
@@ -1157,6 +1194,7 @@ impl Editor {
                             .paint_svg(
                                 icon,
                                 "plus.svg".into(),
+                                None,
                                 TransformationMatrix::unit(),
                                 t.bg,
                                 cx,
@@ -1269,6 +1307,7 @@ impl Editor {
                     .paint_svg(
                         mark,
                         icon.into(),
+                        None,
                         TransformationMatrix::unit(),
                         if on(spot) { t.text } else { t.soft },
                         cx,
@@ -1333,6 +1372,8 @@ impl Editor {
                 .paint(
                     point(at.x + px(8.), panel.bottom() - px(24.)),
                     px(20.),
+                    TextAlign::Left,
+                    None,
                     window,
                     cx,
                 )
@@ -1344,6 +1385,8 @@ impl Editor {
                     panel.bottom() - px(24.),
                 ),
                 px(20.),
+                TextAlign::Left,
+                None,
                 window,
                 cx,
             )

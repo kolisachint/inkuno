@@ -292,7 +292,7 @@ impl Shell {
                             this.pane()
                                 .editor
                                 .update(cx, |e, cx| e.resolve_comment(at, cx));
-                            window.focus(&this.pane().editor.focus_handle(cx));
+                            window.focus(&this.pane().editor.focus_handle(cx), cx);
                         })),
                 ),
             )
@@ -430,7 +430,7 @@ impl Shell {
         });
         self.comment_focus = None;
         self.show_view(Mode::Comments, window, cx);
-        window.focus(&field.focus_handle(cx));
+        window.focus(&field.focus_handle(cx), cx);
         cx.notify();
     }
 
@@ -492,7 +492,7 @@ impl Shell {
         };
         if let Some(editor) = self.draft_note(&draft, cx) {
             editor.update(cx, |e, cx| e.write_comment(draft.inside, &text, cx));
-            window.focus(&editor.focus_handle(cx));
+            window.focus(&editor.focus_handle(cx), cx);
         }
         cx.notify();
     }
@@ -504,7 +504,7 @@ impl Shell {
         };
         if let Some(editor) = self.draft_note(&draft, cx) {
             editor.update(cx, |e, cx| e.resolve_comment(draft.inside, cx));
-            window.focus(&editor.focus_handle(cx));
+            window.focus(&editor.focus_handle(cx), cx);
         }
         cx.notify();
     }
@@ -529,10 +529,10 @@ impl Shell {
         let flash = passage.clone();
         cx.spawn(async move |_, cx| {
             cx.background_executor().timer(FLASH).await;
-            editor.update(cx, |e, cx| e.flash_end(flash, back, cx)).ok();
+            editor.update(cx, |e, cx| e.flash_end(flash, back, cx));
         })
         .detach();
-        window.focus(&self.pane().editor.focus_handle(cx));
+        window.focus(&self.pane().editor.focus_handle(cx), cx);
         cx.notify();
     }
 

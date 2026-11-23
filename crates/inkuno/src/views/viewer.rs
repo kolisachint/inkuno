@@ -11,8 +11,7 @@ use std::time::SystemTime;
 use gpui::{
     App, Asset, Bounds, ContentMask, Context, Corners, CursorStyle, FocusHandle, Focusable, Image,
     ImageFormat, ImgResourceLoader, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point,
-    RenderImage, Resource, Rgba, ScrollWheelEvent, Window, canvas, div, fill, point, prelude::*,
-    px,
+    RenderImage, Resource, Rgba, ScrollEvent, Window, canvas, div, fill, point, prelude::*, px,
 };
 use resvg::usvg;
 
@@ -278,9 +277,9 @@ impl Viewer {
     }
 
     /// The wheel moves the view; with Ctrl (Cmd), it zooms around the pointer.
-    fn scroll(&mut self, e: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn scroll(&mut self, e: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
         let delta = e.delta.pixel_delta(px(26.));
-        if e.modifiers.secondary() {
+        if e.modifiers.secondary(cx) {
             let o = self.bounds.origin;
             let at = (f32::from(e.position.x - o.x), f32::from(e.position.y - o.y));
             self.zoom_at(self.zoom * (f32::from(delta.y) * 0.004).exp(), at, cx);
@@ -439,7 +438,7 @@ impl Viewer {
         let Some(doc) = doc else {
             if let Some(Some(image)) = picture {
                 window
-                    .paint_image(whole, Corners::default(), image, 0, false)
+                    .paint_image(whole, whole, Corners::default(), image, 0, false)
                     .ok();
             }
             return;
@@ -454,7 +453,7 @@ impl Viewer {
         };
         if let Some(image) = self.tile(base, window, cx) {
             window
-                .paint_image(whole, Corners::default(), image, 0, false)
+                .paint_image(whole, whole, Corners::default(), image, 0, false)
                 .ok();
         }
         // The tile level just fine enough for the screen: a tile weighs only its size, the
@@ -497,7 +496,7 @@ impl Viewer {
                         at((ux + side).min(w), (uy + side).min(h)),
                     );
                     window
-                        .paint_image(cell, Corners::default(), image, 0, false)
+                        .paint_image(cell, cell, Corners::default(), image, 0, false)
                         .ok();
                 }
             }
@@ -592,7 +591,7 @@ impl Render for Viewer {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, e: &MouseDownEvent, window, cx| {
-                    window.focus(&this.focus);
+                    window.focus(&this.focus, cx);
                     this.drag = Some(e.position);
                     cx.notify();
                 }),
@@ -615,11 +614,11 @@ impl Render for Viewer {
                     cx.notify();
                 }),
             )
-            .on_scroll_wheel(cx.listener(Self::scroll))
+            .on_scroll(cx.listener(Self::scroll))
             // As in the canvas: + - 0 without modifier.
             .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, _, cx| {
                 let k = &e.keystroke;
-                if k.modifiers.secondary() || k.modifiers.alt {
+                if k.modifiers.secondary(cx) || k.modifiers.alt {
                     return;
                 }
                 match k.key_char.as_deref() {

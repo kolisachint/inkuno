@@ -260,7 +260,7 @@ impl Shell {
         self.recent.clear();
         self.new_note(String::new(), cx);
         vault::save_config(&root, &[]);
-        window.focus(&self.pane().editor.focus_handle(cx));
+        window.focus(&self.pane().editor.focus_handle(cx), cx);
         // The index (names, tags) is built off the UI thread.
         cx.spawn(async move |this, cx| {
             let scan_root = root.clone();
@@ -576,11 +576,11 @@ impl Shell {
                 None => {}
             }
             this.palette = None;
-            window.focus(&this.pane().editor.focus_handle(cx));
+            window.focus(&this.pane().editor.focus_handle(cx), cx);
             cx.notify();
         })
         .detach();
-        window.focus(&palette.focus_handle(cx));
+        window.focus(&palette.focus_handle(cx), cx);
         self.palette = Some(palette);
         cx.notify();
     }

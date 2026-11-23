@@ -270,7 +270,9 @@ fn keycaps_in_palette_and_empty_page(cx: &mut TestAppContext) {
         assert!((row.size.height - px(121.)).abs() <= px(4.), "{row:?}");
     }
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("coffre");
+    // The palette as it opens: the commands with their shortcuts. (Typing a query would leave only the
+    // rows it matches, and gpui keeps no bounds for the rows that vanish.)
+    cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     let mut shown = 0;
     for i in 0..14 {

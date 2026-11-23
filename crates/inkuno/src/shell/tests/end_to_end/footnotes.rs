@@ -10,7 +10,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = |s: &str| note.find(s).unwrap();
     let (first, missing, def) = (at("[^a]"), at("[^x]"), at("[^a]:"));
     let second = note[first + 1..].find("[^a]").unwrap() + first + 1;
-    let held = gpui::Modifiers::secondary_key();
+    let held = shell.read_with(cx, |_, cx| gpui::Modifiers::secondary_key(cx));
     let caret = |cx: &mut gpui::VisualTestContext| {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position())
     };

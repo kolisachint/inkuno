@@ -77,7 +77,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     });
     // What a click in the note does: the keys go back to it, the bar stays.
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     cx.run_until_parked();
     assert_eq!(finding(cx), Some(("hiver".into(), 1, 2)));
@@ -175,7 +175,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     };
     assert_eq!(over(cx, gpui::Modifiers::none()), None);
     assert_eq!(
-        over(cx, gpui::Modifiers::secondary_key()),
+        over(
+            cx,
+            shell.read_with(cx, |_, cx| gpui::Modifiers::secondary_key(cx))
+        ),
         Some(CursorStyle::PointingHand)
     );
     // A checkbox in code stays text.

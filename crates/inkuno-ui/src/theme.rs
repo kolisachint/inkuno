@@ -896,6 +896,7 @@ impl Theme {
             offset: point(px(0.), self.px(1.)),
             blur_radius: self.px(6.),
             spread_radius: px(0.),
+            inset: false,
         }]
     }
 
@@ -910,12 +911,14 @@ impl Theme {
                 offset: point(px(-1.), px(0.)),
                 blur_radius: px(1.),
                 spread_radius: px(0.),
+                inset: false,
             },
             BoxShadow {
                 color: hsla(0., 0., 0., far),
                 offset: point(px(-2.), px(0.)),
                 blur_radius: px(if dark { 12. } else { 10. }),
                 spread_radius: px(0.),
+                inset: false,
             },
         ]
     }
@@ -927,6 +930,7 @@ impl Theme {
             offset: point(px(0.), px(y)),
             blur_radius: px(blur),
             spread_radius: px(0.),
+            inset: false,
         };
         vec![shadow(1., 3., 0.05), shadow(8., 24., 0.10)]
     }
@@ -938,6 +942,7 @@ impl Theme {
             offset: point(px(0.), self.px(6.)),
             blur_radius: self.px(20.),
             spread_radius: px(0.),
+            inset: false,
         }]
     }
 
@@ -1034,6 +1039,7 @@ pub fn frame_shadow(blur: Pixels) -> Vec<BoxShadow> {
         offset: point(px(0.), px(2.)),
         blur_radius: blur,
         spread_radius: px(0.),
+        inset: false,
     }]
 }
 

@@ -283,13 +283,14 @@ fn empty_page(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     // A click on a note to revisit opens it.
+    let date = cx.debug_bounds("empty-today").unwrap().center();
     let at = cx.debug_bounds("empty-recall-1").unwrap().center();
     cx.simulate_click(at, gpui::Modifiers::none());
     assert_eq!(open(cx), Some(old.clone()));
     // A note with text does not show the empty page: where the date was, the click
-    // lands in the note. (gpui keeps the bounds of a vanished element: we click.)
+    // lands in the note. (gpui drops the bounds of a vanished element: the spot was read before.)
     cx.run_until_parked();
-    let at = cx.debug_bounds("empty-today").unwrap().center();
+    let at = date;
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
     assert_eq!(open(cx), Some(old.clone()));
@@ -970,7 +971,7 @@ fn clear_at_a_glance(cx: &mut TestAppContext) {
     };
     let centre = drawn(cx);
     for _ in 0..60 {
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: centre,
             delta: gpui::ScrollDelta::Pixels(point(px(0.), px(300.))),
             ..Default::default()
@@ -1175,7 +1176,7 @@ fn focus_mode_gives_the_note_the_window_and_restores_the_chrome(cx: &mut TestApp
     // From the tree, F9 gives the keys back to the note; Esc in the note leaves the mode.
     cx.update(|window, cx| {
         let tree = shell.read(cx).nav.focus.clone();
-        window.focus(&tree);
+        window.focus(&tree, cx);
     });
     cx.simulate_keystrokes("f9");
     assert!(
@@ -1212,7 +1213,7 @@ fn escape_closes_the_menu_before_it_leaves_focus_mode(cx: &mut TestAppContext) {
     );
     cx.update(|window, cx| {
         let note = shell.read(cx).pane().editor.focus_handle(cx);
-        window.focus(&note);
+        window.focus(&note, cx);
     });
     cx.simulate_keystrokes("escape");
     assert!(

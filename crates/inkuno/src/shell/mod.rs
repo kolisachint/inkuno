@@ -62,11 +62,11 @@ use std::{
 };
 
 use gpui::{
-    Animation, AnimationExt, App, Application, Bounds, ClipboardItem, Context, CursorStyle,
-    Decorations, Div, Entity, FocusHandle, Focusable, KeyBinding, MouseButton, MouseMoveEvent,
-    ObjectFit, PathPromptOptions, Pixels, Point, ResizeEdge, Size, Stateful, TitlebarOptions,
-    Transformation, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
-    WindowOptions, div, img, percentage, point, prelude::*, px, size, svg,
+    Animation, AnimationExt, App, Bounds, ClipboardItem, Context, CursorStyle, Decorations, Div,
+    Entity, FocusHandle, Focusable, KeyBinding, MouseButton, MouseMoveEvent, ObjectFit,
+    PathPromptOptions, Pixels, Point, ResizeEdge, Size, Stateful, TitlebarOptions, Transformation,
+    Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowOptions, div, img,
+    percentage, point, prelude::*, px, size, svg,
 };
 
 use editor::{Editor, EditorEvent};
@@ -329,7 +329,7 @@ impl Shell {
                 );
                 this.panes_saved = this.panes_state();
                 if this.nav.panel == Panel::Full {
-                    window.focus(&this.nav.focus);
+                    window.focus(&this.nav.focus, cx);
                 }
             }
             None => {
@@ -342,7 +342,7 @@ impl Shell {
                 if scratch && this.prefs.restore != "off" {
                     this.restore_panes(tree, saved, panes.starts_with("v3 "), None, window, cx);
                 } else {
-                    window.focus(&this.focus);
+                    window.focus(&this.focus, cx);
                 }
             }
         }
@@ -379,55 +379,57 @@ impl Shell {
 pub fn run() {
     #[cfg(target_os = "linux")]
     platform::skip_absent_nvidia_driver();
-    Application::new().with_assets(Assets).run(|cx: &mut App| {
-        bind_keys(cx);
-        init_fonts(cx);
-        cx.on_action(|_: &Quit, cx| cx.quit());
-        cx.on_window_closed(|cx| cx.quit()).detach();
+    gpui_platform::application()
+        .with_assets(Assets)
+        .run(|cx: &mut App| {
+            bind_keys(cx);
+            init_fonts(cx);
+            cx.on_action(|_: &Quit, cx| cx.quit());
+            cx.on_window_closed(|cx, _| cx.quit()).detach();
 
-        let (vault, recent) = vault::load_config();
-        let lost = vault.clone().filter(|v| !v.is_dir());
-        let vault = vault.filter(|v| v.is_dir());
-        let bounds = Bounds::centered(None, size(px(860.), px(720.)), cx);
-        // Zed-style: the folder first, then the app — the first frame updates it with the open
-        // note, if any (see `render`).
-        let title = match vault.as_ref().map(|v| vault::stem(v)) {
-            Some(name) => format!("{name} — Inkuno"),
-            None => "Inkuno".into(),
-        };
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(TitlebarOptions {
-                    title: Some(title.into()),
-                    // macOS: the content runs under the transparent bar, which `app::ToggleTitleBar`
-                    // and focus mode hide with the traffic lights (`platform::mac_chrome`). gpui reads
-                    // this at creation only, and Windows keeps its own bar.
-                    appears_transparent: cfg!(target_os = "macos"),
+            let (vault, recent) = vault::load_config();
+            let lost = vault.clone().filter(|v| !v.is_dir());
+            let vault = vault.filter(|v| v.is_dir());
+            let bounds = Bounds::centered(None, size(px(860.), px(720.)), cx);
+            // Zed-style: the folder first, then the app — the first frame updates it with the open
+            // note, if any (see `render`).
+            let title = match vault.as_ref().map(|v| vault::stem(v)) {
+                Some(name) => format!("{name} — Inkuno"),
+                None => "Inkuno".into(),
+            };
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    titlebar: Some(TitlebarOptions {
+                        title: Some(title.into()),
+                        // macOS: the content runs under the transparent bar, which `app::ToggleTitleBar`
+                        // and focus mode hide with the traffic lights (`platform::mac_chrome`). gpui reads
+                        // this at creation only, and Windows keeps its own bar.
+                        appears_transparent: cfg!(target_os = "macos"),
+                        ..Default::default()
+                    }),
+                    // Must match the .desktop file name for the desktop to associate the icon.
+                    app_id: Some("com.inkuno.Inkuno".into()),
+                    // On Linux the app draws its title bar. Asking for
+                    // `Server` does not work on GNOME/Wayland, which provides none
+                    // while gpui 0.2 still believes it is decorated. macOS and Windows
+                    // ignore the request and keep their native bar.
+                    window_decorations: Some(WindowDecorations::Client),
+                    window_background: WindowBackgroundAppearance::Transparent,
+                    window_min_size: Some(size(px(360.), px(240.))),
                     ..Default::default()
-                }),
-                // Must match the .desktop file name for the desktop to associate the icon.
-                app_id: Some("com.inkuno.Inkuno".into()),
-                // On Linux the app draws its title bar. Asking for
-                // `Server` does not work on GNOME/Wayland, which provides none
-                // while gpui 0.2 still believes it is decorated. macOS and Windows
-                // ignore the request and keep their native bar.
-                window_decorations: Some(WindowDecorations::Client),
-                window_background: WindowBackgroundAppearance::Transparent,
-                window_min_size: Some(size(px(360.), px(240.))),
-                ..Default::default()
-            },
-            |window, cx| {
-                cx.new(|cx| {
-                    let mut shell = Shell::new(vault, recent, window, cx);
-                    shell.lost = lost;
-                    shell
-                })
-            },
-        )
-        .unwrap();
-        cx.activate(true);
-    });
+                },
+                |window, cx| {
+                    cx.new(|cx| {
+                        let mut shell = Shell::new(vault, recent, window, cx);
+                        shell.lost = lost;
+                        shell
+                    })
+                },
+            )
+            .unwrap();
+            cx.activate(true);
+        });
 }
 
 #[cfg(test)]
