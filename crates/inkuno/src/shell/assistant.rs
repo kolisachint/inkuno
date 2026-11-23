@@ -138,7 +138,7 @@ impl Assistant {
                     }
                 }
                 field::FieldEvent::Cancel => {
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    window.focus(&this.pane().editor.focus_handle(cx), cx);
                 }
                 field::FieldEvent::Changed => cx.notify(),
             },
@@ -1083,7 +1083,7 @@ impl Shell {
         }
         let prompt = words::chat_prompt(self.assistant_note().as_deref(), &question);
         self.assistant_say(Who::You, &question, cx);
-        window.focus(&self.assistant.field.focus_handle(cx));
+        window.focus(&self.assistant.field.focus_handle(cx), cx);
         self.assistant_run(prompt, cx);
         self.clear_box_if_started(cx);
     }

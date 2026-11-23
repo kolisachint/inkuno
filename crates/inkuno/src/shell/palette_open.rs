@@ -48,7 +48,7 @@ impl Shell {
         if heads.is_empty() {
             self.palette = None;
             self.say(Tone::Info, none, cx);
-            window.focus(&self.pane().editor.focus_handle(cx));
+            window.focus(&self.pane().editor.focus_handle(cx), cx);
             return cx.notify();
         }
         let current = heads.iter().rposition(|(_, at)| *at <= before).unwrap_or(0);
@@ -73,7 +73,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        window.focus(&palette.focus_handle(cx));
+        window.focus(&palette.focus_handle(cx), cx);
         self.palette = Some(palette);
         cx.notify();
     }
@@ -162,7 +162,7 @@ impl Shell {
                 }
                 PaletteEvent::Run(name) => {
                     match &back {
-                        Some(back) => window.focus(back),
+                        Some(back) => window.focus(back, cx),
                         None => this.focus_pane(this.active, window, cx),
                     }
                     if let Ok(action) = cx.build_action(name, None) {
@@ -183,7 +183,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        window.focus(&palette.focus_handle(cx));
+        window.focus(&palette.focus_handle(cx), cx);
         self.palette = Some(palette);
         cx.notify();
     }

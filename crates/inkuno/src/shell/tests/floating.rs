@@ -68,8 +68,15 @@ fn the_palette_and_the_menu_keep_their_rows(cx: &mut TestAppContext) {
                     })
                     .min(14);
                 let mut lowest = px(0.);
+                // A row scrolled out of the viewport is not drawn at all (gpui drops its bounds): the first
+                // one always is.
+                if listed > 0 {
+                    bounds_of(cx, "palette-item-0");
+                }
                 for i in 0..listed {
-                    let row = bounds_of(cx, leak(format!("palette-item-{i}")));
+                    let Some(row) = cx.debug_bounds(leak(format!("palette-item-{i}"))) else {
+                        continue;
+                    };
                     // A long list scrolls in its viewport: what lies past it is clipped out of view.
                     lowest = lowest.max(row.bottom().min(bounds_of(cx, "palette-rows").bottom()));
                     assert!(

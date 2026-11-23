@@ -115,11 +115,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             .point_of("# Pane C\n\n[[Pa".len())
             .unwrap()
     });
+    let secondary = shell.read_with(cx, |_, cx| gpui::Modifiers::secondary_key(cx));
     cx.simulate_click(
         link,
         gpui::Modifiers {
             shift: true,
-            ..gpui::Modifiers::secondary_key()
+            ..secondary
         },
     );
     assert_eq!(shown(cx), sides(1, &["C", "E"]));

@@ -119,7 +119,7 @@ fn escape_in_the_draft_takes_the_comment_out_and_keeps_the_passage(cx: &mut Test
 fn focus_draft_field(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) {
     shell.update_in(cx, |s, window, cx| {
         let field = s.comment_draft.as_ref().expect("a draft").field.clone();
-        window.focus(&field.focus_handle(cx));
+        window.focus(&field.focus_handle(cx), cx);
     });
 }
 
@@ -142,7 +142,7 @@ fn typing_above_the_draft_then_escape_leaves_the_other_comments_alone(cx: &mut T
     shell.update_in(cx, |s, window, cx| {
         let editor = s.pane().editor.clone();
         editor.update(cx, |e, cx| e.place_cursor(0, cx));
-        window.focus(&editor.focus_handle(cx));
+        window.focus(&editor.focus_handle(cx), cx);
     });
     cx.simulate_input("Une longue phrase ajoutée ici ");
     focus_draft_field(&shell, cx);

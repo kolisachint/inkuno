@@ -35,7 +35,7 @@ impl Shell {
     ) {
         let menu = self.menu.take();
         if let Some(back) = menu.as_ref().and_then(|menu| menu.back.as_ref()) {
-            window.focus(back);
+            window.focus(back, cx);
         }
         // Without a menu (from the palette), the icon grid opens near the top of the note.
         let at = menu
@@ -92,7 +92,7 @@ impl Shell {
                 chosen,
                 back: window.focused(cx),
             });
-            window.focus(&self.menu_focus);
+            window.focus(&self.menu_focus, cx);
             return;
         }
         // Note menu: the editor's gestures, as with the keyboard, and the targeted link.
@@ -138,7 +138,7 @@ impl Shell {
             _ => None,
         };
         if let Some(action) = action {
-            window.focus(&self.pane().editor.focus_handle(cx));
+            window.focus(&self.pane().editor.focus_handle(cx), cx);
             return window.dispatch_action(action, cx);
         }
         // The panel without a version targeted (the editor's own menu, the palette): nothing of the tree.
@@ -402,7 +402,7 @@ impl Shell {
                 .filter(|_| matches!(event, PaletteEvent::Submit(_)));
             this.palette = None;
             if let Some(back) = &back {
-                window.focus(back);
+                window.focus(back, cx);
             }
             if let Some(dir) = chosen {
                 this.move_all(&items, &dir, cx);
@@ -410,7 +410,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        window.focus(&palette.focus_handle(cx));
+        window.focus(&palette.focus_handle(cx), cx);
         self.palette = Some(palette);
         cx.notify();
     }
@@ -425,14 +425,14 @@ impl Shell {
         self.menu = Some(Menu { back, ..menu });
         // A new menu opens at its top.
         self.menu_scroll.set_offset(gpui::point(px(0.), px(0.)));
-        window.focus(&self.menu_focus);
+        window.focus(&self.menu_focus, cx);
         cx.notify();
     }
 
     /// Closes the menu, if one is open, and gives the focus back to what had it.
     pub(super) fn close_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(back) = self.menu.take().and_then(|menu| menu.back) {
-            window.focus(&back);
+            window.focus(&back, cx);
         }
         cx.notify();
     }

@@ -40,7 +40,7 @@ fn open_note<'a>(
     cx.simulate_resize(size(px(1400.), px(900.)));
     cx.run_until_parked();
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     settle(cx);
     (root, shell, cx, config)
@@ -621,7 +621,7 @@ fn a_save_keeps_the_file_free_of_marks_and_the_change_beside_it(cx: &mut TestApp
         text(&shell, cx)
     );
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     put(&shell, cx, NOTE.find("{++").unwrap() + 1);
     cx.dispatch_action(editor::AcceptChange);

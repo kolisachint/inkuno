@@ -60,7 +60,12 @@ pub fn init_fonts(cx: &mut App) {
         .add_fonts(FONT_FILES.iter().map(|f| Cow::Borrowed(*f)).collect())
         .ok();
     FAMILIES.get_or_init(|| {
-        let names: &'static [String] = cx.text_system().all_font_names().leak();
+        let mut names = cx.text_system().all_font_names();
+        // gpui used to list its special system font itself; the settings still offer it.
+        names.push(".SystemUIFont".to_string());
+        names.sort();
+        names.dedup();
+        let names: &'static [String] = names.leak();
         names.iter().map(String::as_str).collect()
     });
 }

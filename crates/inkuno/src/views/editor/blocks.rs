@@ -144,7 +144,12 @@ pub(super) const GRIP_REACH: Pixels = px(24.);
 impl Editor {
     /// What is clickable under the pointer takes over: a table handle (open, closed
     /// when dragged), a line to insert at, a checkbox, a link when `Ctrl` is held.
-    pub(super) fn hand_at(&self, at: Point<Pixels>, held: gpui::Modifiers) -> Option<CursorStyle> {
+    pub(super) fn hand_at(
+        &self,
+        at: Point<Pixels>,
+        held: gpui::Modifiers,
+        cx: &gpui::App,
+    ) -> Option<CursorStyle> {
         if self.stale() {
             return self.hand;
         }
@@ -163,13 +168,13 @@ impl Editor {
         if self.rows.is_empty() {
             return None;
         }
-        if !held.secondary() && self.checkbox_at(at).is_some() {
+        if !held.secondary(cx) && self.checkbox_at(at).is_some() {
             return Some(CursorStyle::PointingHand);
         }
         let i = self.index_at(at);
         let lr = self.line_range(i);
         let (line, col) = (&self.content[lr.clone()], i - lr.start);
-        if held.secondary()
+        if held.secondary(cx)
             && md::links(line)
                 .into_iter()
                 .any(|(r, link)| r.contains(&col) && !matches!(link, Link::Footnote(_)))
@@ -177,7 +182,7 @@ impl Editor {
             return Some(CursorStyle::PointingHand);
         }
         // A defined footnote reference or definition label: Ctrl+click jumps there.
-        if held.secondary() && self.footnote_defined_at(i) {
+        if held.secondary(cx) && self.footnote_defined_at(i) {
             return Some(CursorStyle::PointingHand);
         }
         let (kind, marker) = md::classify_in(line, self.open_fence(lr.start));
@@ -191,7 +196,7 @@ impl Editor {
         held: gpui::Modifiers,
         cx: &mut Context<Self>,
     ) {
-        let hand = self.hand_at(at, held);
+        let hand = self.hand_at(at, held, cx);
         if hand != self.hand {
             self.hand = hand;
             cx.notify();

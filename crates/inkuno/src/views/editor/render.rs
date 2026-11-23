@@ -282,7 +282,7 @@ impl Render for Editor {
         .on_modifiers_changed(cx.listener(|this, e: &gpui::ModifiersChangedEvent, _, cx| {
             this.aim_hand(this.pointer, e.modifiers, cx)
         }))
-        .on_scroll_wheel(cx.listener(Self::scroll))
+        .on_scroll(cx.listener(Self::scroll))
         .child(EditorElement(cx.entity()))
         .child(band)
         .children(toggle)

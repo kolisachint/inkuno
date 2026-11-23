@@ -130,7 +130,7 @@ impl Shell {
             .on_click(cx.listener(|this, _, window, cx| {
                 let editor = this.pane().editor.clone();
                 editor.update(cx, |note, cx| note.go_to_first_change(cx));
-                window.focus(&editor.focus_handle(cx));
+                window.focus(&editor.focus_handle(cx), cx);
                 cx.notify();
             }))
     }
@@ -158,20 +158,20 @@ impl Shell {
             match event {
                 PaletteEvent::Submit(memo) => {
                     this.palette = None;
-                    window.focus(&editor.focus_handle(cx));
+                    window.focus(&editor.focus_handle(cx), cx);
                     let memo = memo.clone();
                     editor.update(cx, |note, cx| note.comment_on_change(&change, &memo, cx));
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
-                    window.focus(&editor.focus_handle(cx));
+                    window.focus(&editor.focus_handle(cx), cx);
                 }
                 _ => {}
             }
             cx.notify();
         })
         .detach();
-        window.focus(&prompt.focus_handle(cx));
+        window.focus(&prompt.focus_handle(cx), cx);
         self.palette = Some(prompt);
         cx.notify();
     }

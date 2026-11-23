@@ -1,7 +1,7 @@
 //! Shortcuts: the binding table, what the user changed in it, conflicts, the
 //! `keys` file, and what the help panel shows and searches (pure functions).
 
-use gpui::{Action, App, Keystroke};
+use gpui::{Action, App, Keystroke, OperatingSystem};
 use inkuno_logic::lang::fold;
 use inkuno_logic::lang::tr;
 use serde_json::Value;
@@ -101,7 +101,14 @@ const NAMED: [&str; 16] = [
 ];
 
 fn parse(keys: &str) -> Option<Keystroke> {
-    let stroke = Keystroke::parse(keys).ok()?;
+    let os = if cfg!(target_os = "macos") {
+        OperatingSystem::Mac
+    } else if cfg!(target_os = "windows") {
+        OperatingSystem::Windows
+    } else {
+        OperatingSystem::Linux
+    };
+    let stroke = Keystroke::parse_with_os(keys, os).ok()?;
     let key = stroke.key.as_str();
     let function = key
         .strip_prefix('f')

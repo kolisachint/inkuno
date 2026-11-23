@@ -265,7 +265,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // The view's cards and its name sit inside the panel, at every width.
     for width in [420., 860., 1600.] {
         lay(cx, width, Mode::Comments, Panel::Split);
-        let dock = cx.debug_bounds("dock-right").unwrap();
+        // At 420 px the window is too narrow for the dock beside the note: it is not drawn (gpui no longer
+        // keeps the bounds of the earlier, wider layout, which this loop used to read back).
+        let Some(dock) = cx.debug_bounds("dock-right") else {
+            assert!(width < 860., "{width}: dock absent");
+            continue;
+        };
         for id in ["comment-0", "comment-1", "view-head-comments"] {
             let card = cx
                 .debug_bounds(id)

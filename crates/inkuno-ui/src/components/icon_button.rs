@@ -4,7 +4,6 @@
 use gpui::{Div, InteractiveElement, MouseButton, Stateful, div, prelude::*, svg};
 
 use crate::theme::Theme;
-use crate::widgets::Press;
 
 /// Round icon button: window controls, note copy; 24 px, the smallest target a finger or a shaky hand hits.
 pub fn icon_button(id: &'static str, icon: &'static str, t: Theme) -> Stateful<Div> {
@@ -69,10 +68,9 @@ pub fn band_button_turned(
         .cursor_pointer()
         .tab_index(0)
         .focus(|s| s.border_2().border_color(t.accent))
-        // Enter belongs to the button that has the keys, not to the panel around it: gpui presses
-        // it when the key comes up.
+        // Enter belongs to the button that has the keys, not to the panel around it (the "Button" context
+        // binds it to `NoAction`, which masks the panel's Enter): gpui presses it when the key comes up.
         .key_context("Button")
-        .on_action(|_: &Press, _, _| {})
         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
         .hover(|s| s.bg(t.hover))
         .active(|s| s.bg(t.pressed))

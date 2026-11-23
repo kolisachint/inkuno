@@ -17,7 +17,7 @@ impl Shell {
         if self.nav.panel == Panel::Full {
             self.nav.panel = Panel::Split;
         }
-        window.focus(&self.pane().editor.focus_handle(cx));
+        window.focus(&self.pane().editor.focus_handle(cx), cx);
         self.settle_nav(window, cx);
     }
 
@@ -129,7 +129,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        window.focus(&prompt.focus_handle(cx));
+        window.focus(&prompt.focus_handle(cx), cx);
         self.palette = Some(prompt);
         self.scratch_ask = Some(self.pane().editor.clone());
         cx.notify();

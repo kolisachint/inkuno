@@ -4117,7 +4117,7 @@ mod tests {
             assert!(grid && subs == 0, "table line {l}");
         }
         // Ctrl+clicking a reference jumps to its definition, without revealing it.
-        let held = gpui::Modifiers::secondary_key();
+        let held = editor.read_with(cx, |_, cx| gpui::Modifiers::secondary_key(cx));
         let first = text.find("[^a]").unwrap();
         let middle = editor.read_with(cx, |e, _| e.point_of(first + 2).unwrap());
         cx.simulate_click(middle, held);
@@ -4146,14 +4146,17 @@ mod tests {
         draw(cx);
         let hand_at = |at: usize| {
             let spot = editor.read_with(cx, |e, _| e.point_of(at).unwrap());
-            editor.read_with(cx, |e, _| e.hand_at(spot, held))
+            editor.read_with(cx, |e, cx| e.hand_at(spot, held, cx))
         };
         assert_eq!(hand_at(first + 2), Some(CursorStyle::PointingHand));
         assert_eq!(hand_at(at(8) + 2), Some(CursorStyle::PointingHand));
         assert_eq!(hand_at(missing), None);
         assert_eq!(
-            editor.read_with(cx, |e, _| e
-                .hand_at(e.point_of(first + 2).unwrap(), gpui::Modifiers::none())),
+            editor.read_with(cx, |e, cx| e.hand_at(
+                e.point_of(first + 2).unwrap(),
+                gpui::Modifiers::none(),
+                cx
+            )),
             None
         );
     }

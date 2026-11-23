@@ -1,6 +1,6 @@
 # Architecture
 
-Inkuno is a Cargo workspace built on [GPUI](https://www.gpui.rs/) (pinned at 0.2.2): the app is the
+Inkuno is a Cargo workspace built on [GPUI](https://www.gpui.rs/) (`gpui-pre` 0.3.14, pinned): the app is the
 crate `crates/inkuno`, the pure logic is `crates/inkuno-logic`, the outside world is `crates/inkuno-platform`, the look is `crates/inkuno-ui`, the read-only HTML viewer (`inkuno view`, tao + wry, no gpui, built when the `viewer` feature is on) is `crates/inkuno-view`, and the root manifest only lists them. This page is the
 map: where things live, which way the dependencies go, and the rules the code keeps.
 

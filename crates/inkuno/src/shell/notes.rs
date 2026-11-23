@@ -89,7 +89,7 @@ impl Shell {
     ) {
         let theme = self.theme;
         let figure = cx.new(|cx| viewer::Viewer::new(source, theme, cx));
-        window.focus(&figure.focus_handle(cx));
+        window.focus(&figure.focus_handle(cx), cx);
         self.pane_mut().figure = Some(figure);
         cx.notify();
     }
@@ -358,7 +358,7 @@ impl Shell {
         if self.nav.panel == Panel::Full {
             self.nav.panel = Panel::Split;
         }
-        window.focus(&self.pane().editor.focus_handle(cx));
+        window.focus(&self.pane().editor.focus_handle(cx), cx);
         self.settle_nav(window, cx);
     }
 
@@ -1114,7 +1114,7 @@ impl Shell {
             None => {
                 self.fresh_tab(window, cx);
                 self.new_note(format!("# {name}\n\n"), cx);
-                window.focus(&self.pane().editor.focus_handle(cx));
+                window.focus(&self.pane().editor.focus_handle(cx), cx);
             }
         }
     }

@@ -32,7 +32,7 @@ fn the_pickers_write_relative_links(cx: &mut TestAppContext) {
     });
     shell.update_in(cx, |s, window, cx| {
         let focus = s.pane().editor.focus_handle(cx);
-        window.focus(&focus);
+        window.focus(&focus, cx);
     });
     cx.run_until_parked();
     cx.simulate_input("[[Pla");
@@ -64,7 +64,7 @@ fn a_selection_shows_the_toolbar_and_bold_wraps_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     shell.update_in(cx, |s, window, cx| {
         let focus = s.pane().editor.focus_handle(cx);
-        window.focus(&focus);
+        window.focus(&focus, cx);
     });
     cx.simulate_keystrokes(
         "right right right right right shift-right shift-right shift-right shift-right",

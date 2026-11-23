@@ -93,9 +93,9 @@ fn the_outline_chord_switches_the_right_dock_from_the_assistant(cx: &mut TestApp
 fn the_outline_chord_leaves_the_full_window_panel(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("outline-full", cx);
     // The panel fills the window, so the note is not drawn: the keys are the panel's.
-    shell.update_in(cx, |s, window, _| {
+    shell.update_in(cx, |s, window, cx| {
         s.nav.panel = nav::Panel::Full;
-        window.focus(&s.nav.focus);
+        window.focus(&s.nav.focus, cx);
     });
     settle(cx);
     cx.simulate_keystrokes("secondary-shift-o");

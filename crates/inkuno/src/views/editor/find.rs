@@ -148,7 +148,7 @@ impl Editor {
                 .update(cx, |field, cx| field.set(&field.line.text.clone(), cx));
         }
         find.replace = replace;
-        window.focus(&find.aim(was_open || picked_any, cx));
+        window.focus(&find.aim(was_open || picked_any, cx), cx);
         self.find = Some(find);
         self.find_changed(cx);
     }
@@ -156,7 +156,7 @@ impl Editor {
     /// Escape: the bar closes, keeping its search for next time; the note has the keys, on the current match.
     pub(super) fn close_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.found = self.find.take();
-        window.focus(&self.focus);
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 
@@ -164,7 +164,7 @@ impl Editor {
     pub(super) fn flip_replace(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(find) = &mut self.find {
             find.replace = !find.replace;
-            window.focus(&find.aim(true, cx));
+            window.focus(&find.aim(true, cx), cx);
         }
         cx.notify();
     }
@@ -177,7 +177,7 @@ impl Editor {
             } else {
                 &find.with
             };
-            window.focus(&to.focus_handle(cx));
+            window.focus(&to.focus_handle(cx), cx);
         }
         cx.notify();
     }

@@ -167,7 +167,7 @@ impl Shell {
             this.restyle(window, cx);
         })
         .detach();
-        window.focus(&palette.focus_handle(cx));
+        window.focus(&palette.focus_handle(cx), cx);
         self.palette = Some(palette);
         cx.notify();
     }
@@ -198,7 +198,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        window.focus(&prompt.focus_handle(cx));
+        window.focus(&prompt.focus_handle(cx), cx);
         self.palette = Some(prompt);
         cx.notify();
     }
@@ -236,7 +236,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        window.focus(&prompt.focus_handle(cx));
+        window.focus(&prompt.focus_handle(cx), cx);
         self.palette = Some(prompt);
         cx.notify();
     }

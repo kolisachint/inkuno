@@ -43,11 +43,12 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             .point_of(head.find("colonne").unwrap())
             .unwrap()
     });
-    cx.simulate_event(gpui::ScrollWheelEvent {
+    cx.simulate_event(gpui::ScrollEvent {
         position: on_table,
         delta: gpui::ScrollDelta::Pixels(gpui::point(px(-90.), px(0.))),
         modifiers: gpui::Modifiers::none(),
         touch_phase: gpui::TouchPhase::Moved,
+        ..Default::default()
     });
     cx.run_until_parked();
     assert_eq!(state(cx).0, px(90.));

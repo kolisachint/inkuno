@@ -44,7 +44,7 @@ impl Shell {
             }
         })
         .detach();
-        window.focus(&filter.focus_handle(cx));
+        window.focus(&filter.focus_handle(cx), cx);
         self.pane_mut().peek = false;
         self.pane_mut().listing = Some(Listing {
             of,
@@ -139,7 +139,7 @@ impl Shell {
             },
         )
         .detach();
-        window.focus(&field.focus_handle(cx));
+        window.focus(&field.focus_handle(cx), cx);
         if let Some(listing) = &mut self.pane_mut().listing {
             listing.edit = Some((path, key, field));
         }
@@ -151,7 +151,7 @@ impl Shell {
         if let Some(listing) = &mut self.pane_mut().listing
             && listing.edit.take().is_some()
         {
-            window.focus(&listing.filter.focus_handle(cx));
+            window.focus(&listing.filter.focus_handle(cx), cx);
             cx.notify();
         }
     }
@@ -310,7 +310,7 @@ impl Shell {
                         .child(text)
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.open_note(&path, cx);
-                            window.focus(&this.pane().editor.focus_handle(cx));
+                            window.focus(&this.pane().editor.focus_handle(cx), cx);
                         }))
                         .into_any_element(),
                     _ => {

@@ -2,7 +2,7 @@
 //! of the note: where it sits, what it opens, how the viewer then behaves.
 
 use super::*;
-use gpui::{Bounds, Modifiers, Pixels, ScrollDelta, ScrollWheelEvent, TouchPhase, point, px, size};
+use gpui::{Bounds, Modifiers, Pixels, ScrollDelta, ScrollEvent, TouchPhase, point, px, size};
 
 /// A grayscale PNG of `w` x `h` pixels (stored blocks: no compression library needed).
 pub(super) fn png(w: u32, h: u32) -> Vec<u8> {
@@ -83,7 +83,7 @@ impl Page {
                 .update(cx, |e, cx| e.load(text.to_string(), 0, cx))
         });
         self.shell.update_in(cx, |s, window, cx| {
-            window.focus(&s.pane().editor.focus_handle(cx))
+            window.focus(&s.pane().editor.focus_handle(cx), cx)
         });
         self.settle(cx);
     }
@@ -113,11 +113,14 @@ impl Page {
     }
 
     fn wheel(&self, cx: &mut gpui::VisualTestContext, at: gpui::Point<Pixels>, dy: f32) {
-        cx.simulate_event(ScrollWheelEvent {
+        cx.simulate_event(ScrollEvent {
             position: at,
             delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
-            modifiers: Modifiers::secondary_key(),
+            modifiers: self
+                .shell
+                .read_with(cx, |_, cx| Modifiers::secondary_key(cx)),
             touch_phase: TouchPhase::Moved,
+            ..Default::default()
         });
         cx.run_until_parked();
     }
@@ -381,7 +384,7 @@ fn picture_formula_and_figure_enlarge_from_a_button(cx: &mut TestAppContext) {
         let source = crate::views::viewer::Source::Raster(root.join(name));
         let figure = cx.update(|window, cx| {
             let figure = cx.new(|cx| crate::views::viewer::Viewer::new(source, theme, cx));
-            window.focus(&figure.focus_handle(cx));
+            window.focus(&figure.focus_handle(cx), cx);
             figure
         });
         page.shell.update(cx, |s, cx| {

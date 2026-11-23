@@ -55,7 +55,7 @@ impl Shell {
             self.sync_versions(cx);
         }
         self.nav.reveal = true;
-        window.focus(&self.nav.focus);
+        window.focus(&self.nav.focus, cx);
         self.settle_nav(window, cx);
     }
 
@@ -85,8 +85,8 @@ impl Shell {
         // After the settle: with the left panel hidden, it hands the keys to the note; a view keeps them.
         self.settle_nav(window, cx);
         match mode {
-            Mode::Assistant => window.focus(&self.assistant.field.focus_handle(cx)),
-            _ => window.focus(&self.nav.focus),
+            Mode::Assistant => window.focus(&self.assistant.field.focus_handle(cx), cx),
+            _ => window.focus(&self.nav.focus, cx),
         }
         cx.notify();
     }
@@ -205,7 +205,7 @@ impl Shell {
             .filter(|m| self.docked(*m))
         {
             Some(next) if had_focus => self.nav.activate(next),
-            _ if had_focus => window.focus(&self.pane().editor.focus_handle(cx)),
+            _ if had_focus => window.focus(&self.pane().editor.focus_handle(cx), cx),
             _ => {}
         }
         self.settle_nav(window, cx);
@@ -249,7 +249,7 @@ impl Shell {
     /// The outline row at `at`: the cursor jumps there and the note takes the keys back.
     pub(super) fn outline_go(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.pane().editor.update(cx, |e, cx| e.jump(at, true, cx));
-        window.focus(&self.pane().editor.focus_handle(cx));
+        window.focus(&self.pane().editor.focus_handle(cx), cx);
         cx.notify();
     }
 
@@ -285,9 +285,9 @@ impl Shell {
         match self.nav.panel {
             // The left panel hidden, the keys stay with the right dock if it shows a tool (versions, outline).
             Panel::Hidden if self.nav.focus.contains_focused(window, cx) && !self.right_open() => {
-                window.focus(&editor)
+                window.focus(&editor, cx)
             }
-            Panel::Full if editor.is_focused(window) => window.focus(&self.nav.focus),
+            Panel::Full if editor.is_focused(window) => window.focus(&self.nav.focus, cx),
             _ => {}
         }
         self.nav.save();
@@ -522,7 +522,7 @@ impl Shell {
         }
         // An image shows in place of the note, and the panel keeps control.
         if self.pane().file.is_none() {
-            window.focus(&self.pane().editor.focus_handle(cx))
+            window.focus(&self.pane().editor.focus_handle(cx), cx)
         }
         self.settle_nav(window, cx);
     }
@@ -584,7 +584,7 @@ impl Shell {
         let prompt = cx.new(|cx| Palette::prompt(label, text, theme, cx));
         cx.subscribe_in(&prompt, window, move |this, _, event, window, cx| {
             this.palette = None;
-            window.focus(&this.nav.focus);
+            window.focus(&this.nav.focus, cx);
             if let PaletteEvent::Submit(text) = event
                 && let Some(name) = vault::clean_name(text)
             {
@@ -593,7 +593,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        window.focus(&prompt.focus_handle(cx));
+        window.focus(&prompt.focus_handle(cx), cx);
         self.palette = Some(prompt);
         cx.notify();
     }
@@ -601,7 +601,7 @@ impl Shell {
     /// Closes the icon grid, if it is open, and gives the focus back.
     pub(super) fn close_icons(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(back) = self.icon_pick.take().and_then(|pick| pick.back) {
-            window.focus(&back);
+            window.focus(&back, cx);
         }
         cx.notify();
     }
@@ -801,7 +801,7 @@ impl Shell {
                 .collect()
         });
         uniform_list(("nav-rows", Mode::Outline as usize), count, rows)
-            .track_scroll(self.nav.scroll.clone())
+            .track_scroll(&self.nav.scroll)
             .flex_1()
             .min_h_0()
             .into_any_element()
@@ -1158,7 +1158,7 @@ impl Shell {
                         .when_some(said, |d, said| d.tooltip(tip(said, String::new(), t)))
                         .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
                             let held = e.modifiers();
-                            if held.secondary() || held.shift {
+                            if held.secondary(cx) || held.shift {
                                 return this.nav_mark(ix, held.shift, cx);
                             }
                             // A single click on a note previews it in the italic tab, which the next single click
@@ -1182,7 +1182,7 @@ impl Shell {
                                     this.nav.marked.clear();
                                     this.nav.sel = Some(target.clone());
                                 }
-                                window.focus(&this.nav.focus);
+                                window.focus(&this.nav.focus, cx);
                                 // A version lives in the vault's hidden history: its menu is the panel's own.
                                 let versions = this.nav.mode == Mode::Versions;
                                 if versions
@@ -2247,7 +2247,7 @@ impl Shell {
             rows
         });
         let list = uniform_list(("nav-rows", mode as usize), self.nav.rows.len(), rows)
-            .track_scroll(self.nav.scroll.clone())
+            .track_scroll(&self.nav.scroll)
             .flex_1()
             .min_h_0()
             // Outside any row: a drop goes to the root, right-click targets the vault.
@@ -2325,7 +2325,7 @@ impl Shell {
                 if this.nav.panel == Panel::Full {
                     this.nav.panel = Panel::Split;
                 }
-                window.focus(&this.pane().editor.focus_handle(cx));
+                window.focus(&this.pane().editor.focus_handle(cx), cx);
                 this.settle_nav(window, cx);
             }))
             .when(mode != Mode::Tree, |d| {

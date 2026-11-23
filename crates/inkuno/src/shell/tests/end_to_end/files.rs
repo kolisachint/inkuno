@@ -175,7 +175,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // its name. With the title untouched, a freely named note keeps its own.
     fs::write(root.join("brouillon.md"), "texte\n").unwrap();
     shell.update(cx, |s, cx| s.open_note(&root.join("brouillon.md"), cx));
-    cx.update(|window, cx| window.focus(&shell.read(cx).pane().editor.focus_handle(cx)));
+    cx.update(|window, cx| window.focus(&shell.read(cx).pane().editor.focus_handle(cx), cx));
     cx.simulate_keystrokes("secondary-end");
     cx.simulate_input("suite");
     cx.executor().advance_clock(Duration::from_millis(500));

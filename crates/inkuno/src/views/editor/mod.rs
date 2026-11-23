@@ -60,7 +60,7 @@ use gpui::{
     FocusHandle, Focusable, Font, FontStyle, FontWeight, GlobalElementId, Hitbox, HitboxBehavior,
     Hsla, Image, ImageFormat, ImgResourceLoader, InspectorElementId, LayoutId, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, RenderImage, Resource, Rgba,
-    ScrollWheelEvent, SharedString, Size, StrikethroughStyle, Style, TextAlign, TextRun,
+    ScrollEvent, SharedString, Size, StrikethroughStyle, Style, TextAlign, TextRun,
     TransformationMatrix, UTF16Selection, UnderlineStyle, Window, WrappedLine, actions, div, fill,
     font, point, prelude::*, px, quad, relative, size,
 };

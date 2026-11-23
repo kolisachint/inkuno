@@ -88,7 +88,7 @@ fn thumb(handle: ScrollHandle, t: Theme) -> impl IntoElement {
         |_, window, cx| window.use_keyed_state("thumb-drag", cx, |_, _| Drag::default()),
         move |_, drag: Entity<Drag>, window, cx| {
             let view = handle.bounds();
-            let overflow = handle.max_offset().height;
+            let overflow = handle.max_offset().y;
             if overflow <= px(0.) || view.size.height <= px(0.) {
                 drag.update(cx, |d, _| d.grab = None);
                 return;

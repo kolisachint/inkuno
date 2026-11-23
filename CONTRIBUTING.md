@@ -36,8 +36,8 @@ cargo nextest run --locked                   # same tests, faster feedback
 ## Rules of the code base
 
 - **Read [docs/design/architecture.md](docs/design/architecture.md) first**: the layers (`logic`, `platform`, `ui`, `views`, `shell`), which way they depend, and where each feature lives. A file that passes 1,500 lines gets split by subject.
-- **GPUI is pinned to 0.2.2** and its API moves. Check a signature in the source of that version, not in the documentation of `main`.
-- **`Cargo.lock` is fragile**: it started as the one GPUI 0.2.2 was published with. No global `cargo update`; one dependency at a time. No new dependency without an agreement in the issue.
+- **GPUI is `gpui-pre` 0.3.14**, a crates.io snapshot of Zed's GPUI (zed@f126950), pinned with `=` and renamed to `gpui` in `Cargo.toml` (`package = "gpui-pre"`); the app starts through `gpui_platform::application()` (`gpui-pre-platform`). Its API moves. Check a signature in the source of that version, not in the documentation of `main`.
+- **`Cargo.lock` is fragile**: it is the one `gpui-pre` 0.3.14 resolved to. No global `cargo update`; one dependency at a time. No new dependency without an agreement in the issue.
 - **Code, comments**, commit messages, the README and issues are in English.
 - **Interface texts** always go through `tr("English", "Français")`: the app is English-only for now and the French forms are being removed.
 - **Nothing is destroyed or overwritten on disk**: atomic writes (`vault::write`), the `.trash` folder, and a refusal when a name is taken.

@@ -24,7 +24,7 @@ fn paste_scale(cx: &mut TestAppContext) {
     cx.write_to_clipboard(ClipboardItem::new_string(tsv));
     shell.update_in(cx, |s, window, cx| {
         s.new_note(String::new(), cx);
-        window.focus(&s.pane().editor.focus_handle(cx));
+        window.focus(&s.pane().editor.focus_handle(cx), cx);
     });
     let start = Instant::now();
     cx.simulate_keystrokes("secondary-v");
@@ -97,7 +97,7 @@ fn md_table_scale(cx: &mut TestAppContext) {
         let start = Instant::now();
         shell.update_in(cx, |s, window, cx| {
             s.open_note(&file, cx);
-            window.focus(&s.pane().editor.focus_handle(cx));
+            window.focus(&s.pane().editor.focus_handle(cx), cx);
         });
         cx.run_until_parked();
         let opened = start.elapsed();
@@ -118,7 +118,7 @@ fn md_table_scale(cx: &mut TestAppContext) {
         );
         let start = Instant::now();
         for _ in 0..20 {
-            cx.simulate_event(gpui::ScrollWheelEvent {
+            cx.simulate_event(gpui::ScrollEvent {
                 position: point(px(700.), px(300.)),
                 delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-40.))),
                 ..Default::default()
@@ -422,7 +422,7 @@ fn bench(cx: &mut TestAppContext) {
     time("down arrow", cx, &|cx| cx.simulate_keystrokes("down"));
     time("Enter", cx, &|cx| cx.simulate_keystrokes("enter"));
     time("wheel", cx, &|cx| {
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: point(px(700.), px(300.)),
             delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-40.))),
             ..Default::default()
@@ -481,7 +481,7 @@ fn bench(cx: &mut TestAppContext) {
         cx.simulate_keystrokes("down")
     });
     time("wheel on this table", cx, &|cx| {
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: point(px(700.), px(300.)),
             delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-40.))),
             ..Default::default()
@@ -790,7 +790,7 @@ fn help_scroll(cx: &mut TestAppContext) {
     );
     cx.simulate_mouse_move(point(px(960.), px(500.)), None, gpui::Modifiers::none());
     time("help wheel step", cx, &|cx| {
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: point(px(960.), px(500.)),
             delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-10.))),
             ..Default::default()

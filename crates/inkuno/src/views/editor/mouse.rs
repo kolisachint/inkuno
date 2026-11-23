@@ -88,7 +88,7 @@ impl Editor {
             );
             for modifiers in [
                 none,
-                gpui::Modifiers::secondary_key(),
+                gpui::Modifiers::secondary_key(cx),
                 gpui::Modifiers::shift(),
             ] {
                 self.aim_hand(at, modifiers, cx);
@@ -640,7 +640,7 @@ impl Editor {
         // beside the line. The box is toggled where it is drawn: the edit would show the line's
         // source, so the line keeps the reveal it had. Alt and Shift clicks are for cursors and
         // selections, so they pass the box by.
-        if !e.modifiers.secondary()
+        if !e.modifiers.secondary(cx)
             && !e.modifiers.alt
             && !e.modifiers.shift
             && let Some(at) = self.checkbox_at(e.position)
@@ -693,7 +693,7 @@ impl Editor {
         self.more.clear();
         // A click on a commented passage also shows its card in the Comments view; the caret goes where it
         // always goes.
-        if !e.modifiers.secondary()
+        if !e.modifiers.secondary(cx)
             && !e.modifiers.shift
             && let Some(at) = md::all_comments(&self.content)
                 .iter()
@@ -704,7 +704,7 @@ impl Editor {
         }
         // A footnote reference jumps to its definition, a definition's label to its
         // references; references without one are plain text. Before the click reveals its line.
-        if e.modifiers.secondary()
+        if e.modifiers.secondary(cx)
             && let Some(go) = self.footnote_target(i)
         {
             self.jump(go, false, cx);
@@ -713,7 +713,7 @@ impl Editor {
         let lr = self.line_range(i);
         let line = &self.content[lr.clone()];
         let col = i - lr.start;
-        if e.modifiers.secondary()
+        if e.modifiers.secondary(cx)
             && let Some((range, link)) = md::links(line)
                 .into_iter()
                 .filter(|(_, link)| !matches!(link, Link::Footnote(_)))
@@ -1041,7 +1041,7 @@ impl Editor {
         self.aim_hand(e.position, e.modifiers, cx);
     }
 
-    pub(super) fn scroll(&mut self, e: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn scroll(&mut self, e: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
         let delta = e.delta.pixel_delta(px(26.));
         // Shift + wheel, or horizontal touchpad gesture: a table too wide scrolls.
         let (dx, dy) = if e.modifiers.shift {

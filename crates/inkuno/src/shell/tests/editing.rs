@@ -22,7 +22,7 @@ fn commands_are_found(cx: &mut TestAppContext) {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string())
     };
     shell.update_in(cx, |s, window, cx| {
-        window.focus(&s.pane().editor.focus_handle(cx))
+        window.focus(&s.pane().editor.focus_handle(cx), cx)
     });
     cx.simulate_input("mot");
     let runs = |cx: &mut gpui::VisualTestContext| {
@@ -122,7 +122,7 @@ fn block_handles(cx: &mut TestAppContext) {
             s.pane()
                 .editor
                 .update(cx, |e, cx| e.load(text.to_string(), 0, cx));
-            window.focus(&s.pane().editor.focus_handle(cx));
+            window.focus(&s.pane().editor.focus_handle(cx), cx);
         });
         cx.run_until_parked();
     };

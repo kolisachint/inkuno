@@ -45,7 +45,7 @@ Shared build cache: `CARGO_TARGET_DIR=/home/user/tgt`. Worktrees: `~/.hoocode/wo
 ## Follow-ups noticed
 - `views/nav.rs` `ROW` is 28 px; tree rows are 30 px in the one layout (listing.rs uses ROW).
 - `end_to_end/blocks.rs` picker test still names "Quiet Light" (works via the compat mapping).
-- GPUI 0.2.2 keeps stale `debug_bounds` for rows not painted this frame: tests must scroll a row into view before measuring.
+- GPUI (0.2.2) kept stale `debug_bounds` for rows not painted this frame; `gpui-pre` 0.3.14 clears them every frame: a row that is not painted has no bounds, and tests read what they need before it vanishes.
 
 ## Status 2026-11-23
 All tasks merged into PR #19 (labels rust:patch, cargo). Full CI (fast + test matrix ubuntu/macos) green on 962fef4. Waiting for the owner's merge; then the release gate bumps, tags and ships.

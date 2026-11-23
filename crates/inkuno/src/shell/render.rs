@@ -460,8 +460,8 @@ impl Render for Shell {
             .on_action(
                 cx.listener(|this, _: &ContextMenu, window, cx| this.menu_from_keys(window, cx)),
             )
-            .on_action(|_: &FocusNext, window, _| window.focus_next())
-            .on_action(|_: &FocusPrev, window, _| window.focus_prev())
+            .on_action(|_: &FocusNext, window, cx| window.focus_next(cx))
+            .on_action(|_: &FocusPrev, window, cx| window.focus_prev(cx))
             // The row menu's entries, from the palette, on the file of the active pane.
             .on_action(cx.listener(|this, _: &nav::OpenAside, window, cx| {
                 this.file_do(nav::Do::OpenAside, window, cx)
@@ -491,11 +491,11 @@ impl Render for Shell {
                 if this.pane().figure.is_some() {
                     // A figure over the note (magnifier): Escape closes it, back to the note.
                     this.pane_mut().figure = None;
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    window.focus(&this.pane().editor.focus_handle(cx), cx);
                     cx.notify();
                 } else if this.pane().zone.is_focused(window) && this.has_note(cx) {
                     // A pane that only shows an image: Escape goes back to its note.
-                    window.focus(&this.pane().editor.focus_handle(cx));
+                    window.focus(&this.pane().editor.focus_handle(cx), cx);
                 }
             }))
             .key_context("Shell")
@@ -579,7 +579,7 @@ impl Shell {
         self.focus_mode = !self.focus_mode;
         self.band_peek = false;
         if self.focus_mode && self.nav.focus.contains_focused(window, cx) {
-            window.focus(&self.pane().editor.focus_handle(cx));
+            window.focus(&self.pane().editor.focus_handle(cx), cx);
         }
         cx.notify();
     }
@@ -1023,7 +1023,7 @@ impl Shell {
         // The list page closed with input in its filter or one of its cells: nothing
         // receives it anymore, it goes back to the note.
         if active && self.pane().listing.is_none() && window.focused(cx).is_none() {
-            window.focus(&self.pane().editor.focus_handle(cx));
+            window.focus(&self.pane().editor.focus_handle(cx), cx);
         }
         // A tab bar puts the note below the window buttons: its text no longer steps down for them.
         let pill = (title_bar && !barred && group == self.corner_group())

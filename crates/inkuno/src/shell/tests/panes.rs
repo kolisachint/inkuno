@@ -153,7 +153,7 @@ fn panes_split_move_resize_and_come_back(cx: &mut TestAppContext) {
     // Alt+Shift+Enter: the pane on the whole window, then back.
     cx.simulate_keystrokes("alt-shift-enter");
     assert_eq!(shell.read_with(cx, |s, _| s.zoomed), Some(2));
-    let alone = areas(&shell, cx)[2];
+    let alone = cx.debug_bounds("pane-2").expect("pane-2");
     assert!(
         alone.size.width > px(1000.) && alone.size.height > px(800.),
         "{alone:?}"
@@ -170,7 +170,7 @@ fn panes_split_move_resize_and_come_back(cx: &mut TestAppContext) {
     cx.simulate_resize(size(px(280.), px(720.)));
     cx.run_until_parked();
     assert_eq!(shell.read_with(cx, |s, _| s.alone()), Some(2));
-    let alone = areas(&shell, cx)[2];
+    let alone = cx.debug_bounds("pane-2").expect("pane-2");
     assert!(
         alone.size.width > px(270.) && alone.size.height > px(650.),
         "{alone:?}"

@@ -265,9 +265,9 @@ impl Shell {
     }
 
     /// Gives input to the Settings tab's page: the search field on Shortcuts, the page otherwise.
-    pub(super) fn focus_section(&self, window: &mut Window, cx: &App) {
+    pub(super) fn focus_section(&self, window: &mut Window, cx: &mut App) {
         if let Some(focus) = self.settings_focus(cx) {
-            window.focus(&focus);
+            window.focus(&focus, cx);
         }
     }
 
@@ -282,10 +282,10 @@ impl Shell {
 
     /// Gives input back to what the active pane shows: its note, or its Settings page. Used when a
     /// palette or a prompt closes.
-    pub(super) fn focus_note(&self, window: &mut Window, cx: &App) {
+    pub(super) fn focus_note(&self, window: &mut Window, cx: &mut App) {
         match self.settings_focus(cx) {
-            Some(focus) => window.focus(&focus),
-            None => window.focus(&self.pane().editor.focus_handle(cx)),
+            Some(focus) => window.focus(&focus, cx),
+            None => window.focus(&self.pane().editor.focus_handle(cx), cx),
         }
     }
 
