@@ -6,9 +6,7 @@
 
 A fast, minimal note-taking app. Notes are plain Markdown files in a folder you choose, styled as you type. Written in Rust with [GPUI](https://www.gpui.rs), a GPU-accelerated UI framework.
 
-Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larboullet Marin under a new name; its home is now [github.com/kolisachint/inkuno](https://github.com/kolisachint/inkuno).
-
-![Inkuno, light and dark](docs/assets/inkuno.png)
+![Inkuno editing a project plan: the sidebar with its folder and notes, a title, styled checklists, a table and a code block](docs/assets/screenshot-editor.png)
 
 **[Install](#install)** · **[User guide](docs/user/src/introduction.md)** · [Shortcuts](docs/user/src/shortcuts.md) · [Website](https://kolisachint.github.io/inkuno/) · [Contributing](CONTRIBUTING.md)
 
@@ -28,7 +26,9 @@ Inkuno continues [Bref](https://github.com/alarboulletmarin/bref) by Andrea Larb
 - **Comments that stay plain.** A comment is an HTML comment, which GitHub hides. An agent's edits wait beside the note until you accept or reject them, so the file is always clean Markdown.
 - **Yours to dress.** 16 themes, Inter and JetBrains Mono built in, any installed font. Light and dark, in English.
 
-![Typing a note: the title grows, styles render, a table adds up its column](docs/assets/demo.gif)
+![The command palette over a note, filtered to new-note and new-folder commands, with their shortcuts](docs/assets/screenshot-palette.png)
+
+![The right panel listing the outline of the project plan beside the editor](docs/assets/screenshot-outline.png)
 
 ## Install
 
