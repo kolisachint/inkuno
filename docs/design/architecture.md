@@ -149,4 +149,4 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 - **Interface text** always goes through `tr("English", "Français")`: the app is English-only for now and the French forms are being removed.
 - **Pure first**: logic that can be a pure function lives in `crates/inkuno-logic/src/` (re-exported through `crates/inkuno-logic/src/`) and is unit-tested there;
   every user journey is tested end to end with simulated keystrokes (GPUI's test platform).
-- **No new dependency** without asking: `Cargo.lock` comes from GPUI 0.2.2's and is fragile.
+- **No new dependency** without asking: `Cargo.lock` comes from gpui-pre 0.3.14's and is fragile.

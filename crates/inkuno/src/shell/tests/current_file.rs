@@ -25,8 +25,9 @@ fn frames(cx: &mut gpui::VisualTestContext) {
 
 fn current(cx: &mut gpui::VisualTestContext, name: &str) {
     frames(cx);
-    // GPUI 0.2.2 keeps old debug selectors between frames: compare the bounds of a stable
-    // selector, rather than treating an old selector's presence as a row still being current.
+    // gpui clears its debug bounds every frame, so a selector is present only while its element is
+    // drawn. Compare the bounds of a stable selector, rather than treating an old selector's
+    // presence as a row still being current.
     let row = if name.ends_with(".md") {
         name.trim_end_matches(".md")
     } else {

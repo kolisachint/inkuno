@@ -1,11 +1,11 @@
-//! The macOS window buttons (traffic lights), which gpui 0.2.2 cannot hide by itself. Takes the
-//! window as its raw handle, so that this layer names no UI framework.
+//! The macOS window buttons (traffic lights), which gpui cannot hide by itself. Takes the window as
+//! its raw handle, so that this layer names no UI framework.
 
 /// Shows or hides the window's three traffic lights: close, minimize and zoom. Only macOS has them;
 /// elsewhere this does nothing.
 ///
 /// The window's `NSView` is the content view gpui created for it (`MacWindow::window_handle`,
-/// gpui 0.2.2 `platform/mac/window.rs:1549-1556`); its `window` is the `NSWindow`, whose
+/// gpui-pre-macos 0.3.14 `src/window.rs:2586-2593`); its `window` is the `NSWindow`, whose
 /// `standardWindowButton:` gives each button (`NSWindowCloseButton` 0, `NSWindowMiniaturizeButton` 1,
 /// `NSWindowZoomButton` 2; cocoa 0.26.0 `appkit.rs:389-397`). Nothing else of the window is touched.
 /// AppKit must be called on the main thread: the shell calls this from its render, which runs there.
