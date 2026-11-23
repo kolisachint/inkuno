@@ -3,9 +3,6 @@
 use super::*;
 use gpui::{Div, FontWeight};
 
-/// Choices shown at once in the completion list.
-pub(super) const SHOWN: usize = 8;
-
 pub(super) type Command = (
     &'static str,
     &'static str,
@@ -159,14 +156,14 @@ impl Editor {
         crate::logic::wiki::link_to(title, root, folder, to)
     }
 
-    /// Quiet's completion list, a popover above or below the cursor: after a bare `/` the Basic icon grid and
+    /// The completion list, a popover above or below the cursor: after a bare `/` the Basic icon grid and
     /// the More list with right-aligned tokens; otherwise one list of what matches. `None` when it is not open.
     pub(super) fn completion_menu(&self) -> Option<Div> {
         let t = self.theme;
-        if !t.quiet {
+        let Some((start, items)) = self.completion() else {
+            self.ac_followed.set(None);
             return None;
-        }
-        let (start, items) = self.completion()?;
+        };
         let chosen = self.ac_index.min(items.len() - 1);
         let bare = start == self.cursor();
         let grid = |choice: &Choice| matches!(choice, Choice::Command((name, ..)) if bare && BASIC.contains(name));
@@ -179,7 +176,9 @@ impl Editor {
         } else {
             t.px(0.)
         };
-        let height = t.px(10.) + grid_h + row * list.len() as f32;
+        // Ten choices at most show at once; the rest scroll.
+        let visible = list.len().min(10);
+        let height = t.px(10.) + grid_h + row * visible as f32;
         let at = self.popup_at(size(width, height))?;
         let at = at - self.viewport.origin;
         let heading = |text: &'static str| {
@@ -315,7 +314,19 @@ impl Editor {
                 )
                 .child(heading(tr("More", "Plus")));
         }
-        Some(panel.children(rows))
+        // The choices scroll in their own area, and the chosen one is brought into view when it moves.
+        let moved = self.ac_followed.get() != Some(chosen);
+        if let (true, Some(at)) = (moved, list.iter().position(|&i| i == chosen)) {
+            self.ac_followed.set(Some(chosen));
+            self.ac_scroll.scroll_to_item(at);
+        }
+        Some(panel.child(crate::ui::components::scroll::scroll_area(
+            "slash-rows",
+            &self.ac_scroll,
+            t,
+            row * 10.,
+            rows,
+        )))
     }
 
     /// Start of the query (after `[[` or `/`) and what matches it.

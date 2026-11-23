@@ -9,6 +9,18 @@ fn bounds(cx: &mut gpui::VisualTestContext, name: String) -> Option<gpui::Bounds
     cx.debug_bounds(leak(name))
 }
 
+/// Scrolls the tree's row `name` into view. GPUI keeps the debug bounds of an element that is no longer
+/// painted (a row scrolled past the list's viewport, here at a larger zoom), so a row is measured only once
+/// it is drawn in the current frame.
+fn reveal(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext, name: &str) {
+    shell.update(cx, |s, cx| {
+        let ix = s.nav.rows.iter().position(|r| r.name == name);
+        let ix = ix.unwrap_or_else(|| panic!("no row {name}"));
+        s.nav.scroll.scroll_to_item(ix, gpui::ScrollStrategy::Top);
+        cx.notify();
+    });
+}
+
 /// Folders, notes, a table, a diagram and a picture of the root: the names start at the same x, after the
 /// same 16 px icon column, in every folder's depth and at every zoom.
 #[gpui::test]
@@ -51,6 +63,7 @@ fn the_tree_lines_names_up_after_an_icon(cx: &mut TestAppContext) {
             "X",
             "é 漢字 🎉",
         ] {
+            reveal(&shell, cx, name);
             let (icon, text) = (
                 bounds(cx, format!("nav-icon-{name}")),
                 bounds(cx, format!("nav-name-{name}")),
@@ -96,14 +109,14 @@ fn the_tree_lines_names_up_after_an_icon(cx: &mut TestAppContext) {
         bounds(cx, "nav-icon-Dossier".into()).unwrap(),
     );
     assert!(inside.left() > folder.left(), "{inside:?} {folder:?}");
-    // The rows are 28 px high with 8 px of sheet on each side: the icon of a root folder starts after that
+    // The rows are 30 px high (the one layout's tree row) with 8 px of sheet on each side: the icon of a root folder starts after that
     // margin and the row's own 8 px (the indent is 12 px a level, whatever the zoom).
     let (panel, row) = (
         bounds(cx, "nav-panel".into()).unwrap(),
         bounds(cx, "nav-row-Dossier".into()).unwrap(),
     );
     let ui = shell.read_with(cx, |s, _| s.theme.px(1.));
-    assert!((row.size.height - ui * 28.).abs() < px(0.5), "{row:?}");
+    assert!((row.size.height - ui * 30.).abs() < px(0.5), "{row:?}");
     assert!(
         folder.left() - panel.left() >= px(16.),
         "{folder:?} {panel:?}"
@@ -239,6 +252,7 @@ fn a_file_keeps_its_extension_whole_when_its_name_is_cut(cx: &mut TestAppContext
             });
             let panel = bounds(cx, "nav-panel".into()).unwrap();
             for file in files {
+                reveal(&shell, cx, file);
                 let (name, ext) = (
                     bounds(cx, format!("nav-name-{file}")).unwrap(),
                     bounds(cx, format!("nav-ext-{file}")).unwrap(),
@@ -249,8 +263,9 @@ fn a_file_keeps_its_extension_whole_when_its_name_is_cut(cx: &mut TestAppContext
                     ext.right() <= panel.right() + px(0.5) && ext.right() <= name.right() + px(0.5),
                     "{file} at {width}: {name:?} {ext:?} {panel:?}"
                 );
+                // A name cut to nothing leaves only the extension, which then starts the name's box.
                 assert!(
-                    ext.left() > name.left(),
+                    ext.left() >= name.left(),
                     "{file} at {width}: the extension comes after the name"
                 );
                 // As wide as the extension alone: never cut.

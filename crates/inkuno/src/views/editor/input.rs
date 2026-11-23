@@ -42,6 +42,9 @@ impl EntityInputHandler for Editor {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.lang.is_some() {
+            return self.language_type(text, cx);
+        }
         // Multiple cursors: each receives the text, in place of its selection.
         if !self.more.is_empty() && range_utf16.is_none() && self.marked.is_none() {
             return self.each(cx, |this, cx| this.edit(this.sel.clone(), text, cx));

@@ -23,6 +23,7 @@ impl Render for Editor {
         let toggle = folded.then(|| self.bar_toggle(cx));
         // Quiet's completion list (the slash menu and the pickers), a popover over the text.
         let menu = self.completion_menu();
+        let language = self.language_menu(cx);
         let toolbar = self.selection_toolbar(cx);
         // The text scrolls behind this band: it fades into the page, then hides what lies under
         // the bar. Panes are flat (edge to edge), so the band's corners are square too.
@@ -214,6 +215,12 @@ impl Render for Editor {
         .on_action(cx.listener(|this, _: &Copy, _, cx| this.copy(false, cx)))
         .on_action(cx.listener(|this, _: &Cut, _, cx| this.copy(true, cx)))
         .on_action(cx.listener(|this, _: &Paste, _, cx| this.each(cx, |this, cx| this.paste(cx))))
+        // Files dropped on the note: copied next to it, and linked (`images`).
+        .on_drop(
+            cx.listener(|this, paths: &gpui::ExternalPaths, window, cx| {
+                this.drop_files(paths, window, cx)
+            }),
+        )
         .on_action(cx.listener(|this, _: &Undo, _, cx| this.restore(false, cx)))
         .on_action(cx.listener(|this, _: &Redo, _, cx| this.restore(true, cx)))
         // The bar's keys that also work from the note while it is open; its others are on the bar.
@@ -227,6 +234,10 @@ impl Render for Editor {
         .on_action(cx.listener(|this, _: &FindWord, _, cx| this.find_flip(1, cx)))
         .on_action(cx.listener(|this, _: &FindRegex, _, cx| this.find_flip(2, cx)))
         .on_action(cx.listener(|this, _: &Cancel, _, cx| {
+            // The language picker closes first.
+            if this.lang.take().is_some() {
+                return cx.notify();
+            }
             // The color badges close first.
             if std::mem::take(&mut this.bar.swatches) || std::mem::take(&mut this.bar.open) {
                 return cx.notify();
@@ -277,6 +288,7 @@ impl Render for Editor {
         .children(toggle)
         .children(bar)
         .children(menu)
+        .children(language)
         .children(toolbar);
         // The find bar beside the note, not inside it: typing a search never reaches the note's keys.
         div().size_full().relative().child(el).children(find_bar)

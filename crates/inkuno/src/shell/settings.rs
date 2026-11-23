@@ -46,11 +46,10 @@ impl Shell {
             ),
             _ => tr("Default", "Par défaut"),
         };
-        // Page width and big tables: a short fixed list, without "Default"; the
+        // Page width and the other short fixed lists, without "Default"; the
         // choice is stored under its key, its labels follow the language.
         let fixed: Option<Vec<(&'static str, &'static str)>> = match setting {
             Setting::Page => Some(Page::ALL.map(|p| (p.key(), p.label())).into()),
-            Setting::Wide => Some(Wide::ALL.map(|w| (w.key(), w.label())).into()),
             Setting::Bar => Some(vec![
                 ("on", tr("Shown", "Affichée")),
                 ("off", tr("Hidden", "Masquée")),
@@ -59,16 +58,18 @@ impl Shell {
                 ("on", tr("On", "Activées")),
                 ("off", tr("Off", "Désactivées")),
             ]),
+            Setting::Spacing => Some(vec![
+                ("compact", tr("Compact", "Serré")),
+                ("normal", tr("Normal", "Normal")),
+                ("relaxed", tr("Relaxed", "Aéré")),
+                ("loose", tr("Loose", "Large")),
+            ]),
             _ => None,
         };
         let (mut options, current): (Vec<String>, &str) = match (setting, &fixed) {
             (Setting::Page, Some(list)) => (
                 list.iter().map(|o| o.1.to_string()).collect(),
                 Page::of(&self.prefs.page).label(),
-            ),
-            (Setting::Wide, Some(list)) => (
-                list.iter().map(|o| o.1.to_string()).collect(),
-                Wide::of(&self.prefs.wide).label(),
             ),
             (Setting::Bar, Some(list)) => (
                 list.iter().map(|o| o.1.to_string()).collect(),
@@ -85,6 +86,13 @@ impl Shell {
                 } else {
                     list[0].1
                 },
+            ),
+            (Setting::Spacing, Some(list)) => (
+                list.iter().map(|o| o.1.to_string()).collect(),
+                list.iter()
+                    .find(|o| o.0 == self.prefs.spacing.trim())
+                    .unwrap_or(&list[1])
+                    .1,
             ),
             (Setting::Theme, _) => {
                 // Built-ins first, in `THEMES` order; valid custom themes from
@@ -143,9 +151,9 @@ impl Shell {
                         Setting::Font => this.prefs.font = value,
                         Setting::Mono => this.prefs.mono = value,
                         Setting::Page => this.prefs.page = key,
-                        Setting::Wide => this.prefs.wide = key,
                         Setting::Bar => this.prefs.bar = key,
                         Setting::Motion => this.prefs.motion = key,
+                        Setting::Spacing => this.prefs.spacing = key,
                         Setting::Author | Setting::Assistant => {}
                     }
                 }
@@ -154,7 +162,7 @@ impl Shell {
             if !matches!(event, PaletteEvent::Preview(_)) {
                 this.palette = None;
                 this.focus_note(window, cx);
-                vault::save_settings(&this.prefs.to_text());
+                this.save_prefs();
             }
             this.restyle(window, cx);
         })
@@ -177,7 +185,7 @@ impl Shell {
             match event {
                 PaletteEvent::Submit(text) => {
                     this.prefs.author = logic::revision::clean_author(text);
-                    vault::save_settings(&this.prefs.to_text());
+                    this.save_prefs();
                     this.palette = None;
                     this.focus_note(window, cx);
                 }
@@ -210,7 +218,7 @@ impl Shell {
                     let text = text.trim().to_string();
                     let changed = text != this.prefs.assistant;
                     this.prefs.assistant = text;
-                    vault::save_settings(&this.prefs.to_text());
+                    this.save_prefs();
                     this.palette = None;
                     // Another command: the agent that runs is stopped, the next prompt starts the new one.
                     if changed {
@@ -248,7 +256,7 @@ impl Shell {
             }
             .to_text(),
         );
-        vault::save_settings(&self.prefs.to_text());
+        self.save_prefs();
         self.restyle(window, cx);
     }
 }

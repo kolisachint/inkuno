@@ -69,43 +69,6 @@ impl Page {
     }
 }
 
-/// Where a table wider than the text column goes ("Wide tables" setting).
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
-pub enum Wide {
-    /// It stays in the column and scrolls sideways.
-    Column,
-    /// It overflows on both sides, centered on the window.
-    #[default]
-    Centered,
-}
-
-impl Wide {
-    pub const ALL: [Wide; 2] = [Wide::Column, Wide::Centered];
-
-    pub fn key(self) -> &'static str {
-        match self {
-            Wide::Column => "column",
-            Wide::Centered => "center",
-        }
-    }
-
-    pub fn of(key: &str) -> Self {
-        Self::ALL
-            .into_iter()
-            .find(|w| w.key() == key)
-            .unwrap_or_default()
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Wide::Column => tr("In the text column", "Dans la colonne du texte"),
-            Wide::Centered => tr(
-                "Centered, wider than the text",
-                "Centrés, plus larges que le texte",
-            ),
-        }
-    }
-}
 #[derive(Clone, Copy, PartialEq)]
 pub struct Theme {
     pub bg: Hsla,
@@ -125,9 +88,6 @@ pub struct Theme {
     pub link: Hsla,
     /// The colours of a code block's tokens, by the indices of `syntax`.
     pub syntax: [Hsla; 6],
-    /// Quiet's own block marks (the Quiet.md design spec): a 17 px task box, 5 px bullets, quotes
-    /// upright, a link underlined on its live line only. The other themes keep the marks they had.
-    pub quiet: bool,
     /// The border of an unchecked task box: the text at 22 % in Quiet, `soft` elsewhere.
     pub todo_box: Hsla,
     /// The bar beside a quote: `border` unless the theme sets its own (Quiet).
@@ -177,25 +137,28 @@ pub struct Theme {
     /// 1 at 16, from 0.85 to 1.5 so that the panel stays usable.
     pub ui: f32,
     pub page: Page,
-    pub wide: Wide,
     /// Formatting bar at the bottom of the note.
     pub bar: bool,
     /// Short fades when a panel, the format bar or a folder opens; off: everything is instant.
     pub motion: bool,
+    /// Multiplier of every line height (see `Prefs::leading`): 1 is normal spacing.
+    pub leading: f32,
+    /// Line numbers of a code block are drawn (`gutter` is the colour of the gutter).
+    pub numbered: bool,
 }
 
 /// Offered themes: (name, [background, text, faint, accent, code background, panel, border]).
-/// The first two are Quiet's, dark and light, which follow the system; the first is also the default
+/// The first two are Dark and Light, which follow the system; the first is also the default
 /// base of a custom theme. Inkuno's two come next, then the others.
 pub const THEMES: &[(&str, [u32; 7])] = &[
     (
-        "Quiet Dark",
+        "Dark",
         [
             0x1c1c1e, 0xe6e6e6, 0x737477, 0x3a85f7, 0x232325, 0x2c2c2e, 0x38393b,
         ],
     ),
     (
-        "Quiet Light",
+        "Light",
         [
             0xffffff, 0x1f2225, 0x9c9fa0, 0x3a85f7, 0xfbfbfb, 0xffffff, 0xeaebeb,
         ],
@@ -293,13 +256,100 @@ pub const THEMES_VERSION: u32 = 1;
 /// `code_bg`, `panel`, `border`. `of` adjusts and derives the rest.
 pub const THEME_TOKENS: [&str; 7] = ["bg", "text", "dim", "accent", "code_bg", "panel", "border"];
 
+/// Optional extra tokens of a custom theme, by the names of `Extras`: each overrides the colour
+/// derived from the seeds (`derived_extras`). Missing ones stay derived.
+pub const EXTRA_TOKENS: [&str; 13] = [
+    "link",
+    "ground",
+    "quote_bar",
+    "chip",
+    "chip_line",
+    "code_line",
+    "gutter",
+    "gutter_num",
+    "th",
+    "popover",
+    "caution",
+    "syntax",
+    "alerts",
+];
+
+/// The overrides a custom theme sets, see `EXTRA_TOKENS`.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Overrides {
+    pub link: Option<u32>,
+    pub ground: Option<u32>,
+    pub quote_bar: Option<u32>,
+    pub chip: Option<u32>,
+    pub chip_line: Option<u32>,
+    pub code_line: Option<u32>,
+    pub gutter: Option<u32>,
+    pub gutter_num: Option<u32>,
+    pub th: Option<u32>,
+    pub popover: Option<u32>,
+    pub caution: Option<u32>,
+    pub syntax: Option<[u32; 6]>,
+    pub alerts: Option<[u32; 5]>,
+}
+
 /// One custom theme from `themes.json`: its name, the built-in it inherits
-/// missing tokens from, and its seven seed colors.
+/// missing tokens from, its seven seed colors, and the extra tokens it sets.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CustomTheme {
     pub name: String,
     pub base: String,
     pub seeds: [u32; 7],
+    pub overrides: Overrides,
+}
+
+impl Overrides {
+    /// The override slot of the single-colour token `token` (`syntax` and `alerts` are lists: `None`).
+    fn slot(&mut self, token: &str) -> Option<&mut Option<u32>> {
+        Some(match token {
+            "link" => &mut self.link,
+            "ground" => &mut self.ground,
+            "quote_bar" => &mut self.quote_bar,
+            "chip" => &mut self.chip,
+            "chip_line" => &mut self.chip_line,
+            "code_line" => &mut self.code_line,
+            "gutter" => &mut self.gutter,
+            "gutter_num" => &mut self.gutter_num,
+            "th" => &mut self.th,
+            "popover" => &mut self.popover,
+            "caution" => &mut self.caution,
+            _ => return None,
+        })
+    }
+
+    /// `e` with the colours this theme sets in place of the derived ones.
+    fn apply(&self, e: &mut Extras) {
+        e.link = self.link.unwrap_or(e.link);
+        e.ground = self.ground.unwrap_or(e.ground);
+        e.quote_bar = self.quote_bar.unwrap_or(e.quote_bar);
+        e.chip = self.chip.unwrap_or(e.chip);
+        e.chip_line = self.chip_line.unwrap_or(e.chip_line);
+        e.code_line = self.code_line.unwrap_or(e.code_line);
+        e.gutter = self.gutter.unwrap_or(e.gutter);
+        e.gutter_num = self.gutter_num.unwrap_or(e.gutter_num);
+        e.th = self.th.unwrap_or(e.th);
+        e.popover = self.popover.unwrap_or(e.popover);
+        e.caution = self.caution.unwrap_or(e.caution);
+        e.syntax = self.syntax.unwrap_or(e.syntax);
+        e.alerts = self.alerts.unwrap_or(e.alerts);
+    }
+}
+
+/// A list of `N` `#rrggbb` colors; `None` when it is not one.
+fn hex_list<const N: usize>(value: &serde_json::Value) -> Option<[u32; N]> {
+    let items = value.as_array()?;
+    if items.len() != N {
+        return None;
+    }
+    let mut out = [0; N];
+    for (slot, item) in out.iter_mut().zip(items) {
+        *slot = item.as_str().and_then(parse_hex)?;
+    }
+    Some(out)
 }
 
 /// A `#rrggbb` color (the `#` may be omitted); `None` when it is not one.
@@ -311,6 +361,12 @@ pub fn parse_hex(text: &str) -> Option<u32> {
 }
 
 fn base_seeds(base: &str) -> ([u32; 7], bool) {
+    // Settings and themes written before the rename still name the Quiet themes.
+    let base = match base {
+        "Quiet Dark" => "Dark",
+        "Quiet Light" => "Light",
+        other => other,
+    };
     match THEMES.iter().find(|t| t.0 == base) {
         Some(theme) => (theme.1, true),
         // Unknown base: the default theme (THEMES[0]), and the caller warns.
@@ -391,6 +447,31 @@ pub fn parse_themes(text: &str) -> (Vec<CustomTheme>, Vec<String>, Vec<String>) 
                 },
             }
         }
+        // The optional extra tokens: a single colour, or a list for `syntax` and `alerts`.
+        let mut overrides = Overrides::default();
+        for token in EXTRA_TOKENS {
+            let Some(value) = colors.get(token) else {
+                continue;
+            };
+            let read = match token {
+                "syntax" => hex_list(value).map(|list| overrides.syntax = Some(list)),
+                "alerts" => hex_list(value).map(|list| overrides.alerts = Some(list)),
+                _ => match (value.as_str().and_then(parse_hex), overrides.slot(token)) {
+                    (Some(hex), Some(slot)) => {
+                        *slot = Some(hex);
+                        Some(())
+                    }
+                    _ => None,
+                },
+            };
+            if read.is_none() {
+                errors.push(format!(
+                    "{at}: colors.{token} is not a #rrggbb color (six for syntax, five for alerts), the theme is ignored"
+                ));
+                faulty = true;
+                break;
+            }
+        }
         if faulty {
             continue;
         }
@@ -408,6 +489,7 @@ pub fn parse_themes(text: &str) -> (Vec<CustomTheme>, Vec<String>, Vec<String>) 
             name: name.into(),
             base: base.into(),
             seeds,
+            overrides,
         });
     }
     (themes, errors, warns)
@@ -458,8 +540,9 @@ pub mod syntax {
     pub const FUNCTION: usize = 5;
 }
 
-/// What the Quiet themes (the Quiet.md design spec) set beyond the seeds: the link, the ground, the
-/// six code colours and the block marks. The other themes derive them in `Theme::of`.
+/// What the Quiet look sets beyond the seeds: the link, the ground, the six code colours and the
+/// block marks. Dark and Light have their own (`fixed_extras`, the Quiet.md design spec); the other
+/// themes derive theirs from the seeds (`derived_extras`), then take the ones their file sets.
 struct Extras {
     link: u32,
     ground: u32,
@@ -485,10 +568,14 @@ struct Extras {
     caution: u32,
 }
 
-/// The Quiet extras of the theme `name`, if it is one of the Quiet themes.
-fn quiet_extras(name: &str) -> Option<Extras> {
+/// Alerts of Dark and Light: NOTE, TIP, IMPORTANT, WARNING, CAUTION.
+const DARK_ALERTS: [u32; 5] = [0x6ea6ff, 0x58c48a, 0xa98bff, 0xe0a23c, 0xff7b72];
+const LIGHT_ALERTS: [u32; 5] = [0x2f6fd6, 0x2f8a57, 0x7c4dd6, 0xa8650a, 0xc93a3a];
+
+/// The Quiet extras of the built-in theme `name`, when it is Dark or Light.
+fn fixed_extras(name: &str) -> Option<Extras> {
     match name {
-        "Quiet Light" => Some(Extras {
+        "Light" => Some(Extras {
             link: 0x105592,
             ground: 0xeff0f1,
             syntax: [0x8d9096, 0xb2565c, 0x89713a, 0x9759b3, 0x3878b1, 0x5f7e43],
@@ -504,11 +591,11 @@ fn quiet_extras(name: &str) -> Option<Extras> {
             ink: 0x000000,
             table_alpha: 0.09,
             ring_alpha: 0.08,
-            alerts: [0x2f6fd6, 0x2f8a57, 0x7c4dd6, 0xa8650a, 0xc93a3a],
+            alerts: LIGHT_ALERTS,
             popover: 0xfafafa,
             caution: 0xc93a3a,
         }),
-        "Quiet Dark" => Some(Extras {
+        "Dark" => Some(Extras {
             link: 0x8ab4f8,
             ground: 0x141517,
             syntax: [0x8d9096, 0xe06c75, 0xd8b25c, 0xc58af9, 0x6cb6ff, 0x98c379],
@@ -524,7 +611,7 @@ fn quiet_extras(name: &str) -> Option<Extras> {
             ink: 0xffffff,
             table_alpha: 0.12,
             ring_alpha: 0.12,
-            alerts: [0x6ea6ff, 0x58c48a, 0xa98bff, 0xe0a23c, 0xff7b72],
+            alerts: DARK_ALERTS,
             popover: 0x2a2a2c,
             caution: 0xff7b72,
         }),
@@ -532,18 +619,90 @@ fn quiet_extras(name: &str) -> Option<Extras> {
     }
 }
 
-/// Seeds of the custom theme `name`, if `themes.json` holds it.
-fn custom_seeds(name: &str) -> Option<[u32; 7]> {
-    seeds_in(name, &inkuno_platform::vault::load_themes())
+/// The custom theme `name`, if `themes.json` holds it.
+fn custom_theme(name: &str) -> Option<CustomTheme> {
+    custom_in(name, &inkuno_platform::vault::load_themes())
 }
 
-/// Seeds of the custom theme `name` in the `themes.json` text (pure half of [`custom_seeds`]).
-fn seeds_in(name: &str, text: &str) -> Option<[u32; 7]> {
+/// The custom theme `name` in the `themes.json` text (pure half of [`custom_theme`]).
+fn custom_in(name: &str, text: &str) -> Option<CustomTheme> {
     let (custom, _, _) = parse_themes(text);
-    custom
-        .into_iter()
-        .find(|theme| theme.name == name)
-        .map(|theme| theme.seeds)
+    custom.into_iter().find(|theme| theme.name == name)
+}
+
+/// The Quiet look of a theme that is neither Dark nor Light, derived from its seeds the way Dark and
+/// Light relate to their own: the ground is `ground_of`, the chip, code lines and gutter are blends of
+/// the text over the sheet or the code background at the alphas of those two, the alerts are their set
+/// (the dark one for a dark theme) and the caution is its red. The text, the soft grey and the accent
+/// are read here as `Theme::of` reads them, so the colours are legible on their own grounds.
+fn derived_extras(seeds: [u32; 7], dark: bool) -> Extras {
+    let [bg, text, _, accent, code_bg, panel, _] = seeds.map(|c| Hsla::from(rgb(c)));
+    let ground = ground_of(bg);
+    let reads = [bg, panel, code_bg, ground];
+    let text = reads.iter().fold(text, |c, b| legible(c, *b));
+    let soft = faintest(text, bg, reads);
+    let accent = read_accent(accent, bg, ground, &[bg, panel]);
+    let code = |by: f32| {
+        [bg, code_bg].iter().fold(
+            Hsla {
+                h: (accent.h + by).fract(),
+                ..accent
+            },
+            |c, b| legible(c, *b),
+        )
+    };
+    let syntax = [soft, accent, code(0.33), code(0.6), text, text];
+    let alerts = if dark { DARK_ALERTS } else { LIGHT_ALERTS };
+    let gutter = hex(blend(text, code_bg, 0.02));
+    Extras {
+        link: hex(accent),
+        ground: hex(ground),
+        syntax: syntax.map(hex),
+        todo_box: 0.40,
+        dots: if dark { 0.40 } else { 0.45 },
+        quote_bar: hex(blend(text, bg, if dark { 0.40 } else { 0.24 })),
+        chip: hex(blend(text, code_bg, 0.03)),
+        chip_line: hex(blend(text, code_bg, 0.12)),
+        code_line: hex(blend(text, bg, if dark { 0.13 } else { 0.08 })),
+        gutter,
+        gutter_num: hex(soft),
+        th: gutter,
+        ink: if dark { 0xffffff } else { 0x000000 },
+        table_alpha: if dark { 0.12 } else { 0.09 },
+        ring_alpha: if dark { 0.12 } else { 0.08 },
+        alerts,
+        popover: hex(panel),
+        caution: alerts[4],
+    }
+}
+
+/// `color` as `0xrrggbb`, each channel to the nearest step (the alpha is dropped).
+fn hex(color: Hsla) -> u32 {
+    let c = color.to_rgb();
+    let channel = |x: f32| (x * 255.).round() as u32;
+    (channel(c.r) << 16) | (channel(c.g) << 8) | channel(c.b)
+}
+
+/// The faintest grey between `text` and `bg` that reads at 4.5:1 on each of `reads`, else `text`.
+fn faintest(text: Hsla, bg: Hsla, reads: [Hsla; 4]) -> Hsla {
+    (0..=20)
+        .map(|i| blend(text, bg, 0.5 + i as f32 * 0.025))
+        .find(|c| reads.iter().all(|b| contrast(*c, *b) >= 4.5))
+        .unwrap_or(text)
+}
+
+/// The accent, as strong as the text needs: legible on `reads`, on the ground and in an open pill (10 %
+/// of itself over `bg` or the ground). The pill takes its tint from the accent it holds, so it is read
+/// again from the accent made legible, until it settles.
+fn read_accent(accent: Hsla, bg: Hsla, ground: Hsla, reads: &[Hsla]) -> Hsla {
+    (0..4).fold(accent, |a, _| {
+        let pills = [blend(a, bg, 0.1), blend(a, ground, 0.1)];
+        reads
+            .iter()
+            .chain([&ground])
+            .chain(&pills)
+            .fold(a, |c, b| legible(c, *b))
+    })
 }
 
 impl Theme {
@@ -554,20 +713,32 @@ impl Theme {
             WindowAppearance::Dark | WindowAppearance::VibrantDark
         );
         let system = &THEMES[if dark { 0 } else { 1 }];
+        // Settings written before the rename still name the Quiet themes.
+        let requested = match prefs.theme.as_str() {
+            "Quiet Dark" => "Dark",
+            "Quiet Light" => "Light",
+            other => other,
+        };
         // Built-ins win by name (their tests stay immune to the config folder); a custom
         // theme from `themes.json` applies otherwise, its low contrast auto-fixed below.
-        let (name, seeds) = match THEMES.iter().find(|t| t.0 == prefs.theme) {
-            Some(theme) => (theme.0, theme.1),
-            None => match custom_seeds(&prefs.theme) {
-                Some(seeds) => (prefs.theme.as_str(), seeds),
-                None => (system.0, system.1),
+        let (seeds, fixed, overrides) = match THEMES.iter().find(|t| t.0 == requested) {
+            Some(theme) => (theme.1, fixed_extras(theme.0), Overrides::default()),
+            None => match custom_theme(requested) {
+                Some(custom) => (custom.seeds, None, custom.overrides),
+                None => (system.1, fixed_extras(system.0), Overrides::default()),
             },
         };
         let [bg, text, dim, accent, code_bg, panel, border] = seeds.map(|c| Hsla::from(rgb(c)));
-        let quiet = quiet_extras(name);
-        let ground = match &quiet {
-            Some(extras) => Hsla::from(rgb(extras.ground)),
-            None => ground_of(bg),
+        // Every theme has the Quiet look: Dark and Light their own extras, the others derived
+        // from their seeds, and the ones their file sets on top.
+        let derived = fixed.is_none();
+        let mut extras = fixed.unwrap_or_else(|| derived_extras(seeds, bg.l < 0.5));
+        overrides.apply(&mut extras);
+        // A derived ground is `ground_of` itself: the hex of `extras` would lose a step of its 1.08:1.
+        let ground = if derived && overrides.ground.is_none() {
+            ground_of(bg)
+        } else {
+            Hsla::from(rgb(extras.ground))
         };
         // The selection, as strong as the text over it allows.
         let share = (0..=15)
@@ -590,77 +761,37 @@ impl Theme {
             .chain([&code_bg, &ground])
             .fold(text, |c, b| legible(c, *b));
         // The faintest grey between text and background that still reads on the page, the panel and code.
-        let soft = (0..=20)
-            .map(|i| blend(text, bg, 0.5 + i as f32 * 0.025))
-            .find(|c| {
-                [bg, panel, code_bg, ground]
-                    .iter()
-                    .all(|b| contrast(*c, *b) >= 4.5)
-            })
-            .unwrap_or(text);
-        // Links and tags are written in the accent: it must read like text, selected too.
-        // It also reads on the ground and in an open pill (10 % of itself over the page or the ground).
-        // The pill takes its tint from the accent it holds, so it is read again from the accent made legible, until it settles.
-        let accent_read = (0..4).fold(accent, |a, _| {
-            let pills = [blend(a, bg, 0.1), blend(a, ground, 0.1)];
-            picked
-                .iter()
-                .chain([&ground])
-                .chain(&pills)
-                .fold(a, |c, b| legible(c, *b))
-        });
-        // Strings and numbers take the accent shifted in hue, to match each theme without a palette of their own.
-        let code = |by: f32| {
-            [bg, code_bg].iter().fold(
-                Hsla {
-                    h: (accent_read.h + by).fract(),
-                    ..accent_read
-                },
-                |c, b| legible(c, *b),
-            )
-        };
-        // Quiet's own link and code colours read on the sheet and on a code block, as the derived ones do.
+        let soft = faintest(text, bg, [bg, panel, code_bg, ground]);
+        // Links and tags are written in the accent: it must read like text, selected too, on the ground
+        // and in an open pill.
+        let accent_read = read_accent(accent, bg, ground, &picked);
+        // The extras' colours read on the sheet and on a code block, as the derived ones do.
         let read = |c: Hsla| [bg, code_bg].iter().fold(c, |c, b| legible(c, *b));
-        let (link, syntax) = match &quiet {
-            Some(extras) => (
-                read(Hsla::from(rgb(extras.link))),
-                extras.syntax.map(|c| read(Hsla::from(rgb(c)))),
-            ),
-            // Comments take the faint grey, keywords the accent, types and calls the text.
-            None => (
-                accent_read,
-                [soft, accent_read, code(0.33), code(0.6), text, text],
-            ),
-        };
-        // Quiet's block marks; the other themes keep the colours they always had.
-        let (todo_box, quote_bar, dots, chip, chip_line) = match &quiet {
-            Some(extras) => (
-                text.opacity(extras.todo_box),
-                Hsla::from(rgb(extras.quote_bar)),
-                Some(text.opacity(extras.dots)),
-                Some(Hsla::from(rgb(extras.chip))),
-                Hsla::from(rgb(extras.chip_line)),
-            ),
-            None => (soft, border, None, None, border),
-        };
-        // Quiet's blocks: the box, gutter, table and image lines; the alerts' tints read on their fill
-        // (7 % of the tint over the page). The other themes keep their own colours (`None`, `code_bg`).
-        let (code_line, gutter, gutter_num, table_line, th, ring, alerts) = match &quiet {
-            Some(extras) => {
-                let ink = Hsla::from(rgb(extras.ink));
-                let fill = |c: u32| blend(Hsla::from(rgb(c)), bg, 0.07);
-                (
-                    Hsla::from(rgb(extras.code_line)),
-                    Hsla::from(rgb(extras.gutter)),
-                    Hsla::from(rgb(extras.gutter_num)),
-                    ink.opacity(extras.table_alpha),
-                    Hsla::from(rgb(extras.th)),
-                    ink.opacity(extras.ring_alpha),
-                    Some(extras.alerts.map(|c| legible(Hsla::from(rgb(c)), fill(c)))),
-                )
-            }
-            None => (border, code_bg, soft, code_bg, code_bg, border, None),
-        };
+        // The link also reads selected, and on the ground.
+        let link = [bg, code_bg]
+            .iter()
+            .chain(picked.iter())
+            .chain([&ground])
+            .fold(Hsla::from(rgb(extras.link)), |c, b| legible(c, *b));
+        let syntax = extras.syntax.map(|c| read(Hsla::from(rgb(c))));
+        // The block marks and the blocks' own lines of the Quiet look.
+        let ink = Hsla::from(rgb(extras.ink));
+        let fill = |c: u32| blend(Hsla::from(rgb(c)), bg, 0.07);
+        let todo_box = text.opacity(extras.todo_box);
+        let quote_bar = Hsla::from(rgb(extras.quote_bar));
+        let dots = Some(text.opacity(extras.dots));
+        let chip = Some(Hsla::from(rgb(extras.chip)));
+        let chip_line = Hsla::from(rgb(extras.chip_line));
+        let code_line = Hsla::from(rgb(extras.code_line));
+        let gutter = Hsla::from(rgb(extras.gutter));
+        let gutter_num = Hsla::from(rgb(extras.gutter_num));
+        let table_line = ink.opacity(extras.table_alpha);
+        let th = Hsla::from(rgb(extras.th));
+        let ring = ink.opacity(extras.ring_alpha);
+        // The alerts' tints read on their fill (7 % of the tint over the page).
+        let alerts = extras.alerts.map(|c| legible(Hsla::from(rgb(c)), fill(c)));
+        let popover = Hsla::from(rgb(extras.popover));
+        let caution = Hsla::from(rgb(extras.caution));
         // The comment tokens of v2 (`--cmw`, `--cmd`) by theme lightness. The wash is v2's share, lowered
         // until the text and the accent read on it at 4.5:1 (a light text on a dark theme is lifted by it).
         let dark = bg.l < 0.5;
@@ -675,15 +806,7 @@ impl Theme {
                 })
             })
             .unwrap_or(0.12);
-        let (popover, caution) = match &quiet {
-            Some(extras) => (
-                Hsla::from(rgb(extras.popover)),
-                Hsla::from(rgb(extras.caution)),
-            ),
-            None => (bg, accent_read),
-        };
         Self {
-            quiet: quiet.is_some(),
             popover,
             caution,
             todo_box,
@@ -697,7 +820,7 @@ impl Theme {
             table_line,
             th,
             ring,
-            alerts,
+            alerts: Some(alerts),
             bg,
             text,
             dim,
@@ -721,9 +844,10 @@ impl Theme {
             size: prefs.size,
             ui: (prefs.size / Prefs::SIZE).clamp(0.85, 1.5),
             page: Page::of(&prefs.page),
-            wide: Wide::of(&prefs.wide),
             bar: prefs.bar != "off",
             motion: prefs.motion != "off",
+            leading: prefs.leading(),
+            numbered: prefs.gutter != "off",
         }
     }
 }
@@ -860,13 +984,9 @@ impl Theme {
         blend(legible(tint, blend(tint, self.bg, 0.1)), self.text, 0.1)
     }
 
-    /// The radius of a block's box (a code block, a table, a callout): 8 px at size 15 in Quiet, `band` elsewhere.
+    /// The radius of a block's box (a code block, a table, a callout): 8 px at size 15.
     pub fn block_radius(&self) -> Pixels {
-        if self.quiet {
-            px(8. * self.size / Prefs::SIZE)
-        } else {
-            self.band()
-        }
+        px(8. * self.size / Prefs::SIZE)
     }
 
     /// Quiet's tint of a `[!TYPE]` alert (`label` with its brackets), if it is one of the five it has.
@@ -1003,6 +1123,12 @@ mod tests {
     use super::*;
     use gpui::WindowAppearance;
 
+    /// Dark and Light keep the subtler bands and grounds of their own spec (Quiet's); the derived themes
+    /// keep the stricter bars they always had.
+    fn is_spec_look(name: &str) -> bool {
+        matches!(name, "Dark" | "Light")
+    }
+
     /// In each theme, secondary text, the accent (links, tags) and the title of a `[!TIP]`
     /// callout read: at least 4.5:1 (WCAG AA).
     #[test]
@@ -1012,9 +1138,10 @@ mod tests {
                 &Prefs::parse(&format!("theme={name}\n")),
                 WindowAppearance::Light,
             );
-            // The window is cut into zones by `bg` and `panel` alone, with no line between them. Quiet cuts them by
-            // its ground instead (its spec gives the light panel the sheet's own white).
-            if quiet_extras(name).is_none() {
+            // The window is cut into zones by `bg` and `panel` alone, with no line between them. Dark and Light
+            // cut them by their ground instead (their spec gives the light panel the sheet's own white); the
+            // derived themes keep the zones of `bg` and `panel`.
+            if !is_spec_look(name) {
                 assert!(
                     contrast(t.bg, t.panel) >= 1.03,
                     "{name}: bg and panel too close to tell the zones apart"
@@ -1025,12 +1152,8 @@ mod tests {
                 "{name}: soft"
             );
             // The sheets (`bg`) lie on the ground: told apart, and the text, the secondary text and the accent
-            // (sidebar, tabs) read on both. Quiet's ground is its spec's own (1.07:1 on the dark sheet).
-            let ground_bar = if quiet_extras(name).is_some() {
-                1.07
-            } else {
-                1.08
-            };
+            // (sidebar, tabs) read on both. Dark and Light's ground is their spec's own (1.07:1 on the dark sheet).
+            let ground_bar = if is_spec_look(name) { 1.07 } else { 1.08 };
             assert!(
                 contrast(t.ground, t.bg) >= ground_bar,
                 "{name}: ground and sheet too close ({:.3})",
@@ -1077,11 +1200,7 @@ mod tests {
                 // box's mark (drawn in `bg`) reads on its `accent` fill.
                 let (page, mark) = (contrast(t.code_bg, t.bg), contrast(t.bg, t.accent));
                 // Quiet's band is subtler, as its spec sets it (1.03:1 on the white sheet).
-                let band_bar = if quiet_extras(name).is_some() {
-                    1.03
-                } else {
-                    1.05
-                };
+                let band_bar = if is_spec_look(name) { 1.03 } else { 1.05 };
                 if page < band_bar || mark < 2.5 {
                     fails.push(format!(
                         "{name}: column on page {page:.2}, check mark on accent {mark:.2}"
@@ -1359,14 +1478,8 @@ mod tests {
         );
         assert!(Page::Wide.measure(15.) < Page::Full.measure(15.));
         // Keys are read back; an unknown or missing key means the default choice.
-        assert!(
-            Page::ALL.into_iter().all(|p| Page::of(p.key()) == p)
-                && Wide::ALL.into_iter().all(|w| Wide::of(w.key()) == w)
-        );
-        assert_eq!(
-            (Page::of(""), Page::of("?"), Wide::of(""), Wide::of("?")),
-            (Page::Normal, Page::Normal, Wide::Centered, Wide::Centered)
-        );
+        assert!(Page::ALL.into_iter().all(|p| Page::of(p.key()) == p));
+        assert_eq!((Page::of(""), Page::of("?")), (Page::Normal, Page::Normal));
     }
 
     #[test]
@@ -1387,7 +1500,7 @@ mod tests {
         assert_eq!(themes.len(), 2);
         assert_eq!(themes[0].seeds[0], 0x1b1a19);
         // Thin inherits the six missing tokens from its base.
-        assert_eq!(themes[1].base, "Quiet Dark");
+        assert_eq!(themes[1].base, "Dark");
         assert_eq!(themes[1].seeds[0], 0xffffff);
         assert_eq!(themes[1].seeds[1], THEMES[0].1[1]);
         // Faulty themes, one by one: nameless, unreadable color, duplicate name. The dropped
@@ -1408,26 +1521,61 @@ mod tests {
         // Lookup by name, as `of` does; the file faults never reach the theme.
         let text =
             r##"{"version": 1, "themes": [{"name": "My Dark", "colors": {"bg": "#000000"}}]}"##;
-        assert_eq!(seeds_in("My Dark", text).map(|s| s[0]), Some(0x000000));
-        assert_eq!(seeds_in("Missing", text), None);
-        assert_eq!(seeds_in("My Dark", "nope"), None);
+        assert_eq!(
+            custom_in("My Dark", text).map(|t| t.seeds[0]),
+            Some(0x000000)
+        );
+        assert_eq!(custom_in("Missing", text), None);
+        assert_eq!(custom_in("My Dark", "nope"), None);
+    }
+
+    /// Every theme has the Quiet look: the block marks, chip, gutter, table, ring and alerts are set,
+    /// whatever its colours. The derived themes keep the todo box at the spec's 40 % of the text.
+    #[test]
+    fn every_theme_has_the_quiet_look() {
+        for (name, _) in THEMES {
+            for look in [WindowAppearance::Light, WindowAppearance::Dark] {
+                let t = Theme::of(&Prefs::parse(&format!("theme={name}\n")), look);
+                assert!(t.dots.is_some() && t.chip.is_some(), "{name}");
+                assert!(t.alerts.is_some(), "{name}");
+                assert_eq!(t.todo_box, t.text.opacity(0.40), "{name}");
+            }
+        }
+    }
+
+    /// The tokens a `themes.json` theme may set beyond the seeds: they override the derived colours, a
+    /// bad one drops the theme, and a missing one stays derived.
+    #[test]
+    fn json_themes_take_extra_tokens() {
+        let (themes, errors, _) = parse_themes(
+            r##"{"version": 1, "themes": [
+                {"name": "Tinted", "base": "Light", "colors": {"chip": "#101010", "syntax": ["#000001", "#000002", "#000003", "#000004", "#000005", "#000006"], "alerts": ["#000011", "#000012", "#000013", "#000014", "#000015"]}},
+                {"name": "Short", "colors": {"syntax": ["#000001"]}},
+                {"name": "Bad", "colors": {"link": "blue"}}
+            ]}"##,
+        );
+        assert_eq!(errors.len(), 2, "{errors:?}");
+        assert_eq!(themes.len(), 1);
+        let tinted = &themes[0];
+        assert_eq!(tinted.overrides.chip, Some(0x101010));
+        assert_eq!(tinted.overrides.link, None);
+        assert_eq!(tinted.overrides.syntax.map(|s| s[5]), Some(0x000006));
+        let mut extras = derived_extras(tinted.seeds, false);
+        tinted.overrides.apply(&mut extras);
+        assert_eq!(extras.chip, 0x101010);
+        assert_eq!(extras.syntax[0], 0x000001);
+        assert_eq!(
+            extras.alerts,
+            [0x000011, 0x000012, 0x000013, 0x000014, 0x000015]
+        );
+        assert_eq!(extras.popover, hex(Hsla::from(rgb(tinted.seeds[5]))));
     }
 
     #[test]
-    fn block_marks_follow_the_quiet_spec() {
-        for (name, _) in THEMES {
-            let t = Theme::of(
-                &Prefs::parse(&format!("theme={name}\n")),
-                WindowAppearance::Light,
-            );
-            if name.starts_with("Quiet") {
-                assert!(t.quiet && t.dots.is_some() && t.chip.is_some(), "{name}");
-                assert_eq!(t.todo_box, t.text.opacity(0.40), "{name}");
-            } else {
-                // The other themes keep the marks they had: a solid rule, no chip, a soft box border.
-                assert!(!t.quiet && t.dots.is_none() && t.chip.is_none(), "{name}");
-                assert_eq!((t.todo_box, t.quote_bar), (t.soft, t.border), "{name}");
-            }
-        }
+    fn quiet_base_names_seed_the_renamed_themes() {
+        assert_eq!(base_seeds("Quiet Dark"), base_seeds("Dark"));
+        assert_eq!(base_seeds("Quiet Light"), base_seeds("Light"));
+        assert!(base_seeds("Quiet Dark").1);
+        assert!(!base_seeds("Nope").1);
     }
 }

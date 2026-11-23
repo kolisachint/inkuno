@@ -108,10 +108,9 @@ fn a_palette_match_shows_its_line(cx: &mut TestAppContext) {
 /// Deleting is the caution red in Quiet (the accent for the trash in the other themes); other entries
 /// keep the menu's text colour.
 #[gpui::test]
-fn destructive_entries_are_red_in_quiet(cx: &mut TestAppContext) {
+fn destructive_entries_are_red(cx: &mut TestAppContext) {
     let (_root, shell, cx, _config) = start(cx, "menus-red");
     let t = shell.read_with(cx, |s, _| s.theme);
-    assert!(t.quiet, "the default theme is Quiet");
     let caution = if t.bg.l > 0.5 { 0xc93a3a } else { 0xff7b72 };
     let red: Hsla = rgb(caution).into();
     for what in [Do::Trash, Do::DeleteScratch] {

@@ -20,30 +20,38 @@ use crate::{
 };
 
 /// Inner padding of a cell, and stroke thickness.
-pub const PAD_X: Pixels = px(10.);
-pub const PAD_Y: Pixels = px(5.);
 pub const LINE: Pixels = px(1.);
 
-/// Inner padding of a cell, horizontal and vertical: `PAD_X` and `PAD_Y` in the other themes, 12 × 9 at
-/// size 15 in Quiet (`app-ui.md` §3).
+/// Inner padding of a cell, horizontal and vertical: 12 × 9 at size 15 (`app-ui.md` §3).
 pub fn pads(theme: &Theme) -> (Pixels, Pixels) {
-    if theme.quiet {
-        let scale = theme.size / Prefs::SIZE;
-        (px(12. * scale), px(9. * scale))
-    } else {
-        (PAD_X, PAD_Y)
-    }
+    let scale = theme.size / Prefs::SIZE;
+    (px(12. * scale), px(9. * scale))
 }
 /// Text width of a column whose cells are short or empty, and the narrowest
 /// it is given: below that, the table scrolls.
 const MIN_WIDE: f32 = 48.;
 const NARROWEST: f32 = 36.;
+/// Room under a table that scrolls sideways: its thin scrollbar sits there, below the last
+/// line, and never over a cell.
+pub const SCROLL_ROOM: Pixels = px(12.);
+
+/// Room the header's last cell keeps free at its right for the word-wrap switch, which sits at the
+/// table's top right corner (`Editor::table_wrap_bounds`): its text never runs under it.
+pub fn switch_room(pad_x: Pixels) -> Pixels {
+    (super::COPY_SIZE + px(6.) - pad_x - LINE).max(px(0.))
+}
+
+/// Characters a column keeps when its words break (a URL, an identifier): the table
+/// scrolls sideways only below that.
+const SHORT: usize = 6;
 
 /// Text of a cell laid out (on one line, or at its column's width).
 pub struct Shape {
     line: Option<WrappedLine>,
     /// Width of the longest unbreakable piece, measured when the text is on one line.
     narrow: Pixels,
+    /// Width of its first `SHORT` characters: what a column keeps when its words break.
+    short: Pixels,
     /// `\|` written, `|` shown: (byte, written length, shown length), as
     /// for the signs of a line.
     subs: Vec<(usize, usize, usize)>,
@@ -96,13 +104,13 @@ pub struct Look<'a> {
     pub style: u64,
 }
 
-/// Text size of a cell, and its line height: 14/20 at the default body size (`docs/design/app-ui.md` §14).
+/// Text size of a cell, and its line height: Inter 14/20 at the default body size (`docs/design/typography.md`).
 pub fn font_size(theme: &Theme) -> Pixels {
     px(14.) * (theme.size / Prefs::SIZE)
 }
 
 pub fn line_height(theme: &Theme) -> Pixels {
-    (font_size(theme) * 20. / 14.).round()
+    (font_size(theme) * 20. / 14. * theme.leading).round()
 }
 
 /// Text byte → shown text byte.
@@ -177,11 +185,34 @@ fn longest(line: &WrappedLine) -> Pixels {
     widths.fold(px(0.), |a, b| a.max(b))
 }
 
+/// The shared level `l` of columns between `floors` and `sizes` (each one is
+/// `l` clamped to its bounds) that makes their sum `avail`, or 0 if even the floors overflow.
+fn level(floors: &[f32], sizes: &[f32], avail: f32) -> f32 {
+    let take = |l: f32| {
+        floors
+            .iter()
+            .zip(sizes)
+            .map(|(f, s)| l.clamp(*f, *s))
+            .sum::<f32>()
+    };
+    let (mut low, mut high) = (0., sizes.iter().copied().fold(0., f32::max));
+    for _ in 0..40 {
+        let mid = (low + high) / 2.;
+        if take(mid) > avail {
+            high = mid
+        } else {
+            low = mid
+        }
+    }
+    low
+}
+
 /// Content width of each column, like an HTML table: all the text on one
 /// line if the page allows it; otherwise short columns keep their width and long ones
 /// share the rest, without going below their longest word; and if even the words do not
-/// fit, the longest are cut. `narrow`: longest word; `wide`: text on one line.
-pub fn column_widths(narrow: &[f32], wide: &[f32], avail: f32) -> Vec<f32> {
+/// fit, they break, down to `short` (a few characters) each. Beyond that, the table is
+/// wider than the page and scrolls. `narrow`: longest word; `wide`: text on one line.
+pub fn column_widths(narrow: &[f32], wide: &[f32], short: &[f32], avail: f32) -> Vec<f32> {
     let total = |v: &[f32]| v.iter().sum::<f32>();
     if total(wide) <= avail {
         return wide.to_vec();
@@ -190,42 +221,26 @@ pub fn column_widths(narrow: &[f32], wide: &[f32], avail: f32) -> Vec<f32> {
     if total(&narrow) <= avail {
         // One shared level for the columns that need it: short ones keep their width,
         // long ones share the rest, without going below their longest word.
-        let take = |level: f32| {
-            narrow
-                .iter()
-                .zip(wide)
-                .map(|(n, w)| level.clamp(*n, *w))
-                .sum::<f32>()
-        };
-        let (mut low, mut high) = (0., wide.iter().copied().fold(0., f32::max));
-        for _ in 0..40 {
-            let mid = (low + high) / 2.;
-            if take(mid) > avail {
-                high = mid
-            } else {
-                low = mid
-            }
-        }
+        let l = level(&narrow, wide, avail);
         return narrow
             .iter()
             .zip(wide)
-            .map(|(n, w)| low.clamp(*n, *w))
+            .map(|(n, w)| l.clamp(*n, *w))
             .collect();
     }
     // Lower the widest columns to one shared level, like water in vessels.
-    let mut sorted = narrow.clone();
-    sorted.sort_by(f32::total_cmp);
-    let (mut left, mut level) = (avail, f32::MAX);
-    for (k, w) in sorted.iter().enumerate() {
-        let share = left / (sorted.len() - k) as f32;
-        if *w > share {
-            level = share;
-            break;
-        }
-        left -= w;
+    let l = level(&vec![0.; narrow.len()], &narrow, avail);
+    if l >= NARROWEST {
+        return narrow.iter().map(|n| n.min(l)).collect();
     }
-    let level = level.max(NARROWEST);
-    narrow.iter().map(|n| n.min(level)).collect()
+    // The longest words do not fit: they break inside their cells, down to `short`.
+    let short: Vec<f32> = short.iter().zip(&narrow).map(|(s, n)| s.min(*n)).collect();
+    let l = level(&short, &narrow, avail);
+    narrow
+        .iter()
+        .zip(&short)
+        .map(|(n, s)| l.clamp(*s, *n))
+        .collect()
 }
 
 /// A cell: its content in the line and its laid-out text.
@@ -351,11 +366,31 @@ pub struct TableRow {
     /// Inner padding of the cells (see `pads`).
     pad_x: Pixels,
     pad_y: Pixels,
+    /// Room under the last line of a table wider than its page, for the scrollbar.
+    scroll: Pixels,
 }
 
 impl TableRow {
     pub fn hidden(&self) -> bool {
         self.lines == 0
+    }
+
+    /// The table's first line, drawn bold on its tint.
+    pub fn is_header(&self) -> bool {
+        self.header
+    }
+
+    /// Right edge of the text of the last column, from the table's left edge.
+    #[cfg(test)]
+    pub fn last_text_right(&self) -> Pixels {
+        let c = self.cells.len() - 1;
+        self.left(c) + self.cells[c].width
+    }
+
+    /// Room kept under the line for the scrollbar.
+    #[cfg(test)]
+    pub fn scroll(&self) -> Pixels {
+        self.scroll
     }
 
     /// Table width, strokes included.
@@ -383,7 +418,7 @@ impl TableRow {
         if self.hidden() {
             px(0.)
         } else {
-            self.pad() + lh * self.lines as f32 + self.pad_y + self.bottom
+            self.pad() + lh * self.lines as f32 + self.pad_y + self.bottom + self.scroll
         }
     }
 
@@ -504,9 +539,10 @@ impl TableRow {
         if !self.header {
             rule(px(0.), px(0.), self.total(), self.top);
         }
+        // The scrollbar's room under the last line has no column strokes.
         let inner = self.xs.len().saturating_sub(1);
         for x in self.xs.iter().take(inner).skip(1) {
-            rule(*x, px(0.), LINE, height);
+            rule(*x, px(0.), LINE, height - self.scroll);
         }
     }
 }
@@ -557,6 +593,7 @@ fn shape(
         return Shape {
             line: None,
             narrow: px(0.),
+            short: px(0.),
             subs: Vec::new(),
         };
     }
@@ -637,19 +674,28 @@ fn shape_flags(
         tint: None,
         live: true,
         chip: look.theme.chip.is_some(),
-        // Quiet's table header is semibold.
-        semi: bold && look.theme.quiet,
+        // The table header is semibold, in every theme.
+        semi: bold,
     };
     let runs = text_runs(look.theme, &shown_text, &styles, is_marked, &style);
+    let short_at = shown_text
+        .char_indices()
+        .nth(SHORT)
+        .map_or(shown_text.len(), |(i, _)| i);
     let line = text_system
         .shape_text(shown_text.into(), font_size(look.theme), &runs, wrap, None)
         .ok()
         .and_then(|lines| lines.into_iter().next());
-    let narrow = line
+    let (narrow, short) = line
         .as_ref()
         .filter(|_| wrap.is_none())
-        .map_or(px(0.), longest);
-    Shape { line, narrow, subs }
+        .map_or((px(0.), px(0.)), |l| (longest(l), x_at(l, short_at)));
+    Shape {
+        line,
+        narrow,
+        short,
+        subs,
+    }
 }
 
 /// Alignment asked by a cell of the dash line: `:--`, `:-:` or `--:`.
@@ -679,6 +725,7 @@ pub fn build(
     cursor: usize,
     marked: Option<&Range<usize>>,
     foot: u64,
+    fit: bool,
     defined: &dyn Fn(&str) -> bool,
 ) -> Tables {
     // What the layout depends on: the text, the width, the theme, the dash line
@@ -700,6 +747,7 @@ pub fn build(
         composing.map(|m| (m.start - first.min(m.start), m.end)),
         lines.len(),
         live,
+        fit,
     )
         .hash(&mut hasher);
     lines
@@ -726,6 +774,7 @@ pub fn build(
             cursor,
             marked,
             foot,
+            fit,
             defined,
         )
         .into_iter()
@@ -746,6 +795,7 @@ fn rows(
     cursor: usize,
     marked: Option<&Range<usize>>,
     foot: u64,
+    fit: bool,
     defined: &dyn Fn(&str) -> bool,
 ) -> Vec<Option<TableRow>> {
     let parsed: Vec<(Vec<Range<usize>>, Vec<usize>)> = lines
@@ -786,9 +836,20 @@ fn rows(
     // Widths: all the text on one line, and the longest word, of each column.
     let mut wide = vec![MIN_WIDE; cols];
     let mut narrow = vec![NARROWEST; cols];
+    let mut short = vec![0f32; cols];
     let mut alone = vec![vec![px(0.); cols]; lines.len()];
     // The row under the caret shows its source; the others hide their markers.
     let live = |r: usize| (lines[r].0..=lines[r].0 + lines[r].1.len()).contains(&cursor);
+    let (pad_x, pad_y) = pads(look.theme);
+    // The header's last cell keeps the word-wrap switch's room free.
+    let reserve = switch_room(pad_x);
+    let room = |r: usize, c: usize| {
+        if r == 0 && c + 1 == cols {
+            f32::from(reserve)
+        } else {
+            0.
+        }
+    };
     for &r in &shown_rows {
         for c in 0..cols {
             let (text, bold, hide) = (text(r, c), r == 0, !live(r));
@@ -797,23 +858,34 @@ fn rows(
             });
             if let Some(line) = &one.line {
                 alone[r][c] = line.unwrapped_layout.width;
-                wide[c] = wide[c].max(f32::from(alone[r][c]));
-                narrow[c] = narrow[c].max(f32::from(one.narrow));
+                wide[c] = wide[c].max(f32::from(alone[r][c]) + room(r, c));
+                narrow[c] = narrow[c].max(f32::from(one.narrow) + room(r, c));
+                short[c] = short[c].max(f32::from(one.short) + room(r, c));
             }
         }
     }
-    let (pad_x, pad_y) = pads(look.theme);
     let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(pad_x);
     let avail = (f32::from(width) - frame).max(0.);
-    let widths: Vec<Pixels> = column_widths(&narrow, &wide, avail)
-        .into_iter()
-        .map(px)
-        .collect();
+    // Not fitted, a table keeps the width of its text: it scrolls sideways when wider than the page.
+    let widths: Vec<Pixels> = if fit {
+        column_widths(&narrow, &wide, &short, avail)
+    } else {
+        wide.clone()
+    }
+    .into_iter()
+    .map(px)
+    .collect();
     let mut xs = vec![px(0.)];
     for w in &widths {
         xs.push(xs[xs.len() - 1] + LINE + pad_x + *w + pad_x);
     }
     let xs = Rc::new(xs);
+    // Wider than its page, the table scrolls: its last line keeps room for the bar.
+    let scroll = if xs[xs.len() - 1] + LINE > width + px(0.5) {
+        SCROLL_ROOM
+    } else {
+        px(0.)
+    };
 
     let last = shown_rows.last().copied();
     lines
@@ -834,6 +906,7 @@ fn rows(
                     written: 0,
                     pad_x,
                     pad_y,
+                    scroll: px(0.),
                 });
             }
             let cells: Vec<Cell> = (0..cols)
@@ -849,7 +922,8 @@ fn rows(
                         });
                     // A text that fits on its line is not cut: GPUI's measure and wrapping
                     // differ by a few fractions of a pixel.
-                    let wrap = (alone[r][c] > widths[c]).then_some(widths[c]);
+                    let width = widths[c] - px(room(r, c));
+                    let wrap = (alone[r][c] > width).then_some(width);
                     let hide = !live(r);
                     let shape = cache.shape(key(text, wrap, bold, &here, look, foot, hide), || {
                         shape(text_system, text, wrap, bold, &here, look, defined, hide)
@@ -858,7 +932,7 @@ fn rows(
                         range,
                         shape,
                         align: aligns[c],
-                        width: widths[c],
+                        width,
                         clip: false,
                     }
                 })
@@ -879,6 +953,7 @@ fn rows(
                 written: parsed[r].0.len(),
                 pad_x,
                 pad_y,
+                scroll: if Some(r) == last { scroll } else { px(0.) },
             })
         })
         .collect()
@@ -905,6 +980,8 @@ pub struct Geometry {
     dash: Option<usize>,
     pad_x: Pixels,
     pad_y: Pixels,
+    /// Room under the last line for the scrollbar (see `SCROLL_ROOM`).
+    scroll: Pixels,
 }
 
 impl Geometry {
@@ -938,7 +1015,7 @@ impl Geometry {
         } else {
             LINE
         };
-        let bottom = if last { LINE } else { px(0.) };
+        let bottom = if last { LINE + self.scroll } else { px(0.) };
         (
             top + self.pad_y,
             top + self.pad_y + lh + self.pad_y + bottom,
@@ -978,21 +1055,23 @@ pub fn geometry(
                 .map_or(TextAlign::Left, |d| align_of(text(d, c)))
         })
         .collect();
+    let (pad_x, pad_y) = pads(look.theme);
+    let reserve = f32::from(switch_room(pad_x));
     let mut wide = vec![MIN_WIDE; cols];
     for r in (0..lines.len()).filter(|&r| Some(r) != dash) {
         for (c, w) in wide.iter_mut().enumerate() {
+            let room = if r == 0 && c + 1 == cols { reserve } else { 0. };
             let (text, bold) = (text(r, c), r == 0);
             let one = cache.shape(key(text, None, bold, &None, look, foot, false), || {
                 shape(text_system, text, None, bold, &None, look, defined, false)
             });
             if let Some(line) = &one.line {
-                *w = w.max(f32::from(line.unwrapped_layout.width));
+                *w = w.max(f32::from(line.unwrapped_layout.width) + room);
             }
         }
     }
     // No wrapping: a column takes the width of its longest text, without exceeding a third
     // of the page (beyond, it is cut), plus a minimum margin.
-    let (pad_x, pad_y) = pads(look.theme);
     let frame = (cols + 1) as f32 * f32::from(LINE) + cols as f32 * 2. * f32::from(pad_x);
     let cap = ((f32::from(width) - frame) / 3.).max(MIN_WIDE * 2.);
     let widths: Vec<Pixels> = wide.into_iter().map(|w| px(w.min(cap))).collect();
@@ -1000,6 +1079,11 @@ pub fn geometry(
     for w in &widths {
         xs.push(xs[xs.len() - 1] + LINE + pad_x + *w + pad_x);
     }
+    let scroll = if xs[xs.len() - 1] + LINE > width + px(0.5) {
+        SCROLL_ROOM
+    } else {
+        px(0.)
+    };
     Geometry {
         cols,
         widths,
@@ -1008,6 +1092,7 @@ pub fn geometry(
         dash,
         pad_x,
         pad_y,
+        scroll,
     }
 }
 
@@ -1038,6 +1123,7 @@ pub fn big_row(
             written: 0,
             pad_x: geom.pad_x,
             pad_y: geom.pad_y,
+            scroll: px(0.),
         };
     }
     let cells: Vec<Cell> = (0..geom.cols)
@@ -1052,15 +1138,21 @@ pub fn big_row(
             let shape = cache.shape(key(text, None, bold, &here, look, foot, false), || {
                 shape(text_system, text, None, bold, &here, look, defined, false)
             });
+            // The header's last cell leaves the word-wrap switch its room.
+            let width = if r == 0 && c + 1 == geom.cols {
+                geom.widths[c] - switch_room(geom.pad_x)
+            } else {
+                geom.widths[c]
+            };
             let clip = shape
                 .line
                 .as_ref()
-                .is_some_and(|l| l.unwrapped_layout.width > geom.widths[c]);
+                .is_some_and(|l| l.unwrapped_layout.width > width);
             Cell {
                 range,
                 shape,
                 align: geom.aligns[c],
-                width: geom.widths[c],
+                width,
                 clip,
             }
         })
@@ -1080,6 +1172,7 @@ pub fn big_row(
         written: ranges.len(),
         pad_x: geom.pad_x,
         pad_y: geom.pad_y,
+        scroll: if last { geom.scroll } else { px(0.) },
     }
 }
 
@@ -1091,7 +1184,10 @@ mod tests {
     fn a_small_table_keeps_its_own_size() {
         // Content narrower than the room: each column keeps its natural width, not the column's.
         let content = vec![100., 50.];
-        assert_eq!(column_widths(&content, &content, 800.), [100., 50.]);
+        assert_eq!(
+            column_widths(&content, &content, &content, 800.),
+            [100., 50.]
+        );
     }
 
     #[test]
@@ -1146,19 +1242,20 @@ mod tests {
                 .iter()
                 .map(|w| (NARROWEST + roll(200)).min(*w))
                 .collect();
+            let short: Vec<f32> = narrow.iter().map(|n| (30. + roll(30)).min(*n)).collect();
             let avail = roll(1200);
-            let widths = column_widths(&narrow, &wide, avail);
+            let widths = column_widths(&narrow, &wide, &short, avail);
             assert_eq!(widths.len(), cols);
             let total: f32 = widths.iter().sum();
-            let floor = cols as f32 * NARROWEST;
+            let floor: f32 = short.iter().sum();
             assert!(
                 total <= avail.max(floor) + 0.01,
                 "case {case}: {total} for {avail}"
             );
-            for ((w, n), x) in widths.iter().zip(&narrow).zip(&wide) {
+            for (((w, n), s), x) in widths.iter().zip(&narrow).zip(&short).zip(&wide) {
                 assert!(*w <= x + 0.01, "case {case}: {w} > {x}");
                 assert!(
-                    *w >= n.min(NARROWEST).min(*x) - 0.01,
+                    *w >= n.min(*s).min(NARROWEST) - 0.01,
                     "case {case}: {w} < {n}"
                 );
             }
@@ -1174,5 +1271,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A table whose longest words do not fit breaks them, down to a few characters per
+    /// column, before it scrolls.
+    #[test]
+    fn long_words_break_before_the_table_scrolls() {
+        // Two columns of a long URL (400 px) and a short one, in 200 px: words break.
+        let (narrow, wide, short) = ([400., 400., 30.], [400., 400., 30.], [48., 48., 30.]);
+        let widths = column_widths(&narrow, &wide, &short, 200.);
+        let total: f32 = widths.iter().sum();
+        assert!(total <= 200.01, "{widths:?}");
+        assert!(widths[0] >= 48. - 0.01 && widths[2] >= 29.99, "{widths:?}");
+        // Even broken to a few characters, the table does not fit: it scrolls, at the floor.
+        let widths = column_widths(&[400., 400.], &[400., 400.], &[48., 48.], 60.);
+        assert_eq!(widths, [48., 48.]);
+        // Words that fit keep their width: nothing breaks.
+        let widths = column_widths(&[120., 40.], &[120., 40.], &[48., 40.], 170.);
+        assert_eq!(widths, [120., 40.]);
     }
 }

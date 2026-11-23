@@ -93,6 +93,27 @@ impl Editor {
         });
     }
 
+    /// Before `range` is replaced by `new_len` bytes (after `damaged`): the word-wrap switches of the
+    /// blocks after it move with the text, those of a block inside the range go, and the language
+    /// picker, which may point at a fence that is changing, closes.
+    pub(super) fn replacing(&mut self, range: &Range<usize>, new_len: usize) {
+        let delta = new_len as isize - range.len() as isize;
+        let wraps = std::mem::take(&mut self.wraps);
+        self.wraps = wraps
+            .into_iter()
+            .filter_map(|(k, on)| {
+                if k < range.start {
+                    Some((k, on))
+                } else if k >= range.end {
+                    Some(((k as isize + delta) as usize, on))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.lang = None;
+    }
+
     pub(super) fn changed(&mut self, cx: &mut Context<Self>) {
         self.pending = crate::logic::pending::areas(&self.content).into();
         self.bar.swatches = false;
@@ -162,6 +183,7 @@ impl Editor {
         self.push_undo(text.contains('\n') || text == " ");
         let scopes = self.scopes_before(&range, text);
         self.damaged(&range);
+        self.replacing(&range, text.len());
         self.content.replace_range(range.clone(), text);
         let map = |p: usize| {
             if p <= range.start {
@@ -299,6 +321,12 @@ impl Editor {
     }
 
     pub(super) fn delete(&mut self, m: Motion, cx: &mut Context<Self>) {
+        if self.lang.is_some() {
+            if m == Motion::Left {
+                self.language_back(cx);
+            }
+            return;
+        }
         if self.clear_pick(cx) {
             return;
         }
@@ -338,6 +366,9 @@ impl Editor {
     }
 
     pub(super) fn newline(&mut self, cx: &mut Context<Self>) {
+        if self.lang.is_some() {
+            return self.language_enter(cx);
+        }
         if self.accept_completion(cx) {
             return;
         }

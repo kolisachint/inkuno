@@ -24,6 +24,9 @@ A `#tag` in the text, or a `tags` key in the front matter, tags a note.
 
 - `Ctrl + V` with a picture in the clipboard saves it next to the note and inserts its `![](…)` line.
 - Typing `![[` suggests the pictures of the vault.
+- **Drop a file** on the note: an image is copied into the `assets/` folder next to the note and inserted as `![name](assets/name)`, each on its own line. Another file becomes a link, `[name](assets/…)`. A name already taken is never overwritten: a different file gets ` 2`, ` 3`… before its extension, and the same file is reused. One `Ctrl + Z` takes the drop back.
+- **Web pictures**: `![](https://…)` and `<img src="https://…">` are fetched once, then kept on disk. The fetch needs the system `curl` and gives up after 10 seconds or a picture over 20 MB. The `width` and `height` of an `<img>` are honoured. A picture is never wider than the text column.
+- A picture that is still loading, is not found, cannot be fetched or is not an image shows a box with its alternative text and what is wrong.
 - **Enlarge**: point at a picture (PNG, JPEG, GIF, WebP…), a formula, an SVG or a Mermaid diagram, and a magnifier button appears at its corner, or beside it when it is too small to hold it. It opens a viewer: `Ctrl + wheel` zooms around the pointer, and dragging moves the picture.
 - A click on the picture itself still places the cursor. A missing or unreadable picture has no button.
 

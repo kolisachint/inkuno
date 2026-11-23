@@ -546,6 +546,37 @@ pub fn watch(
     Some(watcher)
 }
 
+/// The config files the app reloads while it runs (see `watch_config`), by file name.
+pub fn is_live_config_name(name: &str) -> bool {
+    matches!(name, "keybindings.json" | "themes.json" | "settings")
+}
+
+/// Asks the system to report the changes of the config files (`is_live_config_name`) in the
+/// configuration folder: `on_change` runs for each event on one of them, nothing else. The
+/// folder is created if missing. `None` if the system cannot watch it. Watching stops when
+/// the result is dropped.
+pub fn watch_config(on_change: impl Fn() + Send + 'static) -> Option<RecommendedWatcher> {
+    let dir = config_dir().join("inkuno");
+    fs::create_dir_all(&dir).ok()?;
+    let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
+        let Ok(event) = event else { return };
+        if event.kind.is_access() {
+            return;
+        }
+        let live = event.paths.iter().any(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(is_live_config_name)
+        });
+        if live {
+            on_change();
+        }
+    })
+    .ok()?;
+    watcher.watch(&dir, RecursiveMode::NonRecursive).ok()?;
+    Some(watcher)
+}
+
 /// All the vault's notes (recursive, hidden folders ignored), most recent
 /// first, all its folders, even empty, and its other files: images and tables.
 #[cfg(any(test, feature = "test-support"))]
@@ -1315,6 +1346,23 @@ mod tests {
                 return value;
             }
             std::thread::park_timeout(std::time::Duration::from_secs(5));
+        }
+    }
+
+    #[test]
+    fn config_watch_filters_the_live_files() {
+        for name in ["keybindings.json", "themes.json", "settings"] {
+            assert!(is_live_config_name(name), "{name}");
+        }
+        for name in [
+            "keys",
+            "layout",
+            "config",
+            "crash",
+            "themes.json~",
+            "settings.tmp",
+        ] {
+            assert!(!is_live_config_name(name), "{name}");
         }
     }
 

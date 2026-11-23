@@ -70,7 +70,8 @@ fn the_palette_and_the_menu_keep_their_rows(cx: &mut TestAppContext) {
                 let mut lowest = px(0.);
                 for i in 0..listed {
                     let row = bounds_of(cx, leak(format!("palette-item-{i}")));
-                    lowest = lowest.max(row.bottom());
+                    // A long list scrolls in its viewport: what lies past it is clipped out of view.
+                    lowest = lowest.max(row.bottom().min(bounds_of(cx, "palette-rows").bottom()));
                     assert!(
                         (row.size.height - t.px(38.)).abs() < px(0.5),
                         "{query} row {i}: {row:?}"
@@ -136,8 +137,8 @@ fn the_palette_and_the_menu_keep_their_rows(cx: &mut TestAppContext) {
                 "{menu:?} in {width}"
             );
             let entry = bounds_of(cx, leak(format!("menu-entry-{}", tr("Rename", "Renommer"))));
-            // A menu row is 30 px, 32 px in Quiet (`ui::widgets::menu_row`).
-            let row = if t.quiet { 32. } else { 30. };
+            // A menu row is 32 px (`ui::widgets::menu_row`).
+            let row = 32.;
             assert!((entry.size.height - t.px(row)).abs() < px(0.5), "{entry:?}");
             shell.update(cx, |s, cx| {
                 s.menu = None;

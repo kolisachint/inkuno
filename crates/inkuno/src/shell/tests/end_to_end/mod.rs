@@ -5,6 +5,7 @@ mod assistant_versions;
 mod blocks;
 mod cursors_comments;
 mod dates_lists;
+mod dropped;
 mod files;
 mod find_mouse;
 mod footnotes;
@@ -106,5 +107,7 @@ fn end_to_end(cx: &mut TestAppContext) {
     footnotes::run(&j, cx);
     history_panes::run(&j, cx);
     assistant_versions::run(&j, cx);
+    dropped::run(&j, cx);
+    blocks::language_picker(&j, cx);
     fs::remove_dir_all(&j.root).unwrap();
 }

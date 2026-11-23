@@ -63,10 +63,10 @@ fi
 if [ "$build" -eq 1 ]; then
   cargo build -p inkuno
 fi
-binary=$root/target/debug/inkuno
+binary=${CARGO_TARGET_DIR:-$root/target}/debug/inkuno
 [ -x "$binary" ] || { echo "no binary at $binary (drop --no-build or build first)" >&2; exit 1; }
 
-out=$root/target/visual/$(date +%Y%m%d-%H%M%S)
+out=${CARGO_TARGET_DIR:-$root/target}/visual/$(date +%Y%m%d-%H%M%S)
 mkdir -p "$out"
 
 # A temporary home: the real configuration and vault are never touched.
@@ -87,6 +87,8 @@ export XDG_RUNTIME_DIR=$tmp/run
 mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR" "$HOME/Documents/Notes"
 chmod 700 "$XDG_RUNTIME_DIR"
 cp "$fixtures_dir"/*.md "$HOME/Documents/Notes/"
+# The pictures the notes show, in a folder of their own (media/).
+cp -r "$fixtures_dir"/media "$HOME/Documents/Notes/"
 
 # The first free display number, from 99 up.
 n=99

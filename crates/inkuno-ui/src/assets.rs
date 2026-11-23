@@ -19,16 +19,20 @@ static FONTS: RwLock<(&str, &str)> = RwLock::new(("Inter", "JetBrains Mono"));
 
 /// Inter (text) and JetBrains Mono (code), SIL OFL (`assets/fonts/`, `LICENSE-Inter.txt`
 /// and `LICENSE-JetBrains-Mono.txt`), in the binary: the app has its fonts without installing
-/// anything. Static cuts for the bolds: gpui 0.2 cannot embolden a variable font, so Inter
-/// ships as four static cuts while JetBrains Mono pairs its staged variable regulars with
-/// static bolds (one family either way, so bold and semibold keep working). Plex Sans and
-/// Plex Mono are no longer bundled; they stay last in the `apply_fonts` chain below for
-/// whoever has them installed.
-pub const FONT_FILES: [&[u8]; 10] = [
+/// anything. gpui 0.2 cannot pick a weight from a variable font, so Inter ships as eight static
+/// cuts (regular, medium, semibold and bold, each with its italic); JetBrains Mono pairs its
+/// staged variable regulars with static bolds (one family either way, so bold and semibold keep
+/// working). Plex Sans and Plex Mono are no longer bundled; they stay last in the `apply_fonts`
+/// chain below for whoever has them installed.
+pub const FONT_FILES: [&[u8]; 14] = [
     include_bytes!("../assets/fonts/Inter-Regular.otf"),
     include_bytes!("../assets/fonts/Inter-Italic.otf"),
     include_bytes!("../assets/fonts/Inter-Bold.otf"),
     include_bytes!("../assets/fonts/Inter-BoldItalic.otf"),
+    include_bytes!("../assets/fonts/Inter-Medium.otf"),
+    include_bytes!("../assets/fonts/Inter-MediumItalic.otf"),
+    include_bytes!("../assets/fonts/Inter-SemiBold.otf"),
+    include_bytes!("../assets/fonts/Inter-SemiBoldItalic.otf"),
     include_bytes!("../assets/fonts/JetBrainsMono[wght].ttf"),
     include_bytes!("../assets/fonts/JetBrainsMono-Italic[wght].ttf"),
     include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf"),
@@ -540,11 +544,11 @@ mod tests {
     use super::FONT_FILES;
 
     /// The bundled text and code faces are real font files: Inter (static cuts), JetBrains
-    /// Mono (variable regulars, static bolds) and the Plex serif. Ten non-trivial files,
+    /// Mono (variable regulars, static bolds) and the Plex serif. Fourteen non-trivial files,
     /// TrueType (`00 01 00 00`) or CFF-flavoured OpenType (`OTTO`).
     #[test]
     fn bundled_fonts_are_real_fonts() {
-        assert_eq!(FONT_FILES.len(), 10);
+        assert_eq!(FONT_FILES.len(), 14);
         for (i, f) in FONT_FILES.iter().enumerate() {
             assert!(
                 f.len() > 100_000,
@@ -555,6 +559,42 @@ mod tests {
             assert!(
                 magic == [0x00, 0x01, 0x00, 0x00] || magic == *b"OTTO",
                 "bundled font {i} is neither TrueType nor OpenType"
+            );
+        }
+    }
+
+    /// Every Inter weight the UI asks for resolves to its own cut under the family name "Inter"
+    /// (the 3.19 medium and semibold files name themselves "Inter Medium" in name ID 1).
+    #[test]
+    fn inter_resolves_every_weight() {
+        use resvg::usvg::fontdb::{Database, Family, Query, Stretch, Style, Weight};
+        let mut db = Database::new();
+        FONT_FILES[..8]
+            .iter()
+            .for_each(|f| db.load_font_data(f.to_vec()));
+        for (wanted, italic) in [
+            (400, false),
+            (500, false),
+            (600, false),
+            (700, false),
+            (500, true),
+            (600, true),
+            (700, true),
+        ] {
+            let query = Query {
+                families: &[Family::Name("Inter")],
+                weight: Weight(wanted),
+                stretch: Stretch::Normal,
+                style: if italic { Style::Italic } else { Style::Normal },
+            };
+            let id = db
+                .query(&query)
+                .unwrap_or_else(|| panic!("no Inter face for weight {wanted} italic {italic}"));
+            let face = db.face(id).unwrap();
+            assert_eq!(
+                face.weight.0, wanted,
+                "Inter weight {wanted} italic {italic} resolved to {}",
+                face.weight.0
             );
         }
     }

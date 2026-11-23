@@ -123,22 +123,6 @@ impl TableOp {
     }
 }
 
-/// Width offered to tables in a pane `pane` wide, for a text `text` wide.
-pub(super) fn table_room(wide: Wide, pane: Pixels, text: Pixels) -> Pixels {
-    match wide {
-        Wide::Column => text,
-        Wide::Centered => (pane - SIDE * 2.).max(text),
-    }
-}
-
-/// How far a table `frame` wide goes past the left edge of the text.
-pub(super) fn table_lead(wide: Wide, frame: Pixels, text: Pixels) -> Pixels {
-    match wide {
-        Wide::Centered => ((frame - text) / 2.).max(px(0.)),
-        Wide::Column => px(0.),
-    }
-}
-
 /// "+" buttons of a table: under it for a row, to its right for a column.
 pub(super) fn plus_bars(frame: Bounds<Pixels>) -> [Bounds<Pixels>; 2] {
     [
@@ -170,8 +154,7 @@ impl Editor {
         let rows = self.rows.iter().filter(|r| r.kind == Kind::Table);
         let tall = rows.clone().map(Row::visual_rows).max()?;
         let frame = self.tables.first()?.1;
-        let scrolled =
-            rows.map(|r| r.dx).next()? - table_lead(self.theme.wide, frame.size.width, self.width);
+        let scrolled = rows.map(|r| r.dx).next()?;
         Some((scrolled, tall, frame, self.width, self.viewport))
     }
 
@@ -337,6 +320,7 @@ impl Editor {
         let sel = map(self.sel.start)..map(self.sel.end);
         self.follow(&map);
         self.damaged(&range);
+        self.replacing(&range, text.len());
         self.content.replace_range(range.clone(), &text);
         self.sel = sel;
         self.changed(cx);
@@ -365,6 +349,7 @@ impl Editor {
             });
             for r in ranges.iter().rev() {
                 self.damaged(r);
+                self.replacing(r, 0);
                 self.content.replace_range(r.clone(), "");
             }
         }
@@ -628,6 +613,7 @@ impl Editor {
         let was = self.content[range.clone()].to_string();
         self.follow(realigned(&range, &was, &text));
         self.damaged(&range);
+        self.replacing(&range, text.len());
         self.content.replace_range(range, &text);
         self.sel = cursor..cursor;
         self.changed(cx);

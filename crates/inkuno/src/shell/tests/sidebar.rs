@@ -44,10 +44,6 @@ fn the_left_sidebar_never_enters_versions_assistant_or_outline(cx: &mut TestAppC
     settle(cx);
     assert_eq!(left(&shell, cx), [Mode::Tree]);
     assert!(right(&shell, cx).contains(&Mode::Versions));
-    // Stacked with the shift-click path too: the left dock keeps the tree alone.
-    shell.update_in(cx, |s, window, cx| s.stack_tool(Mode::Versions, window, cx));
-    settle(cx);
-    assert_eq!(left(&shell, cx), [Mode::Tree]);
     let _ = fs::remove_dir_all(root);
 }
 
@@ -122,7 +118,7 @@ fn quiet_sidebar<'a>(
     fs::write(root.join("Note.md"), "# Note\n").unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     shell.update_in(cx, |s, window, cx| {
-        s.prefs.theme = "Quiet Light".into();
+        s.prefs.theme = "Light".into();
         s.restyle(window, cx);
         s.show_nav(Mode::Tree, false, window, cx);
     });

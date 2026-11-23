@@ -10,7 +10,7 @@ use crate::ui::components::{
     segmented::{segment, segmented as seg_track},
     switch::switch as sw,
 };
-use crate::ui::theme::{Page, Wide};
+use crate::ui::theme::Page;
 use crate::views::field::{Field, FieldEvent};
 use gpui::{FontWeight, MouseButton, Stateful};
 
@@ -172,7 +172,7 @@ impl Shell {
                         if let FieldEvent::Changed = event {
                             let text = author.read(cx).line.text.clone();
                             this.prefs.author = logic::revision::clean_author(&text);
-                            vault::save_settings(&this.prefs.to_text());
+                            this.save_prefs();
                         }
                     },
                 )
@@ -186,7 +186,7 @@ impl Shell {
                                 let text = assistant.read(cx).line.text.trim().to_string();
                                 let changed = text != this.prefs.assistant;
                                 this.prefs.assistant = text;
-                                vault::save_settings(&this.prefs.to_text());
+                                this.save_prefs();
                                 // Another command: the agent that runs is stopped, the next prompt starts the new one.
                                 if changed {
                                     this.assistant_halt(cx);
@@ -330,7 +330,7 @@ impl Shell {
         edit: impl FnOnce(&mut Prefs),
     ) {
         edit(&mut self.prefs);
-        vault::save_settings(&self.prefs.to_text());
+        self.save_prefs();
         self.restyle(window, cx);
     }
 
@@ -445,13 +445,13 @@ impl Shell {
                 ),
                 (
                     tr("Light", "Clair").into(),
-                    p.theme == "Quiet Light",
-                    pick(|p| p.theme = "Quiet Light".into()),
+                    p.theme == "Light",
+                    pick(|p| p.theme = "Light".into()),
                 ),
                 (
                     tr("Dark", "Sombre").into(),
-                    p.theme == "Quiet Dark",
-                    pick(|p| p.theme = "Quiet Dark".into()),
+                    p.theme == "Dark",
+                    pick(|p| p.theme = "Dark".into()),
                 ),
             ],
             cx,
@@ -487,6 +487,20 @@ impl Shell {
             )
         });
         let width = segmented(t, "width", width.into(), cx);
+        let spacing = [
+            (tr("Compact", "Serré"), "compact"),
+            (tr("Normal", "Normal"), "normal"),
+            (tr("Relaxed", "Aéré"), "relaxed"),
+            (tr("Loose", "Large"), "loose"),
+        ]
+        .map(|(label, key)| {
+            (
+                label.to_string(),
+                p.spacing.trim() == key || (key == "normal" && p.spacing.trim().is_empty()),
+                pick(move |p| p.spacing = key.into()),
+            )
+        });
+        let spacing = segmented(t, "spacing", spacing.into(), cx);
         let motion = p.motion != "off";
         let animations = switch(
             t,
@@ -522,6 +536,15 @@ impl Shell {
                         tr("Also Ctrl+ and Ctrl−", "Aussi Ctrl+ et Ctrl−")
                     },
                     size,
+                ),
+                card_row(
+                    t,
+                    tr("Line spacing", "Interligne"),
+                    tr(
+                        "The space between the lines of the text and of code",
+                        "L'espace entre les lignes du texte et du code",
+                    ),
+                    spacing,
                 ),
                 card_row(
                     t,
@@ -576,19 +599,6 @@ impl Shell {
             ),
             cx,
         );
-        // Short labels: the row's note says where a wide table goes.
-        let wide = Wide::ALL.map(|wide| {
-            (
-                match wide {
-                    Wide::Column => tr("In column", "Dans la colonne"),
-                    Wide::Centered => tr("Centred", "Centrés"),
-                }
-                .to_string(),
-                Wide::of(&p.wide) == wide,
-                pick(move |p| p.wide = wide.key().into()),
-            )
-        });
-        let wide = segmented(t, "wide", wide.into(), cx);
         let bar = p.bar != "off";
         let bar = switch(
             t,
@@ -598,6 +608,20 @@ impl Shell {
                 move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
                     this.edit_prefs(window, cx, |p| {
                         p.bar = (if bar { "off" } else { "on" }).into()
+                    })
+                },
+            ),
+            cx,
+        );
+        let gutter = p.gutter != "off";
+        let gutter = switch(
+            t,
+            "gutter",
+            gutter,
+            Box::new(
+                move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.edit_prefs(window, cx, |p| {
+                        p.gutter = (if gutter { "off" } else { "on" }).into()
                     })
                 },
             ),
@@ -644,21 +668,21 @@ impl Shell {
                     ),
                     card_row(
                         t,
-                        tr("Wide tables", "Grands tableaux"),
-                        tr(
-                            "Where a table wider than the text goes",
-                            "Où va un tableau plus large que le texte",
-                        ),
-                        wide,
-                    ),
-                    card_row(
-                        t,
                         tr("Formatting bar", "Barre de mise en forme"),
                         tr(
                             "Shown above a selection",
                             "Affichée au-dessus d'une sélection",
                         ),
                         bar,
+                    ),
+                    card_row(
+                        t,
+                        tr("Code line numbers", "Numéros des lignes de code"),
+                        tr(
+                            "Numbers beside the lines of a code block",
+                            "Numéros à côté des lignes d'un bloc de code",
+                        ),
+                        gutter,
                     ),
                 ],
             ),
@@ -689,7 +713,21 @@ impl Shell {
     }
 
     fn files_page(&self, cx: &mut Context<Self>) -> Vec<Div> {
-        let t = self.theme;
+        let (t, p) = (self.theme, &self.prefs);
+        let restore = p.restore != "off";
+        let restore = switch(
+            t,
+            "restore",
+            restore,
+            Box::new(
+                move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.edit_prefs(window, cx, |p| {
+                        p.restore = (if restore { "off" } else { "on" }).into()
+                    })
+                },
+            ),
+            cx,
+        );
         let vault_folder = self
             .vault
             .as_ref()
@@ -727,6 +765,40 @@ impl Shell {
                     div(),
                 ),
                 card_row(t, tr("Trash", "Corbeille"), &trash, div()),
+                card_row(
+                    t,
+                    tr(
+                        "Open last notes on start",
+                        "Rouvrir les dernières notes au lancement",
+                    ),
+                    tr(
+                        "The tabs of last time come back when Inkuno starts",
+                        "Les onglets de la dernière fois reviennent au lancement",
+                    ),
+                    restore,
+                ),
+                card_row(
+                    t,
+                    tr("Config files", "Fichiers de configuration"),
+                    tr(
+                        "themes.json and keybindings.json are reloaded live when saved",
+                        "themes.json et keybindings.json sont rechargés dès l'enregistrement",
+                    ),
+                    button(
+                        t,
+                        "config",
+                        tr("Show folder", "Afficher le dossier").into(),
+                        Box::new(|_: &mut Shell, _: &mut Window, cx: &mut Context<Shell>| {
+                            // The folder may not exist yet: it is made so that the file manager opens it.
+                            let folder = vault::themes_path();
+                            if let Some(dir) = folder.parent() {
+                                let _ = std::fs::create_dir_all(dir);
+                                cx.reveal_path(dir);
+                            }
+                        }),
+                        cx,
+                    ),
+                ),
             ],
         )]
     }

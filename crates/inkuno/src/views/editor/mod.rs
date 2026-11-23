@@ -10,7 +10,9 @@ mod edit;
 mod find;
 mod format_bar;
 pub mod grid;
+mod images;
 mod input;
+mod language;
 mod layout;
 mod links;
 mod listing;
@@ -25,7 +27,6 @@ mod toolbar;
 use grid::TableRow;
 
 pub use blocks::*;
-use completion::*;
 use cursor::*;
 use edit::*;
 use find::*;
@@ -33,6 +34,8 @@ use find::*;
 use format_bar::*;
 #[cfg(test)]
 pub use format_bar::*;
+use images::*;
+use language::*;
 pub use layout::*;
 use mouse::*;
 pub use notes::*;
@@ -73,7 +76,6 @@ use crate::{
     ui::figure,
     ui::svg,
     ui::theme::Theme,
-    ui::theme::Wide,
     ui::theme::syntax,
     views::viewer::Source,
 };
@@ -194,8 +196,29 @@ pub const MAX_WIDTH: Pixels = px(800.);
 /// Margin kept on each side of the page, narrow or full.
 const SIDE: Pixels = px(24.);
 
+/// The thin bar under a table or a code block too wide for the page: its thumb, the frame of the block, the key
+/// of the block (its first byte) and how far the block scrolls (its overflow).
+#[derive(Clone, Copy)]
+pub(super) struct ScrollBar {
+    pub(super) thumb: Bounds<Pixels>,
+    pub(super) frame: Bounds<Pixels>,
+    pub(super) start: usize,
+    pub(super) overflow: Pixels,
+}
+
 /// Side of the copy button, right of the opening line of a code block.
 const COPY_SIZE: Pixels = px(22.);
+/// Inset of a folded code block's badges (its chip, its wrap switch and its copy button) from the top border
+/// of its box and from its right edge, in the opening strip where they sit on one centre line.
+const BADGE_INSET: f32 = 8.;
+/// Gap between two badges of a code block's opening strip, and between the last one and the edge.
+const BADGE_GAP: f32 = 6.;
+
+/// Height of the opening strip of a folded code block, from its row's top: the 3 px above its box, an
+/// inset, the copy button, and the same inset under it.
+pub(super) fn strip_height(t: &Theme, s: f32) -> Pixels {
+    t.px(3.) + px(BADGE_INSET * s) * 2. + COPY_SIZE
+}
 /// Size of formulas relative to the text: the math font looks small at equal size.
 const MATH_SCALE: f32 = 1.2;
 /// Space between a line and the image it points to.
@@ -333,7 +356,13 @@ pub struct Editor {
     /// Table cells styled in the last frame.
     cells: grid::Cache,
     ac_index: usize,
+    /// Scroll of the completion's choices, and the choice it last followed (a moved choice is kept in view).
+    ac_scroll: gpui::ScrollHandle,
+    ac_followed: std::cell::Cell<Option<usize>>,
     ac_dismissed: Option<usize>,
+    /// Language picker open on a folded code block, and its scroll.
+    lang: Option<LangPick>,
+    lang_scroll: gpui::ScrollHandle,
     /// Table picker open under the cursor: chosen columns and rows.
     grid: Option<(usize, usize)>,
     /// Size typed while it is open (`12x5`): it goes beyond the grid.
@@ -370,10 +399,18 @@ pub struct Editor {
     drop_mark: Option<usize>,
     pick: Option<Pick>,
     moving: Option<Moving>,
-    /// Horizontal scroll of tables wider than the page, by table start.
+    /// Horizontal scroll of tables and code blocks wider than the page, by block start.
     table_x: HashMap<usize, Pixels>,
-    /// Scrollbar of each too-wide table, in the last frame.
-    thumbs: Vec<Bounds<Pixels>>,
+    /// Scrollbar of each too-wide table or code block, with its frame, in the last frame.
+    thumbs: Vec<ScrollBar>,
+    /// The thumb of a bar under a table or a code block being dragged: the block's key and where the press
+    /// took the thumb, from its left.
+    bar_drag: Option<(usize, Pixels)>,
+    /// Code blocks of the last frame, as tables are: their bytes, rows and widest line.
+    code_boxes: Vec<(Range<usize>, Bounds<Pixels>)>,
+    /// Word-wrap switch of a table (fit to the page) or a code block (lines wrap), by the start
+    /// of its first line (a code block: its opening fence). Absent: a table fits, a block scrolls.
+    wraps: HashMap<usize, bool>,
     theme: Theme,
     // Layout of the last frame.
     rows: Vec<Row>,
@@ -424,6 +461,8 @@ pub struct Editor {
     opening: Vec<usize>,
     /// Each table of the note: its extent, its rows and its width.
     table_meta: Vec<TableMeta>,
+    /// The code blocks of the layout (see `table_meta`).
+    code_meta: Vec<TableMeta>,
     big: Vec<BigBlock>,
     /// Hash of the theme and fonts of the last layout.
     big_style: u64,
@@ -488,7 +527,11 @@ impl Editor {
             frame: 0,
             cells: grid::Cache::default(),
             ac_index: 0,
+            ac_scroll: gpui::ScrollHandle::new(),
+            ac_followed: Default::default(),
             ac_dismissed: None,
+            lang: None,
+            lang_scroll: gpui::ScrollHandle::new(),
             grid: None,
             grid_typed: String::new(),
             grid_hitbox: None,
@@ -509,6 +552,9 @@ impl Editor {
             moving: None,
             table_x: HashMap::new(),
             thumbs: Vec::new(),
+            bar_drag: None,
+            code_boxes: Vec::new(),
+            wraps: HashMap::new(),
             theme,
             rows: Vec::new(),
             version: 0,
@@ -535,6 +581,7 @@ impl Editor {
             total_y: px(0.),
             opening: Vec::new(),
             table_meta: Vec::new(),
+            code_meta: Vec::new(),
             big: Vec::new(),
             big_style: 0,
             origin: Point::default(),
@@ -585,6 +632,8 @@ impl Editor {
         self.revealed = Some(self.line_range(self.clamp(cursor)).start);
         self.scroll_y = px(0.);
         self.table_x.clear();
+        self.wraps.clear();
+        self.lang = None;
         self.selecting = false;
         self.reveal = true;
         cx.notify();
@@ -657,10 +706,13 @@ impl Editor {
             .iter()
             .find(|r| self.content[r.start..].starts_with(prefix))
             .unwrap();
+        // A figure drawn under the line, or the first inline formula of it.
         let image = row
             .image
             .as_ref()
-            .map(|(_, s)| (s.width.into(), s.height.into()));
+            .map(|(_, s)| *s)
+            .or_else(|| row.inline.first().map(|i| i.size))
+            .map(|s| (s.width.into(), s.height.into()));
         (row.shaped.subs.len(), image)
     }
 
@@ -787,7 +839,7 @@ impl Editor {
         &self.feet
     }
 
-    /// Version of the footnote definitions: their labels, case-insensitively, in order.
+    /// Version of the footnote definitions: their labels, case-insensitively, in order, and their numbers.
     /// Adding, removing or renaming a definition restyles every reference, so the layout
     /// redoes everything when it changes (positions are left out: typing above a definition
     /// must not reshuffle the whole note).
@@ -796,6 +848,8 @@ impl Editor {
         // ponytail: linear in the definitions; notes hold a handful of them.
         for def in &self.feet {
             def.label.to_lowercase().hash(&mut hasher);
+            // The numbers of the references (see `Shaped::foots`) move with the order they first appear in.
+            def.display.hash(&mut hasher);
         }
         hasher.finish()
     }
@@ -886,23 +940,5 @@ mod tests {
             assert_eq!(history.pop(), Some((state.to_string(), i..i)));
         }
         assert_eq!(history.pop(), None);
-    }
-
-    #[test]
-    fn tables_get_room_by_setting() {
-        let (pane, text) = (px(1000.), px(800.));
-        // In the column: nothing changes. Centered: the whole window minus the margins.
-        assert_eq!(table_room(Wide::Column, pane, text), text);
-        assert_eq!(table_room(Wide::Centered, pane, text), px(952.));
-        // Narrow window: the column already fills the space, nothing overflows.
-        let narrow = px(500.);
-        assert_eq!(
-            table_room(Wide::Centered, narrow, narrow - SIDE * 2.),
-            narrow - SIDE * 2.
-        );
-        // A centered table overflows by half its excess on each side; never backwards.
-        assert_eq!(table_lead(Wide::Centered, px(952.), text), px(76.));
-        assert_eq!(table_lead(Wide::Centered, px(300.), text), px(0.));
-        assert_eq!(table_lead(Wide::Column, px(952.), text), px(0.));
     }
 }

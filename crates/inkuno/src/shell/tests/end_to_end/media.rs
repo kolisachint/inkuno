@@ -178,6 +178,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     cx.simulate_input("fin");
     cx.run_until_parked();
+    // A formula's figure is drawn once the window has loaded it: a frame draws it.
+    let _ = cx.update(|window, cx| window.draw(cx));
+    cx.run_until_parked();
     let figures = shell.read_with(cx, |s, cx| {
         let editor = s.pane().editor.read(cx);
         ["![](image-", "```\nsoit", "soit $x^2$"].map(|line| editor.decorations(line).1.is_some())

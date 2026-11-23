@@ -234,8 +234,6 @@ fn the_lights_room_is_only_in_the_band_at_the_top_left(cx: &mut TestAppContext) 
 #[gpui::test]
 fn every_former_rail_action_is_still_a_button(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "rail-actions");
-    // Inkuno's own chrome (the band, the foot, the tree header): Quiet, the default, has its own sidebar.
-    pin_inkuno(&shell, cx);
     fs::write(root.join("A.md"), "# A\n\nun\n").unwrap();
     shell.update(cx, |s, cx| s.rescan(&root, cx));
     shell.update_in(cx, |s, window, cx| {
@@ -260,26 +258,18 @@ fn every_former_rail_action_is_still_a_button(cx: &mut TestAppContext) {
         cx.simulate_click(at, gpui::Modifiers::none());
         cx.run_until_parked();
     };
-    // The band: sidebar toggle, search, new note, right-aligned in that order.
-    let band = ["nav-sidebar", "nav-search", "nav-new"].map(|id| {
+    // The band holds the sidebar toggle; search and the new note head the sidebar, and the settings
+    // and the title bar toggle sit in its foot, in that order.
+    for id in ["nav-sidebar", "nav-search", "nav-new"] {
         cx.debug_bounds(id)
-            .unwrap_or_else(|| panic!("{id} in the band"))
-    });
-    assert!(band[0].right() <= band[1].left() && band[1].right() <= band[2].left());
-    // The foot: the commands logo, the tree, the title bar toggle, in that order.
-    let foot = ["nav-commands", "nav-tree", "nav-titlebar"].map(|id| {
+            .unwrap_or_else(|| panic!("{id} is drawn"));
+    }
+    let foot = ["nav-settings", "nav-titlebar"].map(|id| {
         cx.debug_bounds(id)
             .unwrap_or_else(|| panic!("{id} in the foot"))
     });
-    assert!(foot[0].right() <= foot[1].left() && foot[1].right() <= foot[2].left());
+    assert!(foot[0].right() <= foot[1].left());
 
-    // The commands logo opens the palette on commands.
-    click(cx, "nav-commands");
-    assert!(
-        shell.read_with(cx, |s, _| s.palette.is_some()),
-        "the logo opens the palette"
-    );
-    cx.simulate_keystrokes("escape");
     // Search opens the palette too.
     click(cx, "nav-search");
     assert!(
@@ -287,10 +277,11 @@ fn every_former_rail_action_is_still_a_button(cx: &mut TestAppContext) {
         "search opens the palette"
     );
     cx.simulate_keystrokes("escape");
-    // The tree: from another tool, it shows the tree again.
+    // The tree: from another tool, the tree's shortcut shows it again (the sidebar has no button for it).
     shell.update(cx, |s, _| s.nav.activate(nav::Mode::Recent));
     settle(cx);
-    click(cx, "nav-tree");
+    cx.dispatch_action(nav::ShowTree);
+    cx.run_until_parked();
     assert_eq!(
         shell.read_with(cx, |s, _| s.nav.mode),
         nav::Mode::Tree,
@@ -315,14 +306,7 @@ fn every_former_rail_action_is_still_a_button(cx: &mut TestAppContext) {
     settle(cx);
     let band_height = cx.debug_bounds("sidebar-band").unwrap().size.height;
     assert_eq!(band_height, px(BAND_HIDDEN), "the band is padding only");
-    for id in [
-        "nav-sidebar",
-        "nav-search",
-        "nav-new",
-        "nav-commands",
-        "nav-tree",
-        "nav-titlebar",
-    ] {
+    for id in ["nav-sidebar", "nav-settings", "nav-titlebar"] {
         let bounds = cx
             .debug_bounds(id)
             .unwrap_or_else(|| panic!("{id} in the foot"));

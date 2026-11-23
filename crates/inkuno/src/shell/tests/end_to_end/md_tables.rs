@@ -12,15 +12,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let state = |cx: &mut gpui::VisualTestContext| {
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).table_state().unwrap())
     };
-    let set_wide = |cx: &mut gpui::VisualTestContext, wide: Wide| {
-        shell.update(cx, |s, cx| {
-            s.theme = Theme { wide, ..s.theme };
-            let theme = s.theme;
-            s.pane().editor.update(cx, |e, cx| e.set_theme(theme, cx));
-        });
-    };
-    // In the text column: cells share its width.
-    set_wide(cx, Wide::Column);
+    // In the text column, always: cells share its width.
     j.load(cx, &note, note.find("fin").unwrap());
     let (dx, tall, frame, page, _) = state(cx);
     assert!(
@@ -59,21 +51,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     });
     cx.run_until_parked();
     assert_eq!(state(cx).0, px(90.));
-    // Centred (the default setting): the table extends beyond the column on both sides, without leaving
-    // the window; its left edge does not move with the layout of the other lines.
-    set_wide(cx, Wide::Centered);
-    j.load(cx, &note, note.find("fin").unwrap());
-    let (dx, _, frame, page, view) = state(cx);
-    assert!(
-        dx == px(0.) && frame.size.width > page && frame.size.width <= view.size.width - px(48.),
-        "{dx:?} {frame:?} {page:?} {view:?}"
-    );
-    assert!(
-        (frame.left() - view.left() - (view.size.width - frame.size.width) / 2.).abs() < px(1.),
-        "{frame:?} {view:?}"
-    );
-    // At the limits: narrow window, full or narrow column, very small or very large text. The table stays in
-    // the window with its margins, the text too, and the text is never wider than the setting allows.
+    // At the limits: narrow window, full or narrow column, very small or very large text. The table never
+    // goes past the text column, and the text is never wider than the setting allows.
     let whole = cx.update(|window, _| window.viewport_size());
     for (width, page, zoom) in [
         (420., Page::Normal, 16.),
@@ -88,7 +67,6 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             s.theme = Theme {
                 page,
                 size: zoom,
-                wide: Wide::Centered,
                 ..s.theme
             };
             let theme = s.theme;
@@ -99,9 +77,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         let what = format!(
             "fenêtre {width}, {page:?}, corps {zoom} : cadre {frame:?}, texte {text:?}, vue {view:?}"
         );
+        assert!(frame.size.width <= text + px(0.5), "{what}");
         assert!(
-            frame.left() >= view.left() + px(23.) && frame.right() <= view.right() - px(23.)
-                || frame.size.width <= text,
+            frame.left() >= view.left() + px(23.) && frame.right() <= view.right() - px(23.),
             "{what}"
         );
         assert!(
@@ -124,11 +102,10 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         let theme = s.theme;
         s.pane().editor.update(cx, |e, cx| e.set_theme(theme, cx));
     });
-    // A small table keeps its size, whatever the setting.
+    // A small table keeps its size.
     j.load(cx, "| a | b |\n| - | - |\n| c | d |\n", 0);
     let (_, _, frame, page, _) = state(cx);
     assert!(frame.size.width < page / 2., "{frame:?} {page:?}");
-    set_wide(cx, Wide::Centered);
 
     // Pasting into a table: a cell keeps a single line and its `|`;
     // spreadsheet cells fill the grid; the table stays aligned.
@@ -265,9 +242,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("delete");
     assert_eq!(text(cx), t);
 
-    // A cell too long wraps: the arrows walk it line by line
-    // (in the text column, where it is narrower).
-    set_wide(cx, Wide::Column);
+    // A cell too long wraps: the arrows walk it line by line.
     let long = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega ".repeat(3);
     let wrapped = format!("| A | B |\n| --- | --- |\n| {long}| fin |\n| z | z |\n");
     let start = wrapped.find("alpha").unwrap();
