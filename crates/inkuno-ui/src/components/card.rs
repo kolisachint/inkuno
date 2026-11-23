@@ -12,11 +12,15 @@ pub fn card_row(t: Theme, label: &str, note: &str, control: impl IntoElement) ->
         .px(t.px(14.))
         .py(t.px(12.))
         .flex()
+        // In a narrow card the control drops under the label; without the wrap it squeezes the label
+        // to a few pixels, one letter per line.
+        .flex_wrap()
         .items_center()
         .gap(t.px(16.))
         .child(
             div()
                 .flex_1()
+                .flex_basis(t.px(200.))
                 .min_w_0()
                 .flex()
                 .flex_col()

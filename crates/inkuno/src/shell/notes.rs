@@ -94,45 +94,46 @@ impl Shell {
         cx.notify();
     }
 
-    /// "Open in viewer": the HTML page shown opens in `inkuno view`, in a window of its own. The
-    /// note stays editable here. The viewer is a process of its own, started and not waited for.
-    pub(super) fn open_in_viewer(&mut self, cx: &mut Context<Self>) {
-        let Some(file) = self.pane().displayed_path().cloned() else {
-            return;
-        };
+    /// Opens an HTML page in `inkuno view`, a window of its own, its root the vault (else the page's
+    /// folder). The viewer is a process of its own, started and not waited for. False when this build
+    /// has no viewer or the process did not start: the caller then hands the page to the system.
+    pub(super) fn open_html_in_viewer(&mut self, file: &Path) -> bool {
         let root = self
             .vault
             .clone()
             .or_else(|| file.parent().map(Path::to_path_buf))
             .unwrap_or_default();
-        let Some(args) = platform::viewer::view_args(&file, &root) else {
-            return;
+        let Some(args) = platform::viewer::view_args(file, &root) else {
+            return false;
         };
-        #[cfg(feature = "viewer")]
+        #[cfg(test)]
         {
-            let started = std::env::current_exe().and_then(|exe| {
-                platform::command(exe)
-                    .args(&args)
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .spawn()
-                    .map(|mut child| {
-                        std::thread::spawn(move || {
-                            let _ = child.wait();
-                        });
-                    })
-            });
-            if let Err(error) = started {
-                let text = format!(
-                    "{}: {error}",
-                    tr("The viewer did not start", "La visionneuse n'a pas démarré")
-                );
-                self.say(Tone::Failed, text, cx);
-            }
+            // The test process must not run itself as a viewer: the request is recorded instead.
+            let _ = args;
+            self.viewed.push(file.to_path_buf());
+            true
         }
-        #[cfg(not(feature = "viewer"))]
+        #[cfg(all(not(test), feature = "viewer"))]
         {
-            let _ = (args, cx);
+            std::env::current_exe()
+                .and_then(|exe| {
+                    platform::command(exe)
+                        .args(&args)
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .spawn()
+                        .map(|mut child| {
+                            std::thread::spawn(move || {
+                                let _ = child.wait();
+                            });
+                        })
+                })
+                .is_ok()
+        }
+        #[cfg(all(not(test), not(feature = "viewer")))]
+        {
+            let _ = args;
+            false
         }
     }
 
@@ -196,7 +197,11 @@ impl Shell {
         }
         self.pane_mut().listing = None;
         // An attachment (PDF, video, archive…) opens in the system's application; the note stays.
+        // An HTML page opens in the viewer instead, when this build has one.
         if vault::is_attachment(path) {
+            if platform::viewer::is_html(path) && self.open_html_in_viewer(path) {
+                return false;
+            }
             // The test platform opens nothing: it records what it would have been asked.
             #[cfg(test)]
             self.opened.push(path.to_path_buf());

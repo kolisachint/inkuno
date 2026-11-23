@@ -136,9 +136,9 @@ pub fn run(file: &Path, root: Option<&Path>) -> Result<(), String> {
             NewWindowResponse::Deny
         })
         .with_on_page_load_handler(move |event, url| {
-            if matches!(event, PageLoadEvent::Finished)
-                && let Some(title) = title_of(&title_root, &url)
-            {
+            // A page that did not load (a refused or missing link) has no file name: the plain title.
+            if matches!(event, PageLoadEvent::Finished) {
+                let title = title_of(&title_root, &url).unwrap_or_else(|| "Inkuno".into());
                 let _ = title_proxy.send_event(UserEvent::Title(title));
             }
         });

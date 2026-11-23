@@ -390,6 +390,20 @@ fn the_tree_previews_in_a_single_tab(cx: &mut TestAppContext) {
         shell.read_with(cx, |s, _| s.opened.last().cloned()),
         Some(root.join("rapport.pdf"))
     );
+    // An HTML page goes to the viewer, a window of its own: no tab, and not the system's application.
+    fs::write(root.join("page.html"), "<h1>Page</h1>").unwrap();
+    shell.update_in(cx, |s, window, cx| {
+        s.open(&root.join("page.html"), window, cx)
+    });
+    assert_eq!(tabs(&shell, cx, 0).0.len(), 4);
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.viewed.last().cloned()),
+        Some(root.join("page.html"))
+    );
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.opened.last().cloned()),
+        Some(root.join("rapport.pdf"))
+    );
     let _ = fs::remove_dir_all(&root);
 }
 
