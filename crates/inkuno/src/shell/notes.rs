@@ -94,6 +94,48 @@ impl Shell {
         cx.notify();
     }
 
+    /// "Open in viewer": the HTML page shown opens in `inkuno view`, in a window of its own. The
+    /// note stays editable here. The viewer is a process of its own, started and not waited for.
+    pub(super) fn open_in_viewer(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.pane().displayed_path().cloned() else {
+            return;
+        };
+        let root = self
+            .vault
+            .clone()
+            .or_else(|| file.parent().map(Path::to_path_buf))
+            .unwrap_or_default();
+        let Some(args) = platform::viewer::view_args(&file, &root) else {
+            return;
+        };
+        #[cfg(feature = "viewer")]
+        {
+            let started = std::env::current_exe().and_then(|exe| {
+                platform::command(exe)
+                    .args(&args)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .spawn()
+                    .map(|mut child| {
+                        std::thread::spawn(move || {
+                            let _ = child.wait();
+                        });
+                    })
+            });
+            if let Err(error) = started {
+                let text = format!(
+                    "{}: {error}",
+                    tr("The viewer did not start", "La visionneuse n'a pas démarré")
+                );
+                self.say(Tone::Failed, text, cx);
+            }
+        }
+        #[cfg(not(feature = "viewer"))]
+        {
+            let _ = (args, cx);
+        }
+    }
+
     /// Copies the whole note to the clipboard.
     /// Copies the note; with `block`, only the code block the cursor is in,
     /// if there is one.

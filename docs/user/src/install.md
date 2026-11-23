@@ -54,6 +54,7 @@ This installs the `inkuno` command in `~/.cargo/bin`, without the `.app` bundle.
    ```bash
    sudo apt install build-essential pkg-config libfontconfig-dev libfreetype-dev \
      libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libvulkan1 \
+     libwebkit2gtk-4.1-dev \
      fonts-noto-color-emoji
    ```
 

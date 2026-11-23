@@ -31,6 +31,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | `Ctrl+P › clone` | Clone a vault from a git address (also on the welcome screen) |
 | A cloud folder | iCloud, Dropbox, Google Drive, Syncthing: put the vault there, nothing else; never a git repository inside one |
 | `Ctrl+Shift+C` | Copy the code block, else the note |
+| `Ctrl+Shift+V` | An HTML page: open it in the viewer, in a window of its own (read only) |
 | `Ctrl+click` | Open a \[\[link\]\], \#tag or URL |
 | `Ctrl+,` | Settings: appearance, editor, files, shortcuts, about |
 | `F1` / `Ctrl+/` | This shortcuts page (also F1): every shortcut, changed here |

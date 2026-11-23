@@ -9,6 +9,7 @@ pub mod revisions;
 pub mod scratch;
 pub mod sidecar;
 pub mod vault;
+pub mod viewer;
 pub mod web;
 
 use std::{ffi::OsStr, fs, process::Command};

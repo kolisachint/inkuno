@@ -61,6 +61,7 @@ pub(super) fn help_sections(bound: &[keys::Bind], changes: &keys::Changes) -> ke
                 p("clone", tr("Clone a vault from a git address (also on the welcome screen)", "Cloner un coffre depuis une adresse git (aussi sur l'écran d'accueil)")),
                 t(tr("A cloud folder", "Un dossier synchronisé"), tr("iCloud, Dropbox, Google Drive, Syncthing: put the vault there, nothing else; never a git repository inside one", "iCloud, Dropbox, Google Drive, Syncthing : y poser le coffre, rien d'autre ; jamais un dépôt git dans un tel dossier")),
                 k(&CopyAll, tr("Copy the code block, else the note", "Copier le bloc de code, sinon la note")),
+                k(&OpenInViewer, tr("An HTML page: open it in the viewer, in a window of its own (read only)", "Une page HTML : l'ouvrir dans la visionneuse, dans sa propre fenêtre (lecture seule)")),
                 t(&format!("{MOD}+{click}"), tr("Open a [[link]], #tag or URL", "Ouvrir un [[lien]], #tag ou URL")),
                 k(&OpenSettings, tr("Settings: appearance, editor, files, shortcuts, about", "Réglages : apparence, éditeur, fichiers, raccourcis, à propos")),
                 k(&ToggleHelp, tr("This shortcuts page (also F1): every shortcut, changed here", "Cette page des raccourcis (aussi F1) : chaque raccourci, modifiable ici")),
@@ -310,6 +311,8 @@ pub(crate) fn defaults() -> Vec<keys::Bind> {
         b("secondary-alt-n", &NewNote, None),
         b("secondary-o", &OpenVault, None),
         b("secondary-shift-c", &CopyAll, None),
+        // Only for an HTML page (the command is offered then); the note stays editable.
+        b("secondary-shift-v", &OpenInViewer, None),
         b("f1", &ToggleHelp, None),
         b("secondary-/", &ToggleHelp, None),
         b("secondary-,", &OpenSettings, None),
