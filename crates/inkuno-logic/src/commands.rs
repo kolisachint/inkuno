@@ -329,12 +329,6 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Note,
         ),
         (
-            "app::OpenInViewer",
-            tr("Open in viewer", "Ouvrir dans la visionneuse"),
-            "external.svg",
-            Note,
-        ),
-        (
             "nav::OpenAside",
             tr("Open in the other pane", "Ouvrir dans l'autre volet"),
             "c-split.svg",

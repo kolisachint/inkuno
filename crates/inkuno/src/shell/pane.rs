@@ -14,9 +14,11 @@ pub(super) const MIN_PANE: Pixels = px(300.);
 pub(super) const MIN_PANE_H: Pixels = px(200.);
 
 /// A saved tab that comes back: a file still in the vault, or a scratch note. A token an older
-/// version wrote for a tool tab (`@graph`, `@calendar`) is no file and is ignored.
+/// version wrote for a tool tab (`@graph`, `@calendar`) is no file and is ignored. An HTML page
+/// does not come back: opening it starts the viewer, and only a user's action may do that.
 fn restorable(path: &Path, root: Option<&Path>) -> bool {
     path.is_file()
+        && !platform::viewer::is_html(path)
         && (platform::scratch::holds(path) || root.is_some_and(|root| path.starts_with(root)))
 }
 
@@ -1089,6 +1091,10 @@ mod tests {
         assert!(!restorable(&root.join("@graph"), Some(&root)));
         assert!(!restorable(Path::new("@calendar"), Some(&root)));
         assert!(!restorable(&root.join("Missing.md"), Some(&root)));
+        // An HTML page in the vault is not restored: no viewer window, no system application, at startup.
+        let page = root.join("page.html");
+        std::fs::write(&page, "<h1>Page</h1>").unwrap();
+        assert!(!restorable(&page, Some(&root)));
         let _ = std::fs::remove_dir_all(&root);
     }
 

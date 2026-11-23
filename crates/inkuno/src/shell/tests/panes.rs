@@ -672,3 +672,42 @@ fn an_old_tool_tab_restores_the_files_around_it(cx: &mut TestAppContext) {
         );
     });
 }
+
+/// An HTML page in the saved tabs does not come back at startup: no tab, no viewer window, no
+/// system application. The other tabs come back, and the shown one falls back to a real one.
+#[gpui::test]
+fn an_html_page_is_not_restored_at_startup(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "html-restore");
+    for name in ["Note", "Other"] {
+        fs::write(root.join(format!("{name}.md")), format!("# {name}\n")).unwrap();
+    }
+    fs::write(root.join("page.html"), "<h1>Page</h1>").unwrap();
+    shell.update_in(cx, |s, window, cx| {
+        s.restore_panes(
+            None,
+            vec![(
+                vec![
+                    root.join("Note.md"),
+                    root.join("page.html"),
+                    root.join("Other.md"),
+                ],
+                1,
+            )],
+            false,
+            Some(&root),
+            window,
+            cx,
+        );
+    });
+    shell.read_with(cx, |s, _| {
+        assert_eq!(s.groups[0].tabs.len(), 2);
+        let paths: Vec<PathBuf> = s.groups[0]
+            .tabs
+            .iter()
+            .map(|&tab| s.panes[tab].path.clone().expect("no empty pane"))
+            .collect();
+        assert_eq!(paths, vec![root.join("Note.md"), root.join("Other.md")]);
+        assert!(s.viewed.is_empty(), "{:?}", s.viewed);
+        assert!(s.opened.is_empty(), "{:?}", s.opened);
+    });
+}

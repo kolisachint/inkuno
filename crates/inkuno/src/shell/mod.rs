@@ -110,6 +110,9 @@ struct Shell {
     /// Test: the attachments the system was asked to open.
     #[cfg(test)]
     opened: Vec<PathBuf>,
+    /// Test: the HTML pages the viewer was asked to show.
+    #[cfg(test)]
+    viewed: Vec<PathBuf>,
     /// The vault the config points to when it is no longer there: the welcome page says so, until a vault is opened.
     lost: Option<PathBuf>,
     /// Test: the window buttons are drawn by the app, as on Linux, whatever the test platform says.
@@ -253,6 +256,8 @@ impl Shell {
             tab_aim: None,
             #[cfg(test)]
             opened: Vec::new(),
+            #[cfg(test)]
+            viewed: Vec::new(),
             lost: None,
             #[cfg(test)]
             client: false,
