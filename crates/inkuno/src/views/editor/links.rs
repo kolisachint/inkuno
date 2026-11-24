@@ -2,6 +2,23 @@
 
 use super::*;
 
+/// The comment of `line` that byte `col` picks, as `md::comments` gives it. A card names its comment by where it
+/// starts (`card`), so the one starting at `col` wins even where another comment ends there too (`alpha<!--c2--><!--c1-->`);
+/// otherwise the first comment whose markup holds `col`, its ends included, as a caret does.
+fn comment_picked(
+    line: &str,
+    col: usize,
+    card: bool,
+) -> Option<(Range<usize>, Range<usize>, Range<usize>)> {
+    let found = md::comments(line);
+    if card && let Some(hit) = found.iter().find(|(whole, ..)| whole.start == col) {
+        return Some(hit.clone());
+    }
+    found
+        .into_iter()
+        .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
+}
+
 impl Editor {
     /// Address held by the clipboard, if that is all it holds.
     pub(super) fn copied_url(cx: &mut Context<Self>) -> Option<String> {
@@ -67,10 +84,10 @@ impl Editor {
         self.move_to(sel.start + at, cx);
     }
 
-    /// Resolves the comment starting at byte `at`.
+    /// Resolves the comment at byte `at` (a card names its comment by its start; the draft by a byte inside it).
     pub fn resolve_comment(&mut self, at: usize, cx: &mut Context<Self>) {
         self.move_to(self.clamp(at), cx);
-        self.comment(cx);
+        self.aligned(cx, |this, cx| this.comment_here(true, cx));
     }
 
     /// Writes `text` as the said of the comment the caret is in at byte `at`, its passage kept: the markup
@@ -81,10 +98,7 @@ impl Editor {
         let lr = self.line_range(at);
         let line = self.content[lr.clone()].to_string();
         let col = at - lr.start;
-        let Some((whole, noted, said_at)) = md::comments(&line)
-            .into_iter()
-            .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
-        else {
+        let Some((whole, noted, said_at)) = comment_picked(&line, col, false) else {
             return;
         };
         let kept = line[noted].to_string();
@@ -124,10 +138,7 @@ impl Editor {
         let lr = self.line_range(at);
         let line = self.content[lr.clone()].to_string();
         let col = at - lr.start;
-        let Some((whole, ..)) = md::comments(&line)
-            .into_iter()
-            .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
-        else {
+        let Some((whole, ..)) = comment_picked(&line, col, true) else {
             return;
         };
         let markup = md::markup_in(&line[whole.clone()]);
@@ -172,19 +183,17 @@ impl Editor {
     /// a comment is on the text of a cell, and one per cell the selection covers; handles that took
     /// a row, a column or the table comment it on a line under the table.
     pub(super) fn comment(&mut self, cx: &mut Context<Self>) {
-        self.aligned(cx, |this, cx| this.comment_here(cx));
+        self.aligned(cx, |this, cx| this.comment_here(false, cx));
     }
 
-    fn comment_here(&mut self, cx: &mut Context<Self>) {
+    /// `card`: the comment is named by a card (`resolve_comment`), not by the caret.
+    fn comment_here(&mut self, card: bool, cx: &mut Context<Self>) {
         let lr = self.line_range(self.sel.start);
         let (line, col) = (
             self.content[lr.clone()].to_string(),
             self.sel.start - lr.start,
         );
-        if let Some((whole, noted, _)) = md::comments(&line)
-            .into_iter()
-            .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
-        {
+        if let Some((whole, noted, _)) = comment_picked(&line, col, card) {
             // A comment alone on its line takes the line with it.
             if noted.is_empty() && line.trim() == &line[whole.clone()] {
                 if self.touches_pending(&self.dropped_range(lr.clone()), "") {

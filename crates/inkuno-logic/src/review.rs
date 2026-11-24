@@ -47,18 +47,6 @@ pub fn hidden(areas: &[Area]) -> Vec<Range<usize>> {
         .collect()
 }
 
-/// The line of byte `at` of `text` in the file, 1-based: the line breaks before `at` that the file
-/// holds (not those inside `hidden`, see `hidden`).
-pub fn file_line(text: &str, at: usize, hidden: &[Range<usize>]) -> usize {
-    let mut breaks = 0;
-    for (i, &b) in text.as_bytes()[..at.min(text.len())].iter().enumerate() {
-        if b == b'\n' && !hidden.iter().any(|r| r.contains(&i)) {
-            breaks += 1;
-        }
-    }
-    breaks + 1
-}
-
 /// The label of the heading that byte `at` is under: the last heading above it. `heads` is
 /// `markdown::headings` of the text, read once by the caller. None before the first heading.
 pub fn section<'a>(heads: &[(u8, &'a str, usize)], at: usize) -> Option<&'a str> {
@@ -114,17 +102,16 @@ mod tests {
     }
 
     #[test]
-    fn the_file_line_skips_the_marks_the_file_does_not_hold() {
+    fn the_feed_numbers_a_line_as_the_file_does() {
         // Line 1 plain, then a change: its marker line, removed "b", marker, added "c", marker.
         let text = "a\n{--\nb\n--}\n{++\nc\n++}\nd\ne";
-        let areas = crate::pending::areas(text);
-        let hidden = hidden(&areas);
+        let hidden = hidden(&crate::pending::areas(text));
+        let lines = crate::lines::FileLines::new(text, &hidden);
         // `d` is the 8th line of the editor's text; on disk the change is `b` alone, so it is the 3rd.
-        let d = text.find('d').unwrap();
-        assert_eq!(file_line(text, d, &hidden), 3);
-        assert_eq!(file_line(text, 0, &hidden), 1);
-        // Without marks, plain counting.
-        assert_eq!(file_line("x\ny\nz", 4, &[]), 3);
+        assert_eq!(lines.line_of(text.find('d').unwrap()), 3);
+        assert_eq!(lines.line_of(0), 1);
+        // A change is anchored on the line of its first marker: the file line its removed text is on.
+        assert_eq!(lines.line_of(text.find("{--").unwrap()), 2);
     }
 
     #[test]

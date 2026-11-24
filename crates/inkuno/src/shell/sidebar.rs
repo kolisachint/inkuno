@@ -76,6 +76,8 @@ impl Shell {
             self.nav.panel = Panel::Split;
         }
         self.put_tool(mode);
+        // The feed is current before its view's callers read it (a pick, a comment's card).
+        self.refresh_review(cx);
         // The versions are read again each time their view is shown.
         if mode == Mode::Versions {
             self.versions_stale = true;
@@ -1822,7 +1824,7 @@ impl Shell {
     pub(super) fn switcher(&self, cx: &Context<Self>) -> Div {
         let t = self.theme;
         let shown = self.dock_tools(true);
-        let count = self.review_items.len();
+        let count = self.review_total;
         let needs = self.assistant.status == crate::shell::assistant::Status::NeedsYou;
         div()
             .flex()
@@ -1991,8 +1993,9 @@ impl Shell {
         let switch = right && first;
         let switcher = switch.then(|| self.switcher(cx));
         // Beside the window buttons when the switcher (142 px, after the 8 px pad) and the room the header keeps
-        // free at its right end (PILL_ROOM) fit: from 274 px, so the default 280 px panel holds it in the band.
-        let beside = f32::from(self.nav.right_w) >= 8. + 142. + PILL_ROOM;
+        // free at its right end (PILL_ROOM) fit: from 274 px, so the default 280 px panel holds it in the band. Both
+        // sides are scaled (`Theme::px`) and the width is the one the panel is drawn at (`right_width`).
+        let beside = self.right_width() >= t.px(8.) + t.px(142.) + t.px(PILL_ROOM);
         let (inline, under) = match beside {
             true => (switcher, None),
             false => (None, switcher),

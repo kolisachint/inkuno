@@ -232,7 +232,7 @@ impl Shell {
     /// the Review feed (none without any).
     pub(super) fn render_comments_badge(&self, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let t = self.theme;
-        let count = self.review_items.len();
+        let count = self.review_total;
         (count > 0 && !self.focus_mode).then(|| {
             div()
                 .id("comments-toggle")

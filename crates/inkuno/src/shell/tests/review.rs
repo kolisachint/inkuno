@@ -4,6 +4,7 @@
 
 use super::pending::{settle, text};
 use super::*;
+use crate::logic::layout::Side;
 use crate::logic::pending;
 use crate::platform::revisions::Home;
 use crate::platform::sidecar;
@@ -262,5 +263,168 @@ fn an_empty_note_says_there_is_nothing_to_review(cx: &mut TestAppContext) {
         shell.read_with(cx, |s, _| s.review_title()),
         "Review · 0 open"
     );
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Two comments that touch: the second starts where the first ends (`alpha<!--c1--><!--c2-->`), each on its own.
+const TOUCHING: &str = "alpha<!-- comment @Ana 2026-11-24T10:01Z: first --><!-- comment @Ana 2026-11-24T10:05Z: second -->\n";
+
+#[gpui::test]
+fn a_reply_on_the_second_of_two_touching_comments_goes_to_the_second(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open("review-touch-reply", TOUCHING, &[], cx);
+    let second = TOUCHING.rfind("<!--").unwrap();
+    pick(cx, 1);
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.review_open),
+        Some(Key::Comment(second))
+    );
+    shell.update_in(cx, |s, window, cx| {
+        let (_, field, _) = s.review_reply.as_ref().expect("a reply field");
+        window.focus(&field.focus_handle(cx), cx);
+    });
+    cx.simulate_input("ça suit");
+    cx.simulate_keystrokes("enter");
+    settle(cx);
+    assert_eq!(
+        stamped(&shell, cx),
+        "alpha<!-- comment @Ana <T>: first --><!-- comment @Ana <T>: second ↳ @Ana <T>: ça suit -->\n",
+        "the reply is on the second comment, the first is as it was"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn resolve_on_the_second_of_two_touching_comments_removes_the_second(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open("review-touch-resolve", TOUCHING, &[], cx);
+    pick(cx, 1);
+    click(cx, "review-resolve");
+    assert_eq!(
+        stamped(&shell, cx),
+        "alpha<!-- comment @Ana <T>: first -->\n",
+        "the second's markup goes, the first stays"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_write_inside_the_second_of_two_touching_comments_writes_the_second(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open("review-touch-write", TOUCHING, &[], cx);
+    // The draft's caret is inside the second comment's text.
+    let inside = TOUCHING.rfind("second").unwrap();
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.write_comment(inside, "changed", cx))
+    });
+    settle(cx);
+    assert_eq!(
+        stamped(&shell, cx),
+        "alpha<!-- comment @Ana <T>: first --><!-- comment @Ana <T>: changed -->\n"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A note with a pending replace above the line `end`: the gutter and the feed number the file's lines.
+#[gpui::test]
+fn the_gutter_numbers_the_file_lines_as_the_feed_does_past_a_pending_change(
+    cx: &mut TestAppContext,
+) {
+    let (root, shell, cx, _config) = open("review-gutter", NOTE, &["2026-11-24T10:02Z"], cx);
+    let numbers = shell.read_with(cx, |s, cx| s.panes[0].editor.read(cx).file_line_numbers());
+    // On disk: `# Plan`, blank, `keep`, blank, `alpha`, blank, `old`, `end`. The marks and the added `new`
+    // carry no number; the blank lines are collapsed and carry none.
+    assert_eq!(numbers, [1, 3, 5, 7, 8]);
+    // Each card's Line N is the gutter's number for its line.
+    let lines: Vec<usize> =
+        shell.read_with(cx, |s, _| s.review_items.iter().map(|i| i.line).collect());
+    assert_eq!(lines, [5, 7, 3], "legacy comment, change, comment");
+    for line in lines {
+        assert!(numbers.contains(&line), "line {line} is numbered");
+    }
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_feed_is_built_while_the_review_is_shown_and_counted_without(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open("review-lazy", NOTE, &["2026-11-24T10:02Z"], cx);
+    assert_eq!(shell.read_with(cx, |s, _| s.review_items.len()), 3);
+    shell.update_in(cx, |s, window, cx| s.show_view(Mode::Outline, window, cx));
+    settle(cx);
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.review_total),
+        3,
+        "the count still shows on the switcher while the view is hidden"
+    );
+    // A change to the note while hidden is counted, but the feed is not built again until the view is shown.
+    let end = NOTE.len();
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            e.absorb(&[(end..end, "{++\nlast\n++}\n".to_string())], cx)
+        })
+    });
+    settle(cx);
+    assert_eq!(shell.read_with(cx, |s, _| s.review_total), 4);
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.review_items.len()),
+        3,
+        "no rebuild while the view is hidden"
+    );
+    shell.update_in(cx, |s, window, cx| s.show_review(window, cx));
+    settle(cx);
+    assert_eq!(shell.read_with(cx, |s, _| s.review_items.len()), 4);
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.review_title()),
+        "Review · 4 open"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_proposal_in_an_open_note_has_its_time_before_the_note_is_saved(cx: &mut TestAppContext) {
+    let base = "# Plan\n\nkeep\n\nend\n";
+    let (root, shell, cx, _config) = open("review-proposed", base, &[], cx);
+    let current = text(&shell, cx);
+    let marked = pending::propose(&current, &current, "# Plan\n\nkept\n\nend\n").expect("a change");
+    shell.update(cx, |s, cx| s.absorb_marked(0, &current, &marked, cx));
+    settle(cx);
+    let times: Vec<Option<String>> = shell.read_with(cx, |s, _| {
+        s.review_items.iter().map(|i| i.time.clone()).collect()
+    });
+    assert_eq!(times.len(), 1);
+    assert!(
+        times[0].as_deref().is_some_and(|t| t.ends_with('Z')),
+        "the change has the minute it was proposed at, not none: {times:?}"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn an_author_none_an_empty_name_or_unknown_is_shown_as_unknown() {
+    use crate::shell::review::shown_author;
+    assert_eq!(shown_author(None), "Unknown");
+    assert_eq!(shown_author(Some("")), "Unknown");
+    assert_eq!(shown_author(Some("   ")), "Unknown");
+    assert_eq!(shown_author(Some("unknown")), "Unknown");
+    assert_eq!(shown_author(Some("UNKNOWN")), "Unknown");
+    assert_eq!(shown_author(Some(" Ana ")), "Ana");
+}
+
+#[gpui::test]
+fn every_new_pane_writes_by_the_revisions_author(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = open("review-pane-author", NOTE, &[], cx);
+    // Read before anything draws: the author is given at creation, not pushed by the next render.
+    shell.update_in(cx, |s, window, cx| s.add_tab(window, cx));
+    shell.update_in(cx, |s, window, cx| s.split(Side::Right, window, cx));
+    let authors = shell.read_with(cx, |s, cx| {
+        s.panes
+            .iter()
+            .map(|pane| pane.editor.read(cx).author().to_string())
+            .collect::<Vec<_>>()
+    });
+    assert!(
+        authors.len() >= 3,
+        "the note, a new tab and a split: {authors:?}"
+    );
+    assert!(authors.iter().all(|a| a == "Ana"), "{authors:?}");
     let _ = fs::remove_dir_all(root);
 }

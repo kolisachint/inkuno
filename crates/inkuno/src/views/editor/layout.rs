@@ -3260,7 +3260,8 @@ impl Editor {
     pub(super) fn place(&mut self, bounds: Bounds<Pixels>, window: &mut Window, _: &mut App) {
         // The file's line numbers: the index of the text, rebuilt only when the text moves.
         if self.lines.0 != self.version {
-            self.lines = (self.version, LineIndex::new(&self.content));
+            let hidden = crate::logic::review::hidden(&self.pending);
+            self.lines = (self.version, FileLines::new(&self.content, &hidden));
         }
         let reveal = std::mem::take(&mut self.reveal);
         let to_top = std::mem::take(&mut self.reveal_top);

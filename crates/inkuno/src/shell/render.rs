@@ -28,6 +28,7 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
         self.end_closed_draft();
+        self.refresh_review(cx);
         // The spacings of the interface are in rems: they follow its scale.
         window.set_rem_size(t.px(16.));
         // The pane holding the focus is the active one; when the code changed it without moving
@@ -955,13 +956,8 @@ impl Shell {
         // The band (the pane's tab bar, one tab or many) is drawn over the top row while it is shown.
         let barred = self.band_shown();
         // Copy of the whole note: a plain floating icon, outside the title bar.
-        // The Review feed of the note: its comments and pending changes, read with the note (`review.rs`).
-        // ponytail: the note is reread on every render (a search for `{==`); keep the feed from one
-        // version of the text to the next if very long notes suffer from it.
+        // The Review feed is refreshed once per frame at the top of `render` (`refresh_review`).
         self.sync_comment_author(cx);
-        if active {
-            self.review_items = self.review_feed(cx);
-        }
         // The note's corner badge: a quiet dot, at the foot on the right, for a note with comments.
         let talk = active.then(|| self.render_comments_badge(cx)).flatten();
         let corner = talk.is_some() as usize;

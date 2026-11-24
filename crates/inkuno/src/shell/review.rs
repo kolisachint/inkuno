@@ -1,17 +1,30 @@
 //! The Review view of the right panel (app-ui.md §23): one feed of the note's comments and pending
 //! changes, oldest first. One card is expanded at a time: a comment's shows its text, its replies, a
 //! reply field and Resolve; a change's shows its old and new text and Accept or Reject. Picking a card
-//! selects its passage in the note. The feed is read with the note on each render (`review_feed`).
+//! selects its passage in the note. The feed is built only while the view is shown, and kept while the note
+//! and its saved changes stay the same (`refresh_review`); the count the switcher and the note's corner show is kept
+//! the same way, for the view hidden too.
 
 use std::ops::Range;
 
-use gpui::{App, Context, Div, Entity, Hsla, Stateful, Subscription, Window, div, prelude::*, svg};
+use gpui::{
+    App, Context, Div, Entity, EntityId, Hsla, Stateful, Subscription, Window, div, prelude::*, svg,
+};
 
 use super::*;
 use crate::lang::tr;
 use crate::logic::{markdown, rank, review as feed};
 use crate::ui::components::button::button;
 use crate::views::field::{Field, FieldEvent};
+
+/// What the feed of the active note is read from: the editor (its identity and its text's version) and the
+/// changes saved beside the note (`Pane::saved_version`). Equal sources give an equal feed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Source {
+    editor: EntityId,
+    text: u64,
+    saved: u64,
+}
 
 /// The identity of a feed item: a comment by its start in the note, a pending change by its first byte.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -96,11 +109,24 @@ fn ago(time: &str) -> String {
     }
 }
 
+/// The author a card shows: the name, or Unknown when there is none. None, an empty name and `unknown` in any
+/// case are all Unknown (the comments of older files, and changes saved without an author).
+pub(super) fn shown_author(author: Option<&str>) -> String {
+    let author = author.map(str::to_string);
+    markdown::shown_author(&author).map_or_else(
+        || tr("Unknown", "Inconnu").to_string(),
+        |name| name.trim().to_string(),
+    )
+}
+
+/// Comment text as a card shows it: an escaped `\↳` (a literal arrow in the text) reads as the arrow. Display only.
+fn shown_text(text: &str) -> String {
+    text.replace("\\↳", "↳")
+}
+
 /// The name a card shows, and the letter of its avatar.
 fn name_of(author: &Option<String>) -> (String, String) {
-    let name = author
-        .clone()
-        .unwrap_or_else(|| tr("Unknown", "Inconnu").to_string());
+    let name = shown_author(author.as_deref());
     let initial = name
         .chars()
         .next()
@@ -139,8 +165,52 @@ fn side(t: crate::ui::theme::Theme, label: &str, text: &str, bar: Hsla) -> Div {
 }
 
 impl Shell {
-    /// The feed of the note in the active pane: its comments and its pending changes, in the order the
-    /// view lists them. Empty for a file or a list page, which have none.
+    /// Whether the Review view is drawn: its tool is in an open dock.
+    fn review_shown(&self) -> bool {
+        self.docked(Mode::Review)
+    }
+
+    /// The source the feed of the active pane is read from; None for a file or a list page, which have none.
+    fn review_source(&self, cx: &App) -> Option<Source> {
+        let pane = self.pane();
+        (pane.file.is_none() && pane.listing.is_none()).then(|| Source {
+            editor: pane.editor.entity_id(),
+            text: pane.editor.read(cx).version(),
+            saved: pane.saved_version,
+        })
+    }
+
+    /// Brings the feed and its count up to date with the note, once per frame: the feed is built only while
+    /// the Review view is shown, and only when its source moved; the count follows the source for both.
+    pub(super) fn refresh_review(&mut self, cx: &App) {
+        let source = self.review_source(cx);
+        if self.review_shown() {
+            if self.review_items_source != source {
+                self.review_items = match source {
+                    Some(_) => self.review_feed(cx),
+                    None => Vec::new(),
+                };
+                self.review_items_source = source;
+                self.review_total = self.review_items.len();
+                self.review_total_source = source;
+            }
+        } else if self.review_total_source != source {
+            self.review_total = self.review_count(cx);
+            self.review_total_source = source;
+        }
+    }
+
+    /// How many items the feed of the active pane has, without building it: the comments and the pending changes.
+    fn review_count(&self, cx: &App) -> usize {
+        if self.review_source(cx).is_none() {
+            return 0;
+        }
+        let editor = self.pane().editor.read(cx);
+        markdown::all_comments(editor.text()).len() + editor.pending_areas().len()
+    }
+
+    /// The feed of the note in the active pane: its comments and its pending changes, in the order the view
+    /// lists them. Empty for a file or a list page, which have none.
     pub(super) fn review_feed(&self, cx: &App) -> Vec<Item> {
         let pane = self.pane();
         if pane.file.is_some() || pane.listing.is_some() {
@@ -150,6 +220,8 @@ impl Shell {
         let text = editor.text();
         let areas = editor.pending_areas();
         let hidden = feed::hidden(&areas);
+        // One numbering for the whole feed: the file's lines, the marks and added lines left out.
+        let lines = crate::logic::lines::FileLines::new(text, &hidden);
         let heads = feed::headings(text);
         let section = |at: usize| feed::section(&heads, at).map(rank::plain_line);
         let mut items = Vec::new();
@@ -171,7 +243,7 @@ impl Shell {
                 author: note.author.clone(),
                 kind: feed::Kind::Comment,
                 section: section(note.at),
-                line: feed::file_line(text, note.at, &hidden),
+                line: lines.line_of(note.at),
                 said: note.said.to_string(),
                 body: Body::Comment {
                     noted: note.noted.to_string(),
@@ -200,7 +272,7 @@ impl Shell {
                     .filter(|author| !author.trim().is_empty()),
                 kind: feed::change_kind(&old, &new),
                 section: section(area.range.start),
-                line: feed::file_line(text, area.range.start, &hidden),
+                line: lines.line_of(area.range.start),
                 // The line breaks at the end of a side are not lines of the card.
                 said: match new.is_empty() {
                     true => old.trim_end().to_string(),
@@ -245,7 +317,7 @@ impl Shell {
         format!(
             "{} · {} {}",
             self.tool_title(Mode::Review),
-            self.review_items.len(),
+            self.review_total,
             tr("open", "ouverts")
         )
     }
@@ -410,7 +482,7 @@ impl Shell {
             (Body::Comment { .. }, true) => {
                 tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string()
             }
-            _ => item.said.clone(),
+            _ => shown_text(&item.said),
         };
         div()
             .flex()
@@ -459,7 +531,7 @@ impl Shell {
                     true => {
                         tr("(nothing written yet)", "(rien d'écrit pour l'instant)").to_string()
                     }
-                    false => item.said.clone(),
+                    false => shown_text(&item.said),
                 };
                 let quote = rank::plain_line(noted);
                 let mut body = div().flex().flex_col().gap(t.px(8.));
@@ -523,7 +595,7 @@ impl Shell {
                                     .text_size(t.px(13.))
                                     .line_height(t.px(19.))
                                     .text_color(t.text)
-                                    .child(reply.text.clone()),
+                                    .child(shown_text(&reply.text)),
                             ),
                     );
                 }

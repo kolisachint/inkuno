@@ -76,6 +76,8 @@ pub(super) struct Pane {
     /// The pending changes saved beside the note (`sidecar::read`), read with `orphans`: they carry the
     /// time each change was proposed, which the Review feed orders by.
     pub(super) pending_saved: Vec<inkuno_logic::pending::Entry>,
+    /// Counts up each time `pending_saved` is read again: the Review feed is kept while it holds.
+    pub(super) saved_version: u64,
     /// The note's file as last read or written here: what another program changed since is
     /// merged into what is typed (`Shell::take_outside`), not overwritten.
     pub(super) base: String,
@@ -207,8 +209,18 @@ impl Pane {
 
 impl Shell {
     /// An empty pane: a new note in its editor.
-    pub(super) fn new_pane(theme: Theme, window: &mut Window, cx: &mut Context<Self>) -> Pane {
-        let editor = cx.new(|cx| Editor::new(theme, cx));
+    /// `author` is who the comments written in the pane are by: every pane gets the revisions' author.
+    pub(super) fn new_pane(
+        theme: Theme,
+        author: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Pane {
+        let editor = cx.new(|cx| {
+            let mut editor = Editor::new(theme, cx);
+            editor.set_author(author);
+            editor
+        });
         cx.subscribe_in(&editor, window, Self::on_editor_event)
             .detach();
         Pane {
@@ -226,6 +238,7 @@ impl Shell {
             dirty: false,
             orphans: 0,
             pending_saved: Vec::new(),
+            saved_version: 0,
             base: String::new(),
             listing: None,
             peek: false,
@@ -352,7 +365,10 @@ impl Shell {
         if self.nav.panel == Panel::Full {
             self.nav.panel = Panel::Split;
         }
-        let (group, pane) = (self.group(), Self::new_pane(self.theme, window, cx));
+        let (group, pane) = (
+            self.group(),
+            Self::new_pane(self.theme, self.revision_author(), window, cx),
+        );
         self.panes.push(pane);
         let tab = self.panes.len() - 1;
         self.split_off(group, side, tab);
@@ -610,7 +626,7 @@ impl Shell {
     /// A new tab in the active pane, right of the one shown, on a new note; it gets input.
     pub(super) fn add_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let group = self.group();
-        let pane = Self::new_pane(self.theme, window, cx);
+        let pane = Self::new_pane(self.theme, self.revision_author(), window, cx);
         self.panes.push(pane);
         let tab = self.panes.len() - 1;
         let at = self.groups[group]
@@ -967,7 +983,7 @@ impl Shell {
                     tree.remove(kept);
                     continue;
                 }
-                let pane = Self::new_pane(self.theme, window, cx);
+                let pane = Self::new_pane(self.theme, self.revision_author(), window, cx);
                 self.panes.push(pane);
                 self.active = self.panes.len() - 1;
                 self.groups.push(Group::of(self.active));

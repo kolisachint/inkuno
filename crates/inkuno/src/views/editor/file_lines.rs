@@ -24,11 +24,13 @@ impl Editor {
         (right - column >= self.viewport.left()).then_some(right)
     }
 
-    /// The file line a row carries, if it has a number: a shown row that begins a line of the note. The rest of a
-    /// wrapped line, a hidden row and a collapsed blank line (9 px, nothing drawn) carry none (`app-ui.md` §23.7).
+    /// The file line a row carries, if it has a number: a shown row that begins a line of the file. The rest of a
+    /// wrapped line, a hidden row, a mark or added line of a pending change, and a collapsed blank line (9 px,
+    /// nothing drawn) carry none (`app-ui.md` §23.7).
     pub(super) fn file_line_of(&self, row: &Row) -> Option<usize> {
-        (!row.hidden() && !row.collapsed && self.lines.1.starts_line(row.start))
-            .then(|| self.lines.1.number_at(row.start))
+        (!row.hidden() && !row.collapsed)
+            .then(|| self.lines.1.number_of_line(row.start))
+            .flatten()
     }
 
     /// The file line numbers the gutter shows, top to bottom, for the rows laid out: none while the setting is off.

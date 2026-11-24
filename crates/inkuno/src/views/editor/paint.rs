@@ -220,7 +220,7 @@ impl Editor {
         let (t, o, w) = (self.theme, self.origin, self.width);
         let cursor = self.cursor();
         let numbers = self.line_numbers_right(window);
-        let cursor_line = self.lines.1.number_at(cursor);
+        let cursor_line = self.lines.1.line_of(cursor);
         let sel = &self.sel;
         let label = |text: &str, color, window: &mut Window| {
             let run = TextRun {

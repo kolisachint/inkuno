@@ -25,7 +25,7 @@ mod style;
 mod table;
 mod toolbar;
 
-use crate::logic::lines::LineIndex;
+use crate::logic::lines::FileLines;
 use grid::TableRow;
 
 pub use blocks::*;
@@ -423,7 +423,7 @@ pub struct Editor {
     /// layout is reused as is, for a plain scroll.
     version: u64,
     /// The lines of the text, for the file line numbers of the gutter: rebuilt when `version` moves (see `place`).
-    lines: (u64, LineIndex),
+    lines: (u64, FileLines),
     /// Counts text changes, and only them: an image that loads or a theme that changes does not move it.
     revision: u64,
     /// The `revision` the lines in `rows` were laid out for: pointer events between an edit and the next
@@ -565,7 +565,7 @@ impl Editor {
             theme,
             rows: Vec::new(),
             version: 0,
-            lines: (u64::MAX, LineIndex::new("")),
+            lines: (u64::MAX, FileLines::default()),
             revision: 0,
             rows_revision: 0,
             corner: 1,
@@ -606,6 +606,17 @@ impl Editor {
 
     pub fn text(&self) -> &str {
         &self.content
+    }
+
+    /// The text's version: it moves with every change of the text, the pending changes included.
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// Who the comments written here are by (`set_author`).
+    #[cfg(test)]
+    pub fn author(&self) -> &str {
+        &self.author
     }
 
     /// Makes the note read-only (a comparison) or editable again. A read-only note refuses every change.

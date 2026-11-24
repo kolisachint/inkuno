@@ -936,6 +936,16 @@ impl Shell {
                 .editor
                 .update(cx, |editor, cx| editor.absorb(&[edit], cx));
         }
+        // The proposal's changes wait in the note until it is saved. Their list is read now, as the save would
+        // read it, so the feed shows each with the time it was proposed, not untimed until the save.
+        if let Some(path) = self.panes[pane].path.clone()
+            && let Some(home) = history::home_of(&path, self.vault.as_deref())
+        {
+            let (_, entries) = platform::sidecar::split(Some(&home), &path, marked, "assistant");
+            let pane = &mut self.panes[pane];
+            pane.pending_saved = entries;
+            pane.saved_version += 1;
+        }
     }
 
     /// Writes the agent's proposal into its note as pending changes: one undo step when a tab shows

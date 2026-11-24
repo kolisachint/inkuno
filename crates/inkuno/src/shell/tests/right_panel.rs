@@ -215,3 +215,29 @@ fn the_switcher_sits_in_the_band_at_the_default_width(cx: &mut TestAppContext) {
     );
     let _ = fs::remove_dir_all(root);
 }
+
+#[gpui::test]
+fn the_switcher_goes_beside_the_window_buttons_by_the_scaled_width(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("panel-scale", cx);
+    // The switcher's room is 274 px at the default scale and 411 px at 1.5: at 280 px the panel holds it
+    // in the band at the default scale only; scaled up, its own row shows under the band.
+    let default = crate::logic::prefs::Prefs::SIZE;
+    for (scale, under) in [(1.0, false), (1.5, true)] {
+        shell.update_in(cx, |s, window, cx| {
+            s.prefs.size = default * scale;
+            s.restyle(window, cx);
+        });
+        cx.simulate_keystrokes("secondary-alt-1");
+        settle(cx);
+        assert_eq!(
+            cx.debug_bounds("switch-row").is_some(),
+            under,
+            "at scale {scale} the switcher is under the band: {under}"
+        );
+    }
+    shell.update_in(cx, |s, window, cx| {
+        s.prefs.size = default;
+        s.restyle(window, cx);
+    });
+    let _ = fs::remove_dir_all(root);
+}

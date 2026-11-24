@@ -30,8 +30,10 @@ impl Shell {
                 Some((saved, count))
             })
             .unwrap_or_default();
-        self.pane_mut().orphans = count;
-        self.pane_mut().pending_saved = saved;
+        let pane = self.pane_mut();
+        pane.orphans = count;
+        pane.pending_saved = saved;
+        pane.saved_version += 1;
     }
 
     /// Discard: the orphans of the note in the pane leave its list beside it. The text is not touched,
