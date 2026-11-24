@@ -29,7 +29,7 @@ impl Shell {
     /// The debounced save: an existing note is written in the background (`start_quiet_save`), the other
     /// panes are flushed as before. A note whose background save is still running is left to it: when
     /// that ends, it saves what was typed meanwhile.
-    fn flush_debounced(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn flush_debounced(&mut self, cx: &mut Context<Self>) {
         self.each_pane(|this| {
             if this.pane().saving.is_some() {
                 return;
