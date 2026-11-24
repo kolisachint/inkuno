@@ -1991,7 +1991,9 @@ impl Shell {
         // views before them; narrower, the switcher is a row under the band.
         let switch = right && first;
         let switcher = switch.then(|| self.switcher(cx));
-        let beside = f32::from(self.nav.right_w) >= 8. + 142. + PILL_ROOM + 28.;
+        // Beside the window buttons when the switcher (142 px, after the 8 px pad) and the room the header keeps
+        // free at its right end (PILL_ROOM) fit: from 274 px, so the default 280 px panel holds it in the band.
+        let beside = f32::from(self.nav.right_w) >= 8. + 142. + PILL_ROOM;
         let (inline, under) = match beside {
             true => (switcher, None),
             false => (None, switcher),

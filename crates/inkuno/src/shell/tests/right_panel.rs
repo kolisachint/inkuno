@@ -181,3 +181,34 @@ fn the_switcher_is_clear_of_the_window_buttons_at_any_panel_width(cx: &mut TestA
     }
     let _ = fs::remove_dir_all(root);
 }
+
+#[gpui::test]
+fn the_switcher_sits_in_the_band_at_the_default_width(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("panel-band", cx);
+    // The default width (PANEL_W, 280 px): the switcher has the band's row, with no row of its own under it,
+    // and the view's head starts right under the band, so the band holds no dead row.
+    cx.simulate_keystrokes("secondary-alt-1");
+    settle(cx);
+    assert_eq!(shown(&shell, cx), [Mode::Outline]);
+    let dock = cx.debug_bounds("dock-right").expect("the panel is drawn");
+    let switch = cx
+        .debug_bounds("switch-outline")
+        .expect("the switcher is drawn");
+    let head = cx
+        .debug_bounds("view-head-outline")
+        .expect("the view's head is drawn");
+    assert!(
+        cx.debug_bounds("switch-row").is_none(),
+        "no switcher row under the band at the default width"
+    );
+    let band = f32::from(dock.top()) + crate::ui::theme::BAND;
+    assert!(
+        f32::from(switch.bottom()) <= band,
+        "the switcher {switch:?} is in the band, which ends at {band}"
+    );
+    assert!(
+        f32::from(head.top()) <= band + 1.,
+        "the view's head {head:?} starts under the band, not under a dead row"
+    );
+    let _ = fs::remove_dir_all(root);
+}
