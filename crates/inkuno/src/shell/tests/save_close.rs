@@ -475,3 +475,99 @@ fn a_rename_of_a_note_that_links_to_itself_keeps_its_new_title(cx: &mut TestAppC
     );
     let _ = fs::remove_dir_all(root);
 }
+
+/// The 400 ms pause saves an existing note in the background; the file then holds what was typed and
+/// nothing is left dirty.
+#[gpui::test]
+fn a_debounced_save_writes_the_typed_text_and_leaves_nothing_dirty(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-save");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" ajout");
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal");
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(&plan).unwrap(),
+        "# Plan\n\noriginal ajout"
+    );
+    assert!(shell.read_with(cx, |s, _| {
+        let pane = s.pane();
+        !pane.dirty && pane.saving.is_none() && pane.base == "# Plan\n\noriginal ajout"
+    }));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Another program writes the note before the pause is over: its section is merged with the typed
+/// text, as the synchronous save merges it, and the note is clean.
+#[gpui::test]
+fn an_outside_write_before_the_debounced_save_is_merged(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-outside");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\nPremière ligne\nDeuxième ligne\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &plan);
+    let at = shell.read_with(cx, |s, cx| {
+        s.pane()
+            .editor
+            .read(cx)
+            .text()
+            .find("Première ligne")
+            .unwrap()
+            + "Première ligne".len()
+    });
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
+    });
+    cx.simulate_input(" tapée");
+    fs::write(
+        &plan,
+        "# Plan\n\nPremière ligne\nDeuxième ligne\n\n## Agent\n",
+    )
+    .unwrap();
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    let both = "# Plan\n\nPremière ligne tapée\nDeuxième ligne\n\n## Agent\n";
+    assert_eq!(fs::read_to_string(&plan).unwrap(), both);
+    assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text() == both));
+    // The merge's own change is saved by the next pause, which leaves the note clean.
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), both);
+    assert!(shell.read_with(cx, |s, _| !s.pane().dirty));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A background save that cannot write keeps the text and reports it; the next close writes it.
+#[gpui::test]
+fn a_failed_debounced_save_keeps_the_text_for_the_next_save(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-failed");
+    let anchor = root.join("Anchor.md");
+    let plan = root.join("Plan.md");
+    fs::write(&anchor, "# Anchor\n").unwrap();
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &anchor);
+    open(&shell, cx, &plan);
+    // Notes save through `.<stem>.tmp`: a folder there blocks the write.
+    let block = root.join(".Plan.tmp");
+    fs::create_dir(&block).unwrap();
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" ajout");
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal");
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "Plan")));
+    assert!(shell.read_with(cx, |s, _| s.pane().dirty));
+    fs::remove_dir(&block).unwrap();
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(&plan).unwrap(),
+        "# Plan\n\noriginal ajout"
+    );
+    let _ = fs::remove_dir_all(root);
+}
