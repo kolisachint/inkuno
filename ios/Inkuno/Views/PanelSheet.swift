@@ -392,15 +392,3 @@ enum PanelTab: String, CaseIterable, Identifiable {
         }
     }
 }
-
-private extension VaultStore {
-    /// Notes whose body links to `note`: a `[[Name]]` wiki link or a relative link to its file.
-    /// ponytail: alias resolution and the link index live in the Rust core (`wiki.rs`).
-    func backlinks(to note: URL) throws -> [(url: URL, title: String)] {
-        let title = note.deletingPathExtension().lastPathComponent
-        let bodies = try allNotes().map { entry -> (url: URL, title: String, body: String) in
-            (entry.url, entry.title, (try? readNote(at: entry.url)) ?? "")
-        }
-        return BacklinkScan.backlinks(to: title, fileName: note.lastPathComponent, selfURL: note, notes: bodies)
-    }
-}

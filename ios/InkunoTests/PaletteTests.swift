@@ -1,32 +1,37 @@
 import Foundation
+import InkunoCore
 import XCTest
 @testable import Inkuno
 
-/// Palette ranking: empty query shows recent, fuzzy name match beats body contains,
-/// mirroring `crates/inkuno-logic/src/rank.rs`.
+/// Palette ranking and search, through the core (`rank.rs` `fuzzy`, `search`, `snippet_line`).
 final class PaletteTests: XCTestCase {
+    /// The core scores folded text, as the palette passes it.
+    private func score(_ query: String, _ name: String) -> Int32? {
+        fuzzyScore(query: foldText(text: query), name: foldText(text: name))
+    }
+
     func testEmptyQueryMatchesEverything() {
-        XCTAssertNotNil(PaletteRank.fuzzy(query: "", name: "Courses"))
+        XCTAssertNotNil(score("", "Courses"))
     }
 
     func testSubstringBeatsSubsequenceAndEarlierBeatsLater() {
-        let courses = PaletteRank.fuzzy(query: "cou", name: "courses")!
-        let lesCourses = PaletteRank.fuzzy(query: "cou", name: "les courses")!
+        let courses = score("cou", "courses")!
+        let lesCourses = score("cou", "les courses")!
         XCTAssertGreaterThan(courses, lesCourses)
 
-        let sub = PaletteRank.fuzzy(query: "crs", name: "courses")
-        let full = PaletteRank.fuzzy(query: "ours", name: "courses")
+        let sub = score("crs", "courses")
+        let full = score("ours", "courses")
         XCTAssertNotNil(sub)
         XCTAssertGreaterThan(full!, sub!)
     }
 
     func testNoMatchIsNil() {
-        XCTAssertNil(PaletteRank.fuzzy(query: "xyz", name: "courses"))
+        XCTAssertNil(score("xyz", "courses"))
     }
 
     func testFoldsAccents() {
-        XCTAssertEqual(PaletteRank.fold("Thème Été"), "theme ete")
-        XCTAssertNotNil(PaletteRank.fuzzy(query: "theme", name: "Thème"))
+        XCTAssertEqual(foldText(text: "Thème Été"), "theme ete")
+        XCTAssertNotNil(score("theme", "Thème"))
     }
 
     func testCommandsFilter() {
@@ -49,11 +54,20 @@ final class PaletteTests: XCTestCase {
         XCTAssertTrue(none.map(\.title).contains("Restore from Trash"))
     }
 
-    func testSnippetsShowTheMatchingLine() {
-        XCTAssertEqual(
-            PaletteSheet.snippet(in: "# Plan\n\n- [ ] **Book** the flight\n", query: "book"),
-            "- [ ] **Book** the flight"
-        )
-        XCTAssertNil(PaletteSheet.snippet(in: "nothing here\n", query: "book"))
+    func testSearchListsNamesThenTextWithTheMatchingLine() {
+        let index = VaultIndex(notes: [
+            NoteInput(path: "courses.md", body: "- lait", mtimeUnix: 0),
+            NoteInput(path: "Notes.md", body: "# Plan\n\n- [ ] **Book** the flight\n", mtimeUnix: 0),
+        ])
+
+        let byName = index.search(query: "cou", limit: 10)
+        XCTAssertEqual(byName.map(\.name), ["courses"])
+        XCTAssertEqual(byName.first?.kind, .byName)
+
+        let byText = index.search(query: "book", limit: 10)
+        XCTAssertEqual(byText.map(\.name), ["Notes"])
+        XCTAssertEqual(byText.first?.kind, .byText)
+        XCTAssertEqual(byText.first?.snippet?.text.contains("Book"), true)
+        XCTAssertTrue(index.search(query: "nothing", limit: 10).isEmpty)
     }
 }

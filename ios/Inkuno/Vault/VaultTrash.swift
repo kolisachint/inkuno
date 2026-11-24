@@ -4,12 +4,12 @@ import Observation
 
 // MARK: - Vault operations: Trash, rename/move/duplicate, versions, pending review
 //
-// Mirrors the desktop's on-disk behavior (nothing is destroyed or overwritten):
-// - Trash is the vault's `.trash` folder (`platform/vault.rs` `trash`, `trashed`, `restore`).
-// - A version lives in `.inkuno/revisions/<note-rel-path>/NNNN.md` (`platform/revisions.rs`).
-// - Pending changes live in `.inkuno/pending/<note-rel-path>.json` (`platform/sidecar.rs`).
-// ponytail: the Rust core (InkunoCore via UniFFI) will own naming, history and pending rules;
-// this extension is the Swift bridge until then.
+// Mirrors the desktop's on-disk behavior (nothing is destroyed or overwritten). The paths, names,
+// version files and pending lists are the Rust core's (InkunoCore); this extension does the file IO:
+// - Trash is the vault's `.trash` folder, its history and pending lists wait in `.inkuno/trash` and
+//   `.inkuno/pending-trash`.
+// - A version lives in `.inkuno/revisions/<note-rel-path>/NNNN.md`.
+// - Pending changes live in `.inkuno/pending/<note-rel-path>.json`.
 
 extension VaultStore {
     // MARK: Layout
@@ -75,8 +75,10 @@ extension VaultStore {
         guard let root = vaultURL, let bin = trashDir else { throw VaultError.noVault }
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         let free = bin.appendingPathComponent(trashName(name: url.lastPathComponent, taken: Self.names(in: bin)))
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: free)
         moveAsideHistoryAndPending(from: url, trashedName: free.lastPathComponent, root: root)
+        indexRemoved(at: url, isFolder: isFolder)
         return free
     }
 
@@ -93,8 +95,14 @@ extension VaultStore {
             n == 1 ? root.appendingPathComponent("\(stem)\(ext)")
                    : root.appendingPathComponent("\(stem) \(n)\(ext)")
         }.first { !FileManager.default.fileExists(atPath: $0.path) }!
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: free)
         restoreHistoryAndPending(trashedName: url.lastPathComponent, to: free, root: root)
+        if isFolder {
+            indexRemoved(at: url, isFolder: true)
+        } else {
+            indexNote(at: free, text: (try? readNote(at: free)) ?? "")
+        }
         return free
     }
 
@@ -116,8 +124,10 @@ extension VaultStore {
         guard !FileManager.default.fileExists(atPath: target.path),
               !FileManager.default.fileExists(atPath: Self.placeholderURL(for: target).path)
         else { throw VaultError.nameTaken(target) }
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: target)
         moveAlongHistoryAndPending(from: url, to: target)
+        indexMoved(from: url, to: target, isFolder: isFolder)
         return target
     }
 
@@ -129,8 +139,10 @@ extension VaultStore {
         guard !FileManager.default.fileExists(atPath: target.path),
               !FileManager.default.fileExists(atPath: Self.placeholderURL(for: target).path)
         else { throw VaultError.nameTaken(target) }
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: target)
         moveAlongHistoryAndPending(from: url, to: target)
+        indexMoved(from: url, to: target, isFolder: isFolder)
         return target
     }
 
@@ -147,6 +159,7 @@ extension VaultStore {
         }.first { !FileManager.default.fileExists(atPath: $0.path) }!
         let data = try coordinateRead(url) { try Data(contentsOf: $0) }
         try coordinateWrite(free) { try data.write(to: $0, options: .withoutOverwriting) }
+        indexNote(at: free, text: String(decoding: data, as: UTF8.self))
         return free
     }
 
@@ -439,6 +452,17 @@ extension VaultStore {
             try? FileManager.default.moveItem(at: slot, to: aside)
         }
         try? FileManager.default.moveItem(at: src, to: slot)
+    }
+
+    /// Whether `url` is a folder (the URL of a listed folder or a file that may have gone).
+    static func isFolder(_ url: URL) -> Bool {
+        url.hasDirectoryPath || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
+    /// Keeps the index current after `url` moved to `target` (a folder's notes are indexed again on use).
+    func indexMoved(from url: URL, to target: URL, isFolder: Bool) {
+        indexRemoved(at: url, isFolder: isFolder)
+        if !isFolder { indexNote(at: target, text: (try? readNote(at: target)) ?? "") }
     }
 
     /// The names of the entries of a folder (empty when it cannot be read).

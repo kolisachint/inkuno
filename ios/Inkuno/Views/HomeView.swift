@@ -1,3 +1,4 @@
+import InkunoCore
 import SwiftUI
 
 /// The stack root: Today, New note, Search and Notes, then recall cards from a month ago.
@@ -7,7 +8,7 @@ struct HomeView: View {
     @Binding var path: [Route]
     @Binding var showPalette: Bool
 
-    @State private var recall: [VaultEntry] = []
+    @State private var recall: [RecalledNote] = []
     @State private var error: String?
 
     private let columns = [
@@ -34,6 +35,7 @@ struct HomeView: View {
         .navigationTitle("Inkuno")
         .navigationBarTitleDisplayMode(.large)
         .refreshable {
+            try? vault.rebuildIndex()
             reloadRecall()
             showPalette = true
         }
@@ -116,17 +118,17 @@ struct HomeView: View {
     private var recallCards: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: InkMetrics.gridGap) {
-                ForEach(recall) { entry in
+                ForEach(recall, id: \.path) { note in
                     Button {
-                        path.append(.note(entry.url))
+                        if let url = vault.noteURL(path: note.path) { path.append(.note(url)) }
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(entry.title)
+                            Text(note.name)
                                 .font(InkType.rowTitle)
                                 .foregroundStyle(InkColor.ink)
                                 .lineLimit(2)
                             Spacer(minLength: 0)
-                            Text(InkFormat.age(entry.modified))
+                            Text(ago(days: note.days))
                                 .font(InkType.caption)
                                 .foregroundStyle(InkColor.faint)
                         }
@@ -163,7 +165,7 @@ struct HomeView: View {
     }
 
     private func reloadRecall() {
-        recall = (try? vault.recallNotes()) ?? []
+        recall = (try? vault.recalledNotes()) ?? []
     }
 
     private func perform(_ work: () throws -> Void) {
