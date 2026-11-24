@@ -53,6 +53,7 @@ final class MarkdownEditorController: NSObject {
     private func makeTextView() -> EditorTextView {
         let view = EditorTextView(usingTextLayoutManager: true)
         view.delegate = self
+        view.accessibilityIdentifier = "editor.text"
         view.backgroundColor = UIColor(InkColor.sheet)
         view.textContainerInset = UIEdgeInsets(top: 12, left: 0, bottom: 24, right: 0)
         view.textContainer.lineFragmentPadding = 0

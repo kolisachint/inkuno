@@ -96,15 +96,34 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Inkuno.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Inkuno"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
+  # End-to-end walk of the v1 screens on a seeded vault (Fixtures/vault), with screenshots.
+  # Run ios/InkunoUITests/export-screenshots.sh to save the screenshots out of the result bundle.
+  InkunoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: InkunoUITests
+        excludes:
+          - Fixtures/**
+    dependencies:
+      - target: Inkuno
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inkuno.InkunoUITests
+        TEST_TARGET_NAME: Inkuno
+
 schemes:
   Inkuno:
     build:
       targets:
         Inkuno: all
         InkunoTests: [test]
+        InkunoUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - InkunoTests
+        - InkunoUITests

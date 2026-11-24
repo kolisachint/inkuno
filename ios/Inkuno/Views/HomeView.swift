@@ -110,20 +110,21 @@ struct HomeView: View {
         .padding(.horizontal, InkMetrics.cardMarginH)
         .padding(.top, 8)
         .padding(.bottom, InkMetrics.cardMarginBottom)
+        .accessibilityIdentifier("home.write")
     }
 
     private var tiles: some View {
         LazyVGrid(columns: columns, spacing: InkMetrics.gridGap) {
-            tile("Today", subtitle: todaySubtitle, systemImage: "calendar") { openToday() }
-            tile("New note", subtitle: "In Notes", systemImage: "square.and.pencil") { newNote() }
-            tile("Search", subtitle: "Or pull down", systemImage: "magnifyingglass") { showPalette = true }
-            tile("Notes", subtitle: Self.notesSubtitle(count: noteCount), systemImage: "folder") { openNotes() }
+            tile("Today", subtitle: todaySubtitle, systemImage: "calendar", id: "today") { openToday() }
+            tile("New note", subtitle: "In Notes", systemImage: "square.and.pencil", id: "newNote") { newNote() }
+            tile("Search", subtitle: "Or pull down", systemImage: "magnifyingglass", id: "search") { showPalette = true }
+            tile("Notes", subtitle: Self.notesSubtitle(count: noteCount), systemImage: "folder", id: "notes") { openNotes() }
         }
         .padding(.horizontal, InkMetrics.cardMarginH)
         .padding(.bottom, InkMetrics.cardMarginBottom)
     }
 
-    private func tile(_ title: String, subtitle: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func tile(_ title: String, subtitle: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
                 Image(systemName: systemImage)
@@ -145,6 +146,7 @@ struct HomeView: View {
             .background(InkColor.sheet, in: RoundedRectangle(cornerRadius: InkRadius.card, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("home.tile.\(id)")
     }
 
     private var recallCards: some View {

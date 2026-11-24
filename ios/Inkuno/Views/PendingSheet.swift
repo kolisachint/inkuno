@@ -10,7 +10,9 @@ struct PendingPill: View {
     @State private var count = 0
 
     var body: some View {
-        Group {
+        // A VStack, not a Group: a Group with no child never appears, so its `.task` would never
+        // load the count and the pill would stay hidden.
+        VStack(spacing: 0) {
             if count > 0 {
                 Button(action: onReview) {
                     Text("\(count) change\(count == 1 ? "" : "s") · Review")
