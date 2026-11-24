@@ -23,8 +23,39 @@ enum MarkdownGlyph: Int {
 }
 
 extension NSAttributedString.Key {
+    /// On the characters of a table row off the caret: a `TableRowMark`.
+    static let inkTableRow = NSAttributedString.Key("inkuno.tableRow")
     /// On the character of a bullet or task glyph: the `MarkdownGlyph` raw value (an `NSNumber`).
     static let inkunoGlyph = NSAttributedString.Key("inkuno.glyph")
+}
+
+/// Where a row sits in its table, and how wide the table is. `MarkdownStyler` sets it on every row that is drawn
+/// (the delimiter row collapses and has none); `MarkdownLayoutFragment` draws the header fill, the rules and the
+/// border from it. The table's first row is its header, its last row is `isLast`.
+final class TableRowMark: NSObject {
+    let isHeader: Bool
+    let isLast: Bool
+    /// The table's width in points: the rules and the border span it.
+    let width: CGFloat
+
+    init(isHeader: Bool, isLast: Bool, width: CGFloat) {
+        self.isHeader = isHeader
+        self.isLast = isLast
+        self.width = width
+    }
+
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? TableRowMark else { return false }
+        return other.isHeader == isHeader && other.isLast == isLast && other.width == width
+    }
+
+    override var hash: Int {
+        var hasher = Hasher()
+        hasher.combine(isHeader)
+        hasher.combine(isLast)
+        hasher.combine(width)
+        return hasher.finalize()
+    }
 }
 
 /// Hands every paragraph to `MarkdownLayoutFragment`, which draws the glyphs.

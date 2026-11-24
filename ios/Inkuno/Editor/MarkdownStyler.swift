@@ -286,12 +286,14 @@ struct MarkdownStyler {
     // MARK: Tables
 
     /// A table block off the caret line, drawn as a grid. The delimiter row (`| --- |`) collapses, and the outer
-    /// pipes are hidden. Each inner pipe is clear and keeps one character of width; its kern pads the cell before
-    /// it to the widest cell of its column, so the columns line up in the table's monospace font. The header row
-    /// is semibold on the header background, and each row has a rule under it.
+    /// pipes are hidden, with the spaces that follow the leading pipe. Each inner pipe is clear and keeps one
+    /// character of width; its kern pads the cell before it to the widest cell of its column, so the columns line
+    /// up in the table's monospace font. The header row is semibold. Each row carries a `TableRowMark` that
+    /// `MarkdownLayoutFragment` draws the background, the rules and the border from.
     // ponytail: the padding counts visible characters, so a wide character (CJK, emoji) or a smaller inline code
     // span misaligns its column. Lines are clipped at the edge of the text view: a wide table is cut off and
-    // cannot be scrolled, and cells are not editable in v1 (the caret on the table shows its raw Markdown).
+    // cannot be scrolled (a per-block scroll view is later), and cells are not editable in v1 (the caret on the
+    // table shows its raw Markdown).
     private func styleTable(_ block: ClosedRange<Int>, layouts: [LineLayout], text: NSString, storage: NSMutableAttributedString) {
         struct Row {
             let index: Int
@@ -302,6 +304,9 @@ struct MarkdownStyler {
             let hidden: [Bool]
             let pipes: [Int]
             let isDelimiter: Bool
+            /// The leading units that take no room: an outer leading pipe and the spaces after it, so the first
+            /// cell starts at the margin.
+            let lead: Int
         }
 
         var rows: [Row] = []
@@ -324,13 +329,25 @@ struct MarkdownStyler {
                     hidden[unit] = true
                 }
             }
+            let pipes = units.indices.filter { units[$0] == Self.pipe }
+            var lead = 0
+            if let first = pipes.first, units[..<first].allSatisfy(Self.isBlank) {
+                lead = first + 1
+                while lead < units.count, Self.isBlank(units[lead]) {
+                    lead += 1
+                }
+            }
+            for unit in 0..<lead {
+                hidden[unit] = true
+            }
             rows.append(Row(
                 index: index,
                 start: line.startUTF16,
                 units: units,
                 hidden: hidden,
-                pipes: units.indices.filter { units[$0] == Self.pipe },
-                isDelimiter: Self.isDelimiter(lineText)
+                pipes: pipes,
+                isDelimiter: Self.isDelimiter(lineText),
+                lead: lead
             ))
         }
         guard !rows.isEmpty else { return }
@@ -360,7 +377,13 @@ struct MarkdownStyler {
         /// An outer pipe: nothing but spaces lies between it and the line's edge.
         func isOuter(_ row: Row, pipe: Int, first: Bool) -> Bool {
             let rest = first ? row.units[..<pipe] : row.units[(pipe + 1)...]
-            return rest.allSatisfy { $0 == 32 || $0 == 9 }
+            return rest.allSatisfy(Self.isBlank)
+        }
+        /// The pipe at `column` is an outer pipe, drawn as nothing.
+        func isOuterPipe(_ row: Row, column: Int) -> Bool {
+            let pipe = row.pipes[column]
+            return (column == 0 && isOuter(row, pipe: pipe, first: true))
+                || (column == row.pipes.count - 1 && isOuter(row, pipe: pipe, first: false))
         }
 
         var widths: [Int] = []
@@ -370,9 +393,16 @@ struct MarkdownStyler {
                 widths[column] = max(widths[column], visibleWidth(row, span))
             }
         }
+        // The rules span the table: its padded cells, and one character for each inner pipe. A trailing outer pipe
+        // leaves a last cell of spaces, which is not counted.
+        let innerPipes = rows.map { row in row.pipes.indices.filter { !isOuterPipe(row, column: $0) }.count }.max() ?? 0
+        let trailing = rows.contains { row in !row.pipes.isEmpty && isOuterPipe(row, column: row.pipes.count - 1) }
+        let ruleUnits = widths.dropLast(trailing ? 1 : 0).reduce(0, +) + innerPipes
+        let ruleWidth = CGFloat(ruleUnits) * advance
 
         // The header is the first row when the second is the delimiter row.
         let header = rows.count > 1 && rows[1].isDelimiter ? rows[0].index : nil
+        let bodyRows = rows.filter { !$0.isDelimiter }
         for row in rows {
             let lineRange = NSRange(location: row.start, length: row.units.count)
             if row.isDelimiter {
@@ -381,8 +411,11 @@ struct MarkdownStyler {
                 storage.addAttributes(hiddenAttributes, range: whole)
                 continue
             }
+            let mark = TableRowMark(isHeader: row.index == header,
+                                    isLast: row.index == bodyRows.last?.index,
+                                    width: ruleWidth)
+            storage.addAttribute(.inkTableRow, value: mark, range: lineRange)
             if row.index == header {
-                storage.addAttribute(.backgroundColor, value: color(InkColor.tableHeader), range: lineRange)
                 // Semibold, keeping each run's size and the hidden markers hidden.
                 var runs: [(NSRange, UIFont)] = []
                 storage.enumerateAttribute(.font, in: lineRange) { value, range, _ in
@@ -392,18 +425,14 @@ struct MarkdownStyler {
                     storage.addAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: font.pointSize, weight: .semibold), range: range)
                 }
             }
-            storage.addAttributes([
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .underlineColor: color(InkColor.tableLine),
-            ], range: lineRange)
+            if row.lead > 0 {
+                storage.addAttributes(hiddenAttributes, range: NSRange(location: row.start, length: row.lead))
+            }
 
             let cells = spans(row)
-            let last = row.pipes.count - 1
             for (column, pipe) in row.pipes.enumerated() {
                 let range = NSRange(location: row.start + pipe, length: 1)
-                let outerLeading = column == 0 && isOuter(row, pipe: pipe, first: true)
-                let outerTrailing = column == last && isOuter(row, pipe: pipe, first: false)
-                if outerLeading || outerTrailing {
+                if isOuterPipe(row, column: column) {
                     storage.addAttributes(hiddenAttributes, range: range)
                     continue
                 }
@@ -419,6 +448,11 @@ struct MarkdownStyler {
     }
 
     private static let pipe: UInt16 = 124
+
+    /// A space or a tab.
+    private static func isBlank(_ unit: UInt16) -> Bool {
+        unit == 32 || unit == 9
+    }
 
     /// A delimiter row: dashes, colons, pipes and spaces, with at least one dash.
     private static func isDelimiter(_ line: String) -> Bool {
