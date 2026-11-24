@@ -303,13 +303,16 @@ impl Shell {
             .collect()
     }
 
-    /// The position of `key` among the children of the view's list, the draft card first.
+    /// The position of `key`'s card among the children of the view's list, the draft card first. A run of
+    /// changes is one card (`review_runs`), so the position is the card's, not the item's.
     fn review_child(&self, key: Key) -> Option<usize> {
         let draft = self.comment_draft.is_some() as usize;
-        self.review_visible()
+        let visible = self.review_visible();
+        let at = visible.iter().position(|item| item.key == key)?;
+        let card = review_runs(&visible)
             .iter()
-            .position(|item| item.key == key)
-            .map(|at| at + draft)
+            .position(|run| run.contains(&at))?;
+        Some(card + draft)
     }
 
     /// The view's head: `Review · N open`, N the items of the note's feed.
@@ -379,10 +382,13 @@ impl Shell {
             .gap(t.px(8.))
             .children(draft)
             .children(
-                items
+                review_runs(&items)
                     .into_iter()
                     .enumerate()
-                    .map(|(i, item)| self.review_card(i, item, cx)),
+                    .map(|(i, run)| match run.len() {
+                        1 => self.review_card(i, items[run.start], cx),
+                        _ => self.review_group(i, &items[run], cx),
+                    }),
             )
             .into_any_element()
     }
@@ -619,47 +625,191 @@ impl Shell {
                     ),
                 )
             }
-            Body::Change {
-                index, old, new, ..
-            } => {
-                let index = *index;
-                let mut body = div().flex().flex_col().gap(t.px(8.));
-                if !old.is_empty() {
-                    body = body.child(side(t, tr("Before", "Avant"), old, t.removed));
-                }
-                if !new.is_empty() {
-                    body = body.child(side(t, tr("After", "Après"), new, t.added));
-                }
-                body.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(t.px(6.))
-                        .child(
-                            button("review-accept", tr("Accept", "Accepter"), t)
-                                .h(t.px(24.))
-                                .px(t.px(9.))
-                                .text_size(t.px(12.))
-                                .bg(t.accent)
-                                .text_color(t.bg)
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    cx.stop_propagation();
-                                    this.review_decide(index, true, window, cx)
-                                })),
-                        )
-                        .child(
-                            button("review-reject", tr("Reject", "Refuser"), t)
-                                .h(t.px(24.))
-                                .px(t.px(9.))
-                                .text_size(t.px(12.))
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    cx.stop_propagation();
-                                    this.review_decide(index, false, window, cx)
-                                })),
-                        ),
-                )
-            }
+            Body::Change { .. } => self.change_detail(item, "review", cx),
         }
+    }
+
+    /// A change's two sides, and its Accept and Reject. `tag` names its buttons: `{tag}-accept`, `{tag}-reject`.
+    fn change_detail(&self, item: &Item, tag: &str, cx: &mut Context<Self>) -> Div {
+        let t = self.theme;
+        let Body::Change {
+            index, old, new, ..
+        } = &item.body
+        else {
+            return div();
+        };
+        let index = *index;
+        let mut body = div().flex().flex_col().gap(t.px(8.));
+        if !old.is_empty() {
+            body = body.child(side(t, tr("Before", "Avant"), old, t.removed));
+        }
+        if !new.is_empty() {
+            body = body.child(side(t, tr("After", "Après"), new, t.added));
+        }
+        body.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.px(6.))
+                .child(
+                    button(&format!("{tag}-accept"), tr("Accept", "Accepter"), t)
+                        .h(t.px(24.))
+                        .px(t.px(9.))
+                        .text_size(t.px(12.))
+                        .bg(t.accent)
+                        .text_color(t.bg)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.review_decide(index, true, window, cx)
+                        })),
+                )
+                .child(
+                    button(&format!("{tag}-reject"), tr("Reject", "Refuser"), t)
+                        .h(t.px(24.))
+                        .px(t.px(9.))
+                        .text_size(t.px(12.))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.review_decide(index, false, window, cx)
+                        })),
+                ),
+        )
+    }
+
+    /// One card for a run of changes proposed together (`review_runs`): "N changes", who and when. Collapsed, the
+    /// text of its first change. Expanded, each change with its own Accept and Reject, then Accept all and Reject
+    /// all for the N of the run.
+    fn review_group(&self, i: usize, run: &[&Item], cx: &mut Context<Self>) -> Stateful<Div> {
+        let t = self.theme;
+        let first = run[0];
+        let (key, at) = (first.key, first.at);
+        let open = self.review_open == Some(key);
+        let card = div()
+            .id(("review-group", at))
+            .debug_selector(move || format!("review-group-{i}"))
+            .flex()
+            .flex_col()
+            .gap(t.px(6.))
+            .px(t.px(10.))
+            .py(t.px(8.))
+            .rounded(t.card())
+            .border_1()
+            .border_color(if open { t.border } else { t.bg })
+            .when(open, |d| d.bg(t.panel))
+            .when(!open, |d| d.cursor_pointer().hover(|s| s.bg(t.hover)))
+            .child(self.group_head(run));
+        match open {
+            true => card.child(self.group_detail(run, cx)),
+            false => card.child(self.review_summary(first)).on_click(
+                cx.listener(move |this, _, window, cx| this.review_pick(key, window, cx)),
+            ),
+        }
+    }
+
+    /// The head of a group card: "N changes", the first change's author, and when they were proposed.
+    fn group_head(&self, run: &[&Item]) -> Div {
+        let t = self.theme;
+        let first = run[0];
+        let (name, initial) = name_of(&first.author);
+        div()
+            .flex()
+            .items_center()
+            .gap(t.px(6.))
+            .min_w_0()
+            .child(
+                div()
+                    .size(t.px(20.))
+                    .flex_none()
+                    .rounded_full()
+                    .bg(t.pill)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(t.px(11.))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(t.soft)
+                    .child(initial),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(t.px(12.))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(t.text)
+                    .child(format!("{} {}", run.len(), tr("changes", "modifications"))),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(t.px(11.))
+                    .text_color(t.dim)
+                    .child(name),
+            )
+            .child(div().flex_1())
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(t.px(11.))
+                    .text_color(t.dim)
+                    .child(first.time.as_deref().map(ago).unwrap_or_default()),
+            )
+    }
+
+    /// The expanded group: each change with its own Accept and Reject, then Accept all and Reject all for the run.
+    fn group_detail(&self, run: &[&Item], cx: &mut Context<Self>) -> Div {
+        let t = self.theme;
+        let n = run.len();
+        let at = run[0].at;
+        let indices: Vec<usize> = run
+            .iter()
+            .filter_map(|&item| match &item.body {
+                Body::Change { index, .. } => Some(*index),
+                Body::Comment { .. } => None,
+            })
+            .collect();
+        let mut body = div().flex().flex_col().gap(t.px(10.));
+        for &item in run {
+            body = body.child(self.change_detail(item, &format!("review-change-{}", item.at), cx));
+        }
+        let (accept, reject) = (indices.clone(), indices);
+        body.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.px(6.))
+                .child(
+                    button(
+                        &format!("review-group-{at}-accept-all"),
+                        format!("{} {n}", tr("Accept all", "Tout accepter")),
+                        t,
+                    )
+                    .h(t.px(24.))
+                    .px(t.px(9.))
+                    .text_size(t.px(12.))
+                    .bg(t.accent)
+                    .text_color(t.bg)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.review_decide_all(accept.clone(), true, window, cx)
+                    })),
+                )
+                .child(
+                    button(
+                        &format!("review-group-{at}-reject-all"),
+                        format!("{} {n}", tr("Reject all", "Tout refuser")),
+                        t,
+                    )
+                    .h(t.px(24.))
+                    .px(t.px(9.))
+                    .text_size(t.px(12.))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.review_decide_all(reject.clone(), false, window, cx)
+                    })),
+                ),
+        )
     }
 
     /// The reply field of the expanded comment, its hint while blank, and Reply (Enter sends too).
@@ -918,6 +1068,22 @@ impl Shell {
         cx.notify();
     }
 
+    /// Accept or Reject of several pending changes at once (a group's buttons), as one undo step.
+    fn review_decide_all(
+        &mut self,
+        indices: Vec<usize>,
+        accept: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let editor = self.pane().editor.clone();
+        editor.update(cx, |e, cx| e.decide_changes(&indices, accept, cx));
+        self.review_open = None;
+        self.review_reply = None;
+        window.focus(&editor.focus_handle(cx), cx);
+        cx.notify();
+    }
+
     /// Accept or Reject of the pending change `index`, as one undo step.
     fn review_decide(
         &mut self,
@@ -933,4 +1099,17 @@ impl Shell {
         window.focus(&editor.focus_handle(cx), cx);
         cx.notify();
     }
+}
+
+/// The cards of the visible feed items: a run of changes (`feed::runs`) is one card, every other item one card.
+fn review_runs(visible: &[&Item]) -> Vec<Range<usize>> {
+    let slots: Vec<feed::Slot> = visible
+        .iter()
+        .map(|item| feed::Slot {
+            change: matches!(item.body, Body::Change { .. }),
+            author: item.author.as_deref(),
+            time: item.time.as_deref(),
+        })
+        .collect();
+    feed::runs(&slots)
 }

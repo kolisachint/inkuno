@@ -33,6 +33,37 @@ pub fn sort<T>(items: &mut [T], time: impl Fn(&T) -> Option<&str>, at: impl Fn(&
     items.sort_by(|a, b| time(a).cmp(&time(b)).then_with(|| at(a).cmp(&at(b))));
 }
 
+/// What the grouping of a feed reads of one entry: whether it is a pending change, who by, and the minute it
+/// was proposed (`None` when it has none).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slot<'a> {
+    pub change: bool,
+    pub author: Option<&'a str>,
+    pub time: Option<&'a str>,
+}
+
+/// The runs of entries the feed shows, each as one card: a run is two or more pending changes in a row with the
+/// same author and the same proposal minute, both known (one Improve proposes them together). Every other entry
+/// is a run of its own. The runs cover `slots` in order.
+pub fn runs(slots: &[Slot]) -> Vec<Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < slots.len() {
+        let first = slots[start];
+        let mut end = start + 1;
+        if first.change && first.time.is_some() {
+            while slots.get(end).is_some_and(|next| {
+                next.change && next.time == first.time && next.author == first.author
+            }) {
+                end += 1;
+            }
+        }
+        out.push(start..end);
+        start = end;
+    }
+    out
+}
+
 /// The bytes of `areas` that the file does not hold: the marker lines and the added lines of each
 /// pending change. Its removed lines stay in the file.
 pub fn hidden(areas: &[Area]) -> Vec<Range<usize>> {
@@ -142,5 +173,44 @@ mod tests {
         let found = entry_of(&entries, "old", "new").expect("the entry");
         assert_eq!(found.created.as_deref(), Some("2026-11-24T10:02Z"));
         assert!(entry_of(&entries, "old", "other").is_none());
+    }
+
+    #[test]
+    fn a_run_of_changes_by_one_author_in_one_minute_is_one_card() {
+        let change = |author, time| Slot {
+            change: true,
+            author: Some(author),
+            time: Some(time),
+        };
+        let slots = [
+            change("assistant", "2026-11-24T10:02Z"),
+            change("assistant", "2026-11-24T10:02Z"),
+            change("assistant", "2026-11-24T10:02Z"),
+            change("Bo", "2026-11-24T10:02Z"),
+            change("Bo", "2026-11-24T10:09Z"),
+        ];
+        assert_eq!(runs(&slots), [0..3, 3..4, 4..5]);
+    }
+
+    #[test]
+    fn a_single_change_and_a_comment_are_not_grouped() {
+        let change = Slot {
+            change: true,
+            author: Some("assistant"),
+            time: Some("2026-11-24T10:02Z"),
+        };
+        let comment = Slot {
+            change: false,
+            author: Some("assistant"),
+            time: Some("2026-11-24T10:02Z"),
+        };
+        let untimed = Slot {
+            change: true,
+            author: Some("assistant"),
+            time: None,
+        };
+        assert_eq!(runs(&[change, comment, change]), [0..1, 1..2, 2..3]);
+        assert_eq!(runs(&[untimed, untimed]), [0..1, 1..2], "no time, no group");
+        assert!(runs(&[]).is_empty());
     }
 }

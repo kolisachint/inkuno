@@ -1365,6 +1365,10 @@ passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: r
 - Storage unchanged (§17): changes stay in `.inkuno/pending/<note>.json` in the vault and sync with it.
 - Each list entry gains `created`: the UTC time the change was proposed (`2026-11-24T10:02Z`). It is used only for feed order. `at` stays a text position.
 - Entries without `created` sort with untimed items (§23.2).
+- **A run is one card.** Two or more pending changes in a row with the same author and the same `created` minute (one
+  Improve proposes them together; `logic::review::runs`) show as one card, **N changes**, with the first change's text.
+  Expanded, each change has its own Accept and Reject, and **Accept all N** / **Reject all N** act on that run only
+  (`Editor::decide_changes`: applied last to first, one undo step; the others stay pending). The title's count stays per change.
 
 ### 23.6 Text
 
