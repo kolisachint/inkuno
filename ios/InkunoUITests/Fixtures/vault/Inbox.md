@@ -7,6 +7,6 @@ Quick captures for the week. Move a capture to [[Project Plan]] once it is a pro
 - Review [[Meeting Notes]] before Monday
 - [ ] Draft the launch checklist
 - [x] Send the invoice
-Plan the launch review<!-- comment: Sachin, 10:00: check this -->
+Plan the launch review<!-- comment @Sachin 2026-11-24T10:00Z: check this -->
 
 Due @2026-11-24. Tagged #work and #home.

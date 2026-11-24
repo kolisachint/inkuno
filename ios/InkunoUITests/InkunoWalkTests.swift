@@ -94,6 +94,7 @@ final class InkunoWalkTests: XCTestCase {
 
         segments.buttons["Comments"].tap()
         expect(app.staticTexts["check this"], "comment text")
+        expect(app.staticTexts["Sachin"], "comment author")
         expect(app.buttons["Resolve"], "comment Resolve button")
         shot("09-panel-comments")
 
