@@ -8,7 +8,7 @@ use std::{
 };
 
 use super::{clock, vault};
-use inkuno_logic::scratch;
+use inkuno_logic::{scratch, trash};
 
 /// The folder of the scratch notes: `inkuno/scratch` under the config folder of the platform.
 pub fn dir() -> PathBuf {
@@ -61,13 +61,7 @@ pub fn trash(path: &Path) -> io::Result<PathBuf> {
         .unwrap_or_default()
         .to_string_lossy()
         .into_owned();
-    let free = (1..)
-        .map(|n| match n {
-            1 => bin.join(&name),
-            n => bin.join(format!("{n} {name}")),
-        })
-        .find(|p| !p.exists())
-        .unwrap();
+    let free = bin.join(trash::name(&name, |c| bin.join(c).exists()));
     fs::rename(path, &free)?;
     Ok(free)
 }

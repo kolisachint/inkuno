@@ -21,4 +21,6 @@ pub mod rank;
 pub mod recall;
 pub mod revision;
 pub mod scratch;
+pub mod sidecar;
+pub mod trash;
 pub mod wiki;
