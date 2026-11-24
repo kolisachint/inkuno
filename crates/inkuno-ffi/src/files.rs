@@ -33,7 +33,10 @@ fn name_of(name: &str) -> Option<&str> {
 /// `.inkuno/revisions/`, so `ideas/plan.md` is `.inkuno/revisions/ideas/plan.md`.
 #[uniffi::export]
 pub fn revision_folder(note_path: String) -> Option<String> {
-    Some(format!(".inkuno/revisions/{}", parts_of(&note_path)?.join("/")))
+    Some(format!(
+        ".inkuno/revisions/{}",
+        parts_of(&note_path)?.join("/")
+    ))
 }
 
 /// The folder of the revisions of a scratch note, named `name`: `.revisions/<name>`.
@@ -56,7 +59,10 @@ pub fn pending_list_path(note_path: String) -> Option<String> {
 /// where `trashed name` is the name the item got in the trash (see `trash_name`).
 #[uniffi::export]
 pub fn trashed_pending_list_path(trashed_name: String) -> Option<String> {
-    Some(format!(".inkuno/pending-trash/{}.json", name_of(&trashed_name)?))
+    Some(format!(
+        ".inkuno/pending-trash/{}.json",
+        name_of(&trashed_name)?
+    ))
 }
 
 /// The vault's trash, where deleted notes and folders go: `.trash` at the root.

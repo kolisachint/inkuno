@@ -7,6 +7,7 @@
 //! (`*_utf16`), the unit UITextView counts in; `utf8_to_utf16` and `utf16_to_utf8` convert the
 //! rest. No function here touches the disk, a window or a clock: the dates are passed in.
 
+mod changes;
 mod editing;
 mod files;
 mod lines;
