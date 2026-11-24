@@ -246,3 +246,6 @@ Clickable iPhone prototype for the planned SwiftUI app (`v3-ios.html`, one self-
 - Mermaid and math: show as code blocks.
 - Focus mode and Backup (tar.gz).
 - Theme set beyond Light, Dark, System and Quiet.
+
+**Feedback (owner, 2026-11-24):** limited v1 scope approved as suggested above: every row marked
+Defer or Simplify stays out of v1. Next steps are in [`../ios.md`](../ios.md).
