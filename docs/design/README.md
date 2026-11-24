@@ -15,6 +15,8 @@ reverse (`CONTRIBUTING.md`).
   `app-ui.md` §11; if it disagrees with `defaults()`, code wins.
 - **Assistant v1 — `app-ui.md` §16** (owner-approved 2026-11-14): the round button and the right-dock
   panel; the process and `comment --file` are in `cli.md` (Decisions).
+- **`ios.md` — iPhone app.** Status, owner and build decisions, v1 scope and risks for the
+  native iPhone app (`ios/`, UniFFI over `inkuno-logic`); the iPhone UI itself is `app-ui.md` §23.
 - **`revisions.md` — saved versions.** The revision file format, where the
   history lives (`.inkuno/revisions/`), the diffs, and the dated decisions of
   idea refinement (2026-11-14).

@@ -1,7 +1,7 @@
 # Architecture
 
 Inkuno is a Cargo workspace built on [GPUI](https://www.gpui.rs/) (`gpui-pre` 0.3.14, pinned): the app is the
-crate `crates/inkuno`, the pure logic is `crates/inkuno-logic`, the outside world is `crates/inkuno-platform`, the look is `crates/inkuno-ui`, the read-only HTML viewer (`inkuno view`, tao + wry, no gpui, built when the `viewer` feature is on) is `crates/inkuno-view`, and the root manifest only lists them. This page is the
+crate `crates/inkuno`, the pure logic is `crates/inkuno-logic`, the outside world is `crates/inkuno-platform`, the look is `crates/inkuno-ui`, the read-only HTML viewer (`inkuno view`, tao + wry, no gpui, built when the `viewer` feature is on) is `crates/inkuno-view`, the UniFFI wrapper over the logic for the iPhone app is `crates/inkuno-ffi`, the native iPhone app (SwiftUI, xcodegen, not a Cargo crate) is `ios/`, and the root manifest only lists them. This page is the
 map: where things live, which way the dependencies go, and the rules the code keeps.
 
 Inkuno's home is github.com/kolisachint/inkuno.
@@ -34,6 +34,8 @@ shell ──► views ──► ui ──► logic
   │         │              ▲
   └─────────┴──► platform ─┘        lang, actions: usable everywhere
 cli ────────────► ui, logic, platform (and the shortcut table of shell/keymap)
+ffi ──► logic only (UniFFI wrapper `crates/inkuno-ffi`; no ui, no platform, no gpui)
+ios/ (SwiftUI) ──► ffi ──► logic (through the generated `InkunoCore` bindings; no direct Rust use)
 ```
 
 ![The layers of Inkuno and which ones each uses](../user/src/img/architecture-layers.svg)
@@ -108,6 +110,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | the command palette | `views/palette.rs`, `shell/palette_open.rs` |
 | a shortcut | `shell/keymap.rs` (`defaults`, `help_sections`), `crates/inkuno-ui/src/keys.rs` (how keys are read and shown) |
 | the test of a feature | `shell/tests/` (`end_to_end/` is one session, one file per chapter) |
+| the iPhone app (SwiftUI) and its Rust core | `ios/` (design in `docs/design/ios.md`, UI in `app-ui.md` §23); `crates/inkuno-ffi` (UniFFI wrapper over `inkuno-logic`; logic only) |
 | the user guide | `docs/user/src/` (an mdBook); `shortcuts.md` is written from `help_sections` by the test `shortcuts_page_is_current` |
 
 ## How the main parts work

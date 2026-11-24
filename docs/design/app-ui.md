@@ -1368,3 +1368,48 @@ passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: r
 - Washed out: the theme's faint text colour, about 0.85× body size, right-aligned. The current line is one step darker. No other decoration.
 - On by default. A settings toggle hides it (text via `tr()`).
 - When on, Quiet's per-code-block line numbers (`layout.rs` gutter) are not drawn: file lines only.
+
+---
+
+## 24. iPhone app (APPROVED by owner 2026-11-24)
+
+The v1 iPhone UI. Native SwiftUI app. Prototype: `docs/design/prototypes/v3-ios.html`.
+Build decisions live in `docs/design/ios.md`.
+
+- Navigation: Home is the NavigationStack root. Cards (Write here… opens Today), a 2×2 grid
+  (Today, New note, Search, Notes), then From a month ago with recall cards. The tree pushes:
+  folders (icon, count, chevron), then notes (icon, title, age), then a Scratch section.
+  Empty folders say "This folder is empty." No tab bar. Pull-down or search opens the palette.
+- Editor: live-styled Markdown. Only the caret line shows raw Markdown (Settings toggle).
+  Links open. #tags filter the palette. @date jumps to that day. An accessory bar sits above
+  the keyboard: / # [[ task indent outdent undo hide.
+- Slash sheet: medium detent, 3-column grid. Heading, Bulleted, Numbered, Task, Quote, Code,
+  Table, Divider. No Math, no Mermaid.
+- Palette: full sheet with a search field. Empty query shows 6 recent notes. Groups:
+  Recent, Names, Content. A ">" prefix runs commands (This note, Formatting, Notes, Window).
+  A "Create «q»" row creates the note. No match says "No matches".
+- Panel sheet: bottom sheet (medium/large detents) with four segments. Outline lists indented
+  headings; tap scrolls there ("No headings" when empty). Comments show the passage quote,
+  who·time, text, and Resolve; adding is long-press on a block only. Versions has "Save version"
+  and the list; tap asks to confirm the restore, current saved first ("No saved versions yet").
+  Backlinks lists linking notes ("No notes link here yet").
+- Pending review: a bottom pill ("N changes · Review") opens a sheet with Reject all / Accept all
+  and one card per change (old struck, new). Swipe leading accepts, trailing rejects.
+  No inline washes.
+- Context menus are long-press. Tree row: Rename, Move, Duplicate, Copy link, separator,
+  Move to Trash (destructive). Block: Comment, Show Markdown, Copy, Duplicate, separator,
+  Delete (destructive).
+- Settings is a Form. Notes folder (change). Appearance: Theme Light/Dark/System segmented,
+  Text size 14/15/16/18, Page width narrow/normal/wide. Editor: "Show Markdown on the live line"
+  toggle. Files: Trash (count) opens the Trash list. About: version.
+- Trash is a list with Restore buttons. The palette command "Restore from Trash" restores too.
+- Themes: Light, Dark, System only. The desktop's other themes are out of v1.
+- Type: Inter (fallback system), JetBrains Mono for code (fallback SF Mono). Note body 16 pt,
+  line-height 1.6. H1 1.9em/700, H2 1.45em/650, H3 1.15em/600, H4–H6 1em/600. Rows are at
+  least 44 pt. Large nav title 34 pt/700. Push .32 s, sheets .25–.3 s, Reduce Motion respected.
+- Tokens: the full table is the prototype. iPhone-only additions: toast + toast-ink, add +
+  add-ink, del + del-ink, comment wash + comment dot, selection highlight, scrim. Dark
+  code-line/gutter-num/quote use the softened §22.4 values.
+- Out of v1: Compare/diff screen, inline pending washes, table cell editing, Mermaid and math
+  rendering (shown as code), Focus mode, tar.gz backup, the other themes, Assistant,
+  comment replies, text-selection comments.

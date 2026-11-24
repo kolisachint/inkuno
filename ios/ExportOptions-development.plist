@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Export a development-signed IPA from an archive, for the owner's own iPhone:
+    xcodebuild -exportArchive -archivePath ios/build/Inkuno.xcarchive \
+      -exportPath ios/build/export -exportOptionsPlist ios/ExportOptions-development.plist
+  Automatic signing takes the team from ios/Local.xcconfig. For ad-hoc IPAs
+  built in CI, see .github/workflows/release-ios.yml (method release-testing).
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>debugging</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>stripSwiftSymbols</key>
+	<true/>
+</dict>
+</plist>
