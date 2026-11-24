@@ -1814,12 +1814,15 @@ mod tests {
         let out = comment_on(text, "passage here", said).unwrap();
         assert_eq!(
             out,
-            "A passage here<!-- comment: Fine -- > [see](https://example.com) <!-- x --> and more.\n"
+            "A passage here<!-- comment: Fine -- > [see](https://example.com) <! -- x --> and more.\n"
         );
         let notes = all_comments(&out);
         assert_eq!(notes.len(), 1, "{notes:?}");
         assert_eq!(notes[0].noted, "A passage here");
-        assert_eq!(notes[0].said, "Fine -- > [see](https://example.com) <!-- x");
+        assert_eq!(
+            notes[0].said,
+            "Fine -- > [see](https://example.com) <! -- x"
+        );
         assert_eq!(&out[notes[0].end..], " and more.\n");
     }
 
@@ -1836,7 +1839,15 @@ mod tests {
     #[test]
     fn a_passage_holding_comment_marks_is_refused() {
         let text = "a {== b ==} c {>> d <<} e\n";
-        for passage in ["{==", "==}", "{>>", "<<}", "<!-- comment:", "-->"] {
+        for passage in [
+            "{==",
+            "==}",
+            "{>>",
+            "<<}",
+            "<!-- comment:",
+            "<!-- comment @Ana 2026-11-24T10:02Z:",
+            "-->",
+        ] {
             let refused = comment_on(text, &format!("x{passage}y"), "note").unwrap_err();
             assert_eq!(refused, "the passage holds comment marks", "{passage}");
         }

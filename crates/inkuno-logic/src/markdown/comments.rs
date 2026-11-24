@@ -11,6 +11,7 @@ use super::*;
 /// the cell of a table, or the end of the previous comment) up to the marker, trimmed.
 pub const COMMENT_OPEN: &str = "<!-- comment:";
 const HTML_CLOSE: &str = "-->";
+const HTML_OPEN: &str = "<!--";
 
 /// Start of every comment, in either form: `<!-- comment:` (legacy) or `<!-- comment @` (with an
 /// author and a time). Both are read; the legacy form has no author and no time.
@@ -61,10 +62,26 @@ fn is_stamp(b: &[u8]) -> bool {
         })
 }
 
-/// Whether `s` starts with the opening of a comment, in either form.
+/// Whether `s` starts with the opening of a comment, in either form: `<!-- comment:` (legacy), or
+/// `<!-- comment @name <stamp>:` whose head is complete before the comment's close.
 fn opens_here(s: &str) -> bool {
-    s.strip_prefix(HEAD)
-        .is_some_and(|rest| rest.starts_with(':') || rest.starts_with(" @"))
+    let Some(rest) = s.strip_prefix(HEAD) else {
+        return false;
+    };
+    if rest.starts_with(':') {
+        return true;
+    }
+    let Some(head_at) = rest.strip_prefix(' ') else {
+        return false;
+    };
+    let close = head_at.find(HTML_CLOSE).unwrap_or(head_at.len());
+    head(&head_at[..close]).is_some()
+}
+
+/// Whether `text` holds the opening of a comment, in either form.
+pub fn has_comment(text: &str) -> bool {
+    text.match_indices(HEAD)
+        .any(|(at, _)| opens_here(&text[at..]))
 }
 
 /// The byte where the next comment opening of `line`, from `from`, starts.
@@ -107,6 +124,11 @@ struct Part {
     text: Range<usize>,
 }
 
+/// Whether the comment of `inner` (the bytes after `<!-- comment`) is in the legacy form.
+fn is_legacy(inner: &str) -> bool {
+    inner.starts_with(':')
+}
+
 fn parts(inner: &str) -> Option<Vec<Part>> {
     let b = inner.as_bytes();
     let (first_author, first_time, start) = match b.first()? {
@@ -121,6 +143,7 @@ fn parts(inner: &str) -> Option<Vec<Part>> {
         }
         _ => return None,
     };
+    let legacy = is_legacy(inner);
     let mut end = inner.len();
     if end > start && b[end - 1] == b' ' {
         end -= 1;
@@ -131,14 +154,24 @@ fn parts(inner: &str) -> Option<Vec<Part>> {
         bounds.push(found);
         from = found + SEP.len();
     }
-    let mut out = vec![Part {
-        author: first_author,
-        time: first_time,
-        text: start..bounds.first().copied().unwrap_or(end),
-    }];
+    // A legacy comment is one text, arrows and all: a separator starts a reply only where the
+    // segment after it has a head (`@name stamp:`). The new form splits at every separator.
+    let mut starts = Vec::new();
     for (k, &sep) in bounds.iter().enumerate() {
         let seg = sep + SEP.len();
         let stop = bounds.get(k + 1).copied().unwrap_or(end);
+        if !legacy || head(&inner[seg..stop]).is_some() {
+            starts.push(sep);
+        }
+    }
+    let mut out = vec![Part {
+        author: first_author,
+        time: first_time,
+        text: start..starts.first().copied().unwrap_or(end),
+    }];
+    for (k, &sep) in starts.iter().enumerate() {
+        let seg = sep + SEP.len();
+        let stop = starts.get(k + 1).copied().unwrap_or(end);
         out.push(match head(&inner[seg..stop]) {
             Some((a, t, text)) => Part {
                 author: Some(seg + a.start..seg + a.end),
@@ -155,13 +188,21 @@ fn parts(inner: &str) -> Option<Vec<Part>> {
     Some(out)
 }
 
-/// The text as the markup holds it: a literal `↳` is written `\↳`.
+/// The text as the markup holds it in the new form: a `-->` or a `<!--` is spaced out (`spaced`),
+/// and a literal `↳` is written `\↳`.
 fn escape(text: &str) -> String {
     spaced(text).replace('↳', "\\↳")
 }
 
+/// The text of a new-form part as it is read: `\↳` becomes `↳`.
 fn unescape(raw: &str) -> String {
     raw.replace("\\↳", "↳")
+}
+
+/// A text as the markup holds it: `escape` in the new form; in the legacy form, which has no
+/// escapes, only `spaced`.
+fn written(text: &str, new: bool) -> String {
+    if new { escape(text) } else { spaced(text) }
 }
 
 /// A name as the markup holds it: one line, no `↳`, no `-->`, single spaces; `Unknown` when empty.
@@ -203,19 +244,23 @@ pub fn parse_comment(markup: &str) -> Option<Comment> {
     }
     let inner = t[HEAD.len()..].strip_suffix(HTML_CLOSE)?;
     let parts = parts(inner)?;
-    let text = |r: &Range<usize>| unescape(&inner[r.clone()]);
     let name = |r: &Option<Range<usize>>| r.as_ref().map(|r| inner[r.clone()].to_string());
     let first = &parts[0];
+    let root = &inner[first.text.clone()];
     Some(Comment {
         author: name(&first.author),
         time: name(&first.time),
-        text: text(&first.text),
+        text: if is_legacy(inner) {
+            root.to_string()
+        } else {
+            unescape(root)
+        },
         replies: parts[1..]
             .iter()
             .map(|p| Reply {
                 author: name(&p.author),
                 time: name(&p.time),
-                text: text(&p.text),
+                text: unescape(&inner[p.text.clone()]),
             })
             .collect(),
     })
@@ -225,11 +270,12 @@ pub fn parse_comment(markup: &str) -> Option<Comment> {
 /// or the legacy `<!-- comment: text -->` when it has no author and no time.
 pub fn format_comment(comment: &Comment) -> String {
     let mut out = String::from(HEAD);
+    let stamped = comment.author.is_some() && comment.time.is_some();
     if let (Some(author), Some(time)) = (&comment.author, &comment.time) {
         out.push_str(&format!(" @{} {time}", clean_name(author)));
     }
     out.push_str(": ");
-    out.push_str(&escape(&comment.text));
+    out.push_str(&written(&comment.text, stamped));
     for reply in &comment.replies {
         out.push_str(SEP);
         if let (Some(author), Some(time)) = (&reply.author, &reply.time) {
@@ -256,8 +302,9 @@ pub fn resolve(line: &str, at: usize) -> Option<String> {
     ))
 }
 
-/// `line`, a comment alone on it (indent aside), with its text replaced by `text` (escaped as
-/// `format_comment` escapes it): its author, its time and its replies are kept. `None` when `line` is not such a comment.
+/// `line`, a comment alone on it (indent aside), with its text replaced by `text` (written as
+/// `format_comment` writes it): its author, its time and its replies are kept. `None` when `line` is
+/// not such a comment.
 pub fn retext(line: &str, text: &str) -> Option<String> {
     let t = line.trim();
     if !opens_here(t) {
@@ -268,15 +315,16 @@ pub fn retext(line: &str, text: &str) -> Option<String> {
     Some(format!(
         "{HEAD}{}{}{}{HTML_CLOSE}",
         &inner[..first.start],
-        escape(text),
+        written(text, !is_legacy(inner)),
         &inner[first.end..]
     ))
 }
 
-/// The markup of a comment in `whole`, a passage and its comment as `comments` gives them: from the
-/// opening of the comment to the end. `whole` itself when it holds no opening.
+/// The markup of the comment in `whole`, a passage and its comment as `comments` gives them: from the
+/// opening of the comment (the first one `next_open` finds, so a text holding `<!-- comment` cannot
+/// move it) to the end. `whole` itself when it holds no opening.
 pub fn markup_in(whole: &str) -> &str {
-    whole.rfind(HEAD).map_or(whole, |i| &whole[i..])
+    next_open(whole, 0).map_or(whole, |i| &whole[i..])
 }
 
 /// Where the text of `comment` starts in `format_comment(comment)`: past the opening, the author and
@@ -289,14 +337,25 @@ pub fn said_offset(comment: &Comment) -> usize {
     HEAD.len() + stamp + ": ".len()
 }
 
-/// Refusal of a comment text or passage that would break the marks: a comment cannot hold `-->`,
-/// so every one is spaced out (`-- >`), and a passage cannot hold a mark of either form.
+/// Refusal of a comment text that would break the marks: a comment cannot hold `-->` (every one is
+/// spaced out, `-- >`) nor `<!--` (spaced, `<! --`), so that neither can close it or open another
+/// comment. The line breaks become spaces.
 pub fn spaced(text: &str) -> String {
     let mut flat = text.replace("\r\n", " ").replace(['\n', '\r'], " ");
-    while flat.contains(HTML_CLOSE) {
-        flat = flat.replace(HTML_CLOSE, "-- >");
+    while flat.contains(HTML_CLOSE) || flat.contains(HTML_OPEN) {
+        flat = flat.replace(HTML_CLOSE, "-- >").replace(HTML_OPEN, "<! --");
     }
     flat
+}
+
+/// Whether `author` is shown as `Unknown`: no author, an empty one, or the placeholder `unknown`
+/// (any case) that `revision::default_author` gives when the environment names nobody. Otherwise the
+/// name, trimmed.
+pub fn shown_author(author: &Option<String>) -> Option<&str> {
+    author
+        .as_deref()
+        .map(str::trim)
+        .filter(|a| !a.is_empty() && !a.eq_ignore_ascii_case("unknown"))
 }
 
 /// `passage<!-- comment: text -->`. In a table cell a `|` of the comment is written `\|`. The
@@ -333,9 +392,10 @@ fn comment_with(
     if passage.contains(['\n', '\r']) {
         return Err("the passage must be on one line".into());
     }
-    if ["{==", "==}", "{>>", "<<}", COMMENT_OPEN, HTML_CLOSE]
+    if ["{==", "==}", "{>>", "<<}", HTML_CLOSE]
         .iter()
         .any(|mark| passage.contains(mark))
+        || has_comment(passage)
     {
         return Err("the passage holds comment marks".into());
     }
@@ -519,6 +579,22 @@ fn said_range(inner: &str) -> Range<usize> {
     let lo = usize::from(inner.starts_with(' '));
     let hi = inner.len() - usize::from(inner.len() > lo && inner.ends_with(' '));
     lo..hi
+}
+
+/// The text of a comment line on its own, as the writer gave it: `\↳` reads as `↳` in the new form,
+/// and the legacy text is kept as it is. `None` when `line` is not such a line.
+pub fn comment_line_plain(line: &str) -> Option<String> {
+    let t = line.trim();
+    if !opens_here(t) {
+        return None;
+    }
+    let inner = t[HEAD.len()..].strip_suffix(HTML_CLOSE)?;
+    let root = &inner[parts(inner)?.swap_remove(0).text];
+    Some(if is_legacy(inner) {
+        root.to_string()
+    } else {
+        unescape(root)
+    })
 }
 
 /// A comment on its own, `<!-- comment: text -->`, the text spaced as `comment_on` spaces it. The
@@ -756,9 +832,7 @@ pub fn all_comments(text: &str) -> Vec<Note<'_>> {
             .then(|| row.map_or(0, |r| r + 1));
         let cells = row.map(|_| cells(line));
         for (whole, noted, said) in comments_in(line, &hidden) {
-            let markup = line[whole.clone()]
-                .rfind(HEAD)
-                .map_or("", |i| &line[whole.start + i..whole.end]);
+            let markup = markup_in(&line[whole.clone()]);
             let (author, time, replies) = parse_comment(markup)
                 .map(|c| (c.author, c.time, c.replies))
                 .unwrap_or_default();
@@ -965,5 +1039,137 @@ mod form_tests {
         assert_eq!(back.text, "a ↳ b");
         assert!(back.replies.is_empty());
         assert_eq!(back.author.as_deref(), Some("Ana"));
+    }
+
+    #[test]
+    fn a_plain_comment_with_a_mention_is_not_an_inkuno_comment() {
+        let line = "a<!-- comment @todo fix -->";
+        assert!(!has_comment(line));
+        assert_eq!(parse_comment("<!-- comment @todo fix -->"), None);
+        assert!(comments(line).is_empty());
+        assert!(all_comments(line).is_empty());
+        assert!(has_comment("a<!-- comment: x -->"));
+        assert!(has_comment("a<!-- comment @Ana 2026-11-24T10:02Z: x -->"));
+        assert!(!has_comment("<!-- commentary -->"));
+    }
+
+    #[test]
+    fn a_legacy_text_keeps_its_arrows_and_backslashes() {
+        let c = parse_comment("<!-- comment: a ↳ b \\↳ c -->").unwrap();
+        assert_eq!(c.text, "a ↳ b \\↳ c");
+        assert!(c.replies.is_empty());
+    }
+
+    #[test]
+    fn a_legacy_comment_splits_only_before_a_reply_head() {
+        let c =
+            parse_comment("<!-- comment: old ↳ plain ↳ @Bo 2026-11-24T10:05Z: r\\↳x -->").unwrap();
+        assert_eq!(c.text, "old ↳ plain");
+        assert_eq!(
+            c.replies,
+            [Reply {
+                author: Some("Bo".into()),
+                time: Some("2026-11-24T10:05Z".into()),
+                text: "r↳x".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_new_form_comment_unescapes_its_text_and_its_replies() {
+        let markup =
+            "<!-- comment @Ana 2026-11-24T10:02Z: a \\↳ b ↳ @Bo 2026-11-24T10:05Z: c \\↳ d -->";
+        let c = parse_comment(markup).unwrap();
+        assert_eq!(c.text, "a ↳ b");
+        assert_eq!(c.replies[0].text, "c ↳ d");
+    }
+
+    #[test]
+    fn a_comment_text_cannot_open_another_comment() {
+        let c = new_comment("see <!-- comment @Bo 2026-11-24T10:05Z: x --> here", ANA);
+        let markup = format_comment(&c);
+        assert_eq!(markup.matches("<!--").count(), 1, "{markup}");
+        let note = format!("alpha{markup} beta");
+        let listed = all_comments(&note);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].author.as_deref(), Some("Ana"));
+        assert_eq!(
+            parse_comment(&markup).unwrap().text,
+            "see <! -- comment @Bo 2026-11-24T10:05Z: x -- > here"
+        );
+        // A reply is spaced the same way, and the text that has no mark round-trips as it is.
+        let mut with_reply = new_comment("plain", ANA);
+        add_reply(&mut with_reply, "<!-- comment: x", BO);
+        let markup = format_comment(&with_reply);
+        assert_eq!(all_comments(&format!("a{markup}")).len(), 1);
+        assert_eq!(
+            parse_comment(&markup).unwrap().replies[0].text,
+            "<! -- comment: x"
+        );
+        let exact = new_comment("a ↳ b, c", ANA);
+        assert_eq!(parse_comment(&format_comment(&exact)), Some(exact));
+    }
+
+    #[test]
+    fn the_markup_of_a_comment_is_the_one_its_opening_starts() {
+        assert_eq!(
+            markup_in("passage<!-- comment @Ana 2026-11-24T10:02Z: x <!-- comment: y -->"),
+            "<!-- comment @Ana 2026-11-24T10:02Z: x <!-- comment: y -->"
+        );
+        // A legacy text holding an opening: the comment is still the one that starts the markup.
+        let listed =
+            all_comments("alpha<!-- comment @Ana 2026-11-24T10:02Z: a <!-- comment: b --> beta");
+        assert_eq!(listed[0].author.as_deref(), Some("Ana"));
+        assert_eq!(listed[0].said, "a <!-- comment: b");
+    }
+
+    #[test]
+    fn a_retext_of_a_legacy_comment_keeps_its_arrows_raw() {
+        let legacy = "<!-- comment: old -->";
+        let out = retext(legacy, "a ↳ b").unwrap();
+        assert_eq!(out, "<!-- comment: a ↳ b -->");
+        assert_eq!(comment_line_plain(&out).as_deref(), Some("a ↳ b"));
+    }
+
+    #[test]
+    fn a_passage_holding_an_opening_is_refused() {
+        let text = "a <!-- comment @Ana 2026-11-24T10:02Z: x b";
+        assert!(comment_on_by(text, "a <!-- comment @Ana 2026-11-24T10:02Z: x", "y", ANA).is_err());
+    }
+
+    #[test]
+    fn shown_author_treats_none_empty_and_unknown_as_unknown() {
+        assert_eq!(shown_author(&None), None);
+        assert_eq!(shown_author(&Some(String::new())), None);
+        assert_eq!(shown_author(&Some("  ".into())), None);
+        assert_eq!(shown_author(&Some("unknown".into())), None);
+        assert_eq!(shown_author(&Some("Unknown".into())), None);
+        assert_eq!(shown_author(&Some("UNKNOWN".into())), None);
+        assert_eq!(shown_author(&Some(" Ana ".into())), Some("Ana"));
+    }
+
+    #[test]
+    fn a_renamed_header_keeps_its_escaped_arrow_as_it_is() {
+        let names = |n: &str| (vec![format!("Row \"Léa{n}\"")], Vec::new());
+        let line = "<!-- comment @Ana 2026-11-24T10:02Z: Row \"Léa\": a \\↳ b -->";
+        let rows = [Some(0)];
+        let mut once =
+            crate::markdown::retarget(&[line], &names(""), &names("2"), (&rows, &[]), false);
+        let once = once.swap_remove(0).unwrap();
+        assert_eq!(
+            once,
+            "<!-- comment @Ana 2026-11-24T10:02Z: Row \"Léa2\": a \\↳ b -->"
+        );
+        let mut twice = crate::markdown::retarget(
+            &[once.as_str()],
+            &names("2"),
+            &names("3"),
+            (&rows, &[]),
+            false,
+        );
+        assert_eq!(
+            twice.swap_remove(0).unwrap(),
+            "<!-- comment @Ana 2026-11-24T10:02Z: Row \"Léa3\": a \\↳ b -->"
+        );
     }
 }

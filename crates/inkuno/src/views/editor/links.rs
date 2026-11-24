@@ -489,7 +489,7 @@ impl Editor {
     /// The table around `at`, if comments sit under it, and the names they could use: to give
     /// back to `rename_scopes` once an edit that does not go through `splice` is done.
     pub(super) fn name_guard(&self, at: usize) -> Option<(usize, md::Scopes)> {
-        if !self.content.contains(md::COMMENT_OPEN) {
+        if !md::has_comment(&self.content) {
             return None;
         }
         let (table, rows, _) = self.table_at(at)?;

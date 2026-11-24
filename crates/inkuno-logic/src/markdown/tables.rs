@@ -300,7 +300,7 @@ pub fn retarget(
         .iter()
         .map(|line| {
             let indent = &line[..line.len() - line.trim_start().len()];
-            let Some(body) = super::comment_line_text(line) else {
+            let Some(body) = super::comment_line_plain(line) else {
                 return Some(line.to_string());
             };
             if body.starts_with("Table: ") {
