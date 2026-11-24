@@ -319,24 +319,30 @@ pub fn place(text: &str, found: &[Finding], listed: &[Open], by: markdown::Stamp
             }
         }
     }
-    for finding in found {
-        let Finding::New { passage, comment } = finding else {
-            continue;
-        };
+    // The new comments go from the last passage in the text to the first: each placement moves only the
+    // text after it, so the passages before it keep their places (a passage is found again by its text
+    // anyway, so this matters only where two passages overlap). A passage not in the text goes last.
+    let mut news: Vec<(usize, &str, &str)> = found
+        .iter()
+        .filter_map(|finding| match finding {
+            Finding::New { passage, comment } => Some((
+                out.text.find(passage.as_str()).unwrap_or(0),
+                passage.as_str(),
+                comment.as_str(),
+            )),
+            Finding::Reply { .. } => None,
+        })
+        .collect();
+    news.sort_by_key(|(at, ..)| std::cmp::Reverse(*at));
+    for (_, passage, comment) in news {
         let unquoted = unquote(passage);
-        let placed = [passage.as_str(), unquoted.as_str()]
-            .into_iter()
-            .find_map(|form| {
-                let inside = out.text.find(form).is_some_and(|at| {
-                    markdown::all_comments(&out.text)
-                        .iter()
-                        .any(|note| note.at <= at && at < note.end)
-                });
-                match markdown::comment_on_by(&out.text, form, comment, by) {
-                    Ok(next) if !inside => Some(next),
-                    _ => None,
-                }
-            });
+        let placed = [passage, unquoted.as_str()].into_iter().find_map(|form| {
+            let at = out.text.find(form)?;
+            if !may_split(&out.text, at, form.len()) {
+                return None;
+            }
+            markdown::comment_on_by(&out.text, form, comment, by).ok()
+        });
         match placed {
             Some(next) => {
                 out.text = next;
@@ -346,6 +352,31 @@ pub fn place(text: &str, found: &[Finding], listed: &[Open], by: markdown::Stamp
         }
     }
     out
+}
+
+/// Whether a new comment may be written on the `len` bytes at `at` of `text`.
+///
+/// Not where they lie in a comment's marker or its text after the passage, nor in a CriticMarkup
+/// comment. Inside the passage of a comment already there, the new comment splits that passage: the
+/// old comment keeps the words after the new marker. That split is refused when it would leave the old
+/// passage with no letter or digit, so a passage that ends at the old marker (or only before its
+/// punctuation) is left out.
+fn may_split(text: &str, at: usize, len: usize) -> bool {
+    let Some(note) = markdown::all_comments(text)
+        .into_iter()
+        .find(|note| note.at <= at && at < note.end)
+    else {
+        return true;
+    };
+    if ["{==", "{>>"]
+        .iter()
+        .any(|mark| text[note.at..].starts_with(mark))
+    {
+        return false;
+    }
+    let passage_end = note.at + note.noted.len();
+    let end = at + len;
+    end <= passage_end && text[end..passage_end].chars().any(char::is_alphanumeric)
 }
 
 /// The one splice that turns `old` into `new`: the range of `old` that differs, and its
@@ -868,6 +899,48 @@ mod tests {
         let placed = place_listed(edited, &[reply(1, "late")], &listed);
         assert_eq!((placed.replied, placed.skipped), (0, 1));
         assert_eq!(placed.text, edited);
+    }
+
+    #[test]
+    fn a_new_comment_splits_the_passage_of_a_comment_already_there() {
+        let text = "We ship the beta on 3 March to fourty testers.\
+                    <!-- comment @sachin 2026-11-24T09:00Z: Is 40 enough? -->\n";
+        let found = [
+            pair("ship the beta on 3 March", "Which date?"),
+            pair("to fourty testers.", "A typo?"),
+            pair("We ship", "Is it final?"),
+        ];
+        let placed = place_at(text, &found);
+        // The passage that ends at the old marker is left out; the other two are placed.
+        assert_eq!((placed.placed, placed.skipped), (2, 1));
+        assert_eq!(
+            placed.text,
+            "We ship<!-- comment @Ana 2026-11-24T10:02Z: Is it final? --> the beta on 3 March\
+             <!-- comment @Ana 2026-11-24T10:02Z: Which date? --> to fourty testers.\
+             <!-- comment @sachin 2026-11-24T09:00Z: Is 40 enough? -->\n"
+        );
+        // The old comment keeps its author, its time and its text.
+        let notes = markdown::all_comments(&placed.text);
+        let old = notes.last().unwrap();
+        assert_eq!(old.author.as_deref(), Some("sachin"));
+        assert_eq!(old.time.as_deref(), Some("2026-11-24T09:00Z"));
+        assert_eq!(old.said, "Is 40 enough?");
+    }
+
+    #[test]
+    fn a_split_that_leaves_the_old_passage_without_words_is_refused() {
+        let text = "We ship the beta on 3 March to fourty testers.\
+                    <!-- comment @sachin 2026-11-24T09:00Z: Is 40 enough? -->\n";
+        // Only the full stop would be left of the old passage after the new marker: refused.
+        let placed = place_at(text, &[pair("fourty testers", "A typo?")]);
+        assert_eq!((placed.placed, placed.skipped), (0, 1));
+        // With words left after the new marker, the split is made.
+        let placed = place_at(text, &[pair("We ship", "Final?")]);
+        assert_eq!((placed.placed, placed.skipped), (1, 0));
+        // A passage in the old comment's text (after its marker) is never split.
+        let placed = place_at(text, &[pair("Is 40 enough", "No")]);
+        assert_eq!((placed.placed, placed.skipped), (0, 1));
+        assert_eq!(placed.text, text);
     }
 
     #[test]

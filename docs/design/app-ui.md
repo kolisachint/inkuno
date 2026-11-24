@@ -798,8 +798,13 @@ Normal 800 is the default (§10.4 lock released for this change).
   A reply is written after the comment's replies, on its line (`markdown::reply_on`), by `assistant`. The agent writes
   its comments and replies under the name `assistant`, so it never answers itself.
 - Placing the findings (`Shell::apply_review`, `logic::assistant::place`): replies first, last comment first; then each
-  new comment in order with `markdown::comment_on_by`. A reply is written only where its listed comment still starts at
-  the same byte with the same markup. The skipped ones are counted.
+  new comment with `markdown::comment_on_by`, from the last passage in the text to the first. A reply is written only where
+  its listed comment still starts at the same byte with the same markup.
+- **New-comment skip rule** (`logic::assistant::may_split`): a passage is found by its text and must be in the text exactly
+  once. It may lie inside the passage of a comment already there: the new marker splits it, and the old comment keeps the
+  words after the new marker (its author, time and text are untouched). Skipped when the passage lies in a comment's marker
+  or text, in a CriticMarkup comment, or when the split would leave the old passage with no letter or digit (a passage that
+  ends at the old marker, or before its punctuation). The skipped ones are counted.
   The summary: "Wrote N comments.", "Wrote N replies.", "Wrote N comments and M replies.", "1 finding could not be
   placed.", or "No findings.".
 - The words are written by Inkuno, never by the agent. A review that is stopped, or whose agent fails or
