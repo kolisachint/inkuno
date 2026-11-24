@@ -8,6 +8,7 @@
 //! rest. No function here touches the disk, a window or a clock: the dates are passed in.
 
 mod editing;
+mod files;
 mod lines;
 mod notes;
 mod search;
