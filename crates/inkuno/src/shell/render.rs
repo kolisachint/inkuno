@@ -1027,8 +1027,16 @@ impl Shell {
                 viewer.update(cx, |viewer, _| viewer.sync(t));
                 note.child(viewer)
             }
+            // A native page draws over every gpui layer: while the palette, a menu or the icon picker is
+            // open it is not painted, so it stays hidden (the hide pass above) and they show.
             #[cfg(all(target_os = "macos", feature = "viewer"))]
-            Some((_, FileKind::Html(page))) => note.child(page),
+            Some((_, FileKind::Html(page))) => match self.palette.is_some()
+                || self.menu.is_some()
+                || self.icon_pick.is_some()
+            {
+                true => note,
+                false => note.child(page),
+            },
             Some((path, FileKind::Image)) => {
                 // A big picture takes a while: it says so after a moment; a file that is no picture says so too.
                 let said = move |text: &'static str| {
