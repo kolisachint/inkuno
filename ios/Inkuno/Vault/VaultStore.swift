@@ -78,10 +78,16 @@ final class VaultStore {
     /// The vault-relative path of a file inside the vault (`ideas/plan.md`); nil outside it.
     func relativePath(of url: URL) -> String? {
         guard let root = vaultURL else { return nil }
-        let rootPath = root.standardized.path
-        let path = url.standardized.path
+        let rootPath = Self.canonicalPath(root)
+        let path = Self.canonicalPath(url)
         guard path.hasPrefix(rootPath + "/") else { return nil }
         return String(path.dropFirst(rootPath.count + 1))
+    }
+
+    /// The path with symlinks resolved, so a vault named through a link (`/tmp` is `/private/tmp`) and the
+    /// same vault named by its real path compare equal. Both sides go through here.
+    static func canonicalPath(_ url: URL) -> String {
+        url.resolvingSymlinksInPath().standardizedFileURL.path
     }
 
     var displayName: String {
