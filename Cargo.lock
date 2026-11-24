@@ -3518,6 +3518,7 @@ dependencies = [
  "muda",
  "notify",
  "open",
+ "raw-window-handle",
  "tao",
  "wry",
 ]

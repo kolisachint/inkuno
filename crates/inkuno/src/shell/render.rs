@@ -29,6 +29,8 @@ impl Render for Shell {
         let t = self.theme;
         self.end_closed_draft();
         self.refresh_review(cx);
+        // An HTML page is a native view over the window: hidden now, shown again by its paint if its tab is drawn.
+        self.hide_html_pages(cx);
         // The spacings of the interface are in rems: they follow its scale.
         window.set_rem_size(t.px(16.));
         // The pane holding the focus is the active one; when the code changed it without moving
@@ -1025,6 +1027,8 @@ impl Shell {
                 viewer.update(cx, |viewer, _| viewer.sync(t));
                 note.child(viewer)
             }
+            #[cfg(all(target_os = "macos", feature = "viewer"))]
+            Some((_, FileKind::Html(page))) => note.child(page),
             Some((path, FileKind::Image)) => {
                 // A big picture takes a while: it says so after a moment; a file that is no picture says so too.
                 let said = move |text: &'static str| {

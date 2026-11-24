@@ -94,6 +94,54 @@ impl Shell {
         cx.notify();
     }
 
+    /// Shows an HTML page in a tab of its own: a webview laid over the tab's area (macOS only, the
+    /// webview needs the window's native view). The page's root is its folder, as for the viewer.
+    /// False when the page cannot be served from there; the caller then opens the viewer window.
+    #[cfg(all(target_os = "macos", feature = "viewer", not(test)))]
+    pub(super) fn open_html_tab(&mut self, file: &Path, cx: &mut Context<Self>) -> bool {
+        let Some(root) = file.parent() else {
+            return false;
+        };
+        if platform::web::url_for(root, file).is_none() {
+            return false;
+        }
+        let page = cx.new(|_| crate::views::html_page::HtmlPage::new(file, root));
+        self.set_file(
+            Some(FileView {
+                path: file.to_path_buf(),
+                kind: FileKind::Html(page),
+            }),
+            cx,
+        );
+        cx.notify();
+        true
+    }
+
+    /// No HTML tab in this build (or in the tests, which record the viewer's request instead).
+    #[cfg(not(all(target_os = "macos", feature = "viewer", not(test))))]
+    pub(super) fn open_html_tab(&mut self, _file: &Path, _cx: &mut Context<Self>) -> bool {
+        false
+    }
+
+    /// Hides the webview of every HTML tab. The paint of a tab that is drawn shows its page again,
+    /// so a page of a tab out of sight stays hidden.
+    #[cfg(all(target_os = "macos", feature = "viewer"))]
+    pub(super) fn hide_html_pages(&self, cx: &App) {
+        for pane in &self.panes {
+            if let Some(FileView {
+                kind: FileKind::Html(page),
+                ..
+            }) = &pane.file
+            {
+                page.read(cx).hide();
+            }
+        }
+    }
+
+    /// No HTML tab in this build: nothing to hide.
+    #[cfg(not(all(target_os = "macos", feature = "viewer")))]
+    pub(super) fn hide_html_pages(&self, _cx: &App) {}
+
     /// Opens an HTML page in `inkuno view`, a window of its own. Its root is the page's own folder,
     /// so the viewer reads nothing outside it. The viewer is a process of its own, started and not
     /// waited for. False when this build has no viewer (Windows has none), the page cannot be
@@ -200,9 +248,11 @@ impl Shell {
         }
         self.pane_mut().listing = None;
         // An attachment (PDF, video, archive…) opens in the system's application; the note stays.
-        // An HTML page opens in the viewer instead, when this build has one.
+        // An HTML page opens in a tab (macOS), else in the viewer, when this build has one.
         if vault::is_attachment(path) {
-            if platform::viewer::is_html(path) && self.open_html_in_viewer(path) {
+            if platform::viewer::is_html(path)
+                && (self.open_html_tab(path, cx) || self.open_html_in_viewer(path))
+            {
                 return false;
             }
             // The test platform opens nothing: it records what it would have been asked.

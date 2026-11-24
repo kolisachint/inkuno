@@ -3,6 +3,8 @@
 
 pub mod editor;
 pub mod field;
+#[cfg(all(target_os = "macos", feature = "viewer"))]
+pub mod html_page;
 pub mod nav;
 pub mod palette;
 pub mod viewer;
