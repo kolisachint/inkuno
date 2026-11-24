@@ -675,3 +675,110 @@ fn text_changed_during_a_failed_debounced_save_is_saved_by_the_next_pause(cx: &m
     assert!(shell.read_with(cx, |s, _| !s.pane().dirty));
     let _ = fs::remove_dir_all(root);
 }
+
+/// Opens `first`, then `second` in a new pane beside it: `second` is the active one, and its close
+/// saves it (a single pane keeps its tab).
+fn open_beside(
+    shell: &Entity<Shell>,
+    cx: &mut gpui::VisualTestContext,
+    first: &Path,
+    second: &Path,
+) {
+    open(shell, cx, first);
+    shell.update_in(cx, |s, window, cx| {
+        assert!(s.add_pane(Side::Right, window, cx));
+    });
+    open(shell, cx, second);
+}
+
+/// Text typed while a background save is in flight is kept when the note is closed: the close saves it,
+/// and nothing later overwrites it.
+#[gpui::test]
+fn closing_while_a_background_save_is_in_flight_keeps_the_typed_text(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-close-inflight");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    fs::write(root.join("Anchor.md"), "# Anchor\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open_beside(&shell, cx, &root.join("Anchor.md"), &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" a");
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    // Typed meanwhile: `load` changes the text the save did not take, as typing would.
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            let text = "# Plan\n\noriginal a b".to_string();
+            let end = text.len();
+            e.load(text, end, cx)
+        })
+    });
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a b");
+    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a b");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A pause that finds a save in flight leaves it to that save: the save writes what it was given, the
+/// text typed meanwhile stays dirty with the base at the saved text, and the next pause saves the rest.
+#[gpui::test]
+fn text_typed_during_a_background_save_is_saved_by_the_next_pause(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-typed-during");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    fs::write(root.join("Anchor.md"), "# Anchor\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open_beside(&shell, cx, &root.join("Anchor.md"), &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" a");
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            let text = "# Plan\n\noriginal a b".to_string();
+            let end = text.len();
+            e.load(text, end, cx)
+        })
+    });
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a");
+    assert!(shell.read_with(cx, |s, _| {
+        let pane = s.pane();
+        pane.dirty && pane.base.ends_with(" a") && !pane.base.ends_with(" b")
+    }));
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a b");
+    assert!(shell.read_with(cx, |s, _| !s.pane().dirty));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Undo back to the saved text while its save is queued: the close writes the original text, exactly.
+#[gpui::test]
+fn undo_to_the_saved_text_while_a_save_is_queued_leaves_the_original(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-undo-queued");
+    let plan = root.join("Plan.md");
+    let original = "# Plan\n\noriginal";
+    fs::write(&plan, original).unwrap();
+    fs::write(root.join("Anchor.md"), "# Anchor\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open_beside(&shell, cx, &root.join("Anchor.md"), &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" a");
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.restore(false, cx))
+    });
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string()),
+        original
+    );
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), original);
+    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), original);
+    let _ = fs::remove_dir_all(root);
+}
