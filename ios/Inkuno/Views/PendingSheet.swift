@@ -1,10 +1,5 @@
 import SwiftUI
 
-// TODO(integration): the editor (NoteView, owned by the editor crew — do not edit it here) shows
-// `PendingPill` above the keyboard while the note has pending changes and presents
-// `PendingSheet` from Review. Both read the sidecar list `.inkuno/pending/<note>.json` through
-// VaultStore; after accept/reject the editor should reload the note text from disk.
-
 /// The bottom pill while a note has pending changes: "N changes · Review".
 struct PendingPill: View {
     let noteURL: URL

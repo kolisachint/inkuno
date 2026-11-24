@@ -405,6 +405,35 @@ enum CommentFormat {
         return (name, time, text)
     }
 
+    /// The line with a comment written after it: `passage<!-- comment: text -->`, the passage being the
+    /// whole line (`comment_on`, anchored to the start of the line). Nil when there is nothing to
+    /// comment on (a blank line, or a passage that holds comment marks) or the comment is empty. A
+    /// `-->` in the comment is spaced out, as the desktop does; a table line escapes its `|`.
+    static func commented(line: String, said: String, inTable: Bool) -> String? {
+        // The passage starts after the last comment already on the line, so a line can take another.
+        var passage = line
+        if let close = passage.range(of: "-->", options: .backwards) {
+            passage = String(passage[close.upperBound...])
+        }
+        let trimmed = passage.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              !["{==", "==}", "{>>", "<<}", open, close].contains(where: { trimmed.contains($0) })
+        else { return nil }
+
+        var flat = said.replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+        while flat.contains(close) {
+            flat = flat.replacingOccurrences(of: close, with: "-- >")
+        }
+        flat = flat.trimmingCharacters(in: .whitespaces)
+        guard !flat.isEmpty else { return nil }
+        if inTable {
+            flat = flat.replacingOccurrences(of: "|", with: "\\|")
+        }
+        return line + open + " " + flat + " " + close
+    }
+
     /// Resolve: drop the `<!-- comment: … -->` markup, keep the passage. A comment alone on its
     /// line takes the line with it (`links.rs` `comment_here`).
     static func resolve(in text: String, comment: NoteComment) -> String {

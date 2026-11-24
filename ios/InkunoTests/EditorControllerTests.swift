@@ -103,4 +103,70 @@ final class EditorControllerTests: XCTestCase {
         XCTAssertEqual(view.textStorage.string, "Note\n```\n\n```")
         XCTAssertEqual(view.selectedRange, NSRange(location: 9, length: 0))
     }
+
+    // MARK: Block menu
+
+    func testCommentWritesTheDesktopSyntaxAfterTheLine() {
+        controller.update(text: "Ship it\nnext")
+        place(0)
+
+        XCTAssertTrue(controller.commentLine(0, said: "Keep it short"))
+
+        XCTAssertEqual(view.textStorage.string, "Ship it<!-- comment: Keep it short -->\nnext")
+        XCTAssertEqual(CommentFormat.parse(view.textStorage.string).map(\.text), ["Keep it short"])
+    }
+
+    func testAnEmptyCommentWritesNothing() {
+        controller.update(text: "Ship it")
+
+        XCTAssertFalse(controller.commentLine(0, said: "   "))
+        XCTAssertEqual(view.textStorage.string, "Ship it")
+    }
+
+    func testDuplicateCopiesTheBlockBelowIt() {
+        controller.update(text: "one\ntwo")
+        place(1)
+
+        controller.duplicateBlock()
+
+        XCTAssertEqual(view.textStorage.string, "one\none\ntwo")
+    }
+
+    func testDeleteRemovesTheBlockAndItsBreak() {
+        controller.update(text: "one\ntwo\nthree")
+        place(5)
+
+        controller.deleteBlock()
+
+        XCTAssertEqual(view.textStorage.string, "one\nthree")
+    }
+
+    func testDeleteOfTheLastBlockTakesTheBreakBefore() {
+        controller.update(text: "one\ntwo")
+        place(6)
+
+        controller.deleteBlock()
+
+        XCTAssertEqual(view.textStorage.string, "one")
+    }
+
+    func testShowMarkdownRevealsTheCaretBlockUntilTheCaretLeaves() {
+        controller.showMarkers = false
+        controller.update(text: "**bold** here\nnext")
+        place(2)
+        XCTAssertTrue(isHidden(0), "with the setting off, the caret line hides its markers")
+        controller.revealBlock()
+        XCTAssertFalse(isHidden(0), "the revealed block shows its markers")
+
+        place(16)
+        XCTAssertTrue(isHidden(0), "the markers hide again once the caret leaves the block")
+    }
+
+    func testRevealedOutlineLineScrollsTheCaretThere() {
+        controller.update(text: "# One\n\n## Two")
+
+        controller.reveal(line: 2)
+
+        XCTAssertEqual(view.selectedRange, NSRange(location: 7, length: 0))
+    }
 }
