@@ -17,6 +17,8 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"        # iPhone only
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     CODE_SIGN_STYLE: Automatic
+    # The Rust core ships arm64 slices only (device and Apple-silicon simulator).
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
     # DEVELOPMENT_TEAM is NOT set here: it comes from the untracked ios/Local.xcconfig
     # (see Local.xcconfig.example) through Config/Base.xcconfig.
 
