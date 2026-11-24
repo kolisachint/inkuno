@@ -48,7 +48,7 @@ pub fn scratch_revision_folder(name: String) -> Option<String> {
 /// The pending-changes list of a vault note: `.inkuno/pending/<note path>.json`. A scratch note's
 /// list is the same with its file name alone (its path is then just the name).
 #[uniffi::export]
-pub fn pending_list_path(note_path: String) -> Option<String> {
+pub fn sidecar_path(note_path: String) -> Option<String> {
     Some(format!(
         ".inkuno/pending/{}.json",
         parts_of(&note_path)?.join("/")
@@ -58,7 +58,7 @@ pub fn pending_list_path(note_path: String) -> Option<String> {
 /// The bin of a trashed note's pending-changes list: `.inkuno/pending-trash/<trashed name>.json`,
 /// where `trashed name` is the name the item got in the trash (see `trash_name`).
 #[uniffi::export]
-pub fn trashed_pending_list_path(trashed_name: String) -> Option<String> {
+pub fn trashed_sidecar_path(trashed_name: String) -> Option<String> {
     Some(format!(
         ".inkuno/pending-trash/{}.json",
         name_of(&trashed_name)?
@@ -130,7 +130,7 @@ mod tests {
         );
         assert_eq!(scratch_revision_folder("a/b.md".into()), None);
         assert_eq!(
-            pending_list_path("2026-11-24-103200.md".into()).as_deref(),
+            sidecar_path("2026-11-24-103200.md".into()).as_deref(),
             Some(".inkuno/pending/2026-11-24-103200.md.json")
         );
     }
@@ -138,15 +138,15 @@ mod tests {
     #[test]
     fn the_pending_list_mirrors_the_note_path() {
         assert_eq!(
-            pending_list_path("ideas/plan.md".into()).as_deref(),
+            sidecar_path("ideas/plan.md".into()).as_deref(),
             Some(".inkuno/pending/ideas/plan.md.json")
         );
-        assert_eq!(pending_list_path("../x.md".into()), None);
+        assert_eq!(sidecar_path("../x.md".into()), None);
         assert_eq!(
-            trashed_pending_list_path("2 plan.md".into()).as_deref(),
+            trashed_sidecar_path("2 plan.md".into()).as_deref(),
             Some(".inkuno/pending-trash/2 plan.md.json")
         );
-        assert_eq!(trashed_pending_list_path("a/plan.md".into()), None);
+        assert_eq!(trashed_sidecar_path("a/plan.md".into()), None);
     }
 
     #[test]
