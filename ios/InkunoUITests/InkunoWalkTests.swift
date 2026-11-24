@@ -60,13 +60,22 @@ final class InkunoWalkTests: XCTestCase {
         shot("03-folder")
         goBack(app)
 
-        // 04 Note: the live editor with the seeded text.
-        // ponytail: the pending pill (and so the review sheet and accept) is not walked: PendingPill's `.task`
-        // sits on a Group whose only child is `if count > 0`, so it never runs and the pill never appears.
-        // PendingSheet.swift is the fix point; fixture .inkuno/pending/Inbox.md.json is ready for it.
+        // 04 Note: the live editor with the seeded text, and the pending pill (one change from Ana).
         app.staticTexts["Inbox"].tap()
         let editor = expect(app.textViews["editor.text"], "note editor")
+        let pill = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '1 pending change'")).firstMatch
+        expect(pill, "pending pill for the one change")
         shot("04-note")
+
+        // 05 Pending: the pill opens the review sheet; accepting the change writes it to the note and the pill goes.
+        pill.tap()
+        expect(app.staticTexts["1 pending change"], "review sheet title")
+        expect(app.buttons["Accept"].firstMatch, "review card")
+        shot("05-pending-sheet")
+        app.buttons["Accept"].firstMatch.tap()
+        XCTAssertTrue(pill.waitForNonExistence(timeout: 5), "the pill goes once the change is accepted")
+        expect(app.textViews["editor.text"], "note editor after accept")
+        XCTAssertTrue(waitFor(editor, toContain: "before Friday"), "the accepted change is in the note")
 
         // 06 Caret: a tap on a line. Not asserted: in XCUI a tap does not give the editor keyboard focus on this
         // simulator (focus stays false, and a typed marker is refused), so the caret position is unverified.

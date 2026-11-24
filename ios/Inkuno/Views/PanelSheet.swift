@@ -237,11 +237,11 @@ struct PanelSheet: View {
                                     .frame(width: InkMetrics.markerIconSize)
                                     .foregroundStyle(InkColor.icon)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(revisionRowName(head: header, autoWord: "auto"))
+                                    Text(versionTitle(header))
                                         .font(InkType.rowTitle)
                                         .foregroundStyle(header.kind == .auto ? InkColor.soft : InkColor.ink)
-                                    if !header.date.isEmpty {
-                                        Text(revisionLocalDate(date: header.date, utcOffsetSeconds: Int64(TimeZone.current.secondsFromGMT())))
+                                    if let detail = versionDetail(header) {
+                                        Text(detail)
                                             .font(InkType.caption)
                                             .foregroundStyle(InkColor.faint)
                                     }
@@ -278,6 +278,29 @@ struct PanelSheet: View {
     }
 
     // MARK: Backlinks
+
+    /// The row title, as the core's `revisionRowName` builds it without the author: "#2 · auto", or the memo
+    /// ("#3 · Before the review"). The author is not in it: `versionDetail` shows it when it is known.
+    // ponytail: mirrors `revision.rs` row_name minus the author; keep the two in step.
+    private func versionTitle(_ header: RevisionHeader) -> String {
+        var title = "#\(header.number)"
+        if header.kind == .auto {
+            title += " · auto"
+        }
+        if let note = header.note, !note.isEmpty {
+            title += " · \(note)"
+        }
+        return title
+    }
+
+    /// The author (when it is not "unknown") and the local time, joined with " · ". Nil when neither is known.
+    private func versionDetail(_ header: RevisionHeader) -> String? {
+        let when = header.date.isEmpty
+            ? nil
+            : revisionLocalDate(date: header.date, utcOffsetSeconds: Int64(TimeZone.current.secondsFromGMT()))
+        let parts = [header.author == "unknown" || header.author.isEmpty ? nil : header.author, when].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
     @ViewBuilder
     private var backlinksBody: some View {
