@@ -24,6 +24,12 @@ pub(super) struct Toast {
 pub(super) const TOAST: Duration = Duration::from_secs(4);
 /// A failure is read, not glanced at: it stays longer, and a click or Esc takes it away.
 pub(super) const FAILED: Duration = Duration::from_secs(12);
+/// The status messages stack above this distance from the note's bottom edge (px).
+pub(super) const TOAST_BOTTOM: f32 = 54.;
+/// The room one status message takes in the stack (px): the card and the gap after it. An estimate
+/// of one line of text; a message that wraps is taller than this says. Read only by the HTML page.
+#[cfg(all(target_os = "macos", feature = "viewer"))]
+pub(super) const TOAST_ROW: f32 = 38.;
 
 impl Shell {
     /// Shows a status message, which goes on click or after `TOAST`. It replaces the

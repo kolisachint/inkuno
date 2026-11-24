@@ -19,6 +19,8 @@ pub struct HtmlPage {
     view: Option<Child>,
     /// Set once building the webview failed: the tab then says so, and no build is tried again.
     failed: bool,
+    /// Px kept clear at the bottom of the tab, where the status messages are drawn over the note.
+    bottom_inset: f32,
 }
 
 impl HtmlPage {
@@ -29,7 +31,13 @@ impl HtmlPage {
             root: root.to_path_buf(),
             view: None,
             failed: false,
+            bottom_inset: 0.,
         }
+    }
+
+    /// Keeps `px` clear at the bottom of the tab: the page is placed above that band at the next paint.
+    pub fn set_bottom_inset(&mut self, px: f32) {
+        self.bottom_inset = px;
     }
 
     /// Hides the page. The next paint of its tab shows it again.
@@ -55,7 +63,8 @@ impl HtmlPage {
         let Some(view) = &self.view else {
             return just_failed;
         };
-        let (width, height) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+        let width = f32::from(bounds.size.width);
+        let height = f32::from(bounds.size.height) - self.bottom_inset;
         if width <= 0. || height <= 0. {
             view.show(false);
             return just_failed;

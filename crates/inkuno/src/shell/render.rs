@@ -207,7 +207,7 @@ impl Render for Shell {
             let toasts = self.render_toasts(cx);
             let toasts = div()
                 .absolute()
-                .bottom(px(54.))
+                .bottom(px(toasts::TOAST_BOTTOM))
                 .left_4()
                 .right_4()
                 .flex()
@@ -1027,13 +1027,25 @@ impl Shell {
                 viewer.update(cx, |viewer, _| viewer.sync(t));
                 note.child(viewer)
             }
-            // A native page draws over every gpui layer: while the palette, a menu or the icon picker is
-            // open it is not painted, so it stays hidden (the hide pass above) and they show.
+            // A native page draws over every gpui layer: while the palette, a menu, the icon picker, a
+            // tab being dragged or the band peek is open it is not painted, so it stays hidden (the hide
+            // pass above) and they show. Over the note's bottom, the status messages leave their room:
+            // the page is placed above them.
             #[cfg(all(target_os = "macos", feature = "viewer"))]
             Some((_, FileKind::Html(page))) => {
-                match self.palette.is_some() || self.menu.is_some() || self.icon_pick.is_some() {
+                let covered = self.palette.is_some()
+                    || self.menu.is_some()
+                    || self.icon_pick.is_some()
+                    || dragging
+                    || self.band_peek;
+                match covered {
                     true => note,
-                    false => note.child(page),
+                    false => {
+                        let inset =
+                            toasts::TOAST_BOTTOM + self.toasts.len() as f32 * toasts::TOAST_ROW;
+                        page.update(cx, |page, _| page.set_bottom_inset(inset));
+                        note.child(page)
+                    }
                 }
             }
             Some((path, FileKind::Image)) => {
