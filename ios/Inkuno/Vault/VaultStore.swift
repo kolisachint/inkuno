@@ -53,9 +53,19 @@ final class VaultStore {
     /// The app's store: restores the folder from the saved bookmark.
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        #if DEBUG
+        // Debug builds only: `-InkunoVaultPath <absolute path>` opens that folder, with no picker or bookmark.
+        if let path = defaults.string(forKey: Self.debugVaultPathKey) {
+            vaultURL = URL(fileURLWithPath: path, isDirectory: true)
+            return
+        }
+        #endif
         restoreBookmark()
     }
 
+    #if DEBUG
+    static let debugVaultPathKey = "InkunoVaultPath"
+    #endif
 
     /// A store on a known folder with no bookmark and no security scope. Used by tests.
     init(vaultURL: URL, defaults: UserDefaults = .standard) {

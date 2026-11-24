@@ -166,6 +166,20 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(try store.backlinks(to: plan).count, 0, "the write updates the index")
     }
 
+    #if DEBUG
+    func testDebugLaunchArgumentOpensTheVaultWithoutABookmark() {
+        let suite = "inkuno-debug-vault-\(UUID().uuidString)"
+        let launch = UserDefaults(suiteName: suite)!
+        launch.set(root.path, forKey: VaultStore.debugVaultPathKey)
+
+        let opened = VaultStore(defaults: launch)
+
+        XCTAssertEqual(opened.vaultURL?.path, root.path)
+        XCTAssertTrue(opened.hasVault)
+        launch.removePersistentDomain(forName: suite)
+    }
+    #endif
+
     // MARK: Folder state
 
     func testFreshStoreHasNoVaultUntilOneIsChosen() {
