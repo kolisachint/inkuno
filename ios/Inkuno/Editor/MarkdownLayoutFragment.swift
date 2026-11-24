@@ -71,11 +71,20 @@ final class MarkdownLayoutDelegate: NSObject, NSTextLayoutManagerDelegate {
 /// The glyph's slot is the kern after the character (`MarkdownStyler`), so the text starts after it.
 final class MarkdownLayoutFragment: NSTextLayoutFragment {
     override func draw(at renderingOrigin: CGPoint, in context: CGContext) {
-        super.draw(at: renderingOrigin, in: context)
         guard let paragraph = textElement as? NSTextParagraph,
               let line = textLineFragments.first
-        else { return }
+        else {
+            super.draw(at: renderingOrigin, in: context)
+            return
+        }
         let text = paragraph.attributedString
+        context.saveGState()
+        if let mark = text.attribute(.inkTableRow, at: 0, effectiveRange: nil) as? TableRowMark {
+            drawTableRow(mark, text: text, line: line, origin: renderingOrigin, in: context)
+        }
+        super.draw(at: renderingOrigin, in: context)
+        context.restoreGState()
+
         var found: (index: Int, glyph: MarkdownGlyph)?
         text.enumerateAttribute(.inkunoGlyph, in: NSRange(location: 0, length: text.length)) { value, range, stop in
             guard let raw = (value as? NSNumber)?.intValue, let glyph = MarkdownGlyph(rawValue: raw) else { return }
@@ -91,6 +100,65 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
         UIGraphicsPushContext(context)
         defer { UIGraphicsPopContext() }
         Self.draw(found.glyph, font: font, x: x, baseline: baseline)
+    }
+
+    /// A table row's header fill, its rule under it and, with the row's place in the table, its part of the
+    /// border. The row's rectangle is clipped, so the border's rounded corners and the sides of a row are drawn
+    /// by every row alike; the top of the header and the bottom of the last row close the border.
+    /// Text past the edge of the text container is cut before the cell that does not fit, never inside a glyph.
+    // ponytail: a table wider than the container is cut and cannot be scrolled; a per-block scroll view is later.
+    private func drawTableRow(_ mark: TableRowMark, text: NSAttributedString, line: NSTextLineFragment,
+                              origin: CGPoint, in context: CGContext) {
+        let traits = UITraitCollection.current
+        func resolved(_ token: Color) -> UIColor { UIColor(token).resolvedColor(with: traits) }
+
+        let left = origin.x + line.typographicBounds.minX
+        let height = layoutFragmentFrame.height
+        var width = mark.width
+        if let container = textLayoutManager?.textContainer, let advance = Self.cellAdvance(text) {
+            let room = container.size.width - left
+            if width > room {
+                let cut = left + floor(room / advance) * advance
+                // Text is clipped to the cells that fit; the border closes at the last of them.
+                context.clip(to: CGRect(x: -100_000, y: origin.y - 100_000, width: cut + 200_000, height: 200_000))
+                width = cut - left
+            }
+        }
+
+        let top = mark.isHeader ? origin.y + 0.5 : origin.y - 1_000
+        let bottom = mark.isLast ? origin.y + height - 0.5 : origin.y + height + 1_000
+        let frame = CGRect(x: left + 0.5, y: top, width: width - 1, height: bottom - top)
+        let rounded = UIBezierPath(roundedRect: frame, cornerRadius: 8)
+
+        context.saveGState()
+        context.clip(to: CGRect(x: left, y: origin.y, width: width, height: height))
+        if mark.isHeader {
+            resolved(InkColor.tableHeader).setFill()
+            rounded.fill()
+        }
+        resolved(InkColor.tableLine).setStroke()
+        rounded.lineWidth = 1
+        rounded.stroke()
+        if !mark.isLast {
+            let rule = UIBezierPath()
+            rule.move(to: CGPoint(x: left, y: origin.y + height - 0.5))
+            rule.addLine(to: CGPoint(x: left + width, y: origin.y + height - 0.5))
+            rule.lineWidth = 1
+            resolved(InkColor.tableLine).setStroke()
+            rule.stroke()
+        }
+        context.restoreGState()
+    }
+
+    /// The advance of a monospace character in the text's first sized font, which a table row is set in.
+    private static func cellAdvance(_ text: NSAttributedString) -> CGFloat? {
+        var font: UIFont?
+        text.enumerateAttribute(.font, in: NSRange(location: 0, length: text.length)) { value, _, stop in
+            guard let found = value as? UIFont, found.pointSize >= 0.1 else { return }
+            font = found
+            stop.pointee = true
+        }
+        return font.map { ("0" as NSString).size(withAttributes: [.font: $0]).width }
     }
 
     /// The disc or box at `x` on `baseline`, in the size of `font`. The disc is centred in its slot, the
