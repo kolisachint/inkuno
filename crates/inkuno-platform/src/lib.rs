@@ -12,7 +12,10 @@ pub mod vault;
 pub mod viewer;
 pub mod web;
 
-use std::{ffi::OsStr, fs, process::Command};
+use std::{ffi::OsStr, process::Command};
+
+#[cfg(target_os = "linux")]
+use std::fs;
 
 /// The NVIDIA Vulkan driver (package `nvidia-utils`) takes about 2 s to give up
 /// when no NVIDIA card is plugged in: the loader is asked to ignore it.

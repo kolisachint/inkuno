@@ -14,7 +14,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{Value, json};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
@@ -24,6 +23,7 @@ use super::{
 use inkuno_logic::{
     markdown,
     pending::{self, Entry},
+    sidecar,
 };
 
 /// How long an orphan waits beside its note before it is dropped on load: 30 days, in seconds.
@@ -58,39 +58,10 @@ pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
     let Some(file) = file(home, note) else {
         return Vec::new();
     };
-    let Ok(text) = fs::read_to_string(file) else {
-        return Vec::new();
-    };
-    let Ok(value) = serde_json::from_str::<Value>(&text) else {
-        return Vec::new();
-    };
-    let Some(list) = value.get("changes").and_then(Value::as_array) else {
-        return Vec::new();
-    };
-    list.iter()
-        .filter_map(|change| {
-            Some(Entry {
-                id: u32::try_from(change.get("id")?.as_u64()?).ok()?,
-                author: change.get("author")?.as_str()?.to_string(),
-                at: usize::try_from(change.get("at")?.as_u64()?).ok()?,
-                old: change.get("old")?.as_str()?.to_string(),
-                new: change.get("new")?.as_str()?.to_string(),
-                // Kept from version 2 on: a list of version 1 has none, and is found by its offset.
-                before: change
-                    .get("before")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
-                after: change
-                    .get("after")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
-                // Absent from a list written before orphans were kept: such a list has none.
-                orphan_since: change.get("orphan_since").and_then(Value::as_u64),
-            })
-        })
-        .collect()
+    match fs::read_to_string(file) {
+        Ok(text) => sidecar::parse(&text),
+        Err(_) => Vec::new(),
+    }
 }
 
 /// The pending changes of `note` that its file text `disk` does not place (`pending::placed`): they
@@ -139,24 +110,7 @@ pub fn store(home: &Home, note: &Path, entries: &[Entry]) -> io::Result<()> {
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
-    let changes: Vec<Value> = entries
-        .iter()
-        .map(|e| {
-            json!({
-                "id": e.id,
-                "author": e.author,
-                "at": e.at,
-                "old": e.old,
-                "new": e.new,
-                "before": e.before,
-                "after": e.after,
-                "orphan_since": e.orphan_since,
-            })
-        })
-        .collect();
-    let text = serde_json::to_string_pretty(&json!({ "version": 2, "changes": changes }))
-        .map_err(io::Error::other)?;
-    vault::write(&file, text + "\n")
+    vault::write(&file, sidecar::render(entries))
 }
 
 /// The text the editor shows for `note`, given the text on disk. Without a home (a note outside

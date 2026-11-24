@@ -19,3 +19,11 @@
 
 # agent harness (local-only)
 .hoocode/
+
+# iOS app (ios/): generated project, Rust core outputs, local signing settings
+ios/*.xcodeproj/
+ios/Frameworks/
+ios/Generated/
+ios/build/
+ios/Local.xcconfig
+ios/DerivedData*/

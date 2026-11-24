@@ -1,0 +1,5 @@
+# Swift bindings of the iOS app: the Swift module is `InkunoCore` (generated InkunoCore.swift),
+# its C layer is the Clang module `InkunoCoreFFI` (InkunoCoreFFI.h + modulemap, see scripts/build-ios-core.sh).
+[bindings.swift]
+module_name = "InkunoCore"
+ffi_module_name = "InkunoCoreFFI"
