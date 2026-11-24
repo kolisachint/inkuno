@@ -1,8 +1,7 @@
 import Foundation
 
-// The contract between the live editor and the Markdown layer. `SwiftMarkdownProvider` implements it
-// in Swift for now; the Rust core (`InkunoCore`, UniFFI) implements the same shape later, so the
-// adapter stays small. Offsets are UTF-16 units.
+// The contract between the live editor and the Markdown layer. `CoreMarkdownProvider` implements it on
+// the Rust core (`InkunoCore`, UniFFI). Offsets are UTF-16 units.
 
 /// What a source line is, for styling.
 enum LineKind: Equatable {
@@ -35,7 +34,7 @@ struct LineLayout: Equatable {
     var inCodeBlock = false
 }
 
-/// Bits of a `StyleRun`. The core returns the same UInt32 values.
+/// Bits of a `StyleRun`. The editor's own bits: `CoreMarkdownProvider` maps the core's bits onto them.
 enum StyleBit {
     static let bold: UInt32 = 1 << 0
     static let italic: UInt32 = 1 << 1

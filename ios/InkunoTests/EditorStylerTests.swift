@@ -5,7 +5,7 @@ import XCTest
 
 final class EditorStylerTests: XCTestCase {
     private let light = UITraitCollection(userInterfaceStyle: .light)
-    private let provider = SwiftMarkdownProvider()
+    private let provider = CoreMarkdownProvider()
 
     /// Styles every line of `text`, with the caret on `caretLine`.
     private func styled(_ text: String, caretLine: Int?, showMarkers: Bool = true) -> NSMutableAttributedString {

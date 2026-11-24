@@ -6,8 +6,7 @@ import UIKit
 /// the accessory bar and the slash blocks. Plain UIKit, so the tests drive it without SwiftUI.
 @MainActor
 final class MarkdownEditorController: NSObject {
-    // ponytail: the Swift fallback provider. The core provider replaces it (see SwiftMarkdownProvider.swift).
-    private let provider: MarkdownLayoutProvider = SwiftMarkdownProvider()
+    private let provider: MarkdownLayoutProvider
 
     var onTextChange: ((String) -> Void)?
     var onSlash: (() -> Void)?
@@ -39,6 +38,12 @@ final class MarkdownEditorController: NSObject {
     private var styledCaret = 0
 
     // MARK: Setup
+
+    /// `provider` is the Markdown layer: the Rust core unless a test passes another one.
+    init(provider: MarkdownLayoutProvider = CoreMarkdownProvider()) {
+        self.provider = provider
+        super.init()
+    }
 
     private func makeTextView() -> EditorTextView {
         let view = EditorTextView(usingTextLayoutManager: true)

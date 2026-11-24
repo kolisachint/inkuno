@@ -46,16 +46,37 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.inkuno.Inkuno
         GENERATE_INFOPLIST_FILE: NO
-    # ---- Rust core (InkunoCore) — NOT linked yet; the app builds without it. ----
-    # Uncomment when the core branch lands. scripts/build-ios-core.sh writes both
-    # outputs into ios/Frameworks and ios/Generated (both gitignored).
-    #
-    # dependencies:
-    #   - framework: Frameworks/InkunoCore.xcframework
-    #     embed: false
-    # sources:
-    #   - path: Inkuno
-    #   - path: Generated          # UniFFI Swift bindings, Swift module InkunoCore
+    dependencies:
+      # The Rust core: the Swift bindings (module InkunoCore) and the static library that holds the code.
+      - target: InkunoCore
+        embed: false
+      - framework: Frameworks/InkunoCore.xcframework
+        embed: false
+
+  # The UniFFI Swift bindings, compiled as their own module. The generated types (LineKind, LineLayout,
+  # StyleRun, EnterOutcome) would clash with the editor's types in the app module.
+  # scripts/build-ios-core.sh writes both inputs; both are gitignored.
+  InkunoCore:
+    type: framework.static
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Generated
+    dependencies:
+      - framework: Frameworks/InkunoCore.xcframework
+        embed: false
+    preBuildScripts:
+      - name: Check the Rust core
+        script: |
+          if [ ! -d "$SRCROOT/Frameworks/InkunoCore.xcframework" ] || [ ! -f "$SRCROOT/Generated/InkunoCore.swift" ]; then
+            echo "error: the Rust core is missing (ios/Frameworks/InkunoCore.xcframework, ios/Generated/InkunoCore.swift)."
+            echo "error: run scripts/build-ios-core.sh from the repository root, then xcodegen generate."
+            exit 1
+          fi
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        PRODUCT_NAME: InkunoCore
 
   InkunoTests:
     type: bundle.unit-test
