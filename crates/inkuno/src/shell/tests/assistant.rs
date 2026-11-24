@@ -2,6 +2,7 @@
 //! and the seam the process side fills in. No process is started: the tests call the seam by hand
 //! and read what the panel shows.
 
+use super::pending::unstamped;
 use super::*;
 use crate::actions::AssistantImprove;
 use crate::platform::assistant::Event;
@@ -345,7 +346,7 @@ fn a_run_with_the_panel_hidden_waits_as_needs_you(cx: &mut TestAppContext) {
 #[gpui::test]
 fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-review-write", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     click_button(cx);
     click_review(cx);
     feed(
@@ -358,7 +359,7 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
         ],
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     // The answer is not shown; the summary is the last line.
@@ -379,8 +380,7 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
     shell.update(cx, |s, cx| s.flush(cx));
     settle(cx);
     assert!(
-        fs::read_to_string(root.join("Plan.md"))
-            .unwrap()
+        unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap())
             .contains("un peu de texte<!-- comment: Trop court. -->")
     );
 
@@ -388,14 +388,14 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
     focus_note(&shell, cx);
     cx.simulate_keystrokes("secondary-z");
     settle(cx);
-    assert_eq!(editor_text(&shell, cx), original);
+    assert_eq!(unstamped(&editor_text(&shell, cx)), original);
     let _ = fs::remove_dir_all(root);
 }
 
 #[gpui::test]
 fn a_review_with_no_findings_changes_nothing(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-review-none", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     click_button(cx);
     click_review(cx);
     feed(
@@ -411,7 +411,7 @@ fn a_review_with_no_findings_changes_nothing(cx: &mut TestAppContext) {
         entries(&shell, cx).last(),
         Some(&(Who::Note, "No findings.".to_string()))
     );
-    assert_eq!(editor_text(&shell, cx), original);
+    assert_eq!(unstamped(&editor_text(&shell, cx)), original);
     let _ = fs::remove_dir_all(root);
 }
 
@@ -435,7 +435,7 @@ fn a_review_of_a_note_whose_tab_closed_writes_the_file(cx: &mut TestAppContext) 
         ],
     );
     assert_eq!(
-        fs::read_to_string(root.join("Plan.md")).unwrap(),
+        unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap()),
         "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     let _ = fs::remove_dir_all(root);
@@ -471,7 +471,7 @@ fn a_review_of_a_closed_note_keeps_a_pending_change_placed(cx: &mut TestAppConte
     );
     let disk = fs::read_to_string(&plan).unwrap();
     assert_eq!(
-        disk,
+        unstamped(&disk),
         "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     assert!(crate::platform::sidecar::unplaced(&home, &plan, &disk).is_empty());
@@ -549,7 +549,7 @@ fn an_agent_that_exits_is_reported_and_a_prompt_starts_it_again(cx: &mut TestApp
 #[gpui::test]
 fn stop_during_a_review_writes_nothing(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-stop-review", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     click_button(cx);
     click_review(cx);
     // The whole answer has arrived, but the person stops before the agent ends.
@@ -569,12 +569,8 @@ fn stop_during_a_review_writes_nothing(cx: &mut TestAppContext) {
         Some(&(Who::Note, "Stopped.".to_string()))
     );
     feed(&shell, cx, vec![Event::Ended]);
-    assert_eq!(editor_text(&shell, cx), original);
-    assert!(
-        !fs::read_to_string(root.join("Plan.md"))
-            .unwrap()
-            .contains("{==")
-    );
+    assert_eq!(unstamped(&editor_text(&shell, cx)), original);
+    assert!(!unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap()).contains("{=="));
     let _ = fs::remove_dir_all(root);
 }
 
@@ -590,9 +586,7 @@ fn unsaved_edits_are_on_disk_before_the_prompt_is_sent(cx: &mut TestAppContext) 
     });
     settle(cx);
     assert!(
-        fs::read_to_string(root.join("Plan.md"))
-            .unwrap()
-            .contains("ajout"),
+        unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap()).contains("ajout"),
         "the note was saved before the agent read it"
     );
     assert_eq!(sent(&shell, cx).len(), 1);
@@ -720,7 +714,7 @@ fn the_first_review_of_a_session_writes_its_comment(cx: &mut TestAppContext) {
         ],
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     assert_eq!(
@@ -749,7 +743,7 @@ fn a_review_reads_the_text_of_separate_messages(cx: &mut TestAppContext) {
         ],
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan\n\nun peu de texte<!-- comment: Trop court. -->\n"
     );
     assert_eq!(
@@ -898,7 +892,7 @@ pub(super) const CLEARER: &str = "BEGIN TEXT\nUn peu plus clair.\nEND TEXT\n";
 #[gpui::test]
 fn improve_a_selection_sends_the_passage_and_shows_no_answer(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-improve-selection", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     select(&shell, cx, 8..23);
     assert_eq!(
         shell.read_with(cx, |s, cx| s.pane().editor.read(cx).selected().to_string()),
@@ -942,7 +936,7 @@ fn improve_a_selection_sends_the_passage_and_shows_no_answer(cx: &mut TestAppCon
         ))
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
     );
     assert_eq!(
@@ -954,17 +948,20 @@ fn improve_a_selection_sends_the_passage_and_shows_no_answer(cx: &mut TestAppCon
     focus_note(&shell, cx);
     cx.simulate_keystrokes("secondary-enter");
     settle(cx);
-    assert_eq!(editor_text(&shell, cx), "# Plan\n\nUn peu plus clair.\n");
+    assert_eq!(
+        unstamped(&editor_text(&shell, cx)),
+        "# Plan\n\nUn peu plus clair.\n"
+    );
     cx.simulate_keystrokes("secondary-z");
     settle(cx);
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
     );
     cx.simulate_keystrokes("secondary-z");
     settle(cx);
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         original,
         "one undo takes the proposal back"
     );
@@ -1006,7 +1003,7 @@ fn improve_the_whole_note_takes_the_instruction_typed_in_the_box(cx: &mut TestAp
         ],
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n"
     );
     let _ = fs::remove_dir_all(root);
@@ -1051,14 +1048,14 @@ fn improve_is_refused_while_the_note_has_pending_changes(cx: &mut TestAppContext
         ))
     );
     assert_eq!(status(&shell, cx), Status::Idle);
-    assert_eq!(editor_text(&shell, cx), pending);
+    assert_eq!(unstamped(&editor_text(&shell, cx)), pending);
     let _ = fs::remove_dir_all(root);
 }
 
 #[gpui::test]
 fn stop_during_an_improvement_writes_nothing(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-improve-stop", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     select(&shell, cx, 8..23);
     click_button(cx);
     click_improve(cx);
@@ -1070,14 +1067,10 @@ fn stop_during_an_improvement_writes_nothing(cx: &mut TestAppContext) {
     cx.simulate_click(stop, gpui::Modifiers::none());
     settle(cx);
     feed(&shell, cx, vec![Event::Ended]);
-    assert_eq!(editor_text(&shell, cx), original);
+    assert_eq!(unstamped(&editor_text(&shell, cx)), original);
     assert!(
-        !fs::read_to_string(root.join("Plan.md"))
-            .unwrap()
-            .contains("{==")
-            && !fs::read_to_string(root.join("Plan.md"))
-                .unwrap()
-                .contains("{++"),
+        !unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap()).contains("{==")
+            && !unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap()).contains("{++"),
         "nothing written"
     );
     let _ = fs::remove_dir_all(root);
@@ -1086,7 +1079,7 @@ fn stop_during_an_improvement_writes_nothing(cx: &mut TestAppContext) {
 #[gpui::test]
 fn an_answer_without_a_change_writes_nothing(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("assistant-improve-none", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     select(&shell, cx, 8..23);
     click_button(cx);
     for answer in ["NO CHANGE", "Sure, here is a better version: ..."] {
@@ -1101,7 +1094,11 @@ fn an_answer_without_a_change_writes_nothing(cx: &mut TestAppContext) {
             Some(&(Who::Note, "The assistant proposed no change.".to_string())),
             "for {answer:?}"
         );
-        assert_eq!(editor_text(&shell, cx), original, "for {answer:?}");
+        assert_eq!(
+            unstamped(&editor_text(&shell, cx)),
+            original,
+            "for {answer:?}"
+        );
     }
     let _ = fs::remove_dir_all(root);
 }
@@ -1130,7 +1127,7 @@ fn a_change_of_another_line_meanwhile_is_merged(cx: &mut TestAppContext) {
         vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\nentre les deux\nla fin!\n"
     );
     let _ = fs::remove_dir_all(root);
@@ -1146,7 +1143,7 @@ fn a_change_of_the_same_line_meanwhile_is_refused(cx: &mut TestAppContext) {
     caret(&shell, cx, 8);
     cx.simulate_input("x");
     settle(cx);
-    let typed = editor_text(&shell, cx);
+    let typed = unstamped(&editor_text(&shell, cx));
     feed(
         &shell,
         cx,
@@ -1160,7 +1157,7 @@ fn a_change_of_the_same_line_meanwhile_is_refused(cx: &mut TestAppContext) {
         ))
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         typed,
         "only the person's change is there"
     );
@@ -1185,7 +1182,7 @@ fn an_improvement_of_a_note_that_is_not_open_writes_its_file(cx: &mut TestAppCon
     );
     // The file keeps its own text; the proposal waits beside it, in `.inkuno`, until a person decides.
     assert_eq!(
-        fs::read_to_string(root.join("Plan.md")).unwrap(),
+        unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap()),
         "# Plan\n\nun peu de texte\n"
     );
     let changes = crate::platform::sidecar::read(
@@ -1230,7 +1227,7 @@ fn an_improvement_in_a_vault_keeps_two_automatic_revisions(cx: &mut TestAppConte
     assert_eq!(found[1].note.as_deref(), Some("proposed, pending"));
     assert_eq!(
         found[1].text,
-        crate::logic::pending::accept_all(&editor_text(&shell, cx)),
+        crate::logic::pending::accept_all(&unstamped(&editor_text(&shell, cx))),
         "the proposed text, as it would be once every change is accepted"
     );
     let _ = fs::remove_dir_all(root);
@@ -1270,7 +1267,7 @@ fn an_improvement_after_a_title_change_lands_in_the_renamed_note(cx: &mut TestAp
         vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
     );
     assert_eq!(
-        editor_text(&shell, cx),
+        unstamped(&editor_text(&shell, cx)),
         "# Plan v2\n\n{--\nun peu de texte\n--}\n{++\nUn peu plus clair.\n++}\n",
         "the proposal is in the renamed note"
     );
@@ -1305,9 +1302,9 @@ fn a_review_after_a_title_change_names_the_renamed_note(cx: &mut TestAppContext)
         vec![Event::Text(ONE_FINDING_AND_ONE_MISS.into()), Event::Ended],
     );
     assert!(
-        editor_text(&shell, cx).contains("Trop court."),
+        unstamped(&editor_text(&shell, cx)).contains("Trop court."),
         "the finding is in the renamed note: {}",
-        editor_text(&shell, cx)
+        unstamped(&editor_text(&shell, cx))
     );
     let _ = fs::remove_dir_all(root);
 }
@@ -1317,7 +1314,7 @@ fn a_failed_refused_or_exited_improvement_drops_its_job_and_writes_nothing(
     cx: &mut TestAppContext,
 ) {
     let (root, shell, cx, _config) = note_open("assistant-improve-ends-badly", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     select(&shell, cx, 8..23);
     click_button(cx);
     let ends = [
@@ -1352,11 +1349,9 @@ fn a_failed_refused_or_exited_improvement_drops_its_job_and_writes_nothing(
         );
         // The end of the run that comes after finds no job: nothing is written.
         feed(&shell, cx, vec![Event::Ended]);
-        assert_eq!(editor_text(&shell, cx), original, "{name}");
+        assert_eq!(unstamped(&editor_text(&shell, cx)), original, "{name}");
         assert!(
-            !fs::read_to_string(root.join("Plan.md"))
-                .unwrap()
-                .contains("{++"),
+            !unstamped(&fs::read_to_string(root.join("Plan.md")).unwrap()).contains("{++"),
             "{name}: nothing written"
         );
         assert_ne!(
@@ -1456,7 +1451,7 @@ fn an_improvement_that_cannot_start_leaves_no_job_and_keeps_the_instruction(
     cx: &mut TestAppContext,
 ) {
     let (root, shell, cx, _config) = note_open("assistant-improve-start-fails", cx);
-    let original = editor_text(&shell, cx);
+    let original = unstamped(&editor_text(&shell, cx));
     select(&shell, cx, 8..23);
     click_button(cx);
     cx.simulate_input("Make it formal");
@@ -1476,6 +1471,6 @@ fn an_improvement_that_cannot_start_leaves_no_job_and_keeps_the_instruction(
         "the instruction is kept"
     );
     assert_eq!(status(&shell, cx), Status::Idle);
-    assert_eq!(editor_text(&shell, cx), original);
+    assert_eq!(unstamped(&editor_text(&shell, cx)), original);
     let _ = fs::remove_dir_all(root);
 }

@@ -821,7 +821,13 @@ impl Shell {
                 }
             },
         };
-        let placed = words::place(&current, &found);
+        let author = self.revision_author();
+        let time = crate::logic::markdown::utc_minute(crate::platform::revisions::now());
+        let by = crate::logic::markdown::Stamp {
+            author: &author,
+            time: &time,
+        };
+        let placed = words::place(&current, &found, by);
         if placed.placed > 0 {
             match open {
                 Some(i) => {

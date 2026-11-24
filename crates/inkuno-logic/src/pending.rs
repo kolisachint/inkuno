@@ -456,6 +456,9 @@ pub struct Entry {
     pub before: String,
     pub after: String,
     pub orphan_since: Option<u64>,
+    /// When the change was proposed, UTC to the minute (`2026-11-24T10:02Z`). Set by the platform
+    /// when it saves a new change; `None` for a change that has none (an older list).
+    pub created: Option<String>,
 }
 
 /// The note text as it is on disk, and the pending changes beside it: `display` (the text with
@@ -1607,6 +1610,7 @@ mod tests {
                 before: "keep\n".into(),
                 after: "end\n".into(),
                 orphan_since: None,
+                created: None,
             }]
         );
     }

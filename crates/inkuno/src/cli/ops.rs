@@ -1254,7 +1254,13 @@ fn annotate(
     comment: &str,
 ) -> Result<String, String> {
     let (text, _) = vault::read_shown(root, path)?;
-    let next = markdown::comment_on(&text, passage, comment)?;
+    let author = super::rev::default_author()?;
+    let time = markdown::utc_minute(crate::platform::revisions::now());
+    let by = markdown::Stamp {
+        author: &author,
+        time: &time,
+    };
+    let next = markdown::comment_on_by(&text, passage, comment, by)?;
     guard_pending(&text, &next)?;
     vault::write_shown(root, path, &next, "")?;
     Ok(vault::token(next.as_bytes()))

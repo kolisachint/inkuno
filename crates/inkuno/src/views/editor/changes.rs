@@ -141,7 +141,13 @@ impl Editor {
     /// first removed line when nothing is added). The change stays pending. When no change has that
     /// text any more (an outside edit moved or changed it), nothing is written and the person is told.
     /// Refused, with the reason, when the line cannot carry a comment: empty, or holding comment marks.
-    pub fn comment_on_change(&mut self, change: &str, memo: &str, cx: &mut Context<Self>) {
+    pub fn comment_on_change(
+        &mut self,
+        change: &str,
+        memo: &str,
+        by: markdown::Stamp,
+        cx: &mut Context<Self>,
+    ) {
         if self.readonly {
             return self.refuse_pending(cx);
         }
@@ -167,7 +173,7 @@ impl Editor {
         };
         let passage = self.content[block].split('\n').next().unwrap_or("");
         let passage = passage.trim_end_matches('\r').to_string();
-        match markdown::comment_on(&self.content, &passage, memo) {
+        match markdown::comment_on_by(&self.content, &passage, memo, by) {
             Ok(new) => {
                 let at = self.sel.start;
                 self.settle(new, at, cx);

@@ -251,7 +251,7 @@ fn a_comment_on_a_change_is_written_and_the_change_stays_pending(cx: &mut TestAp
     cx.simulate_input("à relire");
     cx.simulate_keystrokes("enter");
     settle(cx);
-    let marked = text(&shell, cx);
+    let marked = unstamped(&text(&shell, cx));
     assert!(marked.contains("new<!-- comment: à relire -->"), "{marked}");
     assert!(pending::has_pending(&marked), "still pending");
     assert_eq!(pending::areas(&marked).len(), 1);
@@ -380,7 +380,7 @@ fn a_comment_finds_its_change_again_after_an_outside_edit_moved_it(cx: &mut Test
     cx.simulate_input("à relire");
     cx.simulate_keystrokes("enter");
     settle(cx);
-    let marked = text(&shell, cx);
+    let marked = unstamped(&text(&shell, cx));
     assert!(
         marked.contains("deux<!-- comment: à relire -->"),
         "{marked}"
@@ -681,6 +681,7 @@ fn an_orphan_is_counted_in_the_pill_and_discard_removes_it(cx: &mut TestAppConte
     let note = root.join("Plan.md");
     let home = Home::Vault(root.clone());
     let orphan = Entry {
+        created: None,
         id: 1,
         author: "assistant".into(),
         at: 2,
@@ -721,4 +722,19 @@ fn an_orphan_is_counted_in_the_pill_and_discard_removes_it(cx: &mut TestAppConte
         "the note's text is untouched"
     );
     let _ = fs::remove_dir_all(root);
+}
+
+/// The text with the author and the time of its comments left out, so that a test does not depend on
+/// the clock: `<!-- comment @Ana 2026-11-24T10:02Z: x -->` reads `<!-- comment: x -->`.
+pub(super) fn unstamped(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("<!-- comment @") {
+        out.push_str(&rest[..at]);
+        out.push_str("<!-- comment");
+        let after = &rest[at + "<!-- comment @".len()..];
+        rest = &after[after.find(": ").unwrap_or(0)..];
+    }
+    out.push_str(rest);
+    out
 }

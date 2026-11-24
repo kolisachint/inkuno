@@ -322,7 +322,7 @@ pub fn retarget(
                 None => Some(line.to_string()),
                 Some((Some(name), rest)) if !table_gone => Some(format!(
                     "{indent}{}",
-                    super::comment_line(&format!("{name}: {rest}"))
+                    super::retext(line, &format!("{name}: {rest}")).unwrap_or_default()
                 )),
                 Some(_) => None,
             }

@@ -138,14 +138,20 @@ fn a_review_writes_its_findings_and_one_undo_takes_them_back(
             Event::Ended,
         ],
     );
-    assert_eq!(j.text(cx), REVIEWED);
+    assert_eq!(
+        crate::shell::tests::pending::unstamped(&j.text(cx)),
+        REVIEWED
+    );
     assert_eq!(
         asst::entries(shell, cx).last(),
         Some(&(Who::Note, "Wrote 2 comments.".to_string()))
     );
     shell.update(cx, |s, cx| s.flush(cx));
     asst::settle(cx);
-    assert_eq!(fs::read_to_string(&path).unwrap(), REVIEWED);
+    assert_eq!(
+        crate::shell::tests::pending::unstamped(&fs::read_to_string(&path).unwrap()),
+        REVIEWED
+    );
 
     // Ctrl+Z takes the whole review back, both comments at once.
     asst::focus_note(shell, cx);

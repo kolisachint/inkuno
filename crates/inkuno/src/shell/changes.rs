@@ -160,7 +160,16 @@ impl Shell {
                     this.palette = None;
                     window.focus(&editor.focus_handle(cx), cx);
                     let memo = memo.clone();
-                    editor.update(cx, |note, cx| note.comment_on_change(&change, &memo, cx));
+                    let author = this.revision_author();
+                    let time =
+                        crate::logic::markdown::utc_minute(crate::platform::revisions::now());
+                    let by = crate::logic::markdown::Stamp {
+                        author: &author,
+                        time: &time,
+                    };
+                    editor.update(cx, |note, cx| {
+                        note.comment_on_change(&change, &memo, by, cx)
+                    });
                 }
                 PaletteEvent::Dismiss => {
                     this.palette = None;
