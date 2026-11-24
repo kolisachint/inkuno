@@ -76,3 +76,17 @@ impl Note {
             || self.aliases.iter().any(|alias| alias.to_lowercase() == key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_template_is_a_note_under_a_templates_folder_at_the_root() {
+        assert!(is_template(Path::new("Templates/Réunion.md")));
+        assert!(is_template(Path::new("modèles/Projets/Plan.md")));
+        assert!(!is_template(Path::new("Templates")));
+        assert!(!is_template(Path::new("Notes/Templates/A.md")));
+        assert!(!is_template(Path::new("Réunion.md")));
+    }
+}
