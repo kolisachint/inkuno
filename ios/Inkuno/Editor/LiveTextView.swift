@@ -32,7 +32,7 @@ struct LiveMarkdownEditor: UIViewRepresentable {
     let showMarkers: Bool
     let isEditable: Bool
     let onSlash: () -> Void
-    let onComment: (_ line: Int, _ text: String, _ inTable: Bool) -> Void
+    let onComment: (_ line: Int, _ text: String) -> Void
 
     func makeUIView(context: Context) -> EditorTextView {
         controller.textView

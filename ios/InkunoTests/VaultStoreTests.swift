@@ -140,19 +140,45 @@ final class VaultStoreTests: XCTestCase {
 
     // MARK: Recall
 
-    func testRecallPicksNotesFromAboutAMonthAgoNewestFirst() throws {
+    func testRecallOffersTheDailyNoteOfAMonthAgo() throws {
         let now = Date()
-        let thirty = try touch("thirty.md")
-        let thirtyTwo = try touch("thirty-two.md")
-        let yesterday = try touch("yesterday.md")
-        try setModified(thirty, daysAgo: 30, from: now)
-        try setModified(thirtyTwo, daysAgo: 32, from: now)
-        try setModified(yesterday, daysAgo: 1, from: now)
+        let month = Calendar.current.date(byAdding: .month, value: -1, to: now)!
+        let daily = try touch(VaultStore.dailyNoteFileName(for: month), "# Day\nfirst line\n")
+        _ = try touch("yesterday.md", "# Today\n")
+        try setModified(daily, daysAgo: 30, from: now)
 
-        let recalled = VaultStore.recall(from: try store.allNotes(), now: now)
+        let recalled = try store.recalledNotes(now: now)
 
-        XCTAssertEqual(recalled.map(\.title), ["thirty", "thirty-two"])
+        XCTAssertTrue(recalled.contains { $0.path == daily.lastPathComponent }, "core recall: the daily note of a month ago")
+        XCTAssertEqual(recalled.first { $0.path == daily.lastPathComponent }?.line, "first line")
     }
+
+    // MARK: Index
+
+    func testBacklinksFollowTheWritesThisStoreMakes() throws {
+        let plan = try touch("Plan.md", "# Plan\n")
+        let linker = try touch("Notes/Ideas.md", "see [[plan]]\n")
+
+        XCTAssertEqual(try store.backlinks(to: plan).map(\.url), [linker])
+
+        try store.writeNote("no link now\n", to: linker)
+
+        XCTAssertEqual(try store.backlinks(to: plan).count, 0, "the write updates the index")
+    }
+
+    #if DEBUG
+    func testDebugLaunchArgumentOpensTheVaultWithoutABookmark() {
+        let suite = "inkuno-debug-vault-\(UUID().uuidString)"
+        let launch = UserDefaults(suiteName: suite)!
+        launch.set(root.path, forKey: VaultStore.debugVaultPathKey)
+
+        let opened = VaultStore(defaults: launch)
+
+        XCTAssertEqual(opened.vaultURL?.path, root.path)
+        XCTAssertTrue(opened.hasVault)
+        launch.removePersistentDomain(forName: suite)
+    }
+    #endif
 
     // MARK: Folder state
 

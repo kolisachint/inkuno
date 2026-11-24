@@ -1,8 +1,9 @@
+import InkunoCore
 import SwiftUI
 
 /// Note search and `>` commands, as a full sheet. An empty query shows the six most recent notes
-/// (by mtime). A query matches names with fuzzy ranking (`rank.rs` `fuzzy`), then bodies; ">"
-/// switches to commands. `currentNote` (with `onPanelTab`) enables the This-note commands when a
+/// (by mtime). A query is searched in the vault index (core `search`: names, then text, then `#tags`);
+/// ">" switches to commands. `currentNote` (with `onPanelTab`) enables the This-note commands when a
 /// note is open; without it those commands are hidden.
 struct PaletteSheet: View {
     @Environment(VaultStore.self) private var vault
@@ -15,7 +16,8 @@ struct PaletteSheet: View {
 
     @State private var query = ""
     @State private var notes: [VaultEntry] = []
-    @State private var bodies: [URL: String] = [:]
+    /// The listed notes by their vault-relative path, to pair a search hit with its row.
+    @State private var entriesByPath: [String: VaultEntry] = [:]
     @State private var error: String?
 
     private var isCommandMode: Bool {
@@ -33,27 +35,27 @@ struct PaletteSheet: View {
             .map { $0 }
     }
 
-    private struct NameHit {
+    /// A note found by its text, with the line that holds the word.
+    private struct TextHit: Identifiable {
         var entry: VaultEntry
-        var score: Int
+        var snippet: String?
+        var id: URL { entry.url }
+    }
+
+    /// The index's matches for the query, in its order (names and tags first, then text).
+    private var matches: [(entry: VaultEntry, kind: SearchKind, snippet: String?)] {
+        guard let index = vault.index, !needle.isEmpty else { return [] }
+        return index.search(query: needle, limit: UInt32(notes.count + 8)).compactMap { hit in
+            entriesByPath[hit.path].map { (entry: $0, kind: hit.kind, snippet: hit.snippet?.text) }
+        }
     }
 
     private var nameHits: [VaultEntry] {
-        notes.compactMap { entry in
-            PaletteRank.fuzzy(query: needle, name: entry.title).map { NameHit(entry: entry, score: $0) }
-        }
-        .sorted { $0.score > $1.score }
-        .map(\.entry)
+        matches.filter { $0.kind != .byText }.map(\.entry)
     }
 
-    private var contentHits: [VaultEntry] {
-        let folded = PaletteRank.fold(needle)
-        let named = Set(nameHits.map(\.id))
-        return notes.filter { entry in
-            !named.contains(entry.id)
-                && bodies[entry.url].map { PaletteRank.fold($0).contains(folded) } == true
-        }
-        .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    private var contentHits: [TextHit] {
+        matches.filter { $0.kind == .byText }.map { TextHit(entry: $0.entry, snippet: $0.snippet) }
     }
 
     private var showCreateRow: Bool {
@@ -81,8 +83,8 @@ struct PaletteSheet: View {
                 } else if needle.hasPrefix("@") {
                     Section {
                         Button("Today's note") { openToday() }
-                        ForEach(contentHits) { entry in
-                            noteButton(entry, snippet: needle)
+                        ForEach(contentHits) { hit in
+                            noteButton(hit.entry, snippet: hit.snippet)
                         }
                     } header: {
                         InkSectionTitle("Names")
@@ -110,8 +112,8 @@ struct PaletteSheet: View {
                     }
                     if !contentHits.isEmpty {
                         Section {
-                            ForEach(contentHits) { entry in
-                                noteButton(entry, snippet: needle)
+                            ForEach(contentHits) { hit in
+                                noteButton(hit.entry, snippet: hit.snippet)
                             }
                         } header: {
                             InkSectionTitle("Content")
@@ -178,29 +180,8 @@ struct PaletteSheet: View {
         Button {
             onOpen(.note(entry.url))
         } label: {
-            if let snippet, !snippet.isEmpty, snippet.first != "@",
-               let body = bodies[entry.url] {
-                NoteRow(entry: entry, snippet: PaletteSheet.snippet(in: body, query: snippet))
-            } else {
-                NoteRow(entry: entry)
-            }
+            NoteRow(entry: entry, snippet: snippet)
         }
-    }
-
-    /// The matching line with the word marked, trimmed to one line (`rank.rs` `snippet`).
-    static func snippet(in body: String, query: String) -> String? {
-        let folded = PaletteRank.fold(body)
-        let needle = PaletteRank.fold(query)
-        guard let range = folded.range(of: needle) else { return nil }
-        let distance = folded.distance(from: folded.startIndex, to: range.lowerBound)
-        let index = body.index(body.startIndex, offsetBy: distance, limitedBy: body.endIndex) ?? body.startIndex
-        let lineStart = body[..<index].lastIndex(of: "\n").map { body.index(after: $0) } ?? body.startIndex
-        let lineEnd = body[index...].firstIndex(of: "\n") ?? body.endIndex
-        var line = String(body[lineStart..<lineEnd]).trimmingCharacters(in: .whitespaces)
-        if line.count > 72 {
-            line = "…" + line.prefix(70) + "…"
-        }
-        return line.isEmpty ? nil : line
     }
 
     // MARK: Data
@@ -208,7 +189,10 @@ struct PaletteSheet: View {
     private func reload() {
         do {
             notes = try vault.allNotes()
-            bodies = Dictionary(uniqueKeysWithValues: notes.map { ($0.url, (try? vault.readNote(at: $0.url)) ?? "") })
+            entriesByPath = Dictionary(uniqueKeysWithValues: notes.compactMap { entry in
+                vault.relativePath(of: entry.url).map { ($0, entry) }
+            })
+            try vault.rebuildIndex()
             error = nil
         } catch {
             self.error = error.localizedDescription

@@ -1,32 +1,34 @@
 import Foundation
+import InkunoCore
 import Observation
 
 // MARK: - Vault operations: Trash, rename/move/duplicate, versions, pending review
 //
-// Mirrors the desktop's on-disk behavior (nothing is destroyed or overwritten):
-// - Trash is the vault's `.trash` folder (`platform/vault.rs` `trash`, `trashed`, `restore`).
-// - A version lives in `.inkuno/revisions/<note-rel-path>/NNNN.md` (`platform/revisions.rs`).
-// - Pending changes live in `.inkuno/pending/<note-rel-path>.json` (`platform/sidecar.rs`).
-// ponytail: the Rust core (InkunoCore via UniFFI) will own naming, history and pending rules;
-// this extension is the Swift bridge until then.
+// Mirrors the desktop's on-disk behavior (nothing is destroyed or overwritten). The paths, names,
+// version files and pending lists are the Rust core's (InkunoCore); this extension does the file IO:
+// - Trash is the vault's `.trash` folder, its history and pending lists wait in `.inkuno/trash` and
+//   `.inkuno/pending-trash`.
+// - A version lives in `.inkuno/revisions/<note-rel-path>/NNNN.md`.
+// - Pending changes live in `.inkuno/pending/<note-rel-path>.json`.
 
 extension VaultStore {
     // MARK: Layout
 
     /// The vault's trash folder (created on first use).
     var trashDir: URL? {
-        vaultURL?.appendingPathComponent(".trash", isDirectory: true)
+        vaultURL?.appendingPathComponent(vaultTrashFolder(), isDirectory: true)
     }
 
+    /// The pending-changes list beside a note: `.inkuno/pending/<note path>.json` (core `sidecarPath`).
     func pendingFile(for note: URL) -> URL? {
-        guard let root = vaultURL else { return nil }
-        return RevisionFormat.folder(root: root, dir: ".inkuno/pending", note: note)
-            .map { $0.appendingPathExtension("json") }
+        guard let root = vaultURL, let rel = relativePath(of: note), let path = sidecarPath(notePath: rel) else { return nil }
+        return root.appendingPathComponent(path)
     }
 
+    /// The folder of a note's versions: `.inkuno/revisions/<note path>` (core `revisionFolder`).
     func revisionDir(for note: URL) -> URL? {
-        guard let root = vaultURL else { return nil }
-        return RevisionFormat.folder(root: root, dir: ".inkuno/revisions", note: note)
+        guard let root = vaultURL, let rel = relativePath(of: note), let path = revisionFolder(notePath: rel) else { return nil }
+        return root.appendingPathComponent(path, isDirectory: true)
     }
 
     // MARK: Trash
@@ -72,12 +74,11 @@ extension VaultStore {
     func trashItem(at url: URL) throws -> URL {
         guard let root = vaultURL, let bin = trashDir else { throw VaultError.noVault }
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        let name = url.lastPathComponent
-        let free = (1...).lazy.map { n in
-            n == 1 ? bin.appendingPathComponent(name) : bin.appendingPathComponent("\(n) \(name)")
-        }.first { !FileManager.default.fileExists(atPath: $0.path) }!
+        let free = bin.appendingPathComponent(trashName(name: url.lastPathComponent, taken: Self.names(in: bin)))
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: free)
         moveAsideHistoryAndPending(from: url, trashedName: free.lastPathComponent, root: root)
+        indexRemoved(at: url, isFolder: isFolder)
         return free
     }
 
@@ -94,8 +95,14 @@ extension VaultStore {
             n == 1 ? root.appendingPathComponent("\(stem)\(ext)")
                    : root.appendingPathComponent("\(stem) \(n)\(ext)")
         }.first { !FileManager.default.fileExists(atPath: $0.path) }!
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: free)
         restoreHistoryAndPending(trashedName: url.lastPathComponent, to: free, root: root)
+        if isFolder {
+            indexRemoved(at: url, isFolder: true)
+        } else {
+            indexNote(at: free, text: (try? readNote(at: free)) ?? "")
+        }
         return free
     }
 
@@ -117,8 +124,10 @@ extension VaultStore {
         guard !FileManager.default.fileExists(atPath: target.path),
               !FileManager.default.fileExists(atPath: Self.placeholderURL(for: target).path)
         else { throw VaultError.nameTaken(target) }
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: target)
         moveAlongHistoryAndPending(from: url, to: target)
+        indexMoved(from: url, to: target, isFolder: isFolder)
         return target
     }
 
@@ -130,8 +139,10 @@ extension VaultStore {
         guard !FileManager.default.fileExists(atPath: target.path),
               !FileManager.default.fileExists(atPath: Self.placeholderURL(for: target).path)
         else { throw VaultError.nameTaken(target) }
+        let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: target)
         moveAlongHistoryAndPending(from: url, to: target)
+        indexMoved(from: url, to: target, isFolder: isFolder)
         return target
     }
 
@@ -148,16 +159,13 @@ extension VaultStore {
         }.first { !FileManager.default.fileExists(atPath: $0.path) }!
         let data = try coordinateRead(url) { try Data(contentsOf: $0) }
         try coordinateWrite(free) { try data.write(to: $0, options: .withoutOverwriting) }
+        indexNote(at: free, text: String(decoding: data, as: UTF8.self))
         return free
     }
 
     /// `[Title](relative/path.md)`: a relative link, so it also works on GitHub and the desktop.
     func copyLink(for url: URL) -> String? {
-        guard let root = vaultURL else { return nil }
-        let rootPath = root.standardized.path
-        let notePath = url.standardized.path
-        guard notePath.hasPrefix(rootPath + "/") else { return nil }
-        let rel = String(notePath.dropFirst(rootPath.count + 1))
+        guard let rel = relativePath(of: url) else { return nil }
         return "[\(url.deletingPathExtension().lastPathComponent)](\(rel))"
     }
 
@@ -189,9 +197,9 @@ extension VaultStore {
         guard let dir = revisionDir(for: note) else { return [] }
         guard FileManager.default.fileExists(atPath: dir.path) else { return [] }
         let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
-        let numbers = names.compactMap(RevisionFormat.number(of:)).sorted()
+        let numbers = names.compactMap { revisionNumberOf(name: $0) }.sorted()
         return numbers.map { number in
-            let file = dir.appendingPathComponent(RevisionFormat.fileName(number))
+            let file = dir.appendingPathComponent(revisionFileName(number: number))
             do {
                 let head = try readRevisionHeader(at: file)
                 return .success(head)
@@ -219,22 +227,24 @@ extension VaultStore {
         guard let text = String(data: head, encoding: .utf8) else {
             throw VaultError.coordination("unreadable version header")
         }
-        switch RevisionFormat.parseHeader(text) {
-        case .success(let parsed): return parsed.header
-        case .failure: throw VaultError.coordination("unreadable version header")
+        do {
+            return try revisionParseHeader(file: text)
+        } catch {
+            throw VaultError.coordination("unreadable version header")
         }
     }
 
     func readRevisionText(number: UInt32, for note: URL) throws -> String {
         guard let dir = revisionDir(for: note) else { throw VaultError.noVault }
-        let file = dir.appendingPathComponent(RevisionFormat.fileName(number))
+        let file = dir.appendingPathComponent(revisionFileName(number: number))
         let data = try coordinateRead(file) { try Data(contentsOf: $0) }
         guard let text = String(data: data, encoding: .utf8) else {
             throw VaultError.coordination("unreadable version")
         }
-        switch RevisionFormat.parse(text) {
-        case .success(let parsed): return parsed.text
-        case .failure: throw VaultError.coordination("unreadable version")
+        do {
+            return try revisionParse(file: text).text
+        } catch {
+            throw VaultError.coordination("unreadable version")
         }
     }
 
@@ -246,19 +256,19 @@ extension VaultStore {
         guard let dir = revisionDir(for: note) else { throw VaultError.noVault }
         let text = try readNote(at: note)
         let existing = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        let numbers = existing.compactMap(RevisionFormat.number(of:)).sorted()
+        let numbers = existing.compactMap { revisionNumberOf(name: $0) }.sorted()
         if let latest = numbers.last,
            (try? readRevisionText(number: latest, for: note)) == text {
             return nil
         }
-        let number = RevisionFormat.nextNumber(numbers)
-        let rev = RevisionFormat.render(
+        let number = revisionNextNumber(saved: numbers)
+        let rev = revisionRender(revision: Revision(
             number: number, parent: numbers.last,
-            author: "unknown", date: Self.rfc3339UTC(Date()),
+            author: "unknown", date: revisionDate(unix: Self.nowUnix()),
             kind: .checkpoint, note: memo, text: text
-        )
+        ))
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appendingPathComponent(RevisionFormat.fileName(number))
+        let file = dir.appendingPathComponent(revisionFileName(number: number))
         // Never overwrite: a racing save takes the next number instead.
         guard !FileManager.default.fileExists(atPath: file.path) else {
             return try saveVersion(of: note, memo: memo)
@@ -284,19 +294,19 @@ extension VaultStore {
     private func saveVersionRaw(of note: URL, text: String, kind: RevisionKind, memo: String?) throws {
         guard let dir = revisionDir(for: note) else { throw VaultError.noVault }
         let existing = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        let numbers = existing.compactMap(RevisionFormat.number(of:)).sorted()
+        let numbers = existing.compactMap { revisionNumberOf(name: $0) }.sorted()
         if let latest = numbers.last,
            (try? readRevisionText(number: latest, for: note)) == text {
             return
         }
-        let number = RevisionFormat.nextNumber(numbers)
-        let rev = RevisionFormat.render(
+        let number = revisionNextNumber(saved: numbers)
+        let rev = revisionRender(revision: Revision(
             number: number, parent: numbers.last,
-            author: "unknown", date: Self.rfc3339UTC(Date()),
+            author: "unknown", date: revisionDate(unix: Self.nowUnix()),
             kind: kind, note: memo, text: text
-        )
+        ))
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appendingPathComponent(RevisionFormat.fileName(number))
+        let file = dir.appendingPathComponent(revisionFileName(number: number))
         guard !FileManager.default.fileExists(atPath: file.path) else {
             try saveVersionRaw(of: note, text: text, kind: kind, memo: memo)
             return
@@ -304,27 +314,25 @@ extension VaultStore {
         try coordinateWrite(file) { try Data(rev.utf8).write(to: $0, options: .withoutOverwriting) }
     }
 
-    static func rfc3339UTC(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: date)
+    /// The current time in Unix seconds, for the core's date writer (`revision_date`).
+    static func nowUnix() -> Int64 {
+        Int64(Date().timeIntervalSince1970)
     }
 
     // MARK: Pending changes
 
-    /// The pending changes beside the note (`platform/sidecar.rs` `read`).
-    func pendingEntries(for note: URL) -> [PendingChange] {
+    /// The pending changes beside the note (core `sidecarParse`). A missing or unreadable list is empty.
+    func pendingEntries(for note: URL) -> [PendingEntry] {
         guard let file = pendingFile(for: note),
               let data = try? Data(contentsOf: file) else { return [] }
-        return PendingList.parse(data)
+        return sidecarParse(json: String(decoding: data, as: UTF8.self))
     }
 
     func pendingCount(for note: URL) -> Int {
         pendingEntries(for: note).count
     }
 
-    private func writePendingEntries(_ entries: [PendingChange], for note: URL) throws {
+    private func writePendingEntries(_ entries: [PendingEntry], for note: URL) throws {
         guard let file = pendingFile(for: note) else { throw VaultError.noVault }
         if entries.isEmpty {
             if FileManager.default.fileExists(atPath: file.path) {
@@ -333,7 +341,16 @@ extension VaultStore {
             return
         }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try coordinateWrite(file) { try PendingList.encode(entries).write(to: $0, options: .atomic) }
+        let json = sidecarRender(entries: entries)
+        try coordinateWrite(file) { try Data(json.utf8).write(to: $0, options: .atomic) }
+    }
+
+    /// The text with one entry accepted: the entry is written over the text (core `composePending`), then
+    /// its one area is accepted (core `acceptChange`). Nil when its text is not in `text`, so the caller
+    /// keeps the entry.
+    static func textAccepting(_ entry: PendingEntry, in text: String) -> String? {
+        guard placedPending(base: text, entries: [entry]) == [true] else { return nil }
+        return acceptChange(text: composePending(base: text, entries: [entry]), index: 0)
     }
 
     /// Accepts one pending change into the note file. Returns false when the change's text is
@@ -343,7 +360,7 @@ extension VaultStore {
         var entries = pendingEntries(for: note)
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return false }
         let text = try readNote(at: note)
-        guard let next = PendingList.accept(entries[index], in: text) else { return false }
+        guard let next = Self.textAccepting(entries[index], in: text) else { return false }
         if next != text { try writeNote(next, to: note) }
         entries.remove(at: index)
         try writePendingEntries(entries, for: note)
@@ -357,26 +374,20 @@ extension VaultStore {
         try writePendingEntries(entries, for: note)
     }
 
-    /// Accept all / Reject all. Accept applies each change whose text is still there and keeps
-    /// the rest; reject drops them all.
+    /// Accept all / Reject all. Accept writes every change whose text is still there (core
+    /// `composePending`, then `acceptAllChanges`) and keeps the rest; reject drops them all.
     func resolveAllPending(for note: URL, accept: Bool) throws {
         if !accept {
             try writePendingEntries([], for: note)
             return
         }
-        var entries = pendingEntries(for: note)
-        var text = try readNote(at: note)
-        var kept: [PendingChange] = []
-        for entry in entries {
-            if let next = PendingList.accept(entry, in: text) {
-                text = next
-            } else {
-                kept.append(entry)
-            }
-        }
-        entries = kept
-        try writeNote(text, to: note)
-        try writePendingEntries(entries, for: note)
+        let entries = pendingEntries(for: note)
+        let text = try readNote(at: note)
+        let placed = placedPending(base: text, entries: entries)
+        let accepted = acceptAllChanges(text: composePending(base: text, entries: entries))
+        if accepted != text { try writeNote(accepted, to: note) }
+        let kept = zip(entries, placed).filter { !$0.1 }.map(\.0)
+        try writePendingEntries(kept, for: note)
     }
 
     // MARK: History follows the note
@@ -385,8 +396,8 @@ extension VaultStore {
     /// (`revisions.rs` `move_along`, `sidecar.rs` `move_along`).
     private func moveAlongHistoryAndPending(from: URL, to: URL) {
         guard let root = vaultURL else { return }
-        if let src = RevisionFormat.folder(root: root, dir: ".inkuno/revisions", note: from),
-           let dst = RevisionFormat.folder(root: root, dir: ".inkuno/revisions", note: to),
+        if let src = revisionDir(for: from),
+           let dst = revisionDir(for: to),
            FileManager.default.fileExists(atPath: src.path), !FileManager.default.fileExists(atPath: dst.path) {
             try? FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? FileManager.default.moveItem(at: src, to: dst)
@@ -398,59 +409,65 @@ extension VaultStore {
         }
     }
 
-    /// Trash: history and pending lists wait in their bins under the trashed name
-    /// (`revisions.rs` `trash_history`, `sidecar.rs` `trash_along`). A stale bin entry is moved
-    /// aside under a free name, never deleted.
+    /// Trash: history and pending lists wait in their bins under the trashed name (core
+    /// `vaultRevisionBin`, `trashedSidecarPath`). A stale bin entry is moved aside, never deleted.
     private func moveAsideHistoryAndPending(from: URL, trashedName: String, root: URL) {
-        let revBin = root.appendingPathComponent(".inkuno/trash", isDirectory: true)
-        if let src = RevisionFormat.folder(root: root, dir: ".inkuno/revisions", note: from),
-           FileManager.default.fileExists(atPath: src.path) {
-            try? FileManager.default.createDirectory(at: revBin, withIntermediateDirectories: true)
-            let slot = revBin.appendingPathComponent(trashedName)
-            if FileManager.default.fileExists(atPath: slot.path) {
-                let aside = freeName(in: revBin, name: trashedName)
-                try? FileManager.default.moveItem(at: slot, to: aside)
-            }
-            try? FileManager.default.moveItem(at: src, to: slot)
+        if let src = revisionDir(for: from), FileManager.default.fileExists(atPath: src.path) {
+            moveIntoBin(src, bin: root.appendingPathComponent(vaultRevisionBin(), isDirectory: true), name: trashedName)
         }
-        let pendBin = root.appendingPathComponent(".inkuno/pending-trash", isDirectory: true)
-        if let src = pendingFile(for: from), FileManager.default.fileExists(atPath: src.path) {
-            try? FileManager.default.createDirectory(at: pendBin, withIntermediateDirectories: true)
-            let slot = pendBin.appendingPathComponent(trashedName + ".json")
-            if FileManager.default.fileExists(atPath: slot.path) {
-                let aside = freeName(in: pendBin, name: trashedName + ".json")
-                try? FileManager.default.moveItem(at: slot, to: aside)
-            }
-            try? FileManager.default.moveItem(at: src, to: slot)
+        if let src = pendingFile(for: from), FileManager.default.fileExists(atPath: src.path),
+           let slot = trashedSidecarPath(trashedName: trashedName) {
+            let target = root.appendingPathComponent(slot)
+            moveIntoBin(src, bin: target.deletingLastPathComponent(), name: target.lastPathComponent)
         }
     }
 
     /// Restore: the bin entries of that exact name come back with the note
     /// (`revisions.rs` `restore_along`, `sidecar.rs` `restore_along`).
     private func restoreHistoryAndPending(trashedName: String, to: URL, root: URL) {
-        let revBin = root.appendingPathComponent(".inkuno/trash", isDirectory: true)
-        let revSrc = revBin.appendingPathComponent(trashedName)
+        let revSrc = root.appendingPathComponent(vaultRevisionBin(), isDirectory: true).appendingPathComponent(trashedName)
         if FileManager.default.fileExists(atPath: revSrc.path),
-           let dst = RevisionFormat.folder(root: root, dir: ".inkuno/revisions", note: to),
+           let dst = revisionDir(for: to),
            !FileManager.default.fileExists(atPath: dst.path) {
             try? FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? FileManager.default.moveItem(at: revSrc, to: dst)
         }
-        let pendBin = root.appendingPathComponent(".inkuno/pending-trash", isDirectory: true)
-        let pendSrc = pendBin.appendingPathComponent(trashedName + ".json")
-        if FileManager.default.fileExists(atPath: pendSrc.path),
-           let dst = pendingFile(for: to), !FileManager.default.fileExists(atPath: dst.path) {
-            try? FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? FileManager.default.moveItem(at: pendSrc, to: dst)
+        if let slot = trashedSidecarPath(trashedName: trashedName) {
+            let pendSrc = root.appendingPathComponent(slot)
+            if FileManager.default.fileExists(atPath: pendSrc.path),
+               let dst = pendingFile(for: to), !FileManager.default.fileExists(atPath: dst.path) {
+                try? FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? FileManager.default.moveItem(at: pendSrc, to: dst)
+            }
         }
     }
 
-    /// First free name in `dir`: `Name.md`, `2 Name.md`, `3 Name.md`…
-    /// (`platform/revisions.rs` `free_in`, mirrored for both bins).
-    private func freeName(in dir: URL, name: String) -> URL {
-        (1...).lazy.map { n in
-            n == 1 ? dir.appendingPathComponent(name) : dir.appendingPathComponent("\(n) \(name)")
-        }.first { !FileManager.default.fileExists(atPath: $0.path) }!
+    /// Moves `src` into `bin` as `name`. An entry already there moves aside under a free name first, so
+    /// nothing is replaced.
+    private func moveIntoBin(_ src: URL, bin: URL, name: String) {
+        try? FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let slot = bin.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: slot.path) {
+            let aside = bin.appendingPathComponent(trashName(name: name, taken: Self.names(in: bin)))
+            try? FileManager.default.moveItem(at: slot, to: aside)
+        }
+        try? FileManager.default.moveItem(at: src, to: slot)
+    }
+
+    /// Whether `url` is a folder (the URL of a listed folder or a file that may have gone).
+    static func isFolder(_ url: URL) -> Bool {
+        url.hasDirectoryPath || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
+    /// Keeps the index current after `url` moved to `target` (a folder's notes are indexed again on use).
+    func indexMoved(from url: URL, to target: URL, isFolder: Bool) {
+        indexRemoved(at: url, isFolder: isFolder)
+        if !isFolder { indexNote(at: target, text: (try? readNote(at: target)) ?? "") }
+    }
+
+    /// The names of the entries of a folder (empty when it cannot be read).
+    static func names(in folder: URL) -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
     }
 
     // MARK: Coordination helpers used by this extension

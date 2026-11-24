@@ -30,9 +30,9 @@ enum VaultError: LocalizedError {
 /// The user's notes folder: a folder in the Files app, kept with a security-scoped bookmark.
 /// The folder is the same one the desktop app uses.
 ///
-/// ponytail: pure Swift for now. The Rust core (`inkuno-logic`, via InkunoCore) will replace
-/// the naming rules, search, listing order and the recall window. File access stays here, and runs
-/// on the main actor, which is fine for a few hundred notes but not for large vaults.
+/// The desktop's rules (names, trash, versions, pending changes, search, recall) are the Rust core's,
+/// through InkunoCore. File access stays here, with file coordination, on the main actor: fine for a few
+/// hundred notes, not for large vaults.
 @Observable
 @MainActor
 final class VaultStore {
@@ -42,6 +42,9 @@ final class VaultStore {
     private(set) var vaultURL: URL?
     /// The last problem worth showing the user (for example a bookmark that no longer resolves).
     private(set) var lastError: String?
+    /// The vault's notes as the core indexes them: names, links, tags and bodies. Backlinks, recall and
+    /// the palette's search read it. Built by `rebuildIndex`, kept current by this store's writes.
+    private(set) var index: VaultIndex?
 
     private let defaults: UserDefaults
     /// The folder whose security-scoped access this store started and must stop.
@@ -50,8 +53,19 @@ final class VaultStore {
     /// The app's store: restores the folder from the saved bookmark.
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        #if DEBUG
+        // Debug builds only: `-InkunoVaultPath <absolute path>` opens that folder, with no picker or bookmark.
+        if let path = defaults.string(forKey: Self.debugVaultPathKey) {
+            vaultURL = URL(fileURLWithPath: path, isDirectory: true)
+            return
+        }
+        #endif
         restoreBookmark()
     }
+
+    #if DEBUG
+    static let debugVaultPathKey = "InkunoVaultPath"
+    #endif
 
     /// A store on a known folder with no bookmark and no security scope. Used by tests.
     init(vaultURL: URL, defaults: UserDefaults = .standard) {
@@ -60,6 +74,15 @@ final class VaultStore {
     }
 
     var hasVault: Bool { vaultURL != nil }
+
+    /// The vault-relative path of a file inside the vault (`ideas/plan.md`); nil outside it.
+    func relativePath(of url: URL) -> String? {
+        guard let root = vaultURL else { return nil }
+        let rootPath = root.standardized.path
+        let path = url.standardized.path
+        guard path.hasPrefix(rootPath + "/") else { return nil }
+        return String(path.dropFirst(rootPath.count + 1))
+    }
 
     var displayName: String {
         vaultURL?.lastPathComponent ?? "Not chosen"
@@ -80,6 +103,7 @@ final class VaultStore {
         }
         scopedURL = granted ? url : nil
         vaultURL = url
+        index = nil
         lastError = nil
     }
 
@@ -91,6 +115,7 @@ final class VaultStore {
             let granted = url.startAccessingSecurityScopedResource()
             scopedURL = granted ? url : nil
             vaultURL = url
+            index = nil
             if stale {
                 // The bookmark still resolves but is out of date: save a fresh one while access is granted.
                 if let fresh = try? url.bookmarkData() {
@@ -135,24 +160,66 @@ final class VaultStore {
         return notes
     }
 
-    /// Notes modified about a month ago, newest first, for the "From a month ago" cards.
-    func recallNotes(now: Date = .now, limit: Int = 6) throws -> [VaultEntry] {
-        Self.recall(from: try allNotes(), now: now, limit: limit)
+    // MARK: Index, recall and search
+
+    /// The index of the vault, built on first use and then kept current by this store's writes.
+    func searchIndex() throws -> VaultIndex {
+        if let index { return index }
+        return try rebuildIndex()
     }
 
-    /// The window is 23 to 37 days before `now`, so a note from "a month ago" is about thirty days old.
-    static func recall(from notes: [VaultEntry], now: Date, limit: Int = 6) -> [VaultEntry] {
-        let day: TimeInterval = 86_400
-        let newest = now.addingTimeInterval(-23 * day)
-        let oldest = now.addingTimeInterval(-37 * day)
-        return notes
-            .filter { entry in
-                guard let modified = entry.modified else { return false }
-                return modified <= newest && modified >= oldest
-            }
-            .sorted { ($0.modified ?? .distantPast) > ($1.modified ?? .distantPast) }
-            .prefix(limit)
-            .map { $0 }
+    /// Reads every note of the vault and builds the index from them. A note that cannot be read is
+    /// indexed with an empty body. Call it when the files may have changed outside this store.
+    @discardableResult
+    func rebuildIndex() throws -> VaultIndex {
+        let inputs = try allNotes().compactMap { entry -> NoteInput? in
+            guard let path = relativePath(of: entry.url) else { return nil }
+            return NoteInput(
+                path: path,
+                body: (try? readNote(at: entry.url)) ?? "",
+                mtimeUnix: Int64((entry.modified ?? .distantPast).timeIntervalSince1970)
+            )
+        }
+        let built = VaultIndex(notes: inputs)
+        index = built
+        return built
+    }
+
+    /// The URL of a vault-relative note path (`ideas/plan.md`).
+    func noteURL(path: String) -> URL? {
+        vaultURL?.appendingPathComponent(path)
+    }
+
+    /// Notes to reread today, at most three (core `recall`): the daily notes of a week, a month and a year
+    /// ago, then an old note. `now` is the time of the day.
+    func recalledNotes(now: Date = .now) throws -> [RecalledNote] {
+        try searchIndex().recall(today: CoreDates.ymd(now), nowUnix: Int64(now.timeIntervalSince1970))
+    }
+
+    /// The notes that link to `note` by name (core `backlinks`), for the Backlinks panel.
+    func backlinks(to note: URL) throws -> [(url: URL, title: String)] {
+        guard let path = relativePath(of: note) else { return [] }
+        return try searchIndex().backlinks(path: path).compactMap { ref in
+            noteURL(path: ref.path).map { (url: $0, title: ref.name) }
+        }
+    }
+
+    /// Keeps the index current after a note's text is written: the note is put in again under its path
+    /// (core `update`). Nothing happens before the index is built.
+    func indexNote(at url: URL, text: String) {
+        guard let index, let path = relativePath(of: url) else { return }
+        index.update(note: NoteInput(path: path, body: text, mtimeUnix: Self.nowUnix()))
+    }
+
+    /// Keeps the index current after `url` left its place: a note is taken out of the index; a folder's
+    /// notes change paths, so the index is dropped and built again on its next use.
+    func indexRemoved(at url: URL, isFolder: Bool) {
+        guard index != nil else { return }
+        if isFolder {
+            index = nil
+        } else if let path = relativePath(of: url) {
+            index?.remove(path: path)
+        }
     }
 
     // MARK: Reading and writing
@@ -173,6 +240,7 @@ final class VaultStore {
     func writeNote(_ text: String, to url: URL) throws {
         let data = Data(text.utf8)
         try coordinateWrite(url) { try data.write(to: $0, options: .atomic) }
+        indexNote(at: url, text: text)
     }
 
     /// Creates a note. Refuses when the name is taken, so nothing is overwritten.
@@ -183,6 +251,7 @@ final class VaultStore {
         else { throw VaultError.nameTaken(url) }
         let data = Data(text.utf8)
         try coordinateWrite(url) { try data.write(to: $0, options: .withoutOverwriting) }
+        indexNote(at: url, text: text)
         return url
     }
 
@@ -199,7 +268,6 @@ final class VaultStore {
     }
 
     /// Opens today's daily note in the vault root, creating it empty if needed.
-    /// ponytail: the name is `YYYY-MM-DD.md`. The desktop naming rule from inkuno-logic replaces it.
     func openToday(now: Date = .now, calendar: Calendar = .current) throws -> URL {
         guard let root = vaultURL else { throw VaultError.noVault }
         let url = root.appendingPathComponent(Self.dailyNoteFileName(for: now, calendar: calendar))

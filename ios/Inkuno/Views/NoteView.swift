@@ -70,8 +70,8 @@ struct NoteView: View {
                 showMarkers: showMarkdownOnLiveLine,
                 isEditable: loaded,
                 onSlash: { showSlash = true },
-                onComment: { line, passage, inTable in
-                    commentDraft = CommentDraft(line: line, passage: passage, inTable: inTable)
+                onComment: { line, passage in
+                    commentDraft = CommentDraft(line: line, passage: passage)
                 }
             )
             .padding(.horizontal, pageWidth.gutter)

@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// A comment being written on a block: the block's line (0-based), its text (quoted as the passage) and
-/// whether it is a table line (its `|` is escaped).
+/// A comment being written on a block: the block's line (0-based) and its text (quoted as the passage).
 struct CommentDraft: Identifiable {
     let id = UUID()
     let line: Int
     let passage: String
-    let inTable: Bool
 }
 
 /// The small composer for a block comment: the passage quoted, what is said, Cancel and Add. Add writes the
@@ -21,7 +19,7 @@ struct CommentComposer: View {
 
     /// Whether the passage can take a comment: a non-blank line without comment marks.
     private var canComment: Bool {
-        CommentFormat.commented(line: draft.passage, said: "x", inTable: draft.inTable) != nil
+        CommentFormat.commented(line: draft.passage, said: "x") != nil
     }
 
     private var canAdd: Bool {

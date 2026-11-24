@@ -12,7 +12,7 @@ final class MarkdownEditorController: NSObject {
     var onTextChange: ((String) -> Void)?
     var onSlash: (() -> Void)?
     /// Comment from the block menu: the block's line index, its text, and whether it is a table line.
-    var onComment: ((_ line: Int, _ text: String, _ inTable: Bool) -> Void)?
+    var onComment: ((_ line: Int, _ text: String) -> Void)?
 
     var textSize: CGFloat = 16 {
         didSet {
@@ -288,7 +288,7 @@ final class MarkdownEditorController: NSObject {
     /// Comment: asks the host for the comment text of the block's line.
     func beginComment() {
         let index = selectedLines().lowerBound
-        onComment?(index, lineText(index), layouts[index].kind == .table)
+        onComment?(index, lineText(index))
     }
 
     /// Writes the comment on line `index` as `passage<!-- comment: said -->`, the passage being the line.
@@ -298,7 +298,7 @@ final class MarkdownEditorController: NSObject {
         guard layouts.indices.contains(index) else { return false }
         let line = layouts[index]
         let text = lineText(index)
-        guard let commented = CommentFormat.commented(line: text, said: said, inTable: line.kind == .table) else { return false }
+        guard let commented = CommentFormat.commented(line: text, said: said) else { return false }
         replace(
             NSRange(location: line.startUTF16, length: text.utf16.count),
             with: commented,
