@@ -1036,7 +1036,7 @@ impl Shell {
                 let covered = self.palette.is_some()
                     || self.menu.is_some()
                     || self.icon_pick.is_some()
-                    || dragging
+                    || cx.has_active_drag()
                     || self.band_peek;
                 match covered {
                     true => note,
