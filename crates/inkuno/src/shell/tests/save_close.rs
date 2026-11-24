@@ -632,3 +632,46 @@ fn a_heading_rename_keeps_the_text_typed_in_the_note_that_links_to_it(cx: &mut T
     assert!(copies.is_empty(), "{copies:?}");
     let _ = fs::remove_dir_all(root);
 }
+
+/// The pause of a note whose background save is still in flight is left to that save (the text typed
+/// meanwhile is not lost). When that save fails, the text that changed during it is saved by the next
+/// pause, once the folder can be written again.
+#[gpui::test]
+fn text_changed_during_a_failed_debounced_save_is_saved_by_the_next_pause(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-failed-typing");
+    let anchor = root.join("Anchor.md");
+    let plan = root.join("Plan.md");
+    fs::write(&anchor, "# Anchor\n").unwrap();
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &anchor);
+    open(&shell, cx, &plan);
+    // Notes save through `.<stem>.tmp`: a folder there blocks the write.
+    let block = root.join(".Plan.tmp");
+    fs::create_dir(&block).unwrap();
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" ajout");
+    // The pause's timer is due, and the save is started before the timer runs: the timer leaves it.
+    cx.executor().advance_clock(Duration::from_millis(400));
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    // The text changes while the save is pending. `load` changes the text without a typing pause of its
+    // own, so only the failed save can save it again.
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            let text = "# Plan\n\noriginal ajout b".to_string();
+            let end = text.len();
+            e.load(text, end, cx)
+        })
+    });
+    cx.run_until_parked();
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "Plan") && s.pane().dirty));
+    fs::remove_dir(&block).unwrap();
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(&plan).unwrap(),
+        "# Plan\n\noriginal ajout b"
+    );
+    assert!(shell.read_with(cx, |s, _| !s.pane().dirty));
+    let _ = fs::remove_dir_all(root);
+}

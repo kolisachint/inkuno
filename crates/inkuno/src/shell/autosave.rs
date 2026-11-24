@@ -127,7 +127,14 @@ impl Shell {
                 Applied::Outside => {
                     this.flush_one(cx);
                 }
-                Applied::Failed | Applied::Stale => {}
+                Applied::Failed => {
+                    // Typing went on meanwhile: the next pause saves it, as the save that failed would
+                    // have. Nothing is retried on its own otherwise: the error is shown.
+                    if this.pane().editor.read(cx).version() != saving.version {
+                        this.schedule_save(cx);
+                    }
+                }
+                Applied::Stale => {}
             }
         });
         cx.notify();
