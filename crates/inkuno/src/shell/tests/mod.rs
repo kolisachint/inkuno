@@ -16,6 +16,7 @@ mod floating;
 mod keyboard;
 mod keycaps;
 mod layout;
+mod line_numbers;
 mod menus;
 mod motion;
 mod outline;

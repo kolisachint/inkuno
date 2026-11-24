@@ -143,8 +143,11 @@ pub struct Theme {
     pub motion: bool,
     /// Multiplier of every line height (see `Prefs::leading`): 1 is normal spacing.
     pub leading: f32,
-    /// Line numbers of a code block are drawn (`gutter` is the colour of the gutter).
+    /// Line numbers of a code block are drawn (`gutter` is the colour of the gutter). Off while the
+    /// note's own line numbers show: a code block then has no numbers of its own.
     pub numbered: bool,
+    /// The note's line numbers show, in a gutter left of the text.
+    pub line_numbers: bool,
 }
 
 /// Offered themes: (name, [background, text, faint, accent, code background, panel, border]).
@@ -847,7 +850,8 @@ impl Theme {
             bar: prefs.bar != "off",
             motion: prefs.motion != "off",
             leading: prefs.leading(),
-            numbered: prefs.gutter != "off",
+            numbered: prefs.gutter != "off" && prefs.line_numbers == "off",
+            line_numbers: prefs.line_numbers != "off",
         }
     }
 }

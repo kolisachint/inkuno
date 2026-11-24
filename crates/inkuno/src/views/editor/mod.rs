@@ -7,6 +7,7 @@ mod clipboard;
 mod completion;
 mod cursor;
 mod edit;
+mod file_lines;
 mod find;
 mod format_bar;
 pub mod grid;
@@ -24,6 +25,7 @@ mod style;
 mod table;
 mod toolbar;
 
+use crate::logic::lines::LineIndex;
 use grid::TableRow;
 
 pub use blocks::*;
@@ -418,6 +420,8 @@ pub struct Editor {
     /// (theme, images): as long as it and the rest of `LayoutKey` do not move, the
     /// layout is reused as is, for a plain scroll.
     version: u64,
+    /// The lines of the text, for the file line numbers of the gutter: rebuilt when `version` moves (see `place`).
+    lines: (u64, LineIndex),
     /// Counts text changes, and only them: an image that loads or a theme that changes does not move it.
     revision: u64,
     /// The `revision` the lines in `rows` were laid out for: pointer events between an edit and the next
@@ -558,6 +562,7 @@ impl Editor {
             theme,
             rows: Vec::new(),
             version: 0,
+            lines: (u64::MAX, LineIndex::new("")),
             revision: 0,
             rows_revision: 0,
             corner: 1,

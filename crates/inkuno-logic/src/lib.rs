@@ -12,6 +12,7 @@ pub mod commands;
 pub mod daily;
 pub mod lang;
 pub mod layout;
+pub mod lines;
 pub mod markdown;
 pub mod merge;
 pub mod note;

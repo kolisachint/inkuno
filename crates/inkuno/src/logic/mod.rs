@@ -10,6 +10,7 @@ pub use inkuno_logic::block;
 pub use inkuno_logic::commands;
 pub use inkuno_logic::daily;
 pub use inkuno_logic::layout;
+pub use inkuno_logic::lines;
 pub use inkuno_logic::markdown;
 pub use inkuno_logic::merge;
 pub use inkuno_logic::note;

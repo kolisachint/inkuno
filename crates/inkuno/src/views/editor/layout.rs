@@ -3258,6 +3258,10 @@ impl Editor {
     /// What depends on scrolling and the window size, and is redone every frame:
     /// view, table frames, clickable zones.
     pub(super) fn place(&mut self, bounds: Bounds<Pixels>, window: &mut Window, _: &mut App) {
+        // The file's line numbers: the index of the text, rebuilt only when the text moves.
+        if self.lines.0 != self.version {
+            self.lines = (self.version, LineIndex::new(&self.content));
+        }
         let reveal = std::mem::take(&mut self.reveal);
         let to_top = std::mem::take(&mut self.reveal_top);
         // A narrow note (the pane, not the page measure, sets its width) that reaches under the window buttons starts lower.
