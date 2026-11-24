@@ -1,0 +1,131 @@
+# iOS CI: shared Rust core tests, device-free simulator build and unit tests.
+#
+# Runs only when the iOS app or the Rust code it links changes. The app is
+# built for the simulator with signing disabled, so no secrets are needed.
+# Signed device builds live in release-ios.yml and scripts/ios-device.sh.
+#
+# Runner: macos-26 is pinned because its image ships Xcode 27 (listed in
+# actions/runner-images README, "Available Images"). Xcode is chosen by
+# DEVELOPER_DIR at run time, so a new image label only needs this line changed.
+name: CI iOS
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/inkuno-logic/**"
+      - "crates/inkuno-ffi/**"
+      - "ios/**"
+      - "scripts/build-ios-core.sh"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/ci-ios.yml"
+  pull_request:
+    paths:
+      - "crates/inkuno-logic/**"
+      - "crates/inkuno-ffi/**"
+      - "ios/**"
+      - "scripts/build-ios-core.sh"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/ci-ios.yml"
+  # By hand on any branch: `gh workflow run "CI iOS" --ref <branch>`.
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-ios-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      # sccache with the GitHub Actions cache backend, as in ci.yml.
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_CACHE_SIZE: "2G"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          dev=/Applications/Xcode.app/Contents/Developer
+          if [ ! -d "$dev" ]; then
+            # Fallback: the newest Xcode*.app on the image, whatever its name.
+            app=$(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort -V | tail -1 || true)
+            if [ -z "$app" ]; then
+              echo "::error::no Xcode found under /Applications"
+              exit 1
+            fi
+            dev="$app/Contents/Developer"
+          fi
+          echo "Xcode installs on this image:"
+          find /Applications -maxdepth 1 -name 'Xcode*.app'
+          echo "DEVELOPER_DIR=$dev" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$dev" xcodebuild -version
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain
+      - name: Add iOS Rust targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: Swatinem/rust-cache@v2
+      - name: Shared core tests
+        run: cargo test -p inkuno-ffi --locked
+      - name: Install xcodegen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+      - name: Build the Rust core for the simulator (debug)
+        run: scripts/build-ios-core.sh debug
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Choose the newest available iPhone simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/simctl.json"
+          python3 - "$RUNNER_TEMP/simctl.json" >> "$GITHUB_OUTPUT" <<'PY'
+          import json, re, sys
+
+          devices = json.load(open(sys.argv[1]))["devices"]
+          candidates = []
+          for runtime, entries in devices.items():
+              match = re.search(r"SimRuntime\.iOS-(\d+)-(\d+)", runtime)
+              if not match:
+                  continue
+              for device in entries:
+                  if device.get("isAvailable") and device["name"].startswith("iPhone"):
+                      # Prefer the name the project documents (iPhone 17), then the newest iOS.
+                      version = (int(match[1]), int(match[2]))
+                      candidates.append((device["name"] == "iPhone 17", version, device["name"], device["udid"]))
+          if not candidates:
+              sys.exit("no available iPhone simulator on this image")
+          best = max(candidates, key=lambda c: (c[0], c[1]))
+          print(f"name={best[2]}")
+          print(f"udid={best[3]}")
+          PY
+      - name: Unit tests (simulator, unsigned)
+        working-directory: ios
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          xcodebuild -project Inkuno.xcodeproj -scheme Inkuno \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -resultBundlePath build/TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+      - name: Upload the test result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ios/build/TestResults.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
