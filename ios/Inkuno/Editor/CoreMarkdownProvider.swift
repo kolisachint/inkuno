@@ -11,9 +11,8 @@ struct CoreMarkdownProvider: MarkdownLayoutProvider {
     /// The core's bit of each style, read from the core once. Nothing here assumes the core's numbers.
     private static let coreBits = InkunoCore.styleBits()
 
-    /// (core bit, editor bit) for each style the editor draws. Core styles with no editor bit (highlight,
-    /// underline, code colouring, quiet text, checkboxes) are dropped. `date` has no core bit: no run
-    /// carries it yet.
+    /// (core bit, editor bit) for each inline style the editor draws. Core styles with no editor bit
+    /// (highlight, underline, checkboxes) are dropped.
     private static let bitMap: [(core: UInt32, editor: UInt32)] = [
         (coreBits.bold, StyleBit.bold),
         (coreBits.italic, StyleBit.italic),
@@ -21,32 +20,71 @@ struct CoreMarkdownProvider: MarkdownLayoutProvider {
         (coreBits.strike, StyleBit.strike),
         (coreBits.link, StyleBit.link),
         (coreBits.tag, StyleBit.tag),
-        // The core dims the syntax characters (`**`, backticks, the brackets and URL of a link).
+        // The core dims the syntax characters (`**`, backticks, the brackets of a link).
         (coreBits.dim, StyleBit.marker),
+        // The core's quiet text: the address of a link. Hidden off the caret line, except in front matter.
+        (coreBits.quiet, StyleBit.quiet),
     ]
+
+    /// (core bit, editor bit) for a code line's colouring. Only the colours and the italics of a comment:
+    /// the core's code runs also carry `DIM` and `QUIET` on comments, which must not hide them.
+    private static let codeBitMap: [(core: UInt32, editor: UInt32)] = [
+        (coreBits.keyword, StyleBit.keyword),
+        (coreBits.string, StyleBit.string),
+        (coreBits.number, StyleBit.number),
+        (coreBits.comment, StyleBit.comment),
+        (coreBits.typeName, StyleBit.type),
+        (coreBits.function, StyleBit.function),
+        (coreBits.italic, StyleBit.italic),
+    ]
+
+    /// `@2026-11-24`, or a day word after `@`. Not after a word character or a dot, so an address is left alone.
+    /// ponytail: the core has no date bit yet. This scan finds the `@` words and the core's date
+    /// suggestions accept or refuse them, so the desktop's day rules apply.
+    private static let dateWord = try? NSRegularExpression(pattern: "(?<![\\w.\\\\])@[A-Za-z0-9-]+")
 
     func documentLayout(_ text: String) -> [LineLayout] {
         let lines = InkunoCore.documentLayout(text: text).lines
+        let sourceLines = text.components(separatedBy: "\n")
+        // The language of the open code block, from its opening fence ("```rust" is "rust").
+        var openLang: String?
         return lines.enumerated().map { index, line in
-            LineLayout(
+            let kind = LineKind(line.kind)
+            // A fence inside a block closes it; the core marks both fences as in the block.
+            if kind == .fence, line.inCodeBlock, index < sourceLines.count {
+                if openLang == nil {
+                    let info = sourceLines[index].drop { $0 == " " || $0 == "`" || $0 == "~" }
+                    openLang = info.split(separator: " ").first.map(String.init) ?? ""
+                } else {
+                    openLang = nil
+                }
+            }
+            return LineLayout(
                 startUTF16: Int(line.startUtf16),
                 // The core's length leaves out the line break; the editor's counts it, except on the last line.
                 lenUTF16: Int(line.lenUtf16) + (index < lines.count - 1 ? 1 : 0),
-                kind: LineKind(line.kind),
+                kind: kind,
                 headingLevel: Int(line.headingLevel),
                 markerLenUTF16: Int(line.markerLenUtf16),
-                inCodeBlock: line.inCodeBlock
+                inCodeBlock: line.inCodeBlock,
+                codeLang: kind == .code ? (openLang ?? "") : ""
             )
         }
     }
 
     func styleRuns(line: String) -> [StyleRun] {
-        InkunoCore.lineStyleRuns(line: line).compactMap { run in
-            let bits = Self.editorBits(run.bits)
-            guard bits != 0 else { return nil }
-            return StyleRun(startUTF16: Int(run.startUtf16), lenUTF16: Int(run.lenUtf16), bits: bits)
+        let runs = InkunoCore.lineStyleRuns(line: line).compactMap { run in
+            Self.run(run.startUtf16, run.lenUtf16, run.bits, Self.bitMap)
+        }
+        return runs + Self.dateRuns(in: line)
+    }
+
+    func codeStyleRuns(line: String, lang: String) -> [StyleRun] {
+        InkunoCore.codeStyleRuns(line: line, lang: lang).compactMap { run in
+            Self.run(run.startUtf16, run.lenUtf16, run.bits, Self.codeBitMap)
         }
     }
+
 
     func onEnter(line: String, colUTF16: Int, inFence: Bool) -> EnterOutcome {
         switch InkunoCore.onEnter(line: line, colUtf16: UInt64(max(0, colUTF16)), inFence: inFence) {
@@ -78,9 +116,31 @@ struct CoreMarkdownProvider: MarkdownLayoutProvider {
         return (newText, selection)
     }
 
-    /// The editor's bits for the core bits of `bits`.
-    private static func editorBits(_ bits: UInt32) -> UInt32 {
-        bitMap.reduce(into: UInt32(0)) { result, pair in
+    private static func run(_ start: UInt64, _ length: UInt64, _ bits: UInt32, _ map: [(core: UInt32, editor: UInt32)]) -> StyleRun? {
+        let editor = editorBits(bits, map)
+        guard editor != 0 else { return nil }
+        return StyleRun(startUTF16: Int(start), lenUTF16: Int(length), bits: editor)
+    }
+
+    /// The runs of the `@` words of `line` that the core reads as a day (`dateSuggestions`).
+    private static func dateRuns(in line: String) -> [StyleRun] {
+        guard line.contains("@"), let dateWord else { return [] }
+        let text = line as NSString
+        let today = CoreDates.ymd(.now)
+        return dateWord.matches(in: line, range: NSRange(location: 0, length: text.length)).compactMap { match in
+            let word = text.substring(with: NSRange(location: match.range.location + 1, length: match.range.length - 1))
+            // The core completes prefixes ("mo" for Monday); a styled date is a whole day name or ISO date.
+            let whole = InkunoCore.dateSuggestions(query: word, today: today).contains { day in
+                day.iso == word || day.label.split(separator: ",").first?.lowercased() == word.lowercased()
+            }
+            guard whole else { return nil }
+            return StyleRun(startUTF16: match.range.location, lenUTF16: match.range.length, bits: StyleBit.date)
+        }
+    }
+
+    /// The editor's bits for the core bits of `bits`, through `map`.
+    private static func editorBits(_ bits: UInt32, _ map: [(core: UInt32, editor: UInt32)]) -> UInt32 {
+        map.reduce(into: UInt32(0)) { result, pair in
             if bits & pair.core != 0 {
                 result |= pair.editor
             }
