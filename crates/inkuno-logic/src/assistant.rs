@@ -18,9 +18,96 @@ pub fn chat_prompt(note: Option<&str>, question: &str) -> String {
     format!("{opening}{file} Do not change any file. Answer briefly, in plain text.\n\n{question}")
 }
 
+/// The name the assistant writes its comments and replies with. The listing of [`open_comments`]
+/// leaves out a comment whose last message is by it, so the agent does not answer itself.
+pub const AUTHOR: &str = "assistant";
+
+/// A comment of the note that a review may answer: where its passage starts, its markup (to find it
+/// again), and what it says, as the prompt lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Open {
+    /// The byte where the comment's passage starts in the note as it was read.
+    pub at: usize,
+    /// The whole of the comment in that note: passage and markup, `text[at..end]`.
+    pub whole: String,
+    /// The commented text; empty for a comment on its own.
+    pub passage: String,
+    /// The comment as its markup says it: its author, its text and its replies.
+    pub comment: markdown::Comment,
+}
+
+/// The comments of `text` a review may answer: those whose last message (the last reply, else the
+/// comment) is not by [`AUTHOR`], in the note's order. The prompt numbers them from 1, and a reply
+/// names its comment by that number.
+pub fn open_comments(text: &str) -> Vec<Open> {
+    markdown::all_comments(text)
+        .into_iter()
+        .filter_map(|note| {
+            let whole = &text[note.at..note.end];
+            let comment = markdown::parse_comment(markdown::markup_in(whole))?;
+            let last = match comment.replies.last() {
+                Some(reply) => reply.author.as_deref(),
+                None => comment.author.as_deref(),
+            };
+            if last.is_some_and(|by| by.eq_ignore_ascii_case(AUTHOR)) {
+                return None;
+            }
+            Some(Open {
+                at: note.at,
+                whole: whole.to_string(),
+                passage: note.noted.to_string(),
+                comment,
+            })
+        })
+        .collect()
+}
+
+/// One line of the prompt's list of open comments: `C1 on "passage" — @name: text ↳ @other: reply`.
+fn listing_line(number: usize, open: &Open) -> String {
+    let said = |author: Option<&str>, text: &str| {
+        let owned = author.map(str::to_string);
+        let name = markdown::shown_author(&owned).unwrap_or("Unknown");
+        format!("@{name}: {text}")
+    };
+    let subject = match open.passage.is_empty() {
+        true => "alone on its line".to_string(),
+        false => format!("on \"{}\"", open.passage),
+    };
+    let mut line = format!(
+        "C{number} {subject} — {}",
+        said(open.comment.author.as_deref(), &open.comment.text)
+    );
+    for reply in &open.comment.replies {
+        line.push_str(" ↳ ");
+        line.push_str(&said(reply.author.as_deref(), &reply.text));
+    }
+    line
+}
+
 /// The words that ask for a review of `note` (a path relative to the agent's working folder,
-/// or absolute). The answer is read back by [`findings`].
-pub fn review_prompt(note: &str) -> String {
+/// or absolute), with the comments of the note it may answer (`open`, see [`open_comments`]). The
+/// answer is read back by [`findings`].
+pub fn review_prompt(note: &str, open: &[Open]) -> String {
+    let (listed, reply) = match open.is_empty() {
+        true => (String::new(), String::new()),
+        false => {
+            let lines: Vec<String> = open
+                .iter()
+                .enumerate()
+                .map(|(i, open)| listing_line(i + 1, open))
+                .collect();
+            (
+                format!(
+                    "The note already has these comments, numbered. You may answer a question or \
+                     a remark in one of them, once, with a reply:\n{}\n\n",
+                    lines.join("\n")
+                ),
+                "To answer a comment, give the two lines `REPLY: C<number>` and `COMMENT: <the \
+                 reply, one line>`, only where the reply adds something.\n"
+                    .to_string(),
+            )
+        }
+    };
     format!(
         "You are the assistant inside Inkuno, a note app for Markdown.\n\
          \n\
@@ -29,31 +116,48 @@ pub fn review_prompt(note: &str) -> String {
          12 findings, the most useful first. No praise. Write the comments in the language of the \
          note. Do not change any file.\n\
          \n\
+         {listed}\
          Answer with NOTHING but findings, one after another, each in exactly this form, with no \
          text before, between or after them:\n\
          PASSAGE: <text copied exactly from ONE line of the note, short (3 to 12 words), unique \
          in the note, no Markdown markup added>\n\
          COMMENT: <the remark, one line>\n\
+         {reply}\
          \n\
          When there is nothing to say, answer with the single line NO FINDINGS."
     )
 }
 
-/// The findings in a review answer: (passage, comment) pairs, in order.
+/// One thing a review answer asks for: a new comment on a passage of the note, or a reply to a
+/// comment the prompt listed (`id` is its number, from 1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Finding {
+    New { passage: String, comment: String },
+    Reply { id: usize, text: String },
+}
+
+/// The findings in a review answer, in order.
 ///
-/// Tolerant: a `PASSAGE:` line opens a finding and the `COMMENT:` line after it closes it. A
-/// comment may go on over the following lines until a blank line, a code fence or the next
-/// `PASSAGE:`. Labels may come with a list mark, bold or backticks around them. Text before,
-/// between and after the findings is ignored, and so is a pair with an empty part.
-pub fn findings(answer: &str) -> Vec<(String, String)> {
+/// Tolerant: a `PASSAGE:` line opens a new comment and a `REPLY:` line a reply; the `COMMENT:` line
+/// after either closes it. A reply's number is read as `C3`, `c3` or `3`. A comment may go on over
+/// the following lines until a blank line, a code fence or the next label. Labels may come with a
+/// list mark, bold or backticks around them. Text before, between and after the findings is
+/// ignored, and so is a finding with an empty part.
+pub fn findings(answer: &str) -> Vec<Finding> {
     let mut found = Vec::new();
-    let mut open: Option<Open> = None;
+    let mut open: Option<Partial> = None;
     for line in answer.lines() {
         let line = line.trim();
         if let Some(value) = label(line, "PASSAGE") {
             finish(&mut open, &mut found);
-            open = Some(Open {
-                passage: value.to_string(),
+            open = Some(Partial {
+                head: Head::Passage(value.to_string()),
+                comment: None,
+            });
+        } else if let Some(value) = label(line, "REPLY") {
+            finish(&mut open, &mut found);
+            open = comment_number(value).map(|id| Partial {
+                head: Head::Reply(id),
                 comment: None,
             });
         } else if let Some(value) = label(line, "COMMENT") {
@@ -61,7 +165,7 @@ pub fn findings(answer: &str) -> Vec<(String, String)> {
                 open.comment = Some(value.to_string());
             }
         } else if line.is_empty() || markdown::is_fence(line) {
-            // The comment ends here; a passage still waiting for its comment stays open.
+            // The comment ends here; a finding still waiting for its comment stays open.
             if open.as_ref().is_some_and(|open| open.comment.is_some()) {
                 finish(&mut open, &mut found);
             }
@@ -74,24 +178,53 @@ pub fn findings(answer: &str) -> Vec<(String, String)> {
     found
 }
 
-/// A finding read so far: its passage, and its comment once the `COMMENT:` line came.
-struct Open {
-    passage: String,
+/// What a finding read so far asks for: a passage, or the number of the comment it replies to.
+enum Head {
+    Passage(String),
+    Reply(usize),
+}
+
+/// A finding read so far: its head, and its comment once the `COMMENT:` line came.
+struct Partial {
+    head: Head,
     comment: Option<String>,
 }
 
-/// Moves the open finding into `found` when both of its parts are there.
-fn finish(open: &mut Option<Open>, found: &mut Vec<(String, String)>) {
-    if let Some(Open {
-        passage,
+/// Moves the open finding into `found` when both of its parts are there and it is not empty.
+fn finish(open: &mut Option<Partial>, found: &mut Vec<Finding>) {
+    let Some(Partial {
+        head,
         comment: Some(comment),
     }) = open.take()
-    {
-        let comment = comment.trim();
-        if !passage.is_empty() && !comment.is_empty() {
-            found.push((passage, comment.to_string()));
-        }
+    else {
+        return;
+    };
+    let comment = comment.trim();
+    if comment.is_empty() {
+        return;
     }
+    match head {
+        Head::Passage(passage) if !passage.is_empty() => found.push(Finding::New {
+            passage,
+            comment: comment.to_string(),
+        }),
+        Head::Reply(id) => found.push(Finding::Reply {
+            id,
+            text: comment.to_string(),
+        }),
+        Head::Passage(_) => {}
+    }
+}
+
+/// The number a reply names: `C3`, `c3` or `3`, with any bold or backticks around it. `None` when
+/// there is no number.
+fn comment_number(value: &str) -> Option<usize> {
+    let value = value
+        .trim()
+        .trim_matches(['*', '`', ' ', '\t'])
+        .trim_start_matches(['C', 'c']);
+    let digits: String = value.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok().filter(|&n| n > 0)
 }
 
 /// The value after `name:` when `line` starts with that label, whatever is around the label
@@ -127,27 +260,69 @@ fn unquote(value: &str) -> String {
     value.to_string()
 }
 
-/// What placing the findings in a note gave: the new text, and how many findings were placed and
-/// how many were left out.
+/// What placing the findings in a note gave: the new text, how many new comments and how many replies
+/// were placed, and how many findings were left out.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Placed {
     pub text: String,
     pub placed: usize,
+    pub replied: usize,
     pub skipped: usize,
 }
 
-/// Wraps each finding's passage in `text`, in order, with `markdown::comment_on`. The passage is
-/// tried as written first, then without the one pair of quotes or backticks around it (a model
-/// may add them). A finding is left out when neither form is in the text exactly once, or when it
-/// lies inside a comment that is already there (a second finding on the same words would nest in
-/// the first).
-pub fn place(text: &str, found: &[(String, String)], by: markdown::Stamp) -> Placed {
+/// Writes each finding into `text`: the replies first, then the new comments in order.
+///
+/// A reply goes to the comment `listed` numbers (see [`open_comments`] on the text it was read from).
+/// It is written only where that comment still starts at the same byte with the same markup; a reply
+/// to a number that is not listed, or to a comment that has changed, is left out. The replies go
+/// from the last comment to the first, so that the comments before each one keep their places.
+///
+/// A new comment wraps its passage with `markdown::comment_on_by`. The passage is tried as written
+/// first, then without the one pair of quotes or backticks around it (a model may add them). It is
+/// left out when neither form is in the text exactly once, or when it lies inside a comment that is
+/// already there (a second finding on the same words would nest in the first).
+pub fn place(text: &str, found: &[Finding], listed: &[Open], by: markdown::Stamp) -> Placed {
     let mut out = Placed {
         text: text.to_string(),
         placed: 0,
+        replied: 0,
         skipped: 0,
     };
-    for (passage, comment) in found {
+    // The replies of each listed comment, in their order; a number that is not listed is skipped.
+    let mut targets: Vec<(usize, Vec<&str>)> = Vec::new();
+    for finding in found {
+        let Finding::Reply { id, text } = finding else {
+            continue;
+        };
+        match id.checked_sub(1).filter(|&i| i < listed.len()) {
+            Some(i) => match targets.iter_mut().find(|(j, _)| *j == i) {
+                Some((_, texts)) => texts.push(text),
+                None => targets.push((i, vec![text])),
+            },
+            None => out.skipped += 1,
+        }
+    }
+    targets.sort_by_key(|(i, _)| std::cmp::Reverse(listed[*i].at));
+    for (i, texts) in targets {
+        let open = &listed[i];
+        let at = markdown::all_comments(&out.text)
+            .iter()
+            .find(|note| note.at == open.at && out.text[note.at..note.end] == open.whole)
+            .map(|note| note.at);
+        for text in texts {
+            match at.and_then(|at| markdown::reply_on(&out.text, at, text, by)) {
+                Some(next) => {
+                    out.text = next;
+                    out.replied += 1;
+                }
+                None => out.skipped += 1,
+            }
+        }
+    }
+    for finding in found {
+        let Finding::New { passage, comment } = finding else {
+            continue;
+        };
         let unquoted = unquote(passage);
         let placed = [passage.as_str(), unquoted.as_str()]
             .into_iter()
@@ -331,22 +506,40 @@ pub fn rewritten(base: &str, range: Option<Range<usize>>, text: &str) -> String 
 
 #[cfg(test)]
 mod tests {
-    /// `place`, with a fixed author and time for the comments it writes.
-    fn place_at(text: &str, found: &[(String, String)]) -> super::Placed {
-        super::place(
-            text,
-            found,
-            crate::markdown::Stamp {
-                author: "Ana",
-                time: "2026-11-24T10:02Z",
-            },
-        )
+    /// `place`, with a fixed author and time for the comments it writes, and no listed comment.
+    fn place_at(text: &str, found: &[Finding]) -> super::Placed {
+        super::place(text, found, &[], stamp("Ana"))
+    }
+
+    /// `place` with the comments `listed` (as the note `text` lists them), written by the assistant.
+    fn place_listed(text: &str, found: &[Finding], listed: &[Open]) -> super::Placed {
+        super::place(text, found, listed, stamp(super::AUTHOR))
+    }
+
+    /// A stamp by `author` at a fixed minute.
+    fn stamp(author: &str) -> crate::markdown::Stamp<'_> {
+        crate::markdown::Stamp {
+            author,
+            time: "2026-11-24T10:02Z",
+        }
     }
 
     use super::*;
 
-    fn pair(passage: &str, comment: &str) -> (String, String) {
-        (passage.into(), comment.into())
+    /// A new comment on `passage`, as the agent's answer gives it.
+    fn pair(passage: &str, comment: &str) -> Finding {
+        Finding::New {
+            passage: passage.into(),
+            comment: comment.into(),
+        }
+    }
+
+    /// A reply to the comment numbered `id`.
+    fn reply(id: usize, text: &str) -> Finding {
+        Finding::Reply {
+            id,
+            text: text.into(),
+        }
     }
 
     #[test]
@@ -373,13 +566,85 @@ mod tests {
 
     #[test]
     fn review_prompt_names_the_note_and_the_exact_format() {
-        let prompt = review_prompt("Notes/Draft.md");
+        let prompt = review_prompt("Notes/Draft.md", &[]);
         assert!(prompt.contains("`Notes/Draft.md`"));
         assert!(prompt.contains("at most 12 findings"));
         assert!(prompt.contains("PASSAGE: <text copied exactly"));
         assert!(prompt.contains("COMMENT: <the remark, one line>"));
         assert!(prompt.contains("NO FINDINGS"));
         assert!(prompt.contains("Do not change any file."));
+        // No comment to answer: no list and no reply form.
+        assert!(!prompt.contains("REPLY"));
+        assert!(!prompt.contains("already has these comments"));
+    }
+
+    #[test]
+    fn review_prompt_lists_the_open_comments_numbered_with_the_reply_form() {
+        let text = "keep<!-- comment @Ana 2026-11-24T10:05Z: is this final? -->\n\
+                    alpha<!-- comment: legacy -->\n";
+        let prompt = review_prompt("Plan.md", &open_comments(text));
+        assert!(
+            prompt.contains("C1 on \"keep\" — @Ana: is this final?\n"),
+            "{prompt}"
+        );
+        assert!(
+            prompt.contains("C2 on \"alpha\" — @Unknown: legacy\n"),
+            "{prompt}"
+        );
+        assert!(prompt.contains("`REPLY: C<number>`"));
+        assert!(prompt.contains("`COMMENT: <the reply, one line>`"));
+    }
+
+    #[test]
+    fn a_comment_alone_on_its_line_and_its_replies_are_listed_in_order() {
+        let text = "<!-- comment @Ana 2026-11-24T10:05Z: a note to self ↳ @Bo 2026-11-24T10:06Z: me too -->\n";
+        let listing = review_prompt("Plan.md", &open_comments(text));
+        assert!(
+            listing.contains("C1 alone on its line — @Ana: a note to self ↳ @Bo: me too\n"),
+            "{listing}"
+        );
+    }
+
+    #[test]
+    fn open_comments_leave_out_the_ones_the_assistant_answered_last() {
+        let text = "a<!-- comment @Ana 2026-11-24T10:05Z: one -->\n\
+                    b<!-- comment @Ana 2026-11-24T10:05Z: two ↳ @assistant 2026-11-24T10:06Z: three -->\n\
+                    c<!-- comment @assistant 2026-11-24T10:07Z: four -->\n\
+                    d<!-- comment @Ana 2026-11-24T10:08Z: five -->\n";
+        let open = open_comments(text);
+        let passages: Vec<&str> = open.iter().map(|o| o.passage.as_str()).collect();
+        assert_eq!(passages, ["a", "d"], "the agent does not answer itself");
+        assert_eq!(
+            open[0].whole,
+            "a<!-- comment @Ana 2026-11-24T10:05Z: one -->"
+        );
+    }
+
+    #[test]
+    fn the_numbers_of_replies_are_read_in_tolerant_forms() {
+        let answer = "REPLY: C2\nCOMMENT: yes\n\
+                      reply: c3\ncomment: no\n\
+                      - **REPLY:** `4`\n  **COMMENT:** maybe\n\
+                      REPLY: 0\nCOMMENT: never\n\
+                      REPLY: nothing\nCOMMENT: never either";
+        assert_eq!(
+            findings(answer),
+            vec![reply(2, "yes"), reply(3, "no"), reply(4, "maybe"),]
+        );
+    }
+
+    #[test]
+    fn a_reply_and_a_new_finding_mix_in_one_answer() {
+        let answer = "REPLY: C1\nCOMMENT: agreed\nPASSAGE: ships in March\nCOMMENT: Which year?\n\
+                      REPLY: C1\nCOMMENT: and a second thought";
+        assert_eq!(
+            findings(answer),
+            vec![
+                reply(1, "agreed"),
+                pair("ships in March", "Which year?"),
+                reply(1, "and a second thought"),
+            ]
+        );
     }
 
     #[test]
@@ -443,11 +708,15 @@ mod tests {
                       PASSAGE: `code words`\nCOMMENT: b\n\
                       PASSAGE: 'single quoted'\nCOMMENT: c\n\
                       PASSAGE: ``double``\nCOMMENT: d";
-        let found = findings(answer);
-        assert_eq!(found[0].0, "\"quoted words here\"");
-        assert_eq!(found[1].0, "`code words`");
-        assert_eq!(found[2].0, "'single quoted'");
-        assert_eq!(found[3].0, "``double``");
+        assert_eq!(
+            findings(answer),
+            vec![
+                pair("\"quoted words here\"", "a"),
+                pair("`code words`", "b"),
+                pair("'single quoted'", "c"),
+                pair("``double``", "d"),
+            ]
+        );
     }
 
     #[test]
@@ -545,12 +814,60 @@ mod tests {
         ];
         let placed = place_at(text, &found);
         assert_eq!(placed.placed, 2);
-        assert_eq!(placed.skipped, 2);
+        assert_eq!((placed.replied, placed.skipped), (0, 2));
         assert_eq!(
             placed.text,
             "# T\n\nthe cache is cleared daily<!-- comment @Ana 2026-11-24T10:02Z: Daily when? -->\n\
              ships in March<!-- comment @Ana 2026-11-24T10:02Z: Which year? -->\nalpha and alpha\n"
         );
+    }
+
+    #[test]
+    fn a_reply_is_written_on_the_line_of_its_listed_comment() {
+        let text = "keep<!-- comment @Ana 2026-11-24T10:05Z: is this final? -->\n\
+                    alpha<!-- comment: legacy -->\n\
+                    end of the note\n";
+        let listed = open_comments(text);
+        let found = [
+            reply(1, "not yet"),
+            reply(2, "say so"),
+            pair("end of the note", "a new remark"),
+        ];
+        let placed = place_listed(text, &found, &listed);
+        assert_eq!((placed.placed, placed.replied, placed.skipped), (1, 2, 0));
+        assert_eq!(
+            placed.text,
+            "keep<!-- comment @Ana 2026-11-24T10:05Z: is this final? ↳ @assistant 2026-11-24T10:02Z: not yet -->\n\
+             alpha<!-- comment: legacy ↳ @assistant 2026-11-24T10:02Z: say so -->\n\
+             end of the note<!-- comment @assistant 2026-11-24T10:02Z: a new remark -->\n"
+        );
+    }
+
+    #[test]
+    fn several_replies_to_one_comment_go_after_each_other_in_order() {
+        let text = "alpha<!-- comment @Ana 2026-11-24T10:05Z: first -->\n";
+        let listed = open_comments(text);
+        let placed = place_listed(text, &[reply(1, "one"), reply(1, "two")], &listed);
+        assert_eq!(placed.replied, 2);
+        assert_eq!(
+            placed.text,
+            "alpha<!-- comment @Ana 2026-11-24T10:05Z: first ↳ @assistant 2026-11-24T10:02Z: one \
+             ↳ @assistant 2026-11-24T10:02Z: two -->\n"
+        );
+    }
+
+    #[test]
+    fn a_reply_to_a_number_not_listed_or_to_a_changed_comment_is_skipped() {
+        let text = "alpha<!-- comment @Ana 2026-11-24T10:05Z: first -->\n";
+        let listed = open_comments(text);
+        // No comment 2 in the listing: skipped, and the other reply still lands.
+        let placed = place_listed(text, &[reply(2, "no"), reply(1, "yes")], &listed);
+        assert_eq!((placed.replied, placed.skipped), (1, 1));
+        // The comment was edited since it was listed: the same number finds no match.
+        let edited = "alpha<!-- comment @Ana 2026-11-24T10:05Z: other -->\n";
+        let placed = place_listed(edited, &[reply(1, "late")], &listed);
+        assert_eq!((placed.replied, placed.skipped), (0, 1));
+        assert_eq!(placed.text, edited);
     }
 
     #[test]

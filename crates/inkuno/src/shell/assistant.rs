@@ -57,10 +57,12 @@ pub(crate) struct Entry {
 }
 
 /// A review in progress: the note under review, and the answer collected so far. The answer is
-/// not shown; it becomes comments when the agent ends.
+/// not shown; it becomes comments and replies when the agent ends.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Review {
     pub path: PathBuf,
+    /// The comments the prompt listed, numbered from 1 there: a reply names one by its number.
+    pub open: Vec<words::Open>,
     pub answer: String,
 }
 
@@ -194,12 +196,26 @@ fn login_problem(error: &str) -> bool {
         .any(|text| error.contains(text))
 }
 
-/// The sentence that ends a review: what was written, what could not be placed.
-fn review_summary(placed: usize, skipped: usize) -> String {
-    let written = match placed {
-        0 => String::new(),
-        1 => tr("Wrote 1 comment.", "1 commentaire écrit.").to_string(),
-        n => format!("Wrote {n} comments."),
+/// The sentence that ends a review: what was written (comments, replies), what could not be placed.
+/// With no reply, the sentence is the one of comments alone.
+fn review_summary(placed: usize, replied: usize, skipped: usize) -> String {
+    let written = match (placed, replied) {
+        (0, 0) => String::new(),
+        (1, 0) => tr("Wrote 1 comment.", "1 commentaire écrit.").to_string(),
+        (n, 0) => format!("Wrote {n} comments."),
+        (0, 1) => tr("Wrote 1 reply.", "1 réponse écrite.").to_string(),
+        (0, m) => format!("Wrote {m} replies."),
+        (n, m) => {
+            let comments = match n {
+                1 => "1 comment".to_string(),
+                n => format!("{n} comments"),
+            };
+            let replies = match m {
+                1 => "1 reply".to_string(),
+                m => format!("{m} replies"),
+            };
+            format!("Wrote {comments} and {replies}.")
+        }
     };
     let missed = match skipped {
         0 => String::new(),
@@ -782,13 +798,17 @@ impl Shell {
             return;
         };
         let note = self.assistant_words(&path);
+        // The comments the agent may answer, numbered as the prompt lists them: kept for the reply.
+        let open = words::open_comments(self.pane().editor.read(cx).text());
+        let prompt = words::review_prompt(&note, &open);
         self.assistant.job = Some(Job::Review(Review {
             path,
+            open,
             answer: String::new(),
         }));
         self.assistant_say(Who::You, tr("Review this note", "Relire cette note"), cx);
         self.assistant_say(Who::Note, tr("Reviewing…", "Relecture en cours…"), cx);
-        self.assistant_run(words::review_prompt(&note), cx);
+        self.assistant_run(prompt, cx);
     }
 
     /// Writes the findings of a finished review into the note, as one undo step when the note is
@@ -821,14 +841,15 @@ impl Shell {
                 }
             },
         };
-        let author = self.revision_author();
+        // The agent writes under its own name, so that it never answers itself (`words::open_comments`).
         let time = crate::logic::markdown::utc_minute(crate::platform::revisions::now());
         let by = crate::logic::markdown::Stamp {
-            author: &author,
+            author: words::AUTHOR,
             time: &time,
         };
-        let placed = words::place(&current, &found, by);
-        if placed.placed > 0 {
+        let placed = words::place(&current, &found, &review.open, by);
+        let written = placed.placed + placed.replied > 0;
+        if written {
             match open {
                 Some(i) => {
                     if let Some(edit) = words::edit_between(&current, &placed.text) {
@@ -851,7 +872,7 @@ impl Shell {
                 }
             }
         }
-        let summary = review_summary(placed.placed, placed.skipped);
+        let summary = review_summary(placed.placed, placed.replied, placed.skipped);
         self.assistant_say(Who::Note, &summary, cx);
     }
 

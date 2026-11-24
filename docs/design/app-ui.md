@@ -793,10 +793,15 @@ Normal 800 is the default (§10.4 lock released for this change).
   (`logic::assistant::review_prompt`): `PASSAGE:` a line copied from the note, `COMMENT:` the remark, at
   most 12, or the single line `NO FINDINGS`. The answer is not shown; its text is collected while the agent
   works, and read when the agent ends (`logic::assistant::findings`).
-- Placing the findings (`Shell::apply_review`): each finding is placed with `markdown::comment_on` on the
-  note's current text, in order (`logic::assistant::place`). A finding is skipped when its passage is not
-  in the text exactly once, or when it lies inside a comment already there. The skipped ones are counted.
-  The summary: "Wrote N comments.", "1 finding could not be placed.", or "No findings.".
+- **Replies**: the prompt also lists the note's open comments, numbered `C1`, `C2`… (`logic::assistant::open_comments`:
+  those whose last message is not by `assistant`). The agent may answer one with `REPLY: C<n>` and `COMMENT:` (one line).
+  A reply is written after the comment's replies, on its line (`markdown::reply_on`), by `assistant`. The agent writes
+  its comments and replies under the name `assistant`, so it never answers itself.
+- Placing the findings (`Shell::apply_review`, `logic::assistant::place`): replies first, last comment first; then each
+  new comment in order with `markdown::comment_on_by`. A reply is written only where its listed comment still starts at
+  the same byte with the same markup. The skipped ones are counted.
+  The summary: "Wrote N comments.", "Wrote N replies.", "Wrote N comments and M replies.", "1 finding could not be
+  placed.", or "No findings.".
 - The words are written by Inkuno, never by the agent. A review that is stopped, or whose agent fails or
   exits, writes nothing.
 
