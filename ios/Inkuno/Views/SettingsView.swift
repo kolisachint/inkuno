@@ -12,6 +12,7 @@ struct SettingsView: View {
 
     @State private var showFolderImporter = false
     @State private var error: String?
+    @State private var trashCount = 0
 
     var body: some View {
         Form {
@@ -48,6 +49,21 @@ struct SettingsView: View {
                 Toggle("Show Markdown on the live line", isOn: $showMarkdownOnLiveLine)
             }
 
+            Section("Files") {
+                NavigationLink(value: Route.trash) {
+                    Label {
+                        HStack {
+                            Text("Trash")
+                            Spacer(minLength: 8)
+                            Text("\(trashCount)")
+                                .foregroundStyle(InkColor.faint)
+                        }
+                    } icon: {
+                        Image(systemName: "trash")
+                    }
+                }
+            }
+
             if let error {
                 Section {
                     Text(error)
@@ -62,6 +78,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .task { trashCount = vault.trashCount() }
         .fileImporter(isPresented: $showFolderImporter, allowedContentTypes: [.folder]) { result in
             switch result {
             case .success(let url):
