@@ -112,8 +112,11 @@ final class EditorControllerTests: XCTestCase {
 
         XCTAssertTrue(controller.commentLine(0, said: "Keep it short"))
 
-        XCTAssertEqual(view.textStorage.string, "Ship it<!-- comment: Keep it short -->\nnext")
-        XCTAssertEqual(CommentFormat.parse(view.textStorage.string).map(\.text), ["Keep it short"])
+        let written = CommentFormat.parse(view.textStorage.string)
+        XCTAssertTrue(view.textStorage.string.hasPrefix("Ship it<!-- comment @"))
+        XCTAssertTrue(view.textStorage.string.hasSuffix(" -->\nnext"))
+        XCTAssertEqual(written.map(\.passage), ["Ship it"])
+        XCTAssertEqual(written.map(\.text), ["Keep it short"])
     }
 
     func testAnEmptyCommentWritesNothing() {

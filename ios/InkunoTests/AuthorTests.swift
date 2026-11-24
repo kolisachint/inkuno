@@ -53,34 +53,18 @@ final class AuthorTests: XCTestCase {
         XCTAssertEqual(AuthorName.resolved(in: defaults), "Ana Kim")
     }
 
-    // MARK: Comment bylines
+    // MARK: Comment authors
 
-    func testBylineIsNameClockAndText() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 10, minute: 2))!
+    func testRelativeTimeReadsTheStampAndKeepsAnUnknownOne() {
+        let now = Date(timeIntervalSince1970: 1_795_514_520 + 3_600)
 
-        XCTAssertEqual(
-            CommentComposer.withByline("à relire", author: "Ana", now: now, calendar: calendar),
-            "Ana, 10:02: à relire"
-        )
+        XCTAssertNotEqual(CommentFormat.relativeTime("2026-11-24T10:02Z", now: now), "2026-11-24T10:02Z")
+        XCTAssertEqual(CommentFormat.relativeTime("09:12", now: now), "09:12")
     }
 
-    func testBylineIsMissingWithoutAName() {
-        XCTAssertEqual(CommentComposer.withByline("Keep it short", author: ""), "Keep it short")
-        XCTAssertEqual(CommentComposer.withByline("Keep it short", author: "   "), "Keep it short")
-    }
-
-    func testBylineReadsBackInTheCommentsPanel() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 9, minute: 45))!
-
-        let said = CommentComposer.withByline("ok", author: "Doe, Ana", now: now, calendar: calendar)
-        let (who, time, text) = CommentFormat.splitByline(said)
-        XCTAssertEqual(who, "Doe, Ana")
-        XCTAssertEqual(time, "09:45")
-        XCTAssertEqual(text, "ok")
+    func testAnUnknownAuthorShowsAsUnknown() {
+        XCTAssertEqual(CommentFormat.displayName(nil), "Unknown")
+        XCTAssertEqual(CommentFormat.displayName("Ana"), "Ana")
     }
 
     // MARK: Revisions carry the name

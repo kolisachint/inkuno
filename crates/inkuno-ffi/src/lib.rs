@@ -25,7 +25,7 @@ mod text;
 mod wiki;
 
 pub use changes::{PendingArea, PendingEntry, PendingSplit, ProposeError};
-pub use comments::{CommentError, CommentInfo};
+pub use comments::{CommentError, CommentInfo, ReplyInfo};
 pub use editing::{EnterOutcome, TextEdit};
 pub use history::{
     Revision, RevisionCompareError, RevisionError, RevisionFormat, RevisionHeader, RevisionKind,

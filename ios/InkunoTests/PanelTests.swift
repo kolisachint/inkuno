@@ -155,15 +155,38 @@ final class PanelTests: XCTestCase {
 
     // MARK: Comments — markdown/mod.rs `comment_on` shape
 
-    func testParsesWhoTimeAndText() {
-        let comments = CommentFormat.parse("Ship it<!-- comment: Ben, 09:12: Keep it to Quiet for v1. -->\nplain\n")
+    func testParsesAuthorTimeAndText() {
+        let comments = CommentFormat.parse("Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it to Quiet for v1. -->\nplain\n")
 
         XCTAssertEqual(comments.count, 1)
         XCTAssertEqual(comments[0].passage, "Ship it")
-        XCTAssertEqual(comments[0].who, "Ben")
-        XCTAssertEqual(comments[0].time, "09:12")
+        XCTAssertEqual(comments[0].author, "Ben")
+        XCTAssertEqual(comments[0].time, "2026-11-24T09:12Z")
         XCTAssertEqual(comments[0].text, "Keep it to Quiet for v1.")
         XCTAssertEqual(comments[0].line, 0)
+    }
+
+    func testParsesRepliesInOrder() {
+        let comments = CommentFormat.parse("Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. ↳ @Ana 2026-11-24T09:20Z: Agreed. -->\n")
+
+        XCTAssertEqual(comments[0].replies.map(\.author), ["Ana"])
+        XCTAssertEqual(comments[0].replies.map(\.text), ["Agreed."])
+    }
+
+    func testAReplyIsWrittenAndReadBack() throws {
+        let text = "Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. -->\n"
+        let comment = CommentFormat.parse(text)[0]
+
+        let updated = try CommentFormat.reply(
+            in: text, comment: comment, said: "Agreed", author: "Ana",
+            at: Date(timeIntervalSince1970: 1_795_514_520)
+        )
+
+        XCTAssertEqual(
+            updated,
+            "Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. ↳ @Ana 2026-11-24T10:02Z: Agreed -->\n"
+        )
+        XCTAssertEqual(CommentFormat.parse(updated)[0].replies.map(\.text), ["Agreed"])
     }
 
     func testParsesBareCommentAndSkipsFences() {
@@ -174,19 +197,19 @@ final class PanelTests: XCTestCase {
         XCTAssertEqual(comments[0].text, "read this")
     }
 
-    func testResolveKeepsThePassage() {
-        let text = "Ship it<!-- comment: Ben: Keep it. -->\nnext\n"
+    func testResolveKeepsThePassage() throws {
+        let text = "Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. -->\nnext\n"
         let comments = CommentFormat.parse(text)
 
-        XCTAssertEqual(CommentFormat.resolve(in: text, comment: comments[0]), "Ship it\nnext\n")
+        XCTAssertEqual(try CommentFormat.resolve(in: text, comment: comments[0]), "Ship it\nnext\n")
     }
 
-    func testResolveOfALoneCommentTakesTheLine() {
+    func testResolveOfALoneCommentTakesTheLine() throws {
         let text = "keep\n<!-- comment: whole line -->\nend\n"
         let comments = CommentFormat.parse(text)
         XCTAssertEqual(comments[0].passage, "")
 
-        XCTAssertEqual(CommentFormat.resolve(in: text, comment: comments[0]), "keep\nend\n")
+        XCTAssertEqual(try CommentFormat.resolve(in: text, comment: comments[0]), "keep\nend\n")
     }
 
     // MARK: Outline — markdown/mod.rs `headings`
@@ -201,15 +224,17 @@ final class PanelTests: XCTestCase {
 
     // MARK: Comment written from the block menu
 
+    private static let november24 = Date(timeIntervalSince1970: 1_795_514_520)
+
     func testCommentOnALineWritesTheMarkup() {
-        XCTAssertEqual(CommentFormat.commented(line: "Ship it", said: "Keep it short"),
-                       "Ship it<!-- comment: Keep it short -->")
+        XCTAssertEqual(CommentFormat.commented(line: "Ship it", said: "Keep it short", author: "Ana", at: Self.november24),
+                       "Ship it<!-- comment @Ana 2026-11-24T10:02Z: Keep it short -->")
     }
 
     func testCommentSpacesOutTheCloseMarkInTheText() {
-        let written = CommentFormat.commented(line: "Ship it", said: "a --> b")
+        let written = CommentFormat.commented(line: "Ship it", said: "a --> b", author: "Ana", at: Self.november24)
 
-        XCTAssertEqual(written, "Ship it<!-- comment: a -- > b -->")
+        XCTAssertEqual(written, "Ship it<!-- comment @Ana 2026-11-24T10:02Z: a -- > b -->")
         XCTAssertEqual(CommentFormat.parse(written ?? "").map(\.text), ["a -- > b"])
     }
 
@@ -220,7 +245,7 @@ final class PanelTests: XCTestCase {
     }
 
     func testCommentOnATableLineEscapesThePipe() {
-        XCTAssertEqual(CommentFormat.commented(line: "| a |", said: "x | y"),
-                       "| a |<!-- comment: x \\| y -->")
+        XCTAssertEqual(CommentFormat.commented(line: "| a |", said: "x | y", author: "Ana", at: Self.november24),
+                       "| a |<!-- comment @Ana 2026-11-24T10:02Z: x \\| y -->")
     }
 }

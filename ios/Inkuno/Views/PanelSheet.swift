@@ -23,6 +23,8 @@ struct PanelSheet: View {
     }
 
     @State private var comments: [NoteComment] = []
+    /// The note's text after this sheet's last write: `text` is the editor's, which is stale until it reloads.
+    @State private var written: String?
     @State private var versions: [Result<RevisionHeader, VaultStore.UnreadableVersion>] = []
     @State private var versionsError: String?
     @State private var backlinks: [(url: URL, title: String)] = []
@@ -144,44 +146,15 @@ struct PanelSheet: View {
         } else {
             LazyVStack(spacing: 12) {
                 ForEach(comments) { comment in
-                    VStack(alignment: .leading, spacing: 4) {
-                        if !comment.passage.isEmpty {
-                            Text(comment.passage)
-                                .font(InkType.caption)
-                                .foregroundStyle(InkColor.soft)
-                                .padding(.leading, 8)
-                                .overlay(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .fill(InkColor.commentDot)
-                                        .frame(width: 3)
-                                }
+                    CommentCard(
+                        comment: comment,
+                        onReply: { reply(comment, said: $0) },
+                        onResolve: { resolve(comment) },
+                        onGoToLine: {
+                            dismiss()
+                            onSelectLine(comment.line)
                         }
-                        if !comment.who.isEmpty {
-                            Text([comment.who, comment.time].filter { !$0.isEmpty }.joined(separator: " · "))
-                                .font(InkType.caption)
-                                .foregroundStyle(InkColor.faint)
-                        }
-                        Text(comment.text.isEmpty ? "(empty)" : comment.text)
-                            .font(InkType.body)
-                            .foregroundStyle(InkColor.ink)
-                        HStack(spacing: 8) {
-                            Button("Resolve") { resolve(comment) }
-                                .buttonStyle(.bordered)
-                                .tint(InkColor.accent)
-                                .controlSize(.small)
-                            Button("Go to line") {
-                                dismiss()
-                                onSelectLine(comment.line)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                        .padding(.top, 4)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, InkMetrics.cardPaddingH)
-                    .padding(.vertical, 10)
-                    .background(InkColor.ground, in: RoundedRectangle(cornerRadius: InkRadius.card, style: .continuous))
+                    )
                     .padding(.horizontal, InkMetrics.cardMarginH)
                 }
             }
@@ -341,8 +314,12 @@ struct PanelSheet: View {
 
     // MARK: Data
 
+    private var current: String {
+        written ?? text
+    }
+
     private func reload() {
-        comments = CommentFormat.parse(text)
+        comments = CommentFormat.parse(current)
         do {
             versions = try vault.revisionHeaders(for: noteURL).reversed()
             versionsError = nil
@@ -381,13 +358,29 @@ struct PanelSheet: View {
 
     private func resolve(_ comment: NoteComment) {
         do {
-            let updated = CommentFormat.resolve(in: text, comment: comment)
+            let updated = try CommentFormat.resolve(in: current, comment: comment)
             try vault.writeNote(updated, to: noteURL)
+            written = updated
             NotificationCenter.default.post(name: .inkunoNoteChanged, object: noteURL)
             flash("Comment resolved.")
             comments = CommentFormat.parse(updated)
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Adds the reply to the comment and writes the note; true when it was written.
+    private func reply(_ comment: NoteComment, said: String) -> Bool {
+        do {
+            let updated = try CommentFormat.reply(in: current, comment: comment, said: said)
+            try vault.writeNote(updated, to: noteURL)
+            written = updated
+            NotificationCenter.default.post(name: .inkunoNoteChanged, object: noteURL)
+            comments = CommentFormat.parse(updated)
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
         }
     }
 

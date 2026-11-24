@@ -86,8 +86,11 @@ rendering (shown as code), Focus mode, tar.gz backup, the other 15 themes, the A
 
 1. Hand tests on the device: IME (dictation, CJK keyboards), long notes, iCloud placeholders and
    conflict copies, bookmark restore after relaunch.
-2. Comment resolve and the byline split stay in Swift (they live in the desktop GUI crate).
+2. Comments are the core's: the author and UTC time, replies, reply and Resolve come from `inkuno-ffi`
+   (`comment_add_by`, `comment_reply`, `comment_resolve`, `all_comments`). Swift only formats the relative
+   time. Not yet tested on a device or in the simulator.
 3. The core has no date style bit: `@date` is found by a Swift scan.
 4. The vault index rebuilds when the palette opens or Home refreshes; no file watching yet.
-5. A version's author is "unknown" until Settings has an author field.
+5. A version's author is "unknown" while the name in Settings (`SettingsView`, `AppearanceKey.authorName`)
+   is empty.
 6. TestFlight once there is a paid developer account.

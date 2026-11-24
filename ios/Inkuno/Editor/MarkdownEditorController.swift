@@ -295,7 +295,8 @@ final class MarkdownEditorController: NSObject {
         onComment?(index, lineText(index))
     }
 
-    /// Writes the comment on line `index` as `passage<!-- comment: said -->`, the passage being the line.
+    /// Writes the comment on line `index` as `passage<!-- comment @author time: said -->`, the passage being the
+    /// line, the author the one in Settings and the time now (`CommentFormat.commented`).
     /// False (and nothing written) when the line cannot take a comment or `said` is empty.
     @discardableResult
     func commentLine(_ index: Int, said: String) -> Bool {
