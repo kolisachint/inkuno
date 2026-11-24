@@ -1,0 +1,22 @@
+# A note written by another program while it is typed in: merged, or kept as a conflict copy.
+shape: sequence_diagram
+
+agent: "Agent or sync"
+disk: "Note on disk"
+ink: "Inkuno"
+editor: "Editor"
+
+agent -> disk: writes the note
+disk -> ink: watcher: changed
+ink -> editor: text typed
+editor -> ink: ours
+
+"alt [merge::onto(base, ours, disk) succeeds]": {
+  ink -> editor: absorb(edits)
+  editor -> ink: one undo step
+}
+
+"alt [same lines changed]": {
+  ink -> disk: Note (conflict date).md
+  disk -> ink: kept
+}

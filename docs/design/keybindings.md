@@ -46,7 +46,7 @@ page, never this doc: if this doc and `defaults()` disagree, `defaults()` wins.
 
 | Family | Scope | Examples |
 |---|---|---|
-| `Ctrl+Shift+*` | Vault / panel / list scope | `Ctrl+Shift+F` search vault, `S` sync, `O` outline, `P` commands, `Z` redo, `B` list-cycle, `M` comment, `C` copy block/selection, `N` new folder, `D` new diagram, `J` calendar, `T` reopen tab |
+| `Ctrl+Shift+*` | Vault / panel / list scope | `Ctrl+Shift+F` search vault, `S` sync, `O` outline, `P` commands, `Z` redo, `B` list-cycle, `M` comment, `C` copy block/selection, `N` new folder, `D` new diagram (planned), `J` calendar, `T` reopen tab |
 | `Alt+*` | Move / act on the thing under the cursor | `Alt+Up/Down` move block (row in a table), `Alt+=` autosum, `Alt+Enter` open embed, `Alt+Left/Right` back/forward, `Alt+Shift+arrows` travel panes |
 | `Ctrl+Enter` | Confirm / act in place | Task toggle, palette open-aside, find-bar replace-all, sheet insert-below |
 | Plain `Ctrl+letter` | The note itself | `Ctrl+I/U` styles, `Ctrl+Alt+B` bold, `Ctrl+F/R` find, `Ctrl+D` next occurrence, `Ctrl+K` link; `Ctrl+B` is the sidebar (§8) |
@@ -57,7 +57,7 @@ context or `Shell` meets everything; two views never meet each other, except a
 `Line` field with its carrying view). Documented cases:
 
 - `Ctrl+D` ×3: `editor::SelectNext` (Editor) / `nav::Duplicate` (Nav) /
-  `canvas::Duplicate` (Diagram). Help shows three rows; only one can fire.
+  `canvas::Duplicate` (Diagram, planned). Help shows three rows; only one can fire.
 - `Ctrl+Shift+Enter` ×2: `ReplaceInVault` (Find bar) / `sheet::InsertAbove`
   (CSV grid).
 - `Ctrl+\` / `Ctrl+Alt+\`: split pane right / below.
@@ -184,7 +184,7 @@ palette-only, `›` + help-rebindable.
 | — | `nav::ShowScratch` (the Scratch panel: scratch notes, newest first) | — | `› scratch notes` |
 | `Ctrl+Alt+N` | `app::NewNote` (note in the tree's folder, in the vault) | — | `› new note in folder` |
 | `Ctrl+J` / `Ctrl+O` | `app::Today/OpenVault` | — | `› today/change vault` |
-| `Ctrl+Shift+D` | `app::NewDiagram` | — | `› new diagram` |
+| `Ctrl+Shift+D` | `app::NewDiagram` (planned: not in `crates/` yet) | — | `› new diagram` |
 | `Ctrl+Shift+S` | `app::ToggleTitleBar` (the bar the app draws on Linux, or the system bar and its traffic lights on macOS: shown or hidden; the rail's switch brings it back) | — | `› title bar: show or hide it` |
 | `Ctrl+M` | `nav::ToggleFull` (panel full-window) | Shell | `› panel on the whole window` |
 | `Ctrl+B` | `app::ToggleSidebar` (left dock shown or hidden, the rail stays; works in the note) | — | `› sidebar: show or hide the side panel` |
@@ -211,7 +211,7 @@ Tree/list keys (context `Nav`): arrows move, `Right/Left` fold/unfold,
 | `Ctrl+Enter` | `palette::ConfirmAside` | Palette | — |
 | — | `app::TabToLeft/Right/Up/Down`, `EvenPanes`, `MoveTool`, `ToolAsTab` | — | `› move the tab…/even out/move the panel…/open as tab` |
 
-### Diagrams (context `Diagram`/`Canvas`)
+### Diagrams (planned: context `Diagram`/`Canvas`, not in `crates/` yet)
 
 `Ctrl+A` select all, `Ctrl+D` duplicate, `Delete/Backspace` erase,
 `Ctrl+Z/Y` undo/redo, arrows nudge, `F2` edit text, `Enter` confirm,
@@ -254,7 +254,7 @@ note, with an optional line on what changed; nothing is saved when the text is t
   the palette shows only actions the current view offers
   (`palette_commands()`, `crates/inkuno/src/shell/palette_open.rs:211`), with the view's
   group first (`arrange()`): `Block` in a note, `Table` in a table
-  (`here_group()`, `crates/inkuno/src/shell/help.rs:223`), `Diagram` on a drawing, CSV picks
+  (`here_group()`, `crates/inkuno/src/shell/help.rs:223`), `Diagram` on a drawing (planned), CSV picks
   on a grid.
 - In command queries, catalogue `editor::Table*`/`sheet::Pick*` lines are
   hidden as doubled (`doubled()`, `crates/inkuno/src/views/palette.rs:654`): the same gestures

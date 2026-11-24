@@ -38,7 +38,11 @@ cli ────────────► ui, logic, platform (and the shortcu
 
 ![The layers of Inkuno and which ones each uses](../user/src/img/architecture-layers.svg)
 
-*The source is in the SVG, so Inkuno opens it in the viewer.*
+*Diagrams.* A complex diagram has its source in `docs/diagrams/<name>.d2`. `scripts/diagrams.sh` renders it
+(with [d2](https://d2lang.com)) to `docs/user/src/img/<name>.svg`, which is committed and embedded with `![alt](path)`.
+Edit the `.d2` file, never the SVG, then run the script again. The SVG still opens in Inkuno's viewer.
+A simple flow is an inline ` ```mermaid ` block in the Markdown itself. Inkuno draws class, sequence and state
+diagrams from it (`crates/inkuno/src/logic/mermaid.rs`); other kinds are not drawn.
 
 The test `layers_only_depend_downwards` fails when a file breaks this rule, and when a view
 reaches into the shell.
@@ -141,6 +145,39 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   is linked in: hoocode is a separate program.
 - **Window**: on Linux Inkuno draws its own title bar, shadow and resize edges (client-side
   decorations); on macOS and Windows the system does.
+
+### Saving
+
+- Typing changes the editor's text in memory only. Each change marks the note dirty and restarts a 400 ms
+  timer (the `EditorEvent::Changed` handler in `shell/notes.rs`).
+- When the timer ends, the shell calls `flush`, which calls `flush_one` on each pane. The write is synchronous,
+  on the UI thread (a `// ponytail:` comment in `notes.rs` names the limit).
+- Before writing, `take_outside` reads the note from disk. If the disk still holds the text Inkuno last read or
+  wrote (`base`), nothing is merged. Otherwise `logic::merge::onto(base, ours, disk)` merges the outside edits into
+  the editor as one undo step. When that merge fails (both sides changed the same lines), the other version is
+  written beside the note as a conflict copy, and the note keeps the typed text.
+- Closing a tab, file operations, the palette, menus, the Assistant and scratch notes call the same path at once.
+- Every write goes through `vault::write`: a temp file, `fsync`, then a rename, so a crash never leaves a
+  truncated note.
+
+```mermaid
+sequenceDiagram
+    participant E as Editor
+    participant S as Shell
+    participant D as Disk
+    E->>S: text changed, 400 ms timer
+    S->>D: read the note
+    alt disk unchanged (text equals base)
+        S->>D: write (atomic)
+    else disk changed
+        alt merge succeeds
+            S->>E: absorb the outside edits (one undo step)
+        else same lines changed
+            S->>D: write the other version as a conflict copy
+        end
+        S->>D: write the note (atomic)
+    end
+```
 
 ## Rules
 

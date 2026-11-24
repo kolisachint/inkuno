@@ -45,7 +45,7 @@ A YAML front matter is a block that starts on the first line with `---` and ends
 What other programs change in the vault (a sync tool, a script, another editor) is picked up in about half a second, without restarting. Inkuno asks the system to report changes (inotify, FSEvents, ReadDirectoryChangesW).
 
 - Notes and folders added, renamed or removed elsewhere show up in the tree and the palette.
-- The note on display is read again when its file changes. If you were typing in that note at that moment, your version is kept and written back.
+- The note on display is read again when its file changes. If you were typing in that note at that moment, the other change is merged into your text as one undo step. When both changed the same lines, your version stays in the note, and the other one is written beside it as `Note (conflict <date>).md`.
 - Inkuno also looks at the vault every 30 seconds, in case an event got lost. When the system cannot watch the folder, it looks every two seconds. See [Troubleshooting](troubleshooting.md#changes-made-elsewhere-show-up-late).
 
 ## Backup
