@@ -1237,7 +1237,7 @@ The window has four regions and nothing else:
 1. **Title band** (`BAND`, 38 px; 12 px hidden): the tab strip of each pane, the window controls and the right-panel switch. The strip is the band, even for one note. Ctrl+Shift+S hides the band; a pointer on its top edge brings it back over the note.
 2. **Left sidebar, files only**: Search and Today rows, the tree, a folded Scratch section at the bottom, Settings at the foot. It sits on the window background, without a panel, border or shadow. Recent notes and search live in the palette (Ctrl+P).
 3. **Panes**: one or two, side by side, each with its own tabs. Preview tabs are in italics. The focused pane's active tab is solid; the other pane's tabs are dimmed. A hairline divides the panes.
-4. **Right panel**: one panel with four views, Outline, Comments, Versions and Assistant, chosen by an icon switcher in the band; one view at a time, 280 px wide. Ctrl+Shift+O opens the outline, Ctrl+Alt+1 to 4 pick a view.
+4. **Right panel**: one panel with four views, Outline, Review (§23; was Comments), Versions and Assistant, chosen by an icon switcher in the band; one view at a time, 280 px wide. Ctrl+Shift+O opens the outline, Ctrl+Alt+1 to 4 pick a view.
 
 The note is a flat sheet, flush with the top, right and bottom edges of the window, without gutters, rounded corners or borders. Its left edge casts one faint shadow (the only structural exception).
 
@@ -1291,7 +1291,7 @@ Already at or above target, unchanged: body and secondary text, the five syntax 
 
 ---
 
-## 23. Review feed (AGREED 2026-11-24, not built)
+## 23. Review feed (APPROVED 2026-11-24, not built)
 
 > Status: agreed design, recorded 2026-11-24. Not built. It replaces the Comments view and the
 > pending-change cards of §22.1. Until it lands,
@@ -1348,7 +1348,7 @@ passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: r
 - A literal `↳` in text is escaped as `\↳`.
 - The time is UTC, to the minute (`Z`).
 - A legacy `<!-- comment: text -->` reads as author `Unknown`, with no time.
-- A legacy comment is rewritten in the new form only when it is edited.
+- A legacy comment is rewritten in the new form only when it is edited, never on read. (Reading still migrates CriticMarkup to `<!-- comment: -->`, as before.)
 
 ### 23.5 Pending changes
 
