@@ -193,4 +193,29 @@ final class PanelTests: XCTestCase {
         XCTAssertEqual(headings.map(\.text), ["Title", "Sub", "Deep"])
         XCTAssertEqual(headings.map(\.line), [0, 2, 6])
     }
+
+    // MARK: Comment written from the block menu
+
+    func testCommentOnALineWritesTheMarkup() {
+        XCTAssertEqual(CommentFormat.commented(line: "Ship it", said: "Keep it short", inTable: false),
+                       "Ship it<!-- comment: Keep it short -->")
+    }
+
+    func testCommentSpacesOutTheCloseMarkInTheText() {
+        let written = CommentFormat.commented(line: "Ship it", said: "a --> b", inTable: false)
+
+        XCTAssertEqual(written, "Ship it<!-- comment: a -- > b -->")
+        XCTAssertEqual(CommentFormat.parse(written ?? "").map(\.text), ["a -- > b"])
+    }
+
+    func testCommentRefusesABlankLineAnEmptyTextAndCommentMarks() {
+        XCTAssertNil(CommentFormat.commented(line: "   ", said: "x", inTable: false))
+        XCTAssertNil(CommentFormat.commented(line: "Ship it", said: "  ", inTable: false))
+        XCTAssertNil(CommentFormat.commented(line: "{==marked==}", said: "x", inTable: false))
+    }
+
+    func testCommentOnATableLineEscapesThePipe() {
+        XCTAssertEqual(CommentFormat.commented(line: "| a |", said: "x | y", inTable: true),
+                       "| a |<!-- comment: x \\| y -->")
+    }
 }

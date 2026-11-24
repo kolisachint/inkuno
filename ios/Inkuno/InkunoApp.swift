@@ -11,6 +11,8 @@ struct InkunoApp: App {
                 .environment(vault)
                 .preferredColorScheme(theme.colorScheme)
                 .tint(InkColor.tint)
+                // Blank scratch notes left by a crash go, as the desktop does at start (`clean_blank`).
+                .task { ScratchStore.cleanBlank() }
         }
     }
 }
@@ -28,6 +30,15 @@ struct RootView: View {
     @Environment(VaultStore.self) private var vault
     @State private var path: [Route] = []
     @State private var showPalette = false
+    /// The panel segment the palette asked for on the note, sent to that note once the palette has closed.
+    @State private var panelRequest: PanelRequest?
+    @State private var queuedPanel: PanelRequest?
+
+    /// The note on top of the stack, if any: the palette's This-note commands act on it.
+    private var currentNote: URL? {
+        if case .note(let url) = path.last { return url }
+        return nil
+    }
 
     var body: some View {
         if vault.hasVault {
@@ -37,11 +48,18 @@ struct RootView: View {
                         destination(for: route)
                     }
             }
-            .sheet(isPresented: $showPalette) {
-                PaletteSheet { route in
-                    showPalette = false
-                    path.append(route)
-                }
+            .sheet(isPresented: $showPalette, onDismiss: sendQueuedPanel) {
+                PaletteSheet(
+                    onOpen: { route in
+                        showPalette = false
+                        path.append(route)
+                    },
+                    currentNote: currentNote,
+                    onPanelTab: { tab in
+                        guard let url = currentNote else { return }
+                        queuedPanel = PanelRequest(url: url, tab: tab)
+                    }
+                )
             }
         } else {
             OnboardingView()
@@ -54,7 +72,7 @@ struct RootView: View {
         case .tree(let folder):
             TreeView(folder: folder, path: $path)
         case .note(let url):
-            NoteView(url: url)
+            NoteView(url: url, panelRequest: $panelRequest)
         case .settings:
             SettingsView()
         case .trash:
@@ -63,5 +81,12 @@ struct RootView: View {
                 path.append(.note(note))
             }
         }
+    }
+
+    /// Runs when the palette has closed: a panel command opens its segment on the note.
+    private func sendQueuedPanel() {
+        guard let request = queuedPanel else { return }
+        queuedPanel = nil
+        panelRequest = request
     }
 }

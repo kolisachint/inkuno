@@ -23,12 +23,14 @@ struct MarkdownStyler {
     let traits: UITraitCollection
 
     /// Restyles `lines` (indices into `layouts`) of `storage`, whose string must be the text `layouts` describe.
-    /// `caretLine` is the line that holds the caret, if any.
-    func style(_ storage: NSMutableAttributedString, layouts: [LineLayout], lines: [Int], caretLine: Int?) {
+    /// `caretLine` is the line that holds the caret, if any. `revealedLines` show their markers whatever the
+    /// setting (the block menu's Show Markdown).
+    func style(_ storage: NSMutableAttributedString, layouts: [LineLayout], lines: [Int], caretLine: Int?,
+               revealedLines: Set<Int> = []) {
         let text = NSString(string: storage.string)
         storage.beginEditing()
         for index in lines where layouts.indices.contains(index) {
-            let live = index == caretLine && showMarkersOnCaretLine
+            let live = revealedLines.contains(index) || (index == caretLine && showMarkersOnCaretLine)
             styleLine(layouts[index], text: text, storage: storage, live: live)
         }
         storage.endEditing()
@@ -48,8 +50,18 @@ struct MarkdownStyler {
         guard length > 0 else { return }
         let lineText = text.substring(with: NSRange(location: line.startUTF16, length: length))
 
+        // A code line takes the core's colouring only; a fence line and the rest of a block take nothing.
+        let runs: [StyleRun]
+        if line.kind == .code {
+            runs = provider.codeStyleRuns(line: lineText, lang: line.codeLang)
+        } else if line.inCodeBlock {
+            runs = []
+        } else {
+            runs = provider.styleRuns(line: lineText)
+        }
+
         var bits = [UInt32](repeating: 0, count: length)
-        for run in provider.styleRuns(line: lineText) {
+        for run in runs {
             let low = max(0, run.startUTF16)
             let high = min(length, run.startUTF16 + run.lenUTF16)
             guard low < high else { continue }
@@ -172,7 +184,12 @@ struct MarkdownStyler {
 
     /// Attributes for one run of characters that share their style bits and block-marker state.
     private func attributes(bits: UInt32, isBlockMarker: Bool, line: LineLayout, live: Bool) -> [NSAttributedString.Key: Any] {
-        let isMarker = isBlockMarker || bits & StyleBit.marker != 0
+        // Quiet text (a link's address) is hidden like a marker. Front matter is read as it is: its
+        // syntax and quiet text stay visible, since the core dims a link there too.
+        let readAsIs = line.kind == .meta
+        let quiet = bits & StyleBit.quiet != 0 && !readAsIs
+        let syntax = bits & StyleBit.marker != 0 && !readAsIs
+        let isMarker = isBlockMarker || syntax || quiet
         if isMarker && !live {
             return [.font: UIFont.systemFont(ofSize: Self.hiddenFontSize), .foregroundColor: UIColor.clear]
         }
@@ -201,6 +218,9 @@ struct MarkdownStyler {
         if bits & StyleBit.date != 0 {
             foreground = color(InkColor.accent)
         }
+        if let syntax = syntaxColor(bits) {
+            foreground = color(syntax)
+        }
         if bits & StyleBit.strike != 0 {
             extra[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
@@ -210,6 +230,18 @@ struct MarkdownStyler {
         extra[.font] = spec.font()
         extra[.foregroundColor] = foreground
         return extra
+    }
+
+    /// The colour of a code token, the first of its bits that is set. Comment, keyword, string, number,
+    /// type, then function (a token holds one of them).
+    private func syntaxColor(_ bits: UInt32) -> Color? {
+        if bits & StyleBit.comment != 0 { return InkColor.syntaxComment }
+        if bits & StyleBit.keyword != 0 { return InkColor.syntaxKeyword }
+        if bits & StyleBit.string != 0 { return InkColor.syntaxString }
+        if bits & StyleBit.number != 0 { return InkColor.syntaxNumber }
+        if bits & StyleBit.type != 0 { return InkColor.syntaxType }
+        if bits & StyleBit.function != 0 { return InkColor.syntaxFunction }
+        return nil
     }
 
     // MARK: Bullet and task glyphs

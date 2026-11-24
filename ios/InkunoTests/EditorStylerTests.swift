@@ -149,4 +149,55 @@ final class EditorStylerTests: XCTestCase {
         XCTAssertEqual(change.newEnd, 10)
         XCTAssertEqual(change.map(8), 12)
     }
+
+    // MARK: Code lines, quiet text and dates
+
+    func testInlineStylesAreNotAppliedInsideCodeLines() {
+        let text = "```\nlet **x** = `y`\n```\nafter"
+        let storage = styled(text, caretLine: 3)
+
+        let stars = location(of: "**x", in: text)
+        XCTAssertFalse(isHidden(storage, stars), "the stars of a code line are code, not markers")
+        XCTAssertFalse(isHidden(storage, location(of: "`y", in: text)), "backticks in code stay")
+        XCTAssertEqual(font(storage, stars).pointSize, 16 * 0.82, accuracy: 0.01, "code lines keep the code size")
+        XCTAssertNil(storage.attribute(.strikethroughStyle, at: stars, effectiveRange: nil))
+    }
+
+    func testCodeLinesTakeTheSyntaxColours() {
+        let text = "```rust\nlet s = \"a\";\n```\nafter"
+        let storage = styled(text, caretLine: 3)
+
+        XCTAssertEqual(color(storage, location(of: "let", in: text)), resolved(InkColor.syntaxKeyword))
+        XCTAssertEqual(color(storage, location(of: "\"a\"", in: text)), resolved(InkColor.syntaxString))
+    }
+
+    func testLinkAddressIsHiddenOffTheCaretLine() {
+        let text = "see [site](https://x.y)\nnext"
+        let storage = styled(text, caretLine: 1)
+
+        XCTAssertTrue(isHidden(storage, location(of: "https", in: text)), "a link address is quiet, hidden off the caret line")
+        XCTAssertEqual(color(storage, location(of: "site", in: text)), resolved(InkColor.link), "the link text stays")
+    }
+
+    func testLinkAddressShowsOnTheCaretLine() {
+        let text = "see [site](https://x.y)\nnext"
+        let storage = styled(text, caretLine: 0)
+
+        XCTAssertFalse(isHidden(storage, location(of: "https", in: text)))
+    }
+
+    func testFrontMatterKeepsItsQuietTextVisible() {
+        let text = "---\nsource: [x](https://x.y)\n---\n# Title"
+        let storage = styled(text, caretLine: 3)
+
+        XCTAssertFalse(isHidden(storage, location(of: "https", in: text)), "front matter is read as it is")
+    }
+
+    func testAtDatesKeepTheAccent() {
+        let text = "meet @2026-11-24 and @nonsense\nnext"
+        let storage = styled(text, caretLine: 1)
+
+        XCTAssertEqual(color(storage, location(of: "2026-11-24", in: text)), resolved(InkColor.accent))
+        XCTAssertNotEqual(color(storage, location(of: "nonsense", in: text)), resolved(InkColor.accent))
+    }
 }

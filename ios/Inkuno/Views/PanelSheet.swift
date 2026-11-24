@@ -1,11 +1,8 @@
 import SwiftUI
 
-// TODO(integration): the editor (NoteView, owned by the editor crew — do not edit it here)
-// hosts this sheet from its panel button and passes `onSelectLine` to scroll the caret.
-// `PendingPill`/`PendingSheet` (PendingSheet.swift) are hosted the same way.
-
 /// The bottom sheet for the right panel: Outline, Comments, Versions, Backlinks.
-/// Self-contained: reads and writes through VaultStore; the editor only presents it.
+/// Self-contained: reads and writes through VaultStore; the editor presents it and passes `onSelectLine`
+/// to scroll the editor to a line. A write here posts `.inkunoNoteChanged`, so the editor reloads the text.
 struct PanelSheet: View {
     let noteURL: URL
     let text: String
@@ -14,7 +11,16 @@ struct PanelSheet: View {
     @Environment(VaultStore.self) private var vault
     @Environment(\.dismiss) private var dismiss
 
-    @State private var tab: PanelTab = .outline
+    @State private var tab: PanelTab
+
+    /// `initialTab` picks the segment shown first: the palette's "Show comments" and the like.
+    init(noteURL: URL, text: String, initialTab: PanelTab = .outline, onSelectLine: @escaping (Int) -> Void = { _ in }) {
+        self.noteURL = noteURL
+        self.text = text
+        self.onSelectLine = onSelectLine
+        _tab = State(initialValue: initialTab)
+    }
+
     @State private var comments: [NoteComment] = []
     @State private var versions: [Result<RevisionHeader, VaultStore.UnreadableVersion>] = []
     @State private var versionsError: String?
@@ -339,6 +345,7 @@ struct PanelSheet: View {
     private func restore(_ header: RevisionHeader) {
         do {
             try vault.restoreVersion(number: header.number, for: noteURL)
+            NotificationCenter.default.post(name: .inkunoNoteChanged, object: noteURL)
             restoreCandidate = nil
             flash("Restored #\(header.number). The previous text is kept as a version.")
             reload()
@@ -352,6 +359,7 @@ struct PanelSheet: View {
         do {
             let updated = CommentFormat.resolve(in: text, comment: comment)
             try vault.writeNote(updated, to: noteURL)
+            NotificationCenter.default.post(name: .inkunoNoteChanged, object: noteURL)
             flash("Comment resolved.")
             comments = CommentFormat.parse(updated)
         } catch {

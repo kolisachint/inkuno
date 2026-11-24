@@ -32,6 +32,8 @@ struct LineLayout: Equatable {
     var markerLenUTF16 = 0
     /// True for the fence lines and the code lines between them.
     var inCodeBlock = false
+    /// The info string of the block a code line is in ("rust"), empty otherwise. Picks the colouring.
+    var codeLang = ""
 }
 
 /// Bits of a `StyleRun`. The editor's own bits: `CoreMarkdownProvider` maps the core's bits onto them.
@@ -48,6 +50,16 @@ enum StyleBit {
     static let date: UInt32 = 1 << 6
     /// Syntax characters that are hidden off the live line: `**`, backticks, the brackets and URL of a link.
     static let marker: UInt32 = 1 << 7
+    /// Text that steps back but is still read: the address of a link. Hidden off the live line like a
+    /// marker, except in front matter (`LineKind.meta`).
+    static let quiet: UInt32 = 1 << 8
+    /// Code colouring, from `codeStyleRuns`: keyword, string, number, comment, type and function.
+    static let keyword: UInt32 = 1 << 9
+    static let string: UInt32 = 1 << 10
+    static let number: UInt32 = 1 << 11
+    static let comment: UInt32 = 1 << 12
+    static let type: UInt32 = 1 << 13
+    static let function: UInt32 = 1 << 14
 }
 
 /// A span of one line, relative to the line start. Runs may overlap; their bits add up.
@@ -72,6 +84,8 @@ protocol MarkdownLayoutProvider {
     func documentLayout(_ text: String) -> [LineLayout]
     /// The inline spans of one line, without its newline. Offsets are relative to the line.
     func styleRuns(line: String) -> [StyleRun]
+    /// The colouring of one line of a code block in language `lang`.
+    func codeStyleRuns(line: String, lang: String) -> [StyleRun]
     /// What Enter does at `colUTF16` (relative to the line start) of `line`.
     func onEnter(line: String, colUTF16: Int, inFence: Bool) -> EnterOutcome
     /// Indents (or outdents) every line the range touches. Returns the new text and the range that

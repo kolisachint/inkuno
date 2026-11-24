@@ -3,13 +3,16 @@ import UIKit
 
 /// Drives the live editor's text view. After every change and caret move it restyles only the lines the
 /// edit touched and the caret lines, and it performs the editing actions: list continuation, indent,
-/// the accessory bar and the slash blocks. Plain UIKit, so the tests drive it without SwiftUI.
+/// the accessory bar, the slash blocks and the block menu (Comment, Show Markdown, Duplicate, Delete).
+/// Plain UIKit, so the tests drive it without SwiftUI.
 @MainActor
 final class MarkdownEditorController: NSObject {
     private let provider: MarkdownLayoutProvider
 
     var onTextChange: ((String) -> Void)?
     var onSlash: (() -> Void)?
+    /// Comment from the block menu: the block's line index, its text, and whether it is a table line.
+    var onComment: ((_ line: Int, _ text: String, _ inTable: Bool) -> Void)?
 
     var textSize: CGFloat = 16 {
         didSet {
@@ -36,6 +39,8 @@ final class MarkdownEditorController: NSObject {
     /// The text and caret as of the last styling pass; the next pass diffs against them.
     private var styledText = NSString()
     private var styledCaret = 0
+    /// The lines whose Markdown the block menu's Show Markdown made visible. Kept while the caret stays in them.
+    private var revealedLines: Set<Int> = []
 
     // MARK: Setup
 
@@ -118,7 +123,8 @@ final class MarkdownEditorController: NSObject {
         style(lines.sorted())
     }
 
-    /// Restyles after the caret moved. Only the line it left and the line it entered change.
+    /// Restyles after the caret moved. Only the line it left and the line it entered change, and the
+    /// revealed lines when the caret leaves them.
     func selectionChanged() {
         guard textView.markedTextRange == nil else { return }
         guard textView.textStorage.string == (styledText as String) else {
@@ -129,8 +135,23 @@ final class MarkdownEditorController: NSObject {
         let before = layouts.lineIndex(containing: styledCaret)
         let after = layouts.lineIndex(containing: caret)
         styledCaret = caret
-        guard before != after else { return }
-        style([before, after].sorted())
+        var changed: Set<Int> = before != after ? [before, after] : []
+        if !revealedLines.isEmpty, !revealedLines.contains(after) {
+            changed.formUnion(revealedLines)
+            revealedLines = []
+        }
+        guard !changed.isEmpty else { return }
+        style(changed.sorted())
+    }
+
+    /// Scrolls to `line` (0-based, as the outline and the comments give it) and puts the caret at its start.
+    func reveal(line: Int) {
+        guard !layouts.isEmpty else { return }
+        let index = min(max(0, line), layouts.count - 1)
+        let location = layouts[index].startUTF16
+        textView.selectedRange = NSRange(location: location, length: 0)
+        selectionChanged()
+        textView.scrollRangeToVisible(NSRange(location: location, length: 0))
     }
 
     /// Styles `lines` with the caret as last recorded. Undo registration is off while styling, so a
@@ -148,7 +169,8 @@ final class MarkdownEditorController: NSObject {
             textView.textStorage,
             layouts: layouts,
             lines: lines,
-            caretLine: layouts.lineIndex(containing: styledCaret)
+            caretLine: layouts.lineIndex(containing: styledCaret),
+            revealedLines: revealedLines
         )
         undo?.enableUndoRegistration()
     }
@@ -244,6 +266,87 @@ final class MarkdownEditorController: NSObject {
         )
     }
 
+    // MARK: Block menu
+
+    /// The lines the selection touches: the block the menu acts on. A caret alone is its own line.
+    private func selectedLines() -> ClosedRange<Int> {
+        let selection = textView.selectedRange
+        let first = layouts.lineIndex(containing: selection.location)
+        let end = selection.length > 0 ? NSMaxRange(selection) - 1 : selection.location
+        let last = layouts.lineIndex(containing: max(selection.location, end))
+        return first...max(first, last)
+    }
+
+    /// The UTF-16 range of a block: its lines, with the line break after the last one when it has one.
+    /// A layout's `lenUTF16` already counts that break.
+    private func blockRange(_ lines: ClosedRange<Int>) -> NSRange {
+        let start = layouts[lines.lowerBound].startUTF16
+        let last = layouts[lines.upperBound]
+        return NSRange(location: start, length: last.startUTF16 + last.lenUTF16 - start)
+    }
+
+    /// Comment: asks the host for the comment text of the block's line.
+    func beginComment() {
+        let index = selectedLines().lowerBound
+        onComment?(index, lineText(index), layouts[index].kind == .table)
+    }
+
+    /// Writes the comment on line `index` as `passage<!-- comment: said -->`, the passage being the line.
+    /// False (and nothing written) when the line cannot take a comment or `said` is empty.
+    @discardableResult
+    func commentLine(_ index: Int, said: String) -> Bool {
+        guard layouts.indices.contains(index) else { return false }
+        let line = layouts[index]
+        let text = lineText(index)
+        guard let commented = CommentFormat.commented(line: text, said: said, inTable: line.kind == .table) else { return false }
+        replace(
+            NSRange(location: line.startUTF16, length: text.utf16.count),
+            with: commented,
+            selection: NSRange(location: line.startUTF16 + commented.utf16.count, length: 0)
+        )
+        return true
+    }
+
+    /// Show Markdown: the block's markers show while the caret stays in it.
+    func revealBlock() {
+        let lines = selectedLines()
+        revealedLines = Set(lines)
+        style(Array(lines))
+    }
+
+    /// Copy: the block's text on the pasteboard, without its line break.
+    func copyBlock() {
+        let range = blockRange(selectedLines())
+        var text = textView.textStorage.string.substring(startUTF16: range.location, lengthUTF16: range.length)
+        if text.hasSuffix("\n") {
+            text.removeLast()
+        }
+        UIPasteboard.general.string = text
+    }
+
+    /// Duplicate: a copy of the block goes right after it, and the caret moves to the copy.
+    func duplicateBlock() {
+        let range = blockRange(selectedLines())
+        let block = textView.textStorage.string.substring(startUTF16: range.location, lengthUTF16: range.length)
+        let end = NSMaxRange(range)
+        let hasBreak = block.hasSuffix("\n")
+        // A block at the very end of the note has no break after it: its copy comes after a new one.
+        let copy = hasBreak ? block : "\n" + block
+        replace(NSRange(location: end, length: 0), with: copy, selection: NSRange(location: end + (hasBreak ? 0 : 1), length: 0))
+    }
+
+    /// Delete: the block goes, with its line break (or the one before it, for the last line of the note).
+    func deleteBlock() {
+        let range = blockRange(selectedLines())
+        let text = textView.textStorage.string as NSString
+        let hasBreak = range.length > 0 && text.character(at: NSMaxRange(range) - 1) == 10
+        var cut = range
+        if !hasBreak, range.location > 0 {
+            cut = NSRange(location: range.location - 1, length: range.length + 1)
+        }
+        replace(cut, with: "", selection: NSRange(location: cut.location, length: 0))
+    }
+
     /// Inserts a slash block at the caret line: into the line when it is empty, else on a new line after it.
     func insertBlock(_ item: SlashItem) {
         let index = layouts.lineIndex(containing: textView.selectedRange.location)
@@ -325,6 +428,31 @@ extension MarkdownEditorController: UITextViewDelegate {
 
     func textViewDidChangeSelection(_ textView: UITextView) {
         selectionChanged()
+    }
+
+    /// The edit menu of a selection: the system's actions, then the block actions (Comment, Show
+    /// Markdown, Copy, Duplicate, and Delete last, destructive).
+    func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        let block = UIMenu(options: .displayInline, children: [
+            UIAction(title: "Comment", image: UIImage(systemName: "text.bubble")) { [weak self] _ in
+                self?.beginComment()
+            },
+            UIAction(title: "Show Markdown", image: UIImage(systemName: "chevron.left.forwardslash.chevron.right")) { [weak self] _ in
+                self?.revealBlock()
+            },
+            UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
+                self?.copyBlock()
+            },
+            UIAction(title: "Duplicate", image: UIImage(systemName: "plus.square.on.square")) { [weak self] _ in
+                self?.duplicateBlock()
+            },
+        ])
+        let delete = UIMenu(options: .displayInline, children: [
+            UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+                self?.deleteBlock()
+            },
+        ])
+        return UIMenu(children: suggestedActions + [block, delete])
     }
 }
 

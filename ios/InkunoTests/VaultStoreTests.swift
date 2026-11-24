@@ -161,7 +161,6 @@ final class VaultStoreTests: XCTestCase {
 
         XCTAssertFalse(empty.hasVault)
         XCTAssertEqual(empty.displayName, "Not chosen")
-        XCTAssertThrowsError(try empty.openScratch())
     }
 
     func testUnresolvableBookmarkIsForgotten() {

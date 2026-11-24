@@ -190,4 +190,29 @@ final class CoreProviderTests: XCTestCase {
         let result = provider.indent("", rangeUTF16: NSRange(location: 0, length: 0), outdent: false)
         XCTAssertEqual(result.newText, "    ")
     }
+
+    // MARK: Runs the editor reads
+
+    func testAtDatesAreDateRuns() {
+        let line = "see @2026-11-24 and @nonsense"
+        let runs = provider.styleRuns(line: line)
+
+        let date = (line as NSString).range(of: "@2026-11-24")
+        XCTAssertTrue(runs.contains { $0.startUTF16 == date.location && $0.lenUTF16 == date.length && $0.bits & StyleBit.date != 0 })
+        XCTAssertFalse(runs.contains { $0.bits & StyleBit.date != 0 && $0.startUTF16 > 20 }, "an unknown word is not a date")
+    }
+
+    func testTheQuietAddressIsAStyleRun() {
+        let line = "[site](https://x.y)"
+        XCTAssertNotEqual(bits(of: "https", in: line) & StyleBit.quiet, 0)
+    }
+
+    func testCodeRunsAreSyntaxColours() {
+        let runs = provider.codeStyleRuns(line: "let s = 1; // hi", lang: "rust")
+
+        XCTAssertTrue(runs.contains { $0.bits & StyleBit.keyword != 0 })
+        XCTAssertTrue(runs.contains { $0.bits & StyleBit.number != 0 })
+        XCTAssertTrue(runs.contains { $0.bits & StyleBit.comment != 0 })
+        XCTAssertFalse(runs.contains { $0.bits & StyleBit.marker != 0 }, "code runs carry no markers")
+    }
 }
