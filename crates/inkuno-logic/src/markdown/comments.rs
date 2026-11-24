@@ -302,10 +302,11 @@ pub fn resolve(line: &str, at: usize) -> Option<String> {
     ))
 }
 
-/// `text` with a reply by `by` added to the comment that starts at byte `at` (as `Note::at` gives it): the
-/// reply is written after the replies it has, on the comment's line, so the comment stays on one line.
-/// In a table a `|` of the reply is written `\|`. `None` when no comment starts at `at` on its line, or
-/// when its markup does not read.
+/// `text` with a reply by `by` added to the comment that starts at byte `at` (as `Note::at` gives it, the
+/// start of its passage, or of the comment on its own; a comment inside its markup is not found): the reply
+/// is written after the replies it has, on the comment's line, so the comment stays on one line. The reply
+/// is trimmed; in a table a `|` of it is written `\|`, and `format_comment` spaces its marks. `None` when
+/// the reply is empty, when no comment starts at `at` on its line, or when its markup does not read.
 pub fn reply_on(text: &str, at: usize, reply: &str, by: Stamp) -> Option<String> {
     let line_start = text[..at].rfind('\n').map_or(0, |i| i + 1);
     let line_end = text[at..].find('\n').map_or(text.len(), |i| at + i);
@@ -321,7 +322,11 @@ pub fn reply_on(text: &str, at: usize, reply: &str, by: Stamp) -> Option<String>
         true => reply.replace('|', r"\|"),
         false => reply.to_string(),
     };
-    add_reply(&mut comment, typed.trim(), by);
+    let typed = typed.trim();
+    if typed.is_empty() {
+        return None;
+    }
+    add_reply(&mut comment, typed, by);
     let marked = format!("{kept}{}", format_comment(&comment));
     Some(format!(
         "{}{marked}{}",
@@ -1198,6 +1203,26 @@ mod form_tests {
         assert_eq!(
             twice.swap_remove(0).unwrap(),
             "<!-- comment @Ana 2026-11-24T10:02Z: Row \"Léa3\": a \\↳ b -->"
+        );
+    }
+
+    #[test]
+    fn reply_on_escapes_bars_in_a_table_line_and_refuses_an_empty_reply() {
+        let at = |text: &str, mark: &str| text.find(mark).unwrap();
+        let table = "| A | B |\n| - | - |\n| x<!-- comment @Ana 2026-11-24T10:02Z: vu --> | y |\n";
+        let start = at(table, "x<!--");
+        let out = reply_on(table, start, " a | b ", BO).unwrap();
+        assert!(
+            out.contains("↳ @Bo 2026-11-24T10:05Z: a \\| b -->"),
+            "{out}"
+        );
+        // The row keeps its three cell bars; the escaped one of the reply adds one more.
+        assert_eq!(out.lines().nth(2).unwrap().matches('|').count(), 4);
+        let plain = "one<!-- comment @Ana 2026-11-24T10:02Z: vague -->\n";
+        assert_eq!(reply_on(plain, 0, " \n ", BO), None);
+        assert_eq!(
+            reply_on(plain, 0, "| x", BO).unwrap().matches('|').count(),
+            1
         );
     }
 }

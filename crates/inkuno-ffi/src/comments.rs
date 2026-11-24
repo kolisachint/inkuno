@@ -106,7 +106,8 @@ pub fn comment_add_by(
 }
 
 /// `text` with `reply`, by `author` at `unix_time`, added after the replies of the comment that starts at
-/// `comment_start_utf16`. The reply is refused when it is empty or no comment starts there.
+/// `comment_start_utf16`. See `inkuno_logic::markdown::reply_on`. The reply is refused when it is empty or
+/// no comment starts there.
 #[uniffi::export]
 pub fn comment_reply(
     text: String,
@@ -115,34 +116,19 @@ pub fn comment_reply(
     author: String,
     unix_time: i64,
 ) -> Result<String, CommentError> {
-    let (start, end) = comment_span(&text, comment_start_utf16)?;
-    let markup = markdown::markup_in(&text[start..end]);
-    let markup_at = end - markup.len();
-    let mut comment =
-        markdown::parse_comment(markup).ok_or_else(|| refused("the comment cannot be read"))?;
-    let mut flat = markdown::spaced(&reply).trim().to_string();
-    if flat.is_empty() {
-        return Err(refused("the reply is empty"));
-    }
-    // In a table cell a `|` of the reply is written `\|`, as the comment itself is.
-    let (line_start, line_end) = line_bounds(&text, markup_at);
-    if markdown::is_table_line(&text[line_start..line_end]) {
-        flat = flat.replace('|', "\\|");
-    }
+    let (start, _) = comment_span(&text, comment_start_utf16)?;
     let time = markdown::utc_minute(unix_time);
-    markdown::add_reply(
-        &mut comment,
-        &flat,
-        Stamp {
-            author: &author,
-            time: &time,
-        },
-    );
-    let mut out = String::with_capacity(text.len() + flat.len() + 64);
-    out.push_str(&text[..markup_at]);
-    out.push_str(&markdown::format_comment(&comment));
-    out.push_str(&text[end..]);
-    Ok(out)
+    let by = Stamp {
+        author: &author,
+        time: &time,
+    };
+    markdown::reply_on(&text, start, &reply, by).ok_or_else(|| {
+        refused(if reply.trim().is_empty() {
+            "the reply is empty"
+        } else {
+            "the comment cannot be read"
+        })
+    })
 }
 
 /// `text` with the comment that starts at `comment_start_utf16` resolved: its markup goes and its passage
