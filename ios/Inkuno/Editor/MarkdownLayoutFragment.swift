@@ -76,8 +76,7 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
         guard let text = (textElement as? NSTextParagraph)?.attributedString,
               let mark = text.attribute(.inkTableRow, at: 0, effectiveRange: nil) as? TableRowMark
         else { return bounds }
-        let margin = -layoutFragmentFrame.minX
-        return bounds.union(CGRect(x: margin, y: 0, width: mark.width + 2, height: layoutFragmentFrame.height))
+        return bounds.union(CGRect(x: -layoutFragmentFrame.minX, y: 0, width: mark.width + 2, height: layoutFragmentFrame.height))
     }
 
     override func draw(at renderingOrigin: CGPoint, in context: CGContext) {
@@ -121,19 +120,23 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
         let traits = UITraitCollection.current
         func resolved(_ token: Color) -> UIColor { UIColor(token).resolvedColor(with: traits) }
 
-        // The margin: the text container's left edge, which the fragment's frame starts past by the table's
-        // padding (the head indent of the row). The text itself is drawn from the frame's origin.
-        let left = origin.x - layoutFragmentFrame.minX
+        // The fragment's frame starts past the margin by the row's head indent (the table padding), and the drawing
+        // is in the fragment's space: the margin is `-minX`, where the border starts, and the text is inset from it
+        // by the padding. A table wider than the text container is cut after the last cell that fits: the text is
+        // clipped there, and the border closes after that cell.
+        let padding = MarkdownStyler.tablePadding
+        let left = -layoutFragmentFrame.minX
         let height = layoutFragmentFrame.height
         var width = mark.width
+        var cut: CGFloat?
         if let container = textLayoutManager?.textContainer, let advance = Self.cellAdvance(text) {
-            let room = container.size.width
-            if width > room {
-                let padding = MarkdownStyler.tablePadding
-                let cut = left + padding + floor((room - 2 * padding) / advance) * advance
-                // Text is clipped to the cells that fit; the border closes after the last of them.
-                context.clip(to: CGRect(x: -100_000, y: origin.y - 100_000, width: cut + 200_000, height: 200_000))
-                width = cut - left + padding
+            // A point short of the container's edge, so the border's right side stays inside it.
+            let right = container.size.width - layoutFragmentFrame.minX - 1
+            if left + width > right {
+                let textLeft = left + padding
+                let last = textLeft + floor((right - padding - textLeft) / advance) * advance
+                cut = last
+                width = last + padding - left
             }
         }
 
@@ -161,6 +164,10 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
             rule.stroke()
         }
         context.restoreGState()
+        // The text is cut after the last cell that fits; the border is not, so it is drawn before this clip.
+        if let cut {
+            context.clip(to: CGRect(x: -100_000, y: origin.y - 100_000, width: cut + 100_000, height: 200_000))
+        }
     }
 
     /// The advance of a monospace character in the text's first sized font, which a table row is set in.
