@@ -45,11 +45,12 @@ fi
 
 if [ -n "${IOS_DEVICE_ID:-}" ]; then
     device=$IOS_DEVICE_ID
+    udid=$IOS_DEVICE_ID
 else
     devices_json=$(mktemp)
     trap 'rm -f "$devices_json"' EXIT
     xcrun devicectl list devices --json-output "$devices_json" >/dev/null
-    device=$(python3 -c '
+    read -r device udid < <(python3 -c '
 import json, sys
 
 
@@ -81,23 +82,28 @@ for device in json.load(open(sys.argv[1]))["result"]["devices"]:
         continue
     if fields.get("tunnelState") == "unavailable":
         continue
-    found.append((fields.get("name", "unnamed"), fields.get("identifier") or fields.get("udid")))
+    identifier = fields.get("identifier") or fields.get("udid")
+    found.append((fields.get("name", "unnamed"), identifier, fields.get("udid") or identifier))
 
 if not found:
     sys.exit("ios-device: no connected iPhone. Plug it in, unlock it, tap Trust, then retry.")
 if len(found) > 1:
-    names = ", ".join("%s (%s)" % (name, identifier) for name, identifier in found)
+    names = ", ".join("%s (%s)" % (name, identifier) for name, identifier, _ in found)
     sys.exit("ios-device: more than one iPhone connected: %s. Set IOS_DEVICE_ID to choose one." % names)
-print(found[0][1])
+print(found[0][1], found[0][2])
 ' "$devices_json")
+    if [ -z "${device:-}" ]; then
+        exit 1
+    fi
 fi
 
 echo "ios-device: building $xcode_config for device $device"
 scripts/build-ios-core.sh "$config"
 (cd ios && xcodegen generate)
 xcodebuild -project ios/Inkuno.xcodeproj -scheme Inkuno -configuration "$xcode_config" \
-    -destination 'generic/platform=iOS' -derivedDataPath ios/build \
-    -allowProvisioningUpdates DEVELOPMENT_TEAM="$team" build
+    -destination "id=$udid" -derivedDataPath ios/build \
+    -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+    DEVELOPMENT_TEAM="$team" build
 
 app="ios/build/Build/Products/$xcode_config-iphoneos/Inkuno.app"
 if [ ! -d "$app" ]; then
