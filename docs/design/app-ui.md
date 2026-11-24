@@ -1413,3 +1413,10 @@ Build decisions live in `docs/design/ios.md`.
 - Out of v1: Compare/diff screen, inline pending washes, table cell editing, Mermaid and math
   rendering (shown as code), Focus mode, tar.gz backup, the other themes, Assistant,
   comment replies, text-selection comments.
+
+## 25. HTML pages (macOS: a tab)
+
+- An HTML page of the vault opens as a tab on macOS: a native webview is laid over the tab's area (`views/html_page.rs`, `inkuno_view::embed`).
+- Elsewhere it opens in its own window, `inkuno view` (`shell/notes.rs`, `open_html_in_viewer`), as before.
+- Why: gpui does not run the GTK loop that the webview needs on Linux, and Windows has no viewer, so the separate window stays the fallback there.
+- A tab out of sight hides its webview each frame; the page is not restored at startup, as before.

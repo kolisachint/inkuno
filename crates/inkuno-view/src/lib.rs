@@ -2,6 +2,7 @@
 //! and follows the links between the pages under one root. No browser, no server: the files
 //! come through the custom protocol `inkuno://workspace/` (`inkuno_platform::web`). No gpui.
 
+pub mod embed;
 mod keys;
 #[cfg(target_os = "macos")]
 mod menu;
@@ -84,6 +85,31 @@ fn title_of(root: &Path, url: &str) -> Option<String> {
     Some(format!("{name} — Inkuno"))
 }
 
+/// The webview of the page at `url`, served from `root`: the scripts, the custom protocol, the
+/// navigation policy and the link handler. The window and an embedded page share it.
+fn page<'a>(url: &str, root: &Path) -> WebViewBuilder<'a> {
+    let serve_root = root.to_path_buf();
+    let last_open = Cell::new(None::<Instant>);
+    WebViewBuilder::new()
+        .with_url(url)
+        .with_initialization_script(keys::SCRIPT)
+        .with_initialization_script(keys::LINKS)
+        .with_custom_protocol(web::SCHEME.to_string(), move |_id, request| {
+            protocol::respond(&serve_root, &request.uri().to_string())
+        })
+        .with_ipc_handler(move |request| {
+            // The page's script sends the address of a link the user clicked.
+            let link = request.body();
+            let now = Instant::now();
+            if web::is_external(link) && may_open(last_open.get(), now) {
+                last_open.set(Some(now));
+                let _ = open::that_detached(link);
+            }
+        })
+        .with_navigation_handler(|url| allow(&url))
+        .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
+}
+
 /// Opens a window on `file` and follows its links under `root` (default: the file's folder).
 /// Returns an error when the file or root is unusable or the window cannot be built. On
 /// success it runs the event loop until the window closes; on some platforms that never
@@ -114,35 +140,15 @@ pub fn run(file: &Path, root: Option<&Path>) -> Result<(), String> {
         .build(&event_loop)
         .map_err(|error| format!("cannot open the window: {error}"))?;
 
-    let serve_root = root.clone();
     let title_root = root.clone();
-    let last_open = Cell::new(None::<Instant>);
     let title_proxy = event_loop.create_proxy();
-    let builder = WebViewBuilder::new()
-        .with_url(&url)
-        .with_initialization_script(keys::SCRIPT)
-        .with_initialization_script(keys::LINKS)
-        .with_custom_protocol(web::SCHEME.to_string(), move |_id, request| {
-            protocol::respond(&serve_root, &request.uri().to_string())
-        })
-        .with_ipc_handler(move |request| {
-            // The page's script sends the address of a link the user clicked.
-            let link = request.body();
-            let now = Instant::now();
-            if web::is_external(link) && may_open(last_open.get(), now) {
-                last_open.set(Some(now));
-                let _ = open::that_detached(link);
-            }
-        })
-        .with_navigation_handler(|url| allow(&url))
-        .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
-        .with_on_page_load_handler(move |event, url| {
-            // A page that did not load (a refused or missing link) has no file name: the plain title.
-            if matches!(event, PageLoadEvent::Finished) {
-                let title = title_of(&title_root, &url).unwrap_or_else(|| "Inkuno".into());
-                let _ = title_proxy.send_event(UserEvent::Title(title));
-            }
-        });
+    let builder = page(&url, &root).with_on_page_load_handler(move |event, url| {
+        // A page that did not load (a refused or missing link) has no file name: the plain title.
+        if matches!(event, PageLoadEvent::Finished) {
+            let title = title_of(&title_root, &url).unwrap_or_else(|| "Inkuno".into());
+            let _ = title_proxy.send_event(UserEvent::Title(title));
+        }
+    });
 
     #[cfg(target_os = "linux")]
     let webview = {
