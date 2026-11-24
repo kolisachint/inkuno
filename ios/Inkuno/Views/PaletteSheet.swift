@@ -160,7 +160,19 @@ struct PaletteSheet: View {
             if let rows = groups[group], !rows.isEmpty {
                 Section {
                     ForEach(rows) { command in
-                        Button(command.title) { run(command) }
+                        Button { run(command) } label: {
+                            // A command is not a link: ink text, with its symbol in the icon colour, as the note rows.
+                            HStack(spacing: 12) {
+                                Image(systemName: command.symbol)
+                                    .frame(width: InkMetrics.markerIconSize)
+                                    .foregroundStyle(InkColor.icon)
+                                    .accessibilityHidden(true)
+                                Text(command.title)
+                                    .font(InkType.rowTitle)
+                                    .foregroundStyle(InkColor.ink)
+                            }
+                            .frame(minHeight: InkMetrics.rowMinHeight)
+                        }
                     }
                 } header: {
                     InkSectionTitle(group.title)
@@ -272,6 +284,24 @@ struct PaletteCommand: Identifiable {
     var group: Group
     var title: String
     var action: Action
+
+    /// The SF Symbol of the row.
+    var symbol: String {
+        switch action {
+        case .today: return "calendar"
+        case .newNote: return "square.and.pencil"
+        case .settings: return "gearshape"
+        case .trash: return "arrow.uturn.backward"
+        case .saveVersion: return "clock.arrow.circlepath"
+        case .showPanel(let tab):
+            switch tab {
+            case .outline: return "list.bullet.indent"
+            case .comments: return "text.bubble"
+            case .versions: return "clock.arrow.circlepath"
+            case .backlinks: return "link"
+            }
+        }
+    }
 
     /// The full command list. The This-note commands (Save version, Outline/Comments/Versions/
     /// Backlinks) appear only when a note is open; the panel ones also need a host for the sheet.
