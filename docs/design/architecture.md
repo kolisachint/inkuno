@@ -96,6 +96,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | the Versions panel and the compare (a read-only tab against a version) | `shell/versions.rs`, `shell/sidebar.rs` (rows), `views/editor/` (`readonly`); `docs/design/app-ui.md` §19 |
 | the window's door for `inkuno show` | `crates/inkuno-platform/src/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
+| background save of a note | `platform::vault::save_quiet` (`crates/inkuno-platform/src/vault.rs`), `Shell::flush_debounced` and the `Saving` slot in `shell/autosave.rs` |
 | colours, themes, page width | `crates/inkuno-ui/src/theme.rs` |
 | icons and fonts | `crates/inkuno-ui/src/assets.rs` |
 | a reusable piece of UI (button, row, menu item, switch…) | `crates/inkuno-ui/src/components/` (one file per piece, named after its v2 class) |
@@ -150,32 +151,40 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 
 - Typing changes the editor's text in memory only. Each change marks the note dirty and restarts a 400 ms
   timer (the `EditorEvent::Changed` handler in `shell/notes.rs`).
-- When the timer ends, the shell calls `flush`, which calls `flush_one` on each pane. The write is synchronous,
-  on the UI thread (a `// ponytail:` comment in `notes.rs` names the limit).
-- Before writing, `take_outside` reads the note from disk. If the disk still holds the text Inkuno last read or
-  wrote (`base`), nothing is merged. Otherwise `logic::merge::onto(base, ours, disk)` merges the outside edits into
-  the editor as one undo step. When that merge fails (both sides changed the same lines), the other version is
-  written beside the note as a conflict copy, and the note keeps the typed text.
-- Closing a tab, file operations, the palette, menus, the Assistant and scratch notes call the same path at once.
-- Every write goes through `vault::write`: a temp file, `fsync`, then a rename, so a crash never leaves a
-  truncated note.
+- When the timer ends, the shell calls `Shell::flush_debounced` (in `shell/autosave.rs`).
+- An existing, dirty note with no title change and no comment-form migration is saved in the background by
+  `platform::vault::save_quiet`, on the background executor, under `vault::save_lock`. It writes only if the disk
+  still equals the pane's `base` (the text last saved). Otherwise it returns `Outside`, and `Shell::flush_one`
+  (in `shell/notes.rs`) merges as before: `take_outside`, then `logic::merge::onto`; when the same lines changed,
+  the other version is written beside the note as a conflict copy.
+- Close, switch, quit, rename, new notes, scratch and conflicts use `flush_one` on the UI thread. It first settles
+  the pane's `Saving` slot (`Shell::settle_saving`): a queued background save is cancelled, a running one is waited
+  for and its outcome applied. So the last text is on disk before the window closes.
+- Rewriting links in other notes after a heading rename first saves those notes' panes, and takes the save lock.
+- Every write is atomic (`vault::write`: a temp file, `fsync`, then a rename), so a crash never leaves a truncated note.
+- Remaining shortcut: a note that gains a `#` title stays on the synchronous path until it is reopened
+  (`// ponytail:` on `pane.h1`).
 
 ```mermaid
 sequenceDiagram
     participant E as Editor
     participant S as Shell
+    participant W as Worker
     participant D as Disk
-    E->>S: text changed, 400 ms timer
-    S->>D: read the note
-    alt disk unchanged (text equals base)
-        S->>D: write (atomic)
-    else disk changed
-        alt merge succeeds
-            S->>E: absorb the outside edits (one undo step)
-        else same lines changed
-            S->>D: write the other version as a conflict copy
+    E->>S: changed
+    Note over S: 400 ms
+    alt existing note, no rename
+        S->>W: save_quiet
+        W->>D: read, compare with base
+        alt disk equals base
+            W->>D: write (atomic)
+            W-->>S: Saved
+        else disk changed
+            W-->>S: Outside
+            S->>D: flush_one: merge or conflict copy
         end
-        S->>D: write the note (atomic)
+    else rename, new note, scratch
+        S->>D: flush_one (UI thread)
     end
 ```
 
