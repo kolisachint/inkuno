@@ -10,6 +10,7 @@
 mod changes;
 mod editing;
 mod files;
+mod history;
 mod lines;
 mod notes;
 mod search;
