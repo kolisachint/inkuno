@@ -16,8 +16,8 @@ use std::{
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
 use super::{revisions, scratch, sidecar};
-use inkuno_logic::note::{Note, lowered};
-use inkuno_logic::{lang::tr, markdown, revision};
+use inkuno_logic::note::{self, Note, lowered};
+use inkuno_logic::{lang::tr, markdown, revision, trash};
 
 /// The user's configuration folder, per platform.
 pub fn config_dir() -> PathBuf {
@@ -206,14 +206,6 @@ pub fn image_name(path: &Path) -> String {
         .into_owned()
 }
 
-/// The names of the templates folder, at the vault root (ignoring case and accents).
-const TEMPLATE_DIRS: [&str; 2] = ["templates", "modeles"];
-
-fn is_template_dir(name: &str) -> bool {
-    let name = inkuno_logic::lang::fold(name);
-    TEMPLATE_DIRS.contains(&name.as_str())
-}
-
 /// The vault's templates folder: `Templates` or `Modèles`, among its folders.
 #[cfg(test)]
 pub fn template_dir(root: &Path, dirs: &[PathBuf]) -> Option<PathBuf> {
@@ -221,7 +213,7 @@ pub fn template_dir(root: &Path, dirs: &[PathBuf]) -> Option<PathBuf> {
         .find(|d| {
             d.parent() == Some(root)
                 && d.file_name()
-                    .is_some_and(|n| is_template_dir(&n.to_string_lossy()))
+                    .is_some_and(|n| note::is_template_folder(&n.to_string_lossy()))
         })
         .cloned()
 }
@@ -229,14 +221,7 @@ pub fn template_dir(root: &Path, dirs: &[PathBuf]) -> Option<PathBuf> {
 /// The note is a template: it is in the templates folder, however deep under it. A template
 /// is neither in the graph nor in tags and links: its `{{words}}` are not links.
 pub fn in_templates(root: &Path, path: &Path) -> bool {
-    let Ok(rel) = path.strip_prefix(root) else {
-        return false;
-    };
-    let mut parts = rel.components();
-    parts.next_back().is_some()
-        && parts
-            .next()
-            .is_some_and(|first| is_template_dir(&first.as_os_str().to_string_lossy()))
+    path.strip_prefix(root).is_ok_and(note::is_template)
 }
 
 /// The file is an image the app can display.
@@ -742,13 +727,7 @@ pub fn trash(root: &Path, path: &Path) -> io::Result<PathBuf> {
     let bin = root.join(".trash");
     fs::create_dir_all(&bin)?;
     let name = path.file_name().unwrap_or_default().to_string_lossy();
-    let free = (1..)
-        .map(|n| match n {
-            1 => bin.join(&*name),
-            n => bin.join(format!("{n} {name}")),
-        })
-        .find(|p| !p.exists())
-        .unwrap();
+    let free = bin.join(trash::name(&name, |c| bin.join(c).exists()));
     fs::rename(path, &free)?;
     Ok(free)
 }

@@ -1,7 +1,12 @@
 //! A note of the vault as the app keeps it in memory: name, path, tags, links and text.
 
-use std::{path::PathBuf, sync::Arc, time::SystemTime};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::SystemTime,
+};
 
+use crate::lang::fold;
 use crate::markdown;
 
 #[derive(Clone)]
@@ -22,6 +27,24 @@ pub struct Note {
     pub body: Arc<str>,
     /// The same in lowercase: search does not redo it each time the palette opens.
     pub lower: Arc<str>,
+}
+
+/// The folders that hold the templates, at the vault's root (compared folded: `Modèles` is `modeles`).
+const TEMPLATE_DIRS: [&str; 2] = ["templates", "modeles"];
+
+/// Whether a folder name is the templates folder (see `TEMPLATE_DIRS`), ignoring case and accents.
+pub fn is_template_folder(name: &str) -> bool {
+    TEMPLATE_DIRS.contains(&fold(name).as_str())
+}
+
+/// Whether the note at `rel` (its path inside the vault) is a template: it lies in a templates folder
+/// at the root, however deep. A template has no tags, links or aliases of its own.
+pub fn is_template(rel: &Path) -> bool {
+    let mut parts = rel.components();
+    parts.next_back().is_some()
+        && parts
+            .next()
+            .is_some_and(|first| is_template_folder(&first.as_os_str().to_string_lossy()))
 }
 
 /// The text in lowercase; the text itself if it already is, without a copy.
