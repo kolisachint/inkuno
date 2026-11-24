@@ -241,7 +241,7 @@ final class VaultStore {
 
     // MARK: Coordination
 
-    private func coordinateRead<T>(_ url: URL, _ body: (URL) throws -> T) throws -> T {
+    func coordinateRead<T>(_ url: URL, _ body: (URL) throws -> T) throws -> T {
         var coordinationError: NSError?
         var output: Result<T, Error>?
         NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinated in
@@ -252,7 +252,7 @@ final class VaultStore {
         return try output.get()
     }
 
-    private func coordinateWrite<T>(_ url: URL, _ body: (URL) throws -> T) throws -> T {
+    func coordinateWrite<T>(_ url: URL, _ body: (URL) throws -> T) throws -> T {
         var coordinationError: NSError?
         var output: Result<T, Error>?
         NSFileCoordinator().coordinate(writingItemAt: url, options: [], error: &coordinationError) { coordinated in

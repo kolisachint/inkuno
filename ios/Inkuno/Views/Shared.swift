@@ -48,6 +48,8 @@ enum InkFormat {
 /// A note row: icon, title, age. Used by the tree and the palette.
 struct NoteRow: View {
     let entry: VaultEntry
+    /// A matching content line, shown under the title in palette Content results.
+    var snippet: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -59,7 +61,12 @@ struct NoteRow: View {
                     .font(InkType.rowTitle)
                     .foregroundStyle(InkColor.ink)
                     .lineLimit(1)
-                if entry.kind == .cloudPlaceholder {
+                if let snippet {
+                    Text(snippet)
+                        .font(InkType.caption)
+                        .foregroundStyle(InkColor.soft)
+                        .lineLimit(1)
+                } else if entry.kind == .cloudPlaceholder {
                     Text("In iCloud")
                         .font(InkType.caption)
                         .foregroundStyle(InkColor.faint)

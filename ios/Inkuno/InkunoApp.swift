@@ -20,6 +20,7 @@ enum Route: Hashable {
     case tree(URL)
     case note(URL)
     case settings
+    case trash
 }
 
 /// Onboarding until a folder is chosen; then Home as the stack root, with push routes.
@@ -56,6 +57,11 @@ struct RootView: View {
             NoteView(url: url)
         case .settings:
             SettingsView()
+        case .trash:
+            TrashView { note in
+                showPalette = false
+                path.append(.note(note))
+            }
         }
     }
 }

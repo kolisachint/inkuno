@@ -33,6 +33,10 @@ struct HomeView: View {
         .background(InkColor.ground)
         .navigationTitle("Inkuno")
         .navigationBarTitleDisplayMode(.large)
+        .refreshable {
+            reloadRecall()
+            showPalette = true
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
