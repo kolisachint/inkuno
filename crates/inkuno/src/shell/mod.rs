@@ -3,6 +3,7 @@
 //! this folder.
 
 mod assistant;
+mod autosave;
 mod changes;
 mod comments;
 mod config;
