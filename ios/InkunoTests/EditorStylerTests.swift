@@ -148,6 +148,63 @@ final class EditorStylerTests: XCTestCase {
         XCTAssertFalse(isHidden(storage, (text as NSString).range(of: "| -").location))
     }
 
+    func testTableRowsCarryTheirPlaceAndOneWidth() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |\n\nafter"
+        let storage = styled(text, caretLine: 4)
+        func mark(_ needle: String) -> TableRowMark? {
+            storage.attribute(.inkTableRow, at: location(of: needle, in: text), effectiveRange: nil) as? TableRowMark
+        }
+
+        let header = mark("| a")
+        let last = mark("| 1")
+        XCTAssertEqual(header?.isHeader, true)
+        XCTAssertEqual(header?.isLast, false)
+        XCTAssertEqual(last?.isHeader, false)
+        XCTAssertEqual(last?.isLast, true)
+        XCTAssertNil(storage.attribute(.inkTableRow, at: location(of: "| -", in: text), effectiveRange: nil))
+        XCTAssertNil(storage.attribute(.inkTableRow, at: location(of: "after", in: text), effectiveRange: nil))
+        XCTAssertNotNil(header)
+        XCTAssertEqual(header?.width, last?.width)
+        XCTAssertGreaterThan(header?.width ?? 0, 0)
+        XCTAssertNil(storage.attribute(.underlineStyle, at: location(of: "a", in: text), effectiveRange: nil),
+                     "the rules are drawn by the layout, not underlined")
+    }
+
+    func testTableTextIsInsetFromItsBorder() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: nil)
+        let style = storage.attribute(.paragraphStyle, at: location(of: "a", in: text), effectiveRange: nil) as? NSParagraphStyle
+
+        XCTAssertEqual(style?.firstLineHeadIndent, MarkdownStyler.tablePadding)
+        XCTAssertEqual(style?.headIndent, MarkdownStyler.tablePadding)
+    }
+
+    func testTableLastCellEndsAtTheBorder() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: nil)
+
+        XCTAssertTrue(isHidden(storage, (text as NSString).range(of: "b |").location + 1), "the space before the trailing pipe")
+        XCTAssertFalse(isHidden(storage, location(of: "b", in: text)))
+    }
+
+    func testTableHasNoRowMarkWhileTheCaretIsOnIt() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: 1)
+
+        XCTAssertNil(storage.attribute(.inkTableRow, at: location(of: "| a", in: text), effectiveRange: nil))
+    }
+
+    func testTableFirstCellStartsAtTheMargin() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: nil)
+
+        XCTAssertTrue(isHidden(storage, 0), "the leading pipe")
+        XCTAssertTrue(isHidden(storage, 1), "the space after the leading pipe")
+        XCTAssertFalse(isHidden(storage, location(of: "a", in: text)))
+        let second = (text as NSString).range(of: "| 1").location
+        XCTAssertTrue(isHidden(storage, second + 1), "the space after the leading pipe of the body row")
+    }
+
     func testCheckedTaskContentIsStruck() {
         let text = "- [x] done"
         let storage = styled(text, caretLine: 1)
