@@ -263,7 +263,12 @@ final class InkunoWalkTests: XCTestCase {
     /// Waits for the element and fails the test with `what` when it does not show up.
     @discardableResult
     private func expect(_ element: XCUIElement, _ what: String, timeout: TimeInterval = 10) -> XCUIElement {
-        XCTAssertTrue(element.waitForExistence(timeout: timeout), "missing: \(what)")
+        let found = element.waitForExistence(timeout: timeout)
+        if !found {
+            // What the screen held instead, in the CI log: the xcresult is not always at hand.
+            print("WALK-MISSING \(what):\n\(XCUIApplication().debugDescription)")
+        }
+        XCTAssertTrue(found, "missing: \(what)")
         return element
     }
 
