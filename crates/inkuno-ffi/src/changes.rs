@@ -11,7 +11,7 @@ use crate::text::{byte_offset, offset_utf16};
 /// One change of a note, kept beside it in its list file (see `sidecar_parse`). `at` is a hint: the
 /// UTF-8 byte offset of the change in the note's own text, as the file writes it (not UTF-16).
 /// `orphan_since` (seconds since the Unix epoch) is set for a change the text no longer places.
-/// `created` is the UTC time it was proposed, when known.
+/// `created` is the UTC time it was proposed, when known, and `run` the store call that proposed it.
 #[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
 pub struct PendingEntry {
     pub id: u32,
@@ -25,6 +25,10 @@ pub struct PendingEntry {
     /// UTC time the change was proposed (`2026-11-24T10:02Z`); feed order only. None when unknown.
     #[uniffi(default = None)]
     pub created: Option<String>,
+    /// The store call that proposed the change (Unix milliseconds): the changes of one call share it,
+    /// and the feed shows them as one card. None for a change of an older list.
+    #[uniffi(default = None)]
+    pub run: Option<u64>,
 }
 
 impl From<Entry> for PendingEntry {
@@ -39,6 +43,7 @@ impl From<Entry> for PendingEntry {
             after: e.after,
             orphan_since: e.orphan_since,
             created: e.created,
+            run: e.run,
         }
     }
 }
@@ -55,6 +60,7 @@ impl From<PendingEntry> for Entry {
             after: e.after,
             orphan_since: e.orphan_since,
             created: e.created,
+            run: e.run,
         }
     }
 }
@@ -273,6 +279,7 @@ mod tests {
             after: String::new(),
             orphan_since: None,
             created: None,
+            run: None,
         }
     }
 

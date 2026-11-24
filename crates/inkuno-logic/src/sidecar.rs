@@ -1,5 +1,5 @@
 //! The file of pending changes beside a note, as its text reads and writes: `{"version": 2,
-//! "changes": [{id, author, at, old, new, before, after, orphan_since, created?}]}`. Which file holds it,
+//! "changes": [{id, author, at, old, new, before, after, orphan_since, created?, run?}]}`. Which file holds it,
 //! and when it is read or dropped, is the shell's (`platform/sidecar.rs`). Pure: no disk here.
 
 use serde_json::{Value, json};
@@ -41,6 +41,8 @@ pub fn parse(text: &str) -> Vec<Entry> {
                     .get("created")
                     .and_then(Value::as_str)
                     .map(str::to_string),
+                // Absent from a list written before runs were kept: such a change is in no run.
+                run: change.get("run").and_then(Value::as_u64),
             })
         })
         .collect()
@@ -67,6 +69,9 @@ pub fn render(entries: &[Entry]) -> String {
             if let Some(created) = &e.created {
                 change["created"] = json!(created);
             }
+            if let Some(run) = e.run {
+                change["run"] = json!(run);
+            }
             change
         })
         .collect();
@@ -82,6 +87,7 @@ mod tests {
 
     fn entry(id: u32) -> Entry {
         Entry {
+            run: None,
             id,
             author: "sachin".into(),
             at: 12,
@@ -100,6 +106,16 @@ mod tests {
         orphan.orphan_since = Some(1_700_000_000);
         let entries = vec![entry(1), orphan];
         assert_eq!(parse(&render(&entries)), entries);
+    }
+
+    #[test]
+    fn a_run_is_written_only_when_there_is_one_and_read_back() {
+        let mut proposed = entry(1);
+        proposed.run = Some(1_700_000_000_123);
+        let entries = vec![proposed, entry(2)];
+        let text = render(&entries);
+        assert_eq!(text.matches("\"run\"").count(), 1, "{text}");
+        assert_eq!(parse(&text), entries);
     }
 
     #[test]

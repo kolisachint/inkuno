@@ -66,6 +66,8 @@ pub struct Item {
     pub end: usize,
     /// The UTC minute it orders by: a comment's time, or a change's `created`. None when it has none.
     pub time: Option<String>,
+    /// The store call that proposed a change (`pending::Entry::run`); None for a comment or an older change.
+    pub run: Option<u64>,
     /// Who it is by; None is shown as "Unknown".
     pub author: Option<String>,
     pub kind: feed::Kind,
@@ -240,6 +242,7 @@ impl Shell {
                 at: note.at,
                 end: note.end,
                 time: note.time.clone(),
+                run: None,
                 author: note.author.clone(),
                 kind: feed::Kind::Comment,
                 section: section(note.at),
@@ -267,6 +270,7 @@ impl Shell {
                 at: area.range.start,
                 end: area.range.end,
                 time: saved.and_then(|entry| entry.created.clone()),
+                run: saved.and_then(|entry| entry.run),
                 author: saved
                     .map(|entry| entry.author.clone())
                     .filter(|author| !author.trim().is_empty()),
@@ -1115,7 +1119,7 @@ fn review_runs(visible: &[&Item]) -> Vec<Range<usize>> {
         .map(|item| feed::Slot {
             change: matches!(item.body, Body::Change { .. }),
             author: item.author.as_deref(),
-            time: item.time.as_deref(),
+            run: item.run,
         })
         .collect();
     feed::runs(&slots)

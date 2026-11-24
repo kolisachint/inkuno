@@ -33,27 +33,27 @@ pub fn sort<T>(items: &mut [T], time: impl Fn(&T) -> Option<&str>, at: impl Fn(&
     items.sort_by(|a, b| time(a).cmp(&time(b)).then_with(|| at(a).cmp(&at(b))));
 }
 
-/// What the grouping of a feed reads of one entry: whether it is a pending change, who by, and the minute it
-/// was proposed (`None` when it has none).
+/// What the grouping of a feed reads of one entry: whether it is a pending change, who by, and the store
+/// call that proposed it (`Entry::run`, `None` when it has none).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Slot<'a> {
     pub change: bool,
     pub author: Option<&'a str>,
-    pub time: Option<&'a str>,
+    pub run: Option<u64>,
 }
 
 /// The runs of entries the feed shows, each as one card: a run is two or more pending changes in a row with the
-/// same author and the same proposal minute, both known (one Improve proposes them together). Every other entry
-/// is a run of its own. The runs cover `slots` in order.
+/// same known run (one Improve proposes them together, in one store call) by the same author. An entry with no
+/// run is never grouped. Every other entry is a run of its own. The runs cover `slots` in order.
 pub fn runs(slots: &[Slot]) -> Vec<Range<usize>> {
     let mut out = Vec::new();
     let mut start = 0;
     while start < slots.len() {
         let first = slots[start];
         let mut end = start + 1;
-        if first.change && first.time.is_some() {
+        if first.change && first.run.is_some() {
             while slots.get(end).is_some_and(|next| {
-                next.change && next.time == first.time && next.author == first.author
+                next.change && next.run == first.run && next.author == first.author
             }) {
                 end += 1;
             }
@@ -176,20 +176,39 @@ mod tests {
     }
 
     #[test]
-    fn a_run_of_changes_by_one_author_in_one_minute_is_one_card() {
-        let change = |author, time| Slot {
+    fn a_run_of_changes_from_one_store_call_is_one_card() {
+        let change = |author, run| Slot {
             change: true,
             author: Some(author),
-            time: Some(time),
+            run: Some(run),
         };
         let slots = [
-            change("assistant", "2026-11-24T10:02Z"),
-            change("assistant", "2026-11-24T10:02Z"),
-            change("assistant", "2026-11-24T10:02Z"),
-            change("Bo", "2026-11-24T10:02Z"),
-            change("Bo", "2026-11-24T10:09Z"),
+            change("assistant", 1),
+            change("assistant", 1),
+            change("assistant", 1),
+            change("Bo", 1),
+            change("Bo", 2),
         ];
         assert_eq!(runs(&slots), [0..3, 3..4, 4..5]);
+    }
+
+    #[test]
+    fn two_runs_in_the_same_minute_are_two_cards() {
+        let change = |run| Slot {
+            change: true,
+            author: Some("assistant"),
+            run: Some(run),
+        };
+        assert_eq!(
+            runs(&[change(1), change(1), change(2), change(2)]),
+            [0..2, 2..4],
+            "two Improve runs in one minute stay apart"
+        );
+        assert_eq!(
+            runs(&[change(7), change(7)]),
+            vec![0..2],
+            "one run is one card"
+        );
     }
 
     #[test]
@@ -197,20 +216,20 @@ mod tests {
         let change = Slot {
             change: true,
             author: Some("assistant"),
-            time: Some("2026-11-24T10:02Z"),
+            run: Some(1),
         };
         let comment = Slot {
             change: false,
             author: Some("assistant"),
-            time: Some("2026-11-24T10:02Z"),
+            run: Some(1),
         };
-        let untimed = Slot {
+        let no_run = Slot {
             change: true,
             author: Some("assistant"),
-            time: None,
+            run: None,
         };
         assert_eq!(runs(&[change, comment, change]), [0..1, 1..2, 2..3]);
-        assert_eq!(runs(&[untimed, untimed]), [0..1, 1..2], "no time, no group");
+        assert_eq!(runs(&[no_run, no_run]), [0..1, 1..2], "no run, no group");
         assert!(runs(&[]).is_empty());
     }
 }

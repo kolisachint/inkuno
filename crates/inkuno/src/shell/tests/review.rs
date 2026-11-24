@@ -37,8 +37,16 @@ fn open<'a>(
 ) {
     let (root, shell, cx, config) = start(cx, name);
     let (base, mut changes) = pending::split(display, &[]);
+    // Changes given the same minute in a row are one store call, so one run (as an Improve proposes them).
+    let mut run = 0;
+    let mut last: Option<&str> = None;
     for (change, time) in changes.iter_mut().zip(created) {
+        if last != Some(*time) {
+            run += 1;
+            last = Some(time);
+        }
         change.created = Some(time.to_string());
+        change.run = Some(run);
         change.author = "Bo".into();
     }
     let note = root.join("Plan.md");

@@ -459,6 +459,10 @@ pub struct Entry {
     /// When the change was proposed, UTC to the minute (`2026-11-24T10:02Z`). Set by the platform
     /// when it saves a new change; `None` for a change that has none (an older list).
     pub created: Option<String>,
+    /// The identity of the store call that proposed the change (Unix milliseconds): every new change
+    /// of one call shares it, so the feed can show one Improve run as one card. `None` for a change
+    /// of an older list.
+    pub run: Option<u64>,
 }
 
 /// The note text as it is on disk, and the pending changes beside it: `display` (the text with
@@ -1602,6 +1606,7 @@ mod tests {
         assert_eq!(
             entries,
             [Entry {
+                run: None,
                 id: 1,
                 author: String::new(),
                 at: 5,
