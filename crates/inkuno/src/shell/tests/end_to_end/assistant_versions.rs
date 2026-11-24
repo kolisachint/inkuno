@@ -162,7 +162,9 @@ fn a_review_writes_its_findings_and_one_undo_takes_them_back(
     asst::settle(cx);
     assert_eq!(fs::read_to_string(&path).unwrap(), original);
 
-    // A second review, stopped before the agent ends: the answer that came is not written.
+    // A second review, stopped before the agent ends: the answer that came is not written. The first
+    // review opened the Review view on what it wrote, which took the dock: the assistant is shown again.
+    asst::click_button(cx);
     asst::click_review(cx);
     asst::feed(shell, cx, vec![Event::Text(TWO_FINDINGS.into())]);
     click_stop(cx);
