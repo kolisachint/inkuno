@@ -600,6 +600,12 @@ impl Editor {
         &self.content
     }
 
+    /// Changes each time the text changes (typing, undo, a load): a save compares it to tell whether the
+    /// text it wrote is still the text shown.
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
     /// Makes the note read-only (a comparison) or editable again. A read-only note refuses every change.
     pub fn set_readonly(&mut self, readonly: bool) {
         self.readonly = readonly;
