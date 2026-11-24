@@ -790,21 +790,25 @@ Normal 800 is the default (§10.4 lock released for this change).
   person sees. The transcript shows the question; the words sent to the agent also name the note's file
   (`logic::assistant::chat_prompt`).
 - **Review this note**: the note is saved, and the agent is asked for findings in a fixed text form
-  (`logic::assistant::review_prompt`): `PASSAGE:` a line copied from the note, `COMMENT:` the remark, at
-  most 12, or the single line `NO FINDINGS`. The answer is not shown; its text is collected while the agent
+  (`logic::assistant::review_prompt`). When the note has open comments, the prompt lists them first, numbered `C1`,
+  `C2`… (`logic::assistant::open_comments`: those whose last message is not by `assistant`), and says the person's
+  comments come first: each question or request in them gets one `REPLY: C<n>` and `COMMENT:` (one line, a direct
+  answer grounded in the note, or what is missing). Then at most 12 new findings: `PASSAGE:` a line copied from the
+  note, `COMMENT:` the remark. Both item forms are alternatives in the same answer. The single line `NO FINDINGS` only
+  when there is neither a reply nor a finding. The answer is not shown; its text is collected while the agent
   works, and read when the agent ends (`logic::assistant::findings`).
-- **Replies**: the prompt also lists the note's open comments, numbered `C1`, `C2`… (`logic::assistant::open_comments`:
-  those whose last message is not by `assistant`). The agent may answer one with `REPLY: C<n>` and `COMMENT:` (one line).
-  A reply is written after the comment's replies, on its line (`markdown::reply_on`), by `assistant`. The agent writes
-  its comments and replies under the name `assistant`, so it never answers itself.
+- **Replies**: a reply is written after the comment's replies, on its line (`markdown::reply_on`), by `assistant`. The
+  agent writes its comments and replies under the name `assistant`, so it never answers itself.
 - Placing the findings (`Shell::apply_review`, `logic::assistant::place`): replies first, last comment first; then each
-  new comment with `markdown::comment_on_by`, from the last passage in the text to the first. A reply is written only where
+  new comment with `markdown::comment_on_by` (or `comment_after`), from the last passage in the text to the first. A reply is written only where
   its listed comment still starts at the same byte with the same markup.
-- **New-comment skip rule** (`logic::assistant::may_split`): a passage is found by its text and must be in the text exactly
-  once. It may lie inside the passage of a comment already there: the new marker splits it, and the old comment keeps the
-  words after the new marker (its author, time and text are untouched). Skipped when the passage lies in a comment's marker
-  or text, in a CriticMarkup comment, or when the split would leave the old passage with no letter or digit (a passage that
-  ends at the old marker, or before its punctuation). The skipped ones are counted.
+- **New-comment placement** (`logic::assistant::spot`): a passage is found by its text and must be in the text exactly
+  once. It may lie inside the passage of a comment already there, with words after it: the new marker splits that passage,
+  and the old comment keeps the words after the new marker (its author, time and text are untouched). When the passage ends
+  the old passage (or only its punctuation is left), nothing is split: the new comment is written right after the old
+  comment's marker (and after any markers adjacent to it), so the old passage stays whole and the new comment parses as its
+  own comment with its author and time (`logic::assistant::comment_after`). Skipped when the passage lies in a comment's
+  marker or text, or in a CriticMarkup comment. The skipped ones are counted.
   The summary: "Wrote N comments.", "Wrote N replies.", "Wrote N comments and M replies.", "1 finding could not be
   placed.", or "No findings.".
 - When the review writes into the open note, the Review view opens on the first new comment or reply, expanded and scrolled
