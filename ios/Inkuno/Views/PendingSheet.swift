@@ -1,3 +1,4 @@
+import InkunoCore
 import SwiftUI
 
 /// The bottom pill while a note has pending changes: "N changes · Review".
@@ -45,7 +46,7 @@ struct PendingSheet: View {
     @Environment(VaultStore.self) private var vault
     @Environment(\.dismiss) private var dismiss
 
-    @State private var entries: [PendingChange] = []
+    @State private var entries: [PendingEntry] = []
     @State private var error: String?
 
     var body: some View {
@@ -121,7 +122,7 @@ struct PendingSheet: View {
         }
     }
 
-    private func resolve(_ entry: PendingChange, accept: Bool) {
+    private func resolve(_ entry: PendingEntry, accept: Bool) {
         do {
             if accept {
                 guard try vault.acceptPendingEntry(id: entry.id, for: noteURL) else {
@@ -150,7 +151,7 @@ struct PendingSheet: View {
 }
 
 private struct PendingCard: View {
-    let entry: PendingChange
+    let entry: PendingEntry
     var onAccept: () -> Void
     var onReject: () -> Void
 

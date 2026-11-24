@@ -61,6 +61,15 @@ final class VaultStore {
 
     var hasVault: Bool { vaultURL != nil }
 
+    /// The vault-relative path of a file inside the vault (`ideas/plan.md`); nil outside it.
+    func relativePath(of url: URL) -> String? {
+        guard let root = vaultURL else { return nil }
+        let rootPath = root.standardized.path
+        let path = url.standardized.path
+        guard path.hasPrefix(rootPath + "/") else { return nil }
+        return String(path.dropFirst(rootPath.count + 1))
+    }
+
     var displayName: String {
         vaultURL?.lastPathComponent ?? "Not chosen"
     }

@@ -73,15 +73,14 @@ enum ScratchStore {
         }
     }
 
-    /// Moves a scratch note into `folder/.trash` under its name, numbered when taken. Returns the new URL.
+    /// Moves a scratch note into `folder/.trash` under its name, numbered when taken (core `trashName`).
+    /// Returns the new URL.
     @discardableResult
     static func trash(_ url: URL, in folder: URL = directory) throws -> URL {
-        let bin = folder.appendingPathComponent(".trash", isDirectory: true)
+        let bin = folder.appendingPathComponent(scratchTrashFolder(), isDirectory: true)
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        let name = url.lastPathComponent
-        let free = (1...).lazy.map { n in
-            n == 1 ? bin.appendingPathComponent(name) : bin.appendingPathComponent("\(n) \(name)")
-        }.first { !FileManager.default.fileExists(atPath: $0.path) }!
+        let taken = (try? FileManager.default.contentsOfDirectory(atPath: bin.path)) ?? []
+        let free = bin.appendingPathComponent(trashName(name: url.lastPathComponent, taken: taken))
         try FileManager.default.moveItem(at: url, to: free)
         return free
     }

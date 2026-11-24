@@ -1,3 +1,4 @@
+import InkunoCore
 import SwiftUI
 
 /// The bottom sheet for the right panel: Outline, Comments, Versions, Backlinks.
@@ -93,13 +94,13 @@ struct PanelSheet: View {
 
     // MARK: Outline
 
-    private var headings: [NoteHeading] {
-        Outline.parse(text)
+    private var outline: [HeadingInfo] {
+        headings(text: text)
     }
 
     @ViewBuilder
     private var outlineBody: some View {
-        if headings.isEmpty {
+        if outline.isEmpty {
             Text("No headings in this note.")
                 .font(InkType.body)
                 .foregroundStyle(InkColor.faint)
@@ -107,19 +108,19 @@ struct PanelSheet: View {
                 .padding(.top, 32)
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(headings) { heading in
+                ForEach(outline, id: \.line) { heading in
                     Button {
                         dismiss()
-                        onSelectLine(heading.line)
+                        onSelectLine(Int(heading.line))
                     } label: {
                         HStack {
-                            Text(heading.text)
+                            Text(heading.title)
                                 .font(InkType.rowTitle)
                                 .foregroundStyle(InkColor.ink)
                                 .lineLimit(2)
                             Spacer(minLength: 8)
                         }
-                        .padding(.horizontal, InkMetrics.rowPaddingH + CGFloat((heading.level - 1) * 16))
+                        .padding(.horizontal, InkMetrics.rowPaddingH + CGFloat((Int(heading.level) - 1) * 16))
                         .frame(minHeight: InkMetrics.rowMinHeight, alignment: .leading)
                     }
                     .buttonStyle(.plain)
@@ -236,11 +237,11 @@ struct PanelSheet: View {
                                     .frame(width: InkMetrics.markerIconSize)
                                     .foregroundStyle(InkColor.icon)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(RevisionFormat.rowName(header, auto: "auto"))
+                                    Text(revisionRowName(head: header, autoWord: "auto"))
                                         .font(InkType.rowTitle)
                                         .foregroundStyle(header.kind == .auto ? InkColor.soft : InkColor.ink)
                                     if !header.date.isEmpty {
-                                        Text(PanelSheet.displayDate(header.date))
+                                        Text(revisionLocalDate(date: header.date, utcOffsetSeconds: Int64(TimeZone.current.secondsFromGMT())))
                                             .font(InkType.caption)
                                             .foregroundStyle(InkColor.faint)
                                     }
@@ -373,21 +374,6 @@ struct PanelSheet: View {
             try? await Task.sleep(for: .seconds(2.2))
             if notice == message { notice = nil }
         }
-    }
-
-    /// Local date and time to the minute (`logic::revision` `local_date`).
-    static func displayDate(_ rfc3339: String) -> String {
-        let parser = ISO8601DateFormatter()
-        parser.formatOptions = [.withInternetDateTime]
-        let fallback: ISO8601DateFormatter = {
-            let f = ISO8601DateFormatter()
-            f.formatOptions = [.withFullDate, .withTime, .withColonSeparatorInTime, .withTimeZone]
-            return f
-        }()
-        guard let date = parser.date(from: rfc3339) ?? fallback.date(from: rfc3339) else { return rfc3339 }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return formatter.string(from: date)
     }
 }
 
