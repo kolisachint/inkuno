@@ -11,12 +11,9 @@ disk -> ink: watcher: changed
 ink -> editor: text typed
 editor -> ink: ours
 
-"alt [merge::onto(base, ours, disk) succeeds]": {
-  ink -> editor: absorb(edits)
-  editor -> ink: one undo step
-}
-
-"alt [same lines changed]": {
+"alt: merge succeeds / else: same lines changed": {
+  ink -> editor: absorb(edits), one undo step
+  # else: same lines changed (d2 has no else; these messages are the alternative)
   ink -> disk: Note (conflict date).md
   disk -> ink: kept
 }
