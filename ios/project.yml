@@ -1,0 +1,85 @@
+# XcodeGen spec for the Inkuno iPhone app.
+# Regenerate after any edit:  cd ios && xcodegen generate
+# The generated Inkuno.xcodeproj is gitignored.
+name: Inkuno
+
+options:
+  bundleIdPrefix: com.inkuno
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: 0.0.15          # = version in crates/inkuno/Cargo.toml
+    CURRENT_PROJECT_VERSION: 1         # = CI run number; 1 locally
+    SWIFT_VERSION: "5.10"
+    TARGETED_DEVICE_FAMILY: "1"        # iPhone only
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    CODE_SIGN_STYLE: Automatic
+    # DEVELOPMENT_TEAM is NOT set here: it comes from the untracked ios/Local.xcconfig
+    # (see Local.xcconfig.example) through Config/Base.xcconfig.
+
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
+targets:
+  Inkuno:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Inkuno
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: Inkuno
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inkuno.Inkuno
+        GENERATE_INFOPLIST_FILE: NO
+    # ---- Rust core (InkunoCore) — NOT linked yet; the app builds without it. ----
+    # Uncomment when the core branch lands. scripts/build-ios-core.sh writes both
+    # outputs into ios/Frameworks and ios/Generated (both gitignored).
+    #
+    # dependencies:
+    #   - framework: Frameworks/InkunoCore.xcframework
+    #     embed: false
+    # sources:
+    #   - path: Inkuno
+    #   - path: Generated          # UniFFI Swift bindings, Swift module InkunoCore
+
+  InkunoTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: InkunoTests
+    dependencies:
+      - target: Inkuno
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inkuno.InkunoTests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Inkuno.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Inkuno"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  Inkuno:
+    build:
+      targets:
+        Inkuno: all
+        InkunoTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - InkunoTests
