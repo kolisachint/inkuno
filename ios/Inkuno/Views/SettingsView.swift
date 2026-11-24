@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage(AppearanceKey.noteTextSize) private var textSize: NoteTextSize = .standard
     @AppStorage(AppearanceKey.pageWidth) private var pageWidth: PageWidth = .normal
     @AppStorage(AppearanceKey.showMarkdownOnLiveLine) private var showMarkdownOnLiveLine = true
+    @AppStorage(AppearanceKey.authorName) private var authorName = ""
 
     @State private var showFolderImporter = false
     @State private var error: String?
@@ -46,6 +47,9 @@ struct SettingsView: View {
             }
 
             Section("Editor") {
+                TextField("Your name", text: $authorName)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
                 Toggle("Show Markdown on the live line", isOn: $showMarkdownOnLiveLine)
             }
 

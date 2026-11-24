@@ -250,7 +250,7 @@ extension VaultStore {
 
     /// Saves the note's text as a new Checkpoint revision (`platform/revisions.rs` `save`).
     /// Refused (no file) when the text is the latest revision's already.
-    /// ponytail: the author is "unknown" until Settings gains an author field; dates are UTC RFC 3339.
+    /// The author is the Settings name, cleaned; "unknown" when it is empty. Dates are UTC RFC 3339.
     @discardableResult
     func saveVersion(of note: URL, memo: String? = nil) throws -> UInt32? {
         guard let dir = revisionDir(for: note) else { throw VaultError.noVault }
@@ -264,7 +264,7 @@ extension VaultStore {
         let number = revisionNextNumber(saved: numbers)
         let rev = revisionRender(revision: Revision(
             number: number, parent: numbers.last,
-            author: "unknown", date: revisionDate(unix: Self.nowUnix()),
+            author: AuthorName.resolved(), date: revisionDate(unix: Self.nowUnix()),
             kind: .checkpoint, note: memo, text: text
         ))
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -302,7 +302,7 @@ extension VaultStore {
         let number = revisionNextNumber(saved: numbers)
         let rev = revisionRender(revision: Revision(
             number: number, parent: numbers.last,
-            author: "unknown", date: revisionDate(unix: Self.nowUnix()),
+            author: AuthorName.resolved(), date: revisionDate(unix: Self.nowUnix()),
             kind: kind, note: memo, text: text
         ))
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
