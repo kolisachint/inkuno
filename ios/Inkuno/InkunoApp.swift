@@ -33,6 +33,9 @@ struct RootView: View {
     /// The panel segment the palette asked for on the note, sent to that note once the palette has closed.
     @State private var panelRequest: PanelRequest?
     @State private var queuedPanel: PanelRequest?
+    /// A screen a palette command opens, pushed once the palette has gone: a push while the sheet is
+    /// still dismissing can be dropped by the navigation stack.
+    @State private var queuedRoute: Route?
 
     /// The note on top of the stack, if any: the palette's This-note commands act on it.
     private var currentNote: URL? {
@@ -48,11 +51,11 @@ struct RootView: View {
                         destination(for: route)
                     }
             }
-            .sheet(isPresented: $showPalette, onDismiss: sendQueuedPanel) {
+            .sheet(isPresented: $showPalette, onDismiss: sendQueued) {
                 PaletteSheet(
                     onOpen: { route in
+                        queuedRoute = route
                         showPalette = false
-                        path.append(route)
                     },
                     currentNote: currentNote,
                     onPanelTab: { tab in
@@ -84,9 +87,15 @@ struct RootView: View {
     }
 
     /// Runs when the palette has closed: a panel command opens its segment on the note.
-    private func sendQueuedPanel() {
-        guard let request = queuedPanel else { return }
-        queuedPanel = nil
-        panelRequest = request
+    /// What the palette asked for, once it has gone: a screen to push, or a panel tab to show.
+    private func sendQueued() {
+        if let route = queuedRoute {
+            queuedRoute = nil
+            path.append(route)
+        }
+        if let request = queuedPanel {
+            queuedPanel = nil
+            panelRequest = request
+        }
     }
 }
