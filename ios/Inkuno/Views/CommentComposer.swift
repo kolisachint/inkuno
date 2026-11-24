@@ -8,24 +8,14 @@ struct CommentDraft: Identifiable {
 }
 
 /// The small composer for a block comment: the passage quoted, what is said, Cancel and Add. Add writes the
-/// desktop's comment syntax after the line (`CommentFormat.commented`), through the editor.
+/// comment after the line, stamped with the author's name and the time (`CommentFormat.commented`, the core's
+/// `comment_add_by`), through the editor.
 struct CommentComposer: View {
     let draft: CommentDraft
     var onAdd: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(AppearanceKey.authorName) private var authorName = ""
     @State private var said = ""
-
-    /// The comment text with the author's byline, `Name, HH:MM: text`, as the Comments panel reads it
-    /// (`CommentFormat.splitByline`). No byline when no name is set, as the desktop writes it then.
-    static func withByline(_ said: String, author: String, now: Date = Date(), calendar: Calendar = .current) -> String {
-        let name = AuthorName.clean(author)
-        guard !name.isEmpty else { return said }
-        let parts = calendar.dateComponents([.hour, .minute], from: now)
-        let clock = String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0)
-        return "\(name), \(clock): \(said.trimmingCharacters(in: .whitespacesAndNewlines))"
-    }
     @FocusState private var focused: Bool
 
     /// Whether the passage can take a comment: a non-blank line without comment marks.
@@ -74,7 +64,7 @@ struct CommentComposer: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        onAdd(Self.withByline(said, author: authorName))
+                        onAdd(said)
                         dismiss()
                     }
                     .disabled(!canAdd)
