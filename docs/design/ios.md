@@ -1,6 +1,8 @@
 # iOS app: handoff note
 
-Status: **in progress** (steps 1–3 underway, 2026-11-24). Pick up here.
+Status: **v1 feature-complete in development builds** (2026-11-24): every v1 screen is built, the
+Rust core is linked, and the app runs on the owner's iPhone. Branch `ios-v1`, draft PR #23. Pick up
+at "Open items" below.
 
 - Prototype: [`prototypes/v3-ios.html`](prototypes/v3-ios.html), published at
   https://claude.ai/artifact/68n8SgCXhVCDZft9GCEbgh. The decision and complexity table is in
@@ -27,7 +29,9 @@ Status: **in progress** (steps 1–3 underway, 2026-11-24). Pick up here.
 | Xcode project | `ios/` folder in this repo, generated with **xcodegen** from `ios/project.yml`. The `.xcodeproj` is NOT committed (gitignored). |
 | New dependency | UniFFI approved (no issue needed). |
 | App identity | Bundle id `com.inkuno.Inkuno`, iOS 17.0 minimum, iPhone only. |
-| First builds | Development builds on the owner's own iPhone (TestFlight later). Simulator builds unsigned. |
+| First builds | Development builds on the owner's own iPhone (TestFlight later). Simulator builds unsigned. The owner's team is a free Personal Team: device builds expire after 7 days, and `release-ios.yml` cannot export until a paid account. |
+| Fonts | System fonts in v1 (Inter and JetBrains Mono are not bundled). |
+| Scratch | As on the desktop: scratch notes live outside the vault, in the app's Application Support/Scratch. |
 | CI | `ci-ios.yml` (build + test) and `release-ios.yml` (packaging). |
 | Rust crate | `crates/inkuno-ffi` (lib name `inkuno_ffi`), UniFFI wrapper over the editor slice of `inkuno-logic`. Swift module of the generated bindings: `InkunoCore`. |
 | Build script | `scripts/build-ios-core.sh [debug\|release]` builds both iOS targets, generates Swift bindings into `ios/Generated/` and the framework `ios/Frameworks/InkunoCore.xcframework` (both gitignored). |
@@ -67,10 +71,23 @@ rendering (shown as code), Focus mode, tar.gz backup, the other 15 themes, the A
 2. **The Files-folder vault**: coordinated reads and writes, iCloud files that are not downloaded
    yet, and conflict copies (`Note (conflict DATE).md`).
 
-## Next steps
+## Done
 
-1. (underway — this branch) Write the iOS decisions into `app-ui.md` as their own section (§23), doc-first as the process asks.
-2. (underway — decided, unmerged) No issue needed: UniFFI is approved, and the Xcode project lives in `ios/` here (xcodegen), not in its own repository.
-3. (underway) Add the `inkuno-ffi` crate (UniFFI) over the editor slice of `inkuno-logic`, with `scripts/build-ios-core.sh` and CI (`ci-ios.yml`, `release-ios.yml`).
-4. Editor spike in Xcode. It needs a Mac: attach it to the session.
-5. Vault spike: pick a folder, keep the bookmark, then read, write and watch with file coordination.
+- `app-ui.md` §23 records the iPhone UI.
+- `crates/inkuno-ffi` exports the editor slice (layout, style runs, lists, indent, dates, search)
+  and the vault formats (`VaultIndex`, pending list, revisions, comments, trash names, merge).
+- The app: vault picker with bookmark and coordinated IO, home, tree, Scratch, Today, the TextKit 2
+  live editor with accessory bar and slash sheet, palette with `>` commands, the panel sheet,
+  pending review, block menu with comments, Trash, Settings, icon and launch screen.
+- `ci-ios.yml` runs the core tests and the simulator tests on GitHub (green on PR #23).
+- Local device install: `scripts/ios-device.sh` (needs `ios/Local.xcconfig` with `DEVELOPMENT_TEAM`).
+
+## Open items
+
+1. Hand tests on the device: IME (dictation, CJK keyboards), long notes, iCloud placeholders and
+   conflict copies, bookmark restore after relaunch.
+2. Comment resolve and the byline split stay in Swift (they live in the desktop GUI crate).
+3. The core has no date style bit: `@date` is found by a Swift scan.
+4. The vault index rebuilds when the palette opens or Home refreshes; no file watching yet.
+5. A version's author is "unknown" until Settings has an author field.
+6. TestFlight once there is a paid developer account.
