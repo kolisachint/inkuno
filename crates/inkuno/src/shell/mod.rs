@@ -17,6 +17,7 @@ mod notes;
 mod palette_open;
 mod pane;
 mod render;
+mod review;
 mod revisions;
 mod scratch;
 mod settings;
@@ -65,9 +66,9 @@ use std::{
 use gpui::{
     Animation, AnimationExt, App, Bounds, ClipboardItem, Context, CursorStyle, Decorations, Div,
     Entity, FocusHandle, Focusable, KeyBinding, MouseButton, MouseMoveEvent, ObjectFit,
-    PathPromptOptions, Pixels, Point, ResizeEdge, Size, Stateful, TitlebarOptions, Transformation,
-    Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowOptions, div, img,
-    percentage, point, prelude::*, px, size, svg,
+    PathPromptOptions, Pixels, Point, ResizeEdge, Size, Stateful, Subscription, TitlebarOptions,
+    Transformation, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
+    WindowOptions, div, img, percentage, point, prelude::*, px, size, svg,
 };
 
 use editor::{Editor, EditorEvent};
@@ -149,15 +150,23 @@ struct Shell {
     icons: std::collections::HashMap<PathBuf, String>,
     /// Icon picker grid, if open.
     icon_pick: Option<IconPick>,
-    /// The note's comments as the Comments view lists them, read with the note (`comments.rs`).
-    comment_cards: Vec<comments::Card>,
-    /// The card the Comments view focuses: the caret's comment, or the one clicked last.
-    comment_focus: Option<usize>,
-    /// The comment being written, its draft card at the top of the Comments view (`comments.rs`).
+    /// The Review feed of the note as the right panel lists it, built while the view is shown (`review.rs`).
+    review_items: Vec<review::Item>,
+    /// What `review_items` was built from, and the open items of the note (shown with the view hidden too)
+    /// with what they were counted from (`refresh_review`).
+    review_items_source: Option<review::Source>,
+    review_total: usize,
+    review_total_source: Option<review::Source>,
+    /// The one card of the feed that is expanded, if any.
+    review_open: Option<review::Key>,
+    /// The reply being written under the expanded comment: its key, its field, and the field's events.
+    review_reply: Option<(review::Key, Entity<field::Field>, Subscription)>,
+    /// The comment being written, its draft card at the top of the feed (`comments.rs`).
     comment_draft: Option<comments::Draft>,
-    /// Scroll of the Comments view, and the comment the caret was in last.
-    comments_scroll: gpui::ScrollHandle,
-    comments_seen: Option<usize>,
+    /// Scroll of the Review feed.
+    review_scroll: gpui::ScrollHandle,
+    /// The author the editors write their comments by: the revisions' author, as last pushed to them.
+    comment_author: String,
     /// Status messages shown, oldest to newest.
     toasts: Vec<Toast>,
     /// Number of the last message, to remove the right one when it expires.
@@ -219,7 +228,7 @@ impl Shell {
         let prefs = Prefs::parse(&vault::load_settings());
         apply_fonts(&prefs);
         let theme = Theme::of(&prefs, window.appearance());
-        let pane = Self::new_pane(theme, window, cx);
+        let pane = Self::new_pane(theme, Self::author_named(&prefs.author), window, cx);
         cx.observe_window_appearance(window, |this, window, cx| this.restyle(window, cx))
             .detach();
         let shell = cx.entity().downgrade();
@@ -281,12 +290,16 @@ impl Shell {
             icons: Default::default(),
             icon_pick: None,
             // Calm UI (ui.md §12): the comments column starts collapsed to its dot;
-            // the palette (`› comments`) reopens it via `open_comments`.
-            comment_cards: Vec::new(),
-            comment_focus: None,
+            // the palette (`› review`) reopens it via `open_review`.
+            review_items: Vec::new(),
+            review_items_source: None,
+            review_total: 0,
+            review_total_source: None,
+            review_open: None,
+            review_reply: None,
             comment_draft: None,
-            comments_scroll: gpui::ScrollHandle::new(),
-            comments_seen: None,
+            review_scroll: gpui::ScrollHandle::new(),
+            comment_author: String::new(),
             toasts: Vec::new(),
             toasted: 0,
             title: String::new(),

@@ -48,7 +48,7 @@ From top to bottom, the panel has:
 - The answer itself is not shown. While the agent works, the panel says **Reviewing…**. When it ends, the panel says how many comments were written.
 - All the comments of one review are one undo step. `Ctrl + Z` takes the whole review back.
 - A finding is left out when its passage is not in the note exactly once, or when it lies inside a comment that is already there. The panel says how many were left out.
-- The comments show in the Comments view, with the ones you write. Click one to go to it, and resolve it as usual.
+- The comments show in the Review view, with the ones you write. Click one to go to it, and resolve it as usual.
 
 If you edit the note while the agent works, the comments go into the text as it is when the agent ends.
 

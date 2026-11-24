@@ -141,7 +141,7 @@ pub struct Placed {
 /// may add them). A finding is left out when neither form is in the text exactly once, or when it
 /// lies inside a comment that is already there (a second finding on the same words would nest in
 /// the first).
-pub fn place(text: &str, found: &[(String, String)]) -> Placed {
+pub fn place(text: &str, found: &[(String, String)], by: markdown::Stamp) -> Placed {
     let mut out = Placed {
         text: text.to_string(),
         placed: 0,
@@ -157,7 +157,7 @@ pub fn place(text: &str, found: &[(String, String)]) -> Placed {
                         .iter()
                         .any(|note| note.at <= at && at < note.end)
                 });
-                match markdown::comment_on(&out.text, form, comment) {
+                match markdown::comment_on_by(&out.text, form, comment, by) {
                     Ok(next) if !inside => Some(next),
                     _ => None,
                 }
@@ -331,6 +331,18 @@ pub fn rewritten(base: &str, range: Option<Range<usize>>, text: &str) -> String 
 
 #[cfg(test)]
 mod tests {
+    /// `place`, with a fixed author and time for the comments it writes.
+    fn place_at(text: &str, found: &[(String, String)]) -> super::Placed {
+        super::place(
+            text,
+            found,
+            crate::markdown::Stamp {
+                author: "Ana",
+                time: "2026-11-24T10:02Z",
+            },
+        )
+    }
+
     use super::*;
 
     fn pair(passage: &str, comment: &str) -> (String, String) {
@@ -442,32 +454,38 @@ mod tests {
     fn a_passage_in_quotes_is_placed_as_written_or_without_them() {
         let quoted = [pair("\"quoted words\"", "as written")];
         // The note has the quotes: the passage as written is placed.
-        let as_written = place("say \"quoted words\" now\n", &quoted);
+        let as_written = place_at("say \"quoted words\" now\n", &quoted);
         assert_eq!(as_written.placed, 1);
         assert_eq!(
             as_written.text,
-            "say \"quoted words\"<!-- comment: as written --> now\n"
+            "say \"quoted words\"<!-- comment @Ana 2026-11-24T10:02Z: as written --> now\n"
         );
         // The note has none: the passage without its quotes is placed.
-        let bare = place("say quoted words now\n", &quoted);
+        let bare = place_at("say quoted words now\n", &quoted);
         assert_eq!(bare.placed, 1);
         assert_eq!(
             bare.text,
-            "say quoted words<!-- comment: as written --> now\n"
+            "say quoted words<!-- comment @Ana 2026-11-24T10:02Z: as written --> now\n"
         );
         // Both are in the note: the one as written wins.
-        let both = place("\"quoted words\" and quoted words\n", &quoted);
+        let both = place_at("\"quoted words\" and quoted words\n", &quoted);
         assert_eq!(
             both.text,
-            "\"quoted words\"<!-- comment: as written --> and quoted words\n"
+            "\"quoted words\"<!-- comment @Ana 2026-11-24T10:02Z: as written --> and quoted words\n"
         );
         // Backticks follow the same rule.
-        let code = place("run `ls` now\n", &[pair("`ls`", "a command")]);
-        assert_eq!(code.text, "run `ls`<!-- comment: a command --> now\n");
-        let plain = place("run ls now\n", &[pair("`ls`", "a command")]);
-        assert_eq!(plain.text, "run ls<!-- comment: a command --> now\n");
+        let code = place_at("run `ls` now\n", &[pair("`ls`", "a command")]);
+        assert_eq!(
+            code.text,
+            "run `ls`<!-- comment @Ana 2026-11-24T10:02Z: a command --> now\n"
+        );
+        let plain = place_at("run ls now\n", &[pair("`ls`", "a command")]);
+        assert_eq!(
+            plain.text,
+            "run ls<!-- comment @Ana 2026-11-24T10:02Z: a command --> now\n"
+        );
         // Neither form is in the note: the finding is left out.
-        let missing = place("nothing here\n", &quoted);
+        let missing = place_at("nothing here\n", &quoted);
         assert_eq!((missing.placed, missing.skipped), (0, 1));
     }
 
@@ -525,20 +543,20 @@ mod tests {
             pair("nowhere", "not here"),
             pair("ships in March", "Which year?"),
         ];
-        let placed = place(text, &found);
+        let placed = place_at(text, &found);
         assert_eq!(placed.placed, 2);
         assert_eq!(placed.skipped, 2);
         assert_eq!(
             placed.text,
-            "# T\n\nthe cache is cleared daily<!-- comment: Daily when? -->\n\
-             ships in March<!-- comment: Which year? -->\nalpha and alpha\n"
+            "# T\n\nthe cache is cleared daily<!-- comment @Ana 2026-11-24T10:02Z: Daily when? -->\n\
+             ships in March<!-- comment @Ana 2026-11-24T10:02Z: Which year? -->\nalpha and alpha\n"
         );
     }
 
     #[test]
     fn a_passage_inside_a_comment_already_there_is_left_out() {
         let text = "alpha<!-- comment: first --> beta\n";
-        let placed = place(text, &[pair("alpha", "again")]);
+        let placed = place_at(text, &[pair("alpha", "again")]);
         assert_eq!(placed.placed, 0);
         assert_eq!(placed.skipped, 1);
         assert_eq!(placed.text, text);

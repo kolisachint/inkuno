@@ -30,7 +30,7 @@ The right panel holds what is about the open note. Its switcher, an icon for eac
 | View | Key | Shows |
 |---|---|---|
 | Outline | `Ctrl + Shift + O` | the headings of the note, indented by level. Click one to go to it. |
-| Comments | `Ctrl + Alt + 2` | the comments of the note, with their resolve marks. See [Comments](comments.md#the-comments-view). |
+| Review | `Ctrl + Alt + 2` | the comments and the pending changes of the note, as one feed. See [Comments](comments.md#the-review-view). |
 | Versions | `Ctrl + Alt + 3` | the saved versions of the note, newest first, and *Save version*. See [Versions](writing.md#versions). |
 | Assistant | `Ctrl + Alt + 4` | the [Assistant](assistant.md): its actions and its prompt. |
 

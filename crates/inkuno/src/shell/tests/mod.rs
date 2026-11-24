@@ -16,6 +16,7 @@ mod floating;
 mod keyboard;
 mod keycaps;
 mod layout;
+mod line_numbers;
 mod menus;
 mod motion;
 mod outline;
@@ -23,6 +24,7 @@ mod panel_rows;
 mod panes;
 mod pending;
 mod relative_links;
+mod review;
 mod revisions;
 mod right_panel;
 mod save_close;
@@ -39,6 +41,34 @@ use crate::{logic::block, ui::theme::contrast, views::editor::grid};
 use gpui::{Hsla, TestAppContext};
 
 static CONFIG: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The text with each UTC minute it holds (`2026-11-24T10:02Z`, as a comment's markup writes it) shown as
+/// `<T>`: the clock is the test's own, so a comment is compared without it.
+pub(super) fn without_clock(text: &str) -> String {
+    fn minute(b: &[u8]) -> bool {
+        b.len() == 17
+            && b.iter().enumerate().all(|(i, &c)| match i {
+                4 | 7 => c == b'-',
+                10 => c == b'T',
+                13 => c == b':',
+                16 => c == b'Z',
+                _ => c.is_ascii_digit(),
+            })
+    }
+    let mut out = String::new();
+    let mut at = 0;
+    while at < text.len() {
+        if text.as_bytes()[at..].len() >= 17 && minute(&text.as_bytes()[at..at + 17]) {
+            out.push_str("<T>");
+            at += 17;
+        } else {
+            let ch = text[at..].chars().next().unwrap();
+            out.push(ch);
+            at += ch.len_utf8();
+        }
+    }
+    out
+}
 
 /// The layers only depend downwards: `logic` and `platform` never see gpui nor the layers
 /// above them, `ui` never sees the views, and the views never see the shell, whose code stays

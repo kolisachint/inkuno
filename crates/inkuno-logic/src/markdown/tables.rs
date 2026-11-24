@@ -300,7 +300,7 @@ pub fn retarget(
         .iter()
         .map(|line| {
             let indent = &line[..line.len() - line.trim_start().len()];
-            let Some(body) = super::comment_line_text(line) else {
+            let Some(body) = super::comment_line_plain(line) else {
                 return Some(line.to_string());
             };
             if body.starts_with("Table: ") {
@@ -322,7 +322,7 @@ pub fn retarget(
                 None => Some(line.to_string()),
                 Some((Some(name), rest)) if !table_gone => Some(format!(
                     "{indent}{}",
-                    super::comment_line(&format!("{name}: {rest}"))
+                    super::retext(line, &format!("{name}: {rest}")).unwrap_or_default()
                 )),
                 Some(_) => None,
             }

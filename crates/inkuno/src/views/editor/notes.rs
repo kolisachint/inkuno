@@ -31,7 +31,7 @@ impl Editor {
         {
             return marks.clone();
         }
-        let commented = self.content.contains(md::COMMENT_OPEN);
+        let commented = md::has_comment(&self.content);
         let marks: HashMap<usize, Notes> = starts
             .iter()
             .filter(|_| commented)

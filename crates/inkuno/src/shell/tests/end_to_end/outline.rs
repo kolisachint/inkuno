@@ -15,7 +15,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     // No headings and no comments: the comments palette says so instead of opening, which
     // leaves the status message the clicks below dismiss.
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("comments");
+    cx.simulate_input("review");
     // The matching command is the first row: the "Create" row is always last (P-09), so no `down`.
     cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()

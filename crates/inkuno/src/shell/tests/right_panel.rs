@@ -60,7 +60,7 @@ fn the_switcher_shows_one_view_at_a_time(cx: &mut TestAppContext) {
     settle(cx);
     assert_eq!(shown(&shell, cx), [Mode::Outline]);
     for (switch, view, head) in [
-        ("switch-comments", Mode::Comments, "view-head-comments"),
+        ("switch-review", Mode::Review, "view-head-review"),
         ("switch-versions", Mode::Versions, "view-head-versions"),
         ("switch-assistant", Mode::Assistant, "view-head-assistant"),
         ("switch-outline", Mode::Outline, "view-head-outline"),
@@ -82,7 +82,7 @@ fn ctrl_alt_digits_pick_the_four_views(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("panel-keys", cx);
     for (keys, view) in [
         ("secondary-alt-1", Mode::Outline),
-        ("secondary-alt-2", Mode::Comments),
+        ("secondary-alt-2", Mode::Review),
         ("secondary-alt-3", Mode::Versions),
         ("secondary-alt-4", Mode::Assistant),
     ] {
@@ -98,12 +98,15 @@ fn the_comments_view_lists_the_cards(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = note_open("panel-cards", cx);
     cx.simulate_keystrokes("secondary-alt-2");
     settle(cx);
-    assert!(cx.debug_bounds("comment-0").is_some(), "the card is drawn");
     assert!(
-        cx.debug_bounds("comment-1").is_none(),
+        cx.debug_bounds("review-card-0").is_some(),
+        "the card is drawn"
+    );
+    assert!(
+        cx.debug_bounds("review-card-1").is_none(),
         "one comment, one card"
     );
-    assert!(shell.read_with(cx, |s, _| s.comment_cards.len() == 1));
+    assert!(shell.read_with(cx, |s, _| s.review_items.len() == 1));
     let _ = fs::remove_dir_all(root);
 }
 
@@ -131,7 +134,7 @@ fn the_palette_has_a_command_for_each_view(cx: &mut TestAppContext) {
     let listed = shell.update_in(cx, |s, window, cx| s.palette_commands(window, cx).0);
     for action in [
         "app::ToggleOutline",
-        "app::ShowCommentsView",
+        "app::ShowReviewView",
         "app::ShowVersions",
         "app::ToggleAssistant",
         "app::ToggleRightPanel",
@@ -150,8 +153,8 @@ fn the_switcher_is_clear_of_the_window_buttons_at_any_panel_width(cx: &mut TestA
     for width in [160., 280., 420.] {
         shell.update(cx, |s, _| {
             s.nav.right_w = px(width);
-            s.nav.right_shown = vec![Mode::Comments];
-            s.nav.right_view = Mode::Comments;
+            s.nav.right_shown = vec![Mode::Review];
+            s.nav.right_view = Mode::Review;
         });
         cx.simulate_resize(size(px(900.), px(700.)));
         settle(cx);
@@ -161,7 +164,7 @@ fn the_switcher_is_clear_of_the_window_buttons_at_any_panel_width(cx: &mut TestA
             .expect("the window buttons are drawn");
         for id in [
             "switch-outline",
-            "switch-comments",
+            "switch-review",
             "switch-versions",
             "switch-assistant",
         ] {
@@ -179,5 +182,62 @@ fn the_switcher_is_clear_of_the_window_buttons_at_any_panel_width(cx: &mut TestA
             );
         }
     }
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_switcher_sits_in_the_band_at_the_default_width(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("panel-band", cx);
+    // The default width (PANEL_W, 280 px): the switcher has the band's row, with no row of its own under it,
+    // and the view's head starts right under the band, so the band holds no dead row.
+    cx.simulate_keystrokes("secondary-alt-1");
+    settle(cx);
+    assert_eq!(shown(&shell, cx), [Mode::Outline]);
+    let dock = cx.debug_bounds("dock-right").expect("the panel is drawn");
+    let switch = cx
+        .debug_bounds("switch-outline")
+        .expect("the switcher is drawn");
+    let head = cx
+        .debug_bounds("view-head-outline")
+        .expect("the view's head is drawn");
+    assert!(
+        cx.debug_bounds("switch-row").is_none(),
+        "no switcher row under the band at the default width"
+    );
+    let band = f32::from(dock.top()) + crate::ui::theme::BAND;
+    assert!(
+        f32::from(switch.bottom()) <= band,
+        "the switcher {switch:?} is in the band, which ends at {band}"
+    );
+    assert!(
+        f32::from(head.top()) <= band + 1.,
+        "the view's head {head:?} starts under the band, not under a dead row"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn the_switcher_goes_beside_the_window_buttons_by_the_scaled_width(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = note_open("panel-scale", cx);
+    // The switcher's room is 274 px at the default scale and 411 px at 1.5: at 280 px the panel holds it
+    // in the band at the default scale only; scaled up, its own row shows under the band.
+    let default = crate::logic::prefs::Prefs::SIZE;
+    for (scale, under) in [(1.0, false), (1.5, true)] {
+        shell.update_in(cx, |s, window, cx| {
+            s.prefs.size = default * scale;
+            s.restyle(window, cx);
+        });
+        cx.simulate_keystrokes("secondary-alt-1");
+        settle(cx);
+        assert_eq!(
+            cx.debug_bounds("switch-row").is_some(),
+            under,
+            "at scale {scale} the switcher is under the band: {under}"
+        );
+    }
+    shell.update_in(cx, |s, window, cx| {
+        s.prefs.size = default;
+        s.restyle(window, cx);
+    });
     let _ = fs::remove_dir_all(root);
 }

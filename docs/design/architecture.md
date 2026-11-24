@@ -61,6 +61,8 @@ each, all `impl Shell`:
 | `sidebar.rs`, `files.rs`, `menu.rs`, `listing.rs` | the side panel, file operations, the context menu, list pages |
 | `palette_open.rs` | every way the palette opens: notes, commands, comments, places |
 | `help.rs`, `keymap.rs` | the help panel; the default shortcuts and their sections |
+| `review.rs` | the Review view of the right dock (`app-ui.md` §23): the feed of the note's comments and pending changes, its cards, replies, Resolve, Accept and Reject; the feed's order and locations are pure (`inkuno-logic/src/review.rs`) |
+| `comments.rs` | a comment being written from the editor: its draft (Enter writes it, Escape takes it out) and the note's corner badge |
 | `assistant.rs` | the Assistant panel in the right dock: its conversation, the review, the prompt box, the state of the agent process it drives (`crates/inkuno-platform/src/assistant.rs`), and the writing of a review's comments into the note |
 | `settings.rs`, `toasts.rs` | settings, status messages |
 | `versions.rs` | the Versions panel (the saved versions of the active note) and the compare tab (`app-ui.md` §19) |

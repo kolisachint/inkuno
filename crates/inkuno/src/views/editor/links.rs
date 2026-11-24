@@ -2,8 +2,22 @@
 
 use super::*;
 
-/// Where the cursor goes in a new comment: after `<!-- comment: `, the empty text to write.
-const COMMENT_CURSOR: usize = md::COMMENT_OPEN.len() + 1;
+/// The comment of `line` that byte `col` picks, as `md::comments` gives it. A card names its comment by where it
+/// starts (`card`), so the one starting at `col` wins even where another comment ends there too (`alpha<!--c2--><!--c1-->`);
+/// otherwise the first comment whose markup holds `col`, its ends included, as a caret does.
+fn comment_picked(
+    line: &str,
+    col: usize,
+    card: bool,
+) -> Option<(Range<usize>, Range<usize>, Range<usize>)> {
+    let found = md::comments(line);
+    if card && let Some(hit) = found.iter().find(|(whole, ..)| whole.start == col) {
+        return Some(hit.clone());
+    }
+    found
+        .into_iter()
+        .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
+}
 
 impl Editor {
     /// Address held by the clipboard, if that is all it holds.
@@ -70,10 +84,10 @@ impl Editor {
         self.move_to(sel.start + at, cx);
     }
 
-    /// Resolves the comment starting at byte `at`.
+    /// Resolves the comment at byte `at` (a card names its comment by its start; the draft by a byte inside it).
     pub fn resolve_comment(&mut self, at: usize, cx: &mut Context<Self>) {
         self.move_to(self.clamp(at), cx);
-        self.comment(cx);
+        self.aligned(cx, |this, cx| this.comment_here(true, cx));
     }
 
     /// Writes `text` as the said of the comment the caret is in at byte `at`, its passage kept: the markup
@@ -84,10 +98,7 @@ impl Editor {
         let lr = self.line_range(at);
         let line = self.content[lr.clone()].to_string();
         let col = at - lr.start;
-        let Some((whole, noted, said_at)) = md::comments(&line)
-            .into_iter()
-            .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
-        else {
+        let Some((whole, noted, said_at)) = comment_picked(&line, col, false) else {
             return;
         };
         let kept = line[noted].to_string();
@@ -103,15 +114,68 @@ impl Editor {
             false => typed,
         };
         let range = lr.start + whole.start..lr.start + whole.end;
-        let marked = format!("{kept}{}", md::comment_line(&said));
+        // Only the text changes: the author, the time and the replies of the comment stay (`retext`).
+        let Some(markup) = md::retext(md::markup_in(&line[whole.clone()]), &said) else {
+            return;
+        };
+        let marked = format!("{kept}{markup}");
         if self.touches_pending(&range, &marked) {
             return self.refuse_pending(cx);
         }
         self.push_undo(true);
         self.edit(range.clone(), &marked, cx);
-        self.move_to(range.start + kept.len() + COMMENT_CURSOR, cx);
+        let said_at = md::parse_comment(&markup).map_or(0, |c| md::said_offset(&c));
+        self.move_to(range.start + kept.len() + said_at, cx);
         // The text may widen the cell: the table realigns, and the cursor follows its text.
         self.align_at(range.start, cx);
+    }
+
+    /// Adds a reply by the author now to the comment that holds byte `at`: written after the replies
+    /// it has, on its line, so the comment stays on one line. Nothing is written when there is no
+    /// comment at `at`, or when the line cannot take it.
+    pub fn reply_comment(&mut self, at: usize, text: &str, cx: &mut Context<Self>) {
+        let at = self.clamp(at);
+        let lr = self.line_range(at);
+        let line = self.content[lr.clone()].to_string();
+        let col = at - lr.start;
+        let Some((whole, ..)) = comment_picked(&line, col, true) else {
+            return;
+        };
+        let markup = md::markup_in(&line[whole.clone()]);
+        let Some(mut comment) = md::parse_comment(markup) else {
+            return;
+        };
+        let kept = &line[whole.start..whole.end - markup.len()];
+        let typed = match self.is_table_line(&lr) {
+            true => text.replace('|', r"\|"),
+            false => text.to_string(),
+        };
+        let time = md::utc_minute(crate::platform::revisions::now());
+        let by = md::Stamp {
+            author: &self.author,
+            time: &time,
+        };
+        md::add_reply(&mut comment, typed.trim(), by);
+        let marked = format!("{kept}{}", md::format_comment(&comment));
+        let range = lr.start + whole.start..lr.start + whole.end;
+        if self.touches_pending(&range, &marked) {
+            return self.refuse_pending(cx);
+        }
+        self.push_undo(true);
+        self.edit(range.clone(), &marked, cx);
+        self.align_at(range.start, cx);
+    }
+
+    /// A new comment by the author now, with `text`: its markup, and the byte in it where the text
+    /// starts (where the caret goes to write it).
+    fn stamped(&self, text: &str) -> (String, usize) {
+        let time = md::utc_minute(crate::platform::revisions::now());
+        let by = md::Stamp {
+            author: &self.author,
+            time: &time,
+        };
+        let comment = md::new_comment(text, by);
+        (md::format_comment(&comment), md::said_offset(&comment))
     }
 
     /// Comments the selection, or the line without one: `text<!-- comment: … -->`, the cursor in the
@@ -119,19 +183,17 @@ impl Editor {
     /// a comment is on the text of a cell, and one per cell the selection covers; handles that took
     /// a row, a column or the table comment it on a line under the table.
     pub(super) fn comment(&mut self, cx: &mut Context<Self>) {
-        self.aligned(cx, |this, cx| this.comment_here(cx));
+        self.aligned(cx, |this, cx| this.comment_here(false, cx));
     }
 
-    fn comment_here(&mut self, cx: &mut Context<Self>) {
+    /// `card`: the comment is named by a card (`resolve_comment`), not by the caret.
+    fn comment_here(&mut self, card: bool, cx: &mut Context<Self>) {
         let lr = self.line_range(self.sel.start);
         let (line, col) = (
             self.content[lr.clone()].to_string(),
             self.sel.start - lr.start,
         );
-        if let Some((whole, noted, _)) = md::comments(&line)
-            .into_iter()
-            .find(|(whole, ..)| (whole.start..=whole.end).contains(&col))
-        {
+        if let Some((whole, noted, _)) = comment_picked(&line, col, card) {
             // A comment alone on its line takes the line with it.
             if noted.is_empty() && line.trim() == &line[whole.clone()] {
                 if self.touches_pending(&self.dropped_range(lr.clone()), "") {
@@ -162,13 +224,14 @@ impl Editor {
             };
             let len = cells[0].len();
             let noted = self.content[cells[0].clone()].to_string();
+            let (markup, said_at) = self.stamped("");
             // All or none: every cell is checked before the first is marked.
             let marks: Vec<(Range<usize>, String)> = cells
                 .iter()
                 .rev()
                 .map(|cell| {
                     let text = &self.content[cell.clone()];
-                    (cell.clone(), format!("{text}{}", md::comment_line("")))
+                    (cell.clone(), format!("{text}{markup}"))
                 })
                 .collect();
             let checked: Vec<(Range<usize>, &str)> =
@@ -180,7 +243,7 @@ impl Editor {
             for (range, text) in marks {
                 self.edit(range, &text, cx);
             }
-            self.move_to(first + len + COMMENT_CURSOR, cx);
+            self.move_to(first + len + said_at, cx);
             // The marker widens its cell, so the table realigns: the cursor follows its text, and the
             // draft is given the marker where it now is.
             self.align_at(first, cx);
@@ -200,13 +263,14 @@ impl Editor {
             return;
         }
         let text = self.content[sel.clone()].to_string();
-        let marked = format!("{text}{}", md::comment_line(""));
+        let (markup, said_at) = self.stamped("");
+        let marked = format!("{text}{markup}");
         if self.touches_pending(&sel, &marked) {
             return self.refuse_pending(cx);
         }
         self.push_undo(true);
         self.edit(sel.clone(), &marked, cx);
-        self.move_to(sel.start + text.len() + COMMENT_CURSOR, cx);
+        self.move_to(sel.start + text.len() + said_at, cx);
         self.align_at(sel.start, cx);
         cx.emit(EditorEvent::CommentStarted {
             inside: self.cursor(),
@@ -275,7 +339,8 @@ impl Editor {
             names[pick.rows.start].clone()
         };
         // The text ends with its separator space: the scope is kept, empty comment or not.
-        let head = format!("{} {}: ", md::COMMENT_OPEN, md::spaced(&name));
+        let head = format!("{}: ", md::spaced(&name));
+        let (markup, said_at) = self.stamped(&head);
         // A blank line keeps other apps from reading the comment as one more row.
         let after = &self.content[range.end..];
         let tail = if after.is_empty() || after == "\n" || after.starts_with("\n\n") {
@@ -283,15 +348,16 @@ impl Editor {
         } else {
             "\n"
         };
-        let note = format!("\n\n{head} -->{tail}");
+        let note = format!("\n\n{markup}{tail}");
         if self.touches_pending(&(range.end..range.end), &note) {
             return self.refuse_pending(cx);
         }
         self.push_undo(true);
         self.edit(range.end..range.end, &note, cx);
-        self.move_to(range.end + 2 + head.len(), cx);
+        let inside = range.end + 2 + said_at + head.len();
+        self.move_to(inside, cx);
         cx.emit(EditorEvent::CommentStarted {
-            inside: range.end + 2 + head.len(),
+            inside,
             noted: name,
         });
     }
@@ -432,7 +498,7 @@ impl Editor {
     /// The table around `at`, if comments sit under it, and the names they could use: to give
     /// back to `rename_scopes` once an edit that does not go through `splice` is done.
     pub(super) fn name_guard(&self, at: usize) -> Option<(usize, md::Scopes)> {
-        if !self.content.contains(md::COMMENT_OPEN) {
+        if !md::has_comment(&self.content) {
             return None;
         }
         let (table, rows, _) = self.table_at(at)?;

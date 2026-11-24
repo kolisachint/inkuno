@@ -1237,7 +1237,7 @@ The window has four regions and nothing else:
 1. **Title band** (`BAND`, 38 px; 12 px hidden): the tab strip of each pane, the window controls and the right-panel switch. The strip is the band, even for one note. Ctrl+Shift+S hides the band; a pointer on its top edge brings it back over the note.
 2. **Left sidebar, files only**: Search and Today rows, the tree, a folded Scratch section at the bottom, Settings at the foot. It sits on the window background, without a panel, border or shadow. Recent notes and search live in the palette (Ctrl+P).
 3. **Panes**: one or two, side by side, each with its own tabs. Preview tabs are in italics. The focused pane's active tab is solid; the other pane's tabs are dimmed. A hairline divides the panes.
-4. **Right panel**: one panel with four views, Outline, Comments, Versions and Assistant, chosen by an icon switcher in the band; one view at a time, 280 px wide. Ctrl+Shift+O opens the outline, Ctrl+Alt+1 to 4 pick a view.
+4. **Right panel**: one panel with four views, Outline, Review (§23; was Comments), Versions and Assistant, chosen by an icon switcher in the band; one view at a time, 280 px wide. Ctrl+Shift+O opens the outline, Ctrl+Alt+1 to 4 pick a view.
 
 The note is a flat sheet, flush with the top, right and bottom edges of the window, without gutters, rounded corners or borders. Its left edge casts one faint shadow (the only structural exception).
 
@@ -1288,3 +1288,83 @@ Already at or above target, unchanged: body and secondary text, the five syntax 
 - P4 (Settings tab: Ctrl+, opens Appearance, Editor, Files, Shortcuts, About; F1 opens Shortcuts; the help overlay is gone) is merged.
 - Not yet merged when this section was written: P2 (sidebar) and P3 (right panel). The user guide describes them as the prototype specifies, and the lines that depend on them are listed in the P8 report.
 - Open questions of the prototype (Q1 to Q3) are answered as in its log. The gap in §20.4 (sidebar and title bar both hidden) is still open in backlog W1.
+
+---
+
+## 23. Review feed (APPROVED 2026-11-24, not built)
+
+> Status: agreed design, recorded 2026-11-24. Not built. It replaces the Comments view and the
+> pending-change cards of §22.1. Until it lands,
+> the code is as §17 and §22 describe. Decision log: `revisions.md`, 2026-11-24.
+
+### 23.1 One panel
+
+- One right-dock panel, **Review · N open**, replaces the Comments view and the pending-change cards.
+  N counts the open comments and pending changes of the note. 280 px (`PANEL_W`,
+  `crates/inkuno/src/views/nav.rs:60`). The editor stays the primary region.
+- No filter row. Count only. No "show resolved".
+
+### 23.2 The feed
+
+- One scrollable feed, oldest first.
+- Sort key: a comment's timestamp, or a pending change's new `created` field (UTC, set when the
+  change is proposed). `at` is a text position, not a time. Items without a time (legacy comments,
+  pending changes without `created`) sort first, in document order.
+- Only one card is expanded at a time.
+- Selecting a card highlights its anchored passage in the editor and scrolls to it.
+- No full diff in a collapsed card.
+
+Collapsed card:
+
+- Author: avatar initial and name.
+- Type icon: comment, replace, insert or delete.
+- Relative time.
+- Content: at most 3 lines.
+- Location: `Section · Line N`. It is computed at render from the text anchor and never stored.
+
+Expanded comment:
+
+- Full text, replies, a reply field, and **Resolve**.
+
+Expanded change:
+
+- Full old and new text, and **Accept** / **Reject**.
+
+### 23.3 Resolve
+
+- **Resolve** deletes the comment from the note: its markup goes, the passage text stays.
+- Undo and the revisions recover it. There is no "show resolved".
+
+### 23.4 Comment markup
+
+The markup travels with the `.md` file. A reply is a line inside the same block.
+
+```text
+passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: reply -->
+```
+
+- The comment block, replies included, stays on one physical line, so file line numbers are stable.
+- Replies are separated by ` ↳ `. The panel shows each reply as its own row.
+- A literal `↳` in text is escaped as `\↳`.
+- The time is UTC, to the minute (`Z`).
+- A legacy `<!-- comment: text -->` reads as author `Unknown`, with no time.
+- A legacy comment is rewritten in the new form only when it is edited, never on read. (Reading still migrates CriticMarkup to `<!-- comment: -->`, as before.)
+
+### 23.5 Pending changes
+
+- Storage unchanged (§17): changes stay in `.inkuno/pending/<note>.json` in the vault and sync with it.
+- Each list entry gains `created`: the UTC time the change was proposed (`2026-11-24T10:02Z`). It is used only for feed order. `at` stays a text position.
+- Entries without `created` sort with untimed items (§23.2).
+
+### 23.6 Text
+
+- All interface text goes through `tr("English", "Français")`.
+
+### 23.7 Line numbers
+
+- The editor gutter shows file line numbers: the lines of the `.md` on disk, the same numbers as the feed's `Line N`, git and the CLI. Lines hidden by the editor (front matter, comment markup, table syntax) leave gaps; accepted.
+- A wrapped line shows its number on its first visual row only.
+- Own column left of the block and list drag handles (`blocks.rs` gutter). Not selectable, not copied.
+- Washed out: the theme's faint text colour, about 0.85× body size, right-aligned. The current line is one step darker. No other decoration.
+- On by default. A settings toggle hides it (text via `tr()`).
+- When on, Quiet's per-code-block line numbers (`layout.rs` gutter) are not drawn: file lines only.

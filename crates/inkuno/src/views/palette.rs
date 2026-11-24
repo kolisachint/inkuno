@@ -59,8 +59,8 @@ fn list_label(style: ListStyle) -> &'static str {
     }
 }
 
-fn comments_label() -> &'static str {
-    tr("Comments of the note", "Commentaires de la note")
+fn review_label() -> &'static str {
+    tr("Review of the note", "Relecture de la note")
 }
 
 fn help_label() -> &'static str {
@@ -137,7 +137,7 @@ pub enum PaletteEvent {
     /// A gesture on the table under the cursor.
     Grid(TableOp),
     /// List of the note's comments.
-    Comments,
+    Review,
     /// Lists the vault's trash, to restore an item from it.
     Trash,
     /// Archives the vault into a folder to choose.
@@ -161,7 +161,7 @@ enum Item {
     Help,
     Settings,
     Folder,
-    Comments,
+    Review,
     Trash,
     Backup,
     Terminal,
@@ -541,7 +541,7 @@ impl Palette {
             }
         }
         for (label, item) in [
-            (comments_label(), Item::Comments),
+            (review_label(), Item::Review),
             (trash_label(), Item::Trash),
             (backup_label(), Item::Backup),
             (terminal_label(), Item::Terminal),
@@ -644,7 +644,7 @@ impl Palette {
             Some(&Item::Restyle(style)) => PaletteEvent::Restyle(style),
             Some(&Item::Grid(op)) => PaletteEvent::Grid(op),
             Some(&Item::Command(n)) => PaletteEvent::Run(self.commands[n].action),
-            Some(Item::Comments) => PaletteEvent::Comments,
+            Some(Item::Review) => PaletteEvent::Review,
             Some(Item::Trash) => PaletteEvent::Trash,
             Some(Item::Backup) => PaletteEvent::Backup,
             Some(Item::Terminal) => PaletteEvent::Terminal,
@@ -867,7 +867,7 @@ impl Render for Palette {
                 Item::Help => (help_label().to_string(), crate::ui::keys::of(cx, &crate::actions::ToggleHelp)),
                 Item::Settings => (settings_label().to_string(), crate::ui::keys::of(cx, &crate::actions::OpenSettings)),
                 Item::Folder => (folder_label().to_string(), crate::ui::keys::of(cx, &crate::views::nav::NewFolder)),
-                Item::Comments => (comments_label().to_string(), String::new()),
+                Item::Review => (review_label().to_string(), String::new()),
                 &Item::Restyle(style) => (list_label(style).to_string(), String::new()),
                 &Item::Grid(op) => (op.label().to_string(), crate::ui::keys::of(cx, op.action().as_ref())),
                 &Item::Command(n) => (self.commands[n].label.to_string(), self.commands[n].keys.clone()),

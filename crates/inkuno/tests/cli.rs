@@ -1143,7 +1143,7 @@ fn comment_file_works_without_any_vault() {
     assert_eq!(run.code, 0, "{}", run.err);
     assert_eq!(run.out, format!("{}\n", absolute.display()));
     assert_eq!(
-        fs::read_to_string(&note).unwrap(),
+        unstamped(&fs::read_to_string(&note).unwrap()),
         "# S\n\nThe passage<!-- comment: more? --> here.\n"
     );
     // The extension is read without regard to case, and --json gives the path and the token.
@@ -1166,7 +1166,7 @@ fn comment_file_works_without_any_vault() {
     let value: Value = serde_json::from_str(&json.out).unwrap();
     let written = fs::read(folder.join("U.MD")).unwrap();
     assert_eq!(
-        std::str::from_utf8(&written).unwrap(),
+        unstamped(std::str::from_utf8(&written).unwrap()),
         "# U\n\nTwo lines<!-- comment: a b -->\n"
     );
     assert_eq!(
@@ -1198,7 +1198,7 @@ fn a_note_outside_the_vault_keeps_its_pending_marks_in_its_file() {
     assert_eq!(run.code, 0, "{}", run.err);
     // The marks are the file's own text, as the editor shows them: nothing moves to a list beside it.
     assert_eq!(
-        fs::read_to_string(&note).unwrap(),
+        unstamped(&fs::read_to_string(&note).unwrap()),
         "# S\n\nkeep<!-- comment: more? -->\n{++\nnew\n++}\n"
     );
     assert!(!folder.join(".inkuno").exists());
@@ -1315,8 +1315,7 @@ fn comment_wraps_one_passage_and_daily_writes_its_day() {
     );
     assert_eq!((run.code, run.out.as_str()), (0, "c.md\n"), "{}", run.err);
     assert!(
-        fs::read_to_string(vault.join("c.md"))
-            .unwrap()
+        unstamped(&fs::read_to_string(vault.join("c.md")).unwrap())
             .contains("passage<!-- comment: more? -->")
     );
     let missing = inkuno(&home, &vault, &["comment", "c.md", "--passage", "here"]);
@@ -1764,6 +1763,22 @@ fn links_of_an_unreadable_note_is_an_error_not_an_empty_answer() {
 
 /// The note's text after a `write`, the first line of its pending marks included.
 /// The note's file as it is on disk: its own text, without pending changes.
+/// The text with the author and the time of its comments left out (`@<author> <stamp>`): the
+/// stamp is the clock's, so a check of a comment's text does not depend on when it ran.
+/// `<!-- comment @unknown 2026-11-24T14:35Z: x -->` reads `<!-- comment: x -->`.
+fn unstamped(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("<!-- comment @") {
+        out.push_str(&rest[..at]);
+        out.push_str("<!-- comment");
+        let after = &rest[at + "<!-- comment @".len()..];
+        rest = &after[after.find(": ").unwrap_or(0)..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn note_text(vault: &Path, name: &str) -> String {
     fs::read_to_string(vault.join(name)).unwrap()
 }
@@ -2479,7 +2494,7 @@ fn edits_outside_the_areas_and_an_append_at_the_end_still_work() {
         &["comment", "plan.md", "--passage", "c", "--text", "note"],
     );
     assert_eq!(comment.code, 0, "{}", comment.err);
-    let text = shown(&home, &vault, "plan.md");
+    let text = unstamped(&shown(&home, &vault, "plan.md"));
     assert!(text.contains("{--\nold\n--}\n{++\nnew\n++}\n"), "{text}");
     assert!(
         text.ends_with("c<!-- comment: note -->\n\nlast\n"),
@@ -2500,7 +2515,7 @@ fn an_old_comment_is_written_in_the_new_form_by_the_next_comment() {
     assert_eq!(run.code, 0, "{}", run.err);
     // The earlier form is read, and written in the new one; the text of both comments is kept.
     assert_eq!(
-        note_text(&vault, "c.md"),
+        unstamped(&note_text(&vault, "c.md")),
         "# C\n\na<!-- comment: old --> b<!-- comment: new -->\n"
     );
     let _ = fs::remove_dir_all(home);

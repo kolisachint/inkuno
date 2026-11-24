@@ -627,6 +627,20 @@ impl Shell {
             ),
             cx,
         );
+        let lines = p.line_numbers != "off";
+        let lines = switch(
+            t,
+            "line_numbers",
+            lines,
+            Box::new(
+                move |this: &mut Shell, window: &mut Window, cx: &mut Context<Shell>| {
+                    this.edit_prefs(window, cx, |p| {
+                        p.line_numbers = (if lines { "off" } else { "on" }).into()
+                    })
+                },
+            ),
+            cx,
+        );
         // A field sits on the window's ground with a line border; focused, a 2 px accent ring.
         let field = |field: &Entity<Field>, cx: &App| {
             let focus = field.read(cx).focus_handle(cx);
@@ -683,6 +697,15 @@ impl Shell {
                             "Numéros à côté des lignes d'un bloc de code",
                         ),
                         gutter,
+                    ),
+                    card_row(
+                        t,
+                        tr("Line numbers", "Numéros des lignes"),
+                        tr(
+                            "The lines of the note's file, beside the text. Hides the code block numbers",
+                            "Les lignes du fichier de la note, à côté du texte. Masque les numéros des blocs de code",
+                        ),
+                        lines,
                     ),
                 ],
             ),

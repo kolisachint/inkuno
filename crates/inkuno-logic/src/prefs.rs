@@ -25,6 +25,9 @@ pub struct Prefs {
     pub spacing: String,
     /// Line numbers of a code block: `off` hides them, anything else shows them.
     pub gutter: String,
+    /// Line numbers of the note's lines, in a gutter left of the text: `off` hides them, empty or anything else
+    /// shows them (on by default). While they show, a code block has no numbers of its own.
+    pub line_numbers: String,
     /// The tabs of last time come back on start: `off` starts with an empty window.
     pub restore: String,
 }
@@ -74,6 +77,7 @@ impl Prefs {
             assistant: String::new(),
             spacing: String::new(),
             gutter: String::new(),
+            line_numbers: String::new(),
             restore: String::new(),
         };
         for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
@@ -105,6 +109,7 @@ impl Prefs {
                 "assistant" => prefs.assistant = value.into(),
                 "spacing" => prefs.spacing = value.into(),
                 "gutter" => prefs.gutter = value.into(),
+                "line_numbers" => prefs.line_numbers = value.into(),
                 "restore" => prefs.restore = value.into(),
                 _ => {}
             }
@@ -135,6 +140,7 @@ impl Prefs {
             ("assistant", &self.assistant),
             ("spacing", &self.spacing),
             ("gutter", &self.gutter),
+            ("line_numbers", &self.line_numbers),
             ("restore", &self.restore),
         ] {
             if !value.is_empty() {
@@ -244,6 +250,19 @@ mod tests {
         assert_eq!(leads, [0.9, 1., 1.15, 1.3]);
         // An unknown key reads as normal.
         assert_eq!(Prefs::parse("spacing=huge").leading(), 1.);
+    }
+
+    #[test]
+    fn line_numbers_are_on_until_switched_off() {
+        // Absent: on, and not written back.
+        let plain = Prefs::parse("theme=Quiet\n");
+        assert_eq!(plain.line_numbers, "");
+        assert!(!plain.to_text().contains("line_numbers="));
+        // Off is kept and written back.
+        let off = Prefs::parse("line_numbers=off\n");
+        assert_eq!(off.line_numbers, "off");
+        assert_eq!(Prefs::parse(&off.to_text()), off);
+        assert!(off.to_text().contains("line_numbers=off\n"));
     }
 
     #[test]

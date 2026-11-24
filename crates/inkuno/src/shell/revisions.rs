@@ -146,7 +146,12 @@ impl Shell {
     /// The author of the revisions made here: the setting, else `INKUNO_AUTHOR`, else the system
     /// user name, else `unknown`.
     pub(super) fn revision_author(&self) -> String {
-        match revision::clean_author(&self.prefs.author) {
+        Self::author_named(&self.prefs.author)
+    }
+
+    /// The author for the setting `setting` (the one in the Editor page; empty for none), as `revision_author`.
+    pub(super) fn author_named(setting: &str) -> String {
+        match revision::clean_author(setting) {
             name if !name.is_empty() => name,
             _ => revision::default_author(|key| std::env::var(key).ok()),
         }

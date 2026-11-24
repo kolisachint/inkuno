@@ -7,6 +7,7 @@ mod clipboard;
 mod completion;
 mod cursor;
 mod edit;
+mod file_lines;
 mod find;
 mod format_bar;
 pub mod grid;
@@ -24,6 +25,7 @@ mod style;
 mod table;
 mod toolbar;
 
+use crate::logic::lines::FileLines;
 use grid::TableRow;
 
 pub use blocks::*;
@@ -319,6 +321,8 @@ pub struct Editor {
     feet: Vec<md::FootDef>,
     /// The pending changes of the text (`logic::pending`), read again at each change of the text.
     pending: Rc<[crate::logic::pending::Area]>,
+    /// Who the comments written here are by: the revisions' author, set by the shell (`set_author`).
+    author: String,
     /// Revision `feet` was computed for.
     feet_rev: u64,
     /// Last definition jumped to from its label, and which of its references was shown:
@@ -418,6 +422,8 @@ pub struct Editor {
     /// (theme, images): as long as it and the rest of `LayoutKey` do not move, the
     /// layout is reused as is, for a plain scroll.
     version: u64,
+    /// The lines of the text, for the file line numbers of the gutter: rebuilt when `version` moves (see `place`).
+    lines: (u64, FileLines),
     /// Counts text changes, and only them: an image that loads or a theme that changes does not move it.
     revision: u64,
     /// The `revision` the lines in `rows` were laid out for: pointer events between an edit and the next
@@ -508,6 +514,7 @@ impl Editor {
             revealed: None,
             feet: Vec::new(),
             pending: Rc::from([]),
+            author: crate::logic::revision::default_author(|key| std::env::var(key).ok()),
             feet_rev: u64::MAX,
             foot_jump: None,
             notes: Rc::from([]),
@@ -558,6 +565,7 @@ impl Editor {
             theme,
             rows: Vec::new(),
             version: 0,
+            lines: (u64::MAX, FileLines::default()),
             revision: 0,
             rows_revision: 0,
             corner: 1,
@@ -600,10 +608,16 @@ impl Editor {
         &self.content
     }
 
-    /// Changes each time the text changes (typing, undo, a load): a save compares it to tell whether the
-    /// text it wrote is still the text shown.
+    /// Changes each time the text changes (typing, undo, a load, the pending changes included): a save
+    /// compares it to tell whether the text it wrote is still the text shown.
     pub fn version(&self) -> u64 {
         self.version
+    }
+
+    /// Who the comments written here are by (`set_author`).
+    #[cfg(test)]
+    pub fn author(&self) -> &str {
+        &self.author
     }
 
     /// Makes the note read-only (a comparison) or editable again. A read-only note refuses every change.

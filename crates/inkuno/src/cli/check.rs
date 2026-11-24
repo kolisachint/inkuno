@@ -72,6 +72,7 @@ fn an_orphan_change_is_reported_by_read_and_shown_nowhere() {
     let home = Home::Vault(vault.root.clone());
     // A change whose context the note no longer has: it is kept beside the note, as an orphan.
     let orphan = Entry {
+        created: None,
         id: 1,
         author: "assistant".into(),
         at: 2,
@@ -349,7 +350,10 @@ fn editing_renames_and_comments_follow_the_app() {
         &json!({"note": "Table", "passage": "hello", "comment": "yes|no"}),
     ));
     let table = fs::read_to_string(root.join("Table.md")).unwrap();
-    assert!(table.contains("hello<!-- comment: yes\\|no -->"), "{table}");
+    assert!(
+        table.contains("hello<!-- comment @") && table.contains(": yes\\|no -->"),
+        "{table}"
+    );
     write(&root, "Dup.md", "# Dup\n\none one\n");
     vault.rescan();
     assert!(

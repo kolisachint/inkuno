@@ -498,8 +498,8 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
     });
     // The right panel on its Comments view, so the view's header geometry below is exercised.
     shell.update_in(cx, |s, _window, cx| {
-        s.nav.right_view = nav::Mode::Comments;
-        s.nav.right_shown = vec![nav::Mode::Comments];
+        s.nav.right_view = nav::Mode::Review;
+        s.nav.right_shown = vec![nav::Mode::Review];
         cx.notify();
     });
     cx.run_until_parked();
@@ -522,7 +522,7 @@ fn window_buttons_have_the_top_row_to_themselves(cx: &mut TestAppContext) {
             "{width}: the tabs' row {row:?} runs under the window buttons {pill:?}"
         );
         assert!(row.size.width > px(0.), "{width}: no room left for a tab");
-        if let Some(head) = cx.debug_bounds("view-head-comments") {
+        if let Some(head) = cx.debug_bounds("view-head-review") {
             assert!(
                 head.top() >= pill.bottom() || head.right() <= pill.left(),
                 "{width}: the Comments view's name {head:?} under the window buttons {pill:?}"
@@ -643,13 +643,13 @@ fn the_window_can_always_be_grabbed_at_the_top(cx: &mut TestAppContext) {
         .expect("the sidebar's band is drawn");
     assert!(band.top() <= px(12.), "{band:?}");
     shell.update_in(cx, |s, _window, cx| {
-        s.nav.right_view = nav::Mode::Comments;
-        s.nav.right_shown = vec![nav::Mode::Comments];
+        s.nav.right_view = nav::Mode::Review;
+        s.nav.right_shown = vec![nav::Mode::Review];
         cx.notify();
     });
     settle(cx);
     assert!(
-        cx.debug_bounds("comments-view").is_some(),
+        cx.debug_bounds("review-view").is_some(),
         "the Comments view is open"
     );
     // The Comments view takes its room at this width: the two-tab and two-pane steps check the panes without it.

@@ -76,6 +76,8 @@ impl Shell {
             self.nav.panel = Panel::Split;
         }
         self.put_tool(mode);
+        // The feed is current before its view's callers read it (a pick, a comment's card).
+        self.refresh_review(cx);
         // The versions are read again each time their view is shown.
         if mode == Mode::Versions {
             self.versions_stale = true;
@@ -377,7 +379,7 @@ impl Shell {
             Mode::Search
             | Mode::Outline
             | Mode::Scratch
-            | Mode::Comments
+            | Mode::Review
             | Mode::Versions
             | Mode::Assistant => Vec::new(),
             Mode::Recent => self
@@ -1750,10 +1752,14 @@ impl Shell {
             .children(sections)
     }
 
-    /// A view's name under the switcher: 12 px semibold, soft; the Comments view says how many it has.
+    /// A view's name under the switcher: 12 px semibold, soft. The Review view says how many items it has
+    /// open (`Review · N open`).
     fn view_head(&self, mode: Mode) -> Div {
         let t = self.theme;
-        let count = (mode == Mode::Comments).then_some(self.comment_cards.len());
+        let title = match mode {
+            Mode::Review => self.review_title(),
+            _ => self.tool_title(mode),
+        };
         div()
             .debug_selector(move || format!("view-head-{}", mode.name()))
             .flex_none()
@@ -1765,12 +1771,7 @@ impl Shell {
             .text_size(t.px(12.))
             .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_color(t.soft)
-            .child(self.tool_title(mode))
-            .children(count.map(|n| {
-                div()
-                    .font_weight(gpui::FontWeight::NORMAL)
-                    .child(n.to_string())
-            }))
+            .child(title)
     }
 
     /// The Versions view's button: a version of the note saved now, as Ctrl+Alt+S does (its name asked for).
@@ -1810,7 +1811,7 @@ impl Shell {
             (Mode::Tree, Some(root)) => vault::stem(root),
             (Mode::Search, _) => tr("Search", "Recherche").to_string(),
             (Mode::Outline, _) => tr("Outline", "Plan").to_string(),
-            (Mode::Comments, _) => tr("Comments", "Commentaires").to_string(),
+            (Mode::Review, _) => tr("Review", "Relecture").to_string(),
             (Mode::Scratch, _) => tr("Scratch", "Brouillons").to_string(),
             (Mode::Versions, _) => tr("Versions", "Versions").to_string(),
             (Mode::Assistant, _) => tr("Assistant", "Assistant").to_string(),
@@ -1819,11 +1820,11 @@ impl Shell {
     }
 
     /// The right panel's switcher: one icon button per view (`VIEWS`), the shown one on the selection. The
-    /// Comments button counts the note's comments; the Assistant's shows a dot while it needs the person.
+    /// Review button counts the open items of the note; the Assistant's shows a dot while it needs the person.
     pub(super) fn switcher(&self, cx: &Context<Self>) -> Div {
         let t = self.theme;
         let shown = self.dock_tools(true);
-        let count = self.comment_cards.len();
+        let count = self.review_total;
         let needs = self.assistant.status == crate::shell::assistant::Status::NeedsYou;
         div()
             .flex()
@@ -1834,13 +1835,13 @@ impl Shell {
                 let on = shown.contains(&m);
                 let (icon, action): (&'static str, &dyn Action) = match m {
                     Mode::Outline => ("c-outline.svg", &ShowOutlineView),
-                    Mode::Comments => ("comment.svg", &ShowCommentsView),
+                    Mode::Review => ("comment.svg", &ShowReviewView),
                     Mode::Versions => ("clock.svg", &crate::actions::ShowVersions),
                     _ => ("assistant.svg", &ShowAssistantView),
                 };
                 let keys = crate::ui::keys::of(cx, action);
                 let badge = match m {
-                    Mode::Comments if count > 0 => Some(
+                    Mode::Review if count > 0 => Some(
                         div()
                             .debug_selector(|| "switch-badge".into())
                             // v2 `.badge`: inside the button's corner, 15 px high, 4 px at the sides.
@@ -1896,7 +1897,7 @@ impl Shell {
                     )
                     .children(badge)
                     .on_click(cx.listener(move |this, _, window, cx| match m {
-                        Mode::Comments => this.show_comments(window, cx),
+                        Mode::Review => this.show_review(window, cx),
                         _ => this.show_view(m, window, cx),
                     }))
             }))
@@ -1991,7 +1992,10 @@ impl Shell {
         // views before them; narrower, the switcher is a row under the band.
         let switch = right && first;
         let switcher = switch.then(|| self.switcher(cx));
-        let beside = f32::from(self.nav.right_w) >= 8. + 142. + PILL_ROOM + 28.;
+        // Beside the window buttons when the switcher (142 px, after the 8 px pad) and the room the header keeps
+        // free at its right end (PILL_ROOM) fit: from 274 px, so the default 280 px panel holds it in the band. Both
+        // sides are scaled (`Theme::px`) and the width is the one the panel is drawn at (`right_width`).
+        let beside = self.right_width() >= t.px(8.) + t.px(142.) + t.px(PILL_ROOM);
         let (inline, under) = match beside {
             true => (switcher, None),
             false => (None, switcher),
@@ -2358,7 +2362,7 @@ impl Shell {
                 _ if shut => d,
                 Mode::Outline => d.child(self.render_outline(cx)),
                 Mode::Assistant => d.child(self.render_assistant(window, cx)),
-                Mode::Comments => d.child(self.render_comments(cx)),
+                Mode::Review => d.child(self.render_review(cx)),
                 _ => d
                     .when(mode == Mode::Versions, |d| {
                         d.child(self.save_version_row(cx))

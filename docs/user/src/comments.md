@@ -7,25 +7,33 @@
 The comment is kept in the note itself, as an HTML comment that GitHub hides:
 
 ```text
-the text<!-- comment: the comment -->
+the text<!-- comment @Ana 2026-11-24T10:02Z: the comment -->
 ```
+
+The comment names its author and the minute it was written (UTC). Its replies follow it on the same line, each with its author and minute, separated by ` ↳ `. A comment written before this has no author: it shows as **Unknown**, and it keeps its old form until someone replies to it.
 
 The passage is the text from the start of its line (or of its table cell, or of the comment before it) up to the comment. In Inkuno, the passage has a yellow wash, a gold underline and a gold dot in the margin of its line, and the comment is faded; off the line you are editing, the comment's markup is hidden. Notes written with the earlier CriticMarkup comments (`{==text==}{>>comment<<}`) are read as before, and are written in this form when the note is next saved.
 
 A review by the [Assistant](assistant.md) writes its findings in this form too. All the comments of one review are one undo step.
 
-## The Comments view
+## The Review view
 
-The right panel has a **Comments** view, `Ctrl + Alt + 2`, that lists the comments of the note. It shares the panel with the outline, the versions and the Assistant: see [Navigation](navigation.md#the-right-panel).
+The right panel has a **Review** view, `Ctrl + Alt + 2`. It lists the comments of the note and its pending changes as one feed, oldest first. Its head counts them: **Review · 4 open**. It shares the panel with the outline, the versions and the Assistant: see [Navigation](navigation.md#the-right-panel).
 
-A new comment opens the Comments view with a draft card at its top: the passage it is on, a field for what is said, and **Comment** and **Cancel** buttons. `Enter` writes the comment; `Escape` or **Cancel** takes it out again and the passage stays as it was.
+The feed is in time order. An item with no time (an older comment, or a change with none) comes first, in the order of the note. A comment is dated by its minute; a pending change, by the minute it was proposed.
 
-- Click a comment to go to it.
-- A comment whose text starts with `Name, HH:MM: ` shows that name and time above what is said. The text in the file is unchanged.
-- Click its check mark (it shows under the pointer) to resolve it: the markup goes, the text stays.
-- The comment of the passage under the caret is the card that is focused, and the list scrolls to it.
-- Its button in the panel's switcher counts the comments (`9+` beyond nine).
-- `comments` in the palette lists them, to jump to one from the keyboard.
+Each card shows who it is by, its kind (a comment, a replacement, an insertion or a deletion), how long ago, the first lines of what it says, and where it is: its section and its line in the file, as `Section · Line 12`.
+
+- Only one card is open at a time. Click a card to open it: its passage is selected in the note.
+- A comment opens with its full text and its replies. Type a reply in the field and press `Enter`: it is written after the replies, on the same line. **Resolve** takes the comment's markup out and keeps the passage; `Ctrl + Z` brings the comment back.
+- A pending change opens with **Before** (what it removes) and **After** (what it adds). **Accept** and **Reject** do what the keys do in the note.
+
+A new comment opens a draft card at the top of the feed: the passage it is on, a field for what is said, and **Comment** and **Cancel** buttons. `Enter` writes the comment; `Escape` or **Cancel** takes it out again and the passage stays as it was.
+
+- Click a comment's passage in the note to open its card.
+- The bubble at the note's foot, and the switcher's button, count the open items (`9+` beyond nine).
+- The pill at the foot of the note that says how many changes are pending opens the feed on the first change.
+- `review` in the palette lists the comments, to jump to one from the keyboard.
 
 On a comment, `Ctrl + Shift + M` resolves it. On a line of its own (see below), the line goes.
 
@@ -44,6 +52,6 @@ How it shows:
 
 - A commented cell is tinted, with a mark in its corner.
 - A commented row, column or table is outlined, with a dot on its grip. It is stronger while the cursor is in the comment.
-- The Comments view says where each comment is: `Cell C2`, `Row Léa`, `Column Age`, `Table`.
+- The Review view says where each comment is: `Cell C2`, `Row Léa`, `Column Age`, `Table`.
 
 A comment on an empty cell is refused: there is nothing to highlight.

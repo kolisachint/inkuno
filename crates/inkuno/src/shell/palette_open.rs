@@ -5,7 +5,7 @@ use super::*;
 impl Shell {
     /// The note's comments, in the same list as its outline: the commented text, then
     /// what is said about it.
-    pub(super) fn open_comments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_review(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let said = markdown::all_comments(self.pane().editor.read(cx).text())
             .into_iter()
             .map(|n| {
@@ -28,7 +28,7 @@ impl Shell {
             "This note has no comments",
             "Cette note n'a pas de commentaires",
         );
-        self.open_places(tr("Comments", "Commentaires"), none, said, window, cx)
+        self.open_places(tr("Review", "Relecture"), none, said, window, cx)
     }
 
     /// List of places in the note (label, byte), the one we are at preselected; with
@@ -155,7 +155,7 @@ impl Shell {
                 PaletteEvent::Settings => this.open_settings(Section::Appearance, window, cx),
                 PaletteEvent::NewFolder => this.new_folder(window, cx),
                 PaletteEvent::Setting(setting) => this.choose_setting(*setting, window, cx),
-                PaletteEvent::Comments => this.open_comments(window, cx),
+                PaletteEvent::Review => this.open_review(window, cx),
                 PaletteEvent::Grid(op) => {
                     this.focus_note(window, cx);
                     window.dispatch_action(op.action(), cx);

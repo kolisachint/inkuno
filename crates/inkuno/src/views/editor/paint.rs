@@ -219,6 +219,8 @@ impl Editor {
     pub(super) fn paint(&self, focused: bool, window: &mut Window, cx: &mut App) {
         let (t, o, w) = (self.theme, self.origin, self.width);
         let cursor = self.cursor();
+        let numbers = self.line_numbers_right(window);
+        let cursor_line = self.lines.1.line_of(cursor);
         let sel = &self.sel;
         let label = |text: &str, color, window: &mut Window| {
             let run = TextRun {
@@ -245,6 +247,11 @@ impl Editor {
             let end = row.start + row.len;
             let has_cursor = (row.start..=end).contains(&cursor);
             let clear = t.px(3.);
+            // A row that begins a line of the note carries its number; the rest of a wrapped line, and the rows
+            // the editor hides, carry none (the gaps of hidden lines are the numbers that skip).
+            if let (Some(right), Some(number)) = (numbers, self.file_line_of(row)) {
+                self.paint_line_number(row, number, right, cursor_line, window, cx);
+            }
             let block = |x: Pixels, y: Pixels, w: Pixels, h: Pixels| {
                 Bounds::new(point(o.x + x, y), size(w, h))
             };

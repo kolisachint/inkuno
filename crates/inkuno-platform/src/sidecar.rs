@@ -88,6 +88,11 @@ pub fn read(home: &Home, note: &Path) -> Vec<Entry> {
                     .to_string(),
                 // Absent from a list written before orphans were kept: such a list has none.
                 orphan_since: change.get("orphan_since").and_then(Value::as_u64),
+                // Absent from a list written before the review feed: such a change has no time.
+                created: change
+                    .get("created")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
             })
         })
         .collect()
@@ -142,7 +147,7 @@ pub fn store(home: &Home, note: &Path, entries: &[Entry]) -> io::Result<()> {
     let changes: Vec<Value> = entries
         .iter()
         .map(|e| {
-            json!({
+            let mut change = json!({
                 "id": e.id,
                 "author": e.author,
                 "at": e.at,
@@ -151,7 +156,12 @@ pub fn store(home: &Home, note: &Path, entries: &[Entry]) -> io::Result<()> {
                 "before": e.before,
                 "after": e.after,
                 "orphan_since": e.orphan_since,
-            })
+            });
+            // Written only when there is one, so a list without it is what it was.
+            if let Some(created) = &e.created {
+                change["created"] = json!(created);
+            }
+            change
         })
         .collect();
     let text = serde_json::to_string_pretty(&json!({ "version": 2, "changes": changes }))
@@ -198,6 +208,17 @@ pub fn split(
         if entry.author.is_empty() {
             entry.author = author.to_string();
         }
+    }
+    // A change the list did not have is proposed now; one it had keeps its time (none in an older list).
+    let now = markdown::utc_minute(now_secs() as i64);
+    for entry in &mut entries {
+        entry.created = match known
+            .iter()
+            .find(|k| k.old == entry.old && k.new == entry.new)
+        {
+            Some(k) => k.created.clone(),
+            None => Some(now.clone()),
+        };
     }
     if !known.is_empty() {
         let now = now_secs();
@@ -438,6 +459,7 @@ mod tests {
         let note = root.join("a").join("Plan.md");
         fs::write(&note, "# Plan\n").unwrap();
         let entry = Entry {
+            created: None,
             id: 1,
             author: "assistant".into(),
             at: 7,
@@ -482,6 +504,7 @@ mod tests {
         let note = root.join("Plan.md");
         fs::write(&note, "a\nb\n").unwrap();
         let entry = Entry {
+            created: None,
             id: 1,
             author: "assistant".into(),
             at: 2,
@@ -576,12 +599,63 @@ mod tests {
     }
 
     #[test]
+    fn a_list_without_created_reads_its_changes_with_no_time_and_keeps_it_so() {
+        let root = vault_dir("old-created");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nb\n").unwrap();
+        let list = lists_root(&home).join("Plan.md.json");
+        fs::create_dir_all(list.parent().unwrap()).unwrap();
+        fs::write(
+            &list,
+            r#"{"version": 2, "changes": [{"id": 1, "author": "", "at": 2, "old": "", "new": "x\n", "before": "a\n", "after": "b\n"}]}"#,
+        )
+        .unwrap();
+        let read_back = read(&home, &note);
+        assert_eq!(read_back.len(), 1);
+        assert_eq!(read_back[0].created, None);
+        // Stored again without a time, the key is not written.
+        store(&home, &note, &read_back).unwrap();
+        let text = fs::read_to_string(&list).unwrap();
+        assert!(!text.contains("created"), "{text}");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_new_change_is_stamped_with_its_creation_time_and_the_stamp_is_read_back() {
+        let root = vault_dir("created-stamp");
+        let home = Home::Vault(root.clone());
+        let note = root.join("Plan.md");
+        fs::write(&note, "a\nb\n").unwrap();
+        let change = Entry {
+            id: 1,
+            author: "assistant".into(),
+            at: 2,
+            new: "x\n".into(),
+            before: "a\n".into(),
+            after: "b\n".into(),
+            ..Entry::default()
+        };
+        let shown = pending::compose("a\nb\n", std::slice::from_ref(&change));
+        let (base, entries) = split(Some(&home), &note, &shown, "Ana");
+        assert_eq!(base, "a\nb\n");
+        assert_eq!(entries.len(), 1);
+        let created = entries[0].created.clone().expect("a new change has a time");
+        assert_eq!(created.len(), 17, "{created}");
+        store(&home, &note, &entries).unwrap();
+        let read_back = read(&home, &note);
+        assert_eq!(read_back[0].created.as_deref(), Some(created.as_str()));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn an_orphan_older_than_thirty_days_is_dropped_at_the_next_save() {
         let root = vault_dir("expiry");
         let home = Home::Vault(root.clone());
         let note = root.join("Plan.md");
         fs::write(&note, "a\nb\n").unwrap();
         let old = Entry {
+            created: None,
             id: 1,
             author: String::new(),
             at: 0,
@@ -692,6 +766,7 @@ mod tests {
         let note = root.join("Plan.md");
         fs::write(&note, "a\nb\nc\n").unwrap();
         let placed = Entry {
+            created: None,
             id: 1,
             author: String::new(),
             at: 2,

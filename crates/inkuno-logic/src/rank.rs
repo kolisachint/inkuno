@@ -93,10 +93,23 @@ fn original_span(
     start..last + text[last..].chars().next().map_or(0, char::len_utf8)
 }
 
+/// `line` with every comment taken out and its commented text kept, as `vault::without_comments`
+/// does: the comments are the ones the Markdown comments parser reads, in either form.
+fn without_comments(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut at = 0;
+    for (whole, noted, _) in crate::markdown::comments(line) {
+        out.push_str(&line[at..noted.end]);
+        at = whole.end;
+    }
+    out.push_str(&line[at..]);
+    out
+}
+
 /// A line of Markdown as the text it shows: heading, quote, list and task marks, emphasis and code
 /// markers, and links reduced to their text. A `_` stays, so that `my_name` reads as it is.
 pub fn plain_line(line: &str) -> String {
-    let shown = cut_between(&cut_between(line, "<!-- comment:", "-->"), "{>>", "<<}");
+    let shown = without_comments(line);
     let mut s = shown.trim();
     let hashes = s.len() - s.trim_start_matches('#').len();
     if (1..=6).contains(&hashes) && s[hashes..].starts_with(' ') {
@@ -137,22 +150,6 @@ pub fn plain_line(line: &str) -> String {
         out.push_str(&rest[..open]);
         out.push_str(&rest[open + 1..close]);
         rest = &rest[end + 1..];
-    }
-    out.push_str(rest);
-    out
-}
-
-/// `text` with each `open`…`close` span taken out, the markers with it; an open without its close stays.
-/// Both comment forms go this way: the passage stays, what is said does not.
-fn cut_between(text: &str, open: &str, close: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(start) = rest.find(open) {
-        let Some(end) = rest[start..].find(close).map(|i| start + i + close.len()) else {
-            break;
-        };
-        out.push_str(&rest[..start]);
-        rest = &rest[end..];
     }
     out.push_str(rest);
     out
@@ -240,6 +237,21 @@ mod tests {
         );
         assert_eq!(plain_line("- un {==mot==}{>>à revoir<<} ici"), "un mot ici");
         assert_eq!(plain_line("<!-- comment: alone -->"), "");
+        // Every form of comment goes, replies included, and the commented text stays.
+        assert_eq!(
+            plain_line(
+                "# Plan<!-- comment @Ana 2026-11-24T10:02Z: check ↳ @Bo 2026-11-24T10:05Z: reply -->"
+            ),
+            "Plan"
+        );
+        assert_eq!(
+            plain_line("keep<!-- comment @Ana 2026-11-24T10:02Z: a --> this"),
+            "keep this"
+        );
+        assert_eq!(
+            plain_line("- a<!-- comment @todo fix -->"),
+            "a<!-- comment @todo fix -->"
+        );
         assert!(snippet_line(body, &lower, "absent").is_none());
     }
 
