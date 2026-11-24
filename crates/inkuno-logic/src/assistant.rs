@@ -399,10 +399,12 @@ fn spot(text: &str, at: usize, len: usize) -> Spot {
     if text[end..passage_end].chars().any(char::is_alphanumeric) {
         return Spot::Split;
     }
+    // Markers written back to back are passed, but a comment that has a passage of its own starts
+    // where the new one goes: the new comment stays before its passage.
     let mut after = note.end;
     while let Some(next) = markdown::all_comments(text)
         .into_iter()
-        .find(|next| next.at == after)
+        .find(|next| next.at == after && next.noted.is_empty())
     {
         after = next.end;
     }
@@ -995,6 +997,26 @@ mod tests {
         let placed = place_at(text, &[pair("Is 40 enough", "No")]);
         assert_eq!((placed.placed, placed.skipped), (0, 1));
         assert_eq!(placed.text, text);
+    }
+
+    #[test]
+    fn a_comment_after_a_marker_is_placed_before_the_passage_that_follows_it() {
+        // The passage of the next comment starts right after the first marker (no space in CJK text).
+        let text = "最初の文。<!-- comment @sachin 2026-11-24T09:00Z: first -->次の文\
+                    <!-- comment @sachin 2026-11-24T09:01Z: second -->\n";
+        let placed = place_at(text, &[pair("最初の文", "Which one?")]);
+        assert_eq!((placed.placed, placed.skipped), (1, 0));
+        assert_eq!(
+            placed.text,
+            "最初の文。<!-- comment @sachin 2026-11-24T09:00Z: first -->\
+             <!-- comment @Ana 2026-11-24T10:02Z: Which one? -->次の文\
+             <!-- comment @sachin 2026-11-24T09:01Z: second -->\n"
+        );
+        let notes = markdown::all_comments(&placed.text);
+        assert_eq!(notes.len(), 3);
+        assert_eq!(notes[2].noted, "次の文");
+        assert_eq!(notes[2].author.as_deref(), Some("sachin"));
+        assert_eq!(notes[2].said, "second");
     }
 
     #[test]
