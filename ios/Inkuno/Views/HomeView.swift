@@ -9,6 +9,8 @@ struct HomeView: View {
     @Binding var showPalette: Bool
 
     @State private var recall: [RecalledNote] = []
+    @State private var todaySubtitle = Self.notWrittenYet
+    @State private var noteCount = 0
     @State private var error: String?
 
     private let columns = [
@@ -28,6 +30,15 @@ struct HomeView: View {
                         .padding(.bottom, 8)
                     recallCards
                 }
+                // The pull hint stays even when there is nothing to reread (prototype :644).
+                Text("Pull down on any screen to search and run commands")
+                    .font(InkType.caption)
+                    .foregroundStyle(InkColor.soft)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, InkMetrics.cardMarginH + 8)
+                    .padding(.top, recall.isEmpty ? 8 : 12)
+                    .padding(.bottom, 8)
             }
             .padding(.bottom, 24)
         }
@@ -65,11 +76,26 @@ struct HomeView: View {
         }
     }
 
+    /// The Today tile's subtitle: the daily note's title, or "Not written yet" (prototype :636).
+    static func todaySubtitle(todayTitle: String?) -> String {
+        todayTitle ?? notWrittenYet
+    }
+
+    private static let notWrittenYet = "Not written yet"
+
+    /// The Notes tile's subtitle: "N notes" (prototype :639).
+    static func notesSubtitle(count: Int) -> String {
+        "\(count) notes"
+    }
+
     private var writeCard: some View {
         Button {
             openToday()
         } label: {
-            HStack {
+            HStack(spacing: 10) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 20))
+                    .foregroundStyle(InkColor.soft)
                 Text("Write here…")
                     .font(InkType.rowTitle)
                     .foregroundStyle(InkColor.soft)
@@ -88,28 +114,34 @@ struct HomeView: View {
 
     private var tiles: some View {
         LazyVGrid(columns: columns, spacing: InkMetrics.gridGap) {
-            tile("Today", systemImage: "calendar") { openToday() }
-            tile("New note", systemImage: "square.and.pencil") { newNote() }
-            tile("Search", systemImage: "magnifyingglass") { showPalette = true }
-            tile("Notes", systemImage: "folder") { openNotes() }
+            tile("Today", subtitle: todaySubtitle, systemImage: "calendar") { openToday() }
+            tile("New note", subtitle: "In Notes", systemImage: "square.and.pencil") { newNote() }
+            tile("Search", subtitle: "Or pull down", systemImage: "magnifyingglass") { showPalette = true }
+            tile("Notes", subtitle: Self.notesSubtitle(count: noteCount), systemImage: "folder") { openNotes() }
         }
         .padding(.horizontal, InkMetrics.cardMarginH)
         .padding(.bottom, InkMetrics.cardMarginBottom)
     }
 
-    private func tile(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func tile(_ title: String, subtitle: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
                 Image(systemName: systemImage)
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(InkColor.accent)
                 Spacer(minLength: 0)
                 Text(title)
                     .font(InkType.rowTitle)
+                    .fontWeight(.semibold)
                     .foregroundStyle(InkColor.ink)
+                Text(subtitle)
+                    .font(InkType.caption)
+                    .foregroundStyle(InkColor.soft)
+                    .lineLimit(1)
             }
             .padding(InkMetrics.cardPaddingH)
-            .frame(maxWidth: .infinity, minHeight: InkMetrics.tileMinHeight, alignment: .leading)
+            // Spec: tile min height 112pt, radius 16 (radius is `InkRadius.card`).
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
             .background(InkColor.sheet, in: RoundedRectangle(cornerRadius: InkRadius.card, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -164,8 +196,18 @@ struct HomeView: View {
         path.append(.tree(root))
     }
 
+    /// The daily note's title when it is on disk already; nil when it is not written yet.
+    private func todayTitle() -> String? {
+        guard let root = vault.vaultURL else { return nil }
+        let url = root.appendingPathComponent(VaultStore.dailyNoteFileName(for: .now))
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url.deletingPathExtension().lastPathComponent
+    }
+
     private func reloadRecall() {
         recall = (try? vault.recalledNotes()) ?? []
+        noteCount = (try? vault.allNotes().count) ?? 0
+        todaySubtitle = Self.todaySubtitle(todayTitle: todayTitle())
     }
 
     private func perform(_ work: () throws -> Void) {

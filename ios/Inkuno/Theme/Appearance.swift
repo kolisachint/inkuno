@@ -6,6 +6,34 @@ enum AppearanceKey {
     static let noteTextSize = "inkuno.noteTextSize"
     static let pageWidth = "inkuno.pageWidth"
     static let showMarkdownOnLiveLine = "inkuno.showMarkdownOnLiveLine"
+    /// The name on revisions and comment bylines. Empty by default, never a device name;
+    /// `AuthorName.resolved` falls back to "unknown" when it is empty.
+    static let authorName = "inkuno.author"
+}
+
+/// The name on revisions and comment bylines, stored with the other appearance prefs.
+enum AuthorName {
+    /// Cleans a typed name like the desktop's `clean_author`: control characters (including
+    /// newlines and tabs) become spaces, runs of whitespace collapse, the ends are trimmed.
+    /// Empty stays empty, so the caller can fall back to "unknown".
+    static func clean(_ raw: String) -> String {
+        var flattened = ""
+        flattened.reserveCapacity(raw.count)
+        for scalar in raw.unicodeScalars {
+            if CharacterSet.controlCharacters.contains(scalar) || CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                flattened.append(" ")
+            } else {
+                flattened.append(Character(scalar))
+            }
+        }
+        return flattened.components(separatedBy: .whitespaces).filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// The name on revisions and comments: the setting, cleaned; "unknown" when it is empty.
+    static func resolved(in defaults: UserDefaults = .standard) -> String {
+        let name = clean(defaults.string(forKey: AppearanceKey.authorName) ?? "")
+        return name.isEmpty ? "unknown" : name
+    }
 }
 
 enum ThemePreference: String, CaseIterable, Identifiable {

@@ -14,7 +14,18 @@ struct CommentComposer: View {
     var onAdd: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(AppearanceKey.authorName) private var authorName = ""
     @State private var said = ""
+
+    /// The comment text with the author's byline, `Name, HH:MM: text`, as the Comments panel reads it
+    /// (`CommentFormat.splitByline`). No byline when no name is set, as the desktop writes it then.
+    static func withByline(_ said: String, author: String, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let name = AuthorName.clean(author)
+        guard !name.isEmpty else { return said }
+        let parts = calendar.dateComponents([.hour, .minute], from: now)
+        let clock = String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0)
+        return "\(name), \(clock): \(said.trimmingCharacters(in: .whitespacesAndNewlines))"
+    }
     @FocusState private var focused: Bool
 
     /// Whether the passage can take a comment: a non-blank line without comment marks.
@@ -63,7 +74,7 @@ struct CommentComposer: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        onAdd(said)
+                        onAdd(Self.withByline(said, author: authorName))
                         dismiss()
                     }
                     .disabled(!canAdd)
