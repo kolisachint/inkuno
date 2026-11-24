@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Placeholder editor: a plain TextEditor that loads and saves the note through VaultStore.
-/// The live Markdown editor is a later spike (TextKit 2, driven by the Rust core).
+/// The note editor: the live Markdown text view, loaded and saved through VaultStore.
+/// Autosave waits one second after the last change, and saves again when the view goes away.
 struct NoteView: View {
     @Environment(VaultStore.self) private var vault
     @AppStorage(AppearanceKey.noteTextSize) private var textSize: NoteTextSize = .standard
     @AppStorage(AppearanceKey.pageWidth) private var pageWidth: PageWidth = .normal
+    @AppStorage(AppearanceKey.showMarkdownOnLiveLine) private var showMarkdownOnLiveLine = true
 
     let url: URL
     var createIfMissing = false
@@ -16,6 +17,8 @@ struct NoteView: View {
     @State private var loaded = false
     @State private var error: String?
     @State private var saveTask: Task<Void, Never>?
+    @State private var showSlash = false
+    @State private var editor = MarkdownEditorController()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -30,13 +33,15 @@ struct NoteView: View {
                         .padding(.horizontal, pageWidth.gutter)
                 }
             }
-            TextEditor(text: $text)
-                .font(.system(size: textSize.points))
-                .lineSpacing(InkType.bodyLineSpacing(for: textSize.points))
-                .foregroundStyle(InkColor.ink)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, pageWidth.gutter - 5) // TextEditor adds its own inset of about 5pt
-                .disabled(!loaded)
+            LiveMarkdownEditor(
+                text: $text,
+                controller: editor,
+                textSize: textSize.points,
+                showMarkers: showMarkdownOnLiveLine,
+                isEditable: loaded,
+                onSlash: { showSlash = true }
+            )
+            .padding(.horizontal, pageWidth.gutter)
         }
         .background(InkColor.sheet)
         .navigationTitle(url.deletingPathExtension().lastPathComponent)
@@ -44,6 +49,14 @@ struct NoteView: View {
         .onChange(of: text) { _, _ in scheduleSave() }
         .onDisappear(perform: flush)
         .task { load() }
+        .sheet(isPresented: $showSlash) {
+            SlashSheet { item in
+                showSlash = false
+                editor.insertBlock(item)
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private func load() {
@@ -61,12 +74,12 @@ struct NoteView: View {
         }
     }
 
-    /// Debounced save: a short pause after the last keystroke.
+    /// Debounced save: one second after the last change.
     private func scheduleSave() {
         guard loaded, text != savedText else { return }
         saveTask?.cancel()
         saveTask = Task {
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             save()
         }
