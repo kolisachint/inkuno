@@ -1,0 +1,33 @@
+# The layers of Inkuno and which ones each uses. Dashed arrows: "uses". Green and orange are the two accents.
+direction: down
+
+shell: "«component»\nshell\nwindow, panes, commands" {
+  style.stroke: "#7d8590"
+}
+cli: "«component»\ncli\ninkuno <command>, no window" {
+  style.stroke: "#3fa45b"
+  style.stroke-width: 3
+}
+views: "«component»\nviews\neditor, nav, palette, viewer" {
+  style.stroke: "#7d8590"
+}
+ui: "«component»\nui\ntheme, fonts, icons, widgets" {
+  style.stroke: "#7d8590"
+}
+platform: "«component»\nplatform\ndisk, processes, network, OS" {
+  style.stroke: "#7d8590"
+}
+logic: "«component»\nlogic\npure functions" {
+  style.stroke: "#d98e2b"
+  style.stroke-width: 3
+}
+
+shell -> views: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+shell -> platform: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+views -> ui: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+views -> platform: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+ui -> logic: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+platform -> logic: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+cli -> ui: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+cli -> platform: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
+cli -> logic: { style.stroke: "#7d8590"; style.stroke-dash: 4 }
