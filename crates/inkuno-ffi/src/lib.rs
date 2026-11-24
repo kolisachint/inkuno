@@ -8,13 +8,16 @@
 //! rest. No function here touches the disk, a window or a clock: the dates are passed in.
 
 mod changes;
+mod comments;
 mod editing;
 mod files;
 mod history;
 mod lines;
+mod merging;
 mod notes;
 mod search;
 mod text;
+mod wiki;
 
 pub use editing::{EnterOutcome, TextEdit};
 pub use lines::{
