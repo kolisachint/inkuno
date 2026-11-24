@@ -58,13 +58,14 @@ fn main() {
     };
 
     let t = Instant::now();
-    let answer = ask(&agent, &assistant::review_prompt("plan.md"));
+    let open = assistant::open_comments(NOTE);
+    let answer = ask(&agent, &assistant::review_prompt("plan.md", &open));
     println!("== Review ({:.1}s)\n{answer}\n", t.elapsed().as_secs_f32());
     let found = assistant::findings(&answer);
-    let placed = assistant::place(NOTE, &found, by);
+    let placed = assistant::place(NOTE, &found, &open, by);
     println!(
-        "== Placed {} skipped {}\n{}\n",
-        placed.placed, placed.skipped, placed.text
+        "== Placed {} replied {} skipped {}\n{}\n",
+        placed.placed, placed.replied, placed.skipped, placed.text
     );
 
     let t = Instant::now();
