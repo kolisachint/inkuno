@@ -101,7 +101,9 @@ final class InkunoWalkTests: XCTestCase {
         segments.buttons["Versions"].tap()
         expect(app.staticTexts["No saved versions yet."], "versions empty state")
         app.buttons["Save version"].tap()
-        expect(app.staticTexts["Version saved."], "version saved notice")
+        // The saved version's row, not the "Version saved." notice: that one goes after 2.2 s, and a
+        // slow simulator can take longer than that to look.
+        expect(app.staticTexts["#1"], "the saved version's row")
         shot("10-panel-versions")
 
         segments.buttons["Backlinks"].tap()
