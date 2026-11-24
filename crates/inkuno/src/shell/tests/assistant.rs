@@ -267,7 +267,10 @@ fn the_prompt_box_sends_what_is_typed(cx: &mut TestAppContext) {
     click_review(cx);
     let words = sent(&shell, cx);
     assert_eq!(words.len(), 2);
-    assert_eq!(words[1], crate::logic::assistant::review_prompt("Plan.md"));
+    assert_eq!(
+        words[1],
+        crate::logic::assistant::review_prompt("Plan.md", &[])
+    );
     let lines = entries(&shell, cx);
     assert_eq!(lines[2], (Who::You, "Review this note".to_string()));
     assert_eq!(lines[3].0, Who::Note);
@@ -389,6 +392,40 @@ fn a_review_writes_its_findings_as_comments_in_one_undo_step(cx: &mut TestAppCon
     cx.simulate_keystrokes("secondary-z");
     settle(cx);
     assert_eq!(unstamped(&editor_text(&shell, cx)), original);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn a_review_answers_a_listed_comment_with_one_reply(cx: &mut TestAppContext) {
+    let note = "# Plan\n\nun peu de texte<!-- comment @Ana 2026-11-24T10:05Z: trop court ? -->\n";
+    let (root, shell, cx, _config) = note_with("assistant-reply", note, cx);
+    click_button(cx);
+    click_review(cx);
+    // The prompt numbers the open comment, so that the answer can name it.
+    let prompt = sent(&shell, cx).pop().unwrap();
+    assert!(
+        prompt.contains("C1 on \"un peu de texte\" — @Ana: trop court ?"),
+        "{prompt}"
+    );
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text("REPLY: C1\nCOMMENT: Oui, on peut allonger.\n".into()),
+            Event::Ended,
+        ],
+    );
+    let text = editor_text(&shell, cx);
+    assert!(
+        text.contains("<!-- comment @Ana 2026-11-24T10:05Z: trop court ? ↳ @assistant "),
+        "{text}"
+    );
+    assert!(text.contains(": Oui, on peut allonger. -->"), "{text}");
+    assert_eq!(
+        entries(&shell, cx).last(),
+        Some(&(Who::Note, "Wrote 1 reply.".to_string()))
+    );
     let _ = fs::remove_dir_all(root);
 }
 
@@ -1293,7 +1330,7 @@ fn a_review_after_a_title_change_names_the_renamed_note(cx: &mut TestAppContext)
     let words = sent(&shell, cx);
     assert_eq!(
         words[0],
-        crate::logic::assistant::review_prompt("Plan v2.md")
+        crate::logic::assistant::review_prompt("Plan v2.md", &[])
     );
     assert!(root.join("Plan v2.md").exists(), "renamed on the save");
     feed(
@@ -1472,5 +1509,66 @@ fn an_improvement_that_cannot_start_leaves_no_job_and_keeps_the_instruction(
     );
     assert_eq!(status(&shell, cx), Status::Idle);
     assert_eq!(unstamped(&editor_text(&shell, cx)), original);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Whether the note of the active tab has the keys, as the test sees the window now.
+fn note_focused(shell: &Entity<Shell>, cx: &mut gpui::VisualTestContext) -> bool {
+    shell.update_in(cx, |s, window, cx| {
+        s.pane().editor.focus_handle(cx).is_focused(window)
+    })
+}
+
+#[gpui::test]
+fn a_review_that_writes_a_comment_opens_its_card_and_keeps_the_note_focused(
+    cx: &mut TestAppContext,
+) {
+    let (root, shell, cx, _config) = note_open("assistant-reveal-review", cx);
+    click_button(cx);
+    click_review(cx);
+    focus_note(&shell, cx);
+    assert!(note_focused(&shell, cx));
+    feed(
+        &shell,
+        cx,
+        vec![
+            Event::Started,
+            Event::Text(ONE_FINDING_AND_ONE_MISS.into()),
+            Event::Ended,
+        ],
+    );
+    // The new comment's card is open in the Review view, and the note still has the keys.
+    let open = shell.read_with(cx, |s, _| s.review_open);
+    assert!(
+        matches!(open, Some(crate::shell::review::Key::Comment(_))),
+        "{open:?}"
+    );
+    assert!(shell.read_with(cx, |s, _| s.nav.right_shown.contains(&Mode::Review)));
+    assert!(note_focused(&shell, cx), "the note keeps the keys");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn an_improvement_opens_its_run_in_the_review_panel_and_keeps_the_note_focused(
+    cx: &mut TestAppContext,
+) {
+    let (root, shell, cx, _config) = note_open("assistant-reveal-improve", cx);
+    select(&shell, cx, 8..23);
+    cx.dispatch_action(AssistantImprove);
+    settle(cx);
+    focus_note(&shell, cx);
+    feed(
+        &shell,
+        cx,
+        vec![Event::Started, Event::Text(CLEARER.into()), Event::Ended],
+    );
+    // The run's first change is open as its card, in the Review view; no focus moved.
+    let open = shell.read_with(cx, |s, _| s.review_open);
+    assert!(
+        matches!(open, Some(crate::shell::review::Key::Change(_))),
+        "{open:?}"
+    );
+    assert!(shell.read_with(cx, |s, _| s.nav.right_shown.contains(&Mode::Review)));
+    assert!(note_focused(&shell, cx), "the note keeps the keys");
     let _ = fs::remove_dir_all(root);
 }

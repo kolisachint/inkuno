@@ -793,10 +793,23 @@ Normal 800 is the default (§10.4 lock released for this change).
   (`logic::assistant::review_prompt`): `PASSAGE:` a line copied from the note, `COMMENT:` the remark, at
   most 12, or the single line `NO FINDINGS`. The answer is not shown; its text is collected while the agent
   works, and read when the agent ends (`logic::assistant::findings`).
-- Placing the findings (`Shell::apply_review`): each finding is placed with `markdown::comment_on` on the
-  note's current text, in order (`logic::assistant::place`). A finding is skipped when its passage is not
-  in the text exactly once, or when it lies inside a comment already there. The skipped ones are counted.
-  The summary: "Wrote N comments.", "1 finding could not be placed.", or "No findings.".
+- **Replies**: the prompt also lists the note's open comments, numbered `C1`, `C2`… (`logic::assistant::open_comments`:
+  those whose last message is not by `assistant`). The agent may answer one with `REPLY: C<n>` and `COMMENT:` (one line).
+  A reply is written after the comment's replies, on its line (`markdown::reply_on`), by `assistant`. The agent writes
+  its comments and replies under the name `assistant`, so it never answers itself.
+- Placing the findings (`Shell::apply_review`, `logic::assistant::place`): replies first, last comment first; then each
+  new comment with `markdown::comment_on_by`, from the last passage in the text to the first. A reply is written only where
+  its listed comment still starts at the same byte with the same markup.
+- **New-comment skip rule** (`logic::assistant::may_split`): a passage is found by its text and must be in the text exactly
+  once. It may lie inside the passage of a comment already there: the new marker splits it, and the old comment keeps the
+  words after the new marker (its author, time and text are untouched). Skipped when the passage lies in a comment's marker
+  or text, in a CriticMarkup comment, or when the split would leave the old passage with no letter or digit (a passage that
+  ends at the old marker, or before its punctuation). The skipped ones are counted.
+  The summary: "Wrote N comments.", "Wrote N replies.", "Wrote N comments and M replies.", "1 finding could not be
+  placed.", or "No findings.".
+- When the review writes into the open note, the Review view opens on the first new comment or reply, expanded and scrolled
+  into view (`Shell::reveal_review`). It is opened without moving the keys (`Shell::show_view_quiet`), so a person typing stays
+  in the note.
 - The words are written by Inkuno, never by the agent. A review that is stopped, or whose agent fails or
   exits, writes nothing.
 
@@ -1014,6 +1027,8 @@ Normal 800 is the default (§10.4 lock released for this change).
   agent's are placed in the current text (as `inkuno write` does).
 - Then one quiet line: **N changes are pending in the note: accept or reject them there.** (for one: **1 change is pending in
   the note: accept or reject it there.**), counted by `pending::areas`.
+- When the proposal is written into the open note, the Review view opens on its run (one card, expanded; §23.5) with no
+  focus moved (`Shell::reveal_review`, `Shell::show_view_quiet`). Not when the note is not the one shown.
 
 ### 18.6 Revisions
 
@@ -1355,6 +1370,10 @@ passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: r
 - Storage unchanged (§17): changes stay in `.inkuno/pending/<note>.json` in the vault and sync with it.
 - Each list entry gains `created`: the UTC time the change was proposed (`2026-11-24T10:02Z`). It is used only for feed order. `at` stays a text position.
 - Entries without `created` sort with untimed items (§23.2).
+- **A run is one card.** Two or more pending changes in a row with the same author and the same `created` minute (one
+  Improve proposes them together; `logic::review::runs`) show as one card, **N changes**, with the first change's text.
+  Expanded, each change has its own Accept and Reject, and **Accept all N** / **Reject all N** act on that run only
+  (`Editor::decide_changes`: applied last to first, one undo step; the others stay pending). The title's count stays per change.
 
 ### 23.6 Text
 

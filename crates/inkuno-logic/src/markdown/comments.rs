@@ -302,6 +302,34 @@ pub fn resolve(line: &str, at: usize) -> Option<String> {
     ))
 }
 
+/// `text` with a reply by `by` added to the comment that starts at byte `at` (as `Note::at` gives it): the
+/// reply is written after the replies it has, on the comment's line, so the comment stays on one line.
+/// In a table a `|` of the reply is written `\|`. `None` when no comment starts at `at` on its line, or
+/// when its markup does not read.
+pub fn reply_on(text: &str, at: usize, reply: &str, by: Stamp) -> Option<String> {
+    let line_start = text[..at].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[at..].find('\n').map_or(text.len(), |i| at + i);
+    let line = &text[line_start..line_end];
+    let col = at - line_start;
+    let (whole, ..) = comments(line)
+        .into_iter()
+        .find(|(whole, ..)| whole.start == col)?;
+    let markup = markup_in(&line[whole.clone()]);
+    let mut comment = parse_comment(markup)?;
+    let kept = &line[whole.start..whole.end - markup.len()];
+    let typed = match is_table_line(line) {
+        true => reply.replace('|', r"\|"),
+        false => reply.to_string(),
+    };
+    add_reply(&mut comment, typed.trim(), by);
+    let marked = format!("{kept}{}", format_comment(&comment));
+    Some(format!(
+        "{}{marked}{}",
+        &text[..line_start + whole.start],
+        &text[line_start + whole.end..]
+    ))
+}
+
 /// `line`, a comment alone on it (indent aside), with its text replaced by `text` (written as
 /// `format_comment` writes it): its author, its time and its replies are kept. `None` when `line` is
 /// not such a comment.
