@@ -1,0 +1,29 @@
+# An agent draws a note and shows it in the window, or writes it when no window is open.
+shape: sequence_diagram
+
+agent: "Agent (Claude, Codex…)"
+cli: "command line"
+vault: "Vault (disk)"
+win: "Inkuno window"
+
+agent -> cli: inkuno new
+cli -> vault: atomic write
+vault -> cli: written
+cli -> agent: path
+
+"loop [until the drawing is clean]": {
+  agent -> cli: inkuno render
+  cli -> agent: PNG
+}
+
+agent -> cli: inkuno show
+
+"alt [window open on this vault]": {
+  cli -> win: show, on 127.0.0.1
+  win -> cli: ok: tab opened
+  cli -> agent: shown
+}
+
+"alt [no window]": {
+  cli -> agent: not open: file written
+}

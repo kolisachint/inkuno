@@ -1,0 +1,19 @@
+# A note written by another program while it is typed in: merged, or kept as a conflict copy.
+shape: sequence_diagram
+
+agent: "Agent or sync"
+disk: "Note on disk"
+ink: "Inkuno"
+editor: "Editor"
+
+agent -> disk: writes the note
+disk -> ink: watcher: changed
+ink -> editor: text typed
+editor -> ink: ours
+
+"alt: merge succeeds / else: same lines changed": {
+  ink -> editor: absorb(edits), one undo step
+  # else: same lines changed (d2 has no else; these messages are the alternative)
+  ink -> disk: Note (conflict date).md
+  disk -> ink: kept
+}

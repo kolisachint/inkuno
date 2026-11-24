@@ -173,7 +173,7 @@ Verdict per component: **KEEP** (as-is) · **RESKIN** (same behavior, new look) 
 | Format bar | Bottom-of-note bar (`crates/inkuno/src/views/editor/format_bar.rs`, `docs/design/architecture.md:90`); pref `bar`, `off` hides it (`crates/inkuno-logic/src/prefs.rs:17-18`; `Theme::bar`, `crates/inkuno-ui/src/theme.rs:122`) | HIDE by default | Vision: no permanent toolbar; keep pref, default `off` (**TBD** user confirms default) |
 | Focus / typewriter modes | **Not in codebase** (no matches for typewriter/focus-mode) | Vision-only, TBD | Typora parity wants them; needs full §1 proposal |
 | Word / char counts | A counter at the bottom right of the note: words and characters of the note, or of the selection (`crates/inkuno/src/views/editor/mod.rs:653`, "Footer counter") | REMOVED 2026-11-14 | Owner decision: removed completely; the round Assistant button takes its corner (§16) |
-| Auto-save | `EditorEvent::Changed` → `dirty=true` → 400 ms debounce → `flush` (`crates/inkuno/src/shell/notes.rs:491-510`); atomic writes, crash never truncates (`crates/inkuno-platform/src/vault.rs:889`) | KEEP | Already local-first; surface a subtle saved indicator (proposal) |
+| Auto-save | `EditorEvent::Changed` → `dirty=true` → 400 ms debounce → `flush` (the handler in `crates/inkuno/src/shell/notes.rs`); the debounced save runs off the UI thread for an existing note (`Shell::flush_debounced`); close and switch save synchronously; atomic writes through `vault::write` (`crates/inkuno-platform/src/vault.rs`), crash never truncates | KEEP | Already local-first; surface a subtle saved indicator (proposal) |
 | Session restore | Layout persisted on change (`panes_state`, `crates/inkuno/src/shell/render.rs:137-140`); vault backup/restore archives (`crates/inkuno-platform/src/vault.rs:590`, `:703`) | KEEP + TBD | Layout restore exists; unsaved-text-after-crash recovery: **TBD** — verify `dirty` tabs reload path |
 | Zoom (text) | `ZoomIn/Out/Reset` (`crates/inkuno/src/actions.rs:6`); `resize_text` (`crates/inkuno/src/shell/settings.rs:96`); page width follows size (`crates/inkuno-ui/src/theme.rs:44-54`) | KEEP | Accessibility + vision zoom |
 | Themes UI | `ChooseTheme` (`crates/inkuno/src/actions.rs:6`); 13 themes (`crates/inkuno-ui/src/theme.rs:129`) | RESKIN | Curate to light/dark/sepia per §3 |
@@ -212,7 +212,7 @@ From the vision (§2); each must hold before calling the UI work done:
 2. [ ] **Unified editing.** No edit/preview mode split; typing renders in place
       (custom editor element, `docs/design/architecture.md:103-111` approx, Editor section).
 3. [ ] **Source preserved.** Round-trip: file on disk unchanged except the
-      user's keystrokes (atomic write `crates/inkuno-platform/src/vault.rs:889`; merge rule
+      user's keystrokes (atomic write `vault::write` in `crates/inkuno-platform/src/vault.rs`; merge rule
       `docs/design/architecture.md:100`).
 4. [ ] **Offline.** No network needed for any editing/viewing path (vault is a
       local folder; update check is opt-out background, `crates/inkuno-logic/src/prefs.rs:50-51`).
@@ -225,7 +225,7 @@ From the vision (§2); each must hold before calling the UI work done:
 8. [ ] **Large-doc responsive.** Typing cost stays per-damaged-line
       (`views/editor/layout.rs` + `paint.rs`, `docs/design/architecture.md:91`); tables >
       1500 rows use light layout (`docs/design/architecture.md:105-107` approx).
-9. [ ] **Auto-save + recovery.** 400 ms debounce flush (`crates/inkuno/src/shell/notes.rs:504-510`)
+9. [ ] **Auto-save + recovery.** 400 ms debounce flush (`EditorEvent::Changed` in `crates/inkuno/src/shell/notes.rs`)
       plus verified post-crash restore (see §5 TBD).
 10. [ ] **Feels like a writing app.** No IDE chrome by default: no permanent
       toolbar, no forced panels, quietCounts — judged by the user, not by tests.

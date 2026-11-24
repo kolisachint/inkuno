@@ -7,7 +7,7 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, Mutex, MutexGuard,
         atomic::{AtomicBool, Ordering},
     },
     time::{SystemTime, UNIX_EPOCH},
@@ -1273,6 +1273,53 @@ pub fn save(
     Ok(target)
 }
 
+/// Process-wide lock of the saves that write a note: a save on a background thread and one on the
+/// UI thread never read and write the same note at once.
+static SAVING: Mutex<()> = Mutex::new(());
+
+/// Held while a note's file and its pending changes are read, checked and written. A poisoned lock
+/// is taken anyway: the saves keep no state of their own.
+pub fn save_lock() -> MutexGuard<'static, ()> {
+    SAVING.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// What `save_quiet` did.
+#[derive(Debug)]
+pub enum Quiet {
+    /// Written: the text the file now holds, its pending changes split off.
+    Saved { content: String },
+    /// Not written: the file changed since `base`, so another program wrote it. The caller merges.
+    Outside,
+}
+
+/// Saves an existing note without merging. `base` is the text last read or written from the file; if
+/// the file still holds it, `shown` is written as `save` would write it, else nothing is written
+/// (`Quiet::Outside`). It runs under `save_lock`, so it may run off the UI thread.
+pub fn save_quiet(
+    home: Option<&revisions::Home>,
+    path: &Path,
+    shown: &str,
+    base: &str,
+    author: &str,
+) -> io::Result<Quiet> {
+    let _guard = save_lock();
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        // A file that is gone is written back by the synchronous save, as it always was.
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Quiet::Outside),
+        Err(e) => return Err(e),
+    };
+    if sidecar::display(home, path, &raw) != base {
+        return Ok(Quiet::Outside);
+    }
+    let (content, entries) = sidecar::split(home, path, shown, author);
+    write(path, &content)?;
+    if let Some(home) = home {
+        sidecar::store(home, path, &entries)?;
+    }
+    Ok(Quiet::Saved { content })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1396,6 +1443,39 @@ mod tests {
             (h1_of("## Sous-titre"), h1_of("texte"), h1_of("# ")),
             (None, None, None)
         );
+    }
+
+    #[test]
+    fn quiet_save_writes_only_while_the_disk_holds_the_base() {
+        let root = env::temp_dir().join(format!("inkuno-quiet-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("Plan.md");
+        fs::write(&path, "# Plan\n\nun\n").unwrap();
+        // The disk still holds the base: the shown text is written.
+        match save_quiet(None, &path, "# Plan\n\nun deux\n", "# Plan\n\nun\n", "me").unwrap() {
+            Quiet::Saved { content } => assert_eq!(content, "# Plan\n\nun deux\n"),
+            other => panic!("expected Saved, got {other:?}"),
+        }
+        assert_eq!(fs::read_to_string(&path).unwrap(), "# Plan\n\nun deux\n");
+        // Another program wrote the file since: nothing is written, the merge is left to the caller.
+        fs::write(&path, "# Plan\n\nautre\n").unwrap();
+        let quiet = save_quiet(
+            None,
+            &path,
+            "# Plan\n\nun deux trois\n",
+            "# Plan\n\nun deux\n",
+            "me",
+        )
+        .unwrap();
+        assert!(matches!(quiet, Quiet::Outside));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "# Plan\n\nautre\n");
+        // A file that is gone is left to the synchronous save, which writes it back.
+        fs::remove_file(&path).unwrap();
+        let quiet = save_quiet(None, &path, "# Plan\n", "# Plan\n", "me").unwrap();
+        assert!(matches!(quiet, Quiet::Outside));
+        assert!(!path.exists());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

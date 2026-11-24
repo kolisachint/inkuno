@@ -189,7 +189,7 @@ Gaps / **needs-eyes**:
 |------|-------------------|----------------------------|
 | Core | `crates/inkuno-logic/src/markdown/mod.rs` tests (classify/inline/code/boxes); `lists.rs` Enter/renumber/restyle; `front.rs` matter parsing | `crates/inkuno/src/shell/tests/end_to_end/writing.rs` (typing/lists/blocks); `outline.rs` (headings skip code blocks); `find_mouse.rs` (marker searchability) |
 | Extended | `crates/inkuno-logic/src/markdown/tables.rs` tests (cells/paste/format); formula tests with `table_formulas.rs` | `md_tables.rs` (paste/align/wrap thresholds — note `app-ui.md:259-290` recalibration rule), `table_handles.rs`, `table_styles.rs`, `csv.rs` |
-| Optional | `crates/inkuno/src/logic/mermaid.rs` tests (kind/convert/skip counts); formula evaluator tests (`logic/formula.rs`) | `feedback.rs:150-172` (mermaid good/bad/empty); `diagrams.rs` (bridge diagrams); `media.rs` (pictures/figures); PDF tests for `$$` vs `$…$` |
+| Optional | `crates/inkuno/src/logic/mermaid.rs` tests (kind/convert/skip counts); formula tests (`crates/inkuno-logic/src/markdown/mod.rs`, the `$$` and `$…$` lines; drawn by `figure::latex` in `crates/inkuno-ui/src/figure.rs`) | `feedback.rs:150-172` (mermaid good/bad/empty); `diagrams.rs` (bridge diagrams); `media.rs` (pictures/figures); PDF tests for `$$` vs `$…$` |
 | Sanitized | `mod.rs` mark-tag tests (`mark_tag`/`mark_color`); `sharing.rs` plain-text rules | Export/copy tests (Markdown vs plain-text copy, `docs/user/src/writing.md` "Copy and share"); PDF "not printed" list |
 
 Rule for all tiers: when a threshold or pixel value changes (e.g. Normal 800,

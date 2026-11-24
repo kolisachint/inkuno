@@ -70,6 +70,8 @@ pub(super) struct Pane {
     /// The note was created in this pane: left empty, its file does not stay in the vault.
     pub(super) fresh: bool,
     pub(super) dirty: bool,
+    /// A debounced save of the note running off the UI thread (`Shell::start_quiet_save`), if any.
+    pub(super) saving: Option<super::autosave::Saving>,
     /// The changes of the note that its file text does not place (`Shell::count_unplaced_changes`),
     /// counted when the note is loaded, saved or discarded: the pill reads this, not the disk.
     pub(super) orphans: usize,
@@ -236,6 +238,7 @@ impl Shell {
             new_dir: None,
             fresh: false,
             dirty: false,
+            saving: None,
             orphans: 0,
             pending_saved: Vec::new(),
             saved_version: 0,

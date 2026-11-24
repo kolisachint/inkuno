@@ -517,6 +517,12 @@ impl Shell {
     pub(super) fn apply_links(&mut self, plan: LinkPlan, cx: &mut Context<Self>) -> bool {
         let mut changed = Vec::new();
         let mut missed = false;
+        let posts: Vec<PathBuf> = plan
+            .notes
+            .iter()
+            .map(|&index| plan.scan.notes[index].post.clone())
+            .collect();
+        self.flush_panes_showing(&posts, cx);
         for index in plan.notes {
             let note = &plan.scan.notes[index];
             let path = &note.post;
@@ -534,7 +540,11 @@ impl Shell {
                 continue;
             };
             // The text as the editor shows it goes back as the file and its pending changes beside it.
-            if platform::sidecar::save(home.as_ref(), path, &text, "").is_ok() {
+            let written = {
+                let _guard = platform::vault::save_lock();
+                platform::sidecar::save(home.as_ref(), path, &text, "")
+            };
+            if written.is_ok() {
                 if let Some(note) = self.notes.iter_mut().find(|n| n.path == *path) {
                     let disk = fs::read_to_string(path).unwrap_or_default();
                     (note.tags, note.links) = Note::index(&disk);
@@ -604,6 +614,24 @@ impl Shell {
         refused
     }
 
+    /// Settles and saves the panes that show one of `paths`, before those notes are written on disk: a
+    /// background save of one is settled and its typed text saved (`flush_one`), so that the rewrite
+    /// reads the text the pane holds and the pane is reloaded without losing it. Never called with
+    /// `save_lock` held: `flush_one` takes it.
+    fn flush_panes_showing(&mut self, paths: &[PathBuf], cx: &mut Context<Self>) {
+        for pane in 0..self.panes.len() {
+            if self.panes[pane]
+                .path
+                .as_ref()
+                .is_some_and(|path| paths.contains(path))
+            {
+                self.in_pane(pane, |this| {
+                    this.flush_one(cx);
+                });
+            }
+        }
+    }
+
     /// A heading of the note was renamed (the same headings but one, which reads differently): the links
     /// of the other notes that point at it, `[[Note#old]]` and `![[Note#old]]`, now point at the new one.
     // ponytail: synchronous rewrite, limited to the notes the index says link to this one, like `relink`;
@@ -626,6 +654,13 @@ impl Shell {
             return;
         }
         let (name, key) = (vault::stem(path), vault::stem(path).to_lowercase());
+        let linking: Vec<PathBuf> = self
+            .notes
+            .iter()
+            .filter(|n| n.path != path && n.links.contains(&key))
+            .map(|n| n.path.clone())
+            .collect();
+        self.flush_panes_showing(&linking, cx);
         let mut rewritten = Vec::new();
         for note in self
             .notes
@@ -635,12 +670,21 @@ impl Shell {
             // Written as the editor shows the note, so its pending changes stay placed. A rewrite that
             // would change a pending change is left out, as `apply_links` leaves it.
             let home = platform::revisions::home_of(&note.path, self.vault.as_deref());
-            let saved = platform::sidecar::edit(home.as_ref(), &note.path, "", |shown| {
-                let (text, count) = wiki::rename_heading(shown, &name, was.1.trim(), now.1.trim());
-                let refused = logic::pending::rewrite_refused(shown, &text)
-                    || platform::sidecar::rewrite_unplaces(home.as_ref(), &note.path, shown, &text);
-                (count > 0 && !refused).then_some(text)
-            });
+            let saved = {
+                let _guard = platform::vault::save_lock();
+                platform::sidecar::edit(home.as_ref(), &note.path, "", |shown| {
+                    let (text, count) =
+                        wiki::rename_heading(shown, &name, was.1.trim(), now.1.trim());
+                    let refused = logic::pending::rewrite_refused(shown, &text)
+                        || platform::sidecar::rewrite_unplaces(
+                            home.as_ref(),
+                            &note.path,
+                            shown,
+                            &text,
+                        );
+                    (count > 0 && !refused).then_some(text)
+                })
+            };
             if let Ok(true) = saved {
                 let disk = fs::read_to_string(&note.path).unwrap_or_default();
                 (note.tags, note.links) = Note::index(&disk);
@@ -750,9 +794,9 @@ impl Shell {
         markdown::apply_edits(&shown, &edits)
     }
 
-    /// Writes the pane's note to disk if it changed.
-    // ponytail: synchronous write on the UI thread (a few KB, < 1 ms);
-    // move to a background task if notes get very large.
+    /// Writes the pane's note to disk if it changed, on the UI thread. Debounced saves of an existing
+    /// note run in the background (`flush_debounced`); this path remains for close, switch, rename,
+    /// new notes and conflicts.
     pub(super) fn flush_one(&mut self, cx: &mut Context<Self>) -> bool {
         let done = self.flush_one_text(cx);
         self.count_unplaced_changes();
@@ -763,12 +807,16 @@ impl Shell {
         if self.pane().scratch {
             return self.flush_scratch(cx);
         }
+        // A background save of this note is settled first, so that the file read below is the one it left.
+        self.settle_saving(cx);
         let Some(root) = self.vault.clone() else {
             return !self.pane().dirty;
         };
         if !self.pane().dirty {
             return true;
         }
+        // Held until the note is written: a background save of it waits for this one.
+        let guard = vault::save_lock();
         if let Some(path) = self.pane().path.clone()
             && !self.take_outside(&path, cx)
         {
@@ -833,48 +881,8 @@ impl Shell {
                     }
                 }
                 self.pane_mut().dirty = false;
-                self.pane_mut().base = shown.clone();
-                self.calm();
-                let (tags, links) = markdown::index(&content);
-                let old = self.pane().path.clone();
-                // The text as it was last saved, to see which heading was renamed.
-                let before = self
-                    .notes
-                    .iter()
-                    .find(|n| Some(&n.path) == old.as_ref())
-                    .map(|n| n.body.clone());
-                self.notes
-                    .retain(|n| Some(&n.path) != old.as_ref() && n.path != path);
-                let body: Arc<str> = Arc::from(content);
-                self.notes.insert(
-                    0,
-                    Note {
-                        name: vault::stem(&path),
-                        tags: tags.into(),
-                        links: links.into(),
-                        aliases: markdown::aliases(&body).into(),
-                        mtime: SystemTime::now(),
-                        path: path.clone(),
-                        lower: logic::note::lowered(&body),
-                        body,
-                    },
-                );
-                if old.as_ref() != Some(&path) {
-                    // Renamed by its title, the note keeps its icon.
-                    if let Some(icon) = old.as_ref().and_then(|old| self.icons.remove(old)) {
-                        self.icons.insert(path.clone(), icon);
-                        self.save_icons(cx);
-                    }
-                    self.recent.retain(|p| Some(p) != old.as_ref());
-                    self.touch(&path);
-                    self.nav.reveal(&path);
-                    self.pane_mut().path = Some(path.clone());
-                    self.push_names(cx);
-                    self.push_dirs(cx);
-                }
-                if let Some(before) = before {
-                    self.follow_heading(&path, &before, &self.notes[0].body.clone(), cx);
-                }
+                drop(guard);
+                self.saved(old_path, path, shown, content, cx);
             }
             Err(e) => {
                 let name = self
@@ -895,6 +903,60 @@ impl Shell {
         }
         cx.notify();
         !self.pane().dirty
+    }
+
+    /// After a note is written, its text as saved (`shown`, and `content` in the file): the list, the
+    /// index and the links follow it. `old_path` is the file it had, which differs when it was renamed.
+    pub(super) fn saved(
+        &mut self,
+        old_path: Option<PathBuf>,
+        path: PathBuf,
+        shown: String,
+        content: String,
+        cx: &mut Context<Self>,
+    ) {
+        let old = old_path;
+        self.pane_mut().base = shown;
+        self.calm();
+        let (tags, links) = markdown::index(&content);
+        // The text as it was last saved, to see which heading was renamed.
+        let before = self
+            .notes
+            .iter()
+            .find(|n| Some(&n.path) == old.as_ref())
+            .map(|n| n.body.clone());
+        self.notes
+            .retain(|n| Some(&n.path) != old.as_ref() && n.path != path);
+        let body: Arc<str> = Arc::from(content);
+        self.notes.insert(
+            0,
+            Note {
+                name: vault::stem(&path),
+                tags: tags.into(),
+                links: links.into(),
+                aliases: markdown::aliases(&body).into(),
+                mtime: SystemTime::now(),
+                path: path.clone(),
+                lower: logic::note::lowered(&body),
+                body,
+            },
+        );
+        if old.as_ref() != Some(&path) {
+            // Renamed by its title, the note keeps its icon.
+            if let Some(icon) = old.as_ref().and_then(|old| self.icons.remove(old)) {
+                self.icons.insert(path.clone(), icon);
+                self.save_icons(cx);
+            }
+            self.recent.retain(|p| Some(p) != old.as_ref());
+            self.touch(&path);
+            self.nav.reveal(&path);
+            self.pane_mut().path = Some(path.clone());
+            self.push_names(cx);
+            self.push_dirs(cx);
+        }
+        if let Some(before) = before {
+            self.follow_heading(&path, &before, &self.notes[0].body.clone(), cx);
+        }
     }
 
     pub(super) fn on_editor_event(
@@ -922,20 +984,7 @@ impl Shell {
                     this.keep_preview();
                     this.pane_mut().dirty = true;
                 });
-                self.save_gen += 1;
-                let generation = self.save_gen;
-                cx.spawn(async move |this, cx| {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(400))
-                        .await;
-                    this.update(cx, |this, cx| {
-                        if this.save_gen == generation {
-                            this.flush(cx);
-                        }
-                    })
-                    .ok();
-                })
-                .detach();
+                self.schedule_save(cx);
             }
             EditorEvent::Open(link) => self.follow(link, window, cx),
             EditorEvent::OpenAside(link) => match link {

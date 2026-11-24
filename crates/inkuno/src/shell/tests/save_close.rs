@@ -475,3 +475,310 @@ fn a_rename_of_a_note_that_links_to_itself_keeps_its_new_title(cx: &mut TestAppC
     );
     let _ = fs::remove_dir_all(root);
 }
+
+/// The 400 ms pause saves an existing note in the background; the file then holds what was typed and
+/// nothing is left dirty.
+#[gpui::test]
+fn a_debounced_save_writes_the_typed_text_and_leaves_nothing_dirty(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-save");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" ajout");
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal");
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(&plan).unwrap(),
+        "# Plan\n\noriginal ajout"
+    );
+    assert!(shell.read_with(cx, |s, _| {
+        let pane = s.pane();
+        !pane.dirty && pane.saving.is_none() && pane.base == "# Plan\n\noriginal ajout"
+    }));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Another program writes the note before the pause is over: its section is merged with the typed
+/// text, as the synchronous save merges it, and the note is clean.
+#[gpui::test]
+fn an_outside_write_before_the_debounced_save_is_merged(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-outside");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\nPremière ligne\nDeuxième ligne\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &plan);
+    let at = shell.read_with(cx, |s, cx| {
+        s.pane()
+            .editor
+            .read(cx)
+            .text()
+            .find("Première ligne")
+            .unwrap()
+            + "Première ligne".len()
+    });
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
+    });
+    cx.simulate_input(" tapée");
+    fs::write(
+        &plan,
+        "# Plan\n\nPremière ligne\nDeuxième ligne\n\n## Agent\n",
+    )
+    .unwrap();
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    let both = "# Plan\n\nPremière ligne tapée\nDeuxième ligne\n\n## Agent\n";
+    assert_eq!(fs::read_to_string(&plan).unwrap(), both);
+    assert!(shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text() == both));
+    // The merge's own change is saved by the next pause, which leaves the note clean.
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), both);
+    assert!(shell.read_with(cx, |s, _| !s.pane().dirty));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A background save that cannot write keeps the text and reports it; the next close writes it.
+#[gpui::test]
+fn a_failed_debounced_save_keeps_the_text_for_the_next_save(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-failed");
+    let anchor = root.join("Anchor.md");
+    let plan = root.join("Plan.md");
+    fs::write(&anchor, "# Anchor\n").unwrap();
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &anchor);
+    open(&shell, cx, &plan);
+    // Notes save through `.<stem>.tmp`: a folder there blocks the write.
+    let block = root.join(".Plan.tmp");
+    fs::create_dir(&block).unwrap();
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" ajout");
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal");
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "Plan")));
+    assert!(shell.read_with(cx, |s, _| s.pane().dirty));
+    fs::remove_dir(&block).unwrap();
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(&plan).unwrap(),
+        "# Plan\n\noriginal ajout"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A heading renamed while the note that links to it has typed text and its background save is pending:
+/// the link is rewritten on disk, and the text typed in the linking note survives, on disk and in its
+/// pane.
+#[gpui::test]
+fn a_heading_rename_keeps_the_text_typed_in_the_note_that_links_to_it(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "heading-typing");
+    let a = root.join("A.md");
+    let b = root.join("B.md");
+    fs::write(&a, "# A\n\n## X\n\nbody\n").unwrap();
+    fs::write(&b, "# B\n\nsee [[A#X]]\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &a);
+    shell.update_in(cx, |s, window, cx| {
+        assert!(s.add_pane(Side::Right, window, cx));
+    });
+    open(&shell, cx, &b);
+    // Typed on the line of the link: the rewrite must not look like another program's change.
+    let after_link = shell.read_with(cx, |s, cx| {
+        s.pane().editor.read(cx).text().find("[[A#X]]").unwrap() + "[[A#X]]".len()
+    });
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.set_view(after_link, 0., cx))
+    });
+    cx.simulate_input(" tapé");
+    shell.update_in(cx, |s, window, cx| s.focus_pane(0, window, cx));
+    let at = shell.read_with(cx, |s, cx| {
+        s.pane().editor.read(cx).text().find("## X").unwrap() + "## X".len()
+    });
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
+    });
+    cx.simulate_keystrokes("backspace");
+    cx.simulate_input("Y");
+    // The pause ends for both notes: their background saves are queued, and do not run before the
+    // heading is saved on the UI thread (no input or `run_until_parked` in between).
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    assert!(shell.read_with(cx, |s, _| s.panes[1].saving.is_some()));
+    shell.update(cx, |s, cx| {
+        s.in_pane(0, |t| t.flush_one(cx));
+    });
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+
+    assert_eq!(fs::read_to_string(&a).unwrap(), "# A\n\n## Y\n\nbody\n");
+    let disk = fs::read_to_string(&b).unwrap();
+    assert_eq!(disk, "# B\n\nsee [[A#Y]] tapé\n");
+    let shown = shell.read_with(cx, |s, cx| s.panes[1].editor.read(cx).text().to_string());
+    assert_eq!(shown, disk);
+    assert!(shell.read_with(cx, |s, _| !s.panes[1].dirty));
+    // Nothing is set aside as a sync conflict.
+    let copies: Vec<_> = fs::read_dir(&root)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .filter(|name| name.contains("conflict"))
+        .collect();
+    assert!(copies.is_empty(), "{copies:?}");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// The pause of a note whose background save is still in flight is left to that save (the text typed
+/// meanwhile is not lost). When that save fails, the text that changed during it is saved by the next
+/// pause, once the folder can be written again.
+#[gpui::test]
+fn text_changed_during_a_failed_debounced_save_is_saved_by_the_next_pause(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-failed-typing");
+    let anchor = root.join("Anchor.md");
+    let plan = root.join("Plan.md");
+    fs::write(&anchor, "# Anchor\n").unwrap();
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &anchor);
+    open(&shell, cx, &plan);
+    // Notes save through `.<stem>.tmp`: a folder there blocks the write.
+    let block = root.join(".Plan.tmp");
+    fs::create_dir(&block).unwrap();
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" ajout");
+    // The pause's timer is due, and the save is started before the timer runs: the timer leaves it.
+    cx.executor().advance_clock(Duration::from_millis(400));
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    // The text changes while the save is pending. `load` changes the text without a typing pause of its
+    // own, so only the failed save can save it again.
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            let text = "# Plan\n\noriginal ajout b".to_string();
+            let end = text.len();
+            e.load(text, end, cx)
+        })
+    });
+    cx.run_until_parked();
+    assert!(shell.read_with(cx, |s, _| s.told(Tone::Failed, "Plan") && s.pane().dirty));
+    fs::remove_dir(&block).unwrap();
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(&plan).unwrap(),
+        "# Plan\n\noriginal ajout b"
+    );
+    assert!(shell.read_with(cx, |s, _| !s.pane().dirty));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Opens `first`, then `second` in a new pane beside it: `second` is the active one, and its close
+/// saves it (a single pane keeps its tab).
+fn open_beside(
+    shell: &Entity<Shell>,
+    cx: &mut gpui::VisualTestContext,
+    first: &Path,
+    second: &Path,
+) {
+    open(shell, cx, first);
+    shell.update_in(cx, |s, window, cx| {
+        assert!(s.add_pane(Side::Right, window, cx));
+    });
+    open(shell, cx, second);
+}
+
+/// Text typed while a background save is in flight is kept when the note is closed: the close saves it,
+/// and nothing later overwrites it.
+#[gpui::test]
+fn closing_while_a_background_save_is_in_flight_keeps_the_typed_text(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-close-inflight");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    fs::write(root.join("Anchor.md"), "# Anchor\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open_beside(&shell, cx, &root.join("Anchor.md"), &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" a");
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    // Typed meanwhile: `load` changes the text the save did not take, as typing would.
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            let text = "# Plan\n\noriginal a b".to_string();
+            let end = text.len();
+            e.load(text, end, cx)
+        })
+    });
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a b");
+    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a b");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A pause that finds a save in flight leaves it to that save: the save writes what it was given, the
+/// text typed meanwhile stays dirty with the base at the saved text, and the next pause saves the rest.
+#[gpui::test]
+fn text_typed_during_a_background_save_is_saved_by_the_next_pause(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-typed-during");
+    let plan = root.join("Plan.md");
+    fs::write(&plan, "# Plan\n\noriginal").unwrap();
+    fs::write(root.join("Anchor.md"), "# Anchor\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open_beside(&shell, cx, &root.join("Anchor.md"), &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" a");
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| {
+            let text = "# Plan\n\noriginal a b".to_string();
+            let end = text.len();
+            e.load(text, end, cx)
+        })
+    });
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a");
+    assert!(shell.read_with(cx, |s, _| {
+        let pane = s.pane();
+        pane.dirty && pane.base.ends_with(" a") && !pane.base.ends_with(" b")
+    }));
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), "# Plan\n\noriginal a b");
+    assert!(shell.read_with(cx, |s, _| !s.pane().dirty));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Undo back to the saved text while its save is queued: the close writes the original text, exactly.
+#[gpui::test]
+fn undo_to_the_saved_text_while_a_save_is_queued_leaves_the_original(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "quiet-undo-queued");
+    let plan = root.join("Plan.md");
+    let original = "# Plan\n\noriginal";
+    fs::write(&plan, original).unwrap();
+    fs::write(root.join("Anchor.md"), "# Anchor\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open_beside(&shell, cx, &root.join("Anchor.md"), &plan);
+    cx.simulate_keystrokes("secondary-end");
+    cx.simulate_input(" a");
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.restore(false, cx))
+    });
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).text().to_string()),
+        original
+    );
+    cx.simulate_keystrokes("secondary-w");
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), original);
+    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(&plan).unwrap(), original);
+    let _ = fs::remove_dir_all(root);
+}

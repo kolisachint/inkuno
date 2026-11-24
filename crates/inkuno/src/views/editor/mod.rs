@@ -608,7 +608,8 @@ impl Editor {
         &self.content
     }
 
-    /// The text's version: it moves with every change of the text, the pending changes included.
+    /// Changes each time the text changes (typing, undo, a load, the pending changes included): a save
+    /// compares it to tell whether the text it wrote is still the text shown.
     pub fn version(&self) -> u64 {
         self.version
     }

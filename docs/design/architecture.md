@@ -38,7 +38,11 @@ cli ────────────► ui, logic, platform (and the shortcu
 
 ![The layers of Inkuno and which ones each uses](../user/src/img/architecture-layers.svg)
 
-*The source is in the SVG, so Inkuno opens it in the viewer.*
+*Diagrams.* A complex diagram has its source in `docs/diagrams/<name>.d2`. `scripts/diagrams.sh` renders it
+(with [d2](https://d2lang.com)) to `docs/user/src/img/<name>.svg`, which is committed and embedded with `![alt](path)`.
+Edit the `.d2` file, never the SVG, then run the script again. The SVG still opens in Inkuno's viewer.
+A simple flow is an inline ` ```mermaid ` block in the Markdown itself. Inkuno draws class, sequence and state
+diagrams from it (`crates/inkuno/src/logic/mermaid.rs`); other kinds are not drawn.
 
 The test `layers_only_depend_downwards` fails when a file breaks this rule, and when a view
 reaches into the shell.
@@ -94,6 +98,7 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
 | the Versions panel and the compare (a read-only tab against a version) | `shell/versions.rs`, `shell/sidebar.rs` (rows), `views/editor/` (`readonly`); `docs/design/app-ui.md` §19 |
 | the window's door for `inkuno show` | `crates/inkuno-platform/src/link.rs` (127.0.0.1 and a secret in `<config>/inkuno/agent`), `Shell::listen` in `shell/library.rs` |
 | a note written elsewhere while typed in | `crates/inkuno-logic/src/merge.rs` (three-way, by lines), `Shell::take_outside` in `shell/notes.rs` |
+| background save of a note | `platform::vault::save_quiet` (`crates/inkuno-platform/src/vault.rs`), `Shell::flush_debounced` and the `Saving` slot in `shell/autosave.rs` |
 | colours, themes, page width | `crates/inkuno-ui/src/theme.rs` |
 | icons and fonts | `crates/inkuno-ui/src/assets.rs` |
 | a reusable piece of UI (button, row, menu item, switch…) | `crates/inkuno-ui/src/components/` (one file per piece, named after its v2 class) |
@@ -143,6 +148,47 @@ A view talks to the shell only through its events (`EditorEvent`, `PaletteEvent`
   is linked in: hoocode is a separate program.
 - **Window**: on Linux Inkuno draws its own title bar, shadow and resize edges (client-side
   decorations); on macOS and Windows the system does.
+
+### Saving
+
+- Typing changes the editor's text in memory only. Each change marks the note dirty and restarts a 400 ms
+  timer (the `EditorEvent::Changed` handler in `shell/notes.rs`).
+- When the timer ends, the shell calls `Shell::flush_debounced` (in `shell/autosave.rs`).
+- An existing, dirty note with no title change and no comment-form migration is saved in the background by
+  `platform::vault::save_quiet`, on the background executor, under `vault::save_lock`. It writes only if the disk
+  still equals the pane's `base` (the text last saved). Otherwise it returns `Outside`, and `Shell::flush_one`
+  (in `shell/notes.rs`) merges as before: `take_outside`, then `logic::merge::onto`; when the same lines changed,
+  the other version is written beside the note as a conflict copy.
+- Close, switch, quit, rename, new notes, scratch and conflicts use `flush_one` on the UI thread. It first settles
+  the pane's `Saving` slot (`Shell::settle_saving`): a queued background save is cancelled, a running one is waited
+  for and its outcome applied. So the last text is on disk before the window closes.
+- Rewriting links in other notes after a heading rename first saves those notes' panes, and takes the save lock.
+- Every write is atomic (`vault::write`: a temp file, `fsync`, then a rename), so a crash never leaves a truncated note.
+- Remaining shortcut: a note that gains a `#` title stays on the synchronous path until it is reopened
+  (`// ponytail:` on `pane.h1`).
+
+```mermaid
+sequenceDiagram
+    participant E as Editor
+    participant S as Shell
+    participant W as Worker
+    participant D as Disk
+    E->>S: changed
+    Note over S: 400 ms
+    alt existing note, no rename
+        S->>W: save_quiet
+        W->>D: read, compare with base
+        alt disk equals base
+            W->>D: write (atomic)
+            W-->>S: Saved
+        else disk changed
+            W-->>S: Outside
+            S->>D: flush_one: merge or conflict copy
+        end
+    else rename, new note, scratch
+        S->>D: flush_one (UI thread)
+    end
+```
 
 ## Rules
 
