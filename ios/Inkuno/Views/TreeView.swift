@@ -2,7 +2,8 @@ import SwiftUI
 import UIKit
 
 /// One folder of the vault, pushed from Home or from another folder: folders, then notes,
-/// and at the root a Scratch row. An empty folder shows "This folder is empty."
+/// and at the root the Scratch section (new scratch note, then the scratch notes, newest first).
+/// An empty folder shows "This folder is empty."
 /// Long-press a row for its context menu: Rename, Move, Duplicate (notes), Copy link (notes),
 /// Move to Trash. Renaming refuses a taken name, so nothing is overwritten.
 struct TreeView: View {
@@ -17,6 +18,7 @@ struct TreeView: View {
     @State private var renameText = ""
     @State private var moving: VaultEntry?
     @State private var notice: String?
+    @State private var scratches: [ScratchItem] = []
 
     private var isRoot: Bool {
         folder == vault.vaultURL
@@ -59,11 +61,23 @@ struct TreeView: View {
             if isRoot {
                 Section {
                     Button {
-                        openScratch()
+                        newScratch()
                     } label: {
-                        Label("Scratch", systemImage: "pencil.and.scribble")
+                        Label("New scratch", systemImage: "pencil.and.scribble")
                             .font(InkType.rowTitle)
                             .foregroundStyle(InkColor.ink)
+                    }
+                    ForEach(scratches) { scratch in
+                        NavigationLink(value: Route.note(scratch.url)) {
+                            scratchRow(scratch)
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                trashScratch(scratch.url)
+                            } label: {
+                                Label("Move to Trash", systemImage: "trash")
+                            }
+                        }
                     }
                 } header: {
                     InkSectionTitle("Scratch")
@@ -238,6 +252,7 @@ struct TreeView: View {
                 (entry.url, try vault.entries(in: entry.url).count)
             })
             entries = listed
+            scratches = isRoot ? scratchItems() : []
             error = nil
         } catch {
             entries = []
@@ -246,13 +261,58 @@ struct TreeView: View {
         }
     }
 
-    private func openScratch() {
+    private func scratchItems() -> [ScratchItem] {
+        ScratchStore.list().map { url in
+            ScratchItem(
+                url: url,
+                title: ScratchStore.title(of: url),
+                modified: try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            )
+        }
+    }
+
+    private func newScratch() {
         do {
-            path.append(.note(try vault.openScratch()))
+            path.append(.note(try ScratchStore.create()))
         } catch {
             self.error = error.localizedDescription
         }
     }
+
+    private func trashScratch(_ url: URL) {
+        do {
+            try ScratchStore.trash(url)
+            reload()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func scratchRow(_ scratch: ScratchItem) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "pencil.and.scribble")
+                .frame(width: InkMetrics.markerIconSize)
+                .foregroundStyle(InkColor.icon)
+            Text(scratch.title)
+                .font(InkType.rowTitle)
+                .foregroundStyle(InkColor.ink)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(InkFormat.age(scratch.modified))
+                .font(InkType.caption)
+                .foregroundStyle(InkColor.faint)
+        }
+        .frame(minHeight: InkMetrics.rowMinHeight)
+    }
+}
+
+/// A scratch note in the Scratch section: its file, its title (first line) and its last change.
+private struct ScratchItem: Identifiable {
+    let url: URL
+    let title: String
+    let modified: Date?
+
+    var id: URL { url }
 }
 
 /// The Move destination picker: every folder of the vault.

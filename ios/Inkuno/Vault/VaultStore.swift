@@ -1,4 +1,5 @@
 import Foundation
+import InkunoCore
 import Observation
 
 enum VaultError: LocalizedError {
@@ -205,16 +206,9 @@ final class VaultStore {
         return try createIfMissing(at: url)
     }
 
-    /// Scratch pad, `Scratch.md` in the vault root, created if needed.
-    /// ponytail: the desktop Scratch flag is per note; this skeleton uses one fixed file.
-    func openScratch() throws -> URL {
-        guard let root = vaultURL else { throw VaultError.noVault }
-        return try createIfMissing(at: root.appendingPathComponent("Scratch.md"))
-    }
-
+    /// The daily note's file name: `2026-11-24.md`, named by the core (`daily_note_name`).
     static func dailyNoteFileName(for date: Date, calendar: Calendar = .current) -> String {
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d.md", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        dailyNoteName(today: CoreDates.ymd(date, calendar: calendar)) + ".md"
     }
 
     /// The iCloud placeholder that stands in for `url` while it is not downloaded: `folder/.Name.md.icloud`.
