@@ -829,6 +829,7 @@ Normal 800 is the default (§10.4 lock released for this change).
 > Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The changes are beside the note, in
 > `.inkuno/pending` (2026-11-21, `platform/sidecar.rs`); the editor shows them as marks in block form (`logic/pending.rs`),
 > composed from the file and the list, and split again on save. This section is what the editor does with them. Chords: §17.5.
+> Storage superseded 2026-11-24: pending changes leave `.inkuno/pending` for per-device storage (§23.5).
 
 - [x] **Propose**, **User approves**: the flow of `revisions.md` (Decisions, 2026-11-14 and 2026-11-15).
 - [x] **Implement**: `views/editor/layout.rs` (`Pend`, `pend_of`), `paint.rs` (the wash), `text_runs` (dim and
@@ -1288,3 +1289,80 @@ Already at or above target, unchanged: body and secondary text, the five syntax 
 - P4 (Settings tab: Ctrl+, opens Appearance, Editor, Files, Shortcuts, About; F1 opens Shortcuts; the help overlay is gone) is merged.
 - Not yet merged when this section was written: P2 (sidebar) and P3 (right panel). The user guide describes them as the prototype specifies, and the lines that depend on them are listed in the P8 report.
 - Open questions of the prototype (Q1 to Q3) are answered as in its log. The gap in §20.4 (sidebar and title bar both hidden) is still open in backlog W1.
+
+---
+
+## 23. Review feed (AGREED 2026-11-24, not built)
+
+> Status: agreed design, recorded 2026-11-24. Not built. It replaces the Comments view and the
+> pending-change cards of §22.1, and the storage of pending changes (§17, §22.5). Until it lands,
+> the code is as §17 and §22 describe. Decision log: `revisions.md`, 2026-11-24.
+
+### 23.1 One panel
+
+- One right-dock panel, **Review · N open**, replaces the Comments view and the pending-change cards.
+  N counts the open comments and pending changes of the note. 280 px (`PANEL_W`,
+  `crates/inkuno/src/views/nav.rs:60`). The editor stays the primary region.
+- No filter row. Count only. No "show resolved".
+
+### 23.2 The feed
+
+- One scrollable feed, oldest first.
+- Sort key: a comment's timestamp, or a pending change's new `created` field (UTC, set when the
+  change is proposed). `at` is a text position, not a time. Items without a time (legacy comments,
+  older list entries) sort first, in document order.
+- Only one card is expanded at a time.
+- Selecting a card highlights its anchored passage in the editor and scrolls to it.
+- No full diff in a collapsed card.
+
+Collapsed card:
+
+- Author: avatar initial and name.
+- Type icon: comment, replace, insert or delete.
+- Relative time.
+- Content: at most 3 lines.
+- Location: `Section · Line N`. It is computed at render from the text anchor and never stored.
+
+Expanded comment:
+
+- Full text, replies, a reply field, and **Resolve**.
+
+Expanded change:
+
+- Full old and new text, and **Accept** / **Reject**.
+
+### 23.3 Resolve
+
+- **Resolve** deletes the comment from the note: its markup goes, the passage text stays.
+- Undo and the revisions recover it. There is no "show resolved".
+
+### 23.4 Comment markup
+
+The markup travels with the `.md` file. A reply is a line inside the same block.
+
+```text
+passage<!-- comment @name 2026-11-24T10:02Z: text
+↳ @name 2026-11-24T10:05Z: reply -->
+```
+
+- The time is UTC, to the minute (`Z`).
+- A legacy `<!-- comment: text -->` reads as author `Unknown`, with no time.
+- A legacy comment is rewritten in the new form only when it is edited.
+
+### 23.5 Pending changes are per device
+
+- A pending change leaves the vault. It moves from `.inkuno/pending/<note>.json` to the per-device
+  data directory:
+  - Linux: `~/.local/share/inkuno/pending/<vault-id>/<note>.json`
+  - macOS: `~/Library/Application Support/inkuno/pending/<vault-id>/<note>.json`
+  - Windows: under `%APPDATA%`, the same layout.
+- `<vault-id>` is a random id, written once to `.inkuno/id` in the vault. Moving the vault folder
+  keeps the link to its pending changes.
+- A change reaches the note only on Accept.
+- Trade-off: suggestions do not sync across devices, iOS included.
+- Scratch notes: **TBD**. They have no vault, so no `.inkuno/id`.
+- Vault backups no longer hold pending changes. Accepted: they are device-local by design.
+
+### 23.6 Text
+
+- All interface text goes through `tr("English", "Français")`.
