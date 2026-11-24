@@ -18,7 +18,7 @@ struct NoteView: View {
     @State private var error: String?
     @State private var saveTask: Task<Void, Never>?
     @State private var showSlash = false
-    @State private var editor = MarkdownEditorController()
+    @State private var editor = MarkdownEditorController(provider: CoreMarkdownProvider())
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

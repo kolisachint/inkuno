@@ -2,8 +2,9 @@ import Foundation
 import XCTest
 @testable import Inkuno
 
-final class EditorProviderTests: XCTestCase {
-    private let provider = SwiftMarkdownProvider()
+/// The editor's Markdown layer on the Rust core: the adapter's mapping of the core's records and bits.
+final class CoreProviderTests: XCTestCase {
+    private let provider = CoreMarkdownProvider()
 
     private func kinds(_ text: String) -> [LineKind] {
         provider.documentLayout(text).map(\.kind)
@@ -55,6 +56,11 @@ final class EditorProviderTests: XCTestCase {
         XCTAssertEqual(layouts[5].markerLenUTF16, 2)
     }
 
+    func testUncheckedTaskAndMetaLines() {
+        XCTAssertEqual(kinds("- [ ] open"), [.task(checked: false)])
+        XCTAssertEqual(kinds("---\ntitle: Hi\n---\n# Hi"), [.meta, .meta, .meta, .heading])
+    }
+
     func testIndentedBulletKeepsItsIndentInTheMarker() {
         let layouts = provider.documentLayout("- a\n    - b")
         XCTAssertEqual(layouts[1].markerLenUTF16, 6)
@@ -71,6 +77,14 @@ final class EditorProviderTests: XCTestCase {
         XCTAssertEqual(kinds("#tag"), [.para])
     }
 
+    func testLayoutOffsetsAreUTF16() {
+        // "é😀" is 3 units, plus the line break: the next line starts at 4.
+        let layouts = provider.documentLayout("é😀\n# T")
+        XCTAssertEqual(layouts.map(\.startUTF16), [0, 4])
+        XCTAssertEqual(layouts.map(\.lenUTF16), [4, 3])
+        XCTAssertEqual(layouts[1].headingLevel, 1)
+    }
+
     // MARK: Inline runs
 
     func testBoldItalicCodeLinkWikiTagDate() {
@@ -80,10 +94,22 @@ final class EditorProviderTests: XCTestCase {
         XCTAssertEqual(bits(of: "it", in: line) & StyleBit.italic, StyleBit.italic)
         XCTAssertEqual(bits(of: "code", in: line) & StyleBit.code, StyleBit.code)
         XCTAssertEqual(bits(of: "site", in: line) & StyleBit.link, StyleBit.link)
-        XCTAssertEqual(bits(of: "](https://x.y)", in: line) & StyleBit.marker, StyleBit.marker)
+        // The core dims the brackets and the parentheses of a link; the address itself is quiet text, not a marker.
+        XCTAssertEqual(bits(of: "](", in: line) & StyleBit.marker, StyleBit.marker)
         XCTAssertEqual(bits(of: "Wiki", in: line) & StyleBit.link, StyleBit.link)
         XCTAssertEqual(bits(of: "#tag", in: line) & StyleBit.tag, StyleBit.tag)
-        XCTAssertEqual(bits(of: "@2026-11-24", in: line) & StyleBit.date, StyleBit.date)
+    }
+
+    func testStrikeIsMapped() {
+        XCTAssertEqual(bits(of: "gone", in: "~~gone~~") & StyleBit.strike, StyleBit.strike)
+    }
+
+    func testRunsUseUTF16OffsetsAfterAnEmoji() {
+        // "😀" is 2 units, the space 1: the backtick is unit 3 and the code text starts at unit 4.
+        let line = "😀 `c`"
+        let runs = provider.styleRuns(line: line)
+        XCTAssertTrue(runs.contains { $0.startUTF16 == 4 && $0.lenUTF16 == 1 && $0.bits & StyleBit.code != 0 })
+        XCTAssertEqual(bits(of: "c", in: line) & StyleBit.code, StyleBit.code)
     }
 
     func testEmphasisInsideCodeIsNotStyled() {
@@ -96,11 +122,16 @@ final class EditorProviderTests: XCTestCase {
         XCTAssertEqual(bits(of: "rocks", in: line) & StyleBit.tag, 0)
     }
 
+    func testPlainLineHasNoRuns() {
+        XCTAssertEqual(provider.styleRuns(line: "just words"), [])
+    }
+
     // MARK: Enter
 
     func testEnterContinuesListsAndQuotes() {
         XCTAssertEqual(provider.onEnter(line: "- a", colUTF16: 3, inFence: false), .insert("- "))
         XCTAssertEqual(provider.onEnter(line: "  2. x", colUTF16: 6, inFence: false), .insert("  3. "))
+        XCTAssertEqual(provider.onEnter(line: "9. nine", colUTF16: 7, inFence: false), .insert("10. "))
         XCTAssertEqual(provider.onEnter(line: "- [x] task", colUTF16: 10, inFence: false), .insert("- [ ] "))
         XCTAssertEqual(provider.onEnter(line: "> q", colUTF16: 3, inFence: false), .insert("> "))
     }
@@ -108,12 +139,23 @@ final class EditorProviderTests: XCTestCase {
     func testEnterOnAnEmptyItemClearsIt() {
         XCTAssertEqual(provider.onEnter(line: "- ", colUTF16: 2, inFence: false), .clear)
         XCTAssertEqual(provider.onEnter(line: "- [ ] ", colUTF16: 6, inFence: false), .clear)
+        XCTAssertEqual(provider.onEnter(line: "2. ", colUTF16: 3, inFence: false), .clear)
     }
 
     func testOrdinaryEnterAndCaretInsideMarker() {
         XCTAssertEqual(provider.onEnter(line: "plain", colUTF16: 5, inFence: false), .none)
         XCTAssertEqual(provider.onEnter(line: "- a", colUTF16: 1, inFence: false), .none)
         XCTAssertEqual(provider.onEnter(line: "- a", colUTF16: 3, inFence: true), .none)
+    }
+
+    func testEnterInsideAFenceKeepsOnlyTheIndent() {
+        XCTAssertEqual(provider.onEnter(line: "  - not a list", colUTF16: 14, inFence: true), .insert("  "))
+    }
+
+    func testEnterCountsTheCaretInUTF16() {
+        // After the marker (unit 2) Enter continues the list; before it (unit 0) it only breaks the line.
+        XCTAssertEqual(provider.onEnter(line: "- 😀 é", colUTF16: 2, inFence: false), .insert("- "))
+        XCTAssertEqual(provider.onEnter(line: "- 😀 é", colUTF16: 0, inFence: false), .none)
     }
 
     // MARK: Indent
@@ -125,9 +167,23 @@ final class EditorProviderTests: XCTestCase {
         XCTAssertEqual(result.newRange, NSRange(location: 6, length: 7))
     }
 
+    func testIndentOfASelectionKeepsItsLines() {
+        // The start moves past the new indent of the first line; the end moves by the whole change.
+        let result = provider.indent("a\nb", rangeUTF16: NSRange(location: 0, length: 3), outdent: false)
+        XCTAssertEqual(result.newText, "    a\n    b")
+        XCTAssertEqual(result.newRange, NSRange(location: 4, length: 7))
+    }
+
     func testOutdentRemovesUpToFourSpacesOrATab() {
         let result = provider.indent("  x\n\ty\n    z", rangeUTF16: NSRange(location: 0, length: 12), outdent: true)
         XCTAssertEqual(result.newText, "x\ny\nz")
+    }
+
+    func testIndentWithEmojiBeforeTheSelection() {
+        // The selection starts after "😀\n" (unit 3), on "b".
+        let result = provider.indent("😀\nb", rangeUTF16: NSRange(location: 3, length: 1), outdent: false)
+        XCTAssertEqual(result.newText, "😀\n    b")
+        XCTAssertEqual(result.newRange, NSRange(location: 7, length: 1))
     }
 
     func testIndentOfCaretOnEmptyText() {
