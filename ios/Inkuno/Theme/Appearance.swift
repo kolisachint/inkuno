@@ -20,7 +20,7 @@ enum AuthorName {
         var flattened = ""
         flattened.reserveCapacity(raw.count)
         for scalar in raw.unicodeScalars {
-            if CharacterSet.controls.contains(scalar) || CharacterSet.whitespacesAndNewlines.contains(scalar) {
+            if CharacterSet.controlCharacters.contains(scalar) || CharacterSet.whitespacesAndNewlines.contains(scalar) {
                 flattened.append(" ")
             } else {
                 flattened.append(Character(scalar))
