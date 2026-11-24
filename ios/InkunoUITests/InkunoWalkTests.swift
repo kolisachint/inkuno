@@ -33,7 +33,8 @@ final class InkunoWalkTests: XCTestCase {
     /// Every v1 screen in Light, ending with the Dark theme switch and the Trash.
     func testWalkLight() throws {
         appearance = .light
-        let app = try launch(theme: .light)
+        let vault = try makeVaultCopy()
+        let app = launchApp(arguments: ["-InkunoVaultPath", vault.path], theme: .light)
 
         // 01 Home: the stack root, with the write card, the four tiles and the search and settings buttons.
         expect(app.navigationBars["Inkuno"], "home title")
@@ -135,10 +136,17 @@ final class InkunoWalkTests: XCTestCase {
         expect(theme.buttons["Dark"], "theme segment Dark")
         shot("16-settings")
 
-        // 17 Theme Dark: the app switches to the dark appearance.
+        // 17 Theme Dark: the choice is saved, and the app is relaunched without the theme argument (an argument
+        // overrides the saved value, so the launch that pinned Light must go). The saved Dark then shows.
         theme.buttons["Dark"].tap()
+        app.terminate()
+        app.launchArguments = ["-InkunoVaultPath", vault.path]
+        app.launch()
         appearance = .dark
-        expect(app.navigationBars["Settings"], "settings still open after the theme change")
+        expect(app.buttons["home.write"], "home after the relaunch in Dark")
+        app.buttons["Settings"].tap()
+        expect(app.navigationBars["Settings"], "settings title")
+        XCTAssertTrue(app.segmentedControls.firstMatch.buttons["Dark"].isSelected, "Dark is the saved theme")
         shot("17-settings")
 
         // 18 Trash: the trashed note with its origin.
