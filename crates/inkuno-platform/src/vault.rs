@@ -2097,6 +2097,11 @@ mod tests {
         let history = Arc::new(Signal::default());
         let _watcher = watch(&root, changed.clone(), history.clone())
             .expect("the system must be able to watch a folder");
+        // FSEvents (macOS) can report the folder's creation after the watch has started: let it
+        // come, then drop it, so that only the revision's write is under test.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        changed.take();
+        history.take();
         // `inkuno rev save` writes a revision file from a terminal.
         fs::write(folder.join("0001.md"), "x").unwrap();
         let start = std::time::Instant::now();
