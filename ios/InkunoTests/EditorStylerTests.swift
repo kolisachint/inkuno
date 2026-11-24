@@ -85,15 +85,15 @@ final class EditorStylerTests: XCTestCase {
     func testBulletDashBecomesAGlyphOffTheCaretLine() {
         let storage = styled("- item\n- other", caretLine: 1)
 
-        XCTAssertNotNil(storage.attribute(.attachment, at: 0, effectiveRange: nil))
+        XCTAssertEqual(storage.attribute(.inkunoGlyph, at: 0, effectiveRange: nil) as? NSNumber, NSNumber(value: MarkdownGlyph.bullet.rawValue))
         XCTAssertTrue(isHidden(storage, 1), "the space after the dash should be hidden")
-        XCTAssertNil(storage.attribute(.attachment, at: 7, effectiveRange: nil))
+        XCTAssertNil(storage.attribute(.inkunoGlyph, at: 7, effectiveRange: nil))
     }
 
     func testBulletDashIsPlainTextOnTheCaretLine() {
         let storage = styled("- item\n- other", caretLine: 0)
 
-        XCTAssertNil(storage.attribute(.attachment, at: 0, effectiveRange: nil))
+        XCTAssertNil(storage.attribute(.inkunoGlyph, at: 0, effectiveRange: nil))
         XCTAssertEqual(color(storage, 0), resolved(InkColor.faint))
     }
 
@@ -102,7 +102,50 @@ final class EditorStylerTests: XCTestCase {
 
         XCTAssertFalse(isHidden(storage, 4))
         XCTAssertFalse(isHidden(storage, 5))
-        XCTAssertNotNil(storage.attribute(.attachment, at: 6, effectiveRange: nil))
+        XCTAssertNotNil(storage.attribute(.inkunoGlyph, at: 6, effectiveRange: nil))
+    }
+
+    func testTaskBoxesAreGlyphsAndCheckedTextIsStruck() {
+        let text = "- [ ] open\n- [x] done"
+        let storage = styled(text, caretLine: nil)
+
+        XCTAssertEqual(storage.attribute(.inkunoGlyph, at: 0, effectiveRange: nil) as? NSNumber, NSNumber(value: MarkdownGlyph.openTask.rawValue))
+        XCTAssertEqual(storage.attribute(.inkunoGlyph, at: location(of: "- [x]", in: text), effectiveRange: nil) as? NSNumber, NSNumber(value: MarkdownGlyph.checkedTask.rawValue))
+        XCTAssertNil(storage.attribute(.strikethroughStyle, at: location(of: "open", in: text), effectiveRange: nil))
+        XCTAssertNotNil(storage.attribute(.strikethroughStyle, at: location(of: "done", in: text), effectiveRange: nil))
+    }
+
+    // MARK: Tables
+
+    func testTableOffTheCaretHidesOuterPipesAndTheDelimiterRow() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |\n\nafter"
+        let storage = styled(text, caretLine: 4)
+        let delimiter = (text as NSString).range(of: "| - |").location
+
+        XCTAssertTrue(isHidden(storage, 0), "the leading pipe")
+        XCTAssertTrue(isHidden(storage, delimiter), "the delimiter row collapses")
+        XCTAssertTrue(isHidden(storage, delimiter + 3), "the delimiter row collapses")
+        XCTAssertFalse(isHidden(storage, location(of: "a", in: text)))
+        XCTAssertEqual(color(storage, location(of: "after", in: text)), resolved(InkColor.ink))
+    }
+
+    func testTableColumnsArePaddedToTheirWidestCell() {
+        // The first column is 4 wide ("ab"), so the narrower "1" below gets the padding: a kern on the pipe after it.
+        let text = "| ab | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: nil)
+        let widest = (text as NSString).range(of: "| b").location
+        let narrow = (text as NSString).range(of: "| two").location
+
+        XCTAssertNil(storage.attribute(.kern, at: widest, effectiveRange: nil) as? CGFloat)
+        XCTAssertGreaterThan(storage.attribute(.kern, at: narrow, effectiveRange: nil) as? CGFloat ?? 0, 0)
+    }
+
+    func testTheCaretOnATableShowsItsRawMarkdown() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: 1)
+
+        XCTAssertFalse(isHidden(storage, 0))
+        XCTAssertFalse(isHidden(storage, (text as NSString).range(of: "| -").location))
     }
 
     func testCheckedTaskContentIsStruck() {

@@ -33,6 +33,8 @@ final class MarkdownEditorController: NSObject {
     /// Created on first use, so the controller is cheap to build inside SwiftUI state.
     private(set) lazy var textView: EditorTextView = makeTextView()
     private lazy var accessory = EditorAccessoryBar()
+    /// Draws the bullet and task glyphs in each paragraph's layout fragment (`MarkdownLayoutFragment`).
+    private let glyphLayout = MarkdownLayoutDelegate()
 
     /// The lines of the text as last styled. Valid whenever the text storage matches `styledText`.
     private var layouts: [LineLayout] = [LineLayout(startUTF16: 0, lenUTF16: 0, kind: .para)]
@@ -57,6 +59,7 @@ final class MarkdownEditorController: NSObject {
         view.backgroundColor = UIColor(InkColor.sheet)
         view.textContainerInset = UIEdgeInsets(top: 12, left: 0, bottom: 24, right: 0)
         view.textContainer.lineFragmentPadding = 0
+        view.textLayoutManager?.delegate = glyphLayout
         // Smart punctuation would corrupt Markdown: "--" to a dash, straight quotes to curly ones.
         view.smartQuotesType = .no
         view.smartDashesType = .no

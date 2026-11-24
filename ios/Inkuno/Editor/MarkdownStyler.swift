@@ -6,8 +6,9 @@ import UIKit
 ///
 /// Markers are the syntax characters of `StyleBit.marker` and the block markers of the layout. Off the
 /// caret line, or with the setting off, they are hidden: 0.01 pt font, clear colour, no background. On the
-/// caret line they show in `faint`. A bullet or task marker keeps its first character, drawn as a disc or a
-/// box by a text attachment on that character, so the stored text does not change.
+/// caret line they show in `faint`. A bullet or task marker keeps its first character, clear, with a kern for
+/// its slot; `MarkdownLayoutFragment` draws the disc or the box there, so the stored text does not change.
+/// A table block off the caret is drawn as a grid (`styleTable`).
 struct MarkdownStyler {
     /// Font size of a hidden marker. Zero would collapse the glyph and confuse the caret.
     static let hiddenFontSize: CGFloat = 0.01
@@ -29,9 +30,25 @@ struct MarkdownStyler {
                revealedLines: Set<Int> = []) {
         let text = NSString(string: storage.string)
         storage.beginEditing()
-        for index in lines where layouts.indices.contains(index) {
-            let live = revealedLines.contains(index) || (index == caretLine && showMarkersOnCaretLine)
-            styleLine(layouts[index], text: text, storage: storage, live: live)
+        var done: Set<Int> = []
+        for index in lines where layouts.indices.contains(index) && !done.contains(index) {
+            if layouts[index].kind == .table {
+                // A table is styled as a whole: its columns are padded to the widest cell of each column.
+                let block = layouts.tableBlock(containing: index)
+                done.formUnion(block)
+                let live = block.contains { revealedLines.contains($0) }
+                    || (showMarkersOnCaretLine && caretLine.map { block.contains($0) } == true)
+                for line in block {
+                    styleLine(layouts[line], text: text, storage: storage, live: live)
+                }
+                if !live {
+                    styleTable(block, layouts: layouts, text: text, storage: storage)
+                }
+            } else {
+                let live = revealedLines.contains(index) || (index == caretLine && showMarkersOnCaretLine)
+                styleLine(layouts[index], text: text, storage: storage, live: live)
+                done.insert(index)
+            }
         }
         storage.endEditing()
     }
@@ -84,7 +101,8 @@ struct MarkdownStyler {
             let isBlock = block.contains(index)
             if index == glyph && !live {
                 let range = NSRange(location: line.startUTF16 + index, length: 1)
-                storage.addAttributes(glyphAttributes(for: line), range: range)
+                let character = (lineText as NSString).substring(with: NSRange(location: index, length: 1))
+                storage.addAttributes(glyphAttributes(for: line, character: character), range: range)
                 index += 1
                 continue
             }
@@ -171,6 +189,8 @@ struct MarkdownStyler {
     private func baseAttributes(for line: LineLayout) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineHeightMultiple = Self.lineHeightMultiple
+        // ponytail: a table line is clipped at the edge, not wrapped, so its columns keep their alignment.
+        paragraph.lineBreakMode = line.kind == .table ? .byClipping : .byWordWrapping
         var attributes: [NSAttributedString.Key: Any] = [
             .font: lineFont(line).font(),
             .foregroundColor: lineColor(line),
@@ -246,61 +266,163 @@ struct MarkdownStyler {
 
     // MARK: Bullet and task glyphs
 
-    /// The character of a bullet or task marker while the line is not live: clear text, with an attachment
-    /// that draws the disc or the box.
-    private func glyphAttributes(for line: LineLayout) -> [NSAttributedString.Key: Any] {
-        let attachment = NSTextAttachment()
-        let slot = textSize * (line.kind == .bullet ? 1.0 : 1.3)
-        let image = glyphImage(for: line.kind, width: slot)
-        attachment.image = image
-        // The image sits from 0.2 em below the baseline to 0.8 em above it.
-        attachment.bounds = CGRect(x: 0, y: -0.2 * textSize, width: slot, height: textSize)
+    /// The attributes of the character of a bullet or task marker while the line is not live: clear, with the
+    /// glyph's slot as a kern (the character's own width is taken off), and the `.inkunoGlyph` mark that the
+    /// layout fragment draws over it.
+    private func glyphAttributes(for line: LineLayout, character: String) -> [NSAttributedString.Key: Any] {
+        guard let glyph = MarkdownGlyph(line.kind) else { return [:] }
+        let font = lineFont(line).font()
+        // The slot of a bullet is one em, of a task box 1.3 em, as in the prototype.
+        let slot = textSize * (glyph == .bullet ? 1.0 : 1.3)
+        let width = (character as NSString).size(withAttributes: [.font: font]).width
         return [
-            .font: lineFont(line).font(),
+            .font: font,
             .foregroundColor: UIColor.clear,
-            .attachment: attachment,
+            .inkunoGlyph: NSNumber(value: glyph.rawValue),
+            .kern: slot - width,
         ]
     }
 
-    private func glyphImage(for kind: LineKind, width: CGFloat) -> UIImage {
-        let size = CGSize(width: width, height: textSize)
-        let ink = color(InkColor.ink)
-        let accent = color(InkColor.accent)
-        let soft = color(InkColor.soft)
-        let white = UIColor.white
-        let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { _ in
-            if kind == .bullet {
-                // The centre sits 0.26 em above the baseline, which is 0.54 em from the top of the image.
-                let diameter = textSize * 0.36
-                let rect = CGRect(x: (width - diameter) / 2, y: textSize * 0.54 - diameter / 2,
-                                  width: diameter, height: diameter)
-                ink.setFill()
-                UIBezierPath(ovalIn: rect).fill()
-                return
+    // MARK: Tables
+
+    /// A table block off the caret line, drawn as a grid. The delimiter row (`| --- |`) collapses, and the outer
+    /// pipes are hidden. Each inner pipe is clear and keeps one character of width; its kern pads the cell before
+    /// it to the widest cell of its column, so the columns line up in the table's monospace font. The header row
+    /// is semibold on the header background, and each row has a rule under it.
+    // ponytail: the padding counts visible characters, so a wide character (CJK, emoji) or a smaller inline code
+    // span misaligns its column. Lines are clipped at the edge of the text view: a wide table is cut off and
+    // cannot be scrolled, and cells are not editable in v1 (the caret on the table shows its raw Markdown).
+    private func styleTable(_ block: ClosedRange<Int>, layouts: [LineLayout], text: NSString, storage: NSMutableAttributedString) {
+        struct Row {
+            let index: Int
+            /// UTF-16 start of the line in the storage, and the line's units without the line break.
+            let start: Int
+            let units: [UInt16]
+            /// Characters that are hidden markers (`**`, a link's address…), which take no room.
+            let hidden: [Bool]
+            let pipes: [Int]
+            let isDelimiter: Bool
+        }
+
+        var rows: [Row] = []
+        for index in block {
+            let line = layouts[index]
+            let full = NSRange(location: line.startUTF16, length: line.lenUTF16)
+            guard NSMaxRange(full) <= text.length else { continue }
+            var length = line.lenUTF16
+            if length > 0, text.character(at: NSMaxRange(full) - 1) == 10 {
+                length -= 1
             }
-            guard case .task(let checked) = kind else { return }
-            // The box is centred 0.36 em above the baseline, which is 0.44 em from the top.
-            let side = textSize * 0.85
-            let box = CGRect(x: 0, y: textSize * 0.44 - side / 2, width: side, height: side)
-            let corner = UIBezierPath(roundedRect: box, cornerRadius: textSize * 0.15)
-            if checked {
-                accent.setFill()
-                corner.fill()
-                let tick = UIBezierPath()
-                tick.move(to: CGPoint(x: box.minX + side * 0.24, y: box.minY + side * 0.52))
-                tick.addLine(to: CGPoint(x: box.minX + side * 0.42, y: box.minY + side * 0.70))
-                tick.addLine(to: CGPoint(x: box.minX + side * 0.76, y: box.minY + side * 0.30))
-                white.setStroke()
-                tick.lineWidth = max(1, side * 0.12)
-                tick.lineCapStyle = .round
-                tick.lineJoinStyle = .round
-                tick.stroke()
-            } else {
-                soft.setStroke()
-                corner.lineWidth = 1.2
-                corner.stroke()
+            let lineText = text.substring(with: NSRange(location: line.startUTF16, length: length))
+            let units = Array(lineText.utf16)
+            var hidden = [Bool](repeating: false, count: units.count)
+            for run in provider.styleRuns(line: lineText) where run.bits & (StyleBit.marker | StyleBit.quiet) != 0 {
+                let low = max(0, run.startUTF16)
+                let high = min(units.count, run.startUTF16 + run.lenUTF16)
+                guard low < high else { continue }
+                for unit in low..<high {
+                    hidden[unit] = true
+                }
+            }
+            rows.append(Row(
+                index: index,
+                start: line.startUTF16,
+                units: units,
+                hidden: hidden,
+                pipes: units.indices.filter { units[$0] == Self.pipe },
+                isDelimiter: Self.isDelimiter(lineText)
+            ))
+        }
+        guard !rows.isEmpty else { return }
+
+        let tableFont = lineFont(layouts[block.lowerBound]).font()
+        let advance = ("0" as NSString).size(withAttributes: [.font: tableFont]).width
+        let clear = UIColor.clear
+        let hiddenAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: Self.hiddenFontSize),
+            .foregroundColor: clear,
+        ]
+
+        /// The cells of a row: the spans between its pipes, the first before the first pipe, the last after the last.
+        func spans(_ row: Row) -> [Range<Int>] {
+            var result: [Range<Int>] = []
+            var start = 0
+            for pipe in row.pipes {
+                result.append(start..<pipe)
+                start = pipe + 1
+            }
+            result.append(start..<row.units.count)
+            return result
+        }
+        func visibleWidth(_ row: Row, _ span: Range<Int>) -> Int {
+            span.filter { !row.hidden[$0] }.count
+        }
+        /// An outer pipe: nothing but spaces lies between it and the line's edge.
+        func isOuter(_ row: Row, pipe: Int, first: Bool) -> Bool {
+            let rest = first ? row.units[..<pipe] : row.units[(pipe + 1)...]
+            return rest.allSatisfy { $0 == 32 || $0 == 9 }
+        }
+
+        var widths: [Int] = []
+        for row in rows where !row.isDelimiter {
+            for (column, span) in spans(row).enumerated() {
+                if column == widths.count { widths.append(0) }
+                widths[column] = max(widths[column], visibleWidth(row, span))
             }
         }
+
+        // The header is the first row when the second is the delimiter row.
+        let header = rows.count > 1 && rows[1].isDelimiter ? rows[0].index : nil
+        for row in rows {
+            let lineRange = NSRange(location: row.start, length: row.units.count)
+            if row.isDelimiter {
+                // The whole line, its break too: a collapsed line takes no height.
+                let whole = NSRange(location: row.start, length: min(row.units.count + 1, storage.length - row.start))
+                storage.addAttributes(hiddenAttributes, range: whole)
+                continue
+            }
+            if row.index == header {
+                storage.addAttribute(.backgroundColor, value: color(InkColor.tableHeader), range: lineRange)
+                // Semibold, keeping each run's size and the hidden markers hidden.
+                var runs: [(NSRange, UIFont)] = []
+                storage.enumerateAttribute(.font, in: lineRange) { value, range, _ in
+                    if let font = value as? UIFont, font.pointSize >= 0.1 { runs.append((range, font)) }
+                }
+                for (range, font) in runs {
+                    storage.addAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: font.pointSize, weight: .semibold), range: range)
+                }
+            }
+            storage.addAttributes([
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .underlineColor: color(InkColor.tableLine),
+            ], range: lineRange)
+
+            let cells = spans(row)
+            let last = row.pipes.count - 1
+            for (column, pipe) in row.pipes.enumerated() {
+                let range = NSRange(location: row.start + pipe, length: 1)
+                let outerLeading = column == 0 && isOuter(row, pipe: pipe, first: true)
+                let outerTrailing = column == last && isOuter(row, pipe: pipe, first: false)
+                if outerLeading || outerTrailing {
+                    storage.addAttributes(hiddenAttributes, range: range)
+                    continue
+                }
+                // The pipe after cell `column` takes the cell's padding.
+                let padding = column < cells.count ? widths[column] - visibleWidth(row, cells[column]) : 0
+                var attributes: [NSAttributedString.Key: Any] = [.font: tableFont, .foregroundColor: clear]
+                if padding > 0 {
+                    attributes[.kern] = CGFloat(padding) * advance
+                }
+                storage.addAttributes(attributes, range: range)
+            }
+        }
+    }
+
+    private static let pipe: UInt16 = 124
+
+    /// A delimiter row: dashes, colons, pipes and spaces, with at least one dash.
+    private static func isDelimiter(_ line: String) -> Bool {
+        let body = line.filter { !" \t|".contains($0) }
+        return body.contains("-") && body.allSatisfy { $0 == "-" || $0 == ":" }
     }
 }

@@ -110,3 +110,18 @@ extension Array where Element == LineLayout {
         return low
     }
 }
+
+extension Array where Element == LineLayout {
+    /// The lines of the table block that holds line `index` (a table line): the run of table lines around it.
+    func tableBlock(containing index: Int) -> ClosedRange<Int> {
+        var low = index
+        var high = index
+        while low > 0, self[low - 1].kind == .table {
+            low -= 1
+        }
+        while high < count - 1, self[high + 1].kind == .table {
+            high += 1
+        }
+        return low...high
+    }
+}
