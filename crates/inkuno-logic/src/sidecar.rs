@@ -42,7 +42,8 @@ pub fn parse(text: &str) -> Vec<Entry> {
 }
 
 /// The text of a list file (version 2), with the line break that ends it. The keys are written in
-/// the order `serde_json` gives them, as the app always wrote them.
+/// the order `serde_json` gives them (insertion order when a dependency turns on its
+/// `preserve_order` feature, sorted otherwise); readers do not depend on it.
 pub fn render(entries: &[Entry]) -> String {
     let changes: Vec<Value> = entries
         .iter()
@@ -93,7 +94,10 @@ mod tests {
     #[test]
     fn the_file_is_version_2_with_a_line_break_at_the_end() {
         let text = render(&[entry(1)]);
-        assert!(text.starts_with("{\n  \"changes\": ["));
+        // The key order follows serde_json's `preserve_order` feature, which the desktop build
+        // turns on through its dependencies and the iOS core does not: check the shape only.
+        assert!(text.starts_with("{\n  \""));
+        assert!(text.contains("\"changes\": ["));
         assert!(text.contains("\"version\": 2"));
         assert!(text.contains("\"orphan_since\": null"));
         assert!(text.ends_with("}\n"));
