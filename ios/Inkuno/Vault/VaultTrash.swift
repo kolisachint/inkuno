@@ -53,17 +53,12 @@ extension VaultStore {
         (try? trashedNotes().count) ?? 0
     }
 
-    /// The original folder of a trashed note: the vault root (the trash does not keep where the
-    /// note came from). Used only for display ("in Notes").
+    /// The folder a trashed note shows under its title: the vault root, labelled "Notes" as the tree labels it.
+    /// The trash keeps no record of where a note came from (the desktop's does not either), and Restore puts
+    /// the note back at the root.
+    // ponytail: a note's own folder is not kept in the trash, so every trashed note shows the root.
     func trashOrigin(of url: URL) -> String {
-        guard let root = vaultURL else { return "" }
-        let stem = url.deletingPathExtension().lastPathComponent
-        let sibling = root.appendingPathComponent(url.lastPathComponent)
-        if !FileManager.default.fileExists(atPath: sibling.path),
-           stem == url.deletingPathExtension().lastPathComponent {
-            return root.lastPathComponent
-        }
-        return root.lastPathComponent
+        "Notes"
     }
 
     /// Moves the note or folder to the vault's trash under a free name: `Name.md`, then
