@@ -571,3 +571,64 @@ fn a_failed_debounced_save_keeps_the_text_for_the_next_save(cx: &mut TestAppCont
     );
     let _ = fs::remove_dir_all(root);
 }
+
+/// A heading renamed while the note that links to it has typed text and its background save is pending:
+/// the link is rewritten on disk, and the text typed in the linking note survives, on disk and in its
+/// pane.
+#[gpui::test]
+fn a_heading_rename_keeps_the_text_typed_in_the_note_that_links_to_it(cx: &mut TestAppContext) {
+    let (root, shell, cx, _config) = start(cx, "heading-typing");
+    let a = root.join("A.md");
+    let b = root.join("B.md");
+    fs::write(&a, "# A\n\n## X\n\nbody\n").unwrap();
+    fs::write(&b, "# B\n\nsee [[A#X]]\n").unwrap();
+    shell.update(cx, |s, cx| s.rescan(&root, cx));
+    open(&shell, cx, &a);
+    shell.update_in(cx, |s, window, cx| {
+        assert!(s.add_pane(Side::Right, window, cx));
+    });
+    open(&shell, cx, &b);
+    // Typed on the line of the link: the rewrite must not look like another program's change.
+    let after_link = shell.read_with(cx, |s, cx| {
+        s.pane().editor.read(cx).text().find("[[A#X]]").unwrap() + "[[A#X]]".len()
+    });
+    shell.update(cx, |s, cx| {
+        s.pane()
+            .editor
+            .update(cx, |e, cx| e.set_view(after_link, 0., cx))
+    });
+    cx.simulate_input(" tapé");
+    shell.update_in(cx, |s, window, cx| s.focus_pane(0, window, cx));
+    let at = shell.read_with(cx, |s, cx| {
+        s.pane().editor.read(cx).text().find("## X").unwrap() + "## X".len()
+    });
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.set_view(at, 0., cx))
+    });
+    cx.simulate_keystrokes("backspace");
+    cx.simulate_input("Y");
+    // The pause ends for both notes: their background saves are queued, and do not run before the
+    // heading is saved on the UI thread (no input or `run_until_parked` in between).
+    shell.update(cx, |s, cx| s.flush_debounced(cx));
+    assert!(shell.read_with(cx, |s, _| s.panes[1].saving.is_some()));
+    shell.update(cx, |s, cx| {
+        s.in_pane(0, |t| t.flush_one(cx));
+    });
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+
+    assert_eq!(fs::read_to_string(&a).unwrap(), "# A\n\n## Y\n\nbody\n");
+    let disk = fs::read_to_string(&b).unwrap();
+    assert_eq!(disk, "# B\n\nsee [[A#Y]] tapé\n");
+    let shown = shell.read_with(cx, |s, cx| s.panes[1].editor.read(cx).text().to_string());
+    assert_eq!(shown, disk);
+    assert!(shell.read_with(cx, |s, _| !s.panes[1].dirty));
+    // Nothing is set aside as a sync conflict.
+    let copies: Vec<_> = fs::read_dir(&root)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .filter(|name| name.contains("conflict"))
+        .collect();
+    assert!(copies.is_empty(), "{copies:?}");
+    let _ = fs::remove_dir_all(root);
+}

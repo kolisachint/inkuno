@@ -517,6 +517,12 @@ impl Shell {
     pub(super) fn apply_links(&mut self, plan: LinkPlan, cx: &mut Context<Self>) -> bool {
         let mut changed = Vec::new();
         let mut missed = false;
+        let posts: Vec<PathBuf> = plan
+            .notes
+            .iter()
+            .map(|&index| plan.scan.notes[index].post.clone())
+            .collect();
+        self.flush_panes_showing(&posts, cx);
         for index in plan.notes {
             let note = &plan.scan.notes[index];
             let path = &note.post;
@@ -534,7 +540,11 @@ impl Shell {
                 continue;
             };
             // The text as the editor shows it goes back as the file and its pending changes beside it.
-            if platform::sidecar::save(home.as_ref(), path, &text, "").is_ok() {
+            let written = {
+                let _guard = platform::vault::save_lock();
+                platform::sidecar::save(home.as_ref(), path, &text, "")
+            };
+            if written.is_ok() {
                 if let Some(note) = self.notes.iter_mut().find(|n| n.path == *path) {
                     let disk = fs::read_to_string(path).unwrap_or_default();
                     (note.tags, note.links) = Note::index(&disk);
@@ -604,6 +614,24 @@ impl Shell {
         refused
     }
 
+    /// Settles and saves the panes that show one of `paths`, before those notes are written on disk: a
+    /// background save of one is settled and its typed text saved (`flush_one`), so that the rewrite
+    /// reads the text the pane holds and the pane is reloaded without losing it. Never called with
+    /// `save_lock` held: `flush_one` takes it.
+    fn flush_panes_showing(&mut self, paths: &[PathBuf], cx: &mut Context<Self>) {
+        for pane in 0..self.panes.len() {
+            if self.panes[pane]
+                .path
+                .as_ref()
+                .is_some_and(|path| paths.contains(path))
+            {
+                self.in_pane(pane, |this| {
+                    this.flush_one(cx);
+                });
+            }
+        }
+    }
+
     /// A heading of the note was renamed (the same headings but one, which reads differently): the links
     /// of the other notes that point at it, `[[Note#old]]` and `![[Note#old]]`, now point at the new one.
     // ponytail: synchronous rewrite, limited to the notes the index says link to this one, like `relink`;
@@ -626,6 +654,13 @@ impl Shell {
             return;
         }
         let (name, key) = (vault::stem(path), vault::stem(path).to_lowercase());
+        let linking: Vec<PathBuf> = self
+            .notes
+            .iter()
+            .filter(|n| n.path != path && n.links.contains(&key))
+            .map(|n| n.path.clone())
+            .collect();
+        self.flush_panes_showing(&linking, cx);
         let mut rewritten = Vec::new();
         for note in self
             .notes
@@ -635,12 +670,21 @@ impl Shell {
             // Written as the editor shows the note, so its pending changes stay placed. A rewrite that
             // would change a pending change is left out, as `apply_links` leaves it.
             let home = platform::revisions::home_of(&note.path, self.vault.as_deref());
-            let saved = platform::sidecar::edit(home.as_ref(), &note.path, "", |shown| {
-                let (text, count) = wiki::rename_heading(shown, &name, was.1.trim(), now.1.trim());
-                let refused = logic::pending::rewrite_refused(shown, &text)
-                    || platform::sidecar::rewrite_unplaces(home.as_ref(), &note.path, shown, &text);
-                (count > 0 && !refused).then_some(text)
-            });
+            let saved = {
+                let _guard = platform::vault::save_lock();
+                platform::sidecar::edit(home.as_ref(), &note.path, "", |shown| {
+                    let (text, count) =
+                        wiki::rename_heading(shown, &name, was.1.trim(), now.1.trim());
+                    let refused = logic::pending::rewrite_refused(shown, &text)
+                        || platform::sidecar::rewrite_unplaces(
+                            home.as_ref(),
+                            &note.path,
+                            shown,
+                            &text,
+                        );
+                    (count > 0 && !refused).then_some(text)
+                })
+            };
             if let Ok(true) = saved {
                 let disk = fs::read_to_string(&note.path).unwrap_or_default();
                 (note.tags, note.links) = Note::index(&disk);
