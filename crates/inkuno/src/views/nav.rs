@@ -78,8 +78,9 @@ pub enum Mode {
     Outline,
     /// Scratch notes: the ones not filed in the vault yet, newest first.
     Scratch,
-    /// Comments: the comments of the note as cards, a view of the right panel (`shell/comments.rs`).
-    Comments,
+    /// Review: the comments and pending changes of the note as one feed, a view of the right panel
+    /// (`shell/review.rs`). A layout file that names it `comments` still reads it.
+    Review,
     /// Versions: the saved versions of the note of the active tab, newest first; Enter compares one
     /// with the note as it is now (`shell/versions.rs`). A view of the right panel.
     Versions,
@@ -88,12 +89,7 @@ pub enum Mode {
 }
 
 /// The views of the right panel, in the order of its switcher. The panel shows one at a time.
-pub const VIEWS: [Mode; 4] = [
-    Mode::Outline,
-    Mode::Comments,
-    Mode::Versions,
-    Mode::Assistant,
-];
+pub const VIEWS: [Mode; 4] = [Mode::Outline, Mode::Review, Mode::Versions, Mode::Assistant];
 
 impl Mode {
     pub const ALL: [Mode; 8] = [
@@ -102,7 +98,7 @@ impl Mode {
         Mode::Search,
         Mode::Outline,
         Mode::Scratch,
-        Mode::Comments,
+        Mode::Review,
         Mode::Versions,
         Mode::Assistant,
     ];
@@ -115,13 +111,18 @@ impl Mode {
             Mode::Search => "search",
             Mode::Outline => "outline",
             Mode::Scratch => "scratch",
-            Mode::Comments => "comments",
+            Mode::Review => "review",
             Mode::Versions => "versions",
             Mode::Assistant => "assistant",
         }
     }
 
     pub fn named(name: &str) -> Option<Mode> {
+        // The view was called Comments before Review took its slot: an old layout file still reads it.
+        let name = match name {
+            "comments" => "review",
+            other => other,
+        };
         Mode::ALL.into_iter().find(|m| m.name() == name)
     }
 
@@ -130,7 +131,7 @@ impl Mode {
     pub fn left_banned(self) -> bool {
         matches!(
             self,
-            Mode::Outline | Mode::Comments | Mode::Versions | Mode::Assistant
+            Mode::Outline | Mode::Review | Mode::Versions | Mode::Assistant
         )
     }
 }
@@ -919,18 +920,19 @@ mod tests {
         assert_eq!((old.mode, old.panel), (Mode::Recent, Panel::Hidden));
         assert_eq!(read_layout("recent hidden 410\n").panel, Panel::Hidden);
         // A closed panel keeps the view it last showed; an open one shows it.
-        let closed = read_layout("tree split 410 view=comments\n");
+        let closed = read_layout("tree split 410 view=review\n");
         assert_eq!(
             (closed.right_view, closed.right_shown.is_empty()),
-            (Mode::Comments, true)
+            (Mode::Review, true)
         );
-        let open = read_layout("tree split 410 view=comments show=assistant\n");
+        let open = read_layout("tree split 410 view=review show=assistant\n");
         assert_eq!(
             (open.right_view, open.right_shown.clone()),
             (Mode::Assistant, vec![Mode::Assistant])
         );
         assert_eq!(Mode::named("assistant"), Some(Mode::Assistant));
-        assert_eq!(Mode::named("comments"), Some(Mode::Comments));
+        assert_eq!(Mode::named("comments"), Some(Mode::Review));
+        assert_eq!(Mode::named("review"), Some(Mode::Review));
     }
 
     #[test]

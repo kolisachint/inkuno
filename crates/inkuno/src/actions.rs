@@ -47,7 +47,7 @@ actions!(
         AssistantImprove,
         ToggleOutline,
         ShowOutlineView,
-        ShowCommentsView,
+        ShowReviewView,
         ShowAssistantView,
         ToggleRightPanel,
         CloseHelp,

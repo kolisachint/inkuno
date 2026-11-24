@@ -73,6 +73,9 @@ pub(super) struct Pane {
     /// The changes of the note that its file text does not place (`Shell::count_unplaced_changes`),
     /// counted when the note is loaded, saved or discarded: the pill reads this, not the disk.
     pub(super) orphans: usize,
+    /// The pending changes saved beside the note (`sidecar::read`), read with `orphans`: they carry the
+    /// time each change was proposed, which the Review feed orders by.
+    pub(super) pending_saved: Vec<inkuno_logic::pending::Entry>,
     /// The note's file as last read or written here: what another program changed since is
     /// merged into what is typed (`Shell::take_outside`), not overwritten.
     pub(super) base: String,
@@ -222,6 +225,7 @@ impl Shell {
             fresh: false,
             dirty: false,
             orphans: 0,
+            pending_saved: Vec::new(),
             base: String::new(),
             listing: None,
             peek: false,

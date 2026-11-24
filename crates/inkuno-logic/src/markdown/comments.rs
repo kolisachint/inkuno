@@ -256,8 +256,8 @@ pub fn resolve(line: &str, at: usize) -> Option<String> {
     ))
 }
 
-/// `line`, a comment alone on it (indent aside), with its text replaced by `text`: its author, its
-/// time and its replies are kept. `None` when `line` is not such a comment.
+/// `line`, a comment alone on it (indent aside), with its text replaced by `text` (escaped as
+/// `format_comment` escapes it): its author, its time and its replies are kept. `None` when `line` is not such a comment.
 pub fn retext(line: &str, text: &str) -> Option<String> {
     let t = line.trim();
     if !opens_here(t) {
@@ -268,9 +268,25 @@ pub fn retext(line: &str, text: &str) -> Option<String> {
     Some(format!(
         "{HEAD}{}{}{}{HTML_CLOSE}",
         &inner[..first.start],
-        spaced(text),
+        escape(text),
         &inner[first.end..]
     ))
+}
+
+/// The markup of a comment in `whole`, a passage and its comment as `comments` gives them: from the
+/// opening of the comment to the end. `whole` itself when it holds no opening.
+pub fn markup_in(whole: &str) -> &str {
+    whole.rfind(HEAD).map_or(whole, |i| &whole[i..])
+}
+
+/// Where the text of `comment` starts in `format_comment(comment)`: past the opening, the author and
+/// the time when it has them, and the colon.
+pub fn said_offset(comment: &Comment) -> usize {
+    let stamp = match (&comment.author, &comment.time) {
+        (Some(author), Some(time)) => format!(" @{} {time}", clean_name(author)).len(),
+        _ => 0,
+    };
+    HEAD.len() + stamp + ": ".len()
 }
 
 /// Refusal of a comment text or passage that would break the marks: a comment cannot hold `-->`,
@@ -919,5 +935,35 @@ mod form_tests {
         assert_eq!(utc_minute(0), "1970-01-01T00:00Z");
         assert_eq!(utc_minute(1_000_000_000), "2001-09-09T01:46Z");
         assert_eq!(utc_minute(1_000_000_059), "2001-09-09T01:47Z");
+    }
+
+    #[test]
+    fn the_text_of_a_comment_starts_where_said_offset_says() {
+        let stamped = new_comment("x", ANA);
+        assert_eq!(&format_comment(&stamped)[said_offset(&stamped)..], "x -->");
+        let legacy = Comment {
+            text: "x".into(),
+            ..Comment::default()
+        };
+        assert_eq!(&format_comment(&legacy)[said_offset(&legacy)..], "x -->");
+    }
+
+    #[test]
+    fn the_markup_of_a_passage_is_the_comment_after_it() {
+        assert_eq!(
+            markup_in("passage<!-- comment: x -->"),
+            "<!-- comment: x -->"
+        );
+        assert_eq!(markup_in("plain text"), "plain text");
+    }
+
+    #[test]
+    fn retext_writes_an_arrow_escaped_so_that_it_is_not_a_reply() {
+        let line = "<!-- comment @Ana 2026-11-24T10:02Z: old -->";
+        let out = retext(line, "a ↳ b").unwrap();
+        let back = parse_comment(&out).unwrap();
+        assert_eq!(back.text, "a ↳ b");
+        assert!(back.replies.is_empty());
+        assert_eq!(back.author.as_deref(), Some("Ana"));
     }
 }

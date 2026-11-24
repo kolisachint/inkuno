@@ -455,8 +455,8 @@ pub fn catalog() -> Vec<(&'static str, &'static str, &'static str, Group)> {
             Go,
         ),
         (
-            "app::ShowCommentsView",
-            tr("Comments of the note", "Commentaires de la note"),
+            "app::ShowReviewView",
+            tr("Review of the note", "Relecture de la note"),
             "comment.svg",
             Go,
         ),

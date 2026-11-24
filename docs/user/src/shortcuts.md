@@ -80,10 +80,10 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Ctrl+P › assistant` | Assistant: show or hide its view of the right panel (Ctrl+Alt+4 shows it) |
-| `Ctrl+Alt+2` | Comments of the note: the right panel lists them as cards; a click on one shows its passage, Resolve closes it |
+| `Ctrl+Alt+2` | Review of the note: the right panel lists its comments and pending changes as one feed; a click on a card shows its passage, Resolve closes a comment |
 | `Ctrl+P › improve` | Assistant: improve the selection, or the whole note; the proposal comes back as pending changes |
 | `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right panel (also in the palette, as Outline of the note) |
-|  | Right panel: show or hide it, on the view it showed last (its switcher picks Outline, Comments, Versions or Assistant) |
+|  | Right panel: show or hide it, on the view it showed last (its switcher picks Outline, Review, Versions or Assistant) |
 | `Ctrl+B` | Sidebar: show or hide the side panel |
 | `F9` | Focus mode: the note alone, edge to edge, no bars or panels; F9 or Esc goes back |
 | `Ctrl+Shift+S` | Title bar: show or hide the bar the app draws (its buttons come back with it) |
@@ -218,7 +218,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | `Alt+click` | Add a cursor |
 | `Ctrl+K` | Link: \[text\](address) from the selection; on a link, change its address |
 | `Ctrl+Shift+M` | Comment the selection or the line (in a table: the cell, or the taken row, column or table); on a comment, resolve it |
-| `Ctrl+P › comments` | Comments: show their panel, jump to one (a badge on the speech bubble counts them) |
+| `Ctrl+P › review` | Review: show the note's feed of comments and pending changes, jump to one (a badge on the speech bubble counts them) |
 | Right click | Menu of the note: link, comment, cut, copy, paste, bold, italic |
 | `Ctrl+C` | Copy |
 | `Ctrl+X` | Cut |

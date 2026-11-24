@@ -57,37 +57,44 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_input("X");
     assert_eq!((text(cx).matches('X').count(), cursors(cx)), (2, 2));
     cx.simulate_keystrokes("escape");
-    // Comments: Ctrl+Shift+M comments the selection (without one, the line, after its bullet),
-    // the palette lists them and leads there, the same shortcut on a comment resolves it.
+    // Comments: Ctrl+Shift+M comments the selection (without one, the line, after its bullet), the
+    // same shortcut on a comment resolves it. A comment is written with its author and the minute it was
+    // written (`@Ana 2026-…Z`; `without_clock` shows the minute as `<T>`).
+    shell.update(cx, |s, _| s.prefs.author = "Ana".into());
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
     j.load(cx, "- un mot ici\nfin", 5);
     cx.simulate_keystrokes("shift-right shift-right shift-right secondary-shift-m");
     // The text goes to the draft card's field; Enter writes it into the note (RP-19/20).
     cx.simulate_input("à revoir");
     cx.simulate_keystrokes("enter");
-    assert_eq!(text(cx), "- un mot<!-- comment: à revoir --> ici\nfin");
+    assert_eq!(
+        without_clock(&text(cx)),
+        "- un mot<!-- comment @Ana <T>: à revoir --> ici\nfin"
+    );
     cx.simulate_keystrokes("down secondary-shift-m");
     cx.simulate_input("ok");
     cx.simulate_keystrokes("enter");
     assert_eq!(
-        text(cx),
-        "- un mot<!-- comment: à revoir --> ici\nfin<!-- comment: ok -->"
+        without_clock(&text(cx)),
+        "- un mot<!-- comment @Ana <T>: à revoir --> ici\nfin<!-- comment @Ana <T>: ok -->"
     );
-    // The Comments view of the right panel: Ctrl+Alt+2 shows it, one card per comment. A click on a card
-    // leads into its comment and flashes its passage (selected for a moment, then the caret goes to the
-    // comment); its check mark resolves it. The palette still lists the comments and leads there.
+    // The Review view of the right panel: Ctrl+Alt+2 shows it, one card per item of the feed. A click on a
+    // card leads into its comment and flashes its passage (selected for a moment, then the caret goes to
+    // the comment's words).
     cx.simulate_keystrokes("secondary-alt-2");
     for _ in 0..3 {
         cx.update(|window, _| window.refresh());
         cx.run_until_parked();
     }
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()
-        && s.nav.right_shown == [Mode::Comments]
-        && s.comment_cards.len() == 2));
+        && s.nav.right_shown == [Mode::Review]
+        && s.review_items.len() == 2));
     // Click the first card itself, wherever the view lays it out. A pointer hovers first, as in
     // production, and the click lands on the card's lower body.
     let card = cx
-        .debug_bounds("comment-0")
-        .expect("the comments view shows its first card");
+        .debug_bounds("review-card-0")
+        .expect("the review shows its first card");
     cx.simulate_mouse_move(
         point(card.left() + px(24.), card.bottom() - px(18.)),
         None,
@@ -95,8 +102,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     );
     cx.run_until_parked();
     let card = cx
-        .debug_bounds("comment-0")
-        .expect("the comments view shows its first card");
+        .debug_bounds("review-card-0")
+        .expect("the review shows its first card");
     cx.simulate_click(card.center(), gpui::Modifiers::none());
     cx.run_until_parked();
     // The passage "un mot" (2..8, after the bullet) is selected: the flash. Then the caret goes to the comment's words.
@@ -109,34 +116,38 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
         .advance_clock(std::time::Duration::from_secs(1));
     cx.run_until_parked();
     let pos = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
-    assert_eq!(pos, "- un mot<!-- comment: ".len());
+    // `<!-- comment @Ana ` and a minute of 17 bytes, then the colon and its space.
+    assert_eq!(pos, "- un mot<!-- comment @Ana 0000-00-00T00:00Z: ".len());
+    // Resolve (the second comment, on its line): its markup goes, its passage stays; undo brings it back.
+    let fin = text(cx).find("fin").unwrap() + 1;
     shell.update(cx, |s, cx| {
         s.pane()
             .editor
-            .update(cx, |e, cx| e.resolve_comment(40, cx))
+            .update(cx, |e, cx| e.resolve_comment(fin, cx))
     });
-    assert_eq!(text(cx), "- un mot<!-- comment: à revoir --> ici\nfin");
-    cx.simulate_keystrokes("secondary-z");
-    // The view marks the comment under the caret, and none elsewhere.
-    let seen = |cx: &mut gpui::VisualTestContext, at: usize| {
-        shell.update(cx, |s, cx| {
-            s.pane().editor.update(cx, |e, cx| e.place_cursor(at, cx))
-        });
-        cx.run_until_parked();
-        shell.read_with(cx, |s, _| s.comments_seen)
-    };
     assert_eq!(
-        (seen(cx, 40), seen(cx, 36), seen(cx, 8)),
-        (Some(1), None, Some(0))
+        without_clock(&text(cx)),
+        "- un mot<!-- comment @Ana <T>: à revoir --> ici\nfin"
     );
-    // Resolved by the keys (the editor keeps Tab, so the shortcut is the way), and undone.
+    cx.simulate_keystrokes("secondary-z");
+    assert_eq!(
+        without_clock(&text(cx)),
+        "- un mot<!-- comment @Ana <T>: à revoir --> ici\nfin<!-- comment @Ana <T>: ok -->"
+    );
+    // The keys resolve the comment under the caret (the first one, at its passage), and undo brings it back.
+    shell.update(cx, |s, cx| {
+        s.pane().editor.update(cx, |e, cx| e.place_cursor(8, cx))
+    });
     cx.simulate_keystrokes("secondary-shift-m");
     cx.run_until_parked();
-    assert_eq!(text(cx), "- un mot ici\nfin<!-- comment: ok -->");
+    assert_eq!(
+        without_clock(&text(cx)),
+        "- un mot ici\nfin<!-- comment @Ana <T>: ok -->"
+    );
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(
-        text(cx),
-        "- un mot<!-- comment: à revoir --> ici\nfin<!-- comment: ok -->"
+        without_clock(&text(cx)),
+        "- un mot<!-- comment @Ana <T>: à revoir --> ici\nfin<!-- comment @Ana <T>: ok -->"
     );
     // The note's corner badge opens the view on the caret's card; the band's toggle hides the panel,
     // and shows it again on the same view.
@@ -156,17 +167,17 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     let at = cx.debug_bounds("comments-badge").unwrap().center();
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| s.nav.right_shown == [Mode::Comments]));
+    assert!(shell.read_with(cx, |s, _| s.nav.right_shown == [Mode::Review]));
     shell.update_in(cx, |s, window, cx| s.toggle_right_panel(window, cx));
     cx.run_until_parked();
     assert!(shell.read_with(cx, |s, _| s.nav.right_shown.is_empty()
-        && s.nav.right_view == Mode::Comments));
+        && s.nav.right_view == Mode::Review));
     shell.update_in(cx, |s, window, cx| s.toggle_right_panel(window, cx));
     cx.run_until_parked();
-    assert!(shell.read_with(cx, |s, _| s.nav.right_shown == [Mode::Comments]));
+    assert!(shell.read_with(cx, |s, _| s.nav.right_shown == [Mode::Review]));
     // The palette lists the comments and leads to the one named.
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("comments");
+    cx.simulate_input("review");
     // The matching command is the first row (P-09 puts Create last), so no `down`.
     cx.simulate_keystrokes("enter");
     cx.simulate_input("revoir");
@@ -175,11 +186,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(shell.read_with(cx, |s, cx| s.palette.is_none()
         && s.pane().editor.read(cx).position() == "- ".len()));
     cx.simulate_keystrokes("secondary-shift-m");
-    assert_eq!(text(cx), "- un mot ici\nfin<!-- comment: ok -->");
+    assert_eq!(
+        without_clock(&text(cx)),
+        "- un mot ici\nfin<!-- comment @Ana <T>: ok -->"
+    );
     cx.simulate_keystrokes("secondary-z");
     assert_eq!(
-        text(cx),
-        "- un mot<!-- comment: à revoir --> ici\nfin<!-- comment: ok -->"
+        without_clock(&text(cx)),
+        "- un mot<!-- comment @Ana <T>: à revoir --> ici\nfin<!-- comment @Ana <T>: ok -->"
     );
     // The badge at its limits: one comment or a hundred and twenty. It stays in the window, away from the
     // band's toggle, and its size does not change.
@@ -252,7 +266,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             "{part} overflows {zone}: {part_at:?} outside {zone_at:?}"
         );
     };
-    lay(cx, 860., Mode::Comments, Panel::Split);
+    lay(cx, 860., Mode::Review, Panel::Split);
     let (dock, pane) = (
         cx.debug_bounds("dock-right").unwrap(),
         cx.debug_bounds("pane-0").unwrap(),
@@ -264,14 +278,14 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(pane.size.width >= px(199.), "{pane:?}");
     // The view's cards and its name sit inside the panel, at every width.
     for width in [420., 860., 1600.] {
-        lay(cx, width, Mode::Comments, Panel::Split);
+        lay(cx, width, Mode::Review, Panel::Split);
         // At 420 px the window is too narrow for the dock beside the note: it is not drawn (gpui no longer
         // keeps the bounds of the earlier, wider layout, which this loop used to read back).
         let Some(dock) = cx.debug_bounds("dock-right") else {
             assert!(width < 860., "{width}: dock absent");
             continue;
         };
-        for id in ["comment-0", "comment-1", "view-head-comments"] {
+        for id in ["review-card-0", "review-card-1", "view-head-review"] {
             let card = cx
                 .debug_bounds(id)
                 .unwrap_or_else(|| panic!("{width}: {id} absent"));
@@ -281,7 +295,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
             );
         }
     }
-    lay(cx, 420., Mode::Comments, Panel::Split);
+    lay(cx, 420., Mode::Review, Panel::Split);
     cx.simulate_keystrokes("secondary-f");
     cx.run_until_parked();
     within(cx, "find-bar", "pane-0");
@@ -296,7 +310,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.run_until_parked();
     j.load(cx, "rien", 0);
     cx.simulate_keystrokes("secondary-p");
-    cx.simulate_input("comments");
+    cx.simulate_input("review");
     cx.simulate_keystrokes("enter");
     assert!(shell.read_with(cx, |s, _| s.palette.is_none()
         && s.told(Tone::Info, "has no comments")));

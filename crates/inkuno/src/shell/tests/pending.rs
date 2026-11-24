@@ -283,7 +283,7 @@ fn an_outside_change_with_a_pending_change_still_applies(cx: &mut TestAppContext
 }
 
 #[gpui::test]
-fn the_hint_counts_the_changes_and_moves_the_caret(cx: &mut TestAppContext) {
+fn the_hint_counts_the_changes_and_opens_the_review_on_the_first(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = open_note("pending-hint", TWO, cx);
     assert!(
         cx.debug_bounds("pending-hint").is_some(),
@@ -292,11 +292,15 @@ fn the_hint_counts_the_changes_and_moves_the_caret(cx: &mut TestAppContext) {
     let at = cx.debug_bounds("pending-hint").expect("drawn").center();
     cx.simulate_click(at, gpui::Modifiers::none());
     settle(cx);
-    let caret = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).position());
+    // The click routes to the Review feed: its first change is expanded, its passage selected.
+    assert!(
+        shell.read_with(cx, |s, _| s.nav.right_shown == [nav::Mode::Review]
+            && matches!(s.review_open, Some(crate::shell::review::Key::Change(_))))
+    );
+    let selected = shell.read_with(cx, |s, cx| s.pane().editor.read(cx).selected().to_string());
     assert_eq!(
-        caret,
-        TWO.find("{--").unwrap(),
-        "the caret goes to the first change"
+        selected, "un\n",
+        "the added lines of the first change are selected"
     );
     let _ = fs::remove_dir_all(root);
 }

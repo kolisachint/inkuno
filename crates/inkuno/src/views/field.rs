@@ -169,8 +169,10 @@ impl EntityInputHandler for Field {
 }
 
 impl Render for Field {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
+        // The caret is drawn only in a focused field: an unfocused one shows its text alone.
+        let focused = self.focus.is_focused(window);
         let (focus, entity) = (self.focus.clone(), cx.entity());
         let input = canvas(
             |_, _, _| (),
@@ -179,7 +181,7 @@ impl Render for Field {
             },
         )
         .size_0();
-        let (shown, layout) = self.line.shown(t);
+        let (shown, layout) = self.line.shown_with(t, focused);
         self.layout = Some(layout.clone());
         let placed = layout.clone();
         let field = div()

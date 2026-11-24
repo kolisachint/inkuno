@@ -13,21 +13,25 @@ impl Shell {
 
     /// Counts the orphans of the note in the pane from its list and its file, when it is loaded, saved
     /// or discarded, and when the file may have changed: the pill then reads the count, not the disk.
+    /// The list itself is kept beside it, for the Review feed (`pending_saved`).
     pub(super) fn count_unplaced_changes(&mut self) {
-        let count = self
+        let (saved, count) = self
             .pane()
             .path
             .as_deref()
             .and_then(|path| {
                 let home = platform::revisions::home_of(path, self.vault.as_deref())?;
-                if platform::sidecar::read(&home, path).is_empty() {
+                let saved = platform::sidecar::read(&home, path);
+                if saved.is_empty() {
                     return None;
                 }
                 let disk = std::fs::read_to_string(path).unwrap_or_default();
-                Some(platform::sidecar::unplaced(&home, path, &disk).len())
+                let count = platform::sidecar::unplaced(&home, path, &disk).len();
+                Some((saved, count))
             })
-            .unwrap_or(0);
+            .unwrap_or_default();
         self.pane_mut().orphans = count;
+        self.pane_mut().pending_saved = saved;
     }
 
     /// Discard: the orphans of the note in the pane leave its list beside it. The text is not touched,
@@ -54,8 +58,8 @@ impl Shell {
     }
 
     /// The hint at the note's foot, left of the corner buttons: "2 changes pending", and with orphans,
-    /// "1 suggestion could not be placed · Discard". A click on the changes moves the caret to the first
-    /// change; Discard removes the orphans. It is drawn over the text like the corner buttons, so no line moves.
+    /// "1 suggestion could not be placed · Discard". A click on the changes opens the Review feed on the
+    /// first change (`review_first_change`); Discard removes the orphans. It is drawn over the text like the corner buttons, so no line moves.
     pub(super) fn pending_hint(
         &self,
         count: usize,
@@ -128,9 +132,7 @@ impl Shell {
                 )
             })
             .on_click(cx.listener(|this, _, window, cx| {
-                let editor = this.pane().editor.clone();
-                editor.update(cx, |note, cx| note.go_to_first_change(cx));
-                window.focus(&editor.focus_handle(cx), cx);
+                this.review_first_change(window, cx);
                 cx.notify();
             }))
     }

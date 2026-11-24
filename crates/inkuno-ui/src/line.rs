@@ -278,6 +278,11 @@ impl Line {
 
     /// The text, its selection and its cursor; the layout is used to place the cursor on click.
     pub fn shown(&self, t: Theme) -> (gpui::Div, TextLayout) {
+        self.shown_with(t, true)
+    }
+
+    /// As `shown`; with `show_caret` false no caret is drawn (an unfocused field shows its text only).
+    pub fn shown_with(&self, t: Theme, show_caret: bool) -> (gpui::Div, TextLayout) {
         // An empty line keeps its height, and something to place the cursor.
         let text = if self.text.is_empty() {
             " ".to_string()
@@ -321,7 +326,7 @@ impl Line {
         let caret = canvas(|_, _, _| (), {
             let layout = layout.clone();
             move |_, _, window, _| {
-                if let Some(origin) = layout.position_for_index(at) {
+                if let Some(origin) = layout.position_for_index(at).filter(|_| show_caret) {
                     window.paint_quad(fill(
                         Bounds::new(origin, size(t.px(1.5), layout.line_height())),
                         t.accent,

@@ -283,9 +283,7 @@ impl Render for Shell {
                 this.show_view(Mode::Outline, window, cx)
             }))
             .on_action(
-                cx.listener(|this, _: &ShowCommentsView, window, cx| {
-                    this.show_comments(window, cx)
-                }),
+                cx.listener(|this, _: &ShowReviewView, window, cx| this.show_review(window, cx)),
             )
             .on_action(cx.listener(|this, _: &ShowAssistantView, window, cx| {
                 this.show_view(Mode::Assistant, window, cx)
@@ -957,41 +955,12 @@ impl Shell {
         // The band (the pane's tab bar, one tab or many) is drawn over the top row while it is shown.
         let barred = self.band_shown();
         // Copy of the whole note: a plain floating icon, outside the title bar.
-        // Comments of the note: one card each, in the Comments view of the right panel (`shell/comments.rs`).
-        // ponytail: the note is reread on every render (a search for `{==`); keep the
-        // list from one version of the text to the next if very long notes suffer from it.
-        let said: Vec<comments::Card> =
-            match self.pane().file.is_none() && self.pane().listing.is_none() {
-                true => {
-                    let text = self.pane().editor.read(cx).text().to_string();
-                    markdown::all_comments(&text)
-                        .into_iter()
-                        .map(|n| {
-                            // The CriticMarkup form starts its passage after `{==`; the HTML form starts it at the whole.
-                            let from = match text[n.at..].starts_with("{==") {
-                                true => n.at + 3,
-                                false => n.at,
-                            };
-                            let passage = match n.noted.is_empty() {
-                                true => n.at..n.end,
-                                false => from..from + n.noted.len(),
-                            };
-                            comments::Card {
-                                noted: n.noted.into(),
-                                said: n.said.into(),
-                                at: n.at,
-                                inside: n.inside,
-                                end: n.end,
-                                scope: n.scope,
-                                passage,
-                            }
-                        })
-                        .collect()
-                }
-                false => Vec::new(),
-            };
+        // The Review feed of the note: its comments and pending changes, read with the note (`review.rs`).
+        // ponytail: the note is reread on every render (a search for `{==`); keep the feed from one
+        // version of the text to the next if very long notes suffer from it.
+        self.sync_comment_author(cx);
         if active {
-            self.comment_cards = said.clone();
+            self.review_items = self.review_feed(cx);
         }
         // The note's corner badge: a quiet dot, at the foot on the right, for a note with comments.
         let talk = active.then(|| self.render_comments_badge(cx)).flatten();
@@ -1030,18 +999,6 @@ impl Shell {
             e.pill = pill;
             e.strip = pad;
         });
-        // The comment the caret is in (none past the last) is a card focused in the Comments view.
-        let caret = self.pane().editor.read(cx).position();
-        let here = said.iter().position(|n| n.at <= caret && caret <= n.end);
-        if here != self.comments_seen {
-            self.comments_seen = here;
-            if let Some(i) = here {
-                self.comment_focus = Some(i);
-                if self.docked(Mode::Comments) {
-                    self.comments_scroll.scroll_to_item(i);
-                }
-            }
-        }
         // The image picked in the panel; it goes away as soon as the note takes over again.
         if self.pane().editor.focus_handle(cx).is_focused(window) {
             if !self.set_file(None, cx) {

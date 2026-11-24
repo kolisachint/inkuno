@@ -20,6 +20,7 @@ pub mod pending;
 pub mod prefs;
 pub mod rank;
 pub mod recall;
+pub mod review;
 pub mod revision;
 pub mod scratch;
 pub mod wiki;

@@ -321,6 +321,8 @@ pub struct Editor {
     feet: Vec<md::FootDef>,
     /// The pending changes of the text (`logic::pending`), read again at each change of the text.
     pending: Rc<[crate::logic::pending::Area]>,
+    /// Who the comments written here are by: the revisions' author, set by the shell (`set_author`).
+    author: String,
     /// Revision `feet` was computed for.
     feet_rev: u64,
     /// Last definition jumped to from its label, and which of its references was shown:
@@ -512,6 +514,7 @@ impl Editor {
             revealed: None,
             feet: Vec::new(),
             pending: Rc::from([]),
+            author: crate::logic::revision::default_author(|key| std::env::var(key).ok()),
             feet_rev: u64::MAX,
             foot_jump: None,
             notes: Rc::from([]),

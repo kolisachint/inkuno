@@ -78,6 +78,7 @@ fn a_comment_opens_a_draft_card_and_enter_writes_what_is_said(cx: &mut TestAppCo
     let note = root.join("Note.md");
     fs::write(&note, "un mot ici\nfin\n").unwrap();
     open(&shell, cx, &note);
+    shell.update(cx, |s, _| s.prefs.author = "Ana".into());
     comment_on_mot(&shell, cx);
     // The Comments view is open on the draft: its card is drawn, the empty card of the same comment is not.
     assert!(cx.debug_bounds("comment-draft").is_some(), "the draft card");
@@ -86,15 +87,15 @@ fn a_comment_opens_a_draft_card_and_enter_writes_what_is_said(cx: &mut TestAppCo
     cx.simulate_input("à relire");
     cx.simulate_keystrokes("enter");
     settle(cx);
-    // The passage stays, the comment is written as `comment_line` writes it, the draft is gone.
+    // The passage stays, the comment is written with its author and its minute, the draft is gone.
     assert_eq!(
-        text(&shell, cx),
-        "un mot<!-- comment: à relire --> ici\nfin\n"
+        without_clock(&text(&shell, cx)),
+        "un mot<!-- comment @Ana <T>: à relire --> ici\nfin\n"
     );
     assert!(shell.read_with(cx, |s, _| s.comment_draft.is_none()));
     // gpui keeps a removed element's bounds in its frame map, so only a drawn card is checked here.
     assert!(
-        cx.debug_bounds("comment-0").is_some(),
+        cx.debug_bounds("review-card-0").is_some(),
         "the card of the comment"
     );
     let _ = fs::remove_dir_all(root);

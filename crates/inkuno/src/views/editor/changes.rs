@@ -111,11 +111,43 @@ impl Editor {
         self.pending.len()
     }
 
-    /// Moves the caret to the first pending change (the note's hint).
-    pub fn go_to_first_change(&mut self, cx: &mut Context<Self>) {
-        if let Some(start) = self.pending.first().map(|area| area.range.start) {
-            self.move_to(start, cx);
+    /// The pending changes of the note in text order, as `logic::pending` reads them: the Review feed
+    /// lists them by their index here.
+    pub fn pending_areas(&self) -> std::rc::Rc<[pending::Area]> {
+        self.pending.clone()
+    }
+
+    /// Accepts (`accept`) or rejects the change `index` of `pending_areas`, as the keys do for the change
+    /// under the caret: one undo step. Nothing is done for an index that is no change.
+    pub fn decide_change(&mut self, index: usize, accept: bool, cx: &mut Context<Self>) {
+        if self.readonly {
+            return self.refuse_pending(cx);
         }
+        let Some(at) = self.pending.get(index).map(|area| area.range.start) else {
+            return;
+        };
+        let new = match accept {
+            true => pending::accept(&self.content, index),
+            false => pending::reject(&self.content, index),
+        };
+        self.settle(new, at, cx);
+    }
+
+    /// Selects the passage of change `index`: its added lines, or its removed ones when nothing is added.
+    pub fn select_change(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(area) = self.pending.get(index).cloned() else {
+            return;
+        };
+        let passage = match area.added.is_empty() {
+            true => area.removed.clone(),
+            false => area.added.clone(),
+        };
+        self.select_passage(passage, cx);
+    }
+
+    /// Who the comments written here are by, from now on: the revisions' author (`Shell::sync_comment_author`).
+    pub fn set_author(&mut self, author: String) {
+        self.author = author;
     }
 
     /// Asks the shell for the line of a comment on the change under the caret. The change is named

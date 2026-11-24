@@ -169,15 +169,19 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     assert!(aligned(cx));
 
     // Comments. A cursor in a cell comments the cell's text, the row stays a row; resolving
-    // keeps the text; a `|` typed in the comment is written `\|`.
+    // keeps the text; a `|` typed in the comment is written `\|`. A new comment is written by its
+    // author and the minute (`without_clock` shows the minute as `<T>`).
+    j.shell.update(cx, |s, _| s.prefs.author = "Ana".into());
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
     start(cx, grid);
     cx.simulate_keystrokes("secondary-shift-m");
     // The text goes to the draft card's field; Enter writes it into the note (RP-19/20).
     cx.simulate_input("a|b");
     cx.simulate_keystrokes("enter");
     assert_eq!(
-        flat(cx),
-        "Nom|Âge/Léa<!-- comment: a\\|b -->|31/Max|7",
+        without_clock(&flat(cx)),
+        "Nom|Âge/Léa<!-- comment @Ana <T>: a\\|b -->|31/Max|7",
         "{:?}",
         text(cx)
     );
@@ -194,8 +198,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_keystrokes("shift-down shift-right shift-right shift-right");
     cx.simulate_keystrokes("secondary-shift-m");
     assert_eq!(
-        flat(cx),
-        "Nom|Âge/Léa<!-- comment:  -->|31<!-- comment:  -->/Max<!-- comment:  -->|7",
+        without_clock(&flat(cx)),
+        "Nom|Âge/Léa<!-- comment @Ana <T>:  -->|31<!-- comment @Ana <T>:  -->/Max<!-- comment @Ana <T>:  -->|7",
         "{:?}",
         text(cx)
     );
@@ -214,9 +218,9 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_input("en années");
     cx.simulate_keystrokes("enter");
     assert_eq!(
-        text(cx),
+        without_clock(&text(cx)),
         format!(
-            "{}\n\n<!-- comment: Column \"Âge\": en années -->\n\nsuite",
+            "{}\n\n<!-- comment @Ana <T>: Column \"Âge\": en années -->\n\nsuite",
             grid.trim_end_matches("\n\nsuite")
         )
     );
@@ -237,7 +241,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
     assert!(
-        text(cx).contains("\n\n<!-- comment: Row \"Max\":  -->\n\nsuite"),
+        without_clock(&text(cx)).contains("\n\n<!-- comment @Ana <T>: Row \"Max\":  -->\n\nsuite"),
         "{:?}",
         text(cx)
     );
@@ -248,7 +252,7 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
     assert!(
-        text(cx).contains("\n\n<!-- comment: Table:  -->\n\nsuite")
+        without_clock(&text(cx)).contains("\n\n<!-- comment @Ana <T>: Table:  -->\n\nsuite")
             && flat(cx) == "Nom|Âge/Léa|31/Max|7",
         "{:?}",
         text(cx)
@@ -261,8 +265,8 @@ pub(super) fn run(j: &Journey, cx: &mut gpui::VisualTestContext) {
     cx.simulate_click(at, none);
     cx.simulate_keystrokes("secondary-shift-m");
     assert_eq!(
-        text(cx),
-        format!("{twins}\n\n<!-- comment: Row \"x\" (2):  -->")
+        without_clock(&text(cx)),
+        format!("{twins}\n\n<!-- comment @Ana <T>: Row \"x\" (2):  -->")
     );
     // The comments under a table follow it. Renamed first cell or header: the name changes in the
     // comment; a sort leaves it with its row; deleting the row, the column or the table deletes it,
