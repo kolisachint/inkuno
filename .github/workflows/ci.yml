@@ -2,14 +2,15 @@
 #
 # - fast (ubuntu-only): fmt + check + clippy + targeted tests (skips the
 #   end_to_end session). Runs on every push, PR, schedule and dispatch.
-# - test (ubuntu + macos): full `cargo test --locked` (unit + shell + end_to_end
-#   + integration). Runs on main pushes, the nightly schedule and manual dispatch.
+# - test (ubuntu-only, nextest shards): full suite. Runs on main pushes, the
+#   nightly schedule and manual dispatch.
+# - macos (macos-latest): only the native-code crate (inkuno-platform) plus
+#   `cargo check --all-targets`. Runs on main, schedule, dispatch, and on PRs
+#   that touch native code (paths-filter); other PRs skip it.
 #
 # No CI job runs `cargo build --release`: the packaging workflows build the
-# release profile themselves, so a release build here would compile the crate
-# twice (release + dev profiles). The macOS gate stays: the test matrix keeps
-# its macos leg running `cargo test`, and packaging still runs build -> test ->
-# package (see release-binaries.yml, release.yml).
+# release profile themselves. Release packaging (release-binaries.yml,
+# release.yml) keeps its own macOS build -> test -> package gate.
 name: CI
 on:
   push:
@@ -76,7 +77,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Linux only: macOS-specific code is covered by the `macos` job.
+        # Kept as a one-entry matrix so the check names stay "test (ubuntu-latest, N/2)".
+        os: [ubuntu-latest]
         # Count-based nextest partitions: each shard runs 1/N of the test list.
         # N=2: the single serial `end_to_end` test (all its chapters in one
         # session, so it lands whole on one shard) stays the long pole, while
@@ -106,13 +109,11 @@ jobs:
       # would never populate the cache.
       - name: Restore apt packages
         id: apt-cache
-        if: runner.os == 'Linux'
         uses: actions/cache/restore@v4
         with:
           path: ~/apt-archives
           key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
       - name: Linux build dependencies
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           # --no-install-recommends keeps the install to the listed packages
@@ -124,7 +125,7 @@ jobs:
           # The cache post-step runs as the runner user; apt ran under sudo.
           sudo chown -R "$USER" ~/apt-archives
       - name: Save apt packages
-        if: runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
+        if: steps.apt-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/apt-archives
@@ -145,3 +146,48 @@ jobs:
           tool: nextest@0.9.151
       - name: Test (nextest shard ${{ matrix.shard }})
         run: cargo nextest run --locked --profile ci --partition count:${{ matrix.shard }}
+  # Native code only: OS-specific code in inkuno-platform (and its view glue)
+  # is exercised here, not on Linux. Runs on main, schedule, dispatch, and on
+  # PRs that touch native code.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      # paths-filter diffs with git on push events: it needs the checkout.
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            native:
+              - "crates/inkuno-platform/**"
+              - "crates/inkuno-view/**"
+              - "crates/inkuno/src/main.rs"
+              - "Cargo.lock"
+              - ".github/workflows/ci.yml"
+  macos:
+    needs: [changes, fast]
+    if: >-
+      github.ref == 'refs/heads/main' || github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.native == 'true')
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.151
+      - name: Check
+        run: cargo check --locked --all-targets
+      - name: Platform tests (inkuno-platform)
+        run: cargo nextest run --locked --profile ci -p inkuno-platform
