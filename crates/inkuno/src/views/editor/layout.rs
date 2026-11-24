@@ -3715,6 +3715,19 @@ mod tests {
                 .contains(&"<!-- comment: Add it. -->")
         );
         assert!(!hidden("## Tasks<!-- comment: Split this? -->").contains(&"Tasks"));
+        // The new form with a reply, off the live line: the whole marker hides, its multi-byte `↳`,
+        // apostrophe and accents with it; the passage and the final dot stay.
+        let replied = "Sec. 3<!-- comment @Ana 2026-11-24T09:12Z: Trop long ? ↳ @Bo 2026-11-24T09:40Z: d'accord, à raccourcir -->.";
+        let marker = "<!-- comment @Ana 2026-11-24T09:12Z: Trop long ? ↳ @Bo 2026-11-24T09:40Z: d'accord, à raccourcir -->";
+        assert_eq!(hidden(replied), [marker]);
+        // A long one wraps onto a second visual row; the hidden marker is the same, whatever the width.
+        let long = format!(
+            "Une phrase de passage assez longue pour qu'elle passe la largeur de la colonne.<!-- comment @Ana 2026-11-24T09:12Z: {} ↳ @Bo 2026-11-24T09:40Z: d'accord, à raccourcir -->.",
+            "Ce commentaire est très long, il occupe plusieurs lignes à l'écran, et il continue "
+                .repeat(4)
+        );
+        let long_marker = &long[long.find("<!--").unwrap()..long.rfind("-->").unwrap() + 3];
+        assert_eq!(hidden(&long), [long_marker]);
         assert_eq!(hidden("> [!NOTE] hi"), ["> "]);
         // An inline checkbox is not a block marker: it stays.
         assert_eq!(hidden("do [ ] it"), Vec::<&str>::new());

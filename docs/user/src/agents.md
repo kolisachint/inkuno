@@ -64,7 +64,7 @@ Most commands take `--json`; `guide`, `help`, `rev save`, `rev diff`, `keys set`
 | `inkuno trash <note>` | moves the note to `.trash`, with its saved versions. Prints the path it has there |
 | `inkuno restore <path>` | brings a file back from `.trash`, to the vault root |
 | `inkuno daily [--date YYYY-MM-DD] [--append TEXT]` | today's daily note, or the one of the date. `--append` adds a paragraph |
-| `inkuno comment <note> --passage P --text C` | adds a comment after one passage: `P<!-- comment: C -->`, which GitHub hides. The passage must occur once. `--text -` reads the comment from standard input |
+| `inkuno comment <note> --passage P --text C` | adds a comment after one passage: `P<!-- comment @author time: C -->`, with the author and the UTC minute, which GitHub hides. The passage must occur once. `--text -` reads the comment from standard input |
 | `inkuno comment --file PATH --passage P --text C` | the same, on a Markdown file named by its path, with no vault. `PATH` must exist and end in `.md`. `--file` replaces the note name; giving both, or neither, is a usage error |
 | **Diagrams** | |
 | `inkuno render [<file>] [--note N --block K] [--mermaid SRC] [--theme light\|dark] [--width W] --out FILE.png` | a PNG of an SVG file of the vault, of the `K`-th Mermaid block of a note (1 is the first), or of a Mermaid source. `--mermaid -` reads the source from standard input |
