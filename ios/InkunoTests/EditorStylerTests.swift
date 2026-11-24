@@ -170,6 +170,23 @@ final class EditorStylerTests: XCTestCase {
                      "the rules are drawn by the layout, not underlined")
     }
 
+    func testTableTextIsInsetFromItsBorder() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: nil)
+        let style = storage.attribute(.paragraphStyle, at: location(of: "a", in: text), effectiveRange: nil) as? NSParagraphStyle
+
+        XCTAssertEqual(style?.firstLineHeadIndent, MarkdownStyler.tablePadding)
+        XCTAssertEqual(style?.headIndent, MarkdownStyler.tablePadding)
+    }
+
+    func testTableLastCellEndsAtTheBorder() {
+        let text = "| a | b |\n| - | - |\n| 1 | two |"
+        let storage = styled(text, caretLine: nil)
+
+        XCTAssertTrue(isHidden(storage, (text as NSString).range(of: "b |").location + 1), "the space before the trailing pipe")
+        XCTAssertFalse(isHidden(storage, location(of: "b", in: text)))
+    }
+
     func testTableHasNoRowMarkWhileTheCaretIsOnIt() {
         let text = "| a | b |\n| - | - |\n| 1 | two |"
         let storage = styled(text, caretLine: 1)

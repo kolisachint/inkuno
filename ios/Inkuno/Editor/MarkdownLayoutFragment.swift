@@ -70,6 +70,16 @@ final class MarkdownLayoutDelegate: NSObject, NSTextLayoutManagerDelegate {
 /// A paragraph's layout fragment that draws the bullet disc or the task box over the glyph character.
 /// The glyph's slot is the kern after the character (`MarkdownStyler`), so the text starts after it.
 final class MarkdownLayoutFragment: NSTextLayoutFragment {
+    /// A table row's rule and border reach the table's width, which the text may not: the surface covers it.
+    override var renderingSurfaceBounds: CGRect {
+        let bounds = super.renderingSurfaceBounds
+        guard let text = (textElement as? NSTextParagraph)?.attributedString,
+              let mark = text.attribute(.inkTableRow, at: 0, effectiveRange: nil) as? TableRowMark
+        else { return bounds }
+        let margin = -layoutFragmentFrame.minX
+        return bounds.union(CGRect(x: margin, y: 0, width: mark.width + 2, height: layoutFragmentFrame.height))
+    }
+
     override func draw(at renderingOrigin: CGPoint, in context: CGContext) {
         guard let paragraph = textElement as? NSTextParagraph,
               let line = textLineFragments.first
@@ -102,9 +112,8 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
         Self.draw(found.glyph, font: font, x: x, baseline: baseline)
     }
 
-    /// A table row's header fill, its rule under it and, with the row's place in the table, its part of the
-    /// border. The row's rectangle is clipped, so the border's rounded corners and the sides of a row are drawn
-    /// by every row alike; the top of the header and the bottom of the last row close the border.
+    /// A table row's header fill, its rule under it and its part of the border. The row's rectangle is clipped,
+    /// so every row strokes the border's sides, and the header's top and the last row's bottom close it.
     /// Text past the edge of the text container is cut before the cell that does not fit, never inside a glyph.
     // ponytail: a table wider than the container is cut and cannot be scrolled; a per-block scroll view is later.
     private func drawTableRow(_ mark: TableRowMark, text: NSAttributedString, line: NSTextLineFragment,
@@ -112,39 +121,43 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
         let traits = UITraitCollection.current
         func resolved(_ token: Color) -> UIColor { UIColor(token).resolvedColor(with: traits) }
 
-        let left = origin.x + line.typographicBounds.minX
+        // The margin: the text container's left edge, which the fragment's frame starts past by the table's
+        // padding (the head indent of the row). The text itself is drawn from the frame's origin.
+        let left = origin.x - layoutFragmentFrame.minX
         let height = layoutFragmentFrame.height
         var width = mark.width
         if let container = textLayoutManager?.textContainer, let advance = Self.cellAdvance(text) {
-            let room = container.size.width - left
+            let room = container.size.width
             if width > room {
-                let cut = left + floor(room / advance) * advance
-                // Text is clipped to the cells that fit; the border closes at the last of them.
+                let padding = MarkdownStyler.tablePadding
+                let cut = left + padding + floor((room - 2 * padding) / advance) * advance
+                // Text is clipped to the cells that fit; the border closes after the last of them.
                 context.clip(to: CGRect(x: -100_000, y: origin.y - 100_000, width: cut + 200_000, height: 200_000))
-                width = cut - left
+                width = cut - left + padding
             }
         }
 
+        // The border is a rounded rectangle that runs past the row where the table goes on, so each row strokes
+        // its own sides; the header's top corners and the last row's bottom corners are in its rectangle.
         let top = mark.isHeader ? origin.y + 0.5 : origin.y - 1_000
         let bottom = mark.isLast ? origin.y + height - 0.5 : origin.y + height + 1_000
-        let frame = CGRect(x: left + 0.5, y: top, width: width - 1, height: bottom - top)
-        let rounded = UIBezierPath(roundedRect: frame, cornerRadius: 8)
+        let border = UIBezierPath(roundedRect: CGRect(x: left + 0.5, y: top, width: width - 1, height: bottom - top),
+                                  cornerRadius: 8)
+        let rule = UIBezierPath()
+        rule.move(to: CGPoint(x: left, y: origin.y + height - 0.5))
+        rule.addLine(to: CGPoint(x: left + width, y: origin.y + height - 0.5))
 
         context.saveGState()
         context.clip(to: CGRect(x: left, y: origin.y, width: width, height: height))
         if mark.isHeader {
             resolved(InkColor.tableHeader).setFill()
-            rounded.fill()
+            border.fill()
         }
         resolved(InkColor.tableLine).setStroke()
-        rounded.lineWidth = 1
-        rounded.stroke()
+        border.lineWidth = 1
+        border.stroke()
         if !mark.isLast {
-            let rule = UIBezierPath()
-            rule.move(to: CGPoint(x: left, y: origin.y + height - 0.5))
-            rule.addLine(to: CGPoint(x: left + width, y: origin.y + height - 0.5))
             rule.lineWidth = 1
-            resolved(InkColor.tableLine).setStroke()
             rule.stroke()
         }
         context.restoreGState()

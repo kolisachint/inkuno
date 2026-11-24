@@ -14,6 +14,8 @@ struct MarkdownStyler {
     static let hiddenFontSize: CGFloat = 0.01
     /// Body line height: 1.6 times the font, as in the prototype.
     static let lineHeightMultiple: CGFloat = 1.6
+    /// The space between a table's border and its text, on each side: the prototype's cell padding.
+    static let tablePadding: CGFloat = 10
 
     let provider: MarkdownLayoutProvider
     /// Note text size in points (14, 15, 16 or 18).
@@ -307,6 +309,8 @@ struct MarkdownStyler {
             /// The leading units that take no room: an outer leading pipe and the spaces after it, so the first
             /// cell starts at the margin.
             let lead: Int
+            /// Where the spaces before an outer trailing pipe start, so the last cell ends at the border.
+            let tail: Int
         }
 
         var rows: [Row] = []
@@ -340,6 +344,16 @@ struct MarkdownStyler {
             for unit in 0..<lead {
                 hidden[unit] = true
             }
+            var tail = units.count
+            if let last = pipes.last, units[(last + 1)...].allSatisfy(Self.isBlank) {
+                tail = last
+                while tail > lead, Self.isBlank(units[tail - 1]) {
+                    tail -= 1
+                }
+                for unit in tail..<last {
+                    hidden[unit] = true
+                }
+            }
             rows.append(Row(
                 index: index,
                 start: line.startUTF16,
@@ -347,7 +361,8 @@ struct MarkdownStyler {
                 hidden: hidden,
                 pipes: pipes,
                 isDelimiter: Self.isDelimiter(lineText),
-                lead: lead
+                lead: lead,
+                tail: tail
             ))
         }
         guard !rows.isEmpty else { return }
@@ -398,7 +413,7 @@ struct MarkdownStyler {
         let innerPipes = rows.map { row in row.pipes.indices.filter { !isOuterPipe(row, column: $0) }.count }.max() ?? 0
         let trailing = rows.contains { row in !row.pipes.isEmpty && isOuterPipe(row, column: row.pipes.count - 1) }
         let ruleUnits = widths.dropLast(trailing ? 1 : 0).reduce(0, +) + innerPipes
-        let ruleWidth = CGFloat(ruleUnits) * advance
+        let ruleWidth = CGFloat(ruleUnits) * advance + 2 * Self.tablePadding
 
         // The header is the first row when the second is the delimiter row.
         let header = rows.count > 1 && rows[1].isDelimiter ? rows[0].index : nil
@@ -415,6 +430,13 @@ struct MarkdownStyler {
                                     isLast: row.index == bodyRows.last?.index,
                                     width: ruleWidth)
             storage.addAttribute(.inkTableRow, value: mark, range: lineRange)
+            // The text is inset from the border on both sides; the paragraph keeps its other attributes.
+            let whole = NSRange(location: row.start, length: min(row.units.count + 1, storage.length - row.start))
+            let paragraph = (storage.attribute(.paragraphStyle, at: row.start, effectiveRange: nil) as? NSParagraphStyle)?
+                .mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            paragraph.firstLineHeadIndent = Self.tablePadding
+            paragraph.headIndent = Self.tablePadding
+            storage.addAttribute(.paragraphStyle, value: paragraph, range: whole)
             if row.index == header {
                 // Semibold, keeping each run's size and the hidden markers hidden.
                 var runs: [(NSRange, UIFont)] = []
@@ -427,6 +449,9 @@ struct MarkdownStyler {
             }
             if row.lead > 0 {
                 storage.addAttributes(hiddenAttributes, range: NSRange(location: row.start, length: row.lead))
+            }
+            if let last = row.pipes.last, row.tail < last {
+                storage.addAttributes(hiddenAttributes, range: NSRange(location: row.start + row.tail, length: last - row.tail))
             }
 
             let cells = spans(row)
