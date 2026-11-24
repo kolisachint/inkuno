@@ -807,6 +807,9 @@ Normal 800 is the default (§10.4 lock released for this change).
   ends at the old marker, or before its punctuation). The skipped ones are counted.
   The summary: "Wrote N comments.", "Wrote N replies.", "Wrote N comments and M replies.", "1 finding could not be
   placed.", or "No findings.".
+- When the review writes into the open note, the Review view opens on the first new comment or reply, expanded and scrolled
+  into view (`Shell::reveal_review`). It is opened without moving the keys (`Shell::show_view_quiet`), so a person typing stays
+  in the note.
 - The words are written by Inkuno, never by the agent. A review that is stopped, or whose agent fails or
   exits, writes nothing.
 
@@ -1024,6 +1027,8 @@ Normal 800 is the default (§10.4 lock released for this change).
   agent's are placed in the current text (as `inkuno write` does).
 - Then one quiet line: **N changes are pending in the note: accept or reject them there.** (for one: **1 change is pending in
   the note: accept or reject it there.**), counted by `pending::areas`.
+- When the proposal is written into the open note, the Review view opens on its run (one card, expanded; §23.5) with no
+  focus moved (`Shell::reveal_review`, `Shell::show_view_quiet`). Not when the note is not the one shown.
 
 ### 18.6 Revisions
 

@@ -997,6 +997,13 @@ impl Shell {
         }
     }
 
+    /// Shows the card of `key` in the Review view, expanded and scrolled into view, for a result of the
+    /// assistant: the panel opens (`show_view_quiet`) and no focus moves.
+    pub(super) fn reveal_review(&mut self, key: Key, window: &mut Window, cx: &mut Context<Self>) {
+        self.show_view_quiet(Mode::Review, cx);
+        self.review_expand(key, window, cx);
+    }
+
     /// A click on a commented passage in the note (`EditorEvent::CommentAt`): the Review view opens on
     /// its card, expanded.
     pub(super) fn comment_clicked(

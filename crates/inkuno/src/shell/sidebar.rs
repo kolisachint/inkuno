@@ -93,6 +93,19 @@ impl Shell {
         cx.notify();
     }
 
+    /// Opens `mode` in its dock without moving the keys: for a result that comes in while the person may be
+    /// typing (the assistant's), so the note keeps the focus. `show_view` gives the keys to the view.
+    pub(super) fn show_view_quiet(&mut self, mode: Mode, cx: &mut Context<Self>) {
+        if self.nav.panel == Panel::Full {
+            self.nav.panel = Panel::Split;
+        }
+        self.put_tool(mode);
+        self.refresh_review(cx);
+        self.nav.reveal = true;
+        self.nav.save();
+        cx.notify();
+    }
+
     /// The band's toggle and `ToggleRightPanel`: the panel shown on its view, or hidden (the view it showed
     /// is remembered for the next time).
     pub(super) fn toggle_right_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
