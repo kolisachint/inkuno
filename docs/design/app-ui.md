@@ -829,7 +829,6 @@ Normal 800 is the default (§10.4 lock released for this change).
 > Status: the app's side of `inkuno write` (`cli.md`, 2026-11-15). The changes are beside the note, in
 > `.inkuno/pending` (2026-11-21, `platform/sidecar.rs`); the editor shows them as marks in block form (`logic/pending.rs`),
 > composed from the file and the list, and split again on save. This section is what the editor does with them. Chords: §17.5.
-> Storage superseded 2026-11-24: pending changes leave `.inkuno/pending` for per-device storage (§23.5).
 
 - [x] **Propose**, **User approves**: the flow of `revisions.md` (Decisions, 2026-11-14 and 2026-11-15).
 - [x] **Implement**: `views/editor/layout.rs` (`Pend`, `pend_of`), `paint.rs` (the wash), `text_runs` (dim and
@@ -1295,7 +1294,7 @@ Already at or above target, unchanged: body and secondary text, the five syntax 
 ## 23. Review feed (AGREED 2026-11-24, not built)
 
 > Status: agreed design, recorded 2026-11-24. Not built. It replaces the Comments view and the
-> pending-change cards of §22.1, and the storage of pending changes (§17, §22.5). Until it lands,
+> pending-change cards of §22.1. Until it lands,
 > the code is as §17 and §22 describe. Decision log: `revisions.md`, 2026-11-24.
 
 ### 23.1 One panel
@@ -1310,7 +1309,7 @@ Already at or above target, unchanged: body and secondary text, the five syntax 
 - One scrollable feed, oldest first.
 - Sort key: a comment's timestamp, or a pending change's new `created` field (UTC, set when the
   change is proposed). `at` is a text position, not a time. Items without a time (legacy comments,
-  older list entries) sort first, in document order.
+  pending changes without `created`) sort first, in document order.
 - Only one card is expanded at a time.
 - Selecting a card highlights its anchored passage in the editor and scrolls to it.
 - No full diff in a collapsed card.
@@ -1341,28 +1340,31 @@ Expanded change:
 The markup travels with the `.md` file. A reply is a line inside the same block.
 
 ```text
-passage<!-- comment @name 2026-11-24T10:02Z: text
-↳ @name 2026-11-24T10:05Z: reply -->
+passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: reply -->
 ```
 
+- The comment block, replies included, stays on one physical line, so file line numbers are stable.
+- Replies are separated by ` ↳ `. The panel shows each reply as its own row.
+- A literal `↳` in text is escaped as `\↳`.
 - The time is UTC, to the minute (`Z`).
 - A legacy `<!-- comment: text -->` reads as author `Unknown`, with no time.
 - A legacy comment is rewritten in the new form only when it is edited.
 
-### 23.5 Pending changes are per device
+### 23.5 Pending changes
 
-- A pending change leaves the vault. It moves from `.inkuno/pending/<note>.json` to the per-device
-  data directory:
-  - Linux: `~/.local/share/inkuno/pending/<vault-id>/<note>.json`
-  - macOS: `~/Library/Application Support/inkuno/pending/<vault-id>/<note>.json`
-  - Windows: under `%APPDATA%`, the same layout.
-- `<vault-id>` is a random id, written once to `.inkuno/id` in the vault. Moving the vault folder
-  keeps the link to its pending changes.
-- A change reaches the note only on Accept.
-- Trade-off: suggestions do not sync across devices, iOS included.
-- Scratch notes: **TBD**. They have no vault, so no `.inkuno/id`.
-- Vault backups no longer hold pending changes. Accepted: they are device-local by design.
+- Storage unchanged (§17): changes stay in `.inkuno/pending/<note>.json` in the vault and sync with it.
+- Each list entry gains `created`: the UTC time the change was proposed (`2026-11-24T10:02Z`). It is used only for feed order. `at` stays a text position.
+- Entries without `created` sort with untimed items (§23.2).
 
 ### 23.6 Text
 
 - All interface text goes through `tr("English", "Français")`.
+
+### 23.7 Line numbers
+
+- The editor gutter shows file line numbers: the lines of the `.md` on disk, the same numbers as the feed's `Line N`, git and the CLI. Lines hidden by the editor (front matter, comment markup, table syntax) leave gaps; accepted.
+- A wrapped line shows its number on its first visual row only.
+- Own column left of the block and list drag handles (`blocks.rs` gutter). Not selectable, not copied.
+- Washed out: the theme's faint text colour, about 0.85× body size, right-aligned. The current line is one step darker. No other decoration.
+- On by default. A settings toggle hides it (text via `tr()`).
+- When on, Quiet's per-code-block line numbers (`layout.rs` gutter) are not drawn: file lines only.
