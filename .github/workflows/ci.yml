@@ -4,9 +4,10 @@
 #   end_to_end session). Runs on every push, PR, schedule and dispatch.
 # - test (ubuntu-only, nextest shards): full suite. Runs on main pushes, the
 #   nightly schedule and manual dispatch.
-# - macos (macos-latest): only the native-code crate (inkuno-platform) plus
-#   `cargo check --all-targets`. Runs on main, schedule, dispatch, and on PRs
-#   that touch native code (paths-filter); other PRs skip it.
+# - macos (macos-latest): `cargo check --all-targets` and the native-code crate
+#   (inkuno-platform); on schedule and dispatch also the app crate (inkuno).
+#   Runs on main, schedule, dispatch, and on PRs that touch native code
+#   (paths-filter, which includes crates/inkuno/**); other PRs skip it.
 #
 # No CI job runs `cargo build --release`: the packaging workflows build the
 # release profile themselves. Release packaging (release-binaries.yml,
@@ -167,7 +168,10 @@ jobs:
             native:
               - "crates/inkuno-platform/**"
               - "crates/inkuno-view/**"
-              - "crates/inkuno/src/main.rs"
+              - "crates/inkuno/**"
+              - "Cargo.toml"
+              - "crates/*/Cargo.toml"
+              - "rust-toolchain.toml"
               - "Cargo.lock"
               - ".github/workflows/ci.yml"
   macos:
@@ -191,3 +195,8 @@ jobs:
         run: cargo check --locked --all-targets
       - name: Platform tests (inkuno-platform)
         run: cargo nextest run --locked --profile ci -p inkuno-platform
+      # The app's own macOS-only code (cfg(target_os = "macos")) runs its tests here
+      # nightly and on manual dispatch; PRs run the check above and the platform tests.
+      - name: App tests (inkuno, nightly and manual)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: cargo nextest run --locked --profile ci -p inkuno
