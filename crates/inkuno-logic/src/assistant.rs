@@ -379,12 +379,27 @@ enum Spot {
 /// When the bytes end the passage, the split would leave the old passage without letters or digits,
 /// so the new comment goes after the old marker instead.
 fn spot(text: &str, at: usize, len: usize) -> Spot {
-    let Some(note) = markdown::all_comments(text)
-        .into_iter()
-        .find(|note| note.at <= at && at < note.end)
+    let end = at + len;
+    let notes = markdown::all_comments(text);
+    // The comment whose passage holds the bytes' last byte: the bytes may start before its passage
+    // (a finding that runs into a passage from the text before it).
+    let Some(note) = notes
+        .iter()
+        .find(|note| note.at < end && end <= note.at + note.noted.len())
     else {
-        return Spot::Split;
+        // Not in a passage: in the marker or the text of a comment is nowhere to write; else plain text.
+        return match notes.iter().any(|note| note.at <= at && at < note.end) {
+            true => Spot::Refused,
+            false => Spot::Split,
+        };
     };
+    // A finding that starts inside another comment's marker or text is not placed either.
+    if notes
+        .iter()
+        .any(|other| other.at != note.at && other.at <= at && at < other.end)
+    {
+        return Spot::Refused;
+    }
     if ["{==", "{>>"]
         .iter()
         .any(|mark| text[note.at..].starts_with(mark))
@@ -392,10 +407,6 @@ fn spot(text: &str, at: usize, len: usize) -> Spot {
         return Spot::Refused;
     }
     let passage_end = note.at + note.noted.len();
-    let end = at + len;
-    if end > passage_end {
-        return Spot::Refused;
-    }
     if text[end..passage_end].chars().any(char::is_alphanumeric) {
         return Spot::Split;
     }
@@ -1017,6 +1028,43 @@ mod tests {
         assert_eq!(notes[2].noted, "次の文");
         assert_eq!(notes[2].author.as_deref(), Some("sachin"));
         assert_eq!(notes[2].said, "second");
+    }
+
+    #[test]
+    fn a_finding_that_runs_into_a_passage_keeps_the_old_comment_whole() {
+        // The finding starts in the text before the passage of the comment and ends at its end.
+        let text = "- Ship Friday<!-- comment @sachin 2026-11-24T09:00Z: Is Friday firm? -->\n";
+        let placed = place_at(text, &[pair("- Ship Friday", "Which Friday?")]);
+        assert_eq!((placed.placed, placed.skipped), (1, 0));
+        let notes = markdown::all_comments(&placed.text);
+        let old = notes
+            .iter()
+            .find(|n| n.author.as_deref() == Some("sachin"))
+            .unwrap();
+        assert_eq!(old.noted, "Ship Friday");
+        assert_eq!(old.said, "Is Friday firm?");
+        assert_eq!(old.time.as_deref(), Some("2026-11-24T09:00Z"));
+        assert!(placed.text.contains("Friday<!-- comment @sachin 2026-11-24T09:00Z: Is Friday firm? --><!-- comment @Ana 2026-11-24T10:02Z: Which Friday? -->"));
+    }
+
+    #[test]
+    fn a_table_cell_finding_that_runs_into_a_passage_keeps_the_old_comment_whole() {
+        let text = "| h1 | h2 |\n| --- | --- |\n| a | b<!-- comment @sachin 2026-11-24T09:00Z: Typo? --> |\n";
+        let placed = place_at(text, &[pair("a | b", "Which row?")]);
+        assert_eq!((placed.placed, placed.skipped), (1, 0));
+        let notes = markdown::all_comments(&placed.text);
+        let old = notes
+            .iter()
+            .find(|n| n.author.as_deref() == Some("sachin"))
+            .unwrap();
+        assert_eq!(old.noted, "b");
+        assert_eq!(old.said, "Typo?");
+        assert_eq!(old.time.as_deref(), Some("2026-11-24T09:00Z"));
+        assert_eq!(
+            placed.text,
+            "| h1 | h2 |\n| --- | --- |\n| a | b<!-- comment @sachin 2026-11-24T09:00Z: Typo? -->\
+             <!-- comment @Ana 2026-11-24T10:02Z: Which row? --> |\n"
+        );
     }
 
     #[test]
