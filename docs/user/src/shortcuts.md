@@ -57,7 +57,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | `Shift+click on a view's button, title of a view` | Shift+click stacks the view under those shown in its dock; drag its title to another place in a dock, or to the right edge to open the right dock. Escape lets go |
 | Dragging a tab | Onto a tab bar: it moves there; onto the middle of a pane: it joins it; near an edge of a pane: a new pane opens there with it. A file from the tree does the same. Escape lets go without moving anything |
 | Border between panes | Drag it to share the room; double click: even shares |
-| Opening a file | Double-click or Enter in the tree, choose in the palette, follow a link: the file opens in a tab of its own, or its tab comes to the front if it is already open; a single click or the arrows in the tree preview notes in a single italic tab, which the next preview replaces |
+| Opening a file | Double-click or Enter in the tree, choose in the palette, follow a link: the file opens in a tab of its own, or its tab comes to the front if it is already open; an HTML page opens in a tab on macOS, in its own window on Linux, in the system's app on Windows; a single click or the arrows in the tree preview notes in a single italic tab, which the next preview replaces |
 | `Ctrl+W` | Save and close the focused tab; keep it open if saving fails |
 |  | Close the other tabs of the pane, each saved first; one that fails to save stays open |
 |  | Close all the tabs of the pane; the other panes keep theirs |
@@ -80,7 +80,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | A picture | Shown in place of the note |
 | `Ctrl+M` | Panel on the whole window |
 | `Ctrl+P › assistant` | Assistant: show or hide its view of the right panel (Ctrl+Alt+4 shows it) |
-| `Ctrl+Alt+2` | Review of the note: the right panel lists its comments and pending changes as one feed; a click on a card shows its passage, Resolve closes a comment |
+| `Ctrl+Alt+2` | Review of the note: the right panel lists its comments and pending changes as one feed; the Assistant's replies sit in their comment's card; a run of changes is one card with Accept all N and Reject all N; a click on a card shows its passage, Resolve closes a comment |
 | `Ctrl+P › improve` | Assistant: improve the selection, or the whole note; the proposal comes back as pending changes |
 | `Ctrl+Shift+O` | Outline: show or hide the headings of the note in the right panel (also in the palette, as Outline of the note) |
 |  | Right panel: show or hide it, on the view it showed last (its switcher picks Outline, Review, Versions or Assistant) |
@@ -218,7 +218,7 @@ Every line of the Shortcuts page of Settings (`F1`), with the default keys of Li
 | `Alt+click` | Add a cursor |
 | `Ctrl+K` | Link: \[text\](address) from the selection; on a link, change its address |
 | `Ctrl+Shift+M` | Comment the selection or the line (in a table: the cell, or the taken row, column or table); on a comment, resolve it |
-| `Ctrl+P › review` | Review: show the note's feed of comments and pending changes, jump to one (a badge on the speech bubble counts them) |
+| `Ctrl+P › review` | Review: show the note's feed of comments and pending changes, jump to one (a badge on the speech bubble counts them); the Assistant's replies are in the thread of their comment |
 | Right click | Menu of the note: link, comment, cut, copy, paste, bold, italic |
 | `Ctrl+C` | Copy |
 | `Ctrl+X` | Cut |

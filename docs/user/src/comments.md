@@ -14,11 +14,13 @@ The comment names its author and the minute it was written (UTC). Its replies fo
 
 The passage is the text from the start of its line (or of its table cell, or of the comment before it) up to the comment. In Inkuno, the passage has a yellow wash, a gold underline and a gold dot in the margin of its line, and the comment is faded; off the line you are editing, the comment's markup is hidden. Notes written with the earlier CriticMarkup comments (`{==text==}{>>comment<<}`) are read as before, and are written in this form when the note is next saved.
 
-A review by the [Assistant](assistant.md) writes its findings in this form too. All the comments of one review are one undo step.
+A review by the [Assistant](assistant.md) writes its findings in this form too, and its answers to your open comments as replies. All of them are one undo step.
 
 ## The Review view
 
 The right panel has a **Review** view, `Ctrl + Alt + 2`. It lists the comments of the note and its pending changes as one feed, oldest first. Its head counts them: **Review · 4 open**. It shares the panel with the outline, the versions and the Assistant: see [Navigation](navigation.md#the-right-panel).
+
+When the Assistant writes comments or proposes changes in the note you have open, this view opens by itself on the first new card, expanded. Keyboard focus does not move: you keep typing where you were.
 
 The feed is in time order. An item with no time (an older comment, or a change with none) comes first, in the order of the note. A comment is dated by its minute; a pending change, by the minute it was proposed.
 
@@ -27,6 +29,7 @@ Each card shows who it is by, its kind (a comment, a replacement, an insertion o
 - Only one card is open at a time. Click a card to open it: its passage is selected in the note.
 - A comment opens with its full text and its replies. Type a reply in the field and press `Enter`: it is written after the replies, on the same line. **Resolve** takes the comment's markup out and keeps the passage; `Ctrl + Z` brings the comment back.
 - A pending change opens with **Before** (what it removes) and **After** (what it adds). **Accept** and **Reject** do what the keys do in the note.
+- Changes from one Assistant proposal form one card, with **Accept all N** and **Reject all N** for its N changes. See [Assistant](assistant.md#improve).
 
 A new comment opens a draft card at the top of the feed: the passage it is on, a field for what is said, and **Comment** and **Cancel** buttons. `Enter` writes the comment; `Escape` or **Cancel** takes it out again and the passage stays as it was.
 

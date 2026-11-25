@@ -66,7 +66,8 @@ Tables, code blocks and figures always stay inside the text column, never wider.
 ## Assistant command
 
 - `Assistant command…` in the palette sets the command that starts the [Assistant](assistant.md). The default is `hoocode`. An empty entry returns to the default.
-- Inkuno stores no keys and no model. Login and model stay in the configuration of that program.
+- Inkuno stores no keys. Login stays in hoocode; the model is set in hoocode, or with `--model` in the command.
+- The command is split at spaces. See [Assistant](assistant.md#the-setting) for the rules and an example.
 
 ## Language
 
