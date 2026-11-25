@@ -45,12 +45,16 @@ const TOKEN_PLACEHOLDER: &str = "__INKUNO_TOKEN__";
 /// A click in the page makes its webview the first responder, which swallows every key; the script
 /// hands those keys to the app (`window.ipc`) and stops them here. Escape sends `inkuno:<token>:focus`;
 /// a Cmd chord sends `inkuno:<token>:key:<keystroke>` in gpui syntax (`cmd-shift-p`). The token is the
-/// page's secret (`embed::new_token`), written into this script only: the page's own scripts cannot read
-/// it, and a message without it is refused by the app. The key is read from the physical key (`e.code`),
-/// so Option and Shift do not change it and the arrows and Enter are keys. The page keeps its copy, paste, cut, select-all and undo
-/// chords (Cmd-C, V, X, A without Shift, Cmd-Z with or without Shift), and the chords of `SCRIPT`
-/// (Cmd-[, Cmd-], Cmd-R). A forwarded key does not reach the page's own handlers. Only the main frame
-/// runs the script: keys inside an iframe are not forwarded. Not in the viewer window.
+/// page's secret (`embed::new_token`), written into this script only: the page's own scripts cannot
+/// read it, and a message without it is refused by the app.
+///
+/// The key is the typed character (`e.key`, lower-cased) when it is one printable ASCII character, so
+/// a non-QWERTY layout sends the letter it types. Other keys (the arrows, Enter, Tab, Backspace, and
+/// digits or punctuation that are not a single character) come from the physical key (`e.code`).
+/// The page keeps its copy, paste, cut, select-all and undo chords (Cmd-C, V, X, A without Shift,
+/// Cmd-Z with or without Shift), and the chords of `SCRIPT` (Cmd-[, Cmd-], Cmd-R), judged on that
+/// same key. A forwarded key does not reach the page's own handlers. Only the main frame runs the
+/// script: keys inside an iframe are not forwarded. Not in the viewer window.
 #[cfg(target_os = "macos")]
 const EMBEDDED: &str = r#"
 (function () {
@@ -61,12 +65,13 @@ const EMBEDDED: &str = r#"
     Period: '.', Slash: '/', Semicolon: ';', Quote: "'", Backquote: '`', Enter: 'enter', Tab: 'tab',
     Backspace: 'backspace', ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down'
   };
-  function keyOf(code) {
-    var letter = /^Key([A-Z])$/.exec(code);
+  function keyOf(e) {
+    if (typeof e.key === 'string' && /^[!-~]$/.test(e.key)) return e.key.toLowerCase();
+    var letter = /^Key([A-Z])$/.exec(e.code);
     if (letter) return letter[1].toLowerCase();
-    var digit = /^Digit([0-9])$/.exec(code);
+    var digit = /^Digit([0-9])$/.exec(e.code);
     if (digit) return digit[1];
-    return Object.prototype.hasOwnProperty.call(NAMES, code) ? NAMES[code] : null;
+    return Object.prototype.hasOwnProperty.call(NAMES, e.code) ? NAMES[e.code] : null;
   }
   function send(message) {
     ipc.postMessage('inkuno:' + TOKEN + ':' + message);
@@ -79,7 +84,7 @@ const EMBEDDED: &str = r#"
       return;
     }
     if (!e.metaKey) return;
-    var key = keyOf(e.code);
+    var key = keyOf(e);
     if (key === null) return;
     var kept = key === 'z' || key === 'r' ||
       (!e.shiftKey && ['c', 'v', 'x', 'a', '[', ']'].indexOf(key) !== -1);
@@ -95,8 +100,8 @@ const EMBEDDED: &str = r#"
 })();
 "#;
 
-/// The script of one embedded page: `EMBEDDED` with the page's `token` (`embed::new_token`). The token is
-/// written in a string literal, so it must be plain letters and digits: `embed::new_token` makes one.
+/// The script of one embedded page: `EMBEDDED` with the page's `token` (`embed::new_token`). The token
+/// is written into a string literal, so it must be plain letters and digits: `embed::new_token` makes one.
 #[cfg(target_os = "macos")]
 pub fn embedded_script(token: &str) -> String {
     EMBEDDED.replace(TOKEN_PLACEHOLDER, token)
@@ -134,7 +139,8 @@ mod tests {
             "send('focus')",
             "send('key:'",
             "e.metaKey",
-            "keyOf(e.code)",
+            "keyOf(e)",
+            "e.key.toLowerCase()",
             "e.stopImmediatePropagation()",
             "Backslash: '\\\\'",
             "e.isTrusted",
