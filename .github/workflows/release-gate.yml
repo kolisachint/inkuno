@@ -38,6 +38,7 @@ jobs:
         env:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
           git fetch -q origin --tags
@@ -73,8 +74,11 @@ jobs:
           current=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/inkuno/Cargo.toml | head -1)
           head_msg=$(git log -1 --pretty=%s)
           # A merged `chore: release` fallback PR already carries the bump:
-          # tag it instead of bumping twice.
-          if [ "$head_msg" = "chore: release $current" ]; then
+          # tag it instead of bumping twice. A merge commit's subject is
+          # "Merge pull request #…", so the PR title is checked too; it comes
+          # through the env, never the script text. The head subject stays
+          # for a squash or rebase merge that keeps no title line.
+          if [ "$PR_TITLE" = "chore: release $current" ] || [ "$head_msg" = "chore: release $current" ]; then
             tag="v$current"
             if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
               echo "tag $tag already exists; refusing to release twice" >&2
