@@ -36,9 +36,15 @@ fn title_span(head: &str) -> Option<(usize, usize)> {
             .into_iter()
             .find(|name| is_tag(rest, name))
         {
-            // The element's text is skipped up to its closing tag.
-            let close = open + lower[open..].find(&format!("</{name}"))?;
-            at = close + lower[close..].find('>')? + 1;
+            let tag_end = open + rest.find('>')?;
+            if lower[open..tag_end].ends_with('/') {
+                // A self-closing element (`<svg/>`) has no text: its tag is the whole element.
+                at = tag_end + 1;
+            } else {
+                // The element's text is skipped up to its closing tag.
+                let close = open + lower[open..].find(&format!("</{name}"))?;
+                at = close + lower[close..].find('>')? + 1;
+            }
         } else if is_tag(rest, "title") {
             let start = open + rest.find('>')? + 1;
             let end = start + lower[start..].find("</title")?;
@@ -137,6 +143,17 @@ mod tests {
             html_title("<titlex>No</titlex><title>Yes</title>").as_deref(),
             Some("Yes")
         );
+    }
+
+    #[test]
+    fn a_self_closing_svg_before_the_title_does_not_hide_it() {
+        assert_eq!(html_title("<svg/><title>X</title>").as_deref(), Some("X"));
+        assert_eq!(
+            html_title("<svg xmlns=\"http://www.w3.org/2000/svg\" /><title>X</title>").as_deref(),
+            Some("X")
+        );
+        // An svg with its text, and no close, still hides the rest of the head.
+        assert_eq!(html_title("<svg><title>X</title>"), None);
     }
 
     #[test]
