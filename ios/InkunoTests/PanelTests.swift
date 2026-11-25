@@ -1,0 +1,251 @@
+import Foundation
+import InkunoCore
+import XCTest
+@testable import Inkuno
+
+/// Revision headers: render/parse roundtrip and header-only reads, mirroring
+/// `crates/inkuno-logic/src/revision.rs` tests; comments mirroring `markdown/mod.rs`.
+final class PanelTests: XCTestCase {
+    // MARK: Revision format — revision.rs `writes_the_documented_front_matter`
+
+    func testRendersTheDocumentedFrontMatter() {
+        let text = revisionRender(revision: Revision(
+            number: 3, parent: 2, author: "sachin", date: "2026-11-14T10:32:00Z",
+            kind: .checkpoint, note: "dropped the plugin idea, keep it local-first", text: "# Plan\n"
+        ))
+
+        XCTAssertEqual(
+            text,
+            "---\nrevision: 3\nparent: 2\nauthor: sachin\ndate: 2026-11-14T10:32:00Z\n" +
+            "kind: checkpoint\nnote: dropped the plugin idea, keep it local-first\n---\n# Plan\n"
+        )
+    }
+
+    func testFirstRevisionHasNoParent() throws {
+        let text = revisionRender(revision: Revision(
+            number: 1, parent: nil, author: "sachin", date: "2026-11-14T10:32:00Z",
+            kind: .checkpoint, note: nil, text: "a"
+        ))
+
+        XCTAssertFalse(text.contains("parent:"))
+        XCTAssertNil(try revisionParse(file: text).parent)
+    }
+
+    func testRoundTripsTrickyNotesAndAuthors() throws {
+        for note in ["colons: everywhere: here", "a \"quoted\" word", "two\nlines", "  spaces around  ",
+                    "\"starts with a quote", "---", "key: value", "tab\there", "back\\slash",
+                    "Ünïcödé 🦀", "control\u{1}char"] {
+            let text = revisionRender(revision: Revision(
+                number: 2, parent: 1, author: "Sachin Kolisetty", date: "2026-11-14T10:32:00Z",
+                kind: .auto, note: note, text: "body\n---\nmore\nCRLF\r\nline\r\n"
+            ))
+            let parsed = try revisionParse(file: text)
+            XCTAssertEqual(parsed.number, 2)
+            XCTAssertEqual(parsed.parent, 1)
+            XCTAssertEqual(parsed.kind, .auto)
+            XCTAssertEqual(parsed.note, note)
+            XCTAssertEqual(parsed.text, "body\n---\nmore\nCRLF\r\nline\r\n")
+        }
+    }
+
+    func testEmptyNoteIsNoNote() {
+        let text = revisionRender(revision: Revision(
+            number: 1, parent: nil, author: "x", date: "d",
+            kind: .checkpoint, note: "", text: "x"
+        ))
+
+        XCTAssertFalse(text.contains("note:"))
+    }
+
+    func testRefusesFilesThatAreNotRevisions() throws {
+        XCTAssertThrowsError(try revisionParse(file: "# just a note\n"))
+        XCTAssertThrowsError(try revisionParse(file: ""))
+        XCTAssertThrowsError(try revisionParse(file: "---\nrevision: 1\n"))
+        XCTAssertThrowsError(try revisionParse(file: "---\nauthor: x\n---\n"))
+        XCTAssertThrowsError(try revisionParse(file: "---\nrevision: 0\n---\n"))
+        XCTAssertThrowsError(try revisionParse(file: "---\nrevision: 1\nparent: two\n---\n"))
+        XCTAssertThrowsError(try revisionParse(file: "---\nrevision: 1\nkind: manual\n---\n"))
+        // A cut inside the header is unclosed; unknown keys and missing author/date default.
+        XCTAssertThrowsError(try revisionParse(file: "---\nrevision: 2\nauthor: ana\n"))
+        let parsed = try revisionParse(file: "---\nrevision: 5\nfuture: whatever\n---\nbody")
+        XCTAssertEqual(parsed.author, "unknown")
+        XCTAssertEqual(parsed.text, "body")
+    }
+
+    func testHeaderIsReadWithoutTheText() throws {
+        let full = revisionRender(revision: Revision(
+            number: 4, parent: 3, author: "ana", date: "2026-11-14T10:32:00Z",
+            kind: .auto, note: "kept: local", text: "# Plan\n---\nnot a closing line\n"
+        ))
+        // The header parses from the front matter alone: the text after it is not needed.
+        let head = try revisionParseHeader(file: String(full.prefix(upTo: full.range(of: "# Plan")!.lowerBound)))
+
+        XCTAssertEqual(head.number, 4)
+        XCTAssertEqual(head.note, "kept: local")
+    }
+
+    func testNumbersFilesAndTheNextRevision() {
+        XCTAssertEqual(revisionFileName(number: 1), "0001.md")
+        XCTAssertEqual(revisionFileName(number: 12_345), "12345.md")
+        XCTAssertEqual(revisionNumberOf(name: "0003.md"), 3)
+        XCTAssertEqual(revisionNumberOf(name: "0000.md"), nil)
+        XCTAssertEqual(revisionNumberOf(name: "notes.md"), nil)
+        XCTAssertEqual(revisionNumberOf(name: "0003.txt"), nil)
+        XCTAssertEqual(revisionNextNumber(saved: [1, 2, 7]), 8)
+        XCTAssertEqual(revisionNextNumber(saved: []), 1)
+    }
+
+    @MainActor
+    func testMapsVaultNotesToTheirFolders() throws {
+        let vault = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inkuno-folder-tests-\(UUID().uuidString)", isDirectory: true)
+        let store = VaultStore(vaultURL: vault, defaults: UserDefaults(suiteName: "inkuno-folder-\(UUID().uuidString)")!)
+        XCTAssertEqual(
+            store.revisionDir(for: vault.appendingPathComponent("ideas/plan.md"))?.path,
+            vault.appendingPathComponent(".inkuno/revisions/ideas/plan.md").path
+        )
+        XCTAssertNil(store.revisionDir(for: URL(fileURLWithPath: "/elsewhere/x.md")))
+        XCTAssertNil(store.revisionDir(for: vault))
+        // `..` after the root would climb out: nothing is mapped.
+        XCTAssertNil(store.revisionDir(for: vault.appendingPathComponent("sub/../../x.md")))
+    }
+
+    func testRowName() {
+        let checkpoint = RevisionHeader(number: 12, parent: 11, author: "sachin", date: "d", kind: .checkpoint, note: nil)
+        XCTAssertEqual(revisionRowName(head: checkpoint, autoWord: "auto"), "#12 · sachin")
+        let auto = RevisionHeader(number: 3, parent: 2, author: "sachin", date: "d", kind: .auto, note: "proposed, pending")
+        XCTAssertEqual(revisionRowName(head: auto, autoWord: "auto"), "#3 · sachin · auto · proposed, pending")
+    }
+
+    // MARK: Save / restore roundtrip through VaultStore
+
+    @MainActor
+    func testSaveRefusesUnchangedTextAndRestoreSavesCurrentFirst() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inkuno-panel-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = VaultStore(vaultURL: root, defaults: UserDefaults(suiteName: "inkuno-panel-\(UUID().uuidString)")!)
+        let note = root.appendingPathComponent("Plan.md")
+        try Data("one\n".utf8).write(to: note)
+
+        XCTAssertNotNil(try store.saveVersion(of: note))
+        XCTAssertNil(try store.saveVersion(of: note), "unchanged: no file")
+
+        try Data("two\n".utf8).write(to: note)
+        _ = try store.saveVersion(of: note)
+        let headers = try store.revisionHeaders(for: note).compactMap { try? $0.get() }
+        XCTAssertEqual(headers.map(\.number), [1, 2])
+
+        // An unsaved edit, then restore #1: the current text is kept as a version first.
+        try Data("two edited\n".utf8).write(to: note)
+        try store.restoreVersion(number: 1, for: note)
+        XCTAssertEqual(try String(contentsOf: note, encoding: .utf8), "one\n")
+        let after = try store.revisionHeaders(for: note).compactMap { try? $0.get() }
+        XCTAssertEqual(after.map(\.number), [1, 2, 3, 4])
+        XCTAssertEqual(after[2].kind, .auto)
+        XCTAssertEqual(after[2].note, "before restoring version 1")
+        XCTAssertEqual(try store.readRevisionText(number: 3, for: note), "two edited\n")
+        XCTAssertEqual(after[3].note, "version 1 restored")
+        XCTAssertEqual(try store.readRevisionText(number: 4, for: note), "one\n")
+
+        XCTAssertThrowsError(try store.restoreVersion(number: 1, for: note),
+                             "already this version")
+    }
+
+    // MARK: Comments — markdown/mod.rs `comment_on` shape
+
+    func testParsesAuthorTimeAndText() {
+        let comments = CommentFormat.parse("Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it to Quiet for v1. -->\nplain\n")
+
+        XCTAssertEqual(comments.count, 1)
+        XCTAssertEqual(comments[0].passage, "Ship it")
+        XCTAssertEqual(comments[0].author, "Ben")
+        XCTAssertEqual(comments[0].time, "2026-11-24T09:12Z")
+        XCTAssertEqual(comments[0].text, "Keep it to Quiet for v1.")
+        XCTAssertEqual(comments[0].line, 0)
+    }
+
+    func testParsesRepliesInOrder() {
+        let comments = CommentFormat.parse("Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. ↳ @Ana 2026-11-24T09:20Z: Agreed. -->\n")
+
+        XCTAssertEqual(comments[0].replies.map(\.author), ["Ana"])
+        XCTAssertEqual(comments[0].replies.map(\.text), ["Agreed."])
+    }
+
+    func testAReplyIsWrittenAndReadBack() throws {
+        let text = "Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. -->\n"
+        let comment = CommentFormat.parse(text)[0]
+
+        let updated = try CommentFormat.reply(
+            in: text, comment: comment, said: "Agreed", author: "Ana",
+            at: Date(timeIntervalSince1970: 1_795_514_520)
+        )
+
+        XCTAssertEqual(
+            updated,
+            "Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. ↳ @Ana 2026-11-24T10:02Z: Agreed -->\n"
+        )
+        XCTAssertEqual(CommentFormat.parse(updated)[0].replies.map(\.text), ["Agreed"])
+    }
+
+    func testParsesBareCommentAndSkipsFences() {
+        let comments = CommentFormat.parse("```\ncode<!-- comment: x -->\n```\nnote<!-- comment: read this -->\n")
+
+        XCTAssertEqual(comments.count, 1)
+        XCTAssertEqual(comments[0].passage, "note")
+        XCTAssertEqual(comments[0].text, "read this")
+    }
+
+    func testResolveKeepsThePassage() throws {
+        let text = "Ship it<!-- comment @Ben 2026-11-24T09:12Z: Keep it. -->\nnext\n"
+        let comments = CommentFormat.parse(text)
+
+        XCTAssertEqual(try CommentFormat.resolve(in: text, comment: comments[0]), "Ship it\nnext\n")
+    }
+
+    func testResolveOfALoneCommentTakesTheLine() throws {
+        let text = "keep\n<!-- comment: whole line -->\nend\n"
+        let comments = CommentFormat.parse(text)
+        XCTAssertEqual(comments[0].passage, "")
+
+        XCTAssertEqual(try CommentFormat.resolve(in: text, comment: comments[0]), "keep\nend\n")
+    }
+
+    // MARK: Outline — markdown/mod.rs `headings`
+
+    func testParsesHeadingsOutsideFences() {
+        let found = headings(text: "# Title\n\n## Sub\n```\n# code\n```\n### Deep\nno space#no\n")
+
+        XCTAssertEqual(found.map(\.level), [1, 2, 3])
+        XCTAssertEqual(found.map(\.title), ["Title", "Sub", "Deep"])
+        XCTAssertEqual(found.map(\.line), [0, 2, 6])
+    }
+
+    // MARK: Comment written from the block menu
+
+    private static let november24 = Date(timeIntervalSince1970: 1_795_514_520)
+
+    func testCommentOnALineWritesTheMarkup() {
+        XCTAssertEqual(CommentFormat.commented(line: "Ship it", said: "Keep it short", author: "Ana", at: Self.november24),
+                       "Ship it<!-- comment @Ana 2026-11-24T10:02Z: Keep it short -->")
+    }
+
+    func testCommentSpacesOutTheCloseMarkInTheText() {
+        let written = CommentFormat.commented(line: "Ship it", said: "a --> b", author: "Ana", at: Self.november24)
+
+        XCTAssertEqual(written, "Ship it<!-- comment @Ana 2026-11-24T10:02Z: a -- > b -->")
+        XCTAssertEqual(CommentFormat.parse(written ?? "").map(\.text), ["a -- > b"])
+    }
+
+    func testCommentRefusesABlankLineAnEmptyTextAndCommentMarks() {
+        XCTAssertNil(CommentFormat.commented(line: "   ", said: "x"))
+        XCTAssertNil(CommentFormat.commented(line: "Ship it", said: "  "))
+        XCTAssertNil(CommentFormat.commented(line: "{==marked==}", said: "x"))
+    }
+
+    func testCommentOnATableLineEscapesThePipe() {
+        XCTAssertEqual(CommentFormat.commented(line: "| a |", said: "x | y", author: "Ana", at: Self.november24),
+                       "| a |<!-- comment @Ana 2026-11-24T10:02Z: x \\| y -->")
+    }
+}

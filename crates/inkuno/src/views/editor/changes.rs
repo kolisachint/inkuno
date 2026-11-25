@@ -133,6 +133,33 @@ impl Editor {
         self.settle(new, at, cx);
     }
 
+    /// Accepts or rejects each change of `indices` (positions in `pending_areas`), as one undo step. They are
+    /// applied from the last to the first, so the positions of the earlier ones stay valid. The other changes
+    /// stay pending. Nothing is done for an index that is no change.
+    pub fn decide_changes(&mut self, indices: &[usize], accept: bool, cx: &mut Context<Self>) {
+        if self.readonly {
+            return self.refuse_pending(cx);
+        }
+        let mut picks: Vec<usize> = indices
+            .iter()
+            .copied()
+            .filter(|&index| index < self.pending.len())
+            .collect();
+        picks.sort_unstable_by(|a, b| b.cmp(a));
+        picks.dedup();
+        let Some(first) = picks.last().map(|&index| self.pending[index].range.start) else {
+            return;
+        };
+        let mut new = self.content.to_string();
+        for index in picks {
+            new = match accept {
+                true => pending::accept(&new, index),
+                false => pending::reject(&new, index),
+            };
+        }
+        self.settle(new, first, cx);
+    }
+
     /// Selects the passage of change `index`: its added lines, or its removed ones when nothing is added.
     pub fn select_change(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(area) = self.pending.get(index).cloned() else {

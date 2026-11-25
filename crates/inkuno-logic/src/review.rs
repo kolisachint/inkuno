@@ -33,6 +33,37 @@ pub fn sort<T>(items: &mut [T], time: impl Fn(&T) -> Option<&str>, at: impl Fn(&
     items.sort_by(|a, b| time(a).cmp(&time(b)).then_with(|| at(a).cmp(&at(b))));
 }
 
+/// What the grouping of a feed reads of one entry: whether it is a pending change, who by, and the store
+/// call that proposed it (`Entry::run`, `None` when it has none).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slot<'a> {
+    pub change: bool,
+    pub author: Option<&'a str>,
+    pub run: Option<u64>,
+}
+
+/// The runs of entries the feed shows, each as one card: a run is two or more pending changes in a row with the
+/// same known run (one Improve proposes them together, in one store call) by the same author. An entry with no
+/// run is never grouped. Every other entry is a run of its own. The runs cover `slots` in order.
+pub fn runs(slots: &[Slot]) -> Vec<Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < slots.len() {
+        let first = slots[start];
+        let mut end = start + 1;
+        if first.change && first.run.is_some() {
+            while slots.get(end).is_some_and(|next| {
+                next.change && next.run == first.run && next.author == first.author
+            }) {
+                end += 1;
+            }
+        }
+        out.push(start..end);
+        start = end;
+    }
+    out
+}
+
 /// The bytes of `areas` that the file does not hold: the marker lines and the added lines of each
 /// pending change. Its removed lines stay in the file.
 pub fn hidden(areas: &[Area]) -> Vec<Range<usize>> {
@@ -142,5 +173,63 @@ mod tests {
         let found = entry_of(&entries, "old", "new").expect("the entry");
         assert_eq!(found.created.as_deref(), Some("2026-11-24T10:02Z"));
         assert!(entry_of(&entries, "old", "other").is_none());
+    }
+
+    #[test]
+    fn a_run_of_changes_from_one_store_call_is_one_card() {
+        let change = |author, run| Slot {
+            change: true,
+            author: Some(author),
+            run: Some(run),
+        };
+        let slots = [
+            change("assistant", 1),
+            change("assistant", 1),
+            change("assistant", 1),
+            change("Bo", 1),
+            change("Bo", 2),
+        ];
+        assert_eq!(runs(&slots), [0..3, 3..4, 4..5]);
+    }
+
+    #[test]
+    fn two_runs_in_the_same_minute_are_two_cards() {
+        let change = |run| Slot {
+            change: true,
+            author: Some("assistant"),
+            run: Some(run),
+        };
+        assert_eq!(
+            runs(&[change(1), change(1), change(2), change(2)]),
+            [0..2, 2..4],
+            "two Improve runs in one minute stay apart"
+        );
+        assert_eq!(
+            runs(&[change(7), change(7)]),
+            vec![0..2],
+            "one run is one card"
+        );
+    }
+
+    #[test]
+    fn a_single_change_and_a_comment_are_not_grouped() {
+        let change = Slot {
+            change: true,
+            author: Some("assistant"),
+            run: Some(1),
+        };
+        let comment = Slot {
+            change: false,
+            author: Some("assistant"),
+            run: Some(1),
+        };
+        let no_run = Slot {
+            change: true,
+            author: Some("assistant"),
+            run: None,
+        };
+        assert_eq!(runs(&[change, comment, change]), [0..1, 1..2, 2..3]);
+        assert_eq!(runs(&[no_run, no_run]), [0..1, 1..2], "no run, no group");
+        assert!(runs(&[]).is_empty());
     }
 }

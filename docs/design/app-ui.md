@@ -790,13 +790,30 @@ Normal 800 is the default (§10.4 lock released for this change).
   person sees. The transcript shows the question; the words sent to the agent also name the note's file
   (`logic::assistant::chat_prompt`).
 - **Review this note**: the note is saved, and the agent is asked for findings in a fixed text form
-  (`logic::assistant::review_prompt`): `PASSAGE:` a line copied from the note, `COMMENT:` the remark, at
-  most 12, or the single line `NO FINDINGS`. The answer is not shown; its text is collected while the agent
+  (`logic::assistant::review_prompt`). When the note has open comments, the prompt lists them first, numbered `C1`,
+  `C2`… (`logic::assistant::open_comments`: those whose last message is not by `assistant`), and says the person's
+  comments come first: each question or request in them gets one `REPLY: C<n>` and `COMMENT:` (one line, a direct
+  answer grounded in the note, or what is missing). Then at most 12 new findings: `PASSAGE:` a line copied from the
+  note, `COMMENT:` the remark. Both item forms are alternatives in the same answer. The single line `NO FINDINGS` only
+  when there is neither a reply nor a finding. The answer is not shown; its text is collected while the agent
   works, and read when the agent ends (`logic::assistant::findings`).
-- Placing the findings (`Shell::apply_review`): each finding is placed with `markdown::comment_on` on the
-  note's current text, in order (`logic::assistant::place`). A finding is skipped when its passage is not
-  in the text exactly once, or when it lies inside a comment already there. The skipped ones are counted.
-  The summary: "Wrote N comments.", "1 finding could not be placed.", or "No findings.".
+- **Replies**: a reply is written after the comment's replies, on its line (`markdown::reply_on`), by `assistant`. The
+  agent writes its comments and replies under the name `assistant`, so it never answers itself.
+- Placing the findings (`Shell::apply_review`, `logic::assistant::place`): replies first, last comment first; then each
+  new comment with `markdown::comment_on_by` (or `comment_after`), from the last passage in the text to the first. A reply is written only where
+  its listed comment still starts at the same byte with the same markup.
+- **New-comment placement** (`logic::assistant::spot`): a passage is found by its text and must be in the text exactly
+  once. It may lie inside the passage of a comment already there, with words after it: the new marker splits that passage,
+  and the old comment keeps the words after the new marker (its author, time and text are untouched). When the passage ends
+  the old passage (or only its punctuation is left), nothing is split: the new comment is written right after the old
+  comment's marker (and after any markers adjacent to it), so the old passage stays whole and the new comment parses as its
+  own comment with its author and time (`logic::assistant::comment_after`). Skipped when the passage lies in a comment's
+  marker or text, or in a CriticMarkup comment. The skipped ones are counted.
+  The summary: "Wrote N comments.", "Wrote N replies.", "Wrote N comments and M replies.", "1 finding could not be
+  placed.", or "No findings.".
+- When the review writes into the open note, the Review view opens on the first new comment or reply, expanded and scrolled
+  into view (`Shell::reveal_review`). It is opened without moving the keys (`Shell::show_view_quiet`), so a person typing stays
+  in the note.
 - The words are written by Inkuno, never by the agent. A review that is stopped, or whose agent fails or
   exits, writes nothing.
 
@@ -1014,6 +1031,8 @@ Normal 800 is the default (§10.4 lock released for this change).
   agent's are placed in the current text (as `inkuno write` does).
 - Then one quiet line: **N changes are pending in the note: accept or reject them there.** (for one: **1 change is pending in
   the note: accept or reject it there.**), counted by `pending::areas`.
+- When the proposal is written into the open note, the Review view opens on its run (one card, expanded; §23.5) with no
+  focus moved (`Shell::reveal_review`, `Shell::show_view_quiet`). Not when the note is not the one shown.
 
 ### 18.6 Revisions
 
@@ -1355,6 +1374,10 @@ passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: r
 - Storage unchanged (§17): changes stay in `.inkuno/pending/<note>.json` in the vault and sync with it.
 - Each list entry gains `created`: the UTC time the change was proposed (`2026-11-24T10:02Z`). It is used only for feed order. `at` stays a text position.
 - Entries without `created` sort with untimed items (§23.2).
+- **A run is one card.** Two or more pending changes in a row with the same author and the same `created` minute (one
+  Improve proposes them together; `logic::review::runs`) show as one card, **N changes**, with the first change's text.
+  Expanded, each change has its own Accept and Reject, and **Accept all N** / **Reject all N** act on that run only
+  (`Editor::decide_changes`: applied last to first, one undo step; the others stay pending). The title's count stays per change.
 
 ### 23.6 Text
 
@@ -1368,3 +1391,55 @@ passage<!-- comment @name 2026-11-24T10:02Z: text ↳ @name 2026-11-24T10:05Z: r
 - Washed out: the theme's faint text colour, about 0.85× body size, right-aligned. The current line is one step darker. No other decoration.
 - On by default. A settings toggle hides it (text via `tr()`).
 - When on, Quiet's per-code-block line numbers (`layout.rs` gutter) are not drawn: file lines only.
+
+---
+
+## 24. iPhone app (APPROVED by owner 2026-11-24)
+
+The v1 iPhone UI. Native SwiftUI app. Prototype: `docs/design/prototypes/v3-ios.html`.
+Build decisions live in `docs/design/ios.md`.
+
+- Navigation: Home is the NavigationStack root. Cards (Write here… opens Today), a 2×2 grid
+  (Today, New note, Search, Notes), then From a month ago with recall cards. The tree pushes:
+  folders (icon, count, chevron), then notes (icon, title, age), then a Scratch section.
+  Empty folders say "This folder is empty." No tab bar. Pull-down or search opens the palette.
+- Editor: live-styled Markdown. Only the caret line shows raw Markdown (Settings toggle).
+  Links open. #tags filter the palette. @date jumps to that day. An accessory bar sits above
+  the keyboard: / # [[ task indent outdent undo hide.
+- Slash sheet: medium detent, 3-column grid. Heading, Bulleted, Numbered, Task, Quote, Code,
+  Table, Divider. No Math, no Mermaid.
+- Palette: full sheet with a search field. Empty query shows 6 recent notes. Groups:
+  Recent, Names, Content. A ">" prefix runs commands (This note, Formatting, Notes, Window).
+  A "Create «q»" row creates the note. No match says "No matches".
+- Panel sheet: bottom sheet (medium/large detents) with four segments. Outline lists indented
+  headings; tap scrolls there ("No headings" when empty). Comments show the passage quote,
+  who·time, text, and Resolve; adding is long-press on a block only. Versions has "Save version"
+  and the list; tap asks to confirm the restore, current saved first ("No saved versions yet").
+  Backlinks lists linking notes ("No notes link here yet").
+- Pending review: a bottom pill ("N changes · Review") opens a sheet with Reject all / Accept all
+  and one card per change (old struck, new). Swipe leading accepts, trailing rejects.
+  No inline washes.
+- Context menus are long-press. Tree row: Rename, Move, Duplicate, Copy link, separator,
+  Move to Trash (destructive). Block: Comment, Show Markdown, Copy, Duplicate, separator,
+  Delete (destructive).
+- Settings is a Form. Notes folder (change). Appearance: Theme Light/Dark/System segmented,
+  Text size 14/15/16/18, Page width narrow/normal/wide. Editor: "Show Markdown on the live line"
+  toggle. Files: Trash (count) opens the Trash list. About: version.
+- Trash is a list with Restore buttons. The palette command "Restore from Trash" restores too.
+- Themes: Light, Dark, System only. The desktop's other themes are out of v1.
+- Type: Inter (fallback system), JetBrains Mono for code (fallback SF Mono). Note body 16 pt,
+  line-height 1.6. H1 1.9em/700, H2 1.45em/650, H3 1.15em/600, H4–H6 1em/600. Rows are at
+  least 44 pt. Large nav title 34 pt/700. Push .32 s, sheets .25–.3 s, Reduce Motion respected.
+- Tokens: the full table is the prototype. iPhone-only additions: toast + toast-ink, add +
+  add-ink, del + del-ink, comment wash + comment dot, selection highlight, scrim. Dark
+  code-line/gutter-num/quote use the softened §22.4 values.
+- Out of v1: Compare/diff screen, inline pending washes, table cell editing, Mermaid and math
+  rendering (shown as code), Focus mode, tar.gz backup, the other themes, Assistant,
+  comment replies, text-selection comments.
+
+## 25. HTML pages (macOS: a tab)
+
+- An HTML page of the vault opens as a tab on macOS: a native webview is laid over the tab's area (`views/html_page.rs`, `inkuno_view::embed`).
+- Elsewhere it opens in its own window, `inkuno view` (`shell/notes.rs`, `open_html_in_viewer`), as before.
+- Why: gpui does not run the GTK loop that the webview needs on Linux, and Windows has no viewer, so the separate window stays the fallback there.
+- A tab out of sight hides its webview each frame; the page is not restored at startup, as before.

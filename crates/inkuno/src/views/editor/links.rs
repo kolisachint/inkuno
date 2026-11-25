@@ -141,23 +141,20 @@ impl Editor {
         let Some((whole, ..)) = comment_picked(&line, col, true) else {
             return;
         };
-        let markup = md::markup_in(&line[whole.clone()]);
-        let Some(mut comment) = md::parse_comment(markup) else {
-            return;
-        };
-        let kept = &line[whole.start..whole.end - markup.len()];
-        let typed = match self.is_table_line(&lr) {
-            true => text.replace('|', r"\|"),
-            false => text.to_string(),
-        };
         let time = md::utc_minute(crate::platform::revisions::now());
         let by = md::Stamp {
             author: &self.author,
             time: &time,
         };
-        md::add_reply(&mut comment, typed.trim(), by);
-        let marked = format!("{kept}{}", md::format_comment(&comment));
+        // `reply_on` takes the comment's start in the text; it changes only the comment's markup.
+        let start = lr.start + whole.start;
+        let Some(next) = md::reply_on(&self.content, start, text, by) else {
+            return;
+        };
         let range = lr.start + whole.start..lr.start + whole.end;
+        // What lies after the comment is unchanged, so the new markup is what is left between the two.
+        let after = self.content.len() - range.end;
+        let marked = next[range.start..next.len() - after].to_string();
         if self.touches_pending(&range, &marked) {
             return self.refuse_pending(cx);
         }

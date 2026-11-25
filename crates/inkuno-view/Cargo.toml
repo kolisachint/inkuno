@@ -10,6 +10,8 @@ license = "MIT"
 inkuno-platform = { version = "0.0.1", path = "../inkuno-platform" }
 notify = "7"
 open = "5.4.5"
+# The version wry and gpui use (one copy in the lock): the window an embedded page is placed in.
+raw-window-handle = "=0.6.2"
 tao = "0.37.3"
 wry = "0.57.3"
 

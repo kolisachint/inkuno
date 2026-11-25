@@ -5,7 +5,7 @@
 //! state, the panel and the process side (the child process is `platform::assistant`).
 
 use super::*;
-use crate::logic::{assistant as words, pending};
+use crate::logic::{assistant as words, markdown, pending};
 use crate::platform::assistant::{Agent, Event};
 use crate::platform::revisions::{self as history, Home};
 use crate::platform::vault::Signal;
@@ -57,10 +57,12 @@ pub(crate) struct Entry {
 }
 
 /// A review in progress: the note under review, and the answer collected so far. The answer is
-/// not shown; it becomes comments when the agent ends.
+/// not shown; it becomes comments and replies when the agent ends.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Review {
     pub path: PathBuf,
+    /// The comments the prompt listed, numbered from 1 there: a reply names one by its number.
+    pub open: Vec<words::Open>,
     pub answer: String,
 }
 
@@ -194,12 +196,26 @@ fn login_problem(error: &str) -> bool {
         .any(|text| error.contains(text))
 }
 
-/// The sentence that ends a review: what was written, what could not be placed.
-fn review_summary(placed: usize, skipped: usize) -> String {
-    let written = match placed {
-        0 => String::new(),
-        1 => tr("Wrote 1 comment.", "1 commentaire écrit.").to_string(),
-        n => format!("Wrote {n} comments."),
+/// The sentence that ends a review: what was written (comments, replies), what could not be placed.
+/// With no reply, the sentence is the one of comments alone.
+fn review_summary(placed: usize, replied: usize, skipped: usize) -> String {
+    let written = match (placed, replied) {
+        (0, 0) => String::new(),
+        (1, 0) => tr("Wrote 1 comment.", "1 commentaire écrit.").to_string(),
+        (n, 0) => format!("Wrote {n} comments."),
+        (0, 1) => tr("Wrote 1 reply.", "1 réponse écrite.").to_string(),
+        (0, m) => format!("Wrote {m} replies."),
+        (n, m) => {
+            let comments = match n {
+                1 => "1 comment".to_string(),
+                n => format!("{n} comments"),
+            };
+            let replies = match m {
+                1 => "1 reply".to_string(),
+                m => format!("{m} replies"),
+            };
+            format!("Wrote {comments} and {replies}.")
+        }
     };
     let missed = match skipped {
         0 => String::new(),
@@ -683,7 +699,7 @@ impl Shell {
     pub(crate) fn assistant_events(
         &mut self,
         events: Vec<Event>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         for event in events {
@@ -736,8 +752,8 @@ impl Shell {
                 Event::Ended => {
                     self.assistant.stopping = false;
                     match self.assistant.job.take() {
-                        Some(Job::Review(review)) => self.apply_review(review, cx),
-                        Some(Job::Improve(improve)) => self.apply_improve(improve, cx),
+                        Some(Job::Review(review)) => self.apply_review(review, window, cx),
+                        Some(Job::Improve(improve)) => self.apply_improve(improve, window, cx),
                         None => {}
                     }
                     self.assistant_settle(cx);
@@ -782,18 +798,22 @@ impl Shell {
             return;
         };
         let note = self.assistant_words(&path);
+        // The comments the agent may answer, numbered as the prompt lists them: kept for the reply.
+        let open = words::open_comments(self.pane().editor.read(cx).text());
+        let prompt = words::review_prompt(&note, &open);
         self.assistant.job = Some(Job::Review(Review {
             path,
+            open,
             answer: String::new(),
         }));
         self.assistant_say(Who::You, tr("Review this note", "Relire cette note"), cx);
         self.assistant_say(Who::Note, tr("Reviewing…", "Relecture en cours…"), cx);
-        self.assistant_run(words::review_prompt(&note), cx);
+        self.assistant_run(prompt, cx);
     }
 
     /// Writes the findings of a finished review into the note, as one undo step when the note is
     /// open, or straight to its file when no tab shows it. The note is saved by the usual debounce.
-    fn apply_review(&mut self, review: Review, cx: &mut Context<Self>) {
+    fn apply_review(&mut self, review: Review, window: &mut Window, cx: &mut Context<Self>) {
         // The revisions it wrote show in the Versions panel when it is next drawn.
         self.versions_stale = true;
         let found = words::findings(&review.answer);
@@ -821,14 +841,15 @@ impl Shell {
                 }
             },
         };
-        let author = self.revision_author();
+        // The agent writes under its own name, so that it never answers itself (`words::open_comments`).
         let time = crate::logic::markdown::utc_minute(crate::platform::revisions::now());
         let by = crate::logic::markdown::Stamp {
-            author: &author,
+            author: words::AUTHOR,
             time: &time,
         };
-        let placed = words::place(&current, &found, by);
-        if placed.placed > 0 {
+        let placed = words::place(&current, &found, &review.open, by);
+        let written = placed.placed + placed.replied > 0;
+        if written {
             match open {
                 Some(i) => {
                     if let Some(edit) = words::edit_between(&current, &placed.text) {
@@ -851,7 +872,23 @@ impl Shell {
                 }
             }
         }
-        let summary = review_summary(placed.placed, placed.skipped);
+        // The first comment or reply this review wrote opens in the panel, when the note is the one shown.
+        if let (true, Some(i)) = (written, open)
+            && i == self.active
+        {
+            let before: Vec<String> = markdown::all_comments(&current)
+                .iter()
+                .map(|note| current[note.at..note.end].to_string())
+                .collect();
+            let first = markdown::all_comments(&placed.text)
+                .into_iter()
+                .find(|note| !before.contains(&placed.text[note.at..note.end].to_string()))
+                .map(|note| note.at);
+            if let Some(at) = first {
+                self.reveal_review(review::Key::Comment(at), window, cx);
+            }
+        }
+        let summary = review_summary(placed.placed, placed.replied, placed.skipped);
         self.assistant_say(Who::Note, &summary, cx);
     }
 
@@ -952,7 +989,7 @@ impl Shell {
     /// the note, else the file itself. Two automatic revisions surround the write, as `inkuno write`
     /// makes them: the text before (skipped when it is the latest revision), then the proposed text.
     /// A proposal that cannot be placed is said in one line, and nothing is written.
-    fn apply_improve(&mut self, improve: Improve, cx: &mut Context<Self>) {
+    fn apply_improve(&mut self, improve: Improve, window: &mut Window, cx: &mut Context<Self>) {
         // The two revisions of the proposal show in the Versions panel when it is next drawn.
         self.versions_stale = true;
         // The text the block replaces: a fenced passage keeps its fences in the proposal.
@@ -1036,6 +1073,13 @@ impl Shell {
                 );
                 self.assistant_say(Who::Note, &format!("{what} {why}"), cx);
             }
+        }
+        // The run of this proposal opens in the panel, its first change, when the note is the one shown.
+        let first = pending::areas(&marked).first().map(|area| area.range.start);
+        if let (Some(i), Some(at)) = (open, first)
+            && i == self.active
+        {
+            self.reveal_review(review::Key::Change(at), window, cx);
         }
         let count = pending::areas(&marked).len();
         self.assistant_say(Who::Note, &pending_words(count), cx);

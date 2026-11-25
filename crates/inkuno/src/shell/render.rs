@@ -29,6 +29,8 @@ impl Render for Shell {
         let t = self.theme;
         self.end_closed_draft();
         self.refresh_review(cx);
+        // An HTML page is a native view over the window: hidden now, shown again by its paint if its tab is drawn.
+        self.hide_html_pages(cx);
         // The spacings of the interface are in rems: they follow its scale.
         window.set_rem_size(t.px(16.));
         // The pane holding the focus is the active one; when the code changed it without moving
@@ -205,7 +207,7 @@ impl Render for Shell {
             let toasts = self.render_toasts(cx);
             let toasts = div()
                 .absolute()
-                .bottom(px(54.))
+                .bottom(px(toasts::TOAST_BOTTOM))
                 .left_4()
                 .right_4()
                 .flex()
@@ -1024,6 +1026,27 @@ impl Shell {
             Some((_, FileKind::Svg(viewer))) => {
                 viewer.update(cx, |viewer, _| viewer.sync(t));
                 note.child(viewer)
+            }
+            // A native page draws over every gpui layer: while the palette, a menu, the icon picker, a
+            // tab being dragged or the band peek is open it is not painted, so it stays hidden (the hide
+            // pass above) and they show. Over the note's bottom, the status messages leave their room:
+            // the page is placed above them.
+            #[cfg(all(target_os = "macos", feature = "viewer"))]
+            Some((_, FileKind::Html(page))) => {
+                let covered = self.palette.is_some()
+                    || self.menu.is_some()
+                    || self.icon_pick.is_some()
+                    || cx.has_active_drag()
+                    || self.band_peek;
+                match covered {
+                    true => note,
+                    false => {
+                        let inset =
+                            toasts::TOAST_BOTTOM + self.toasts.len() as f32 * toasts::TOAST_ROW;
+                        page.update(cx, |page, _| page.set_bottom_inset(inset));
+                        note.child(page)
+                    }
+                }
             }
             Some((path, FileKind::Image)) => {
                 // A big picture takes a while: it says so after a moment; a file that is no picture says so too.

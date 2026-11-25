@@ -72,6 +72,7 @@ fn an_orphan_change_is_reported_by_read_and_shown_nowhere() {
     let home = Home::Vault(vault.root.clone());
     // A change whose context the note no longer has: it is kept beside the note, as an orphan.
     let orphan = Entry {
+        run: None,
         created: None,
         id: 1,
         author: "assistant".into(),

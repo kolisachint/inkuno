@@ -685,6 +685,7 @@ fn an_orphan_is_counted_in_the_pill_and_discard_removes_it(cx: &mut TestAppConte
     let note = root.join("Plan.md");
     let home = Home::Vault(root.clone());
     let orphan = Entry {
+        run: None,
         created: None,
         id: 1,
         author: "assistant".into(),

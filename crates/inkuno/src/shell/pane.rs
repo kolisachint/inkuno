@@ -136,6 +136,9 @@ pub(super) enum FileKind {
     Image,
     /// An SVG file, in the zoomable viewer.
     Svg(Entity<viewer::Viewer>),
+    /// An HTML page, in a webview laid over the tab (macOS). Not restored: see `restorable`.
+    #[cfg(all(target_os = "macos", feature = "viewer"))]
+    Html(Entity<crate::views::html_page::HtmlPage>),
 }
 
 /// The saved layout (file `panes`): the left pane's share, then each pane's tabs and the position
@@ -278,6 +281,8 @@ impl Shell {
             (Some(listing), _) => window.focus(&listing.filter.focus_handle(cx), cx),
             (None, Some(FileKind::Svg(viewer))) => window.focus(&viewer.focus_handle(cx), cx),
             (None, Some(FileKind::Image)) => window.focus(&self.pane().zone, cx),
+            #[cfg(all(target_os = "macos", feature = "viewer"))]
+            (None, Some(FileKind::Html(_))) => window.focus(&self.pane().zone, cx),
             (None, None) => window.focus(&self.pane().editor.focus_handle(cx), cx),
         }
         cx.notify();

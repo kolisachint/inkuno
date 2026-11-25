@@ -37,8 +37,16 @@ fn open<'a>(
 ) {
     let (root, shell, cx, config) = start(cx, name);
     let (base, mut changes) = pending::split(display, &[]);
+    // Changes given the same minute in a row are one store call, so one run (as an Improve proposes them).
+    let mut run = 0;
+    let mut last: Option<&str> = None;
     for (change, time) in changes.iter_mut().zip(created) {
+        if last != Some(*time) {
+            run += 1;
+            last = Some(time);
+        }
         change.created = Some(time.to_string());
+        change.run = Some(run);
         change.author = "Bo".into();
     }
     let note = root.join("Plan.md");
@@ -426,5 +434,98 @@ fn every_new_pane_writes_by_the_revisions_author(cx: &mut TestAppContext) {
         "the note, a new tab and a split: {authors:?}"
     );
     assert!(authors.iter().all(|a| a == "Ana"), "{authors:?}");
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Clicks the element named `id` (an id made at run time), as a pointer does. The name is leaked: a
+/// selector is `'static`, and a test is short-lived.
+fn click_named(cx: &mut gpui::VisualTestContext, id: String) {
+    let id: &'static str = Box::leak(id.into_boxed_str());
+    let at = cx
+        .debug_bounds(id)
+        .unwrap_or_else(|| panic!("{id} is drawn"))
+        .center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    settle(cx);
+}
+
+/// Clicks the card named `name` (its debug selector), as `pick` does for a numbered card.
+fn pick_named(cx: &mut gpui::VisualTestContext, name: String) {
+    let name: &'static str = Box::leak(name.into_boxed_str());
+    let card = cx
+        .debug_bounds(name)
+        .unwrap_or_else(|| panic!("{name} is drawn"));
+    cx.simulate_mouse_move(
+        point(card.left() + px(24.), card.bottom() - px(8.)),
+        None,
+        gpui::Modifiers::none(),
+    );
+    cx.run_until_parked();
+    let card = cx.debug_bounds(name).unwrap();
+    cx.simulate_click(card.center(), gpui::Modifiers::none());
+    settle(cx);
+}
+
+/// Three changes: the first two proposed in one minute by one author (one run), the third a minute later.
+const THREE_CHANGES: &str = "# Plan\n\nkeep one\n\n{--\nold one\n--}\n{++\nnew one\n++}\n\nkeep two\n\n{--\nold two\n--}\n{++\nnew two\n++}\n\nkeep three\n\n{--\nold three\n--}\n{++\nnew three\n++}\n";
+
+#[gpui::test]
+fn changes_proposed_together_are_one_card_and_a_single_change_is_not(cx: &mut TestAppContext) {
+    let times = [
+        "2026-11-24T10:02Z",
+        "2026-11-24T10:02Z",
+        "2026-11-24T10:09Z",
+    ];
+    let (root, shell, cx, _config) = open("review-group-card", THREE_CHANGES, &times, cx);
+    assert_eq!(
+        shell.read_with(cx, |s, _| s.review_title()),
+        "Review · 3 open",
+        "the count is still per change"
+    );
+    assert!(
+        cx.debug_bounds("review-group-0").is_some(),
+        "the run of two is one card"
+    );
+    assert!(
+        cx.debug_bounds("review-card-1").is_some(),
+        "the change of its own is a card of its own"
+    );
+    assert!(cx.debug_bounds("review-card-2").is_none());
+    let _ = fs::remove_dir_all(root);
+}
+
+#[gpui::test]
+fn accept_all_of_a_group_takes_its_changes_and_leaves_the_others_pending(cx: &mut TestAppContext) {
+    let times = [
+        "2026-11-24T10:02Z",
+        "2026-11-24T10:02Z",
+        "2026-11-24T10:09Z",
+    ];
+    let (root, shell, cx, _config) = open("review-group-accept", THREE_CHANGES, &times, cx);
+    let first = match order(&shell, cx)[0] {
+        Key::Change(at) => at,
+        Key::Comment(_) => panic!("the first item is a change"),
+    };
+    pick_named(cx, "review-group-0".to_string());
+    click_named(cx, format!("review-group-{first}-accept-all"));
+    assert_eq!(
+        text(&shell, cx),
+        THREE_CHANGES
+            .replace("{--\nold one\n--}\n{++\nnew one\n++}\n", "new one\n")
+            .replace("{--\nold two\n--}\n{++\nnew two\n++}\n", "new two\n"),
+        "the two of the run are accepted; the removed lines go, the added stay"
+    );
+    assert_eq!(
+        shell.read_with(cx, |s, cx| s.pane().editor.read(cx).pending_changes()),
+        1,
+        "the third change is still pending"
+    );
+    cx.simulate_keystrokes("secondary-z");
+    settle(cx);
+    assert_eq!(
+        text(&shell, cx),
+        THREE_CHANGES,
+        "one undo step brings the two back"
+    );
     let _ = fs::remove_dir_all(root);
 }
