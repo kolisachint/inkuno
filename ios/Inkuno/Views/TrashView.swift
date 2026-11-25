@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// The vault's Trash: trashed notes with Restore buttons. Restoring brings a note back to the
-/// vault root under its name, numbered when taken (`platform/vault.rs` `restore`).
+/// The vault's Trash: trashed notes with Restore buttons. Restoring brings a note back to the folder it
+/// came from, numbered when taken (`platform/vault.rs` `restore`), then shows a "Restored" notice.
 struct TrashView: View {
+    /// The notice the stack shows over its screens (see `RootView`).
+    @Binding var notice: InkNotice?
     var onOpen: (URL) -> Void = { _ in }
 
     @Environment(VaultStore.self) private var vault
@@ -84,6 +86,7 @@ struct TrashView: View {
         do {
             let restored = try vault.restoreFromTrash(at: entry.url)
             reload()
+            notice = InkNotice("Restored")
             onOpen(restored)
         } catch {
             self.error = error.localizedDescription

@@ -80,3 +80,83 @@ struct NoteRow: View {
         .frame(minHeight: InkMetrics.rowMinHeight)
     }
 }
+
+/// A notice shown over the bottom of the screen: a message and, optionally, one action button (Undo).
+/// `inkNotice(_:)` shows it for its duration, then clears it.
+struct InkNotice: Identifiable {
+    /// Tells this notice from the others: a new id restarts the toast and its timer.
+    let id = UUID()
+    /// The text the toast shows.
+    let message: String
+    /// How long the notice stays on screen, in seconds.
+    let duration: Double
+    /// The action button's title, when there is an action.
+    let actionTitle: String?
+    /// What the action button does.
+    let action: (() -> Void)?
+
+    /// A notice with no action, shown for `duration` seconds.
+    init(_ message: String, duration: Double = 2) {
+        self.message = message
+        self.duration = duration
+        self.actionTitle = nil
+        self.action = nil
+    }
+
+    /// A notice with one action button, such as Undo.
+    init(_ message: String, duration: Double, actionTitle: String, action: @escaping () -> Void) {
+        self.message = message
+        self.duration = duration
+        self.actionTitle = actionTitle
+        self.action = action
+    }
+}
+
+extension View {
+    /// Shows `notice` over the bottom of the view until its duration is up, then clears it.
+    func inkNotice(_ notice: Binding<InkNotice?>) -> some View {
+        modifier(InkNoticeModifier(notice: notice))
+    }
+}
+
+/// The toast behind `inkNotice(_:)`: a capsule above the bottom bar, faded in and out.
+private struct InkNoticeModifier: ViewModifier {
+    /// The notice on screen, or nil. The toast clears it when its duration ends or its action runs.
+    @Binding var notice: InkNotice?
+    /// The system Reduce Motion setting, which the toast's animation follows (`InkMotion.resolved`).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                if let notice {
+                    HStack(spacing: 10) {
+                        Text(notice.message)
+                        if let title = notice.actionTitle, let action = notice.action {
+                            Button(title) {
+                                action()
+                                self.notice = nil
+                            }
+                            .fontWeight(.semibold)
+                            .frame(minHeight: 36)
+                        }
+                    }
+                    .font(InkType.caption)
+                    .foregroundStyle(InkColor.toastInk)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(InkColor.toast, in: Capsule())
+                    .padding(.bottom, 96)
+                    .transition(.opacity)
+                    .id(notice.id)
+                }
+            }
+            .animation(InkMotion.resolved(InkMotion.toast, reduceMotion: reduceMotion), value: notice?.id)
+            .task(id: notice?.id) {
+                guard let current = notice else { return }
+                try? await Task.sleep(for: .seconds(current.duration))
+                guard !Task.isCancelled else { return }
+                notice = nil
+            }
+    }
+}

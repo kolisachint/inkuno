@@ -44,6 +44,9 @@ struct PendingPill: View {
 /// the note file, reject leaves the file; both update the sidecar list.
 struct PendingSheet: View {
     let noteURL: URL
+    /// The notice the stack shows over its screens (see `RootView`). It outlives this sheet, which closes once the
+    /// last change is resolved, so the confirmation still shows.
+    @Binding var notice: InkNotice?
 
     @Environment(VaultStore.self) private var vault
     @Environment(\.dismiss) private var dismiss
@@ -135,6 +138,7 @@ struct PendingSheet: View {
                 try vault.rejectPendingEntry(id: entry.id, for: noteURL)
             }
             NotificationCenter.default.post(name: .inkunoNoteChanged, object: noteURL)
+            notice = InkNotice(accept ? "Change accepted" : "Change rejected")
             reload()
         } catch {
             self.error = error.localizedDescription
@@ -145,6 +149,7 @@ struct PendingSheet: View {
         do {
             try vault.resolveAllPending(for: noteURL, accept: accept)
             NotificationCenter.default.post(name: .inkunoNoteChanged, object: noteURL)
+            notice = InkNotice(accept ? "All changes accepted" : "All changes rejected")
             reload()
         } catch {
             self.error = error.localizedDescription
@@ -224,7 +229,10 @@ private struct PendingCard: View {
         }
     }
 
+    /// The card's horizontal offset while it is dragged, and its spring back to 0 when the drag ends.
     @State private var dragOffset: CGFloat = 0
+    /// With Reduce Motion on, the card snaps back instead of easing (`InkMotion.resolved` returns nil).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var swipeGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
@@ -234,7 +242,7 @@ private struct PendingCard: View {
             }
             .onEnded { value in
                 let dx = value.translation.width
-                withAnimation(.easeOut(duration: 0.18)) { dragOffset = 0 }
+                withAnimation(InkMotion.resolved(InkMotion.popover, reduceMotion: reduceMotion)) { dragOffset = 0 }
                 if dx > 90 {
                     onAccept()
                 } else if dx < -90 {

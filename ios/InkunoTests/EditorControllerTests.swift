@@ -172,4 +172,87 @@ final class EditorControllerTests: XCTestCase {
 
         XCTAssertEqual(view.selectedRange, NSRange(location: 7, length: 0))
     }
+
+    func testLinkAtColumnIsTheWikiLinkUnderIt() {
+        let line = "see [[Plan]] now"
+
+        XCTAssertEqual(MarkdownEditorController.link(in: line, at: 6)?.kind, .wiki)
+        XCTAssertEqual(MarkdownEditorController.link(in: line, at: 6)?.target, "Plan")
+        XCTAssertNil(MarkdownEditorController.link(in: line, at: 0))
+    }
+
+    func testCommentPassageIsTheTextBeforeItsComment() {
+        let passages = MarkdownEditorController.passages(of: "Hello world<!-- comment @Ana 2026-11-24T10:02Z: nice -->")
+
+        XCTAssertEqual(passages.first?.range, NSRange(location: 0, length: 11))
+        XCTAssertEqual(passages.first?.comment.text, "nice")
+    }
+
+    func testLinkAtColumnIsTheTagUnderIt() {
+        XCTAssertEqual(MarkdownEditorController.link(in: "a #idea b", at: 3)?.kind, .tag)
+        XCTAssertNil(MarkdownEditorController.link(in: "a #idea b", at: 8))
+    }
+
+    func testWrapEditWrapsTheSelection() {
+        let edit = MarkdownEditorController.wrapEdit("hello world", selection: NSRange(location: 6, length: 5), marker: "**")
+
+        XCTAssertEqual(edit, EditorEdit(range: NSRange(location: 6, length: 5), text: "**world**", selection: NSRange(location: 8, length: 5)))
+    }
+
+    func testWrapEditUnwrapsASelectionThatHoldsTheMarkers() {
+        let edit = MarkdownEditorController.wrapEdit("**hi**", selection: NSRange(location: 0, length: 6), marker: "**")
+
+        XCTAssertEqual(edit, EditorEdit(range: NSRange(location: 0, length: 6), text: "hi", selection: NSRange(location: 0, length: 2)))
+    }
+
+    func testWrapEditUnwrapsMarkersJustOutsideTheSelection() {
+        let edit = MarkdownEditorController.wrapEdit("**hi**", selection: NSRange(location: 2, length: 2), marker: "**")
+
+        XCTAssertEqual(edit, EditorEdit(range: NSRange(location: 0, length: 6), text: "hi", selection: NSRange(location: 0, length: 2)))
+    }
+
+    func testWrapEditWithEmptySelectionInsertsThePairWithTheCaretBetween() {
+        let edit = MarkdownEditorController.wrapEdit("ab", selection: NSRange(location: 1, length: 0), marker: "**")
+
+        XCTAssertEqual(edit, EditorEdit(range: NSRange(location: 1, length: 0), text: "****", selection: NSRange(location: 3, length: 0)))
+    }
+
+    func testItalicInsideBoldWrapsInsteadOfUnwrapping() {
+        // `**hi**` is bold: the single `*` around `hi` is part of the bold run, so Italic adds its own pair.
+        let edit = MarkdownEditorController.wrapEdit("**hi**", selection: NSRange(location: 2, length: 2), marker: "*")
+
+        XCTAssertEqual(edit, EditorEdit(range: NSRange(location: 2, length: 2), text: "*hi*", selection: NSRange(location: 3, length: 2)))
+    }
+
+    func testHeadingAddsAndRemovesTheMarkerOfTheCaretLine() {
+        let added = MarkdownEditorController.headingEdit("a\nb", caret: 2)
+        XCTAssertEqual(added, EditorEdit(range: NSRange(location: 2, length: 0), text: "# ", selection: NSRange(location: 4, length: 0)))
+
+        let removed = MarkdownEditorController.headingEdit("# b", caret: 3)
+        XCTAssertEqual(removed, EditorEdit(range: NSRange(location: 0, length: 2), text: "", selection: NSRange(location: 1, length: 0)))
+    }
+
+    func testBoldAndItalicWrapTheSelectionInTheEditor() {
+        controller.update(text: "hello")
+        view.selectedRange = NSRange(location: 0, length: 5)
+
+        controller.apply(.bold)
+        XCTAssertEqual(view.textStorage.string, "**hello**")
+
+        view.selectedRange = NSRange(location: 2, length: 5)
+        controller.toggleItalic()
+        XCTAssertEqual(view.textStorage.string, "***hello***")
+    }
+
+    func testHeadingIsToggledOnTheCaretLineInTheEditor() {
+        controller.update(text: "one\ntwo")
+        place(5)
+
+        controller.toggleHeading()
+        XCTAssertEqual(view.textStorage.string, "one\n# two")
+
+        controller.toggleHeading()
+        XCTAssertEqual(view.textStorage.string, "one\ntwo")
+    }
 }
+

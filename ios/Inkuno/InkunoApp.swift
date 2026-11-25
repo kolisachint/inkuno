@@ -21,6 +21,8 @@ struct InkunoApp: App {
 enum Route: Hashable {
     case tree(URL)
     case note(URL)
+    /// A note a link in another note opened: its line is scrolled to once it loads.
+    case linked(URL, line: Int?)
     case settings
     case trash
 }
@@ -33,14 +35,23 @@ struct RootView: View {
     /// The panel segment the palette asked for on the note, sent to that note once the palette has closed.
     @State private var panelRequest: PanelRequest?
     @State private var queuedPanel: PanelRequest?
+    /// The formatting the palette asked for on the note, sent to that note once the palette has closed.
+    @State private var formatRequest: FormatRequest?
+    /// The formatting command the palette queued, sent to `formatRequest` once the palette has closed.
+    @State private var queuedFormat: FormatRequest?
     /// A screen a palette command opens, pushed once the palette has gone: a push while the sheet is
     /// still dismissing can be dropped by the navigation stack.
     @State private var queuedRoute: Route?
+    /// The notice over the stack (Restored, Moved to Trash with Undo, Saved). It outlives the screen that
+    /// raised it, so an Undo still shows after the note that was trashed has closed.
+    @State private var notice: InkNotice?
 
     /// The note on top of the stack, if any: the palette's This-note commands act on it.
     private var currentNote: URL? {
-        if case .note(let url) = path.last { return url }
-        return nil
+        switch path.last {
+        case .note(let url), .linked(let url, _): return url
+        default: return nil
+        }
     }
 
     var body: some View {
@@ -51,6 +62,7 @@ struct RootView: View {
                         destination(for: route)
                     }
             }
+            .inkNotice($notice)
             .sheet(isPresented: $showPalette, onDismiss: sendQueued) {
                 PaletteSheet(
                     onOpen: { route in
@@ -61,6 +73,10 @@ struct RootView: View {
                     onPanelTab: { tab in
                         guard let url = currentNote else { return }
                         queuedPanel = PanelRequest(url: url, tab: tab)
+                    },
+                    onFormat: { format in
+                        guard let url = currentNote else { return }
+                        queuedFormat = FormatRequest(url: url, format: format)
                     }
                 )
             }
@@ -73,17 +89,24 @@ struct RootView: View {
     private func destination(for route: Route) -> some View {
         switch route {
         case .tree(let folder):
-            TreeView(folder: folder, path: $path)
+            TreeView(folder: folder, path: $path, showPalette: $showPalette, notice: $notice)
         case .note(let url):
-            NoteView(url: url, panelRequest: $panelRequest)
+            NoteView(url: url, panelRequest: $panelRequest, formatRequest: $formatRequest, notice: $notice, openLinked: openLinkedNote)
+        case .linked(let url, let line):
+            NoteView(url: url, panelRequest: $panelRequest, formatRequest: $formatRequest, startLine: line, notice: $notice, openLinked: openLinkedNote)
         case .settings:
             SettingsView()
         case .trash:
-            TrashView { note in
+            TrashView(notice: $notice) { note in
                 showPalette = false
                 path.append(.note(note))
             }
         }
+    }
+
+    /// A link in a note opened another note: it is pushed, so Back returns to the note the link was tapped in.
+    private func openLinkedNote(_ url: URL, _ line: Int?) {
+        path.append(.linked(url, line: line))
     }
 
     /// Runs when the palette has closed: a panel command opens its segment on the note.
@@ -96,6 +119,10 @@ struct RootView: View {
         if let request = queuedPanel {
             queuedPanel = nil
             panelRequest = request
+        }
+        if let request = queuedFormat {
+            queuedFormat = nil
+            formatRequest = request
         }
     }
 }

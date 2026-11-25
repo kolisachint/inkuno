@@ -1,3 +1,4 @@
+import InkunoCore
 import SwiftUI
 import UIKit
 
@@ -8,7 +9,8 @@ import UIKit
 /// caret line, or with the setting off, they are hidden: 0.01 pt font, clear colour, no background. On the
 /// caret line they show in `faint`. A bullet or task marker keeps its first character, clear, with a kern for
 /// its slot; `MarkdownLayoutFragment` draws the disc or the box there, so the stored text does not change.
-/// A table block off the caret is drawn as a grid (`styleTable`).
+/// A table block off the caret is drawn as a grid (`styleTable`). A callout's quote lines get a box and a bar
+/// (`styleCallout`), and its `[!TYPE]` marker shows as a label off the caret line.
 struct MarkdownStyler {
     /// Font size of a hidden marker. Zero would collapse the glyph and confuse the caret.
     static let hiddenFontSize: CGFloat = 0.01
@@ -24,6 +26,10 @@ struct MarkdownStyler {
     let showMarkersOnCaretLine: Bool
     /// Resolves the dynamic colours for the current appearance.
     let traits: UITraitCollection
+    /// The passages of the note's comments, washed in `InkColor.commentWash` on every line they cover.
+    var washes: [NSRange] = []
+    /// The horizontal offset of each table block that is scrolled, keyed by the block's first line (`MarkdownEditorController`).
+    var tableOffsets: [Int: CGFloat] = [:]
 
     /// Restyles `lines` (indices into `layouts`) of `storage`, whose string must be the text `layouts` describe.
     /// `caretLine` is the line that holds the caret, if any. `revealedLines` show their markers whatever the
@@ -48,7 +54,8 @@ struct MarkdownStyler {
                 }
             } else {
                 let live = revealedLines.contains(index) || (index == caretLine && showMarkersOnCaretLine)
-                styleLine(layouts[index], text: text, storage: storage, live: live)
+                let calloutLine = callout(at: index, layouts: layouts, text: text)
+                styleLine(layouts[index], text: text, storage: storage, live: live, callout: calloutLine)
                 done.insert(index)
             }
         }
@@ -57,10 +64,62 @@ struct MarkdownStyler {
 
     // MARK: One line
 
-    private func styleLine(_ line: LineLayout, text: NSString, storage: NSMutableAttributedString, live: Bool) {
+    /// A callout's line as the styler draws it: its mark, and on the opening line its marker and label.
+    private struct CalloutLine {
+        let mark: CalloutMark
+        /// The `[!TYPE]` marker, relative to the line start. Nil on the quote lines after the opener.
+        let marker: Range<Int>?
+        /// The label that replaces the marker off the caret line (`MarkdownLayoutFragment` draws it).
+        let label: NSAttributedString?
+    }
+
+    /// The callout that quote line `index` belongs to: the nearest `> [!TYPE]` line at or above it in the same quote
+    /// run. Nil for a line that is not a quote, or a quote with no marker above it in its run.
+    private func callout(at index: Int, layouts: [LineLayout], text: NSString) -> CalloutLine? {
+        var opener = index
+        while layouts[opener].kind == .quote {
+            if let info = InkunoCore.lineCallout(line: lineString(layouts[opener], text: text)) {
+                guard opener == index else {
+                    return CalloutLine(mark: CalloutMark(kind: info.kind), marker: nil, label: nil)
+                }
+                let start = Int(info.startUtf16)
+                let label = NSAttributedString(string: info.kind.capitalized, attributes: [
+                    .font: UIFont.systemFont(ofSize: textSize * 0.95, weight: .semibold),
+                    .foregroundColor: color(CalloutMark.color(for: info.kind)),
+                ])
+                return CalloutLine(mark: CalloutMark(kind: info.kind), marker: start..<start + Int(info.lenUtf16), label: label)
+            }
+            guard opener > 0 else { break }
+            opener -= 1
+        }
+        return nil
+    }
+
+    /// The text of `line` without its line break.
+    private func lineString(_ line: LineLayout, text: NSString) -> String {
+        let range = NSRange(location: line.startUTF16, length: line.lenUTF16)
+        guard NSMaxRange(range) <= text.length else { return "" }
+        var length = line.lenUTF16
+        if length > 0, text.character(at: NSMaxRange(range) - 1) == 10 {
+            length -= 1
+        }
+        return text.substring(with: NSRange(location: line.startUTF16, length: length))
+    }
+
+    private func styleLine(_ line: LineLayout, text: NSString, storage: NSMutableAttributedString, live: Bool,
+                           callout: CalloutLine? = nil) {
         let lineRange = NSRange(location: line.startUTF16, length: line.lenUTF16)
         guard NSMaxRange(lineRange) <= text.length else { return }
-        storage.setAttributes(baseAttributes(for: line), range: lineRange)
+        storage.setAttributes(baseAttributes(for: line, callout: callout?.mark), range: lineRange)
+        // The wash goes under the runs: a tag or a code span keeps its own background over it. A line that holds a
+        // comment's passage carries `.inkComment`, and `MarkdownLayoutFragment` marks it with a dot at the right edge.
+        for wash in washes {
+            let range = NSIntersectionRange(wash, lineRange)
+            if range.length > 0 {
+                storage.addAttribute(.backgroundColor, value: color(InkColor.commentWash), range: range)
+                storage.addAttribute(.inkComment, value: NSNumber(value: true), range: lineRange)
+            }
+        }
 
         var length = line.lenUTF16
         if length > 0, text.character(at: NSMaxRange(lineRange) - 1) == 10 {
@@ -112,9 +171,35 @@ struct MarkdownStyler {
             while end < length, end != glyph, block.contains(end) == isBlock, bits[end] == bits[index] {
                 end += 1
             }
-            let attributes = self.attributes(bits: bits[index], isBlockMarker: isBlock, line: line, live: live)
+            let attributes = self.attributes(bits: bits[index], isBlockMarker: isBlock, line: line, live: live,
+                                             callout: callout != nil)
             storage.addAttributes(attributes, range: NSRange(location: line.startUTF16 + index, length: end - index))
             index = end
+        }
+        if let callout {
+            styleCallout(callout, line: line, storage: storage, live: live)
+        }
+    }
+
+    /// The marks of a callout line: the text starts past the bar, and the `[!TYPE]` marker of the opening line is
+    /// hidden off the caret line, its first character taking the label's width as a kern (`MarkdownLayoutFragment`
+    /// draws the label there). On the caret line the marker shows faint, as the other syntax does.
+    private func styleCallout(_ callout: CalloutLine, line: LineLayout, storage: NSMutableAttributedString, live: Bool) {
+        // The block marker's last character takes the padding as its kern, so the text starts past the bar.
+        if line.markerLenUTF16 > 0 {
+            storage.addAttribute(.kern, value: CalloutMark.padding,
+                                 range: NSRange(location: line.startUTF16 + line.markerLenUTF16 - 1, length: 1))
+        }
+        guard let marker = callout.marker, !marker.isEmpty else { return }
+        let range = NSRange(location: line.startUTF16 + marker.lowerBound, length: marker.count)
+        if live {
+            storage.addAttribute(.foregroundColor, value: color(InkColor.faint), range: range)
+            return
+        }
+        storage.addAttributes([.font: UIFont.systemFont(ofSize: Self.hiddenFontSize), .foregroundColor: UIColor.clear], range: range)
+        if let label = callout.label {
+            storage.addAttributes([.inkCalloutLabel: label, .kern: label.size().width],
+                                  range: NSRange(location: range.location, length: 1))
         }
     }
 
@@ -179,7 +264,8 @@ struct MarkdownStyler {
         UIColor(token).resolvedColor(with: traits)
     }
 
-    private func lineColor(_ line: LineLayout) -> UIColor {
+    private func lineColor(_ line: LineLayout, callout: Bool = false) -> UIColor {
+        if callout { return color(InkColor.ink) }
         switch line.kind {
         case .quote, .meta, .task(checked: true): return color(InkColor.soft)
         case .rule: return color(InkColor.faint)
@@ -188,16 +274,23 @@ struct MarkdownStyler {
     }
 
     /// Attributes for a whole line before its spans are styled: font, colour, paragraph, code background.
-    private func baseAttributes(for line: LineLayout) -> [NSAttributedString.Key: Any] {
+    private func baseAttributes(for line: LineLayout, callout: CalloutMark?) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineHeightMultiple = Self.lineHeightMultiple
-        // ponytail: a table line is clipped at the edge, not wrapped, so its columns keep their alignment.
+        // A table line is not wrapped, so its columns keep their alignment; a wide one scrolls in its box (`TableRowMark`).
         paragraph.lineBreakMode = line.kind == .table ? .byClipping : .byWordWrapping
+        // A wrapped line of a callout keeps the padding; its first line gets it from the kern in `styleCallout`.
+        if callout != nil {
+            paragraph.headIndent = CalloutMark.padding
+        }
         var attributes: [NSAttributedString.Key: Any] = [
             .font: lineFont(line).font(),
-            .foregroundColor: lineColor(line),
+            .foregroundColor: lineColor(line, callout: callout != nil),
             .paragraphStyle: paragraph,
         ]
+        if let callout {
+            attributes[.inkCallout] = callout
+        }
         if line.kind == .fence || line.kind == .code {
             attributes[.backgroundColor] = color(InkColor.codeBackground)
         }
@@ -205,7 +298,8 @@ struct MarkdownStyler {
     }
 
     /// Attributes for one run of characters that share their style bits and block-marker state.
-    private func attributes(bits: UInt32, isBlockMarker: Bool, line: LineLayout, live: Bool) -> [NSAttributedString.Key: Any] {
+    private func attributes(bits: UInt32, isBlockMarker: Bool, line: LineLayout, live: Bool,
+                            callout: Bool = false) -> [NSAttributedString.Key: Any] {
         // Quiet text (a link's address) is hidden like a marker. Front matter is read as it is: its
         // syntax and quiet text stay visible, since the core dims a link there too.
         let readAsIs = line.kind == .meta
@@ -217,7 +311,7 @@ struct MarkdownStyler {
         }
 
         var spec = lineFont(line)
-        var foreground = lineColor(line)
+        var foreground = lineColor(line, callout: callout)
         var extra: [NSAttributedString.Key: Any] = [:]
         if bits & StyleBit.code != 0 && line.kind != .fence && line.kind != .code && line.kind != .table {
             spec.size *= 0.86
@@ -293,9 +387,8 @@ struct MarkdownStyler {
     /// up in the table's monospace font. The header row is semibold. Each row carries a `TableRowMark` that
     /// `MarkdownLayoutFragment` draws the background, the rules and the border from.
     // ponytail: the padding counts visible characters, so a wide character (CJK, emoji) or a smaller inline code
-    // span misaligns its column. Lines are clipped at the edge of the text view: a wide table is cut off and
-    // cannot be scrolled (a per-block scroll view is later), and cells are not editable in v1 (the caret on the
-    // table shows its raw Markdown).
+    // span misaligns its column. A table wider than the text scrolls sideways inside its box, by the offset the
+    // controller keeps; cells are not editable in v1 (the caret on the table shows its raw Markdown).
     private func styleTable(_ block: ClosedRange<Int>, layouts: [LineLayout], text: NSString, storage: NSMutableAttributedString) {
         struct Row {
             let index: Int
@@ -428,7 +521,8 @@ struct MarkdownStyler {
             }
             let mark = TableRowMark(isHeader: row.index == header,
                                     isLast: row.index == bodyRows.last?.index,
-                                    width: ruleWidth)
+                                    width: ruleWidth,
+                                    offset: tableOffsets[block.lowerBound] ?? 0)
             storage.addAttribute(.inkTableRow, value: mark, range: lineRange)
             // The text is inset from the border on both sides; the paragraph keeps its other attributes.
             let whole = NSRange(location: row.start, length: min(row.units.count + 1, storage.length - row.start))

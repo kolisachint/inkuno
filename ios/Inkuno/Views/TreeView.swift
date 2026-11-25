@@ -10,6 +10,10 @@ struct TreeView: View {
     @Environment(VaultStore.self) private var vault
     let folder: URL
     @Binding var path: [Route]
+    /// Opens the palette (search and commands), as the pull-down does on Home (see `RootView`).
+    @Binding var showPalette: Bool
+    /// The notice the stack shows over its screens (see `RootView`).
+    @Binding var notice: InkNotice?
 
     @State private var entries: [VaultEntry] = []
     @State private var childCounts: [URL: Int] = [:]
@@ -17,7 +21,6 @@ struct TreeView: View {
     @State private var renaming: VaultEntry?
     @State private var renameText = ""
     @State private var moving: VaultEntry?
-    @State private var notice: String?
     @State private var scratches: [ScratchItem] = []
 
     private var isRoot: Bool {
@@ -83,7 +86,7 @@ struct TreeView: View {
                     InkSectionTitle("Scratch")
                 }
             }
-            if entries.isEmpty && error == nil {
+            if !isRoot, entries.isEmpty, error == nil {
                 Section {
                     Text("This folder is empty.")
                         .font(InkType.body)
@@ -105,7 +108,21 @@ struct TreeView: View {
         .navigationTitle(isRoot ? "Notes" : folder.lastPathComponent)
         .navigationBarTitleDisplayMode(isRoot ? .large : .inline)
         .task(id: folder) { reload() }
-        .refreshable { reload() }
+        // The pull-down reloads the folder and opens the palette, as on Home.
+        .refreshable {
+            reload()
+            showPalette = true
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    newNote()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("New note")
+            }
+        }
         .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) {}
@@ -118,16 +135,8 @@ struct TreeView: View {
                 move(entry, to: destination)
             }
         }
-        .overlay(alignment: .bottom) {
-            if let notice {
-                Text(notice)
-                    .font(InkType.caption)
-                    .foregroundStyle(InkColor.toastInk)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(InkColor.toast, in: Capsule())
-                    .padding(.bottom, 16)
-            }
+        .onReceive(NotificationCenter.default.publisher(for: .inkunoVaultChanged)) { _ in
+            reload()
         }
     }
 
@@ -204,27 +213,31 @@ struct TreeView: View {
     private func copyLink(_ entry: VaultEntry) {
         if let link = vault.copyLink(for: entry.url) {
             UIPasteboard.general.string = link
-            flash("Copied \(link)")
+            notice = InkNotice("Copied \(link)")
         }
     }
 
     private func trash(_ entry: VaultEntry) {
         do {
-            try vault.trashItem(at: entry.url)
+            let trashed = try vault.trashItem(at: entry.url)
             if path.last == .note(entry.url), path.count > 1 {
                 _ = path.popLast()
             }
             reload()
+            notice = trashNotice(title: entry.title, trashed: trashed)
         } catch {
             self.error = error.localizedDescription
         }
     }
 
-    private func flash(_ message: String) {
-        notice = message
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            if notice == message { notice = nil }
+    /// The notice after an item went to the Trash: Undo restores it to the folder it came from, for four seconds.
+    private func trashNotice(title: String, trashed: URL) -> InkNotice {
+        InkNotice("Moved “\(title)” to Trash", duration: 4, actionTitle: "Undo") {
+            do {
+                try vault.restoreFromTrash(at: trashed)
+            } catch {
+                self.error = error.localizedDescription
+            }
         }
     }
 
@@ -268,6 +281,18 @@ struct TreeView: View {
                 title: ScratchStore.title(of: url),
                 modified: try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
             )
+        }
+    }
+
+    /// A new note in the folder on screen (`Untitled.md`, or the next free name), opened at once. The folder
+    /// is listed again first, so the note is there when the screen is popped.
+    private func newNote() {
+        do {
+            let url = try vault.createNote(at: vault.newNoteURL(in: folder))
+            reload()
+            path.append(.note(url))
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 

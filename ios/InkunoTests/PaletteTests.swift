@@ -54,6 +54,37 @@ final class PaletteTests: XCTestCase {
         XCTAssertTrue(none.map(\.title).contains("Restore from Trash"))
     }
 
+    /// Accept/Reject all are offered only for an open note that has pending changes.
+    func testAcceptRejectAllShowOnlyWithPendingChanges() {
+        let note = URL(fileURLWithPath: "/v/Note.md")
+        let withPending = PaletteCommand.all(for: note, hasPanelHost: true, hasPending: true).map(\.title)
+        XCTAssertTrue(withPending.contains("Accept all changes"))
+        XCTAssertTrue(withPending.contains("Reject all changes"))
+
+        let withoutPending = PaletteCommand.all(for: note, hasPanelHost: true).map(\.title)
+        XCTAssertFalse(withoutPending.contains("Accept all changes"))
+        XCTAssertFalse(withoutPending.contains("Reject all changes"))
+
+        // Pending changes belong to a note: with no note open there is nothing to accept.
+        let noNote = PaletteCommand.all(for: nil, hasPanelHost: false, hasPending: true).map(\.title)
+        XCTAssertFalse(noNote.contains("Accept all changes"))
+    }
+
+    /// Bold, Italic and Heading are offered only for an open note whose host applies them.
+    func testFormattingShowsOnlyForANoteWithAHost() {
+        let note = URL(fileURLWithPath: "/v/Note.md")
+        let titles = PaletteCommand.all(for: note, hasPanelHost: false, hasFormatHost: true).map(\.title)
+        XCTAssertTrue(titles.contains("Bold"))
+        XCTAssertTrue(titles.contains("Italic"))
+        XCTAssertTrue(titles.contains("Heading"))
+
+        let noHost = PaletteCommand.all(for: note, hasPanelHost: false).map(\.title)
+        XCTAssertFalse(noHost.contains("Bold"))
+
+        let noNote = PaletteCommand.all(for: nil, hasPanelHost: false, hasFormatHost: true).map(\.title)
+        XCTAssertFalse(noNote.contains("Italic"))
+    }
+
     func testSearchListsNamesThenTextWithTheMatchingLine() {
         let index = VaultIndex(notes: [
             NoteInput(path: "courses.md", body: "- lait", mtimeUnix: 0),

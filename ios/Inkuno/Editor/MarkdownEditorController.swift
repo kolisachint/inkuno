@@ -1,10 +1,31 @@
+import InkunoCore
 import SwiftUI
 import UIKit
 
+/// The formatting the palette's Formatting group applies to the open note.
+enum EditorFormat: Equatable {
+    /// `**` around the selection.
+    case bold
+    /// `*` around the selection.
+    case italic
+    /// `# ` at the start of the caret's line.
+    case heading
+}
+
+/// A replacement of `range` in a text with `text`, and the selection that follows it.
+struct EditorEdit: Equatable {
+    /// The UTF-16 range replaced.
+    let range: NSRange
+    /// What replaces it.
+    let text: String
+    /// The selection after the replacement.
+    let selection: NSRange
+}
+
 /// Drives the live editor's text view. After every change and caret move it restyles only the lines the
 /// edit touched and the caret lines, and it performs the editing actions: list continuation, indent,
-/// the accessory bar, the slash blocks and the block menu (Comment, Show Markdown, Duplicate, Delete).
-/// Plain UIKit, so the tests drive it without SwiftUI.
+/// the accessory bar, the slash blocks, the formatting (Bold, Italic, Heading) and the block menu (Comment,
+/// Show Markdown, Duplicate, Delete). Plain UIKit, so the tests drive it without SwiftUI.
 @MainActor
 final class MarkdownEditorController: NSObject {
     private let provider: MarkdownLayoutProvider
@@ -13,6 +34,14 @@ final class MarkdownEditorController: NSObject {
     var onSlash: (() -> Void)?
     /// Comment from the block menu: the block's line index, its text, and whether it is a table line.
     var onComment: ((_ line: Int, _ text: String) -> Void)?
+    /// A tap on a wiki link, a Markdown link to a note, or a tag, on a line that is not live. The host opens it.
+    /// The markup is the link's source text (`[[Plan#Intro]]`), which keeps a wiki link's heading. A `.url` opens
+    /// in the browser and a `.heading` scrolls this note, so the host is not asked for those.
+    var onOpenLink: ((_ link: InkunoCore.LinkInfo, _ markup: String) -> Void)?
+    /// A tap on an `@` day on a line that is not live: the word after the `@`, as written (`2026-11-24`, `monday`).
+    var onOpenDate: ((String) -> Void)?
+    /// A tap on the passage of a comment on a line that is not live: the comment, to show its popover.
+    var onOpenComment: ((NoteComment) -> Void)?
 
     var textSize: CGFloat = 16 {
         didSet {
@@ -43,6 +72,16 @@ final class MarkdownEditorController: NSObject {
     private var styledCaret = 0
     /// The lines whose Markdown the block menu's Show Markdown made visible. Kept while the caret stays in them.
     private var revealedLines: Set<Int> = []
+    /// The caret line when the current touch began. A tap on a line that was not the caret's keeps its markup.
+    private var touchCaretLine = 0
+    /// The passage of each comment of the text as last styled, with its range: what is washed and tapped.
+    private var commentPassages: [(range: NSRange, comment: NoteComment)] = []
+    /// The horizontal offset of each table block the pan has scrolled, keyed by the block's first line.
+    private var tableOffsets: [Int: CGFloat] = [:]
+    /// The first line of the table the horizontal pan is scrolling, from the pan's start.
+    private var scrollingTable: Int?
+    /// Scrolls a table sideways. It begins only on a table row, and only when it moves mostly sideways.
+    private var tablePan: UIPanGestureRecognizer?
 
     // MARK: Setup
 
@@ -57,7 +96,8 @@ final class MarkdownEditorController: NSObject {
         view.delegate = self
         view.accessibilityIdentifier = "editor.text"
         view.backgroundColor = UIColor(InkColor.sheet)
-        view.textContainerInset = UIEdgeInsets(top: 12, left: 0, bottom: 24, right: 0)
+        // The right inset holds each comment's dot, so a full-width line wraps before the dot.
+        view.textContainerInset = UIEdgeInsets(top: 12, left: 0, bottom: 24, right: MarkdownLayoutFragment.commentDotMargin)
         view.textContainer.lineFragmentPadding = 0
         view.textLayoutManager?.delegate = glyphLayout
         // Smart punctuation would corrupt Markdown: "--" to a dash, straight quotes to curly ones.
@@ -72,7 +112,20 @@ final class MarkdownEditorController: NSObject {
         view.onTraitChange = { [weak self] in self?.restyleAll() }
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tap.cancelsTouchesInView = false
+        tap.delegate = self
         view.addGestureRecognizer(tap)
+        // The text view's double-tap (word selection) must fail before a single tap acts. Otherwise the first tap
+        // of a double-tap opens a link, tag, day or comment, or toggles a task box, as well as selecting the word.
+        for case let doubleTap as UITapGestureRecognizer in view.gestureRecognizers ?? [] where doubleTap.numberOfTapsRequired == 2 {
+            tap.require(toFail: doubleTap)
+        }
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleTablePan(_:)))
+        pan.delegate = self
+        view.addGestureRecognizer(pan)
+        // The text view's scroll pan waits for the table pan to fail, so a vertical drag fails the table pan at once
+        // (`gestureRecognizerShouldBegin`) and the note scrolls; a horizontal drag on a table is not scrolled by both.
+        view.panGestureRecognizer.require(toFail: pan)
+        tablePan = pan
         accessory.onAction = { [weak self] action in self?.perform(action) }
         return view
     }
@@ -83,6 +136,7 @@ final class MarkdownEditorController: NSObject {
     func update(text: String) {
         guard textView.markedTextRange == nil, textView.textStorage.string != text else { return }
         textView.text = text
+        tableOffsets = [:]
         restyleAll()
     }
 
@@ -91,6 +145,7 @@ final class MarkdownEditorController: NSObject {
         guard textView.markedTextRange == nil else { return }
         let text = textView.textStorage.string
         layouts = provider.documentLayout(text)
+        commentPassages = Self.passages(of: text)
         styledText = NSString(string: text)
         styledCaret = textView.selectedRange.location
         style(Array(layouts.indices))
@@ -101,12 +156,16 @@ final class MarkdownEditorController: NSObject {
     /// nothing: the marked text belongs to the input method, and the change is restyled once committed.
     private func restyleAfterEdit() {
         guard textView.markedTextRange == nil else { return }
+        // Keys are first lines, which an edit can move: a table re-entered after an edit starts unscrolled.
+        let scrolledTables = !tableOffsets.isEmpty
+        tableOffsets = [:]
         let old = styledText
         let new = NSString(string: textView.textStorage.string)
         let change = TextChange(from: old, to: new)
         let previousCaret = change.map(styledCaret)
 
         layouts = provider.documentLayout(new as String)
+        commentPassages = Self.passages(of: new as String)
         styledText = new
         styledCaret = textView.selectedRange.location
 
@@ -123,6 +182,11 @@ final class MarkdownEditorController: NSObject {
                 let high = layouts.lineIndex(containing: max(change.prefix, change.newEnd))
                 lines.formUnion(low...high)
             }
+        }
+        if scrolledTables {
+            // The offsets were cleared, so every table is drawn at offset 0 from now on. Restyle them all, or a
+            // table the edit did not touch keeps drawing at the offset the pan left it at.
+            lines.formUnion(layouts.indices.filter { layouts[$0].kind == .table })
         }
         style(lines.sorted())
     }
@@ -165,7 +229,9 @@ final class MarkdownEditorController: NSObject {
             provider: provider,
             textSize: textSize,
             showMarkersOnCaretLine: showMarkers,
-            traits: textView.traitCollection
+            traits: textView.traitCollection,
+            washes: commentPassages.map { $0.range },
+            tableOffsets: tableOffsets
         )
         let undo = textView.undoManager
         undo?.disableUndoRegistration()
@@ -177,6 +243,16 @@ final class MarkdownEditorController: NSObject {
             revealedLines: revealedLines
         )
         undo?.enableUndoRegistration()
+    }
+
+    /// The passage of each comment of `text` with its UTF-16 range, and the comment. A comment on its own has no
+    /// passage and is left out. Pure apart from the core's parse, so the tests read it without a view.
+    static func passages(of text: String) -> [(range: NSRange, comment: NoteComment)] {
+        CommentFormat.parse(text).compactMap { comment -> (range: NSRange, comment: NoteComment)? in
+            let length = comment.passage.utf16.count
+            guard length > 0 else { return nil }
+            return (range: NSRange(location: Int(comment.startUtf16), length: length), comment: comment)
+        }
     }
 
     private static func touchesFence(_ change: TextChange, old: NSString, new: NSString) -> Bool {
@@ -267,6 +343,108 @@ final class MarkdownEditorController: NSObject {
             NSRange(location: change.prefix, length: change.oldEnd - change.prefix),
             with: inserted,
             selection: newRange
+        )
+    }
+
+    // MARK: Formatting
+
+    /// Bold: wraps the selection in `**`, or unwraps it when it is already wrapped.
+    func toggleBold() {
+        applyWrap("**")
+    }
+
+    /// Italic: wraps the selection in `*`, or unwraps it when it is already wrapped.
+    func toggleItalic() {
+        applyWrap("*")
+    }
+
+    /// Heading: adds `# ` to the start of the caret's line, or removes it when the line already has it.
+    func toggleHeading() {
+        let edit = Self.headingEdit(textView.textStorage.string, caret: textView.selectedRange.location)
+        replace(edit.range, with: edit.text, selection: edit.selection)
+    }
+
+    /// Applies `format` to the note, as the palette's Formatting group asks.
+    func apply(_ format: EditorFormat) {
+        switch format {
+        case .bold: toggleBold()
+        case .italic: toggleItalic()
+        case .heading: toggleHeading()
+        }
+    }
+
+    /// Wraps or unwraps the selection in `marker` through the edit path, so it is one undo step.
+    private func applyWrap(_ marker: String) {
+        let edit = Self.wrapEdit(textView.textStorage.string, selection: textView.selectedRange, marker: marker)
+        replace(edit.range, with: edit.text, selection: edit.selection)
+    }
+
+    /// The edit that wraps `selection` of `text` in `marker`. A selection already wrapped, inside it (`**x**` selected
+    /// whole) or just outside it (`x` between the `**`), is unwrapped instead. An empty selection gets the pair with the
+    /// caret between them. Pure, so the tests read it without a view.
+    static func wrapEdit(_ text: String, selection: NSRange, marker: String) -> EditorEdit {
+        let ns = text as NSString
+        let m = marker.utf16.count
+        let at = selection.location
+        let end = NSMaxRange(selection)
+        guard selection.length > 0 else {
+            return EditorEdit(range: selection, text: marker + marker, selection: NSRange(location: at + m, length: 0))
+        }
+        let inner = ns.substring(with: selection)
+        if let core = unwrapped(inner, marker: marker) {
+            return EditorEdit(range: selection, text: core, selection: NSRange(location: at, length: core.utf16.count))
+        }
+        // The markers outside the selection: they must not be part of a longer run of the same character
+        // (`*x*` inside `**x**` is not italic, so Italic wraps the bold text again).
+        if let last = marker.utf16.last, at >= m, end + m <= ns.length,
+           ns.substring(with: NSRange(location: at - m, length: m)) == marker,
+           ns.substring(with: NSRange(location: end, length: m)) == marker,
+           !(at - m > 0 && ns.character(at: at - m - 1) == last),
+           !(end + m < ns.length && ns.character(at: end + m) == last) {
+            return EditorEdit(
+                range: NSRange(location: at - m, length: selection.length + 2 * m),
+                text: inner,
+                selection: NSRange(location: at - m, length: selection.length)
+            )
+        }
+        return EditorEdit(
+            range: selection,
+            text: marker + inner + marker,
+            selection: NSRange(location: at + m, length: selection.length)
+        )
+    }
+
+    /// The text between `marker`s when `part` is wrapped in them, else nil. The core must not start or end with the
+    /// marker's character: `**x**` is bold, not italic `*x*`.
+    private static func unwrapped(_ part: String, marker: String) -> String? {
+        let ns = part as NSString
+        let m = marker.utf16.count
+        guard ns.length > 2 * m, part.hasPrefix(marker), part.hasSuffix(marker), let last = marker.utf16.last else {
+            return nil
+        }
+        let core = ns.substring(with: NSRange(location: m, length: ns.length - 2 * m))
+        guard core.utf16.first != last, core.utf16.last != last else { return nil }
+        return core
+    }
+
+    /// The edit that adds `# ` to the start of the line of `caret`, or removes it when the line already starts with it.
+    /// The caret moves with the text. Pure, so the tests read it without a view.
+    static func headingEdit(_ text: String, caret: Int) -> EditorEdit {
+        let ns = text as NSString
+        let marker = "# "
+        let m = marker.utf16.count
+        let line = ns.lineRange(for: NSRange(location: caret, length: 0)).location
+        if line + m <= ns.length, ns.substring(with: NSRange(location: line, length: m)) == marker {
+            return EditorEdit(
+                range: NSRange(location: line, length: m),
+                text: "",
+                selection: NSRange(location: max(line, caret - m), length: 0)
+            )
+        }
+        return EditorEdit(
+            range: NSRange(location: line, length: 0),
+            text: marker,
+            selection: NSRange(location: caret + m, length: 0)
         )
     }
 
@@ -403,7 +581,58 @@ final class MarkdownEditorController: NSObject {
         }
     }
 
-    /// A tap on the box of a task line that is not live toggles it: `[ ]` to `[x]` and back.
+    /// The link of `line` that holds the UTF-16 `column`, if any. Pure, so the tests read it without a view.
+    static func link(in line: String, at column: Int) -> InkunoCore.LinkInfo? {
+        InkunoCore.lineLinks(line: line).first { link in
+            column >= Int(link.startUtf16) && column < Int(link.startUtf16 + link.lenUtf16)
+        }
+    }
+
+    /// The word after the `@` of the day run of `text` that holds `column`, when the core reads it as a day.
+    private func dateWord(in text: String, column: Int) -> String? {
+        let run = provider.styleRuns(line: text).first { run in
+            run.bits & StyleBit.date != 0 && column >= run.startUTF16 && column < run.startUTF16 + run.lenUTF16
+        }
+        guard let run else { return nil }
+        return text.substring(startUTF16: run.startUTF16 + 1, lengthUTF16: run.lenUTF16 - 1)
+    }
+
+    /// Opens the link, the day or the comment under `offset` on the non-live line `index`. False when none is there.
+    private func openMarkup(at offset: Int, line index: Int) -> Bool {
+        guard !layouts[index].inCodeBlock else { return false }
+        let text = lineText(index)
+        let column = offset - layouts[index].startUTF16
+        if let link = Self.link(in: text, at: column) {
+            switch link.kind {
+            case .url:
+                if let url = URL(string: link.target) {
+                    UIApplication.shared.open(url)
+                }
+            case .heading:
+                if let at = InkunoCore.linkPosition(text: textView.textStorage.string, anchor: .heading(title: link.target)) {
+                    reveal(line: layouts.lineIndex(containing: Int(at)))
+                }
+            case .footnote:
+                return false
+            case .wiki, .note, .tag:
+                let markup = text.substring(startUTF16: Int(link.startUtf16), lengthUTF16: Int(link.lenUtf16))
+                onOpenLink?(link, markup)
+            }
+            return true
+        }
+        if let word = dateWord(in: text, column: column) {
+            onOpenDate?(word)
+            return true
+        }
+        guard let passage = commentPassages.first(where: { comment in
+            offset >= comment.range.location && offset < NSMaxRange(comment.range)
+        }) else { return false }
+        onOpenComment?(passage.comment)
+        return true
+    }
+
+    /// A tap on a link, a tag or a day opens it (`openMarkup`) when the line is not live and no text is
+    /// selected. A tap on the box of a task line that is not live toggles it: `[ ]` to `[x]` and back.
     @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
         guard textView.markedTextRange == nil else { return }
         let point = recognizer.location(in: textView)
@@ -411,8 +640,11 @@ final class MarkdownEditorController: NSObject {
         let offset = textView.offset(from: textView.beginningOfDocument, to: position)
         let index = layouts.lineIndex(containing: offset)
         let line = layouts[index]
+        let isLive = showMarkers && index == touchCaretLine
+        if !isLive, textView.selectedRange.length == 0, openMarkup(at: offset, line: index) {
+            return
+        }
         guard case .task = line.kind else { return }
-        let isLive = showMarkers && index == layouts.lineIndex(containing: styledCaret)
         guard !isLive else { return }
 
         let indent = lineText(index).prefix { $0 == " " }.utf16.count
@@ -422,6 +654,76 @@ final class MarkdownEditorController: NSObject {
         let mark = textView.textStorage.string.substring(startUTF16: box, lengthUTF16: 1)
         guard mark == " " || mark == "x" || mark == "X" else { return }
         replace(NSRange(location: box, length: 1), with: mark == " " ? "x" : " ", selection: textView.selectedRange)
+    }
+
+    /// The first line of the table block under `point` in the text view, when the point is on a table row.
+    private func tableStart(at point: CGPoint) -> Int? {
+        guard let position = textView.closestPosition(to: point) else { return nil }
+        let index = layouts.lineIndex(containing: textView.offset(from: textView.beginningOfDocument, to: position))
+        guard layouts[index].kind == .table else { return nil }
+        return layouts.tableBlock(containing: index).lowerBound
+    }
+
+    /// The width of the table block at `start`, and the width its box shows in the text container (as
+    /// `MarkdownLayoutFragment` draws it).
+    private func tableWidths(_ start: Int) -> (table: CGFloat, visible: CGFloat)? {
+        let storage = textView.textStorage
+        for index in layouts.tableBlock(containing: start) {
+            let at = layouts[index].startUTF16
+            guard at < storage.length,
+                  let mark = storage.attribute(.inkTableRow, at: at, effectiveRange: nil) as? TableRowMark
+            else { continue }
+            let fit = textView.textContainer.size.width - 1
+            return (mark.width, fit > 0 ? min(mark.width, fit) : mark.width)
+        }
+        return nil
+    }
+
+    /// Moves the table the pan began on by the drag, kept within its box, and restyles its lines with the new offset.
+    @objc private func handleTablePan(_ recognizer: UIPanGestureRecognizer) {
+        if recognizer.state == .began {
+            scrollingTable = tableStart(at: recognizer.location(in: textView))
+        }
+        guard recognizer.state == .began || recognizer.state == .changed else {
+            scrollingTable = nil
+            return
+        }
+        guard let start = scrollingTable, let widths = tableWidths(start) else { return }
+        let dragged = recognizer.translation(in: textView).x
+        recognizer.setTranslation(.zero, in: textView)
+        let scrollable = max(0, widths.table - widths.visible)
+        tableOffsets[start] = min(max(0, (tableOffsets[start] ?? 0) - dragged), scrollable)
+        // Restyling the table's lines sets their new offset, and the text view redraws the fragments that show it.
+        style(Array(layouts.tableBlock(containing: start)))
+        textView.setNeedsDisplay()
+    }
+}
+
+extension MarkdownEditorController: UIGestureRecognizerDelegate {
+    /// Records the caret line as a touch begins, before the text view moves the caret for it.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        touchCaretLine = layouts.lineIndex(containing: styledCaret)
+        return true
+    }
+
+    /// The table pan begins only when it moves mostly sideways and starts on a table row. Its direction is the
+    /// translation once it has moved; the velocity is used only while the translation is still zero.
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = tablePan, gestureRecognizer === pan else { return true }
+        var motion = pan.translation(in: textView)
+        if motion == .zero {
+            motion = pan.velocity(in: textView)
+        }
+        guard abs(motion.x) > abs(motion.y) else { return false }
+        return tableStart(at: pan.location(in: textView)) != nil
+    }
+
+    /// The table pan does not recognise together with any other gesture: the text view's scroll pan waits for it to fail
+    /// (`require(toFail:)`), so a vertical drag scrolls the note and a sideways drag on a table scrolls the table alone.
+    /// The tap needs no overlap with a pan, so nothing is allowed to recognise with the table pan.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        false
     }
 }
 
@@ -436,13 +738,20 @@ extension MarkdownEditorController: UITextViewDelegate {
     }
 
     /// The edit menu of a selection: the system's actions, then the block actions (Comment, Show
-    /// Markdown, Copy, Duplicate, and Delete last, destructive).
+    /// Markdown, Copy, Duplicate, and Delete last, destructive). A table block says Edit as Markdown: the same
+    /// reveal, since a table is drawn as a grid until its markup shows.
+    /// The long-press that selects a block's text opens this menu, so the block menu needs no gesture of its own:
+    /// a UIContextMenuInteraction on the text view would compete with the system's selection long-press.
     func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        let isTable = layouts[layouts.lineIndex(containing: textView.selectedRange.location)].kind == .table
         let block = UIMenu(options: .displayInline, children: [
             UIAction(title: "Comment", image: UIImage(systemName: "text.bubble")) { [weak self] _ in
                 self?.beginComment()
             },
-            UIAction(title: "Show Markdown", image: UIImage(systemName: "chevron.left.forwardslash.chevron.right")) { [weak self] _ in
+            UIAction(
+                title: isTable ? "Edit as Markdown" : "Show Markdown",
+                image: UIImage(systemName: "chevron.left.forwardslash.chevron.right")
+            ) { [weak self] _ in
                 self?.revealBlock()
             },
             UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
