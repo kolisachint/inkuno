@@ -85,16 +85,17 @@ fn title_of(root: &Path, url: &str) -> Option<String> {
     Some(format!("{name} — Inkuno"))
 }
 
+/// An embedded page's token (`embed::new_token`) and the handler of its messages.
+type Embedded = (String, Box<dyn Fn(embed::Message)>);
+
 /// The webview of the page at `url`, served from `root`: the scripts, the custom protocol, the
 /// navigation policy and the link handler. The window and an embedded page share it. An embedded
-/// page also passes its script's messages (`embed::message`) to `on_message`; the window passes none.
-fn page<'a>(
-    url: &str,
-    root: &Path,
-    on_message: Option<Box<dyn Fn(embed::Message)>>,
-) -> WebViewBuilder<'a> {
+/// page, given its token, also passes its script's messages (`embed::message`) to its handler; the
+/// window passes none.
+fn page<'a>(url: &str, root: &Path, embedded: Option<Embedded>) -> WebViewBuilder<'a> {
     let serve_root = root.to_path_buf();
     let last_open = Cell::new(None::<Instant>);
+    // The window has no token: `embedded` is None there, so no message is read.
     WebViewBuilder::new()
         .with_url(url)
         .with_initialization_script(keys::SCRIPT)
@@ -103,10 +104,12 @@ fn page<'a>(
             protocol::respond(&serve_root, &request.uri().to_string())
         })
         .with_ipc_handler(move |request| {
-            if let Some(message) = embed::message(request.body()) {
-                if let Some(on_message) = &on_message {
-                    on_message(message);
-                }
+            // A message needs the page's token: a body without it is not the script's, and is
+            // read as a link below (which it is not), so a page's own script cannot drive the app.
+            if let Some((token, on_message)) = &embedded
+                && let Some(message) = embed::message(request.body(), token)
+            {
+                on_message(message);
                 return;
             }
             // The page's script sends the address of a link the user clicked.

@@ -37,18 +37,25 @@ pub const LINKS: &str = r#"
 })();
 "#;
 
+/// The token placeholder of `EMBEDDED`, replaced by `embedded_script`.
+#[cfg(target_os = "macos")]
+const TOKEN_PLACEHOLDER: &str = "__INKUNO_TOKEN__";
+
 /// Keys of an embedded page (`embed::child`): Escape and the app's chords go to the app, not the page.
 /// A click in the page makes its webview the first responder, which swallows every key; the script
-/// hands those keys to the app (`window.ipc`) and stops them here. Escape sends `inkuno:focus`; a Cmd
-/// chord sends `inkuno:key:<keystroke>` in gpui syntax (`cmd-shift-p`). The key is read from the
-/// physical key (`e.code`), so Option and Shift do not change it and the arrows and Enter are keys.
-/// The page keeps its copy, paste, cut, select-all and undo chords (Cmd-C, V, X, A without Shift, Cmd-Z
-/// with or without Shift), and the chords of `SCRIPT` (Cmd-[, Cmd-], Cmd-R). A forwarded key does not
-/// reach the page's own handlers. Only the main frame runs the script: keys inside an iframe are not
-/// forwarded. Not in the viewer window.
+/// hands those keys to the app (`window.ipc`) and stops them here. Escape sends `inkuno:<token>:focus`;
+/// a Cmd chord sends `inkuno:<token>:key:<keystroke>` in gpui syntax (`cmd-shift-p`). The token is the
+/// page's secret (`embed::new_token`), written into this script only: the page's own scripts cannot read
+/// it, and a message without it is refused by the app. The key is read from the physical key (`e.code`),
+/// so Option and Shift do not change it and the arrows and Enter are keys. The page keeps its copy, paste, cut, select-all and undo
+/// chords (Cmd-C, V, X, A without Shift, Cmd-Z with or without Shift), and the chords of `SCRIPT`
+/// (Cmd-[, Cmd-], Cmd-R). A forwarded key does not reach the page's own handlers. Only the main frame
+/// runs the script: keys inside an iframe are not forwarded. Not in the viewer window.
 #[cfg(target_os = "macos")]
-pub const EMBEDDED: &str = r#"
+const EMBEDDED: &str = r#"
 (function () {
+  var TOKEN = '__INKUNO_TOKEN__';
+  var ipc = window.ipc;
   var NAMES = {
     Backslash: '\\', BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Comma: ',',
     Period: '.', Slash: '/', Semicolon: ';', Quote: "'", Backquote: '`', Enter: 'enter', Tab: 'tab',
@@ -61,10 +68,14 @@ pub const EMBEDDED: &str = r#"
     if (digit) return digit[1];
     return Object.prototype.hasOwnProperty.call(NAMES, code) ? NAMES[code] : null;
   }
+  function send(message) {
+    ipc.postMessage('inkuno:' + TOKEN + ':' + message);
+  }
   window.addEventListener('keydown', function (e) {
+    if (!e.isTrusted) return;
     if (e.key === 'Escape') {
       e.preventDefault(); e.stopImmediatePropagation();
-      window.ipc.postMessage('inkuno:focus');
+      send('focus');
       return;
     }
     if (!e.metaKey) return;
@@ -79,15 +90,22 @@ pub const EMBEDDED: &str = r#"
     if (e.shiftKey) mods.push('shift');
     mods.push('cmd');
     e.preventDefault(); e.stopImmediatePropagation();
-    window.ipc.postMessage('inkuno:key:' + mods.concat([key]).join('-'));
+    send('key:' + mods.concat([key]).join('-'));
   }, true);
 })();
 "#;
 
+/// The script of one embedded page: `EMBEDDED` with the page's `token` (`embed::new_token`). The token is
+/// written in a string literal, so it must be plain letters and digits: `embed::new_token` makes one.
+#[cfg(target_os = "macos")]
+pub fn embedded_script(token: &str) -> String {
+    EMBEDDED.replace(TOKEN_PLACEHOLDER, token)
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "macos")]
-    use super::EMBEDDED;
+    use super::{EMBEDDED, embedded_script};
     use super::{LINKS, SCRIPT};
 
     #[test]
@@ -113,16 +131,29 @@ mod tests {
     #[test]
     fn the_embedded_script_hands_escape_and_app_chords_to_the_app() {
         for needle in [
-            "'inkuno:focus'",
-            "'inkuno:key:'",
+            "send('focus')",
+            "send('key:'",
             "e.metaKey",
             "keyOf(e.code)",
             "e.stopImmediatePropagation()",
             "Backslash: '\\\\'",
-            "window.ipc.postMessage",
+            "e.isTrusted",
             "}, true);",
         ] {
             assert!(EMBEDDED.contains(needle), "{needle}");
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_embedded_script_carries_its_token_and_posts_only_with_it() {
+        let script = embedded_script("0123abcd");
+        assert!(script.contains("var TOKEN = '0123abcd';"));
+        assert!(!script.contains("__INKUNO_TOKEN__"));
+        // Every post goes through `send`, which prefixes the token: no token-less post is left.
+        assert_eq!(script.matches("postMessage(").count(), 1);
+        assert!(script.contains("ipc.postMessage('inkuno:' + TOKEN + ':' + message)"));
+        assert!(!script.contains("'inkuno:focus'"));
+        assert!(!script.contains("'inkuno:key:'"));
     }
 }
