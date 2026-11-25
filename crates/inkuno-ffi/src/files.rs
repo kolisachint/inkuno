@@ -65,6 +65,36 @@ pub fn trashed_sidecar_path(trashed_name: String) -> Option<String> {
     ))
 }
 
+/// The origin record of a trashed item: `.inkuno/trash-origin/<trashed name>.txt`, which holds the
+/// folder the item was in (see `trash_origin_folder`). `trashed name` is as in `trash_name`.
+#[uniffi::export]
+pub fn trash_origin_path(trashed_name: String) -> Option<String> {
+    Some(format!(
+        ".inkuno/trash-origin/{}.txt",
+        name_of(&trashed_name)?
+    ))
+}
+
+/// The folder an item was in before it was trashed, read from its origin record: one
+/// vault-relative line, `""` for the root. `./` and a trailing `/` are dropped. `None` for an
+/// absolute path, for `..`, `.` or an empty part, and for a hidden folder (`.trash`, `.inkuno`).
+#[uniffi::export]
+pub fn trash_origin_folder(text: String) -> Option<String> {
+    let text = text.trim();
+    if text.starts_with('/') {
+        return None;
+    }
+    let rel = text.strip_prefix("./").unwrap_or(text);
+    let rel = rel.strip_suffix('/').unwrap_or(rel);
+    if rel.is_empty() {
+        return Some(String::new());
+    }
+    // A part starting with `.` covers `.`, `..` and the hidden app folders alike.
+    rel.split('/')
+        .all(|part| !part.is_empty() && !part.starts_with('.'))
+        .then(|| rel.to_string())
+}
+
 /// The vault's trash, where deleted notes and folders go: `.trash` at the root.
 #[uniffi::export]
 pub fn vault_trash_folder() -> String {
@@ -147,6 +177,56 @@ mod tests {
             Some(".inkuno/pending-trash/2 plan.md.json")
         );
         assert_eq!(trashed_sidecar_path("a/plan.md".into()), None);
+    }
+
+    #[test]
+    fn the_origin_record_sits_beside_the_trashed_name() {
+        assert_eq!(
+            trash_origin_path("2 plan.md".into()).as_deref(),
+            Some(".inkuno/trash-origin/2 plan.md.txt")
+        );
+        assert_eq!(trash_origin_path("a/plan.md".into()), None);
+        assert_eq!(trash_origin_path("../plan.md".into()), None);
+        assert_eq!(trash_origin_path(String::new()), None);
+    }
+
+    #[test]
+    fn the_origin_folder_is_a_plain_vault_path() {
+        assert_eq!(
+            trash_origin_folder("notes/ideas".into()).as_deref(),
+            Some("notes/ideas")
+        );
+        assert_eq!(
+            trash_origin_folder("./notes/ideas/\n".into()).as_deref(),
+            Some("notes/ideas")
+        );
+        assert_eq!(
+            trash_origin_folder("notes/ideas/".into()).as_deref(),
+            Some("notes/ideas")
+        );
+        assert_eq!(trash_origin_folder(String::new()).as_deref(), Some(""));
+        assert_eq!(trash_origin_folder("./".into()).as_deref(), Some(""));
+        assert_eq!(trash_origin_folder("  \n".into()).as_deref(), Some(""));
+    }
+
+    #[test]
+    fn an_origin_that_is_not_a_plain_folder_is_refused() {
+        for bad in [
+            "../x",
+            "/x",
+            "/",
+            "a/../b",
+            "a/./b",
+            ".",
+            "./.",
+            ".trash",
+            ".inkuno/trash-origin",
+            "notes/.hidden",
+            "notes//ideas",
+            "./../x",
+        ] {
+            assert_eq!(trash_origin_folder(bad.into()), None, "{bad}");
+        }
     }
 
     #[test]
