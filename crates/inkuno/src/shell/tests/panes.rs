@@ -673,8 +673,9 @@ fn an_old_tool_tab_restores_the_files_around_it(cx: &mut TestAppContext) {
     });
 }
 
-/// An HTML page in the saved tabs does not come back at startup: no tab, no viewer window, no
-/// system application. The other tabs come back, and the shown one falls back to a real one.
+/// An HTML page in the saved tabs does not come back at startup where pages are not tabs (every
+/// build but macOS with the viewer, and the tests): no tab, no viewer window, no system application.
+/// The other tabs come back, and the shown one falls back to a real one.
 #[gpui::test]
 fn an_html_page_is_not_restored_at_startup(cx: &mut TestAppContext) {
     let (root, shell, cx, _config) = start(cx, "html-restore");

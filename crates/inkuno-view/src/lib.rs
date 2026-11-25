@@ -86,8 +86,13 @@ fn title_of(root: &Path, url: &str) -> Option<String> {
 }
 
 /// The webview of the page at `url`, served from `root`: the scripts, the custom protocol, the
-/// navigation policy and the link handler. The window and an embedded page share it.
-fn page<'a>(url: &str, root: &Path) -> WebViewBuilder<'a> {
+/// navigation policy and the link handler. The window and an embedded page share it. An embedded
+/// page also passes its script's messages (`embed::message`) to `on_message`; the window passes none.
+fn page<'a>(
+    url: &str,
+    root: &Path,
+    on_message: Option<Box<dyn Fn(embed::Message)>>,
+) -> WebViewBuilder<'a> {
     let serve_root = root.to_path_buf();
     let last_open = Cell::new(None::<Instant>);
     WebViewBuilder::new()
@@ -98,6 +103,12 @@ fn page<'a>(url: &str, root: &Path) -> WebViewBuilder<'a> {
             protocol::respond(&serve_root, &request.uri().to_string())
         })
         .with_ipc_handler(move |request| {
+            if let Some(message) = embed::message(request.body()) {
+                if let Some(on_message) = &on_message {
+                    on_message(message);
+                }
+                return;
+            }
             // The page's script sends the address of a link the user clicked.
             let link = request.body();
             let now = Instant::now();
@@ -142,7 +153,7 @@ pub fn run(file: &Path, root: Option<&Path>) -> Result<(), String> {
 
     let title_root = root.clone();
     let title_proxy = event_loop.create_proxy();
-    let builder = page(&url, &root).with_on_page_load_handler(move |event, url| {
+    let builder = page(&url, &root, None).with_on_page_load_handler(move |event, url| {
         // A page that did not load (a refused or missing link) has no file name: the plain title.
         if matches!(event, PageLoadEvent::Finished) {
             let title = title_of(&title_root, &url).unwrap_or_else(|| "Inkuno".into());

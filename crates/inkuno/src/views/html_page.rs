@@ -3,12 +3,29 @@
 //! hides every page before each frame; a page whose tab is drawn is built at its first paint and
 //! placed over its area at each paint, so it shows again. Dropping the page closes the webview.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use gpui::{Bounds, Context, IntoElement, Pixels, Render, Window, canvas, div, prelude::*};
-use inkuno_view::embed::{self, Child};
+use gpui::{
+    Bounds, Context, EventEmitter, IntoElement, Pixels, Render, Window, canvas, div, prelude::*,
+};
+use inkuno_logic::html::html_title;
+use inkuno_view::embed::{self, Child, Message};
 
 use crate::lang::tr;
+
+/// How much of the file is read for its title: the head, where `<title>` is.
+const TITLE_BYTES: u64 = 16 * 1024;
+
+/// What an HTML page tells the shell (macOS). The shell focuses the page's pane, gives the page back
+/// the keyboard and runs the keys (`Shell::html_page_keys`).
+#[derive(Clone, Debug)]
+pub enum HtmlPageEvent {
+    /// A key the page's script handed over: Escape, or a Cmd chord the page does not need.
+    Keys(Message),
+}
+
+impl EventEmitter<HtmlPageEvent> for HtmlPage {}
 
 /// An HTML page shown in a tab.
 pub struct HtmlPage {
@@ -19,8 +36,10 @@ pub struct HtmlPage {
     view: Option<Child>,
     /// Set once building the webview failed: the tab then says so, and no build is tried again.
     failed: bool,
-    /// Px kept clear at the bottom of the tab, where the status messages are drawn over the note.
-    bottom_inset: f32,
+    /// The top edge of the status messages in window px, when there are some: the page ends above it.
+    clear_above: Option<f32>,
+    /// The page's `<title>`, read at its opening: the tab is named by it.
+    title: Option<String>,
 }
 
 impl HtmlPage {
@@ -31,13 +50,28 @@ impl HtmlPage {
             root: root.to_path_buf(),
             view: None,
             failed: false,
-            bottom_inset: 0.,
+            clear_above: None,
+            title: read_title(path),
         }
     }
 
-    /// Keeps `px` clear at the bottom of the tab: the page is placed above that band at the next paint.
-    pub fn set_bottom_inset(&mut self, px: f32) {
-        self.bottom_inset = px;
+    /// The page's `<title>`, when it has a non-empty one (see `inkuno_logic::html::html_title`).
+    pub fn title(&self) -> Option<String> {
+        self.title.clone()
+    }
+
+    /// Gives the keyboard back to the app: the webview gives up the first responder, so the app's
+    /// shortcuts reach the window again. Nothing when the page is not built.
+    pub fn focus_parent(&self) {
+        if let Some(view) = &self.view {
+            view.focus_parent();
+        }
+    }
+
+    /// The top edge of the status messages (window px), or None with none: the page is placed above
+    /// it at the next paint. A page the messages do not reach keeps its whole height.
+    pub fn set_clear_above(&mut self, edge: Option<f32>) {
+        self.clear_above = edge;
     }
 
     /// Hides the page. The next paint of its tab shows it again.
@@ -49,10 +83,22 @@ impl HtmlPage {
 
     /// Builds the webview if needed, then places it over `bounds` and shows it. Returns true
     /// only when the build has just failed, so that the tab is drawn again to say so.
-    fn place(&mut self, bounds: Bounds<Pixels>, window: &Window) -> bool {
+    fn place(&mut self, bounds: Bounds<Pixels>, window: &Window, cx: &mut Context<Self>) -> bool {
         let mut just_failed = false;
         if self.view.is_none() && !self.failed {
-            match embed::child(window, &self.path, &self.root) {
+            // The page's keys come back as messages from the event loop, which must not touch gpui
+            // at once: each one is emitted as an event from a task, and the shell handles it.
+            let page = cx.weak_entity();
+            let async_app = cx.to_async();
+            let on_message = move |message: Message| {
+                let (page, async_app) = (page.clone(), async_app.clone());
+                async_app
+                    .spawn(async move |cx| {
+                        let _ = page.update(cx, |_, cx| cx.emit(HtmlPageEvent::Keys(message)));
+                    })
+                    .detach();
+            };
+            match embed::child(window, &self.path, &self.root, on_message) {
                 Ok(view) => self.view = Some(view),
                 Err(_) => {
                     self.failed = true;
@@ -64,7 +110,8 @@ impl HtmlPage {
             return just_failed;
         };
         let width = f32::from(bounds.size.width);
-        let height = f32::from(bounds.size.height) - self.bottom_inset;
+        let top = f32::from(bounds.origin.y);
+        let height = embed::page_height(top, top + f32::from(bounds.size.height), self.clear_above);
         if width <= 0. || height <= 0. {
             view.show(false);
             return just_failed;
@@ -100,7 +147,7 @@ impl Render for HtmlPage {
                 canvas(
                     move |bounds, window, cx| {
                         page.update(cx, |page, cx| {
-                            if page.place(bounds, window) {
+                            if page.place(bounds, window, cx) {
                                 cx.notify();
                             }
                         })
@@ -111,4 +158,13 @@ impl Render for HtmlPage {
             )
             .into_any_element()
     }
+}
+
+/// The title of the page at `path`, read from the head of the file. None when the file cannot be
+/// read or has no title.
+fn read_title(path: &Path) -> Option<String> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut head = Vec::new();
+    Read::take(file, TITLE_BYTES).read_to_end(&mut head).ok()?;
+    html_title(&String::from_utf8_lossy(&head))
 }

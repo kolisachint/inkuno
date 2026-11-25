@@ -169,6 +169,8 @@ struct Shell {
     comment_author: String,
     /// Status messages shown, oldest to newest.
     toasts: Vec<Toast>,
+    /// The top edge of the stack of status messages in window px, as last drawn: None with no message.
+    toast_top: std::rc::Rc<std::cell::Cell<Option<f32>>>,
     /// Number of the last message, to remove the right one when it expires.
     toasted: usize,
     title: String,
@@ -301,6 +303,7 @@ impl Shell {
             review_scroll: gpui::ScrollHandle::new(),
             comment_author: String::new(),
             toasts: Vec::new(),
+            toast_top: Default::default(),
             toasted: 0,
             title: String::new(),
             seen: config::Seen::read(),

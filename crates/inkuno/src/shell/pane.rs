@@ -5,6 +5,7 @@
 //! watcher, the theme) loops over it. A `Group` is a pane as the user sees it: its tabs, in
 //! order, and the one it shows.
 
+use super::notes::html_page_root;
 use super::*;
 
 /// Width below which two panes do not fit next to the panel: it folds. No pane is made narrower.
@@ -14,12 +15,16 @@ pub(super) const MIN_PANE: Pixels = px(300.);
 pub(super) const MIN_PANE_H: Pixels = px(200.);
 
 /// A saved tab that comes back: a file still in the vault, or a scratch note. A token an older
-/// version wrote for a tool tab (`@graph`, `@calendar`) is no file and is ignored. An HTML page
-/// does not come back: opening it starts the viewer, and only a user's action may do that.
-fn restorable(path: &Path, root: Option<&Path>) -> bool {
-    path.is_file()
-        && !platform::viewer::is_html(path)
-        && (platform::scratch::holds(path) || root.is_some_and(|root| path.starts_with(root)))
+/// version wrote for a tool tab (`@graph`, `@calendar`) is no file and is ignored.
+///
+/// An HTML page comes back only where a page is a tab (`html_tabs`: macOS with the viewer). There it
+/// is served from its own folder by the webview laid over the window: no process starts and the CSP
+/// closes the network, so restoring it is safe. Elsewhere opening a page starts the viewer or hands
+/// the file to the system, which only a user's action may do: such a page is not restored.
+fn restorable(path: &Path, root: Option<&Path>, html_tabs: bool) -> bool {
+    let inside = root.is_some_and(|root| path.starts_with(root));
+    let page = !platform::viewer::is_html(path) || (html_tabs && html_page_root(path).is_some());
+    path.is_file() && page && (platform::scratch::holds(path) || inside)
 }
 
 /// Where a tab goes: at a place in the bar of a pane, or into a new pane split off a side of one.
@@ -956,6 +961,9 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         let mut seen = std::collections::HashSet::new();
+        // Where a page is a tab: the same condition that makes `open_html_tab` open one (the tests
+        // record the viewer's request instead, so their pages are not restored).
+        let html_tabs = cfg!(all(target_os = "macos", feature = "viewer", not(test)));
         let mut groups: Vec<(Vec<PathBuf>, usize)> = saved
             .into_iter()
             .map(|(tabs, shown)| {
@@ -963,7 +971,7 @@ impl Shell {
                 // A file open twice (edited by hand) keeps its first tab: a note is open once.
                 let tabs: Vec<PathBuf> = tabs
                     .into_iter()
-                    .filter(|p| restorable(p, root) && seen.insert(p.clone()))
+                    .filter(|p| restorable(p, root, html_tabs) && seen.insert(p.clone()))
                     .collect();
                 let shown = want
                     .and_then(|want| tabs.iter().position(|p| *p == want))
@@ -1003,7 +1011,13 @@ impl Shell {
                 if i > 0 {
                     self.add_tab(window, cx);
                 }
-                self.open_note(path, cx);
+                // An HTML page opens as a tab of its own, as a user's open does. `restorable` ran the
+                // same test as `open_html_tab` (`html_page_root`), so the open cannot fail here.
+                if html_tabs && platform::viewer::is_html(path) {
+                    self.open_html_tab(path, cx);
+                } else {
+                    self.open_note(path, cx);
+                }
                 opened.push(self.active);
             }
             if let Some(&tab) = opened.get(shown) {
@@ -1114,15 +1128,21 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let note = root.join("Note.md");
         std::fs::write(&note, "# Note\n").unwrap();
-        assert!(restorable(&note, Some(&root)));
-        assert!(!restorable(&note, None));
-        assert!(!restorable(&root.join("@graph"), Some(&root)));
-        assert!(!restorable(Path::new("@calendar"), Some(&root)));
-        assert!(!restorable(&root.join("Missing.md"), Some(&root)));
-        // An HTML page in the vault is not restored: no viewer window, no system application, at startup.
+        assert!(restorable(&note, Some(&root), false));
+        assert!(!restorable(&note, None, false));
+        assert!(!restorable(&root.join("@graph"), Some(&root), false));
+        assert!(!restorable(Path::new("@calendar"), Some(&root), false));
+        assert!(!restorable(&root.join("Missing.md"), Some(&root), false));
+        // Where pages are not tabs, an HTML page is not restored: no viewer window, no system application.
         let page = root.join("page.html");
         std::fs::write(&page, "<h1>Page</h1>").unwrap();
-        assert!(!restorable(&page, Some(&root)));
+        assert!(!restorable(&page, Some(&root), false));
+        assert!(!restorable(&page, None, false));
+        // Where pages are tabs, a page of the folder comes back, and only one under a root.
+        assert!(restorable(&page, Some(&root), true));
+        assert!(!restorable(&page, None, true));
+        assert!(!restorable(&root.join("Missing.html"), Some(&root), true));
+        assert!(restorable(&note, Some(&root), true));
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -52,6 +52,10 @@ impl Shell {
         if pane.scratch && pane.file.is_none() {
             return logic::scratch::title(pane.editor.read(cx).text());
         }
+        // An HTML page is named by its <title>, where it has one.
+        if let Some(title) = page_title(pane.file.as_ref(), cx) {
+            return title;
+        }
         if let Some(path) = pane.file_path().or(pane.path.as_ref()) {
             return vault::stem(path);
         }
@@ -576,4 +580,19 @@ impl Shell {
             .child(band)
             .into_any_element()
     }
+}
+
+/// The `<title>` of the HTML page a tab shows, when it has one (macOS, where pages are tabs).
+#[cfg(all(target_os = "macos", feature = "viewer"))]
+fn page_title(file: Option<&FileView>, cx: &App) -> Option<String> {
+    match &file?.kind {
+        FileKind::Html(page) => page.read(cx).title(),
+        _ => None,
+    }
+}
+
+/// No HTML tabs in this build: no tab is named by a page's title.
+#[cfg(not(all(target_os = "macos", feature = "viewer")))]
+fn page_title(_file: Option<&FileView>, _cx: &App) -> Option<String> {
+    None
 }
