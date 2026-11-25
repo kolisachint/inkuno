@@ -24,7 +24,7 @@ final class InkunoWalkTests: XCTestCase {
             appearance = theme
             let app = launchWithoutVault(theme: theme)
             expect(app.buttons["Choose folder"], "onboarding has the Choose folder button")
-            expect(app.staticTexts["Inkuno"], "onboarding shows the app name")
+            expect(app.staticTexts["Open your notes folder"], "onboarding shows its title")
             shot("00-onboarding")
             app.terminate()
         }
@@ -79,7 +79,10 @@ final class InkunoWalkTests: XCTestCase {
 
         // 06 Caret: a tap on a line. Not asserted: in XCUI a tap does not give the editor keyboard focus on this
         // simulator (focus stays false, and a typed marker is refused), so the caret position is unverified.
-        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.2)).tap()
+        // The tap lands past the end of the first line, "# Inbox": plain text with no link, tag, day or comment,
+        // so it never opens a note the fixture links to (line 3) or a tag (line 6), whatever the width.
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.03)).tap()
+        expect(app.navigationBars["Inbox"], "the Inbox note is still open after the caret tap")
         shot("06-caret")
 
         // ponytail: the slash sheet (07) is not walked: it opens only from the keyboard accessory bar's "/",
@@ -103,7 +106,7 @@ final class InkunoWalkTests: XCTestCase {
         app.buttons["Save version"].tap()
         // The saved version's row, not the "Version saved." notice: that one goes after 2.2 s, and a
         // slow simulator can take longer than that to look.
-        expect(app.staticTexts["#1"], "the saved version's row")
+        expect(app.staticTexts["Saved version"], "the saved version's row")
         shot("10-panel-versions")
 
         segments.buttons["Backlinks"].tap()

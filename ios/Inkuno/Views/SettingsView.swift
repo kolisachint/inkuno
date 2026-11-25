@@ -17,11 +17,15 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Notes folder") {
+            Section {
                 LabeledContent("Folder", value: vault.displayName)
                 Button("Change folder…") {
                     showFolderImporter = true
                 }
+            } header: {
+                Text("Notes folder")
+            } footer: {
+                Text("The same folder as on your Mac. Changes sync through iCloud Drive.")
             }
 
             Section("Appearance") {
@@ -37,6 +41,7 @@ struct SettingsView: View {
                         Text(option.title).tag(option)
                     }
                 }
+                .pickerStyle(.segmented)
 
                 Picker("Page width", selection: $pageWidth) {
                     ForEach(PageWidth.allCases) { option in
@@ -81,7 +86,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .task { trashCount = vault.trashCount() }
         .fileImporter(isPresented: $showFolderImporter, allowedContentTypes: [.folder]) { result in
             switch result {

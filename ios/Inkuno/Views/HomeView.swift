@@ -30,8 +30,9 @@ struct HomeView: View {
                         .padding(.bottom, 8)
                     recallCards
                 }
-                // The pull hint stays even when there is nothing to reread (prototype :644).
-                Text("Pull down on any screen to search and run commands")
+                // The pull hint stays even when there is nothing to reread (prototype :644). The pull-down
+                // opens the palette on Home and in Notes only.
+                Text("Pull down on Home or Notes to search and run commands")
                     .font(InkType.caption)
                     .foregroundStyle(InkColor.soft)
                     .multilineTextAlignment(.center)
@@ -82,6 +83,21 @@ struct HomeView: View {
     }
 
     private static let notWrittenYet = "Not written yet"
+
+    /// The date a recall card shows, as the prototype does: day and month, no weekday ("21 October"). `days`
+    /// counts back from `now`, to the note's date.
+    static func recallDate(days: Int64, now: Date = .now) -> String {
+        let date = Calendar.current.date(byAdding: .day, value: -Int(days), to: now) ?? now
+        return recallDay.string(from: date)
+    }
+
+    /// English month names whatever the device language, as the app's interface is English for now.
+    private static let recallDay: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "d MMMM"
+        return formatter
+    }()
 
     /// The Notes tile's subtitle: "N notes" (prototype :639).
     static func notesSubtitle(count: Int) -> String {
@@ -162,7 +178,7 @@ struct HomeView: View {
                                 .foregroundStyle(InkColor.ink)
                                 .lineLimit(2)
                             Spacer(minLength: 0)
-                            Text(ago(days: note.days))
+                            Text(Self.recallDate(days: note.days))
                                 .font(InkType.caption)
                                 .foregroundStyle(InkColor.faint)
                         }

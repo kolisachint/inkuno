@@ -126,15 +126,18 @@ struct CoreMarkdownProvider: MarkdownLayoutProvider {
     private static func dateRuns(in line: String) -> [StyleRun] {
         guard line.contains("@"), let dateWord else { return [] }
         let text = line as NSString
-        let today = CoreDates.ymd(.now)
         return dateWord.matches(in: line, range: NSRange(location: 0, length: text.length)).compactMap { match in
             let word = text.substring(with: NSRange(location: match.range.location + 1, length: match.range.length - 1))
-            // The core completes prefixes ("mo" for Monday); a styled date is a whole day name or ISO date.
-            let whole = InkunoCore.dateSuggestions(query: word, today: today).contains { day in
-                day.iso == word || day.label.split(separator: ",").first?.lowercased() == word.lowercased()
-            }
-            guard whole else { return nil }
+            guard Self.day(named: word) != nil else { return nil }
             return StyleRun(startUTF16: match.range.location, lenUTF16: match.range.length, bits: StyleBit.date)
+        }
+    }
+
+    /// The day a `@` word names: a whole day name or an ISO date, the words the styler reads as a date. Nil otherwise.
+    /// The core completes prefixes ("mo" for Monday); only a whole word is a day.
+    static func day(named word: String) -> InkunoCore.DateSuggestion? {
+        InkunoCore.dateSuggestions(query: word, today: CoreDates.ymd(.now)).first { day in
+            day.iso == word || day.label.split(separator: ",").first?.lowercased() == word.lowercased()
         }
     }
 

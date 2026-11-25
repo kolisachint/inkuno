@@ -9,11 +9,11 @@ enum SlashItem: CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .heading: return "Heading"
-        case .bullet: return "Bullet"
-        case .numbered: return "Numbered"
+        case .bullet: return "Bullet list"
+        case .numbered: return "Numbered list"
         case .task: return "Task"
         case .quote: return "Quote"
-        case .code: return "Code"
+        case .code: return "Code block"
         case .table: return "Table"
         case .divider: return "Divider"
         }
@@ -77,7 +77,7 @@ struct SlashSheet: View {
                 .padding(InkMetrics.cardMarginH)
             }
             .background(InkColor.sheet)
-            .navigationTitle("Insert")
+            .navigationTitle("Insert block")
             .navigationBarTitleDisplayMode(.inline)
         }
     }

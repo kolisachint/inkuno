@@ -68,7 +68,7 @@ struct PanelSheet: View {
                 Text(error ?? "")
             }
             .alert(
-                "Restore this version?",
+                restoreTitle,
                 isPresented: Binding(get: { restoreCandidate != nil }, set: { if !$0 { restoreCandidate = nil } }),
                 presenting: restoreCandidate
             ) { candidate in
@@ -210,7 +210,7 @@ struct PanelSheet: View {
                                     .frame(width: InkMetrics.markerIconSize)
                                     .foregroundStyle(InkColor.icon)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(versionTitle(header))
+                                    Text(versionName(header))
                                         .font(InkType.rowTitle)
                                         .foregroundStyle(header.kind == .auto ? InkColor.soft : InkColor.ink)
                                     if let detail = versionDetail(header) {
@@ -252,27 +252,20 @@ struct PanelSheet: View {
 
     // MARK: Backlinks
 
-    /// The row title, as the core's `revisionRowName` builds it without the author: "#2 · auto", or the memo
-    /// ("#3 · Before the review"). The author is not in it: `versionDetail` shows it when it is known.
-    // ponytail: mirrors `revision.rs` row_name minus the author; keep the two in step.
-    private func versionTitle(_ header: RevisionHeader) -> String {
-        var title = "#\(header.number)"
-        if header.kind == .auto {
-            title += " · auto"
-        }
+    /// The version's name: its memo ("Before restoring version 1"), or "Saved version" / "Automatic version" when
+    /// it has none. The row title and the restore question both show it.
+    private func versionName(_ header: RevisionHeader) -> String {
         if let note = header.note, !note.isEmpty {
-            title += " · \(note)"
+            return note
         }
-        return title
+        return header.kind == .auto ? "Automatic version" : "Saved version"
     }
 
-    /// The author (when it is not "unknown") and the local time, joined with " · ". Nil when neither is known.
+    /// The local time of the version, or nil when it is not known.
     private func versionDetail(_ header: RevisionHeader) -> String? {
-        let when = header.date.isEmpty
+        return header.date.isEmpty
             ? nil
             : revisionLocalDate(date: header.date, utcOffsetSeconds: Int64(TimeZone.current.secondsFromGMT()))
-        let parts = [header.author == "unknown" || header.author.isEmpty ? nil : header.author, when].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     @ViewBuilder
@@ -314,6 +307,11 @@ struct PanelSheet: View {
 
     // MARK: Data
 
+    /// The restore question's title, Restore “<memo>”?, for the version the row chose.
+    private var restoreTitle: String {
+        "Restore “\(restoreCandidate.map { versionName($0) } ?? "")”?"
+    }
+
     private var current: String {
         written ?? text
     }
@@ -348,7 +346,7 @@ struct PanelSheet: View {
             try vault.restoreVersion(number: header.number, for: noteURL)
             NotificationCenter.default.post(name: .inkunoNoteChanged, object: noteURL)
             restoreCandidate = nil
-            flash("Restored #\(header.number). The previous text is kept as a version.")
+            flash("Restored. The previous text is kept as a version.")
             reload()
         } catch {
             restoreCandidate = nil

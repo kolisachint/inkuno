@@ -13,12 +13,18 @@ struct PaletteSheet: View {
     let onOpen: (Route) -> Void
     var currentNote: URL? = nil
     var onPanelTab: ((PanelTab) -> Void)? = nil
+    /// Applies a formatting command to the open note (Bold, Italic, Heading). Without it those commands are hidden.
+    var onFormat: ((EditorFormat) -> Void)? = nil
+    /// The query the search field starts with, such as `#tag` from a tapped tag.
+    var initialQuery = ""
 
     @State private var query = ""
     @State private var notes: [VaultEntry] = []
     /// The listed notes by their vault-relative path, to pair a search hit with its row.
     @State private var entriesByPath: [String: VaultEntry] = [:]
     @State private var error: String?
+    /// The pending changes of `currentNote`, read on load: the Accept/Reject all commands show only when it is not 0.
+    @State private var pendingCount = 0
 
     private var isCommandMode: Bool {
         query.hasPrefix(">")
@@ -63,7 +69,12 @@ struct PaletteSheet: View {
     }
 
     private var commands: [PaletteCommand] {
-        PaletteCommand.all(for: currentNote, hasPanelHost: onPanelTab != nil)
+        PaletteCommand.all(
+            for: currentNote,
+            hasPanelHost: onPanelTab != nil,
+            hasPending: pendingCount > 0,
+            hasFormatHost: onFormat != nil
+        )
             .filter { needle.isEmpty || $0.title.localizedStandardContains(needle) }
     }
 
@@ -100,7 +111,7 @@ struct PaletteSheet: View {
                                 noteButton(entry)
                             }
                             if showCreateRow {
-                                Button("Create “\(needle)”") { create() }
+                                Button("Create «\(needle)»") { create() }
                             }
                         } header: {
                             InkSectionTitle("Names")
@@ -139,7 +150,7 @@ struct PaletteSheet: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .background(InkColor.ground)
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Find a note, or > for commands")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search notes, or type > for commands")
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -147,7 +158,10 @@ struct PaletteSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .task { reload() }
+            .task {
+                query = initialQuery
+                reload()
+            }
         }
     }
 
@@ -199,6 +213,7 @@ struct PaletteSheet: View {
     // MARK: Data
 
     private func reload() {
+        pendingCount = currentNote.map { vault.pendingCount(for: $0) } ?? 0
         do {
             notes = try vault.allNotes()
             entriesByPath = Dictionary(uniqueKeysWithValues: notes.compactMap { entry in
@@ -231,6 +246,15 @@ struct PaletteSheet: View {
             case .showPanel(let tab):
                 onPanelTab?(tab)
                 dismiss()
+            case .format(let format):
+                onFormat?(format)
+                dismiss()
+            case .resolveAll(let accept):
+                // The same call as the review sheet's Accept all / Reject all (PendingSheet.resolveAll).
+                guard let note = currentNote else { throw VaultError.noVault }
+                try vault.resolveAllPending(for: note, accept: accept)
+                NotificationCenter.default.post(name: .inkunoNoteChanged, object: note)
+                dismiss()
             }
         } catch {
             self.error = error.localizedDescription
@@ -260,14 +284,23 @@ struct PaletteSheet: View {
 
 /// One `>` command of the palette.
 struct PaletteCommand: Identifiable {
+    /// The sections of the `>` commands, in the order the palette lists them.
     enum Group: String, CaseIterable, Identifiable {
-        case notes, thisNote, window
+        /// New note and Today.
+        case notes
+        /// Bold, Italic and Heading for the open note. Hidden without a format host (`hasFormatHost`).
+        case formatting
+        /// Save version and the panel tabs, for the open note.
+        case thisNote
+        /// Accept and reject all changes, Open Settings and Restore from Trash.
+        case window
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
             case .notes: return "Notes"
+            case .formatting: return "Formatting"
             case .thisNote: return "This note"
             case .window: return "Window"
             }
@@ -278,6 +311,10 @@ struct PaletteCommand: Identifiable {
         case today, newNote, settings, trash
         case saveVersion
         case showPanel(PanelTab)
+        /// Accept (true) or reject (false) every pending change of the current note.
+        case resolveAll(accept: Bool)
+        /// Bold, Italic or Heading of the current note, applied by the host (`onFormat`).
+        case format(EditorFormat)
     }
 
     var id: String { title }
@@ -293,6 +330,13 @@ struct PaletteCommand: Identifiable {
         case .settings: return "gearshape"
         case .trash: return "arrow.uturn.backward"
         case .saveVersion: return "clock.arrow.circlepath"
+        case .resolveAll(let accept): return accept ? "checkmark" : "xmark"
+        case .format(let format):
+            switch format {
+            case .bold: return "bold"
+            case .italic: return "italic"
+            case .heading: return "number"
+            }
         case .showPanel(let tab):
             switch tab {
             case .outline: return "list.bullet.indent"
@@ -305,10 +349,27 @@ struct PaletteCommand: Identifiable {
 
     /// The full command list. The This-note commands (Save version, Outline/Comments/Versions/
     /// Backlinks) appear only when a note is open; the panel ones also need a host for the sheet.
-    static func all(for currentNote: URL?, hasPanelHost: Bool) -> [PaletteCommand] {
+    /// Accept/Reject all changes (Window) appear only when the open note has `hasPending` changes.
+    /// Bold, Italic and Heading (Formatting) appear only for an open note with `hasFormatHost`.
+    static func all(for currentNote: URL?, hasPanelHost: Bool, hasPending: Bool = false, hasFormatHost: Bool = false) -> [PaletteCommand] {
         var list = [
             PaletteCommand(group: .notes, title: "Today", action: .today),
             PaletteCommand(group: .notes, title: "New note", action: .newNote),
+        ]
+        if currentNote != nil, hasPending {
+            list += [
+                PaletteCommand(group: .window, title: "Accept all changes", action: .resolveAll(accept: true)),
+                PaletteCommand(group: .window, title: "Reject all changes", action: .resolveAll(accept: false)),
+            ]
+        }
+        if currentNote != nil, hasFormatHost {
+            list += [
+                PaletteCommand(group: .formatting, title: "Bold", action: .format(.bold)),
+                PaletteCommand(group: .formatting, title: "Italic", action: .format(.italic)),
+                PaletteCommand(group: .formatting, title: "Heading", action: .format(.heading)),
+            ]
+        }
+        list += [
             PaletteCommand(group: .window, title: "Open Settings", action: .settings),
             PaletteCommand(group: .window, title: "Restore from Trash", action: .trash),
         ]

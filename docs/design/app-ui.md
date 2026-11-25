@@ -1404,38 +1404,47 @@ Build decisions live in `docs/design/ios.md`.
   folders (icon, count, chevron), then notes (icon, title, age), then a Scratch section.
   Empty folders say "This folder is empty." No tab bar. Pull-down or search opens the palette.
 - Editor: live-styled Markdown. Only the caret line shows raw Markdown (Settings toggle).
-  Links open. #tags filter the palette. @date jumps to that day. An accessory bar sits above
-  the keyboard: / # [[ task indent outdent undo hide.
+  A tap on a link opens it: a note opens on the stack, a URL opens the browser, a heading
+  scrolls there. A tap on a #tag opens the palette with it. A tap on an @date opens that day.
+  An accessory bar sits above the keyboard: / # [[ task indent outdent undo hide.
+- Comments in the editor: a commented passage is washed, and its line has a gold dot in the
+  right inset. A tap on the passage opens a popover with the comment, its replies and Resolve.
+- Callouts draw as tinted boxes with a label. A wide table scrolls sideways inside its box.
 - Slash sheet: medium detent, 3-column grid. Heading, Bulleted, Numbered, Task, Quote, Code,
   Table, Divider. No Math, no Mermaid.
 - Palette: full sheet with a search field. Empty query shows 6 recent notes. Groups:
-  Recent, Names, Content. A ">" prefix runs commands (This note, Formatting, Notes, Window).
-  A "Create «q»" row creates the note. No match says "No matches".
+  Recent, Names, Content. A ">" prefix runs commands: Formatting (Bold, Italic, Heading, for an
+  open note), This note, Notes, Window. Window has Accept all changes and Reject all changes
+  when the note has pending changes. A "Create «q»" row creates the note. No match says "No matches".
+  Pull-down opens the palette on Home and in the tree. The tree's "+" button makes a new note.
 - Panel sheet: bottom sheet (medium/large detents) with four segments. Outline lists indented
   headings; tap scrolls there ("No headings" when empty). Comments show the passage quote,
-  who·time, text, and Resolve; adding is long-press on a block only. Versions has "Save version"
+  who·time, text, replies and Resolve; adding is long-press on a block only. Versions has "Save version"
   and the list; tap asks to confirm the restore, current saved first ("No saved versions yet").
   Backlinks lists linking notes ("No notes link here yet").
 - Pending review: a bottom pill ("N changes · Review") opens a sheet with Reject all / Accept all
   and one card per change (old struck, new). Swipe leading accepts, trailing rejects.
-  No inline washes.
+  The Accept and Reject confirmations show as a toast after the sheet closes. No inline washes.
 - Context menus are long-press. Tree row: Rename, Move, Duplicate, Copy link, separator,
-  Move to Trash (destructive). Block: Comment, Show Markdown, Copy, Duplicate, separator,
-  Delete (destructive).
+  Move to Trash (destructive). Block: the long-press that selects a block's text opens the
+  edit menu, which holds Comment, Show Markdown (Edit as Markdown for a table), Copy, Duplicate,
+  separator, Delete (destructive). There is no separate block context menu.
 - Settings is a Form. Notes folder (change). Appearance: Theme Light/Dark/System segmented,
   Text size 14/15/16/18, Page width narrow/normal/wide. Editor: "Show Markdown on the live line"
   toggle. Files: Trash (count) opens the Trash list. About: version.
 - Trash is a list with Restore buttons. The palette command "Restore from Trash" restores too.
+  A note goes back to the folder it came from: the origin is recorded in
+  `.inkuno/trash-origin/<name>.txt` when it is trashed. Move to Trash shows an Undo toast.
 - Themes: Light, Dark, System only. The desktop's other themes are out of v1.
 - Type: Inter (fallback system), JetBrains Mono for code (fallback SF Mono). Note body 16 pt,
   line-height 1.6. H1 1.9em/700, H2 1.45em/650, H3 1.15em/600, H4–H6 1em/600. Rows are at
-  least 44 pt. Large nav title 34 pt/700. Push .32 s, sheets .25–.3 s, Reduce Motion respected.
+  least 44 pt. Large nav title 34 pt/700. Push .32 s, sheets .25–.3 s. Motion goes through InkMotion, which honours Reduce Motion.
 - Tokens: the full table is the prototype. iPhone-only additions: toast + toast-ink, add +
   add-ink, del + del-ink, comment wash + comment dot, selection highlight, scrim. Dark
   code-line/gutter-num/quote use the softened §22.4 values.
 - Out of v1: Compare/diff screen, inline pending washes, table cell editing, Mermaid and math
   rendering (shown as code), Focus mode, tar.gz backup, the other themes, Assistant,
-  comment replies, text-selection comments.
+  text-selection comments.
 
 ## 25. HTML pages (macOS: a tab)
 

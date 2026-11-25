@@ -11,10 +11,11 @@ struct OnboardingView: View {
             Spacer()
             InkMark()
             VStack(spacing: 8) {
-                Text("Inkuno")
+                Text("Open your notes folder")
                     .font(InkType.largeTitle)
                     .foregroundStyle(InkColor.ink)
-                Text("Pick the folder that holds your notes. It is the same folder as on the desktop: Markdown files in the Files app.")
+                    .multilineTextAlignment(.center)
+                Text("Inkuno keeps your notes as plain Markdown files in one folder. Pick it in the Files app: iCloud Drive, Dropbox or Working Copy all work, and it is the same folder you use on your Mac.")
                     .font(InkType.body)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(InkColor.soft)

@@ -2,12 +2,18 @@ import Foundation
 import InkunoCore
 import Observation
 
+extension Notification.Name {
+    /// Posted with no object after a note or folder moves to or from the vault's trash, so open folder lists reload.
+    static let inkunoVaultChanged = Notification.Name("inkunoVaultChanged")
+}
+
 // MARK: - Vault operations: Trash, rename/move/duplicate, versions, pending review
 //
 // Mirrors the desktop's on-disk behavior (nothing is destroyed or overwritten). The paths, names,
 // version files and pending lists are the Rust core's (InkunoCore); this extension does the file IO:
 // - Trash is the vault's `.trash` folder, its history and pending lists wait in `.inkuno/trash` and
-//   `.inkuno/pending-trash`.
+//   `.inkuno/pending-trash`, and the folder it came from is kept in `.inkuno/trash-origin`, with the
+//   item's file number, so a record left for a gone item is not read for a later one.
 // - A version lives in `.inkuno/revisions/<note-rel-path>/NNNN.md`.
 // - Pending changes live in `.inkuno/pending/<note-rel-path>.json`.
 
@@ -53,12 +59,74 @@ extension VaultStore {
         (try? trashedNotes().count) ?? 0
     }
 
-    /// The folder a trashed note shows under its title: the vault root, labelled "Notes" as the tree labels it.
-    /// The trash keeps no record of where a note came from (the desktop's does not either), and Restore puts
-    /// the note back at the root.
-    // ponytail: a note's own folder is not kept in the trash, so every trashed note shows the root.
+    /// The folder a trashed item shows under its title, from its origin record: the folder it came from, or
+    /// "Notes" for the vault root, as the tree labels it.
     func trashOrigin(of url: URL) -> String {
-        "Notes"
+        guard let root = vaultURL else { return "Notes" }
+        let folder = Self.restoreFolder(
+            recordText: originRecordText(trashedName: url.lastPathComponent, root: root),
+            fileNumber: Self.fileNumber(of: url)
+        )
+        return folder.isEmpty ? "Notes" : folder
+    }
+
+    /// The file number of the item at `url` (its inode on the device). A rename keeps it. Nil when it cannot be read.
+    static func fileNumber(of url: URL) -> UInt64? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+        return (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+    }
+
+    /// The vault-relative folder of `relativePath` (`ideas/plan.md` → `ideas`, `plan.md` → `""`): where a
+    /// trashed item goes back to.
+    static func originFolder(relativePath: String) -> String {
+        (relativePath as NSString).deletingLastPathComponent
+    }
+
+    /// The folder a trashed item goes back to, read from its origin record. The record is two lines: the folder
+    /// (`trashOriginFolder`) and the item's file number. The folder counts only when the second line is
+    /// `fileNumber`, the item's current number. Otherwise, or when the record has no second line, the vault root (`""`).
+    static func restoreFolder(recordText: String?, fileNumber: UInt64?) -> String {
+        guard let recordText, let fileNumber else { return "" }
+        let lines = recordText.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count >= 2, lines[1].trimmingCharacters(in: .whitespaces) == String(fileNumber) else { return "" }
+        return trashOriginFolder(text: String(lines[0])) ?? ""
+    }
+
+    /// The text of a trashed item's origin record (`.inkuno/trash-origin/<name>.txt`), nil when there is none.
+    private func originRecordText(trashedName: String, root: URL) -> String? {
+        guard let path = trashOriginPath(trashedName: trashedName),
+              let data = try? Data(contentsOf: root.appendingPathComponent(path)) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Writes the origin record of a trashed item: the folder it came from, vault-relative (`""` for the root), then
+    /// the item's file number on the second line. A record already under that name is stale: a new item got this
+    /// trashed name, so it is replaced, not moved aside.
+    private func writeOriginRecord(_ folder: String, fileNumber: UInt64, trashedName: String, root: URL) throws {
+        guard let path = trashOriginPath(trashedName: trashedName) else { return }
+        let file = root.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let text = "\(folder)\n\(fileNumber)\n"
+        try coordinateWrite(file) { try Data(text.utf8).write(to: $0, options: .atomic) }
+    }
+
+    /// The folder a trashed item goes back to: its origin folder when the record names one that is not a file
+    /// (created when it is gone, nothing is destroyed), else the vault root.
+    private func restoreDestination(of url: URL, root: URL) -> URL {
+        let origin = Self.restoreFolder(
+            recordText: originRecordText(trashedName: url.lastPathComponent, root: root),
+            fileNumber: Self.fileNumber(of: url)
+        )
+        guard !origin.isEmpty else { return root }
+        let folder = root.appendingPathComponent(origin, isDirectory: true)
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory) {
+            return isDirectory.boolValue ? folder : root
+        }
+        guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil else {
+            return root
+        }
+        return folder
     }
 
     /// Moves the note or folder to the vault's trash under a free name: `Name.md`, then
@@ -71,33 +139,46 @@ extension VaultStore {
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         let free = bin.appendingPathComponent(trashName(name: url.lastPathComponent, taken: Self.names(in: bin)))
         let isFolder = Self.isFolder(url)
+        let origin = relativePath(of: url).map(Self.originFolder(relativePath:)) ?? ""
         try coordinateMove(from: url, to: free)
         moveAsideHistoryAndPending(from: url, trashedName: free.lastPathComponent, root: root)
+        // The folder it came from is kept beside the trash, with the item's file number, so Restore can put it
+        // back. Failing to write it only means the item restores to the root.
+        if let number = Self.fileNumber(of: free) {
+            try? writeOriginRecord(origin, fileNumber: number, trashedName: free.lastPathComponent, root: root)
+        }
         indexRemoved(at: url, isFolder: isFolder)
+        NotificationCenter.default.post(name: .inkunoVaultChanged, object: nil)
         return free
     }
 
-    /// Takes a trashed note back to the vault root under its name, numbered when taken
-    /// (`platform/vault.rs` `restore`): `Plan.md`, then `Plan 2.md`. Nothing is overwritten.
-    /// Its history and pending list come back with it when no history of that name is there
-    /// (`revisions.rs` `restore_along`, `sidecar.rs` `restore_along`).
+    /// Takes a trashed item back to the folder it came from (its origin record; the root when the record is
+    /// missing or invalid), under its name, numbered when taken (`platform/vault.rs` `restore`): `Plan.md`, then
+    /// `Plan 2.md`. Nothing is overwritten. Its history and pending list come back with it when no history of
+    /// that name is there (`revisions.rs` `restore_along`, `sidecar.rs` `restore_along`). The origin record is
+    /// removed once the item is back.
     @discardableResult
     func restoreFromTrash(at url: URL) throws -> URL {
         guard let root = vaultURL else { throw VaultError.noVault }
+        let folder = restoreDestination(of: url, root: root)
         let stem = url.deletingPathExtension().lastPathComponent
         let ext = url.pathExtension.isEmpty ? "" : ".\(url.pathExtension)"
         let free = (1...).lazy.map { n in
-            n == 1 ? root.appendingPathComponent("\(stem)\(ext)")
-                   : root.appendingPathComponent("\(stem) \(n)\(ext)")
+            n == 1 ? folder.appendingPathComponent("\(stem)\(ext)")
+                   : folder.appendingPathComponent("\(stem) \(n)\(ext)")
         }.first { !FileManager.default.fileExists(atPath: $0.path) }!
         let isFolder = Self.isFolder(url)
         try coordinateMove(from: url, to: free)
         restoreHistoryAndPending(trashedName: url.lastPathComponent, to: free, root: root)
+        if let path = trashOriginPath(trashedName: url.lastPathComponent) {
+            try? FileManager.default.removeItem(at: root.appendingPathComponent(path))
+        }
         if isFolder {
             indexRemoved(at: url, isFolder: true)
         } else {
             indexNote(at: free, text: (try? readNote(at: free)) ?? "")
         }
+        NotificationCenter.default.post(name: .inkunoVaultChanged, object: nil)
         return free
     }
 

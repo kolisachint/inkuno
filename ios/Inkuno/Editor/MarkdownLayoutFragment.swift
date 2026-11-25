@@ -27,6 +27,48 @@ extension NSAttributedString.Key {
     static let inkTableRow = NSAttributedString.Key("inkuno.tableRow")
     /// On the character of a bullet or task glyph: the `MarkdownGlyph` raw value (an `NSNumber`).
     static let inkunoGlyph = NSAttributedString.Key("inkuno.glyph")
+    /// On every character of a callout line: a `CalloutMark`.
+    static let inkCallout = NSAttributedString.Key("inkuno.callout")
+    /// On the first character of a callout's `[!TYPE]` marker off the caret line: the label to draw there (an `NSAttributedString`).
+    static let inkCalloutLabel = NSAttributedString.Key("inkuno.calloutLabel")
+    /// On every character of a line that holds a comment's passage: an `NSNumber` (true). The line gets a dot in the margin.
+    static let inkComment = NSAttributedString.Key("inkuno.comment")
+}
+
+/// A line of a callout: a `> [!TYPE]` quote and the quote lines after it. `MarkdownStyler` sets it; `MarkdownLayoutFragment`
+/// draws the tinted background and the bar in the kind's colour.
+final class CalloutMark: NSObject {
+    /// The callout's TYPE, lowercased: `note`, `tip`, `important`, `warning` or `caution`.
+    let kind: String
+    /// The space between the bar and the text: the prototype's callout padding, in points.
+    static let padding: CGFloat = 14
+
+    /// A callout line of the given kind.
+    init(kind: String) {
+        self.kind = kind
+    }
+
+    /// Two marks are equal when they have the same kind, so an unchanged line keeps its attribute.
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? CalloutMark else { return false }
+        return other.kind == kind
+    }
+
+    /// The hash of the kind, consistent with `isEqual`.
+    override var hash: Int {
+        kind.hashValue
+    }
+
+    /// The colour of a kind, from the prototype's alert colours. An unknown kind is a note.
+    static func color(for kind: String) -> Color {
+        switch kind {
+        case "tip": return InkColor.alertTip
+        case "important": return InkColor.alertImportant
+        case "warning": return InkColor.alertWarning
+        case "caution": return InkColor.alertCaution
+        default: return InkColor.alertNote
+        }
+    }
 }
 
 /// Where a row sits in its table, and how wide the table is. `MarkdownStyler` sets it on every row that is drawn
@@ -35,18 +77,21 @@ extension NSAttributedString.Key {
 final class TableRowMark: NSObject {
     let isHeader: Bool
     let isLast: Bool
-    /// The table's width in points: the rules and the border span it.
+    /// The table's width in points: the rules and the border span it, and the cells scroll within it.
     let width: CGFloat
+    /// How far the table's text is scrolled to the left, in points: 0 when it fits, and kept within the table's width.
+    let offset: CGFloat
 
-    init(isHeader: Bool, isLast: Bool, width: CGFloat) {
+    init(isHeader: Bool, isLast: Bool, width: CGFloat, offset: CGFloat) {
         self.isHeader = isHeader
         self.isLast = isLast
         self.width = width
+        self.offset = offset
     }
 
     override func isEqual(_ object: Any?) -> Bool {
         guard let other = object as? TableRowMark else { return false }
-        return other.isHeader == isHeader && other.isLast == isLast && other.width == width
+        return other.isHeader == isHeader && other.isLast == isLast && other.width == width && other.offset == offset
     }
 
     override var hash: Int {
@@ -54,6 +99,7 @@ final class TableRowMark: NSObject {
         hasher.combine(isHeader)
         hasher.combine(isLast)
         hasher.combine(width)
+        hasher.combine(offset)
         return hasher.finalize()
     }
 }
@@ -70,13 +116,35 @@ final class MarkdownLayoutDelegate: NSObject, NSTextLayoutManagerDelegate {
 /// A paragraph's layout fragment that draws the bullet disc or the task box over the glyph character.
 /// The glyph's slot is the kern after the character (`MarkdownStyler`), so the text starts after it.
 final class MarkdownLayoutFragment: NSTextLayoutFragment {
-    /// A table row's rule and border reach the table's width, which the text may not: the surface covers it.
+    /// The diameter of a comment's dot, as in the prototype.
+    static let commentDotSize: CGFloat = 7
+    /// The editor's right text container inset, where a comment's dot is drawn: the dot never overlaps a full-width line.
+    /// `MarkdownEditorController` sets the inset to this width.
+    static let commentDotMargin: CGFloat = 14
+
+    /// The width of the text container. A callout's box spans it, and a table's visible part is measured in it.
+    private var containerWidth: CGFloat {
+        textLayoutManager?.textContainer?.size.width ?? 0
+    }
+
+    /// A table row's rule and border reach the table's width, and a scrolled table's text is drawn over the container's
+    /// width, which may be wider than the table's box: the surface covers both. A callout's box spans the container, and
+    /// a comment's dot sits in the right inset: the surface covers those too.
     override var renderingSurfaceBounds: CGRect {
-        let bounds = super.renderingSurfaceBounds
-        guard let text = (textElement as? NSTextParagraph)?.attributedString,
-              let mark = text.attribute(.inkTableRow, at: 0, effectiveRange: nil) as? TableRowMark
-        else { return bounds }
-        return bounds.union(CGRect(x: -layoutFragmentFrame.minX, y: 0, width: mark.width + 2, height: layoutFragmentFrame.height))
+        var bounds = super.renderingSurfaceBounds
+        guard let text = (textElement as? NSTextParagraph)?.attributedString, text.length > 0 else { return bounds }
+        if let mark = text.attribute(.inkTableRow, at: 0, effectiveRange: nil) as? TableRowMark {
+            let width = max(mark.width, containerWidth) + 2
+            bounds = bounds.union(CGRect(x: -layoutFragmentFrame.minX, y: 0, width: width, height: layoutFragmentFrame.height))
+        }
+        if text.attribute(.inkCallout, at: 0, effectiveRange: nil) != nil {
+            bounds = bounds.union(CGRect(x: -layoutFragmentFrame.minX, y: 0, width: containerWidth, height: layoutFragmentFrame.height))
+        }
+        if text.attribute(.inkComment, at: 0, effectiveRange: nil) != nil {
+            bounds = bounds.union(CGRect(x: -layoutFragmentFrame.minX + containerWidth, y: 0,
+                                         width: Self.commentDotMargin, height: layoutFragmentFrame.height))
+        }
+        return bounds
     }
 
     override func draw(at renderingOrigin: CGPoint, in context: CGContext) {
@@ -88,11 +156,40 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
         }
         let text = paragraph.attributedString
         context.saveGState()
+        if let callout = text.attribute(.inkCallout, at: 0, effectiveRange: nil) as? CalloutMark {
+            drawCallout(callout, origin: renderingOrigin)
+        }
         if let mark = text.attribute(.inkTableRow, at: 0, effectiveRange: nil) as? TableRowMark {
-            drawTableRow(mark, text: text, line: line, origin: renderingOrigin, in: context)
+            // The box is the table's width, or the container's (less a point, so the border stays inside it) when the
+            // table is wider. The text is shifted by the mark's offset and clipped to the box, so the cells scroll in it.
+            let fit = containerWidth - 1
+            let visible = fit > 0 ? min(mark.width, fit) : mark.width
+            drawTableRow(mark, width: visible, origin: renderingOrigin, in: context)
+            let offset = min(max(0, mark.offset), max(0, mark.width - visible))
+            context.clip(to: CGRect(x: -layoutFragmentFrame.minX, y: renderingOrigin.y, width: visible,
+                                    height: layoutFragmentFrame.height))
+            context.translateBy(x: -offset, y: 0)
         }
         super.draw(at: renderingOrigin, in: context)
         context.restoreGState()
+        if text.attribute(.inkComment, at: 0, effectiveRange: nil) != nil {
+            drawCommentDot(line: line, origin: renderingOrigin)
+        }
+
+        // The `[!TYPE]` label of a callout's opening line, at the padding; the title follows it (`MarkdownStyler`).
+        var label: NSAttributedString?
+        text.enumerateAttribute(.inkCalloutLabel, in: NSRange(location: 0, length: text.length)) { value, _, stop in
+            guard let found = value as? NSAttributedString else { return }
+            label = found
+            stop.pointee = true
+        }
+        if let label {
+            let ascent = (label.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)?.ascender ?? 0
+            let baseline = renderingOrigin.y + line.typographicBounds.minY + line.glyphOrigin.y
+            UIGraphicsPushContext(context)
+            defer { UIGraphicsPopContext() }
+            label.draw(at: CGPoint(x: renderingOrigin.x + line.typographicBounds.minX + CalloutMark.padding, y: baseline - ascent))
+        }
 
         var found: (index: Int, glyph: MarkdownGlyph)?
         text.enumerateAttribute(.inkunoGlyph, in: NSRange(location: 0, length: text.length)) { value, range, stop in
@@ -111,34 +208,37 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
         Self.draw(found.glyph, font: font, x: x, baseline: baseline)
     }
 
-    /// A table row's header fill, its rule under it and its part of the border. The row's rectangle is clipped,
-    /// so every row strokes the border's sides, and the header's top and the last row's bottom close it.
-    /// Text past the edge of the text container is cut before the cell that does not fit, never inside a glyph.
-    // ponytail: a table wider than the container is cut and cannot be scrolled; a per-block scroll view is later.
-    private func drawTableRow(_ mark: TableRowMark, text: NSAttributedString, line: NSTextLineFragment,
-                              origin: CGPoint, in context: CGContext) {
+    /// The gold dot of a line that holds a comment, vertically centred on the line and centred in the editor's right
+    /// inset (`commentDotMargin`), just past the container's right edge.
+    private func drawCommentDot(line: NSTextLineFragment, origin: CGPoint) {
+        let colour = UIColor(InkColor.commentDot).resolvedColor(with: UITraitCollection.current)
+        let size = Self.commentDotSize
+        let left = -layoutFragmentFrame.minX + containerWidth + (Self.commentDotMargin - size) / 2
+        let centreY = origin.y + line.typographicBounds.midY
+        colour.setFill()
+        UIBezierPath(ovalIn: CGRect(x: left, y: centreY - size / 2, width: size, height: size)).fill()
+    }
+
+    /// A callout line's background, tinted by its kind, and the bar at its left edge, over the width of the text container.
+    private func drawCallout(_ mark: CalloutMark, origin: CGPoint) {
+        let colour = UIColor(CalloutMark.color(for: mark.kind)).resolvedColor(with: UITraitCollection.current)
+        let box = CGRect(x: -layoutFragmentFrame.minX, y: origin.y, width: containerWidth, height: layoutFragmentFrame.height)
+        colour.withAlphaComponent(0.1).setFill()
+        UIBezierPath(rect: box).fill()
+        colour.setFill()
+        UIBezierPath(rect: CGRect(x: box.minX, y: box.minY, width: 3, height: box.height)).fill()
+    }
+
+    /// A table row's header fill, its rule under it and its part of the border, over the table's visible box of `width`
+    /// points. The row's rectangle is clipped, so every row strokes the border's sides, and the header's top and the
+    /// last row's bottom close it. The text is drawn by `draw`, shifted and clipped to the same box.
+    private func drawTableRow(_ mark: TableRowMark, width: CGFloat, origin: CGPoint, in context: CGContext) {
         let traits = UITraitCollection.current
         func resolved(_ token: Color) -> UIColor { UIColor(token).resolvedColor(with: traits) }
 
-        // The fragment's frame starts past the margin by the row's head indent (the table padding), and the drawing
-        // is in the fragment's space: the margin is `-minX`, where the border starts, and the text is inset from it
-        // by the padding. A table wider than the text container is cut after the last cell that fits: the text is
-        // clipped there, and the border closes after that cell.
-        let padding = MarkdownStyler.tablePadding
+        // The drawing is in the fragment's space: the margin is `-minX`, where the table's box starts.
         let left = -layoutFragmentFrame.minX
         let height = layoutFragmentFrame.height
-        var width = mark.width
-        var cut: CGFloat?
-        if let container = textLayoutManager?.textContainer, let advance = Self.cellAdvance(text) {
-            // A point short of the container's edge, so the border's right side stays inside it.
-            let right = container.size.width - layoutFragmentFrame.minX - 1
-            if left + width > right {
-                let textLeft = left + padding
-                let last = textLeft + floor((right - padding - textLeft) / advance) * advance
-                cut = last
-                width = last + padding - left
-            }
-        }
 
         // The border is a rounded rectangle that runs past the row where the table goes on, so each row strokes
         // its own sides; the header's top corners and the last row's bottom corners are in its rectangle.
@@ -164,21 +264,6 @@ final class MarkdownLayoutFragment: NSTextLayoutFragment {
             rule.stroke()
         }
         context.restoreGState()
-        // The text is cut after the last cell that fits; the border is not, so it is drawn before this clip.
-        if let cut {
-            context.clip(to: CGRect(x: -100_000, y: origin.y - 100_000, width: cut + 100_000, height: 200_000))
-        }
-    }
-
-    /// The advance of a monospace character in the text's first sized font, which a table row is set in.
-    private static func cellAdvance(_ text: NSAttributedString) -> CGFloat? {
-        var font: UIFont?
-        text.enumerateAttribute(.font, in: NSRange(location: 0, length: text.length)) { value, _, stop in
-            guard let found = value as? UIFont, found.pointSize >= 0.1 else { return }
-            font = found
-            stop.pointee = true
-        }
-        return font.map { ("0" as NSString).size(withAttributes: [.font: $0]).width }
     }
 
     /// The disc or box at `x` on `baseline`, in the size of `font`. The disc is centred in its slot, the
