@@ -1,8 +1,8 @@
 # Assistant
 
-The Assistant is an AI agent that reads the note you have open. You can chat with it about the note, or ask it to review the note. A review's findings are written into the note as comments, in one step: one `Ctrl + Z` takes them back. The agent never changes your text itself.
+The Assistant is an AI agent that reads the note you have open. You can chat with it about the note, or ask it to review the note. A review writes its findings into the note as comments. It also answers your open comments, as replies. One `Ctrl + Z` takes a whole review back. The agent never changes your text itself.
 
-The agent is not part of Inkuno. Inkuno starts the `hoocode` program and talks to it. Login and model stay in hoocode's own settings.
+The agent is not part of Inkuno. Inkuno starts the `hoocode` program and talks to it. Inkuno stores no keys. Login stays in hoocode; the model is set in hoocode, or with `--model` in the command.
 
 ## What you need
 
@@ -46,9 +46,11 @@ From top to bottom, the panel has:
 **Review this note** asks the agent to read the note and list what it finds: unclear or wrong statements, gaps, contradictions and typos that change the meaning. The agent answers with a short list of passages and comments. Inkuno then writes each one as a comment on its passage, in the [comment syntax](comments.md): `passage<!-- comment: text -->`.
 
 - The answer itself is not shown. While the agent works, the panel says **Reviewing…**. When it ends, the panel says how many comments were written.
-- All the comments of one review are one undo step. `Ctrl + Z` takes the whole review back.
+- All the comments and replies of one review are one undo step.
 - A finding is left out when its passage is not in the note exactly once, or when it lies inside a comment that is already there. The panel says how many were left out.
 - The comments show in the Review view, with the ones you write. Click one to go to it, and resolve it as usual.
+- The agent also answers your open comments. A comment is open when its last message is not the Assistant's. Its answer is written as a reply on the same line.
+- The comments and replies are written under the author `assistant`.
 
 If you edit the note while the agent works, the comments go into the text as it is when the agent ends.
 
@@ -58,6 +60,7 @@ If you edit the note while the agent works, the comments go into the text as it 
 
 - The agent is asked to make the writing clearer and tighter, with the same meaning, the same language and the same Markdown structure. To ask for something else, type it in the prompt box first, such as `make it formal`. The box is then cleared, and the instruction is used for this one request.
 - The new text is not written at once. It comes back as **pending changes** in the note: you see the removed lines and the added lines, and you accept or reject them as usual (see the [Agents page](agents.md#accepting-rejecting-and-commenting)). One undo takes the whole proposal back.
+- In the Review view, the changes of one proposal form one card, titled with their count. Its **Accept all N** and **Reject all N** buttons take those N changes, and no others. Each button is one undo step for the N changes. A single change has its own card.
 - Inkuno saves two versions around the proposal: the text before, and the proposed text. They are kept in the note's history, which `inkuno rev list` shows.
 - A note with pending changes cannot be improved yet. Accept or reject them first.
 - If you change the same lines while the agent works, nothing is proposed, and the panel asks you to ask again. Changes to other lines are kept.
@@ -71,11 +74,15 @@ If you edit the note while the agent works, the comments go into the text as it 
 
 `assistant` in the [settings file](settings.md#the-settings-file) is the command that starts the agent. It is `hoocode` by default. To use another command, type `Assistant command…` in the palette. An empty entry returns to `hoocode`. Changing the command stops the agent that runs.
 
+- The command is split at spaces. Its first word is the program, found on your `PATH`, or given as a path. The other words are its arguments, in order. There is no shell quoting.
+- Example: `hoocode --model opencode-go/muse-spark-1.3-contributor`. Inkuno adds its own flags after your words.
+- The model's API key goes in hoocode's own environment or configuration. Inkuno stores only the command.
+
 ## What it does not do
 
 - It does not change your text on its own. It cannot run a program or write a file: it is started without those tools. Its findings become comments only through Inkuno, and its proposals become pending changes only through Inkuno.
 - It does not ask you before it does something. The agent has no tool that could change anything, so there is nothing to approve.
-- It stores no keys and no model choice. Those stay in hoocode's configuration.
+- It stores no keys. The model stays in hoocode's configuration, or in the command you set.
 - It does not keep the conversation. The conversation is kept in memory only, and it is gone when Inkuno restarts.
 - It stops when Inkuno quits, or when you change the vault.
 

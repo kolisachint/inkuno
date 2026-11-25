@@ -31,6 +31,19 @@ A tab can be dragged along the bar, into another pane, or to an edge to split on
 
 Tabs come back at the next start. A tab out of sight keeps its text, cursor and undo, but lets go of what it drew, so a hundred tabs cost little memory.
 
+## HTML pages
+
+An HTML file of the vault opens as a page, not as text. Where it opens depends on the system:
+
+- **macOS**: in a tab of its own, beside the notes.
+- **Linux**: in a separate window, opened by `inkuno view`.
+- **Windows**: in the system's default app for HTML. Inkuno has no viewer there.
+
+In Inkuno's page (macOS, Linux):
+
+- The page sees only the files in its own folder and the folders inside it. A file outside them does not load.
+- A link to `http`, `https` or `mailto` opens in the system's browser or mail program.
+
 ## Panes
 
 `Ctrl + \` splits the pane to the right, `Ctrl + Alt + \` below, as many times as the window has room for. Write a note while reading two others, or keep a table under a note.
