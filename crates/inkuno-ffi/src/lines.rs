@@ -279,6 +279,35 @@ pub fn line_links(line: String) -> Vec<LinkInfo> {
         .collect()
 }
 
+/// The callout a line opens: the `[!TYPE]` marker of a `> [!NOTE] Title` quote.
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct CalloutInfo {
+    /// Where the `[!TYPE]` marker starts, in UTF-16.
+    pub start_utf16: u64,
+    /// The length of the marker in UTF-16, brackets included.
+    pub len_utf16: u64,
+    /// The TYPE of the marker, lowercased: `note`, `warning`, and so on.
+    pub kind: String,
+}
+
+/// The callout a line opens, if it is a `> [!TYPE]` quote (see `inkuno_logic::markdown::callout`).
+/// `None` for a quote without a marker, or for an empty `[!]` marker.
+#[uniffi::export]
+pub fn line_callout(line: String) -> Option<CalloutInfo> {
+    let range = md::callout(&line)?;
+    let marker = &line[range.clone()];
+    // The marker is `[!` + TYPE + `]`: the TYPE sits between the first two and the last byte.
+    let kind = marker[2..marker.len() - 1].to_lowercase();
+    if kind.is_empty() {
+        return None;
+    }
+    Some(CalloutInfo {
+        start_utf16: offset_utf16(&line, range.start),
+        len_utf16: utf16_len(marker),
+        kind,
+    })
+}
+
 /// The headings of `text`, in order (see `inkuno_logic::markdown::headings`).
 #[uniffi::export]
 pub fn headings(text: String) -> Vec<HeadingInfo> {
@@ -485,6 +514,33 @@ mod tests {
         assert_eq!(links[2].kind, LinkKind::Url);
         assert_eq!(links[2].target, "https://x.y");
         assert_eq!(links[2].anchor, None);
+    }
+
+    #[test]
+    fn a_callout_is_its_marker_lowercased() {
+        assert_eq!(
+            line_callout("> [!NOTE] Title".into()),
+            Some(CalloutInfo {
+                start_utf16: 2,
+                len_utf16: 7,
+                kind: "note".into(),
+            })
+        );
+        assert_eq!(line_callout("> note".into()), None);
+        assert_eq!(line_callout("> [!] empty".into()), None);
+    }
+
+    #[test]
+    fn a_callout_marker_is_in_utf16_after_non_ascii() {
+        // The emoji is two UTF-16 units and four bytes; the marker starts at unit 5, byte 7.
+        assert_eq!(
+            line_callout("😀 > [!TIP] x".into()),
+            Some(CalloutInfo {
+                start_utf16: 5,
+                len_utf16: 6,
+                kind: "tip".into(),
+            })
+        );
     }
 
     #[test]

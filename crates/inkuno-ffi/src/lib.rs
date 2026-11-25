@@ -32,8 +32,8 @@ pub use history::{
 };
 pub use index::{NoteInput, NoteRef, RecalledNote, SearchHit, SearchKind, VaultIndex};
 pub use lines::{
-    DocumentLayout, HeadingInfo, LineInfo, LineKind, LineLayout, LinkInfo, LinkKind, NoteIndex,
-    StyleBits, StyleRun,
+    CalloutInfo, DocumentLayout, HeadingInfo, LineInfo, LineKind, LineLayout, LinkInfo, LinkKind,
+    NoteIndex, StyleBits, StyleRun,
 };
 pub use merging::MergeEdit;
 pub use notes::{DateSuggestion, Hms, Ymd};
