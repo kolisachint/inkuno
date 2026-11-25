@@ -29,7 +29,7 @@ A tab can be dragged along the bar, into another pane, or to an edge to split on
 - **Retry**: restore the destination's writability, then close again.
 - **Closing the window**, using **Quit**, or switching vaults also keeps the current documents open if one cannot be saved.
 
-Tabs come back at the next start. A tab out of sight keeps its text, cursor and undo, but lets go of what it drew, so a hundred tabs cost little memory.
+Tabs come back at the next start. HTML pages come back only on macOS, where they are tabs. A tab out of sight keeps its text, cursor and undo, but lets go of what it drew, so a hundred tabs cost little memory.
 
 ## HTML pages
 
@@ -43,6 +43,12 @@ In Inkuno's page (macOS, Linux):
 
 - The page sees only the files in its own folder and the folders inside it. A file outside them does not load.
 - A link to `http`, `https` or `mailto` opens in the system's browser or mail program.
+
+On macOS, where the page is a tab:
+
+- The tab is named by the page's `<title>`, or by its file name when the page has none.
+- A click in the page gives it the keyboard. `Escape` gives the keyboard back to the app.
+- A `Cmd` shortcut goes to the app, except copy, paste, cut, select all, undo and redo, `Cmd + [`, `Cmd + ]` and `Cmd + R`: those stay with the page.
 
 ## Panes
 
