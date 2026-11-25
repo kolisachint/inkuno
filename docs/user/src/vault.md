@@ -36,8 +36,8 @@ A YAML front matter is a block that starts on the first line with `---` and ends
 
 - **Pictures** are part of the vault. The tree lists them under the notes of their folder. Selecting one shows it in place of the note. It can be renamed (the notes that display it follow), moved or trashed like a note.
 - **Pictures** shown and listed: `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`, `tif`, `tiff`, `avif`.
-- **Attachments** are listed, found in the palette, linked with `[[name.pdf]]`, and open in the application of your system: `pdf`; video and audio (`mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mp3`, `m4a`, `wav`, `ogg`, `opus`, `flac`); archives (`zip`, `7z`, `tar`, `gz`, `rar`); documents (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `odt`, `ods`, `odp`, `epub`, `rtf`); text (`txt`, `json`, `xml`, `html`, `log`).
-- **HTML files** open as a page on macOS and Linux, and in the system's app on Windows. See [Tabs and panes](tabs-and-panes.md#html-pages).
+- **Attachments** are listed, found in the palette, linked with `[[name.pdf]]`, and open in the application of your system: `pdf`; video and audio (`mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mp3`, `m4a`, `wav`, `ogg`, `opus`, `flac`); archives (`zip`, `7z`, `tar`, `gz`, `rar`); documents (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `odt`, `ods`, `odp`, `epub`, `rtf`); text (`txt`, `json`, `xml`, `html` (but see below), `log`).
+- **HTML files are attachments too, but open as a page on macOS and Linux; on Windows in the system's app.** See [Tabs and panes](tabs-and-panes.md#html-pages).
 - **Tables** (`csv`, `tsv`) are listed and open as plain text.
 - **Other files** stay in the folder, but Inkuno does not list them.
 
