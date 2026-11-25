@@ -10,6 +10,7 @@ pub mod assistant;
 pub mod block;
 pub mod commands;
 pub mod daily;
+pub mod html;
 pub mod lang;
 pub mod layout;
 pub mod lines;

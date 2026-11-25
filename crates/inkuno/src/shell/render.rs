@@ -205,6 +205,10 @@ impl Render for Shell {
                 self.panes_saved = state;
             }
             let toasts = self.render_toasts(cx);
+            // The stack's top edge, recorded at each paint by the canvas below: an HTML page ends above
+            // it. A change asks for a redraw, so the page is placed again.
+            let (toast_top, shell, any) =
+                (self.toast_top.clone(), cx.entity(), !self.toasts.is_empty());
             let toasts = div()
                 .absolute()
                 .bottom(px(toasts::TOAST_BOTTOM))
@@ -214,7 +218,23 @@ impl Render for Shell {
                 .flex_col()
                 .items_center()
                 .gap_2()
-                .children(toasts);
+                .children(toasts)
+                .child(
+                    gpui::canvas(
+                        move |bounds, _, cx| {
+                            let top = any.then(|| f32::from(bounds.origin.y));
+                            if toast_top.replace(top) != top {
+                                cx.defer(move |cx| shell.update(cx, |_, cx| cx.notify()));
+                            }
+                        },
+                        |_, _, _, _| (),
+                    )
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .right_0()
+                    .bottom_0(),
+                );
             // The left dock first: it settles which tool takes the keys.
             // Focus mode draws neither the sidebars, nor the bands, nor the comments: the note alone.
             let focus = self.focus_mode;
@@ -1041,9 +1061,9 @@ impl Shell {
                 match covered {
                     true => note,
                     false => {
-                        let inset =
-                            toasts::TOAST_BOTTOM + self.toasts.len() as f32 * toasts::TOAST_ROW;
-                        page.update(cx, |page, _| page.set_bottom_inset(inset));
+                        // The stack's top edge, from the paint before: one frame behind a new message.
+                        let edge = self.toast_top.get();
+                        page.update(cx, |page, _| page.set_clear_above(edge));
                         note.child(page)
                     }
                 }

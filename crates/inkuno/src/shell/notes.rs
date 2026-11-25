@@ -1,6 +1,10 @@
 //! Notes: opening, previewing, creating, saving, renaming with their title, links and wikilinks.
 
 use super::*;
+#[cfg(all(target_os = "macos", feature = "viewer", not(test)))]
+use crate::views::html_page::HtmlPageEvent;
+#[cfg(all(target_os = "macos", feature = "viewer", not(test)))]
+use gpui::{Keystroke, OperatingSystem};
 use std::sync::Arc;
 
 /// A note a rename may rewrite the links of: its path on disk now, its path after the rename, and
@@ -99,13 +103,27 @@ impl Shell {
     /// False when the page cannot be served from there; the caller then opens the viewer window.
     #[cfg(all(target_os = "macos", feature = "viewer", not(test)))]
     pub(super) fn open_html_tab(&mut self, file: &Path, cx: &mut Context<Self>) -> bool {
-        let Some(root) = file.parent() else {
+        let Some(root) = html_page_root(file) else {
             return false;
         };
-        if platform::web::url_for(root, file).is_none() {
-            return false;
-        }
         let page = cx.new(|_| crate::views::html_page::HtmlPage::new(file, root));
+        // The keys of the page arrive as an event, while the window may be in the middle of an update:
+        // they are run deferred, in the active window.
+        cx.subscribe(&page, |_, page, event: &HtmlPageEvent, cx| {
+            let HtmlPageEvent::Keys(message) = event.clone();
+            let shell = cx.entity();
+            cx.defer(move |cx| {
+                let Some(handle) = cx.active_window() else {
+                    return;
+                };
+                let _ = handle.update(cx, |_, window, cx| {
+                    shell.update(cx, |shell, cx| {
+                        shell.html_page_keys(&page, message, window, cx)
+                    })
+                });
+            });
+        })
+        .detach();
         self.set_file(
             Some(FileView {
                 path: file.to_path_buf(),
@@ -115,6 +133,33 @@ impl Shell {
         );
         cx.notify();
         true
+    }
+
+    /// Runs the keys an HTML page's script sent (macOS): the pane of the page becomes the active one
+    /// and takes the focus, the page gives the keyboard back to the app, and a key chord is dispatched
+    /// to the window. Nothing when the page no longer has a tab.
+    #[cfg(all(target_os = "macos", feature = "viewer", not(test)))]
+    pub(super) fn html_page_keys(
+        &mut self,
+        page: &Entity<crate::views::html_page::HtmlPage>,
+        message: inkuno_view::embed::Message,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let id = page.entity_id();
+        let Some(tab) = self.panes.iter().position(|pane| {
+            matches!(&pane.file, Some(FileView { kind: FileKind::Html(held), .. }) if held.entity_id() == id)
+        }) else {
+            return;
+        };
+        // The pane (and its group, which shows it) is focused as a click on it would focus it.
+        self.focus_pane(tab, window, cx);
+        page.read(cx).focus_parent();
+        if let inkuno_view::embed::Message::Key(key) = message
+            && let Ok(keystroke) = Keystroke::parse_with_os(&key, OperatingSystem::Mac)
+        {
+            window.dispatch_keystroke(keystroke, cx);
+        }
     }
 
     /// No HTML tab in this build (or in the tests, which record the viewer's request instead).
@@ -1256,4 +1301,12 @@ fn free_conflict_path(path: &Path, date: &str) -> PathBuf {
         });
     }
     other
+}
+
+/// The folder an HTML page is served from, its own folder, when the page can be served from there.
+/// Opening a page as a tab and restoring it at startup both use this test, so a restored page always
+/// opens.
+pub(super) fn html_page_root(file: &Path) -> Option<&Path> {
+    let root = file.parent()?;
+    platform::web::url_for(root, file).is_some().then_some(root)
 }
