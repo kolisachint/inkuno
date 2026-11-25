@@ -19,8 +19,11 @@ pub(super) const MIN_PANE_H: Pixels = px(200.);
 ///
 /// An HTML page comes back only where a page is a tab (`html_tabs`: macOS with the viewer). There it
 /// is served from its own folder by the webview laid over the window: no process starts and the CSP
-/// closes the network, so restoring it is safe. Elsewhere opening a page starts the viewer or hands
-/// the file to the system, which only a user's action may do: such a page is not restored.
+/// closes the network, so restoring it is safe. Its script cannot drive the app either: each page's
+/// messages carry a secret token that only that page's script knows (`inkuno_view::embed::new_token`),
+/// so a page's own scripts cannot send a shortcut or a focus request. Elsewhere opening a page starts
+/// the viewer or hands the file to the system, which only a user's action may do: such a page is not
+/// restored.
 fn restorable(path: &Path, root: Option<&Path>, html_tabs: bool) -> bool {
     let inside = root.is_some_and(|root| path.starts_with(root));
     let page = !platform::viewer::is_html(path) || (html_tabs && html_page_root(path).is_some());
