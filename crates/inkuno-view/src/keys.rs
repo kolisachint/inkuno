@@ -46,7 +46,9 @@ const TOKEN_PLACEHOLDER: &str = "__INKUNO_TOKEN__";
 /// hands those keys to the app (`window.ipc`) and stops them here. Escape sends `inkuno:<token>:focus`;
 /// a Cmd chord sends `inkuno:<token>:key:<keystroke>` in gpui syntax (`cmd-shift-p`). The token is the
 /// page's secret (`embed::new_token`), written into this script only: the page's own scripts cannot
-/// read it, and a message without it is refused by the app.
+/// read it, and a message without it is refused by the app. The script binds the native handler
+/// (`window.webkit.messageHandlers.ipc`) when it starts, before the page's scripts run, so a page cannot
+/// swap in its own `postMessage` and capture the token.
 ///
 /// The key is the typed character (`e.key`, lower-cased) when it is one printable ASCII character, so
 /// a non-QWERTY layout sends the letter it types. Other keys (the arrows, Enter, Tab, Backspace, and
@@ -59,7 +61,8 @@ const TOKEN_PLACEHOLDER: &str = "__INKUNO_TOKEN__";
 const EMBEDDED: &str = r#"
 (function () {
   var TOKEN = '__INKUNO_TOKEN__';
-  var ipc = window.ipc;
+  var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ipc;
+  var post = handler ? handler.postMessage.bind(handler) : null;
   var NAMES = {
     Backslash: '\\', BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Comma: ',',
     Period: '.', Slash: '/', Semicolon: ';', Quote: "'", Backquote: '`', Enter: 'enter', Tab: 'tab',
@@ -74,7 +77,7 @@ const EMBEDDED: &str = r#"
     return Object.prototype.hasOwnProperty.call(NAMES, e.code) ? NAMES[e.code] : null;
   }
   function send(message) {
-    ipc.postMessage('inkuno:' + TOKEN + ':' + message);
+    if (post) post('inkuno:' + TOKEN + ':' + message);
   }
   window.addEventListener('keydown', function (e) {
     if (!e.isTrusted) return;
@@ -157,8 +160,10 @@ mod tests {
         assert!(script.contains("var TOKEN = '0123abcd';"));
         assert!(!script.contains("__INKUNO_TOKEN__"));
         // Every post goes through `send`, which prefixes the token: no token-less post is left.
-        assert_eq!(script.matches("postMessage(").count(), 1);
-        assert!(script.contains("ipc.postMessage('inkuno:' + TOKEN + ':' + message)"));
+        // The one `postMessage` is the bind at start, so a page cannot reach the handler later.
+        assert_eq!(script.matches("postMessage").count(), 1);
+        assert!(script.contains("handler.postMessage.bind(handler)"));
+        assert!(script.contains("post('inkuno:' + TOKEN + ':' + message)"));
         assert!(!script.contains("'inkuno:focus'"));
         assert!(!script.contains("'inkuno:key:'"));
     }
