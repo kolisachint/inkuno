@@ -75,12 +75,18 @@ pub fn trash_origin_path(trashed_name: String) -> Option<String> {
     ))
 }
 
-/// The folder an item was in before it was trashed, read from its origin record: one
-/// vault-relative line, `""` for the root. `./` and a trailing `/` are dropped. `None` for an
-/// absolute path, for `..`, `.` or an empty part, and for a hidden folder (`.trash`, `.inkuno`).
+/// The folder an item was in before it was trashed, read from the first line of its origin record
+/// (the folder). The record is `folder\nfileNumber\n` and the caller passes the folder line alone.
+/// The result is one vault-relative line, `""` for the root. `./` and a trailing `/` are dropped.
+/// `None` for an absolute path, for `..`, `.` or an empty part, for a hidden folder (`.trash`,
+/// `.inkuno`), and for any control character inside the text (a `\n` that joins a second line, a
+/// `\r` or a `\t`).
 #[uniffi::export]
 pub fn trash_origin_folder(text: String) -> Option<String> {
     let text = text.trim();
+    if text.chars().any(char::is_control) {
+        return None;
+    }
     if text.starts_with('/') {
         return None;
     }
@@ -227,6 +233,21 @@ mod tests {
         ] {
             assert_eq!(trash_origin_folder(bad.into()), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn a_record_with_a_second_line_or_a_control_character_is_refused() {
+        // The whole record is not a folder: its second line is the file number.
+        assert_eq!(trash_origin_folder("ideas\n42".into()), None);
+        assert_eq!(trash_origin_folder("ideas\n42\n".into()), None);
+        assert_eq!(trash_origin_folder("ideas\r\n42".into()), None);
+        assert_eq!(trash_origin_folder("ideas\tx".into()), None);
+        assert_eq!(trash_origin_folder("ideas\u{7}".into()), None);
+        // The folder line alone, as the caller passes it, is the folder.
+        assert_eq!(
+            trash_origin_folder("ideas".into()).as_deref(),
+            Some("ideas")
+        );
     }
 
     #[test]
