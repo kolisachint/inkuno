@@ -144,7 +144,8 @@ pub(super) enum FileKind {
     Image,
     /// An SVG file, in the zoomable viewer.
     Svg(Entity<viewer::Viewer>),
-    /// An HTML page, in a webview laid over the tab (macOS). Not restored: see `restorable`.
+    /// An HTML page, in a webview laid over the tab (macOS). Restored at startup there, where it is a
+    /// tab: see `restorable`.
     #[cfg(all(target_os = "macos", feature = "viewer"))]
     Html(Entity<crate::views::html_page::HtmlPage>),
 }
