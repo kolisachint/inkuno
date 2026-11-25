@@ -1,4 +1,5 @@
 import SwiftUI
+import InkunoCore
 
 /// A request from the palette's `>` commands to open a segment of the panel for a note. `id` makes each
 /// request distinct, so the same command twice still opens the panel.
