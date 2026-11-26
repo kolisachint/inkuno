@@ -265,6 +265,18 @@ code,pre,.code,.pre,.cline,.pline,.cl,.cmp,.cmsrc,.dmath,.imath{font-variant-lig
 .confacts .pbtns{margin-top:0}
 .confacts .pbtns button{flex:1}
 .endpad{height:40px}
+/* v4: HTML pages */
+.htag{display:inline-block;margin-left:8px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);vertical-align:middle}
+.page.pgscr{overflow:hidden;padding:0;display:flex;flex-direction:column}
+.pgscr>.nav{flex:none}
+.pgbody{flex:1;min-height:0;display:flex;flex-direction:column}
+.pgframe{flex:1;width:100%;min-height:0;border:0;display:block;background:#fff}
+.pstrip{flex:none;display:flex;align-items:center;gap:8px;padding:4px 6px 4px 16px;min-height:40px;font-size:13px;color:var(--soft);background:var(--ground);border-bottom:1px solid var(--tline)}
+.pstrip span{flex:1;line-height:1.35}
+.pstrip button{flex:none;min-width:44px;min-height:40px;display:grid;place-items:center;color:var(--soft)}
+.pstrip svg{width:16px;height:16px}
+.phone.pgtop .sbar{color:#1f2225}
+.phone.pgtop .hind{background:#1f2225}
 
 /* Pill, keyboard, toast */
 #pill{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;z-index:24;pointer-events:none;transition:bottom .25s ease}
@@ -504,7 +516,9 @@ Object.assign(ICON,{
  zin:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M8 6v4M6 8h4"/>',
  zout:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M6 8h4"/>',
  share:'<path d="M9 2.5v9M6 5.5l3-3 3 3M6.5 8H5a1 1 0 0 0-1 1v5.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-1.5"/>',
- kbd:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="m6 8 3 3 3-3"/>'
+ kbd:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="m6 8 3 3 3-3"/>',
+ page:'<rect x="2.5" y="3.5" width="13" height="11" rx="2"/><path d="M2.5 6.5h13M6.5 10l-1.5 1.5 1.5 1.5M11.5 10l1.5 1.5-1.5 1.5"/>',
+ reload:'<path d="M15 9a6 6 0 1 1-1.8-4.3"/><path d="M15 3.5v3h-3"/>'
 });
 
 /* ---------- Helpers ---------- */
@@ -521,7 +535,7 @@ function box(el){const p=phone.getBoundingClientRect(),r=el.getBoundingClientRec
 
 /* ---------- Seeded notes (adapted from v3) ---------- */
 const WEEK=["# Week plan","",
-"Ship the **Quiet theme** this week and keep the window calm.","",
+"Ship the **Quiet theme** this week and keep the window calm.","","Numbers: [Launch metrics](Projects/launch-report.html)","",
 "## Monday",
 "- [x] Tables",
 "- [ ] Spacing pass",
@@ -541,6 +555,38 @@ const ROADMAP=["# Roadmap","## Now","- Quiet look for the editor","- Settings pa
 "## Later","> [!TIP]","> Revisit the home screen with document cards.","",
 "```mermaid","flowchart LR","  A[Idea] --> B[Draft] --> C[Ship]","```","",
 "$$","\\sum_{i=1}^{n} i = n(n+1)/2","$$"].join("\n");
+/* HTML pages (v4): vault files. Each page's own script draws its chart; its CSP closes the network. */
+const PAGE_CSP=`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">`;
+const PAGE_BASE=`<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${PAGE_CSP}<style>html,body{margin:0;background:#fff;color:#1f2225;color-scheme:light;font:16px/1.5 -apple-system,system-ui,sans-serif}main{padding:20px 20px 40px}h1{font-size:26px;line-height:1.2;margin:0 0 8px;letter-spacing:-.01em}p{margin:8px 0}a{color:#105592}.cap{font-size:13px;color:#5d6064}canvas{display:block;width:100%;height:auto;margin:14px 0 4px}</style>`;
+const REPORT_SRC=`<!doctype html><html lang="en"><head>${PAGE_BASE}<title>Launch metrics</title></head><body><main>
+<h1>Launch metrics</h1>
+<p>Signups per week for the first four weeks after launch. The bars are drawn by this page's own script.</p>
+<canvas id="bars" width="700" height="320" role="img" aria-label="Bar chart of weekly signups"></canvas>
+<p class="cap">Weekly signups, weeks 1 to 4</p>
+<p>Notes on the numbers are in <a href="notes.html" data-vault>Notes</a>. The source data is at <a href="https://example.com" data-ext>example.com</a>.</p>
+</main>
+<script>
+(function(){
+  var c=document.getElementById("bars"), x=c.getContext("2d");
+  var vals=[120,180,240,310], labels=["Week 1","Week 2","Week 3","Week 4"];
+  var pad=40, base=c.height-44, top=24, bw=110, gap=(c.width-2*pad-4*bw)/3;
+  var max=Math.max.apply(null,vals), k=(base-top)/max;
+  x.font="22px -apple-system, system-ui, sans-serif"; x.textAlign="center";
+  vals.forEach(function(v,i){
+    var bx=pad+i*(bw+gap), h=v*k;
+    x.fillStyle="#3a85f7"; x.fillRect(bx,base-h,bw,h);
+    x.fillStyle="#1f2225"; x.fillText(String(v),bx+bw/2,base-h-8);
+    x.fillStyle="#5d6064"; x.fillText(labels[i],bx+bw/2,base+30);
+  });
+  x.strokeStyle="#c9cacb"; x.beginPath(); x.moveTo(pad-10,base); x.lineTo(c.width-pad+10,base); x.stroke();
+  document.addEventListener("click",function(e){
+    var a=e.target.closest&&e.target.closest("a[href]"); if(!a) return;
+    e.preventDefault();
+    parent.postMessage({inkuno:"link",kind:a.hasAttribute("data-vault")?"vault":"external",href:a.getAttribute("href")},"*");
+  });
+})();
+<\/script></body></html>`;
+const NOTES_SRC=`<!doctype html><html lang="en"><head>${PAGE_BASE}</head><body><main><h1>Notes</h1><p>A second page in the vault. It has no title, so Inkuno names it by its file name.</p></main></body></html>`;
 const NOTES={};
 function note(id,o){NOTES[id]=Object.assign({id,title:"",folder:"",scratch:false,age:"",md:"",vers:[],pend:[],trashed:false},o)}
 note("today",{title:"Saturday, 21 November",age:"today",md:["# Saturday, 21 November","","Go through the chrome picks and plan the week with #design and @today.","","- [ ] Commit the spacing pass","- [x] Send the side-by-side screenshots","- See [Week plan](Week%20plan.md)"].join("\n")});
@@ -556,6 +602,8 @@ note("design",{title:"Design maths",folder:"Projects",age:"1 d",md:["# Design ma
 const CONF={target:"week",pairs:{"- [ ] Spacing pass":"- [ ] Spacing pass for the editor","- [ ] Links: see [Roadmap](Roadmap.md)":"- [ ] Links: picker writes relative links"}};
 note("conf",{title:"Week plan (conflict 2026-11-25).md",folder:"Projects",age:"today",conflict:true,md:WEEK.split("\n").map(l=>CONF.pairs[l]??l).join("\n")});
 note("launch",{title:"Launch checklist",folder:"Projects",age:"1 mo",md:["# Launch checklist","- [x] Installer notes","- [ ] Release page","- [ ] Changelog"].join("\n")});
+note("report",{title:"Launch metrics",folder:"Projects",age:"2 h",page:true,file:"launch-report.html",src:REPORT_SRC});
+note("pagenotes",{title:"notes.html",file:"notes.html",page:true,unlisted:true,src:NOTES_SRC});
 note("read",{title:"Reading list",age:"1 w",md:["# Reading list","- *The Elements of Typographic Style*","- [Practical Typography](https://practicaltypography.com)","- [ ] Re-read **Refactoring UI**","- [x] *Shape Up*"].join("\n")});
 note("ideas",{title:"Ideas",age:"3 d",md:["# Ideas","Small things worth trying later.","","- Typewriter scrolling","- Focus the current paragraph","","> [!WARNING]","> Nothing here may write syntax GitHub cannot show."].join("\n")});
 note("j1",{title:"Friday, 20 November",folder:"Journal",age:"1 d",md:["# Friday, 20 November","Quiet morning. Read the spacing notes twice.","- [x] Walk","- [ ] Reply to Ben"].join("\n")});
@@ -819,11 +867,11 @@ function blockHTML(b,id){
 }
 
 /* ---------- Screens ---------- */
-function labelOf(s){switch(s.k){case"home":return"Inkuno";case"tree":return s.path||"Notes";case"note":return NOTES[s.id].title;case"settings":return"Settings";case"trash":return"Trash";case"compare":return"Versions"}return""}
+function labelOf(s){switch(s.k){case"home":return"Inkuno";case"tree":return s.path||"Notes";case"note":case"page":return NOTES[s.id].title;case"settings":return"Settings";case"trash":return"Trash";case"compare":return"Versions"}return""}
 function navHTML(i,right=""){const p=S.stack[i-1];return `<div class="nav">${i>0?`<button class="navbtn" data-a="back" aria-label="Back">${ic("back")}<span>${esc(labelOf(p))}</span></button>`:"<span></span>"}<div class="navr">${right}</div></div>`}
-const rowNote=id=>{const n=NOTES[id],cf=n.conflict&&!S.v1;return `<div class="row" data-a="${cf?"conflict":"note"}" data-id="${id}" data-lp="note:${id}" role="button" tabindex="0">${ic("note")}<span class="rt">${esc(n.title)}</span>${cf?'<i class="wdot" aria-label="Sync conflict"></i>':""}<span class="age">${n.age}</span>${ic("right")}</div>`};
+const rowNote=id=>{const n=NOTES[id],cf=n.conflict&&!S.v1;if(n.page)return `<div class="row" data-a="note" data-id="${id}" data-lp="page:${id}" role="button" tabindex="0">${ic("page")}<span class="rt">${esc(n.title)}<span class="htag">HTML</span></span><span class="age">${n.age}</span>${ic("right")}</div>`;return `<div class="row" data-a="${cf?"conflict":"note"}" data-id="${id}" data-lp="note:${id}" role="button" tabindex="0">${ic("note")}<span class="rt">${esc(n.title)}</span>${cf?'<i class="wdot" aria-label="Sync conflict"></i>':""}<span class="age">${n.age}</span>${ic("right")}</div>`};
 const rowFolder=f=>`<div class="row" data-a="tree" data-path="${esc(f)}" role="button" tabindex="0">${ic("folder")}<span class="rt">${esc(f)}</span><span class="age">${liveNotes().filter(n=>n.folder===f).length}</span>${ic("right")}</div>`;
-const liveNotes=()=>Object.values(NOTES).filter(n=>!n.trashed);
+const liveNotes=()=>Object.values(NOTES).filter(n=>!n.trashed&&!n.unlisted&&!(S.v1&&n.page));
 const foldersList=()=>[...new Set(liveNotes().filter(n=>n.folder&&!n.scratch).map(n=>n.folder))].sort();
 
 function screenHTML(s,i){
@@ -833,6 +881,7 @@ function screenHTML(s,i){
     case "tree": return treeHTML(s,i);
     case "note": return noteHTML(s.id,i);
     case "compare": return compareHTML(s,i);
+    case "page": return pageHTML(s,i);
     case "settings": return settingsHTML(i);
     case "trash": return trashHTML(i);
   }
@@ -877,6 +926,10 @@ function compareHTML(s,i){
   <div class="cmp">${rows.map(([k,t])=>`<div class="cl ${k==="+"?"add":k==="-"?"del":""}"><span>${k===" "?"":k}</span>${esc(t)||"&nbsp;"}</div>`).join("")}</div>
   <div class="bottombar"><button class="cta" data-a="restore" data-id="${s.id}" data-v="${s.v}">Restore this version</button></div>`;
 }
+function pageHTML(s,i){
+  const n=NOTES[s.id];
+  return `<div class="nav">${i>0?`<button class="navbtn" data-a="back" aria-label="Back">${ic("back")}<span>${esc(labelOf(S.stack[i-1]))}</span></button>`:"<span></span>"}<div class="navr"><button class="navbtn" data-a="pmore" aria-label="More">${ic("dots")}</button><div class="ntitle">${esc(n.title)}</div></div></div>${S.pageTip?"":`<div class="pstrip"><span>Read-only. Network is off for vault pages.</span><button data-a="pstrip" aria-label="Dismiss">${ic("x")}</button></div>`}<div class="pgbody"><iframe class="pgframe" title="${esc(n.title)}" sandbox="allow-scripts" srcdoc="${esc(n.src)}"></iframe></div>`;
+}
 function diffLines(a,b){
   const A=a.split("\n"),B=b.split("\n"),n=A.length,m=B.length;
   const T=Array.from({length:n+1},()=>new Array(m+1).fill(0));
@@ -914,7 +967,7 @@ function settingsHTML(i){
 }
 function trashHTML(i){
   const t=Object.values(NOTES).filter(n=>n.trashed);
-  return `${navHTML(i)}<h1 class="large">Trash</h1>${t.length?`<div class="rows">${t.map(n=>`<div class="row">${ic("note")}<span class="rt">${esc(n.title)}<small>${esc(n.folder||"Notes")}</small></span><button class="cta sm" data-a="restoreNote" data-id="${n.id}">Restore</button></div>`).join("")}</div>`:'<div class="empty">Trash is empty.</div>'}<div class="foot">Restore brings a note back to the folder it came from.</div>`;
+  return `${navHTML(i)}<h1 class="large">Trash</h1>${t.length?`<div class="rows">${t.map(n=>`<div class="row">${ic(n.page?"page":"note")}<span class="rt">${esc(n.title)}<small>${esc(n.folder||"Notes")}</small></span><button class="cta sm" data-a="restoreNote" data-id="${n.id}">Restore</button></div>`).join("")}</div>`:'<div class="empty">Trash is empty.</div>'}<div class="foot">Restore brings a note back to the folder it came from.</div>`;
 }
 function paint(anim){
   const n=S.stack.length, top=cur();
@@ -925,9 +978,12 @@ function paint(anim){
       el=document.createElement("div");el.className="page";el.dataset.i=i;pages.appendChild(el);
       if(anim==="push"&&i===n-1){el.classList.add("enter");requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.remove("enter")))}
     }
-    const st=el.scrollTop; el.innerHTML=screenHTML(s,i); el.scrollTop=st;
+    el.classList.toggle("pgscr",s.k==="page");
+    if(s.k==="page"&&el.dataset.done===s.id) return;
+    const st=el.scrollTop; el.innerHTML=screenHTML(s,i); el.scrollTop=st; el.dataset.done=s.k==="page"?s.id:"";
   });
   phone.classList.toggle("kb",!!(S.live&&top.k==="note"&&!S.sheet));
+  phone.classList.toggle("pgtop",top.k==="page");
   phone.dataset.width=S.width;
   phone.style.setProperty("--fs",S.size+"px");
   renderPill();
@@ -949,7 +1005,7 @@ function back(){
   if(top){top.classList.add("leave");setTimeout(()=>top.remove(),320)}
   paint();
 }
-function openNote(id){go({k:"note",id})}
+function openNote(id){go(NOTES[id].page?{k:"page",id}:{k:"note",id})}
 function setLive(at){S.live=at==null?null:{id:cur().id,at};S.liveFig=at!=null&&isFigAt(cur().id,at);paint();if(at!=null)revealLive()}
 /* Keeps the live block above the keyboard, as UIKit scrolls the caret into view. A figure's source goes to the top so its Preview stays visible. */
 function revealLive(){
@@ -972,6 +1028,7 @@ function sheetBody(s){
     case "links": return `<div class="sheetscroll">${linksHTML(s)}</div>`;
     case "files": return `<div class="sheetscroll">${filesHTML()}</div>`;
     case "conflict": return `<div class="sheetscroll">${conflictHTML(s)}</div>`;
+    case "ext": return `<div class="sheetscroll"><div class="sheetbody"><h3>Open ${esc(s.host)} in Safari?</h3><p class="soft">Pages in Inkuno cannot reach the network.</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="extOpen">Open in Safari</button></div></div></div>`;
     case "composer": return `<div class="sheetscroll">${composerHTML(s)}</div>`;
     case "cell": return `<div class="sheetscroll"><div class="sheetbody"><h3>Table cell</h3><input class="field" id="cellv" value="${esc(s.text)}" aria-label="Cell text"><p class="soft small">${chip("Deferred")} Cell edits are not saved in this prototype. Table cells can be edited as Markdown on the live line.</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="cellDone">Done</button></div></div></div>`;
     case "confirm": { const n=NOTES[s.id], v=n.vers[s.v]; return `<div class="sheetscroll"><div class="sheetbody"><h3>Restore “${esc(v.m)}”?</h3><p class="soft">The current text is saved as a version first, so nothing is lost.</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="doRestore" data-id="${s.id}" data-v="${s.v}">Restore</button></div></div></div>`; }
@@ -1076,8 +1133,15 @@ function resolveAll(id,acc){
 }
 function toggleFocus(){S.focus=!S.focus;paint()}
 function openPanel(view){if(cur().k!=="note")return;openSheet({k:"panel",view,id:cur().id},"half")}
+const pathOf=n=>(n.folder?n.folder+"/":"")+n.file;
+function pageByPath(href){
+  if(S.v1) return null;
+  let dec=href; try{dec=decodeURIComponent(href)}catch(e){}
+  return Object.values(NOTES).find(n=>n.page&&!n.trashed&&(pathOf(n)===dec||n.file===dec))||null;
+}
 function openLink(href){
   let dec=href; try{dec=decodeURIComponent(href)}catch(e){}
+  const pg=pageByPath(dec); if(pg) return openNote(pg.id);
   const n=liveNotes().find(x=>x.title+".md"===dec);
   if(n) return openNote(n.id);
   toast(/^https?:/.test(href)?"Opens in Safari (not in this prototype)":"No note called "+href);
@@ -1115,12 +1179,15 @@ function snippet(md,q){
 function palRows(q){
   const ql=q.trim().toLowerCase(), live=liveNotes();
   if(ql.startsWith(">")){const c=ql.slice(1).trim();return CMDS().filter(x=>!c||x.t.toLowerCase().includes(c)).map(x=>({g:x.g,t:x.t,sub:"",icon:"palette",run:x.run}))}
-  if(!ql) return live.slice(0,6).map(n=>({g:"Recent",t:n.title,sub:esc(n.folder||"Notes"),age:n.age,icon:"note",run:()=>openNote(n.id)}));
-  const tm=live.filter(n=>n.title.toLowerCase().includes(ql));
-  const cm=live.filter(n=>!tm.includes(n)&&n.md.toLowerCase().includes(ql));
+  if(!ql) return live.slice(0,6).map(n=>({g:"Recent",t:n.title,sub:esc(n.folder||"Notes"),age:n.age,icon:n.page?"page":"note",run:()=>openNote(n.id)}));
+  const notes=live.filter(n=>!n.page), pgs=live.filter(n=>n.page);
+  const tm=notes.filter(n=>n.title.toLowerCase().includes(ql));
+  const cm=notes.filter(n=>!tm.includes(n)&&n.md.toLowerCase().includes(ql));
+  const pm=pgs.filter(n=>n.title.toLowerCase().includes(ql));
   const R=[];
   tm.forEach(n=>R.push({g:"Names",t:n.title,sub:esc(n.folder||"Notes"),age:n.age,icon:"note",run:()=>openNote(n.id)}));
   cm.forEach(n=>R.push({g:"Content",t:n.title,sub:snippet(n.md,ql),age:n.age,icon:"note",run:()=>openNote(n.id)}));
+  pm.forEach(n=>R.push({g:"Pages",t:n.title,sub:esc(pathOf(n)),age:n.age,icon:"page",run:()=>openNote(n.id)}));
   if(!live.some(n=>n.title.toLowerCase()===ql)) R.push({g:"",t:`Create «${q.trim()}»`,sub:"",icon:"plus",run:()=>toast("New notes are not created in this prototype")});
   return R;
 }
@@ -1133,8 +1200,11 @@ function palListHTML(q){
   });
   return h||'<div class="empty">No matches</div>';
 }
+function backlinksOf(n){const keys=n.page?[n.file]:[n.title+".md",encodeURI(n.title)+".md"];return liveNotes().filter(x=>x.id!==n.id&&keys.some(k=>x.md.includes(k)))}
+function blHTML(n){const bl=backlinksOf(n);return bl.length?`<div class="rows">${bl.map(x=>`<button class="row" data-a="note" data-id="${x.id}">${ic(x.page?"page":"note")}<span class="rt">${esc(x.title)}<small>Links to ${esc(n.title)}</small></span>${ic("right")}</button>`).join("")}</div>`:`<div class="empty">No notes link here yet.</div>`}
 function panelHTML(s){
   const n=NOTES[s.id], v=s.view;
+  if(n.page) return `<h3 style="margin:4px 0 10px">${esc(n.title)}</h3>${blHTML(n)}`;
   const seg=`<div class="seg wide" role="group">${[["outline","Outline"],["comments","Comments"],["versions","Versions"],["backlinks","Backlinks"]].map(([k,l])=>`<button class="${k===v?"on":""}" data-a="pview" data-v="${k}">${l}</button>`).join("")}</div>`;
   let body="";
   if(v==="outline"){
@@ -1148,8 +1218,7 @@ function panelHTML(s){
   } else if(v==="versions"){
     body=`<button class="cta" data-a="savever">Save version</button>`+(n.vers.length?`<div class="rows">${n.vers.map((x,i)=>`<button class="row" data-a="ver" data-v="${i}">${ic("history")}<span class="rt">${esc(x.m)}<small>${esc(x.t)}</small></span>${ic("right")}</button>`).join("")}</div>`:`<div class="empty">No saved versions yet.</div>`);
   } else {
-    const bl=liveNotes().filter(x=>x.id!==n.id&&(x.md.includes(n.title+".md")||x.md.includes(encodeURI(n.title)+".md")));
-    body=bl.length?`<div class="rows">${bl.map(x=>`<button class="row" data-a="note" data-id="${x.id}">${ic("note")}<span class="rt">${esc(x.title)}<small>Links to ${esc(n.title)}</small></span>${ic("right")}</button>`).join("")}</div>`:`<div class="empty">No notes link here yet.</div>`;
+    body=blHTML(n);
   }
   return `<h3 style="margin:4px 0 10px">${esc(n.title)}</h3>${seg}${body}`;
 }
@@ -1242,6 +1311,13 @@ const H={
     delete NOTES[id];S.sheet=null;
     go({k:"note",id:CONF.target});
     toast(w==="both"?"Merged. Lines both sides changed appear twice":w==="iphone"?"Kept the iPhone version":"Kept the Mac version",()=>{Object.assign(t,was);NOTES[id]=c;back()});},
+  pmore:el=>{const id=cur().id,b=box(el),f=topPg()&&topPg().querySelector("iframe");openMenu({x:b.x+b.w/2,y:b.y+b.h},[
+      {t:"Reload",i:"reload",fn:()=>{if(f)f.srcdoc=f.srcdoc;toast("Reloaded")}},
+      {t:"Share",i:"share",fn:()=>toast("Share sheet is not part of this prototype")},
+      {t:"Show in Files",i:"folder",fn:()=>toast("Show in Files is not part of this prototype")},
+      {t:"Backlinks",i:"link",fn:()=>openSheet({k:"panel",view:"backlinks",id},"half")}])},
+  pstrip:()=>{S.pageTip=true;$$(".pstrip",pages).forEach(x=>x.remove())},
+  extOpen:()=>{const h=S.sheet&&S.sheet.host;closeSheet();toast(`Opens ${h} in Safari (not in this prototype)`)},
   fsclose:()=>$("#fsLayer").classList.remove("on"),
   noop:()=>{}
 };
@@ -1251,7 +1327,15 @@ function applyTheme(){const r=document.documentElement;S.theme==="system"?r.remo
 let lp=null,lpT=null,pl=null;
 function longPress(key,p){
   const [type,id,at]=key.split(":");
-  if(type==="note"){const n=NOTES[id];
+  if(type==="page"){
+    openMenu(p,[
+      {t:"Open",i:"open",fn:()=>openNote(id)},
+      {t:"Share",i:"share",fn:()=>toast("Share sheet is not part of this prototype")},
+      {t:"Rename",i:"pen",fn:()=>toast("Rename is not saved in this prototype")},
+      {t:"Move…",i:"move",fn:()=>toast("Move is not saved in this prototype")},
+      {sep:1},
+      {t:"Move to Trash",i:"trash",d:1,fn:()=>trashNote(id)}]);
+  } else if(type==="note"){const n=NOTES[id];
     openMenu(p,[
       {t:"Rename",i:"pen",fn:()=>toast("Rename is not saved in this prototype")},
       {t:"Move…",i:"move",fn:()=>toast("Move is not saved in this prototype")},
@@ -1310,12 +1394,19 @@ phone.addEventListener("click",e=>{
   if(S.live&&cur().k==="note"&&!t.closest("#sheetLayer,#menuLayer,#pill,#fsLayer")) setLive(null);
 });
 phone.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches('[role="button"]')){e.preventDefault();e.target.click()}});
+/* Link taps from a page's iframe: only the window of a page on screen is heard. */
+addEventListener("message",e=>{
+  const f=$$("iframe.pgframe",pages).find(x=>x.contentWindow===e.source), d=e.data;
+  if(!f||!d||d.inkuno!=="link"||typeof d.href!=="string")return;
+  if(d.kind==="vault"){const pg=pageByPath(d.href);if(!pg){toast("No page called "+d.href);return}toast("Opens Notes in Inkuno");openNote(pg.id);return}
+  if(d.kind==="external"&&/^https:\/\//.test(d.href))openSheet({k:"ext",href:d.href,host:d.href.replace(/^https:\/\//,"").split("/")[0]},"half");
+});
 const KBDROWS=["qwertyuiop","asdfghjkl","zxcvbnm"];
 $("#kbd").innerHTML=`<div class="acc">${[["slash","slash","/"],["hash","hash",""],["link","link","[["],["task","task",""],["indent","indent",""],["outdent","outdent",""],["undo","undo",""],["hide","kbd",""]].map(([k,i,l])=>`<button data-a="acc" data-k="${k}" aria-label="${k}">${l?`<span>${l}</span>`:ic(i)}</button>`).join("")}<span class="sp"></span></div>
 <div class="keys">${KBDROWS.map((r,i)=>`<div class="krow">${i===2?'<button class="k fn" data-a="key">⇧</button>':""}${[...r].map(c=>`<button class="k" data-a="key">${c}</button>`).join("")}${i===2?'<button class="k fn" data-a="key">⌫</button>':""}</div>`).join("")}<div class="krow"><button class="k fn" data-a="key">123</button><button class="k sp" data-a="key">space</button><button class="k fn" data-a="key">return</button></div></div>`;
 
 /* ---------- State ---------- */
-const S={stack:[{k:"onboard"}],v1:false,liveFig:false,reveal:true,theme:"system",size:16,width:"normal",live:null,sheet:null,det:"half",suppress:false,focus:false,z:1,started:false,palRuns:[]};
+const S={stack:[{k:"onboard"}],v1:false,liveFig:false,reveal:true,theme:"system",size:16,width:"normal",live:null,sheet:null,det:"half",suppress:false,focus:false,z:1,started:false,palRuns:[],pageTip:false};
 
 /* ---------- Design log ---------- */
 const OWNER=[
@@ -1350,7 +1441,8 @@ const LOG=[
   ["Theme set","Light, Dark, System and Quiet only","Low","Simplify (15 more themes later)","Keeps the theme code small for v1","Simplified","simp"],
   ["Focus mode","Hides the navigation bar","Low","Defer","The phone is already focused","Deferred","defer"],
   ["Backup tar.gz","Row in Settings › Files","Low/Med","Defer","Files already sync through iCloud","Deferred","defer"],
-  ["Trash restore UI","Settings › Files › Trash; palette command Restore from Trash","Low/Med","Keep (palette command)","Keeps undo for deleted notes","",""]
+  ["Trash restore UI","Settings › Files › Trash; palette command Restore from Trash","Low/Med","Keep (palette command)","Keeps undo for deleted notes","",""],
+  ["HTML pages in the vault","Tree row with a page icon and HTML tag; read-only page in a webview; ••• Reload, Share, Show in Files, Backlinks; vault links open in Inkuno, outside links ask before Safari","Med","Defer (hidden in v1)","Same as the Mac tab: own-folder serving and a CSP with no network","Deferred","v4"]
 ];
 const V1_SUGGEST=[
   "Compare screen: restore asks for confirmation instead.",
@@ -1377,7 +1469,7 @@ function renderLog(){
   <ul>${V1_SUGGEST.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
   <p class="logfoot">Note text is read-only here. Actions that would write a file show a toast.</p>
   </div>`;
-  $("#v1").addEventListener("change",e=>{S.v1=e.target.checked;if(S.v1&&S.theme==="quiet")S.theme="light";S.live=null;S.liveFig=false;applyTheme();paint()});
+  $("#v1").addEventListener("change",e=>{S.v1=e.target.checked;if(S.v1&&S.theme==="quiet")S.theme="light";S.live=null;S.liveFig=false;applyTheme();while(S.v1&&S.stack.length>1&&cur().k==="page")S.stack.pop();paint()});
 }
 
 /* ---------- Init ---------- */

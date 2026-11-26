@@ -267,6 +267,7 @@ Built on v3-ios. The switch "Show built app (v1)" shows what ships today. v4 pro
 | 6 | Long-press | Block menu adds Copy image, View full screen | Native pattern |
 | 7 | Slash sheet | Math and Mermaid entries (hidden in v1 mode) | `ios.md` open item 6 |
 | 8 | Conflict copy | Tree row with warning dot; full sheet "Two versions of …" with Not now, neutral highlights, a Merge both / Keep iPhone / Keep Mac picker and a "Result in Week plan" preview. Merge both keeps both variants of each clashing line, Mac first. Applying saves a version, removes the copy, opens the note, and offers Undo | The sheet appears only when `merge_onto` (`inkuno-ffi` `merging.rs`) returns None (same lines changed), so a clean merge is impossible; the preview shows what is written. Swift never calls it yet |
+| 9 | HTML pages | Tree row (title, page icon, HTML tag); read-only page screen in a webview; ••• Reload, Share, Show in Files, Backlinks; vault links open in Inkuno, outside links ask before Safari | Same as the Mac tab (`app-ui.md` §25): own-folder serving, CSP with no network, restored like a note |
 
 ### Fixed from v3
 
@@ -290,6 +291,7 @@ Built on v3-ios. The switch "Show built app (v1)" shows what ships today. v4 pro
 - Move it to a gpui-free module. Export `figure_mermaid` and `figure_latex` (SVG or PNG at device scale) through `inkuno-ffi`.
 - Render off the main thread. Cache by source, theme and width.
 - Measure binary size (STIX Two Math font, renderer crates) before committing to it.
+- HTML pages: WKWebView with a custom URL scheme handler serving only the page's folder, a CSP with no network, no script bridge to the app (the phone has no shortcuts to forward, so no token is needed). Tree and palette must list .html (VaultStore lists .md only today).
 
 ### Still not designed
 
