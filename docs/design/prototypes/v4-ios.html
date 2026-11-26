@@ -1,0 +1,1355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkuno iPhone v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Colour tokens are the desktop v3 set (Quiet theme). iPhone-only tokens follow them. */
+:root{
+  --page:#e4e5e7;
+  --ground:#eff0f1; --sheet:#ffffff; --ink:#1f2225; --side-ink:rgba(31,34,37,.85); --soft:#5d6064; --faint:#9c9fa0; --icon:#3f4143;
+  --line:rgba(0,0,0,.08); --hover:rgba(0,0,0,.045); --selected:rgba(0,0,0,.072); --pressed:rgba(0,0,0,.09);
+  --accent:#3a85f7; --sel:rgba(58,133,247,.24); --link:#105592;
+  --code-bg:#fbfbfb; --code-line:#eaebeb; --gutter:#f8f8f8; --gutter-num:#b9babc;
+  --th:#f8f8f8; --tline:rgba(0,0,0,.09); --chip:#f6f6f7; --chip-line:#e2e3e3;
+  --pop:#fafafa; --box:rgba(0,0,0,.22); --dots:rgba(31,34,37,.45); --quote:#c9cacb; --seg:#ebeced; --seg-on:#ffffff; --sw-off:rgba(31,34,37,.22); --field:#8a8d91;
+  --s-com:#8a8d93; --s-kw:#b2565c; --s-str:#89713a; --s-num:#9759b3; --s-type:#3878b1; --s-fn:#5f7e43;
+  --n:#2f6fd6; --tip:#2f8a57; --imp:#7c4dd6; --warn:#a8650a; --cau:#c93a3a;
+  --toast:#1f2225; --toast-ink:#ffffff;
+  --add:rgba(46,160,90,.15);--add-ink:#1f7a43;--del:rgba(201,58,58,.11);--del-ink:#b3322f;--cmw:rgba(232,176,30,.26);--cmd:#c98a00;--hl:rgba(58,133,247,.16);
+  --scrim:rgba(0,0,0,.12);--shadow-seg:0 1px 2px rgba(0,0,0,.12);--shadow-knob:0 1px 2px rgba(0,0,0,.25);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.035),-2px 0 10px rgba(0,0,0,.045);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.10);
+  --shadow-win:0 1px 2px rgba(0,0,0,.06),0 18px 48px rgba(0,0,0,.14);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0b0b0c;
+  --ground:#141517; --sheet:#1c1c1e; --ink:#e6e6e6; --side-ink:rgba(230,230,230,.82); --soft:#a3a5a8; --faint:#6f7174; --icon:#c9cacb;
+  --line:rgba(255,255,255,.08); --hover:rgba(255,255,255,.055); --selected:rgba(255,255,255,.085); --pressed:rgba(255,255,255,.11);
+  --accent:#4b8ff8; --sel:rgba(75,143,248,.32); --link:#8ab4f8;
+  --code-bg:#212123; --code-line:#2e2f31; --gutter:#1f1f21; --gutter-num:#5b5d60;
+  --th:#232325; --tline:rgba(255,255,255,.09); --chip:#262628; --chip-line:#353638;
+  --pop:#2a2a2c; --box:rgba(255,255,255,.3); --dots:rgba(230,230,230,.4); --quote:#4a4c4f; --seg:#202022; --seg-on:#3a3a3c; --sw-off:rgba(230,230,230,.28); --field:#6f7174;
+  --s-com:#8d9096; --s-kw:#e06c75; --s-str:#d8b25c; --s-num:#c58af9; --s-type:#6cb6ff; --s-fn:#98c379;
+  --n:#6ea6ff; --tip:#58c48a; --imp:#a98bff; --warn:#e0a23c; --cau:#ff7b72;
+  --toast:#e6e6e6; --toast-ink:#1c1c1e;
+  --add:rgba(88,196,138,.16);--add-ink:#7fe0a6;--del:rgba(255,123,114,.15);--del-ink:#ff9d96;--cmw:rgba(232,176,30,.22);--cmd:#f0c040;--hl:rgba(75,143,248,.24);
+  --scrim:rgba(0,0,0,.45);--shadow-seg:0 1px 2px rgba(0,0,0,.4);--shadow-knob:0 1px 2px rgba(0,0,0,.5);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.3),-2px 0 12px rgba(0,0,0,.35);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.45);
+  --shadow-win:0 1px 2px rgba(0,0,0,.4),0 18px 48px rgba(0,0,0,.6);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#0b0b0c;
+  --ground:#141517; --sheet:#1c1c1e; --ink:#e6e6e6; --side-ink:rgba(230,230,230,.82); --soft:#a3a5a8; --faint:#6f7174; --icon:#c9cacb;
+  --line:rgba(255,255,255,.08); --hover:rgba(255,255,255,.055); --selected:rgba(255,255,255,.085); --pressed:rgba(255,255,255,.11);
+  --accent:#4b8ff8; --sel:rgba(75,143,248,.32); --link:#8ab4f8;
+  --code-bg:#212123; --code-line:#2e2f31; --gutter:#1f1f21; --gutter-num:#5b5d60;
+  --th:#232325; --tline:rgba(255,255,255,.09); --chip:#262628; --chip-line:#353638;
+  --pop:#2a2a2c; --box:rgba(255,255,255,.3); --dots:rgba(230,230,230,.4); --quote:#4a4c4f; --seg:#202022; --seg-on:#3a3a3c; --sw-off:rgba(230,230,230,.28); --field:#6f7174;
+  --s-com:#8d9096; --s-kw:#e06c75; --s-str:#d8b25c; --s-num:#c58af9; --s-type:#6cb6ff; --s-fn:#98c379;
+  --n:#6ea6ff; --tip:#58c48a; --imp:#a98bff; --warn:#e0a23c; --cau:#ff7b72;
+  --toast:#e6e6e6; --toast-ink:#1c1c1e;
+  --add:rgba(88,196,138,.16);--add-ink:#7fe0a6;--del:rgba(255,123,114,.15);--del-ink:#ff9d96;--cmw:rgba(232,176,30,.22);--cmd:#f0c040;--hl:rgba(75,143,248,.24);
+  --scrim:rgba(0,0,0,.45);--shadow-seg:0 1px 2px rgba(0,0,0,.4);--shadow-knob:0 1px 2px rgba(0,0,0,.5);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
+  --shadow-note:-1px 0 1px rgba(0,0,0,.3),-2px 0 12px rgba(0,0,0,.35);
+  --shadow-menu:0 1px 3px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.45);
+  --shadow-win:0 1px 2px rgba(0,0,0,.4),0 18px 48px rgba(0,0,0,.6);
+  color-scheme:dark}
+/* iPhone-only tokens */
+:root{--ctx:rgba(255,255,255,.82);--ctx-ink:#1f2225;--sep:rgba(0,0,0,.1);--tint:#3a85f7;--kbd-bg:#d1d3d9;--kbd-acc:#d6d8de;--key:#ffffff;--key-fn:#aeb1b9;--mscrim:rgba(0,0,0,.08);--red:#c93a3a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ctx:rgba(44,44,46,.84);--ctx-ink:#e6e6e6;--sep:rgba(255,255,255,.12);--kbd-bg:#2b2b2e;--kbd-acc:#353538;--key:#5a5a5e;--key-fn:#3a3a3d;--mscrim:rgba(0,0,0,.2);--red:#ff7b72}}
+:root[data-theme="dark"]{--ctx:rgba(44,44,46,.84);--ctx-ink:#e6e6e6;--sep:rgba(255,255,255,.12);--kbd-bg:#2b2b2e;--kbd-acc:#353538;--key:#5a5a5e;--key-fn:#3a3a3d;--mscrim:rgba(0,0,0,.2);--red:#ff7b72}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--page);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+button:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input{font:inherit;color:inherit;user-select:text;-webkit-user-select:text}
+svg{flex:none}
+.faint{color:var(--faint)}
+.small{font-size:13px}
+.soft{color:var(--soft)}
+
+/* Stage: phone on the page ground; design log beside it or below it */
+.stage{display:flex;flex-wrap:wrap;gap:40px 48px;justify-content:center;align-items:flex-start;padding:32px 16px 56px;max-width:1280px;margin:0 auto}
+.wrap{flex:none;width:calc(390px * var(--k,1));height:calc(844px * var(--k,1))}
+.phone{position:relative;width:390px;height:844px;transform:scale(var(--k,1));transform-origin:0 0;border-radius:48px;background:var(--ground);overflow:hidden;outline:10px solid #1d1d1f;box-shadow:var(--shadow-win);font-family:var(--sans);font-size:var(--fs,16px);isolation:isolate;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:pan-y}
+.phone[data-width=narrow]{--gut:30px}
+.phone[data-width=normal]{--gut:22px}
+.phone[data-width=wide]{--gut:14px}
+.sbar{position:absolute;top:0;left:0;right:0;height:54px;z-index:50;display:flex;justify-content:space-between;align-items:center;padding:6px 30px 0 46px;font-weight:600;font-size:16px;pointer-events:none;color:var(--ink)}
+.sicons{display:flex;gap:6px;align-items:center}
+.sicons svg{width:18px;height:12px}
+.sicons svg:last-child{width:26px}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:124px;height:36px;border-radius:20px;background:#000;z-index:55;pointer-events:none}
+.hind{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--ink);opacity:.9;z-index:60;pointer-events:none}
+
+/* Pages and push/pop */
+#pages{position:absolute;inset:0;z-index:1;transition:bottom .25s ease}
+.phone.kb #pages{bottom:262px}
+.page{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;background:var(--ground);padding-bottom:48px;transition:transform .32s cubic-bezier(.2,.8,.2,1);scrollbar-width:none}
+.page::-webkit-scrollbar{display:none}
+.page.enter,.page.leave{transform:translateX(100%)}
+.page.leave{transition-duration:.28s}
+
+/* Navigation bar: 44 px row under the status bar, large titles below */
+.nav{position:sticky;top:0;z-index:5;height:98px;padding:54px 6px 0;display:flex;align-items:center;justify-content:space-between;background:var(--ground)}
+.navr{display:flex;align-items:center}
+.navbtn{min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;gap:2px;color:var(--accent);font-size:17px;padding:0 8px}
+.navbtn svg{width:22px;height:22px}
+.navbtn span{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ntitle{position:absolute;left:50%;transform:translateX(-50%);top:54px;height:44px;display:flex;align-items:center;max-width:46%;font-weight:600;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.focusnav{justify-content:flex-end}
+.large{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin:2px 16px 14px}
+.sec{font-size:13px;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:20px 32px 6px}
+.foot{color:var(--soft);font-size:13px;padding:6px 32px 16px}
+.empty{color:var(--faint);text-align:center;padding:24px;font-size:15px}
+.pullhint{color:var(--faint);font-size:13px;text-align:center;padding:14px 24px}
+
+/* Home cards */
+.card{display:block;width:calc(100% - 32px);text-align:left;background:var(--sheet);border-radius:16px;padding:14px 16px;margin:0 16px 12px;box-shadow:var(--shadow-menu);min-height:44px}
+.line{display:flex;align-items:center;gap:10px;color:var(--soft);font-size:16px}
+.line svg{width:20px;height:20px}
+.homegrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 16px}
+.homegrid .card,.rc{width:auto}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:112px;margin:0}
+.tile>svg{width:22px;height:22px;color:var(--accent);margin-bottom:auto}
+.tile b{font-size:16px;margin-top:8px}
+.tile small{color:var(--soft);font-size:13px}
+.recall{display:flex;gap:12px;overflow-x:auto;padding:0 16px 4px;scrollbar-width:none}
+.recall::-webkit-scrollbar{display:none}
+.rc{flex:0 0 150px;margin:0 0 4px;min-height:84px}
+.rc b{display:block;font-size:15px}
+.rc small{color:var(--soft);font-size:13px}
+
+/* Rows and lists */
+.rows{background:var(--sheet);border-radius:12px;margin:0 16px 8px;overflow:hidden}
+.row{min-height:44px;width:100%;display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--tline);text-align:left;background:none;flex-wrap:wrap}
+.row:last-child{border-bottom:0}
+.row>svg{width:20px;height:20px;color:var(--icon)}
+.row>svg:last-child{width:14px;height:14px;color:var(--faint)}
+.row.col{flex-direction:column;align-items:stretch;gap:8px}
+.row.sel{background:var(--hover)}
+.rt{flex:1;min-width:0;font-size:16px}
+.rt small{display:block;color:var(--soft);font-size:13px}
+.age{color:var(--faint);font-size:14px}
+.row .cta{width:auto}
+.chip{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;padding:2px 6px;border-radius:5px;border:1px solid var(--chip-line);background:var(--chip);color:var(--soft);margin-left:6px;white-space:nowrap;vertical-align:middle;line-height:1.5}
+.chip.dfr{color:var(--warn);border-color:var(--warn)}
+.chip.simp{color:var(--imp);border-color:var(--imp)}
+.seg{display:flex;background:var(--seg);border-radius:9px;padding:2px;width:100%;gap:2px}
+.seg button{flex:1;min-height:30px;border-radius:7px;font-size:14px;color:var(--ink);padding:0 4px;white-space:nowrap}
+.seg button.on{background:var(--seg-on);box-shadow:var(--shadow-seg);font-weight:600}
+.seg.wide{margin:4px 0 12px}
+.seg.wide button{font-size:13px;min-height:32px;padding:0 2px}
+.sw{width:51px;height:31px;border-radius:16px;background:var(--sw-off);position:relative;flex:none;margin-left:auto;transition:background .2s}
+.sw i{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:var(--shadow-knob);transition:transform .2s}
+.sw.on{background:var(--accent)}
+.sw.on i{transform:translateX(20px)}
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;width:100%;border-radius:14px;background:var(--accent);color:#fff;font-weight:600;font-size:17px;padding:0 16px}
+.cta.sm{min-height:36px;width:auto;font-size:15px;padding:0 14px;border-radius:10px}
+.cta svg{width:18px;height:18px}
+
+/* Onboarding */
+.ob{padding:120px 28px 0;display:flex;flex-direction:column;gap:14px}
+.ob h1{font-size:30px;line-height:1.15;margin:12px 0 0;letter-spacing:-.02em}
+.ob p{color:var(--soft);font-size:16px;margin:0}
+.obmark{width:68px;height:68px;border-radius:18px;background:var(--accent);display:grid;place-items:center;color:#fff}
+.obmark svg{width:36px;height:36px}
+.ob .cta{margin-top:20px}
+
+/* Note body: live styling */
+.doc{padding:6px var(--gut) 40px;font-size:var(--fs,16px);line-height:1.6;color:var(--ink)}
+.b{position:relative;margin:0;padding:3px 0}
+.b.live{background:var(--hl);border-radius:6px;margin:0 -8px;padding:3px 8px}
+.h1{font-size:1.9em;font-weight:700;line-height:1.2;margin:.4em 0 .3em;letter-spacing:-.01em}
+.h2{font-size:1.45em;font-weight:650;margin:.9em 0 .2em;line-height:1.25}
+.h3{font-size:1.15em;font-weight:600;margin:.8em 0 .1em}
+.h4,.h5,.h6{font-size:1em;font-weight:600;margin:.7em 0 0}
+p.b{margin:.35em 0}
+.q{border-left:3px solid var(--quote);padding-left:12px;color:var(--soft);margin:.5em 0}
+.li{display:flex;gap:10px;align-items:flex-start;margin:.15em 0}
+.lead{flex:none;width:18px;display:inline-flex;justify-content:center;align-items:center;padding-top:.4em;font-variant-numeric:tabular-nums}
+.lead .dot{width:6px;height:6px;border-radius:50%;background:var(--ink);margin-top:.2em}
+.lead.num{color:var(--soft);justify-content:flex-end;padding-top:0}
+.lead.box{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--box);margin-top:.25em;margin-left:-2px;padding:0}
+.lead.box.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.lead.box svg{width:13px;height:13px}
+.task.done .txt{color:var(--faint);text-decoration:line-through}
+.li .txt{flex:1;min-width:0}
+hr.b{border:0;border-top:1px solid var(--line);margin:1em 0}
+.mk{display:none;color:var(--faint);font-weight:400}
+.doc.reveal .b.live .mk{display:inline}
+.doc.reveal .b.live .cmsrc{display:inline}
+.cmsrc{display:none;color:var(--faint);font-family:var(--mono);font-size:.8em}
+code.ic{font:.86em var(--mono);background:var(--code-bg);border:1px solid var(--code-line);border-radius:5px;padding:0 4px}
+.doc.reveal .b.live code.ic{background:none;border-color:transparent;padding:0}
+a.ln{color:var(--link);text-decoration:underline;text-decoration-color:rgba(16,85,146,.35);text-underline-offset:3px}
+.tag{color:var(--imp)}
+.dl{color:var(--n);background:var(--hl);border-radius:4px;padding:0 3px}
+ins.pw{background:var(--add);color:var(--add-ink);text-decoration:none;border-radius:3px}
+del.pwd{background:var(--del);color:var(--del-ink);text-decoration:line-through;border-radius:3px}
+.cm{background:var(--cmw);border-bottom:1.5px solid var(--cmd);border-radius:2px;cursor:pointer}
+.cdot{position:absolute;right:-15px;top:.7em;width:7px;height:7px;border-radius:50%;background:var(--cmd);cursor:pointer}
+.pre,.code{font:calc(var(--fs,16px) * .82)/1.55 var(--mono);background:var(--code-bg);border:1px solid var(--code-line);border-radius:10px;padding:10px 12px;margin:.6em 0;overflow-x:auto;white-space:pre;color:var(--ink);display:block}
+.t-com{color:var(--s-com)}.t-str{color:var(--s-str)}.t-num{color:var(--s-num)}.t-kw{color:var(--s-kw)}.t-fn{color:var(--s-fn)}.t-type{color:var(--s-type)}
+.alert{margin:.7em 0;border-radius:10px;padding:10px 12px 10px 14px;border-left:3px solid var(--ac);background:color-mix(in srgb,var(--ac) 10%,transparent);font-size:.95em}
+.alert .al{font-weight:600;color:var(--ac);margin-bottom:2px}
+.alert.TIP{--ac:var(--tip)}.alert.NOTE{--ac:var(--n)}.alert.IMPORTANT{--ac:var(--imp)}.alert.WARNING{--ac:var(--warn)}.alert.CAUTION{--ac:var(--cau)}
+.tblwrap{overflow-x:auto;margin:.6em 0;border-radius:8px}
+.tblwrap table{border-collapse:collapse;font-size:.92em;white-space:nowrap}
+.tblwrap th,.tblwrap td{border:1px solid var(--tline);padding:6px 10px;text-align:left;vertical-align:top}
+.tblwrap th{background:var(--th);font-weight:600}
+.tblwrap td{cursor:pointer}
+.media{display:block;width:100%;margin:.7em 0;background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:10px 12px 12px;text-align:left}
+.mtag{display:flex;align-items:center;font-size:13px;color:var(--soft);margin-bottom:6px}
+.mmd{display:block;width:100%;height:auto;color:var(--soft)}
+.math{font-size:19px;padding:10px 0 4px;display:flex;align-items:center;justify-content:center;gap:4px;color:var(--ink);flex-wrap:wrap}
+.sigma{position:relative;display:inline-block;font-size:26px;margin-right:6px}
+.sigma sup,.sigma sub{position:absolute;font-size:11px;left:50%;transform:translateX(-50%)}
+.sigma sup{top:-16px}.sigma sub{bottom:-14px;white-space:nowrap}
+.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 4px}
+.frac>span:first-child{border-bottom:1.5px solid var(--ink);padding:0 4px 2px}
+.frac>span:last-child{padding-top:2px}
+/* v4: figures, formulas, conflict sheet */
+.chip.v4{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.media.fig{position:relative;padding:0;border:0;background:none;margin:8px 0}
+.media.fig:not(.err){padding-top:36px}
+.figmag{position:absolute;top:0;right:0;width:32px;height:32px;display:grid;place-items:center;color:var(--soft);z-index:2;isolation:isolate;border-radius:50%}
+.figmag::before{content:"";position:absolute;width:28px;height:28px;border-radius:50%;background:var(--chip);opacity:.9;z-index:-1}
+.figmag svg{width:18px;height:18px}
+.fchip{position:absolute;top:0;left:0;margin:0;font-size:9px;padding:1px 5px;z-index:2}
+.figscroll{overflow-x:auto;scrollbar-width:none;padding:0}
+.figscroll::-webkit-scrollbar{display:none}
+.figscroll.more{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent)}
+.figind{display:none;position:relative;height:2px;margin-top:6px;border-radius:1px;background:var(--line)}
+.figind.on{display:block}
+.figind i{position:absolute;top:0;height:2px;border-radius:1px;background:var(--soft)}
+code,pre,.code,.pre,.cline,.pline,.cl,.cmp,.cmsrc,.dmath,.imath{font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
+.thin{display:inline-block;width:.17em}
+.rel{margin:0 .28em}
+.bin{margin:0 .22em}
+.figscroll>svg{display:block;margin:0 auto}
+.media.err{padding:0;border:0;background:none}
+.figerr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--box);border-radius:10px;background:var(--sheet);color:var(--soft);font-size:14px}
+.showsrc{flex:none;min-height:32px;padding:0 4px;color:var(--accent);font-weight:600;font-size:14px}
+.prevlbl{font-size:13px;color:var(--soft);margin:10px 0 2px}
+.dmath{width:max-content;margin:0 auto;padding:8px 0 6px;font-family:"STIX Two Math","Cambria Math","Times New Roman",serif;font-size:19px;color:var(--ink);font-style:normal}
+.imath{font-family:"STIX Two Math","Cambria Math","Times New Roman",serif;font-size:1.06em;font-style:normal;white-space:nowrap}
+.imath i,.dmath i{font-style:italic}
+.imath sup,.imath sub,.dmath sup,.dmath sub{font-size:.7em;line-height:0;position:relative;vertical-align:baseline}
+.imath sup,.dmath sup{top:-.5em}
+.imath sub,.dmath sub{top:.3em}
+.bigop{position:relative;display:inline-block;font-size:1.35em;line-height:1;vertical-align:-.1em;margin-right:.7em}
+.bigop .lim{position:absolute;left:100%;margin-left:.15em;font-size:.6em;line-height:1;white-space:nowrap;font-style:normal}
+.bigop .lim.up{bottom:55%}
+.bigop .lim.dn{top:55%}
+.wdot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
+.ccard{background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 10px}
+.chead{font-size:13px;color:var(--soft);margin-bottom:6px}
+.cline{font:13px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;padding:1px 6px;border-radius:4px;margin:2px 0}
+.cline.hl{background:var(--hl);color:var(--ink)}
+.cline.add{background:var(--add);color:var(--add-ink)}
+.cline.del{background:var(--del);color:var(--del-ink)}
+.confacts{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.confacts .pbtns{margin-top:0}
+.confacts .pbtns button{flex:1}
+.endpad{height:40px}
+
+/* Pill, keyboard, toast */
+#pill{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;z-index:24;pointer-events:none;transition:bottom .25s ease}
+#pill:empty{display:none}
+.pill{pointer-events:auto;background:var(--toast);color:var(--toast-ink);border-radius:999px;padding:10px 16px;font-weight:600;font-size:14px;box-shadow:var(--shadow-menu);min-height:40px}
+.phone.kb #pill{bottom:272px}
+#kbd{position:absolute;left:0;right:0;bottom:0;height:262px;z-index:22;background:var(--kbd-bg);display:none}
+.phone.kb #kbd{display:block}
+.acc{height:44px;display:flex;align-items:center;gap:2px;padding:0 6px;background:var(--kbd-acc);border-bottom:1px solid var(--line)}
+.acc button{min-width:40px;height:36px;border-radius:8px;display:grid;place-items:center;color:var(--ink);font-size:15px;padding:0 4px}
+.acc button svg{width:20px;height:20px}
+.acc .sp{flex:1}
+.keys{padding:8px 3px}
+.krow{display:flex;justify-content:center;gap:6px;margin-bottom:9px}
+.k{flex:1;height:40px;border-radius:6px;background:var(--key);box-shadow:0 1px 0 rgba(0,0,0,.25);font-size:19px;color:var(--ink);min-width:0}
+.k.fn{flex:1.5;background:var(--key-fn);font-size:14px}
+.k.sp{flex:5}
+#toast{position:absolute;left:14px;right:14px;bottom:96px;z-index:80;background:var(--toast);color:var(--toast-ink);border-radius:12px;padding:8px 8px 8px 14px;display:flex;align-items:center;gap:10px;font-size:14px;box-shadow:var(--shadow-menu);opacity:0;transform:translateY(12px);transition:opacity .2s,transform .2s;pointer-events:none}
+#toast.on{opacity:1;transform:none;pointer-events:auto}
+#toast span{flex:1;line-height:1.35}
+#toast button{color:#8ab4f8;font-weight:600;min-height:36px;padding:0 10px}
+.phone.kb #toast{bottom:318px}
+
+/* Bottom sheet: one sheet for the right panel, pickers and palette */
+#sheetLayer{position:absolute;inset:0;z-index:40;pointer-events:none}
+#sheetLayer:empty{display:none}
+#sheetLayer .scrim{position:absolute;inset:0;background:var(--scrim);pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sheet);border-radius:10px 10px 0 0;box-shadow:var(--shadow-menu);pointer-events:auto;display:flex;flex-direction:column;transition:height .25s cubic-bezier(.2,.8,.2,1)}
+.sheet.new{animation:sheetup .3s cubic-bezier(.2,.8,.2,1)}
+.sheet.half{height:430px}
+.sheet.full{height:780px}
+.sheetscroll{overflow-y:auto;flex:1;padding:0 0 32px;scrollbar-width:none}
+.grabwrap{height:26px;flex:none;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none}
+.grab{width:36px;height:5px;border-radius:3px;background:var(--box)}
+.sheetbody{padding:4px 16px 0}
+.sheetbody h3{font-size:17px;margin:6px 0 10px}
+.phead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0 10px}
+.phead b{font-size:17px}
+.pacts2{display:flex;justify-content:space-between;gap:8px;margin-bottom:12px}
+.pacts2 button{min-height:36px;padding:0 14px;border-radius:9px;background:var(--seg);font-size:15px}
+.pacts2 .cta{min-height:36px;width:auto;font-size:15px;padding:0 14px;border-radius:9px;background:var(--accent);color:#fff}
+.plist{display:flex;flex-direction:column;gap:10px}
+.pcard{position:relative;border-radius:12px;overflow:hidden}
+.pbg{position:absolute;inset:0;display:flex;align-items:center;padding:0 16px;font-weight:600;font-size:15px;gap:6px}
+.pbg.acc{background:var(--add);color:var(--add-ink);justify-content:flex-start}
+.pbg.rej{background:var(--del);color:var(--del-ink);justify-content:flex-end}
+.pbg svg{width:18px;height:18px}
+.pfg{position:relative;background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:10px 12px;touch-action:pan-y}
+.pline{font:13px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;margin:2px 0}
+.pline.o{color:var(--del-ink);text-decoration:line-through}
+.pline.n{color:var(--add-ink)}
+.pbtns{display:flex;gap:8px;margin-top:8px}
+.pbtns button{min-height:34px;padding:0 12px;border-radius:9px;background:var(--seg);font-size:14px}
+.bq{border-left:3px solid var(--quote);padding-left:10px;color:var(--soft);margin:6px 0 12px;font-size:15px}
+.field{width:100%;min-height:44px;border-radius:10px;border:1px solid var(--field);background:var(--sheet);padding:10px 12px;font-size:16px;outline:none;margin:6px 0 12px;display:block}
+.field:focus{box-shadow:0 0 0 2px var(--accent)}
+.btns{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;align-items:center}
+.btns button:not(.cta){min-height:40px;padding:0 14px;border-radius:10px;font-size:15px;color:var(--accent)}
+.fhead{display:flex;align-items:center;justify-content:space-between;padding:6px 16px 10px;border-bottom:1px solid var(--tline);min-height:50px}
+.fhead b{font-size:17px}
+.fhead .blue{color:var(--accent);font-weight:600}
+.fcrumb{color:var(--soft);font-size:13px;padding:12px 18px 6px}
+.crow{padding:12px 16px;border-bottom:1px solid var(--tline)}
+.crow .quote{color:var(--soft);border-left:3px solid var(--cmd);padding-left:8px;font-size:14px}
+.cmeta{color:var(--faint);font-size:12px;margin:6px 0 2px}
+.cacts{display:flex;gap:8px;margin-top:8px}
+.cacts button:not(.cta){min-height:34px;padding:0 12px;border-radius:9px;background:var(--seg);font-size:14px}
+.pbody{padding:0 16px}
+.pbody>.cta{margin:4px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.gi{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:76px;padding:10px 6px;border-radius:12px;background:var(--seg);font-size:13px;text-align:center}
+.gi svg{width:22px;height:22px;color:var(--icon)}
+.gi .chip{margin:0}
+.palbox{padding:0 16px}
+.palin{display:flex;align-items:center;gap:8px;background:var(--seg);border-radius:10px;padding:0 10px;min-height:40px;margin-bottom:4px}
+.palin input{flex:1;border:0;background:none;outline:none;font-size:17px;min-height:40px;color:var(--ink);min-width:0}
+.palin svg{width:18px;height:18px;color:var(--soft)}
+.pgh{font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:14px 6px 4px}
+.prow{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px;border-radius:10px;text-align:left;width:100%}
+.prow:hover{background:var(--hover)}
+.prow>svg{width:18px;height:18px;color:var(--icon)}
+.prow .pt{flex:1;min-width:0;font-size:16px}
+.prow .pt small{display:block;color:var(--soft);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .age{font-size:13px}
+mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 1px}
+
+/* Context menus and the comment popover */
+#menuLayer{position:absolute;inset:0;z-index:70}
+#menuLayer:empty{display:none}
+#menuLayer .mscrim{position:absolute;inset:0;background:var(--mscrim)}
+.ctx{position:absolute;width:250px;background:var(--ctx);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-radius:13px;box-shadow:var(--shadow-menu);overflow:hidden;animation:pop .18s ease}
+.ci{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0 14px;font-size:16px;color:var(--ctx-ink);text-align:left}
+.ci svg{width:19px;height:19px;color:var(--icon)}
+.ci.danger,.ci.danger svg{color:var(--red)}
+.ci .chip{margin-left:auto}
+.csep{height:1px;background:var(--sep)}
+.cpop{position:absolute;left:24px;right:24px;background:var(--ctx);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:13px;padding:14px 14px 12px;box-shadow:var(--shadow-menu);font-size:15px;animation:pop .18s ease}
+.cpop .cq{color:var(--soft);border-left:3px solid var(--cmd);padding-left:8px;font-size:14px}
+.cpop p{margin:8px 0 0}
+.cpop .cacts{margin-top:10px}
+@keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+@keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
+
+/* Full-screen viewer */
+#fsLayer{position:absolute;inset:0;z-index:90;background:var(--sheet);display:none;flex-direction:column}
+#fsLayer.on{display:flex}
+.fsbar{display:flex;align-items:center;justify-content:space-between;padding:54px 10px 8px 16px;border-bottom:1px solid var(--tline)}
+.fsbar b{font-size:16px}
+.fsbar>div{display:flex;gap:2px;align-items:center}
+.fsbar button{min-width:40px;min-height:40px;color:var(--accent);display:grid;place-items:center}
+.fsbar button.blue{font-weight:600;padding:0 8px;font-size:16px;width:auto}
+.fsbar svg{width:20px;height:20px}
+.fsbody{flex:1;overflow:auto;padding:16px;touch-action:none}
+.fscont{transform-origin:50% 0;transition:transform .15s}
+.fscont>svg{display:block;margin:0 auto}
+.fshint{position:absolute;bottom:44px;left:50%;transform:translateX(-50%);background:var(--toast);color:var(--toast-ink);border-radius:999px;padding:8px 14px;font-size:13px;white-space:nowrap}
+
+/* Compare screen */
+.cmphead{display:flex;align-items:center;gap:8px;padding:0 16px 10px}
+.cmphead h2{font-size:22px;margin:0;letter-spacing:-.01em}
+.cmp{margin:0 16px 16px;background:var(--sheet);border-radius:12px;padding:8px 0;font:13px/1.6 var(--mono);overflow-x:auto}
+.cl{padding:0 12px;white-space:pre-wrap;word-break:break-word;min-height:1.6em}
+.cl span{display:inline-block;width:14px;color:var(--faint)}
+.cl.add{background:var(--add);color:var(--add-ink)}
+.cl.del{background:var(--del);color:var(--del-ink);text-decoration:line-through}
+.bottombar{padding:8px 16px 0}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* Design log */
+.log{flex:1 1 560px;max-width:740px;min-width:0;width:100%}
+.logwrap{background:var(--sheet);border-radius:14px;padding:22px 22px 26px;box-shadow:var(--shadow-menu)}
+.log h2{font-size:22px;margin:0 0 6px;letter-spacing:-.01em}
+.log h3{font-size:15px;margin:22px 0 8px}
+.log p{margin:6px 0}
+.log ul{padding-left:18px;margin:6px 0}
+.log li{margin:3px 0}
+.v1sw{display:flex;gap:10px;align-items:flex-start;background:var(--ground);border-radius:10px;padding:12px;margin:14px 0 4px;cursor:pointer}
+.v1sw input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent);flex:none}
+.tw{overflow-x:auto;margin-top:8px;border:1px solid var(--tline);border-radius:10px}
+.log table{border-collapse:collapse;font-size:13px;width:100%;min-width:780px}
+.log th,.log td{border-bottom:1px solid var(--tline);padding:7px 8px;text-align:left;vertical-align:top}
+.log th{background:var(--th);font-size:12px;color:var(--soft);font-weight:600}
+.log td.n{color:var(--faint);font-variant-numeric:tabular-nums}
+.vk{font-weight:600}
+.vk.keep{color:var(--tip)}
+.vk.simp{color:var(--imp)}
+.vk.defer{color:var(--warn)}
+.log .chip{margin-left:4px}
+.logfoot{color:var(--soft);font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="wrap">
+    <div class="phone" id="phone" data-width="normal" aria-label="Inkuno iPhone prototype">
+      <div class="sbar"><span>9:41</span><span class="sicons"><svg viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg viewBox="0 0 18 12" fill="currentColor"><path d="M9 11.5 6 8.3a4.3 4.3 0 0 1 6 0z"/><path d="M1.6 5.4a10.4 10.4 0 0 1 14.8 0l-1.4 1.4a8.4 8.4 0 0 0-12 0z"/></svg><svg viewBox="0 0 27 12" fill="none"><rect x=".5" y=".5" width="22" height="11" rx="3" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="8" rx="1.8" fill="currentColor"/><path d="M24.5 4v4" stroke="currentColor" stroke-width="1.5" opacity=".5"/></svg></span></div>
+      <div class="island"></div>
+      <div id="pages"></div>
+      <div id="pill"></div>
+      <div id="toast" role="status" aria-live="polite"></div>
+      <div id="kbd"></div>
+      <div id="sheetLayer"></div>
+      <div id="menuLayer"></div>
+      <div id="fsLayer"></div>
+      <div class="hind"></div>
+    </div>
+  </div>
+  <section class="log" id="log" aria-label="Design log"></section>
+</main>
+<script>
+const ICON={
+ sidebar:'<rect x="2.5" y="3.5" width="13" height="11" rx="2.5"/><path d="M7 3.5v11"/>',
+ rpanel:'<rect x="2.5" y="3.5" width="13" height="11" rx="2.5"/><path d="M11 3.5v11"/>',
+ split:'<rect x="2.5" y="3.5" width="13" height="11" rx="2"/><path d="M9 3.5v11"/>',
+ comment:'<path d="M4 4.5h10a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5v-2.5H4A1.5 1.5 0 0 1 2.5 12V6A1.5 1.5 0 0 1 4 4.5z"/>',
+ search:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5"/>',
+ plus:'<path d="M9 3.5v11M3.5 9h11"/>',
+ outline:'<path d="M3 4.5h12M6 9h9M6 13.5h9"/>',
+ history:'<path d="M3.2 9a5.8 5.8 0 1 0 1.7-4.1"/><path d="M3 3.5v2.8h2.8M9 6v3.2l2.2 1.4"/>',
+ settings:'<circle cx="9" cy="9" r="2.25"/><path d="M9 2.5v1.6M9 13.9v1.6M2.5 9h1.6M13.9 9h1.6M4.4 4.4l1.1 1.1M12.5 12.5l1.1 1.1M4.4 13.6l1.1-1.1M12.5 5.5l1.1-1.1"/>',
+ trash:'<path d="M3.5 5h11M7.5 5V3.5h3V5M5 5l.7 9.5h6.6L13 5"/>',
+ folder:'<path d="M2.5 5.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5H14a1.5 1.5 0 0 1 1.5 1.5v5.5A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5z"/>',
+ note:'<path d="M5 2.5h5l3.5 3.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 14V4A1.5 1.5 0 0 1 5 2.5z"/><path d="M10 2.5V6h3.5M6.5 9.5h5M6.5 12h3.5"/>',
+ today:'<rect x="2.5" y="3.5" width="13" height="11.5" rx="2"/><path d="M2.5 7h13M6 2v3M12 2v3"/>',
+ chev:'<path d="m4.5 7 4.5 4.5L13.5 7"/>',
+ x:'<path d="m5 5 8 8M13 5l-8 8"/>',
+ check:'<path d="m4 9.5 3.2 3L14 5.5" stroke-width="2.2"/>',
+ copy:'<rect x="6" y="6" width="9" height="9" rx="2"/><path d="M12 6V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v6A1.5 1.5 0 0 0 4.5 12H6"/>',
+ bold:'<path d="M5.5 3.5h4.25a2.75 2.75 0 0 1 0 5.5H5.5zM5.5 9h5a2.75 2.75 0 0 1 0 5.5h-5z" stroke-width="1.8"/>',
+ italic:'<path d="M8 3.5h5M5 14.5h5M10.5 3.5l-3 11"/>',
+ strike:'<path d="M3 9h12M12.5 5.5C12 4.3 10.8 3.5 9 3.5c-2 0-3.5 1-3.5 2.5M5.5 12.5c.5 1.3 1.7 2 3.5 2 2.2 0 3.5-1 3.5-2.5"/>',
+ code:'<path d="m6.5 5-4 4 4 4M11.5 5l4 4-4 4"/>',
+ link:'<path d="M7.5 10.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.8.8M10.5 7.5a3 3 0 0 0-4.2 0L4 9.8a3 3 0 0 0 4.2 4.2l.8-.8"/>',
+ ul:'<circle cx="4" cy="5" r="1" fill="currentColor"/><circle cx="4" cy="9" r="1" fill="currentColor"/><circle cx="4" cy="13" r="1" fill="currentColor"/><path d="M7.5 5h7M7.5 9h7M7.5 13h7"/>',
+ ol:'<path d="M3.5 3.8h1v3M3.2 6.8h1.8M3.2 10.5h1.6l-1.6 2.4h1.8M7.5 5h7M7.5 9h7M7.5 13h7"/>',
+ task:'<rect x="3" y="3" width="12" height="12" rx="3"/><path d="m6 9 2 2 4-4"/>',
+ quote:'<path d="M4 4v10M7.5 6h7M7.5 9h7M7.5 12h4.5"/>',
+ table:'<rect x="2.5" y="3.5" width="13" height="11" rx="2"/><path d="M2.5 7.5h13M7 7.5v7M11 7.5v7"/>',
+ alert:'<circle cx="9" cy="9" r="6.5"/><path d="M9 8.2v4M9 5.6v.1" stroke-width="1.8"/>',
+ hr:'<path d="M2.5 9h1M5.5 9h1M8.5 9h1M11.5 9h1M14.5 9h1" stroke-width="1.8"/>',
+ image:'<rect x="2.5" y="3.5" width="13" height="11" rx="2"/><circle cx="6.5" cy="7.5" r="1.3"/><path d="m3 13 3.8-3.8 2.7 2.7 2-2 3.5 3.5"/>',
+ math:'<path d="M13.5 4h-9l4.5 5-4.5 5h9"/>',
+ diagram:'<rect x="2.5" y="3" width="5" height="4" rx="1"/><rect x="10.5" y="11" width="5" height="4" rx="1"/><path d="M5 7v3.5a1 1 0 0 0 1 1h4.5"/>',
+ back:'<path d="M11 4 6 9l5 5"/>',
+ palette:'<circle cx="9" cy="9" r="6.5"/><circle cx="6.3" cy="7" r=".9" fill="currentColor"/><circle cx="9.5" cy="5.6" r=".9" fill="currentColor"/><circle cx="12" cy="8.2" r=".9" fill="currentColor"/><path d="M9 15.5a2 2 0 0 1 0-4h1.5"/>',
+ pen:'<path d="M3.5 14.5 4.2 11.6 11.6 4.2a1.6 1.6 0 0 1 2.2 2.2L6.4 13.8z"/>',
+ keyboard:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="M5 7.5h.1M8 7.5h.1M11 7.5h.1M5.5 10.5h7"/>',
+ info:'<circle cx="9" cy="9" r="6.5"/><path d="M9 8.2v4M9 5.6v.1" stroke-width="1.8"/>',
+ spark:'<path d="M9 2.5 10.4 7.6 15.5 9l-5.1 1.4L9 15.5 7.6 10.4 2.5 9l5.1-1.4z"/>',
+ open:'<path d="M10 3.5h4.5V8M14.5 3.5 8 10M12.5 11v2.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1H7"/>',
+ dup:'<rect x="6" y="6" width="9" height="9" rx="2"/><path d="M3 11.5v-7A1.5 1.5 0 0 1 4.5 3h7"/>',
+ move:'<path d="M2.5 9h10M9.5 5.5 13 9l-3.5 3.5M15.5 4v10"/>',
+ find:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M6 8h4"/>',
+ width:'<path d="M2.5 9h13M5 6.5 2.5 9 5 11.5M13 6.5l2.5 2.5-2.5 2.5"/>',
+ md:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="M4.5 11.5v-4l2 2 2-2v4M12.5 7.5v4M11 10l1.5 1.5L14 10"/>'
+};
+const ic=(n,extra="")=>`<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${ICON[n]}</svg>`;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const mk=s=>`<span class="mk">${esc(s)}</span>`;
+const pad=n=>String(n).padStart(2,"0");
+
+/* ---------- Icons added for the iPhone prototype ---------- */
+Object.assign(ICON,{
+ right:'<path d="m7 4.5 4.5 4.5L7 13.5"/>',
+ dots:'<circle cx="4" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="14" cy="9" r="1.2" fill="currentColor" stroke="none"/>',
+ undo:'<path d="M6.5 5.5H11a3.5 3.5 0 0 1 0 7H7"/><path d="M4.5 3.5 2.5 5.5l2 2"/>',
+ indent:'<path d="M3 4.5h12M7 9h8M3 13.5h12"/><path d="m3.5 7.2 2 1.8-2 1.8"/>',
+ outdent:'<path d="M3 4.5h12M7 9h8M3 13.5h12"/><path d="m5.5 7.2-2 1.8 2 1.8"/>',
+ hash:'<path d="M7 3.5 5.5 14.5M12.5 3.5 11 14.5M3.5 6.5h11M3 11.5h11"/>',
+ slash:'<path d="m11.5 3.5-5 11"/>',
+ heading:'<path d="M4 4v10M14 4v10M4 9h10"/>',
+ fs:'<path d="M3 7V3h4M11 3h4v4M15 11v4h-4M7 15H3v-4"/>',
+ focus:'<path d="M3 6V3h3M12 3h3v3M15 12v3h-3M6 15H3v-3"/><circle cx="9" cy="9" r="1.6"/>',
+ zin:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M8 6v4M6 8h4"/>',
+ zout:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M6 8h4"/>',
+ kbd:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="m6 8 3 3 3-3"/>'
+});
+
+/* ---------- Helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const phone=$("#phone"), pages=$("#pages");
+const cur=()=>S.stack[S.stack.length-1];
+const hhmm=()=>"16:20";
+const chip=k=>k?`<span class="chip ${k==="Deferred"?"dfr":k==="v4"?"v4":"simp"}">${k}</span>`:"";
+const KW=new Set("fn let mut pub use impl struct enum return if else for in match const true false self while loop mod as where flowchart graph LR TD".split(" "));
+function fit(){const k=Math.min(1,(innerWidth-32)/390);document.documentElement.style.setProperty("--k",k.toFixed(4))}
+function pt(e){const r=phone.getBoundingClientRect(),k=r.width/390;return{x:(e.clientX-r.left)/k,y:(e.clientY-r.top)/k}}
+function box(el){const p=phone.getBoundingClientRect(),r=el.getBoundingClientRect(),k=p.width/390;return{x:(r.left-p.left)/k,y:(r.top-p.top)/k,w:r.width/k,h:r.height/k}}
+
+/* ---------- Seeded notes (adapted from v3) ---------- */
+const WEEK=["# Week plan","",
+"Ship the **Quiet theme** this week and keep the window calm.","",
+"## Monday",
+"- [x] Tables",
+"- [ ] Spacing pass",
+"- [ ] Settings page and shortcuts<!-- comment: Ben, 09:12: Keep it to Quiet for v1. -->","",
+"## Tuesday",
+"- [ ] Links: see [Roadmap](Roadmap.md)",
+"- [ ] Outline fold","",
+"| Area | Owner | Status |",
+"|--|--|--|",
+"| Typography | Ben | ~~blocked~~ review |",
+"| Chrome | You | picking |","",
+"> Keep the window quiet: one sheet, one accent, no borders that do not earn their place.","",
+"---","",
+"1. Draft","2. Review","3. Ship"].join("\n");
+const ROADMAP=["# Roadmap","## Now","- Quiet look for the editor","- Settings page",
+"## Next","- Selection toolbar","- iOS prototype: `inkuno-logic` already builds for iPhone","  - Text input and IME are the open question",
+"## Later","> [!TIP]","> Revisit the home screen with document cards.","",
+"```mermaid","flowchart LR","  A[Idea] --> B[Draft] --> C[Ship]","```","",
+"$$","\\sum_{i=1}^{n} i = n(n+1)/2","$$"].join("\n");
+const NOTES={};
+function note(id,o){NOTES[id]=Object.assign({id,title:"",folder:"",scratch:false,age:"",md:"",vers:[],pend:[],trashed:false},o)}
+note("today",{title:"Saturday, 21 November",age:"today",md:["# Saturday, 21 November","","Go through the chrome picks and plan the week with #design and @today.","","- [ ] Commit the spacing pass","- [x] Send the side-by-side screenshots","- See [Week plan](Week%20plan.md)"].join("\n")});
+note("week",{title:"Week plan",folder:"Projects",age:"today",md:WEEK,
+ vers:[{t:"Today, 15:42",m:"Spacing pass",md:WEEK.replace("- [x] Tables","- [ ] Tables").replace("- [ ] Outline fold\n","")},
+       {t:"Yesterday, 18:03",m:"First draft",md:WEEK.replace("| Chrome | You | picking |","| Chrome | You | drafting |").replace("2. Review\n3. Ship","2. Review")}],
+ pend:[{old:"Ship the **Quiet theme** this week and keep the window calm.",text:"Ship the **Quiet theme** by Friday and keep the window calm."},
+       {old:"- [ ] Spacing pass",text:"- [ ] Spacing pass for the editor"},
+       {old:"- [ ] Links: see [Roadmap](Roadmap.md)",text:"- [ ] Links: picker writes relative links"}]});
+note("road",{title:"Roadmap",folder:"Projects",age:"2 d",md:ROADMAP});
+note("design",{title:"Design maths",folder:"Projects",age:"1 d",md:["# Design maths","Euler's identity $e^{i\\pi}+1=0$ sits in the line.","","$$\\int_0^1 x^2\\,dx = \\tfrac{1}{3}$$","","```mermaid","flowchart LR","  Draft --> Review --> Publish","  Review -->|changes| Draft","```","","```mermaid","sequenceDiagram","  Phone->>Vault: write note","  Vault-->>Desktop: sync","  Desktop->>Phone: pending change","```","","```mermaid","flowchart LR","  A -->","```","","$$\\frac{1}{$$"].join("\n")});
+note("conf",{title:"Week plan (conflict 2026-11-25).md",folder:"Projects",age:"today",conflict:true,md:["# Week plan","Ship the **Quiet theme** by Friday","- [ ] Spacing pass for the editor","- [ ] Links: picker writes relative links"].join("\n")});
+note("launch",{title:"Launch checklist",folder:"Projects",age:"1 mo",md:["# Launch checklist","- [x] Installer notes","- [ ] Release page","- [ ] Changelog"].join("\n")});
+note("read",{title:"Reading list",age:"1 w",md:["# Reading list","- *The Elements of Typographic Style*","- [Practical Typography](https://practicaltypography.com)","- [ ] Re-read **Refactoring UI**","- [x] *Shape Up*"].join("\n")});
+note("ideas",{title:"Ideas",age:"3 d",md:["# Ideas","Small things worth trying later.","","- Typewriter scrolling","- Focus the current paragraph","","> [!WARNING]","> Nothing here may write syntax GitHub cannot show."].join("\n")});
+note("j1",{title:"Friday, 20 November",folder:"Journal",age:"1 d",md:["# Friday, 20 November","Quiet morning. Read the spacing notes twice.","- [x] Walk","- [ ] Reply to Ben"].join("\n")});
+note("j2",{title:"Thursday, 19 November",folder:"Journal",age:"2 d",md:["# Thursday, 19 November","Long call about #design and the palette."].join("\n")});
+note("iv",{title:"Interview notes",folder:"Journal",age:"1 mo",md:["# Interview notes","- Clear naming matters more than clever names","- Ask about the last thing they shipped"].join("\n")});
+note("s1",{title:"Packing list",scratch:true,age:"5 d",md:["# Packing list","- [ ] Charger","- [ ] Notebook","- [x] Passport"].join("\n")});
+note("s2",{title:"Sprint notes",scratch:true,age:"1 d",md:["# Sprint notes","- Ship split panes first","- Check the preview tab rules"].join("\n")});
+
+/* ---------- Markdown ---------- */
+const COM=/<!--\s*comment:\s*([\s\S]*?)\s*-->/;
+const PEND=/\{--([\s\S]*?)--\}\{\+\+([\s\S]*?)\+\+\}|\{\+\+([\s\S]*?)\+\+\}/g;
+const PREF=/^(\s*(?:[-*+] (?:\[[ xX]\] )?|\d+\. |#{1,6} |> )?)([\s\S]*)$/;
+const parseC=s=>{const q=/^(\w+)(?:, (\d\d:\d\d))?: ([\s\S]*)$/.exec(s);return q?{who:q[1],time:q[2]||"",text:q[3]}:{who:"You",time:"",text:s}};
+const clean=x=>x.replace(/<!--[\s\S]*?-->/g,"").replace(/^\s*(#+\s+|>\s*|([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?)/,"").replace(/\[([^\]]*)\]\([^)]*\)/g,"$1").replace(/[*_`~]/g,"").trim();
+function commentsOf(md){return md.split("\n").map((l,at)=>{const m=COM.exec(l);if(!m)return null;const a=parseC(m[1]);return{at,passage:clean(l.slice(0,m.index)),who:a.who,time:a.time,text:a.text}}).filter(Boolean)}
+function resolveComment(md,at){const L=md.split("\n");L[at]=L[at].replace(/\s*<!--\s*comment:[\s\S]*?-->/g,"");return L.join("\n")}
+function addComment(md,at,text){const L=md.split("\n");L[at]=L[at]+`<!-- comment: You, ${hhmm()}: ${text.replace(/-->/g,"")} -->`;return L.join("\n")}
+/* Pending changes are kept beside the note (v2 Q2): the note text stays clean, and the
+   washes are composed for display only. Each change replaces one line (old -> text). */
+function composed(n){
+  if(!n.pend.length||S.v1) return n.md;
+  const L=n.md.split("\n");
+  return L.map(l=>{const p=n.pend.find(x=>x.old===l);if(!p)return l;
+    const a=PREF.exec(p.old),b=PREF.exec(p.text);
+    return a[1]+(a[2]?`{--${a[2]}--}`:"")+(b[2]?`{++${b[2]}++}`:"");}).join("\n");
+}
+function inline(src){
+  const P=[];const hold=h=>{P.push(h);return "\u0000"+(P.length-1)+"\u0000"};
+  let s=src.replace(PEND,(m,o,n,i)=>hold(o!==undefined?`<del class="pwd">${esc(o.replace(/\*\*/g,""))}</del><ins class="pw">${esc(n.replace(/\*\*/g,""))}</ins>`:`<ins class="pw">${esc(i.replace(/\*\*/g,""))}</ins>`));
+  s=s.replace(/`([^`]+)`/g,(m,c)=>hold(`<code class="ic">${mk("`")}${esc(c)}${mk("`")}</code>`));
+  s=s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(m,t,u)=>hold(`<a class="ln" data-href="${esc(u)}" tabindex="0">${mk("[")}${esc(t)}${mk("]("+u+")")}</a>`));
+  s=s.replace(/(^|[^$\\])\$(?=\S)([^$\n]*?\S)\$(?!\$)/g,(m,a,t)=>a+hold(imathHTML(t)));
+  s=esc(s);
+  s=s.replace(/(^|\s)#([\w-]+)/g,(m,a,t)=>a+hold(`<span class="tag">#${t}</span>`));
+  s=s.replace(/@today\b/g,()=>hold(`<span class="dl">@today</span>`));
+  s=s.replace(/\*\*(.+?)\*\*/g,(m,t)=>hold(`<strong>${mk("**")}${t}${mk("**")}</strong>`));
+  s=s.replace(/~~(.+?)~~/g,(m,t)=>hold(`<del>${mk("~~")}${t}${mk("~~")}</del>`));
+  s=s.replace(/(^|[^\w*])\*([^*\s][^*]*)\*(?!\*)/g,(m,a,t)=>a+hold(`<em>${mk("*")}${t}${mk("*")}</em>`));
+  s=s.replace(/(^|[^\w_])_([^_\s][^_]*)_(?!\w)/g,(m,a,t)=>a+hold(`<em>${mk("_")}${t}${mk("_")}</em>`));
+  for(let k=0;k<4&&s.includes("\u0000");k++) s=s.replace(/\u0000(\d+)\u0000/g,(m,i)=>P[i]);
+  return s;
+}
+function txt(x,at){
+  const m=COM.exec(x); if(!m) return inline(x);
+  return `<span class="cm" data-cid="${at}">${inline(x.slice(0,m.index))}</span><span class="cmsrc">${esc(m[0])}</span><i class="cdot" data-cid="${at}" title="Comment"></i>`;
+}
+function hl(line){
+  const re=/(\/\/.*$)|("(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*!?)/g; let out="",last=0,m;
+  while((m=re.exec(line))){out+=esc(line.slice(last,m.index));const w=m[0];
+    if(m[1])out+=`<span class="t-com">${esc(w)}</span>`;else if(m[2])out+=`<span class="t-str">${esc(w)}</span>`;
+    else if(m[3])out+=`<span class="t-num">${w}</span>`;
+    else if(KW.has(w))out+=`<span class="t-kw">${w}</span>`;
+    else if(/^[A-Z]/.test(w))out+=`<span class="t-type">${w}</span>`;else out+=esc(w);
+    last=re.lastIndex;}
+  return out+esc(line.slice(last));
+}
+function parse(md){
+  const L=md.split("\n"),out=[];let i=0,m;
+  while(i<L.length){const l=L[i],at=i;
+    if(/^```/.test(l)){const lang=l.slice(3).trim(),body=[];i++;while(i<L.length&&!/^```/.test(L[i]))body.push(L[i++]);i++;out.push({k:"code",lang,body,at});continue}
+    if(/^\$\$/.test(l)){const one=/^\$\$(.+)\$\$\s*$/.exec(l);if(one){out.push({k:"math",body:[one[1]],at});i++;continue}const body=[];i++;while(i<L.length&&!/^\$\$/.test(L[i]))body.push(L[i++]);i++;out.push({k:"math",body,at});continue}
+    if(/^\|/.test(l)){const rows=[];while(i<L.length&&/^\|/.test(L[i]))rows.push(L[i++]);out.push({k:"table",rows,at});continue}
+    if((m=l.match(/^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/))){const body=[];i++;while(i<L.length&&/^>/.test(L[i]))body.push(L[i++].replace(/^> ?/,""));out.push({k:"alert",type:m[1],body,at});continue}
+    if((m=l.match(/^> ?(.*)/))){out.push({k:"quote",t:m[1],at});i++;continue}
+    if((m=l.match(/^(#{1,6}) (.*)/))){out.push({k:"h",n:m[1].length,t:m[2],at});i++;continue}
+    if((m=l.match(/^(\s*)[-*+] \[( |x|X)\] (.*)/))){out.push({k:"task",d:m[1].length>>1,done:m[2]!==" ",t:m[3],at});i++;continue}
+    if((m=l.match(/^(\s*)([-*+]) (.*)/))){out.push({k:"ul",d:m[1].length>>1,mark:m[2],t:m[3],at});i++;continue}
+    if((m=l.match(/^(\s*)(\d+)\. (.*)/))){out.push({k:"ol",d:m[1].length>>1,n:m[2],t:m[3],at});i++;continue}
+    if(/^(---|\*\*\*|___)\s*$/.test(l)){out.push({k:"hr",at});i++;continue}
+    if(!l.trim()){i++;continue}
+    out.push({k:"p",t:l,at});i++;}
+  return out;
+}
+const TITLE={NOTE:"Note",TIP:"Tip",IMPORTANT:"Important",WARNING:"Warning",CAUTION:"Caution"};
+const cells=r=>r.replace(/^\||\|\s*$/g,"").split("|").map(c=>c.trim());
+function tableHTML(b){
+  const rows=b.rows.filter((r,i)=>!(i===1&&/^\|[\s:|-]+\|?\s*$/.test(r))).map(cells);
+  const [h,...body]=rows;
+  return `<table><thead><tr>${h.map(c=>`<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${body.map(r=>`<tr>${r.map(c=>`<td data-cell>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+/* ---------- Figures (v4): a Mermaid subset and a formula subset, drawn from their source ---------- */
+let FIGN=0;
+const topPg=()=>$(`.page[data-i="${S.stack.length-1}"]:not(.leave)`,pages);
+const markerDef=id=>`<defs><marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--ink)"/></marker></defs>`;
+function svgWrap(W,H,label,inner,maxW){const k=maxW&&W>maxW?maxW/W:1;return{w:W,html:`<svg viewBox="0 0 ${W} ${H}" width="${W*k}" height="${H*k}" data-w="${W}" data-h="${H}" role="img" aria-label="${label}">${inner}</svg>`}}
+function flowSVG(lines,maxW){
+  const N=new Map(),E=[];
+  const ref=s=>{const m=/^\s*([A-Za-z_]\w*)(?:\[([^\]]*)\])?\s*$/.exec(s);return m?{id:m[1],label:m[2]}:null};
+  const add=r=>{const o=N.get(r.id);if(!o)N.set(r.id,{id:r.id,label:r.label??r.id});else if(r.label!==undefined)o.label=r.label};
+  for(const l of lines){
+    const parts=l.split("-->");
+    const first=ref(parts[0]); if(!first) return null;
+    add(first); let prev=first;
+    for(let k=1;k<parts.length;k++){
+      let t=parts[k], lab="";
+      const lm=/^\s*\|([^|]*)\|(.*)$/.exec(t); if(lm){lab=lm[1].trim();t=lm[2]}
+      const r=ref(t); if(!r) return null;
+      add(r); E.push({a:prev.id,b:r.id,lab}); prev=r;
+    }
+  }
+  if(!N.size) return null;
+  const ids=[...N.keys()], back=new Set(), st=new Map();
+  const dfs=u=>{st.set(u,1);E.forEach(e=>{if(e.a!==u)return;const s=st.get(e.b);if(s===1)back.add(e);else if(!s)dfs(e.b)});st.set(u,2)};
+  ids.forEach(u=>{if(!st.get(u))dfs(u)});
+  const rank=new Map(ids.map(i=>[i,0]));
+  ids.forEach(()=>E.forEach(e=>{if(!back.has(e))rank.set(e.b,Math.max(rank.get(e.b),rank.get(e.a)+1))}));
+  const cols=[];
+  ids.forEach(i=>{const r=rank.get(i);(cols[r]=cols[r]||[]).push(i)});
+  const R=cols.length, C=Math.max(...cols.map(c=>c.length));
+  const nw=Math.max(84,...ids.map(i=>N.get(i).label.length*7.4+28));
+  const NH=36,GX=46,GY=18,P=20,below=back.size?40:0;
+  const W=P*2+R*nw+(R-1)*GX, H=P+C*NH+(C-1)*GY+below+12;
+  const pos=new Map();
+  cols.forEach((col,r)=>{const top=P+(C-col.length)*(NH+GY)/2;col.forEach((i,j)=>pos.set(i,{x:P+r*(nw+GX),y:top+j*(NH+GY)}))});
+  const id=`fm${++FIGN}`;
+  const nodes=ids.map(i=>{const p=pos.get(i);return `<rect x="${p.x}" y="${p.y}" width="${nw}" height="${NH}" rx="9" style="fill:var(--code-bg);stroke:var(--ink);stroke-width:1.2"/><text x="${p.x+nw/2}" y="${p.y+NH/2+4.5}" text-anchor="middle" style="fill:var(--ink);font:13px var(--sans)">${esc(N.get(i).label)}</text>`}).join("");
+  const edges=E.map(e=>{const A=pos.get(e.a),B=pos.get(e.b),isBack=back.has(e),dash=isBack?";stroke-dasharray:4 3":"";
+    let d,lx,ly;
+    if(isBack){const x1=A.x+nw/2,x2=B.x+nw/2,y1=A.y+NH,y2=B.y+NH,Y=Math.max(y1,y2)+26;d=`M${x1} ${y1} C${x1} ${Y} ${x2} ${Y} ${x2} ${y2}`;lx=(x1+x2)/2;ly=Y+10}
+    else{const x1=A.x+nw,y1=A.y+NH/2,x2=B.x,y2=B.y+NH/2,m=(x1+x2)/2;d=`M${x1} ${y1} C${m} ${y1} ${m} ${y2} ${x2} ${y2}`;lx=m;ly=(y1+y2)/2-6}
+    return `<path d="${d}" fill="none" style="stroke:var(--ink);stroke-width:1.2${dash}" marker-end="url(#${id})"/>`+(e.lab?`<text x="${lx}" y="${ly}" text-anchor="middle" style="fill:var(--soft);font:12px var(--sans)">${esc(e.lab)}</text>`:"")}).join("");
+  return svgWrap(W,H,"Flowchart",markerDef(id)+edges+nodes,maxW);
+}
+function seqSVG(lines,maxW){
+  const P=[],M=[],re=/^\s*([A-Za-z_]\w*)\s*(-->>|->>|-->|->)\s*([A-Za-z_]\w*)\s*(?::(.*))?$/;
+  const pid=n=>{if(!P.includes(n))P.push(n);return P.indexOf(n)};
+  for(const l of lines){const m=re.exec(l);if(!m)return null;M.push({a:pid(m[1]),b:pid(m[3]),dash:m[2].startsWith("--"),t:(m[4]||"").trim()})}
+  if(!P.length) return null;
+  const sp=190,W=Math.max(200,140+(P.length-1)*sp),base=(W-(P.length-1)*sp)/2,X=i=>base+i*sp,H=78+Math.max(0,M.length-1)*40+28,id=`fm${++FIGN}`;
+  let s=markerDef(id);
+  P.forEach((n,i)=>{const x=X(i);s+=`<line x1="${x}" y1="40" x2="${x}" y2="${H-14}" style="stroke:var(--ink);stroke-opacity:.35;stroke-dasharray:3 4"/><rect x="${x-55}" y="8" width="110" height="30" rx="8" style="fill:var(--code-bg);stroke:var(--ink);stroke-width:1.2"/><text x="${x}" y="28" text-anchor="middle" style="fill:var(--ink);font:13px var(--sans)">${esc(n)}</text>`});
+  M.forEach((m,j)=>{const y=78+j*40,x1=X(m.a),x2=X(m.b),self=m.a===m.b,dash=m.dash?";stroke-dasharray:5 4":"";
+    s+=self?`<path d="M${x1} ${y} h36 v14 h-36" fill="none" style="stroke:var(--ink);stroke-width:1.3${dash}" marker-end="url(#${id})"/>`:`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" style="stroke:var(--ink);stroke-width:1.3${dash}" marker-end="url(#${id})"/>`;
+    if(m.t) s+=`<text x="${self?x1+18:(x1+x2)/2}" y="${y-8}" text-anchor="middle" style="fill:var(--ink);font:12px var(--sans)">${esc(m.t)}</text>`});
+  return svgWrap(W,H,"Sequence diagram",s,maxW);
+}
+function mermaidSVG(src,maxW){
+  const L=src.split("\n").filter(l=>l.trim()), head=(L[0]||"").trim();
+  if(/^(flowchart|graph)\s+(LR|TD|TB)$/.test(head)) return flowSVG(L.slice(1),maxW);
+  if(head==="sequenceDiagram") return seqSVG(L.slice(1),maxW);
+  return null;
+}
+/* A small TeX subset: letters, digits, \frac, \tfrac, \dfrac, \int, \sum, \pi, \,, ^ and _ with groups. Anything else is unreadable. */
+const GREEK={pi:"π",alpha:"α",beta:"β",theta:"θ",sigma:"σ",infty:"∞",sum:"∑",int:"∫"};
+function texHTML(src){
+  const s=String(src).trim(); if(!s) return null;
+  let i=0, big=false;
+  const fail=()=>{throw new Error("tex")};
+  const cmd=()=>{
+    const m=/^\\([A-Za-z]+|,)/.exec(s.slice(i)); if(!m) fail(); i+=m[0].length;
+    const n=m[1];
+    if(n===",") return '<span class="thin"></span>';
+    if(n==="frac"||n==="tfrac"||n==="dfrac"){const a=arg(),b=arg();return `<span class="frac"><span>${a}</span><span>${b}</span></span>`}
+    if(!GREEK[n]) fail();
+    return n==="int"||n==="sum"?`<span class="bigop">${GREEK[n]}</span>`:GREEK[n];
+  };
+  const single=()=>{
+    if(i>=s.length) fail();
+    const c=s[i];
+    if(c==="\\") return cmd();
+    if("{}^_".includes(c)) fail();
+    i++;
+    if(c==="=")return '<span class="rel">=</span>';
+    if(c==="+"||c==="-")return `<span class="bin">${c}</span>`;
+    return /[A-Za-z]/.test(c)?`<i>${c}</i>`:esc(c);
+  };
+  const arg=()=>{
+    if(s[i]==="{"){i++;const h=run(true);if(s[i]!=="}")fail();i++;return h}
+    return single();
+  };
+  const run=inGroup=>{
+    let h="";
+    while(i<s.length&&s[i]!=="}"){
+      const c=s[i];
+      if(c===" "){i++;continue}
+      if(c==="^"||c==="_"){i++;const a=arg();if(big){h=h.slice(0,-7)+`<span class="lim ${c==="^"?"up":"dn"}">${a}</span></span>`}else h+=c==="^"?`<sup>${a}</sup>`:`<sub>${a}</sub>`;continue}
+      const piece=c==="{"?arg():single();h+=piece;big=piece.startsWith('<span class="bigop">');
+    }
+    if(!inGroup&&i<s.length) fail();
+    return h;
+  };
+  try{const out=run(false);return i===s.length?out:null}catch(e){return null}
+}
+const imathHTML=t=>{const h=S.v1?null:texHTML(t);return h==null?`<code class="ic">${esc("$"+t+"$")}</code>`:`<span class="imath">${h}</span>`};
+/* Returns {html,w} for a figure, or null when the source cannot be read. maxW (optional) fits the SVG for the viewer. */
+function renderFig(kind,src,maxW=0){
+  if(kind==="math"){const h=texHTML(src);return h==null?null:{html:`<div class="dmath">${h}</div>`}}
+  const g=mermaidSVG(src,maxW);return g?{html:g.html,w:g.w}:null;
+}
+/* Sizes each figure to the note column: natural size if it fits, else down to 0.75, else 0.75 with a scroll and a fade. */
+/* Right-edge fade while more content is to the right; a 2px indicator under the figure when it scrolls. */
+function figState(sc){
+  const ov=sc.scrollWidth>sc.clientWidth+1, sv=sc.nextElementSibling, ind=sv&&sv.querySelector("i");
+  sc.classList.toggle("more",ov&&sc.scrollLeft+sc.clientWidth<sc.scrollWidth-2);
+  if(sv) sv.classList.toggle("on",ov);
+  if(ind&&ov){ind.style.width=(sc.clientWidth/sc.scrollWidth*100)+"%";ind.style.left=(sc.scrollLeft/sc.scrollWidth*100)+"%"}
+}
+function fitFigs(){
+  $$(".figscroll").forEach(sc=>{
+    const inn=sc.firstElementChild; if(!inn) return;
+    const sv=inn.tagName.toLowerCase()==="svg", avail=sc.clientWidth;
+    sc.onscroll=()=>figState(sc);
+    if(sv){inn.setAttribute("width",inn.dataset.w);inn.setAttribute("height",inn.dataset.h)} else inn.style.fontSize="";
+    const nw=sv?+inn.dataset.w:inn.offsetWidth;
+    if(!avail||nw<=avail){figState(sc);return}
+    const k=Math.max(.75,avail/nw);
+    if(sv){inn.setAttribute("width",nw*k);inn.setAttribute("height",inn.dataset.h*k)} else inn.style.fontSize=(19*k)+"px";
+    figState(sc);
+  });
+}
+function isFigAt(id,at){const b=parse(composed(NOTES[id])).find(x=>x.at===at);return !!b&&!S.v1&&(b.k==="math"||(b.k==="code"&&b.lang==="mermaid"))}
+/* A figure block. When live, the Markdown source shows above the figure, labelled Preview. */
+function figBlock(kind,b,id,live){
+  const src=b.body.join("\n"), at=b.at, r=renderFig(kind,src);
+  const body=r?`${live?"":'<span class="chip v4 fchip">v4</span>'}<button class="figmag" aria-label="View full screen">${ic("fs")}</button><div class="figscroll">${r.html}</div><div class="figind"><i></i></div>`
+    :`<div class="figerr">Unreadable ${kind==="math"?"formula":"figure"}<button class="showsrc">Show source</button></div>`;
+  const fig=`<figure class="media fig${r?"":" err"}" data-fs="${kind}" data-src="${encodeURIComponent(src)}" data-at="${at}" data-lp="block:${id}:${at}">${body}</figure>`;
+  if(!live) return fig;
+  const fence=kind==="math"?["$$",...b.body,"$$"]:["```mermaid",...b.body,"```"];
+  return `<div class="b live fgrp" data-at="${at}"><pre class="code">${esc(fence.join("\n"))}</pre><div class="prevlbl">Preview</div>${fig}</div>`;
+}
+function conflictHTML(){
+  const A=["Ship the Quiet theme by Friday","- [ ] Spacing pass for the editor","- [ ] Links: picker writes relative links"];
+  const B=["Ship the Quiet theme by Friday","- [ ] Spacing pass","- [ ] Links: see Roadmap"];
+  const card=(who,L,O,cls)=>`<div class="ccard"><div class="chead">${who}</div>${L.map((l,i)=>`<div class="cline${l!==O[i]?" "+cls:""}">${esc(l)}</div>`).join("")}</div>`;
+  return `<div class="sheetbody"><h3>Two versions of Week plan</h3><p class="soft small">The sync kept both copies. Changed lines are marked.</p>
+  ${card("This iPhone · 25 Nov 09:12",A,B,"hl")}${card("Mac · 25 Nov 09:14",B,A,"hl")}
+  <div class="confacts"><button class="cta" data-a="confKeep" data-w="both">Merge both</button><p class="soft small" style="margin:0;text-align:center">Adds lines from both; nothing is lost.</p><div class="pbtns"><button data-a="confKeep" data-w="iphone">Keep iPhone</button><button data-a="confKeep" data-w="mac">Keep Mac</button></div></div></div>`;
+}
+function blockHTML(b,id){
+  const live=!!S.live&&S.live.id===id&&S.live.at===b.at, rv=live&&S.reveal;
+  const cls=`b${live?" live":""}`, at=`data-at="${b.at}" data-lp="block:${id}:${b.at}"`;
+  switch(b.k){
+    case "h": return `<div class="${cls} h${b.n}" ${at}>${rv?mk("#".repeat(b.n)+" "):""}${txt(b.t,b.at)}</div>`;
+    case "p": return `<p class="${cls}" ${at}>${txt(b.t,b.at)}</p>`;
+    case "quote": return `<div class="${cls} q" ${at}>${rv?mk("> "):""}${txt(b.t,b.at)}</div>`;
+    case "ul": return `<div class="${cls} li" ${at} style="padding-left:${b.d*20}px">${rv?mk(b.mark+" "):`<span class="lead"><i class="dot"></i></span>`}<span class="txt">${txt(b.t,b.at)}</span></div>`;
+    case "ol": return `<div class="${cls} li" ${at} style="padding-left:${b.d*20}px">${rv?mk(b.n+". "):`<span class="lead num">${b.n}.</span>`}<span class="txt">${txt(b.t,b.at)}</span></div>`;
+    case "task": return `<div class="${cls} li task${b.done?" done":""}" ${at} style="padding-left:${b.d*20}px">${rv?mk(b.done?"- [x] ":"- [ ] "):`<span class="lead box${b.done?" on":""}" data-a="tbox" role="checkbox" aria-checked="${b.done}">${b.done?ic("check"):""}</span>`}<span class="txt">${txt(b.t,b.at)}</span></div>`;
+    case "hr": return `<hr class="${cls}" ${at}>`;
+    case "table": return `<div class="${cls} tblwrap" ${at}>${tableHTML(b)}</div>`;
+    case "alert": return `<div class="${cls} alert ${b.type}" ${at}><div class="al">${rv?mk("> [!"+b.type+"]"):TITLE[b.type]}</div>${b.body.map(x=>`<div>${txt(x,b.at)}</div>`).join("")}</div>`;
+    case "code":
+      if(b.lang==="mermaid"&&!S.v1) return figBlock("mermaid",b,id,live);
+      return `<pre class="code ${cls}" ${at}>${(live?"```"+b.lang+"\n":"")+b.body.map(hl).join("\n")}</pre>`;
+    case "math":
+      if(!S.v1) return figBlock("math",b,id,live);
+      return `<pre class="code ${cls}" ${at}>$$\n${b.body.map(hl).join("\n")}\n$$</pre>`;
+  }
+  return "";
+}
+
+/* ---------- Screens ---------- */
+function labelOf(s){switch(s.k){case"home":return"Inkuno";case"tree":return s.path||"Notes";case"note":return NOTES[s.id].title;case"settings":return"Settings";case"trash":return"Trash";case"compare":return"Versions"}return""}
+function navHTML(i,right=""){const p=S.stack[i-1];return `<div class="nav">${i>0?`<button class="navbtn" data-a="back" aria-label="Back">${ic("back")}<span>${esc(labelOf(p))}</span></button>`:"<span></span>"}<div class="navr">${right}</div></div>`}
+const rowNote=id=>{const n=NOTES[id],cf=n.conflict&&!S.v1;return `<div class="row" data-a="${cf?"conflict":"note"}" data-id="${id}" data-lp="note:${id}" role="button" tabindex="0">${ic("note")}<span class="rt">${esc(n.title)}</span>${cf?'<i class="wdot" aria-label="Sync conflict"></i>':""}<span class="age">${n.age}</span>${ic("right")}</div>`};
+const rowFolder=f=>`<div class="row" data-a="tree" data-path="${esc(f)}" role="button" tabindex="0">${ic("folder")}<span class="rt">${esc(f)}</span><span class="age">${liveNotes().filter(n=>n.folder===f).length}</span>${ic("right")}</div>`;
+const liveNotes=()=>Object.values(NOTES).filter(n=>!n.trashed);
+const foldersList=()=>[...new Set(liveNotes().filter(n=>n.folder&&!n.scratch).map(n=>n.folder))].sort();
+
+function screenHTML(s,i){
+  switch(s.k){
+    case "onboard": return `<div class="ob"><div class="obmark">${ic("note")}</div><h1>Open your notes folder</h1><p>Inkuno keeps your notes as plain Markdown files in one folder. Pick it in the Files app: iCloud Drive, Dropbox or Working Copy all work, and it is the same folder you use on your Mac.</p><button class="cta" data-a="pickFolder">Choose folder</button></div>`;
+    case "home": return homeHTML(i);
+    case "tree": return treeHTML(s,i);
+    case "note": return noteHTML(s.id,i);
+    case "compare": return compareHTML(s,i);
+    case "settings": return settingsHTML(i);
+    case "trash": return trashHTML(i);
+  }
+  return "";
+}
+function homeHTML(i){
+  return `${navHTML(i,`<button class="navbtn" data-a="search" aria-label="Search">${ic("search")}</button><button class="navbtn" data-a="settings" aria-label="Settings">${ic("settings")}</button>`)}
+  <h1 class="large">Inkuno</h1>
+  <button class="card line" data-a="today">${ic("pen")}<span>Write here…</span></button>
+  <div class="homegrid">
+    <button class="card tile" data-a="today">${ic("today")}<b>Today</b><small>${esc(NOTES.today.title)}</small></button>
+    <button class="card tile" data-a="newnote">${ic("plus")}<b>New note</b><small>In Notes</small></button>
+    <button class="card tile" data-a="search">${ic("search")}<b>Search</b><small>Or pull down</small></button>
+    <button class="card tile" data-a="tree">${ic("folder")}<b>Notes</b><small>${liveNotes().length} notes</small></button>
+  </div>
+  <div class="sec">From a month ago</div>
+  <div class="recall">${["launch","iv"].map(id=>`<button class="card rc" data-a="note" data-id="${id}"><b>${esc(NOTES[id].title)}</b><small>21 October</small></button>`).join("")}</div>
+  <div class="pullhint">Pull down on Home or a note to search and run commands</div>`;
+}
+function treeHTML(s,i){
+  let body;
+  if(!s.path){
+    body=`<div class="rows">${foldersList().map(rowFolder).join("")}${liveNotes().filter(n=>!n.folder&&!n.scratch).map(n=>rowNote(n.id)).join("")}</div>
+    <div class="sec">Scratch</div><div class="rows">${liveNotes().filter(n=>n.scratch).map(n=>rowNote(n.id)).join("")}</div>`;
+  } else {
+    const list=liveNotes().filter(n=>n.folder===s.path);
+    body=`<div class="rows">${list.map(n=>rowNote(n.id)).join("")||""}</div>${list.length?"":'<div class="empty">This folder is empty.</div>'}`;
+  }
+  return `${navHTML(i,`<button class="navbtn" data-a="newnote" aria-label="New note">${ic("plus")}</button>`)}<h1 class="large">${esc(s.path||"Notes")}</h1>${body}<div class="endpad"></div>`;
+}
+function noteHTML(id,i){
+  const n=NOTES[id], bs=parse(composed(n));
+  const nav=S.focus
+    ? `<div class="nav focusnav"><button class="navbtn" data-a="focusoff">Exit focus</button></div>`
+    : `<div class="nav">${i>0?`<button class="navbtn" data-a="back" aria-label="Back">${ic("back")}<span>${esc(labelOf(S.stack[i-1]))}</span></button>`:"<span></span>"}<div class="navr"><button class="navbtn" data-a="panel" aria-label="Outline, comments and versions">${ic("rpanel")}</button><button class="navbtn" data-a="more" aria-label="More">${ic("dots")}</button><div class="ntitle">${esc(n.title)}</div></div></div>`;
+  return `${nav}<div class="doc${S.reveal?" reveal":""}" data-note="${id}">${bs.map(b=>blockHTML(b,id)).join("")}</div><div class="endpad"></div>`;
+}
+function compareHTML(s,i){
+  const n=NOTES[s.id], v=n.vers[s.v], rows=diffLines(v.md,n.md);
+  return `${navHTML(i)}<div class="cmphead"><h2>${esc(n.title)}</h2>${chip("Deferred")}</div>
+  <p class="soft small" style="margin:0 16px 8px">Versus ${esc(v.t)} · ${esc(v.m)}. Green is added since, red was removed.</p>
+  <div class="cmp">${rows.map(([k,t])=>`<div class="cl ${k==="+"?"add":k==="-"?"del":""}"><span>${k===" "?"":k}</span>${esc(t)||"&nbsp;"}</div>`).join("")}</div>
+  <div class="bottombar"><button class="cta" data-a="restore" data-id="${s.id}" data-v="${s.v}">Restore this version</button></div>`;
+}
+function diffLines(a,b){
+  const A=a.split("\n"),B=b.split("\n"),n=A.length,m=B.length;
+  const T=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)T[i][j]=A[i]===B[j]?T[i+1][j+1]+1:Math.max(T[i+1][j],T[i][j+1]);
+  const out=[];let i=0,j=0;
+  while(i<n&&j<m){if(A[i]===B[j]){out.push([" ",A[i]]);i++;j++}else if(T[i+1][j]>=T[i][j+1])out.push(["-",A[i++]]);else out.push(["+",B[j++]])}
+  while(i<n)out.push(["-",A[i++]]);while(j<m)out.push(["+",B[j++]]);
+  return out;
+}
+function settingsHTML(i){
+  const seg=(k,opts,cur)=>`<div class="seg" role="group">${opts.map(([v,l])=>`<button class="${String(cur)===String(v)?"on":""}" data-a="set" data-k="${k}" data-v="${v}">${l}</button>`).join("")}</div>`;
+  const sw=(k,on)=>`<button class="sw${on?" on":""}" role="switch" aria-checked="${on}" data-a="toggle" data-k="${k}" aria-label="Show Markdown on the live line"><i></i></button>`;
+  const trashed=Object.values(NOTES).filter(n=>n.trashed).length;
+  return `${navHTML(i)}<h1 class="large">Settings</h1>
+  <div class="sec">Notes folder</div>
+  <div class="rows"><button class="row" data-a="pickFolder">${ic("folder")}<span class="rt">Folder<small>iCloud Drive › Notes</small></span>${ic("right")}</button></div>
+  <div class="foot">The same folder as on your Mac. Changes sync through iCloud Drive.</div>
+  <div class="sec">Appearance</div>
+  <div class="rows">
+    <div class="row col"><span>Theme</span>${seg("theme",[["light","Light"],["dark","Dark"],["system","System"],...(S.v1?[]:[["quiet","Quiet"]])],S.theme)}</div>
+    ${S.v1?"":`<div class="row">${ic("palette")}<span class="rt">Theme set<small>Quiet</small></span>${chip("Simplified")}</div>`}
+    <div class="row col"><span>Text size</span>${seg("size",[[14,"14"],[15,"15"],[16,"16"],[18,"18"]],S.size)}</div>
+    <div class="row col"><span>Page width</span>${seg("width",[["narrow","Narrow"],["normal","Normal"],["wide","Wide"]],S.width)}</div>
+  </div>
+  <div class="sec">Editor</div>
+  <div class="rows"><div class="row">${ic("md")}<span class="rt">Show Markdown on the live line</span>${sw("reveal",S.reveal)}</div></div>
+  <div class="sec">Files</div>
+  <div class="rows">
+    <button class="row" data-a="trash">${ic("trash")}<span class="rt">Trash</span><span class="age">${trashed}</span>${ic("right")}</button>
+    ${S.v1?"":`<button class="row" data-a="backup">${ic("dup")}<span class="rt">Backup (tar.gz)</span>${chip("Deferred")}${ic("right")}</button>`}
+  </div>
+  <div class="sec">About</div>
+  <div class="rows"><div class="row"><span class="rt">Inkuno for iPhone<small>Prototype · Version 0.0.15 · Assistant later</small></span></div></div>
+  <div class="endpad"></div>`;
+}
+function trashHTML(i){
+  const t=Object.values(NOTES).filter(n=>n.trashed);
+  return `${navHTML(i)}<h1 class="large">Trash</h1>${t.length?`<div class="rows">${t.map(n=>`<div class="row">${ic("note")}<span class="rt">${esc(n.title)}<small>${esc(n.folder||"Notes")}</small></span><button class="cta sm" data-a="restoreNote" data-id="${n.id}">Restore</button></div>`).join("")}</div>`:'<div class="empty">Trash is empty.</div>'}<div class="foot">Restore brings a note back to the folder it came from.</div>`;
+}
+function paint(anim){
+  const n=S.stack.length, top=cur();
+  $$(".page",pages).forEach(p=>{if(!p.classList.contains("leave")&&+p.dataset.i>=n)p.remove()});
+  S.stack.forEach((s,i)=>{
+    let el=$(`.page[data-i="${i}"]:not(.leave)`,pages);
+    if(!el){
+      el=document.createElement("div");el.className="page";el.dataset.i=i;pages.appendChild(el);
+      if(anim==="push"&&i===n-1){el.classList.add("enter");requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.remove("enter")))}
+    }
+    const st=el.scrollTop; el.innerHTML=screenHTML(s,i); el.scrollTop=st;
+  });
+  phone.classList.toggle("kb",!!(S.live&&top.k==="note"&&!S.sheet&&!S.liveFig));
+  phone.dataset.width=S.width;
+  phone.style.setProperty("--fs",S.size+"px");
+  renderPill();
+  paintSheet();
+  fitFigs();
+}
+function renderPill(){
+  const t=cur(),el=$("#pill");
+  if(t.k!=="note"||S.focus||!NOTES[t.id]){el.innerHTML="";return}
+  const c=NOTES[t.id].pend.length;
+  el.innerHTML=c?`<button class="pill" data-a="review">${c} change${c>1?"s":""} · Review</button>`:"";
+}
+function go(s){S.live=null;S.sheet=null;S.stack.push(s);paint("push")}
+function back(){
+  if(S.stack.length<2)return;
+  S.live=null;S.sheet=null;
+  const i=S.stack.length-1, top=$(`.page[data-i="${i}"]:not(.leave)`,pages);
+  S.stack.pop();
+  if(top){top.classList.add("leave");setTimeout(()=>top.remove(),320)}
+  paint();
+}
+function openNote(id){go({k:"note",id})}
+function setLive(at){S.live=at==null?null:{id:cur().id,at};S.liveFig=at!=null&&isFigAt(cur().id,at);paint()}
+
+/* ---------- Sheets, menus, toast ---------- */
+let sheetFresh=false;
+function openSheet(obj,det="half"){S.sheet=obj;S.det=det;sheetFresh=true;paint()}
+function closeSheet(){S.sheet=null;paint()}
+function sheetBody(s){
+  switch(s.k){
+    case "panel": return `<div class="sheetscroll"><div class="pbody">${panelHTML(s)}</div></div>`;
+    case "pending": return `<div class="sheetscroll">${pendingHTML(s)}</div>`;
+    case "pal": return `<div class="sheetscroll"><div class="palbox"><label class="palin">${ic("search")}<input id="palq" value="${esc(s.q)}" placeholder="Search notes, or type > for commands" autocomplete="off" spellcheck="false" aria-label="Search"></label><div id="palList">${palListHTML(s.q)}</div></div></div>`;
+    case "slash": return `<div class="sheetscroll">${slashHTML()}</div>`;
+    case "links": return `<div class="sheetscroll">${linksHTML(s)}</div>`;
+    case "files": return `<div class="sheetscroll">${filesHTML()}</div>`;
+    case "conflict": return `<div class="sheetscroll">${conflictHTML()}</div>`;
+    case "composer": return `<div class="sheetscroll">${composerHTML(s)}</div>`;
+    case "cell": return `<div class="sheetscroll"><div class="sheetbody"><h3>Table cell</h3><input class="field" id="cellv" value="${esc(s.text)}" aria-label="Cell text"><p class="soft small">${chip("Deferred")} Cell edits are not saved in this prototype. Table cells can be edited as Markdown on the live line.</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="cellDone">Done</button></div></div></div>`;
+    case "confirm": { const n=NOTES[s.id], v=n.vers[s.v]; return `<div class="sheetscroll"><div class="sheetbody"><h3>Restore “${esc(v.m)}”?</h3><p class="soft">The current text is saved as a version first, so nothing is lost.</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="doRestore" data-id="${s.id}" data-v="${s.v}">Restore</button></div></div></div>`; }
+  }
+  return "";
+}
+function paintSheet(){
+  const L=$("#sheetLayer"), s=S.sheet;
+  if(!s){L.innerHTML="";return}
+  const prev=L.querySelector(".sheetscroll"), sc=prev?prev.scrollTop:0;
+  L.innerHTML=`<div class="scrim" data-a="closeSheet"></div><div class="sheet ${S.det}${sheetFresh?" new":""}" id="sheet" role="dialog" aria-modal="true"><div class="grabwrap" id="grab" aria-label="Drag to resize"><div class="grab"></div></div>${sheetBody(s)}</div>`;
+  sheetFresh=false;
+  const ns=L.querySelector(".sheetscroll"); if(ns) ns.scrollTop=sc;
+  bindGrab(); bindSwipe(); bindPal();
+}
+function bindGrab(){
+  const g=$("#grab"); if(!g)return; let y0=null;
+  g.addEventListener("pointerdown",e=>{y0=e.clientY;g.setPointerCapture(e.pointerId)});
+  g.addEventListener("pointerup",e=>{if(y0==null)return;const dy=e.clientY-y0;y0=null;
+    if(dy<-40&&S.det!=="full"){S.det="full";paintSheet()}
+    else if(dy>40){if(S.det==="full"){S.det="half";paintSheet()}else closeSheet()}});
+}
+function bindSwipe(){
+  $$(".pfg").forEach(el=>{
+    let x0=null,dx=0;const card=el.parentElement;
+    el.addEventListener("pointerdown",e=>{if(e.target.closest("button"))return;x0=e.clientX;dx=0;el.setPointerCapture(e.pointerId);el.style.transition="none"});
+    el.addEventListener("pointermove",e=>{if(x0==null)return;dx=e.clientX-x0;el.style.transform=`translateX(${dx}px)`});
+    const end=()=>{if(x0==null)return;const d=dx;x0=null;el.style.transition="";
+      if(d>90||d<-90){el.style.transform=`translateX(${d>0?"100%":"-100%"})`;const i=+card.dataset.pi,acc=d>0;setTimeout(()=>applyPend(S.sheet.id,i,acc),180)}
+      else el.style.transform="";};
+    el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
+  });
+}
+function bindPal(){
+  const inp=$("#palq"); if(!inp)return;
+  inp.addEventListener("input",()=>{S.sheet.q=inp.value;$("#palList").innerHTML=palListHTML(inp.value)});
+  inp.addEventListener("keydown",e=>{if(e.key!=="Enter")return;const r=S.palRuns&&S.palRuns[0];if(r){closeSheet();r.run&&r.run()}});
+}
+let menuAt=0;
+function openMenu(p,items){
+  const L=$("#menuLayer");
+  L.innerHTML=`<div class="mscrim" data-a="closeMenu"></div><div class="ctx" id="ctx" role="menu">${items.map((it,i)=>it.sep?'<div class="csep"></div>':`<button class="ci${it.d?" danger":""}" data-m="${i}" role="menuitem">${it.i?ic(it.i):""}<span>${esc(it.t)}</span>${chip(it.chip)}</button>`).join("")}</div>`;
+  menuAt=Date.now();
+  const c=$("#ctx"),w=250,h=c.offsetHeight;
+  const x=Math.min(Math.max(12,p.x-w/2),390-w-12); let y=p.y+8; if(y+h>800) y=Math.max(60,p.y-h-8);
+  c.style.left=x+"px";c.style.top=y+"px";
+  $$("[data-m]",L).forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();closeMenu();items[+b.dataset.m].fn()}));
+}
+function closeMenu(){$("#menuLayer").innerHTML=""}
+function openCpop(at){
+  const n=NOTES[cur().id]; if(!n)return;
+  const c=commentsOf(n.md).find(x=>x.at===at); if(!c)return;
+  const top=topPg(), el=top&&$(`.doc [data-cid="${at}"]`,top), b=el?box(el):{x:40,y:300,w:0,h:20};
+  $("#menuLayer").innerHTML=`<div class="mscrim" data-a="closeMenu"></div><div class="cpop" style="top:${Math.min(b.y+b.h+10,560)}px">
+    <div class="cq">${esc(c.passage||"Comment")}</div><div class="cmeta">${esc(c.who)}${c.time?" · "+esc(c.time):""}</div><p>${esc(c.text)}</p>
+    <div class="cacts"><button class="cta sm" data-a="resolve" data-id="${n.id}" data-at="${at}">Resolve</button><button data-a="reply">Reply</button></div></div>`;
+  menuAt=Date.now();
+}
+let tT=null,tUndo=null;
+function toast(msg,undo){
+  const el=$("#toast");
+  el.innerHTML=`<span>${esc(msg)}</span>${undo?'<button data-a="toastUndo">Undo</button>':""}`;
+  tUndo=undo||null; el.classList.add("on");
+  clearTimeout(tT); tT=setTimeout(()=>el.classList.remove("on"),2800);
+}
+function openFs(kind,src){
+  const r=renderFig(kind,src,358), L=$("#fsLayer");
+  S.z=1;
+  L.innerHTML=`<div class="fsbar"><b>${kind==="math"?"Formula":"Diagram"}</b><div><button class="blue" data-a="fsclose">Done</button><button class="blue" data-a="fscopy">Copy image</button><button class="blue" data-a="fsshare">Share</button></div></div><div class="fsbody" id="fsb"><div class="fscont" id="fsc">${r?r.html:""}</div></div><div class="fshint">Pinch to zoom</div>`;
+  L.classList.add("on");
+  const fb=$("#fsb"); const ps=new Map(); let d0=0,z0=1;
+  fb.addEventListener("pointerdown",e=>{ps.set(e.pointerId,e);if(ps.size===2){const [a,b]=[...ps.values()];d0=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);z0=S.z}});
+  fb.addEventListener("pointermove",e=>{if(!ps.has(e.pointerId))return;ps.set(e.pointerId,e);if(ps.size===2){const [a,b]=[...ps.values()];const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);S.z=Math.min(3,Math.max(.5,z0*d/d0));$("#fsc").style.transform=`scale(${S.z})`}});
+  const up=e=>ps.delete(e.pointerId);fb.addEventListener("pointerup",up);fb.addEventListener("pointercancel",up);
+}
+
+/* ---------- Actions ---------- */
+function trashNote(id){const n=NOTES[id];n.trashed=true;toast(`Moved “${n.title}” to Trash`,()=>{n.trashed=false;paint()});paint()}
+function saveVersion(id){NOTES[id].vers.unshift({t:"Today, "+hhmm(),m:"Saved version",md:NOTES[id].md});toast("Version saved");paint()}
+function restore(id,v){
+  const n=NOTES[id], target=n.vers[v].md;
+  n.vers.unshift({t:"Today, "+hhmm(),m:"Before restore",md:n.md});
+  n.md=target; S.sheet=null;
+  if(cur().k==="compare"){back()}else paint();
+  toast("Restored. The previous text is kept as a version.");
+}
+function applyOne(n,p,acc){
+  if(acc) n.md=n.md.split("\n").map(l=>l===p.old?p.text:l).join("\n");
+}
+function applyPend(id,i,acc){
+  const n=NOTES[id], p=n.pend[i]; if(!p)return;
+  applyOne(n,p,acc); n.pend.splice(i,1);
+  if(!n.pend.length&&S.sheet&&S.sheet.k==="pending")S.sheet=null;
+  toast(acc?"Change accepted":"Change rejected"); paint();
+}
+function resolveAll(id,acc){
+  const n=NOTES[id]; n.pend.forEach(p=>applyOne(n,p,acc)); n.pend=[];
+  if(S.sheet&&S.sheet.k==="pending")S.sheet=null;
+  toast(acc?"All changes accepted":"All changes rejected"); paint();
+}
+function toggleFocus(){S.focus=!S.focus;paint()}
+function openPanel(view){if(cur().k!=="note")return;openSheet({k:"panel",view,id:cur().id},"half")}
+function openLink(href){
+  let dec=href; try{dec=decodeURIComponent(href)}catch(e){}
+  const n=liveNotes().find(x=>x.title+".md"===dec);
+  if(n) return openNote(n.id);
+  toast(/^https?:/.test(href)?"Opens in Safari (not in this prototype)":"No note called "+href);
+}
+function openComposer(id,at){openSheet({k:"composer",id,at},"half")}
+function openSlash(){if(cur().k==="note")openSheet({k:"slash"},"half")}
+function openLinks(){if(cur().k==="note")openSheet({k:"links",id:cur().id},"half")}
+function openPal(q=""){openSheet({k:"pal",q},"full")}
+
+/* Command list for the > mode and the palette */
+function CMDS(){
+  const id=cur().k==="note"?cur().id:null;
+  const L=[
+    {g:"This note",t:"Save version",run:()=>saveVersion(id),need:id},
+    {g:"This note",t:"Show outline",run:()=>openPanel("outline"),need:id},
+    {g:"This note",t:"Show comments",run:()=>openPanel("comments"),need:id},
+    {g:"This note",t:"Show backlinks",run:()=>openPanel("backlinks"),need:id},
+    {g:"Formatting",t:"Bold",run:()=>toast("Notes are read-only in this prototype")},
+    {g:"Notes",t:"Today’s note",run:()=>openNote("today")},
+    {g:"Notes",t:"New note",run:()=>toast("New notes are not created in this prototype")},
+    {g:"Notes",t:"Restore from Trash",run:()=>go({k:"trash"})},
+    {g:"Window",t:"Accept all changes",run:()=>resolveAll(id,true),need:id&&NOTES[id].pend.length>0},
+    {g:"Window",t:"Reject all changes",run:()=>resolveAll(id,false),need:id&&NOTES[id].pend.length>0},
+    {g:"Window",t:"Settings",run:()=>go({k:"settings"})},
+    {g:"Window",t:"Focus",run:toggleFocus,need:id&&!S.v1}
+  ];
+  return L.filter(c=>c.need===undefined||!!c.need);
+}
+function snippet(md,q){
+  const i=md.toLowerCase().indexOf(q.toLowerCase());
+  if(i<0)return esc(md.slice(0,60));
+  const a=Math.max(0,i-28),b=Math.min(md.length,i+q.length+36);
+  return (a?"…":"")+esc(md.slice(a,i))+"<mark>"+esc(md.slice(i,i+q.length))+"</mark>"+esc(md.slice(i+q.length,b))+(b<md.length?"…":"");
+}
+function palRows(q){
+  const ql=q.trim().toLowerCase(), live=liveNotes();
+  if(ql.startsWith(">")){const c=ql.slice(1).trim();return CMDS().filter(x=>!c||x.t.toLowerCase().includes(c)).map(x=>({g:x.g,t:x.t,sub:"",icon:"palette",run:x.run}))}
+  if(!ql) return live.slice(0,6).map(n=>({g:"Recent",t:n.title,sub:esc(n.folder||"Notes"),age:n.age,icon:"note",run:()=>openNote(n.id)}));
+  const tm=live.filter(n=>n.title.toLowerCase().includes(ql));
+  const cm=live.filter(n=>!tm.includes(n)&&n.md.toLowerCase().includes(ql));
+  const R=[];
+  tm.forEach(n=>R.push({g:"Names",t:n.title,sub:esc(n.folder||"Notes"),age:n.age,icon:"note",run:()=>openNote(n.id)}));
+  cm.forEach(n=>R.push({g:"Content",t:n.title,sub:snippet(n.md,ql),age:n.age,icon:"note",run:()=>openNote(n.id)}));
+  if(!live.some(n=>n.title.toLowerCase()===ql)) R.push({g:"",t:`Create «${q.trim()}»`,sub:"",icon:"plus",run:()=>toast("New notes are not created in this prototype")});
+  return R;
+}
+function palListHTML(q){
+  S.palRuns=palRows(q);
+  let g=null,h="";
+  S.palRuns.forEach((r,i)=>{
+    if(r.g!==g){g=r.g;if(g)h+=`<div class="pgh">${esc(g)}</div>`}
+    h+=`<button class="prow" data-a="palRun" data-i="${i}">${ic(r.icon)}<span class="pt">${esc(r.t)}${r.sub?`<small>${r.sub}</small>`:""}</span>${r.age?`<span class="age">${r.age}</span>`:""}</button>`;
+  });
+  return h||'<div class="empty">No matches</div>';
+}
+function panelHTML(s){
+  const n=NOTES[s.id], v=s.view;
+  const seg=`<div class="seg wide" role="group">${[["outline","Outline"],["comments","Comments"],["versions","Versions"],["backlinks","Backlinks"]].map(([k,l])=>`<button class="${k===v?"on":""}" data-a="pview" data-v="${k}">${l}</button>`).join("")}</div>`;
+  let body="";
+  if(v==="outline"){
+    const hs=n.md.split("\n").map((l,at)=>{const m=/^(#{1,6}) (.*)/.exec(l);return m?{at,lvl:m[1].length,t:m[2]}:null}).filter(Boolean);
+    body=hs.length?`<div class="rows">${hs.map(h=>`<button class="row" data-a="goto" data-at="${h.at}" style="padding-left:${14+(h.lvl-1)*16}px"><span class="rt">${esc(h.t)}</span></button>`).join("")}</div>`:`<div class="empty">No headings in this note.</div>`;
+  } else if(v==="comments"){
+    const cs=commentsOf(n.md);
+    body=cs.length?cs.map(c=>`<div class="crow"><div class="quote">${esc(c.passage||"(line)")}</div><div class="cmeta">${esc(c.who)}${c.time?" · "+esc(c.time):""}</div><div>${esc(c.text)}</div><div class="cacts"><button class="cta sm" data-a="resolve" data-id="${n.id}" data-at="${c.at}">Resolve</button><button data-a="reply">Reply</button></div></div>`).join("")
+      :`<div class="empty">No comments on this note.</div>`;
+    body+=`<p class="soft small" style="margin-top:12px">Comments are added from a block’s long-press menu. ${chip("Simplified")}</p>`;
+  } else if(v==="versions"){
+    body=`<button class="cta" data-a="savever">Save version</button>`+(n.vers.length?`<div class="rows">${n.vers.map((x,i)=>`<button class="row" data-a="ver" data-v="${i}">${ic("history")}<span class="rt">${esc(x.m)}<small>${esc(x.t)}</small></span>${ic("right")}</button>`).join("")}</div>`:`<div class="empty">No saved versions yet.</div>`);
+  } else {
+    const bl=liveNotes().filter(x=>x.id!==n.id&&(x.md.includes(n.title+".md")||x.md.includes(encodeURI(n.title)+".md")));
+    body=bl.length?`<div class="rows">${bl.map(x=>`<button class="row" data-a="note" data-id="${x.id}">${ic("note")}<span class="rt">${esc(x.title)}<small>Links to ${esc(n.title)}</small></span>${ic("right")}</button>`).join("")}</div>`:`<div class="empty">No notes link here yet.</div>`;
+  }
+  return `<h3 style="margin:4px 0 10px">${esc(n.title)}</h3>${seg}${body}`;
+}
+function pendingHTML(s){
+  const n=NOTES[s.id];
+  return `<div class="sheetbody"><div class="phead"><b>${n.pend.length} pending change${n.pend.length===1?"":"s"}</b></div>
+  <div class="pacts2"><button data-a="rejectAll">Reject all</button><button class="cta" data-a="acceptAll">Accept all</button></div>
+  <div class="plist">${n.pend.map((p,i)=>`<div class="pcard" data-pi="${i}"><div class="pbg acc">${ic("check")}Accept</div><div class="pbg rej">Reject${ic("x")}</div><div class="pfg"><div class="pline o">${esc(p.old)}</div><div class="pline n">${esc(p.text)}</div><div class="pbtns"><button data-a="pAccept" data-i="${i}">Accept</button><button data-a="pReject" data-i="${i}">Reject</button></div></div></div>`).join("")||'<div class="empty">No pending changes.</div>'}</div>
+  <p class="soft small">Swipe a change right to accept, left to reject. The note file changes only when you accept.</p></div>`;
+}
+function slashHTML(){
+  const it=[["Heading","heading"],["Bullet list","ul"],["Numbered list","ol"],["Task","task"],["Quote","quote"],["Code block","code"],["Table","table"],["Divider","hr"],["Math block","math",1],["Mermaid diagram","diagram",1]].filter(x=>!(S.v1&&x[2]));
+  return `<div class="sheetbody"><h3>Insert block</h3><div class="grid">${it.map(([t,i,d])=>`<button class="gi" data-a="slashpick" data-k="${t}">${ic(i)}<span>${t}</span>${d?chip("v4"):""}</button>`).join("")}</div></div>`;
+}
+function linksHTML(s){
+  const others=liveNotes().filter(x=>x.id!==s.id);
+  return `<div class="sheetbody"><h3>Link to a note</h3><div class="rows">${others.map(x=>`<button class="row" data-a="pickLink" data-id="${x.id}">${ic("note")}<span class="rt">${esc(x.title)}<small>${esc(x.folder||"Notes")}</small></span>${ic("right")}</button>`).join("")}</div><p class="soft small">Writes a relative link such as [Roadmap](Roadmap.md) so it also works on GitHub.</p></div>`;
+}
+function filesHTML(){
+  return `<div class="fhead"><button data-a="closeSheet" style="color:var(--accent)">Cancel</button><b>Choose Folder</b><button class="blue" data-a="openFolder">Open</button></div>
+  <div class="fcrumb">iCloud Drive › Notes</div>
+  <div class="rows">${["Journal","Projects"].map(f=>`<div class="row">${ic("folder")}<span class="rt">${f}</span>${ic("right")}</div>`).join("")}</div>
+  <div class="rows"><div class="row sel">${ic("folder")}<span class="rt"><b>Notes</b><small>Selected</small></span>${ic("check")}</div></div>`;
+}
+function composerHTML(s){
+  const line=NOTES[s.id].md.split("\n")[s.at]||"";
+  return `<div class="sheetbody"><h3>Comment on this line</h3><div class="bq">${esc(clean(line)||line)}</div><input class="field" id="cmtxt" placeholder="Comment" autocomplete="off" aria-label="Comment"><p class="soft small">Comments are added only from a block’s long-press menu. ${chip("Simplified")}</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="addCmt">Add comment</button></div></div>`;
+}
+
+/* ---------- Actions by name (data-a) ---------- */
+const H={
+  pickFolder:()=>openSheet({k:"files"},"full"),
+  openFolder:()=>{ if(!S.started){S.started=true;S.sheet=null;S.stack=[{k:"home"}];paint()} else {closeSheet();toast("Notes folder: iCloud Drive › Notes")} },
+  today:()=>openNote("today"),
+  newnote:()=>toast("New notes are not created in this prototype"),
+  search:()=>openPal(""),
+  settings:()=>go({k:"settings"}),
+  tree:el=>go({k:"tree",path:el.dataset.path||""}),
+  note:el=>openNote(el.dataset.id),
+  back:()=>back(),
+  more:el=>{const b=box(el);openMenu({x:b.x+b.w/2,y:b.y+b.h},[
+      {t:"Save version",i:"history",fn:()=>saveVersion(cur().id)},
+      {t:"Share",i:"open",fn:()=>toast("Share sheet is not part of this prototype")},
+      ...(S.v1?[]:[{t:"Focus",i:"focus",chip:"Deferred",fn:toggleFocus}])])},
+  panel:()=>openPanel("outline"),
+  focusoff:()=>toggleFocus(),
+  trash:()=>go({k:"trash"}),
+  backup:()=>toast("Backup is deferred to later. Files already sync through iCloud"),
+  restoreNote:el=>{NOTES[el.dataset.id].trashed=false;toast("Restored");paint()},
+  set:el=>{const k=el.dataset.k,v=el.dataset.v;if(k==="size")S.size=+v;else if(k==="width")S.width=v;else if(k==="theme"){S.theme=v;applyTheme()}paint()},
+  toggle:el=>{if(el.dataset.k==="reveal")S.reveal=!S.reveal;paint()},
+  closeSheet:()=>closeSheet(),
+  closeMenu:()=>{if(Date.now()-menuAt<350)return;closeMenu()},
+  toastUndo:()=>{const f=tUndo;tUndo=null;$("#toast").classList.remove("on");f&&f()},
+  review:()=>{if(cur().k==="note")openSheet({k:"pending",id:cur().id},"half")},
+  acceptAll:()=>resolveAll(S.sheet.id,true),
+  rejectAll:()=>resolveAll(S.sheet.id,false),
+  pAccept:el=>applyPend(S.sheet.id,+el.dataset.i,true),
+  pReject:el=>applyPend(S.sheet.id,+el.dataset.i,false),
+  pview:el=>{S.sheet.view=el.dataset.v;paint()},
+  goto:el=>{const at=el.dataset.at;closeSheet();const pg=topPg(),t=pg&&$(`.doc > [data-at="${at}"]`,pg);if(t)pg.scrollTop=t.offsetTop-110},
+  resolve:el=>{NOTES[el.dataset.id].md=resolveComment(NOTES[el.dataset.id].md,+el.dataset.at);closeMenu();toast("Comment resolved");paint()},
+  reply:()=>toast("Replies are not saved in this prototype"),
+  savever:()=>saveVersion(S.sheet.id),
+  ver:el=>{const id=S.sheet.id,v=+el.dataset.v;if(S.v1)openSheet({k:"confirm",id,v},"half");else go({k:"compare",id,v})},
+  doRestore:el=>restore(el.dataset.id||S.sheet.id,+(el.dataset.v??S.sheet.v)),
+  restore:el=>restore(el.dataset.id,+el.dataset.v),
+  addCmt:()=>{const s=S.sheet,n=NOTES[s.id],t=($("#cmtxt").value||"").trim();if(!t)return toast("Write a comment first");n.md=addComment(n.md,s.at,t);S.sheet=null;toast("Comment added");paint()},
+  cellDone:()=>{toast("Cell edits are not saved in this prototype")},
+  palRun:el=>{const r=S.palRuns[+el.dataset.i];if(!r)return;closeSheet();r.run&&r.run()},
+  slashpick:el=>{closeSheet();toast(`Adds ${el.dataset.k.toLowerCase()} after the caret line (not saved)`)},
+  pickLink:el=>{const n=NOTES[el.dataset.id];closeSheet();toast(`Writes [${n.title}](${n.title}.md) (not saved)`)},
+  acc:el=>{const k=el.dataset.k;
+    if(k==="slash")return openSlash();
+    if(k==="link")return openLinks();
+    if(k==="hide")return setLive(null);
+    const msg={hash:"#tags stay plain text, so GitHub shows them too",task:"Adds a task line (not saved in this prototype)",indent:"Indent is not applied: notes are read-only here",outdent:"Outdent is not applied: notes are read-only here",undo:"Undo is not available in this prototype"}[k];
+    toast(msg)},
+  key:()=>toast("Keys do nothing: notes are read-only in this prototype"),
+  tbox:()=>toast("Checkboxes are read-only in this prototype"),
+  fscopy:()=>toast("Copied image"),
+  fsshare:()=>toast("Share sheet is not part of this prototype"),
+  conflict:el=>openSheet({k:"conflict",id:el.dataset.id},"full"),
+  confKeep:el=>{const w=el.dataset.w,id=S.sheet.id;delete NOTES[id];S.sheet=null;toast(w==="both"?"Merged both versions into Week plan":w==="iphone"?"Kept This iPhone version":"Kept the Mac version");paint()},
+  fsclose:()=>$("#fsLayer").classList.remove("on"),
+  noop:()=>{}
+};
+function applyTheme(){const r=document.documentElement;S.theme==="system"?r.removeAttribute("data-theme"):r.setAttribute("data-theme",S.theme==="quiet"?"light":S.theme)}
+
+/* ---------- Event wiring ---------- */
+let lp=null,lpT=null,pl=null;
+function longPress(key,p){
+  const [type,id,at]=key.split(":");
+  if(type==="note"){const n=NOTES[id];
+    openMenu(p,[
+      {t:"Rename",i:"pen",fn:()=>toast("Rename is not saved in this prototype")},
+      {t:"Move…",i:"move",fn:()=>toast("Move is not saved in this prototype")},
+      {t:"Duplicate",i:"dup",fn:()=>toast("Duplicate is not saved in this prototype")},
+      {t:"Copy link",i:"link",fn:()=>toast(`Copied [${n.title}](${n.title}.md)`)},
+      {sep:1},
+      {t:"Move to Trash",i:"trash",d:1,fn:()=>trashNote(id)}]);
+  } else if(type==="block"){
+    const a=+at, b=parse(composed(NOTES[id])).find(x=>x.at===a);
+    const items=[{t:"Comment",i:"comment",fn:()=>openComposer(id,a)},{t:"Show Markdown",i:"md",fn:()=>setLive(a)}];
+    if(b&&b.k==="table")items.push({t:"Edit as Markdown",i:"table",fn:()=>setLive(a)});
+    const fk=b&&!S.v1&&(b.k==="math"||(b.k==="code"&&b.lang==="mermaid"))?(b.k==="math"?"math":"mermaid"):null;
+    if(fk&&renderFig(fk,b.body.join("\n")))items.splice(2,0,{t:"Copy image",i:"copy",fn:()=>toast("Copied image")},{t:"View full screen",i:"fs",fn:()=>openFs(fk,b.body.join("\n"))});
+    items.push({t:"Copy",i:"copy",fn:()=>toast("Copied")},{t:"Duplicate",i:"dup",fn:()=>toast("Duplicate is not saved in this prototype")},{sep:1},{t:"Delete",i:"trash",d:1,fn:()=>toast("Delete is not saved in this prototype")});
+    openMenu(p,items);
+  }
+}
+phone.addEventListener("contextmenu",e=>e.preventDefault());
+phone.addEventListener("pointerdown",e=>{
+  S.suppress=false; clearTimeout(lpT); lp=null; pl=null;
+  const p=pt(e), onPage=!S.sheet&&(cur().k==="home"||cur().k==="note")&&p.y<230&&!e.target.closest("button,input,a");
+  if(onPage) pl={x:e.clientX,y:e.clientY};
+  const el=e.target.closest("[data-lp]");
+  if(el){const key=el.dataset.lp;lp={x:e.clientX,y:e.clientY};lpT=setTimeout(()=>{S.suppress=true;lp=null;longPress(key,p)},500)}
+});
+phone.addEventListener("pointermove",e=>{
+  if(lp&&Math.hypot(e.clientX-lp.x,e.clientY-lp.y)>10){clearTimeout(lpT);lp=null}
+  if(pl&&!S.sheet&&e.clientY-pl.y>60&&Math.abs(e.clientX-pl.x)<40){pl=null;openPal("")}
+});
+const endPress=()=>{clearTimeout(lpT);lp=null;pl=null};
+phone.addEventListener("pointerup",endPress);
+phone.addEventListener("pointercancel",endPress);
+phone.addEventListener("click",e=>{
+  if(S.suppress){S.suppress=false;return}
+  const t=e.target;
+  const cm=t.closest(".cm,.cdot");
+  if(cm&&cur().k==="note"){openCpop(+cm.dataset.cid);return}
+  const a=t.closest("a.ln");
+  if(a&&!t.closest(".b.live")){e.preventDefault();openLink(a.dataset.href);return}
+  if(t.closest(".dl")){openNote("today");return}
+  const tg=t.closest(".tag");
+  if(tg){openPal(tg.textContent);return}
+  const fg=t.closest("figure[data-fs]");
+  if(fg){
+    if(t.closest(".figmag")){openFs(fg.dataset.fs,decodeURIComponent(fg.dataset.src));return}
+    if(!fg.closest(".fgrp")) setLive(+fg.dataset.at);
+    return;
+  }
+  if(t.closest(".fgrp")) return;
+  const cell=t.closest("td[data-cell]");
+  if(cell){if(!S.v1)openSheet({k:"cell",text:cell.textContent},"half");return}
+  const ad=t.closest("[data-a]");
+  if(ad){const f=H[ad.dataset.a];if(f)f(ad);return}
+  const b=t.closest(".doc .b[data-at]");
+  if(b&&cur().k==="note"){const at=+b.dataset.at;setLive(S.live&&S.live.id===cur().id&&S.live.at===at?null:at);return}
+  if(S.live&&cur().k==="note"&&!t.closest("#sheetLayer,#menuLayer,#pill,#fsLayer")) setLive(null);
+});
+phone.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches('[role="button"]')){e.preventDefault();e.target.click()}});
+const KBDROWS=["qwertyuiop","asdfghjkl","zxcvbnm"];
+$("#kbd").innerHTML=`<div class="acc">${[["slash","slash","/"],["hash","hash",""],["link","link","[["],["task","task",""],["indent","indent",""],["outdent","outdent",""],["undo","undo",""],["hide","kbd",""]].map(([k,i,l])=>`<button data-a="acc" data-k="${k}" aria-label="${k}">${l?`<span>${l}</span>`:ic(i)}</button>`).join("")}<span class="sp"></span></div>
+<div class="keys">${KBDROWS.map((r,i)=>`<div class="krow">${i===2?'<button class="k fn" data-a="key">⇧</button>':""}${[...r].map(c=>`<button class="k" data-a="key">${c}</button>`).join("")}${i===2?'<button class="k fn" data-a="key">⌫</button>':""}</div>`).join("")}<div class="krow"><button class="k fn" data-a="key">123</button><button class="k sp" data-a="key">space</button><button class="k fn" data-a="key">return</button></div></div>`;
+
+/* ---------- State ---------- */
+const S={stack:[{k:"onboard"}],v1:false,liveFig:false,reveal:true,theme:"system",size:16,width:"normal",live:null,sheet:null,det:"half",suppress:false,focus:false,z:1,started:false,palRuns:[]};
+
+/* ---------- Design log ---------- */
+const OWNER=[
+  "iPhone only. The native app is SwiftUI, built later on inkuno-logic (Rust) through UniFFI. The assistant is deferred and not shown.",
+  "The vault is a folder picked in the Files app (iCloud Drive, Dropbox, Working Copy). It is the same folder as on the desktop.",
+  "Editor: live styling as on the desktop. Only the tapped line shows its Markdown. Accessory bar above the keyboard: / # [[ task, indent, outdent, undo, hide.",
+  "Home is the desktop empty-page cards. The file tree is push navigation with a nav bar and no tab bar; Scratch sits at the foot of the root. Settings is reached from Home.",
+  "Commands: pull down (or tap search) for a sheet with note search and > commands. Long-press a row or block for the context menu.",
+  "The right panel is one bottom sheet with four segments (Outline, Comments, Versions, Backlinks) and half and full detents."
+];
+const LOG=[
+  ["Vault","Folder picked in the Files app; the same folder as on the desktop. Placeholder downloads and conflict copies","High","Keep (foundation)","Every note reads and writes through it; placeholders and conflicts are the hard part","",""],
+  ["Live-styled editor","Rendered Markdown; only the tapped line shows its syntax. Accessory bar above the keyboard","High","Keep (core; spike first)","Biggest risk: TextKit 2 with the Rust parser, IME and undo","",""],
+  ["Home cards, tree, Scratch, Today","Desktop empty-page cards; push tree; Scratch at the foot of the root; Today note","Low","Keep","Mostly layout; Today is the main entry point","",""],
+  ["Pull-down palette and > commands","Pull down or tap search: note names, content matches, > commands in a sheet","Med","Keep","Replaces Ctrl+P; one search surface","",""],
+  ["Accessory bar and slash sheet","/ # [[ task, indent, outdent, undo above the keyboard; / opens a grid sheet","Low","Keep","Native input affordance","",""],
+  ["Links, backlinks, tags, @date","[[ writes relative links; backlinks list; #tags; @today","Med","Keep (logic in inkuno-logic)","Same rules as the desktop; the logic is shared through the core","",""],
+  ["Outline sheet","Outline segment of the one bottom sheet","Low","Keep","Same sheet as the other panel views","",""],
+  ["Comments view and resolve","Comments segment; inline badge; resolve","Med","Keep","Comment syntax already decided (v2 Q1)","",""],
+  ["Adding comments","Long-press a block, then Comment. No text selection on the phone","Med","Simplify (long-press only)","Selecting text on iPhone is costly; block comments cover v1","Simplified","simp"],
+  ["Versions list, save, restore","Versions segment; tap a version; restore asks first","Med","Keep","The history promise","",""],
+  ["Compare diff screen","Green adds, red strikes, Restore","Med","Defer (restore confirm instead)","A second screen to build; the confirm covers the need","Deferred","defer"],
+  ["Pending changes review sheet","Pill opens a sheet; swipe right accepts, left rejects","Med","Keep","Desktop agent edits need a review path on the phone","",""],
+  ["Inline washes in the editor","Green and red washes on the changed lines","High","Defer (pill and sheet only)","Needs styled change spans in TextKit; the sheet covers review","Deferred","defer"],
+  ["Tables render","Horizontal scroll inside the note","Med","Keep","Common in notes; reads well on a phone","",""],
+  ["Table cell editing","Tap a cell: sheet with the cell text","High","Defer (raw Markdown on the live line)","Needs a cell model and sync; raw editing is safe","Deferred","defer"],
+  ["Mermaid render","Flowchart and sequence as inline SVG; full-screen view","High","Defer (code block in v1)","Needs the Rust renderer to output SVG","Deferred","v4"],
+  ["Math render","Formula as styled HTML; full-screen view","High","Defer (code in v1)","Needs a formula layout engine","Deferred","v4"],
+  ["Sync conflict copies","Conflict copy in the tree with a dot; a sheet compares the two versions and keeps one or both","Med","Defer (plain note in v1)","Merging text is a later design; the sheet keeps the choice explicit","Deferred","v4"],
+  ["Context menus","Long-press on tree rows and blocks (replaces right-click)","Low","Keep","Native pattern","",""],
+  ["Settings","Folder, appearance, editor, files, about. Reached from Home","Low","Keep","Plain list","",""],
+  ["Theme set","Light, Dark, System and Quiet only","Low","Simplify (15 more themes later)","Keeps the theme code small for v1","Simplified","simp"],
+  ["Focus mode","Hides the navigation bar","Low","Defer","The phone is already focused","Deferred","defer"],
+  ["Backup tar.gz","Row in Settings › Files","Low/Med","Defer","Files already sync through iCloud","Deferred","defer"],
+  ["Trash restore UI","Settings › Files › Trash; palette command Restore from Trash","Low/Med","Keep (palette command)","Keeps undo for deleted notes","",""]
+];
+const V1_SUGGEST=[
+  "Compare screen: restore asks for confirmation instead.",
+  "Inline washes: the pill and the review sheet only.",
+  "Table cells: edit as Markdown on the live line.",
+  "Mermaid and math: show as code blocks.",
+  "Focus mode and Backup (tar.gz).",
+  "Theme set beyond Light, Dark, System and Quiet."
+];
+function renderLog(){
+  const kind=v=>/^Keep/.test(v)?"keep":/^Simplify/.test(v)?"simp":"defer";
+  $("#log").innerHTML=`<div class="logwrap">
+  <h2>Design log</h2>
+  <p class="soft">iPhone prototype of the planned SwiftUI app. Every feature is clickable. The table gives each one a complexity rating and a v1 suggestion for the owner to reconsider.</p>
+  <label class="v1sw"><input type="checkbox" id="v1" ${S.v1?"checked":""}><span><b>Show built app (v1)</b><br><span class="soft">When on, deferred features show their v1 fallback: no washes, restore confirms instead of compare, table cells are raw Markdown, Mermaid and math show as code, Focus is hidden.</span></span></label>
+  <h3>Owner decisions</h3>
+  <ul>${OWNER.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+  <h3>Decisions and complexity</h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Area</th><th>iPhone design</th><th>Complexity</th><th>v1 suggestion</th><th>Why</th></tr></thead>
+    <tbody>${LOG.map((r,i)=>`<tr><td class="n">${i+1}</td><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td><span class="vk ${kind(r[3])}">${esc(r[3])}</span></td><td>${esc(r[4])}${chip(r[6]==="v4"&&!S.v1?"v4":r[5])}</td></tr>`).join("")}</tbody>
+  </table></div>
+  <h3>Suggested v1 deferrals (owner to reconsider)</h3>
+  <ul>${V1_SUGGEST.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+  <p class="logfoot">Note text is read-only here. Actions that would write a file show a toast.</p>
+  </div>`;
+  $("#v1").addEventListener("change",e=>{S.v1=e.target.checked;if(S.v1&&S.theme==="quiet")S.theme="light";S.live=null;S.liveFig=false;applyTheme();paint()});
+}
+
+/* ---------- Init ---------- */
+fit();
+addEventListener("resize",fit);
+renderLog();
+paint();
+</script>
+</body>
+</html>
