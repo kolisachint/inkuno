@@ -18,7 +18,7 @@
   --pop:#fafafa; --box:rgba(0,0,0,.22); --dots:rgba(31,34,37,.45); --quote:#c9cacb; --seg:#ebeced; --seg-on:#ffffff; --sw-off:rgba(31,34,37,.22); --field:#8a8d91;
   --s-com:#8a8d93; --s-kw:#b2565c; --s-str:#89713a; --s-num:#9759b3; --s-type:#3878b1; --s-fn:#5f7e43;
   --n:#2f6fd6; --tip:#2f8a57; --imp:#7c4dd6; --warn:#a8650a; --cau:#c93a3a;
-  --toast:#1f2225; --toast-ink:#ffffff;
+  --toast:#1f2225; --toast-ink:#ffffff; --toast-act:#8ab4f8;
   --add:rgba(46,160,90,.15);--add-ink:#1f7a43;--del:rgba(201,58,58,.11);--del-ink:#b3322f;--cmw:rgba(232,176,30,.26);--cmd:#c98a00;--hl:rgba(58,133,247,.16);
   --scrim:rgba(0,0,0,.12);--shadow-seg:0 1px 2px rgba(0,0,0,.12);--shadow-knob:0 1px 2px rgba(0,0,0,.25);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
   --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -37,7 +37,7 @@
   --pop:#2a2a2c; --box:rgba(255,255,255,.3); --dots:rgba(230,230,230,.4); --quote:#4a4c4f; --seg:#202022; --seg-on:#3a3a3c; --sw-off:rgba(230,230,230,.28); --field:#6f7174;
   --s-com:#8d9096; --s-kw:#e06c75; --s-str:#d8b25c; --s-num:#c58af9; --s-type:#6cb6ff; --s-fn:#98c379;
   --n:#6ea6ff; --tip:#58c48a; --imp:#a98bff; --warn:#e0a23c; --cau:#ff7b72;
-  --toast:#e6e6e6; --toast-ink:#1c1c1e;
+  --toast:#e6e6e6; --toast-ink:#1c1c1e; --toast-act:#105592;
   --add:rgba(88,196,138,.16);--add-ink:#7fe0a6;--del:rgba(255,123,114,.15);--del-ink:#ff9d96;--cmw:rgba(232,176,30,.22);--cmd:#f0c040;--hl:rgba(75,143,248,.24);
   --scrim:rgba(0,0,0,.45);--shadow-seg:0 1px 2px rgba(0,0,0,.4);--shadow-knob:0 1px 2px rgba(0,0,0,.5);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
   --shadow-note:-1px 0 1px rgba(0,0,0,.3),-2px 0 12px rgba(0,0,0,.35);
@@ -54,7 +54,7 @@
   --pop:#2a2a2c; --box:rgba(255,255,255,.3); --dots:rgba(230,230,230,.4); --quote:#4a4c4f; --seg:#202022; --seg-on:#3a3a3c; --sw-off:rgba(230,230,230,.28); --field:#6f7174;
   --s-com:#8d9096; --s-kw:#e06c75; --s-str:#d8b25c; --s-num:#c58af9; --s-type:#6cb6ff; --s-fn:#98c379;
   --n:#6ea6ff; --tip:#58c48a; --imp:#a98bff; --warn:#e0a23c; --cau:#ff7b72;
-  --toast:#e6e6e6; --toast-ink:#1c1c1e;
+  --toast:#e6e6e6; --toast-ink:#1c1c1e; --toast-act:#105592;
   --add:rgba(88,196,138,.16);--add-ink:#7fe0a6;--del:rgba(255,123,114,.15);--del-ink:#ff9d96;--cmw:rgba(232,176,30,.22);--cmd:#f0c040;--hl:rgba(75,143,248,.24);
   --scrim:rgba(0,0,0,.45);--shadow-seg:0 1px 2px rgba(0,0,0,.4);--shadow-knob:0 1px 2px rgba(0,0,0,.5);--tl1:#ff5f57;--tl2:#febc2e;--tl3:#28c840;
   --shadow-note:-1px 0 1px rgba(0,0,0,.3),-2px 0 12px rgba(0,0,0,.35);
@@ -145,7 +145,7 @@ svg{flex:none}
 .chip.dfr{color:var(--warn);border-color:var(--warn)}
 .chip.simp{color:var(--imp);border-color:var(--imp)}
 .seg{display:flex;background:var(--seg);border-radius:9px;padding:2px;width:100%;gap:2px}
-.seg button{flex:1;min-height:30px;border-radius:7px;font-size:14px;color:var(--ink);padding:0 4px;white-space:nowrap}
+.seg button{flex:1;text-align:center;min-height:30px;border-radius:7px;font-size:14px;color:var(--ink);padding:0 4px;white-space:nowrap}
 .seg button.on{background:var(--seg-on);box-shadow:var(--shadow-seg);font-weight:600}
 .seg.wide{margin:4px 0 12px}
 .seg.wide button{font-size:13px;min-height:32px;padding:0 2px}
@@ -222,7 +222,7 @@ del.pwd{background:var(--del);color:var(--del-ink);text-decoration:line-through;
 .chip.v4{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .media.fig{position:relative;padding:0;border:0;background:none;margin:8px 0}
 .media.fig:not(.err){padding-top:36px}
-.figmag{position:absolute;top:0;right:0;width:32px;height:32px;display:grid;place-items:center;color:var(--soft);z-index:2;isolation:isolate;border-radius:50%}
+.figmag{position:absolute;top:-6px;right:-8px;width:44px;height:44px;display:grid;place-items:center;color:var(--soft);z-index:2;isolation:isolate;border-radius:50%}
 .figmag::before{content:"";position:absolute;width:28px;height:28px;border-radius:50%;background:var(--chip);opacity:.9;z-index:-1}
 .figmag svg{width:18px;height:18px}
 .fchip{position:absolute;top:0;left:0;margin:0;font-size:9px;padding:1px 5px;z-index:2}
@@ -239,11 +239,14 @@ code,pre,.code,.pre,.cline,.pline,.cl,.cmp,.cmsrc,.dmath,.imath{font-variant-lig
 .figscroll>svg{display:block;margin:0 auto}
 .media.err{padding:0;border:0;background:none}
 .figerr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--box);border-radius:10px;background:var(--sheet);color:var(--soft);font-size:14px}
-.showsrc{flex:none;min-height:32px;padding:0 4px;color:var(--accent);font-weight:600;font-size:14px}
+.showsrc{flex:none;min-height:44px;padding:0 4px;color:var(--accent);font-weight:600;font-size:14px}
 .prevlbl{font-size:13px;color:var(--soft);margin:10px 0 2px}
 .dmath{width:max-content;margin:0 auto;padding:8px 0 6px;font-family:"STIX Two Math","Cambria Math","Times New Roman",serif;font-size:19px;color:var(--ink);font-style:normal}
 .imath{font-family:"STIX Two Math","Cambria Math","Times New Roman",serif;font-size:1.06em;font-style:normal;white-space:nowrap}
 .imath i,.dmath i{font-style:italic}
+.isrc{display:none;font:.86em var(--mono)}
+.doc.reveal .b.live .isrc{display:inline}
+.doc.reveal .b.live .imath{display:none}
 .imath sup,.imath sub,.dmath sup,.dmath sub{font-size:.7em;line-height:0;position:relative;vertical-align:baseline}
 .imath sup,.dmath sup{top:-.5em}
 .imath sub,.dmath sub{top:.3em}
@@ -282,7 +285,7 @@ code,pre,.code,.pre,.cline,.pline,.cl,.cmp,.cmsrc,.dmath,.imath{font-variant-lig
 #toast{position:absolute;left:14px;right:14px;bottom:96px;z-index:80;background:var(--toast);color:var(--toast-ink);border-radius:12px;padding:8px 8px 8px 14px;display:flex;align-items:center;gap:10px;font-size:14px;box-shadow:var(--shadow-menu);opacity:0;transform:translateY(12px);transition:opacity .2s,transform .2s;pointer-events:none}
 #toast.on{opacity:1;transform:none;pointer-events:auto}
 #toast span{flex:1;line-height:1.35}
-#toast button{color:#8ab4f8;font-weight:600;min-height:36px;padding:0 10px}
+#toast button{color:var(--toast-act);font-weight:600;min-height:36px;padding:0 10px}
 .phone.kb #toast{bottom:318px}
 
 /* Bottom sheet: one sheet for the right panel, pickers and palette */
@@ -366,17 +369,19 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 1px}
 @keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
 
 /* Full-screen viewer */
-#fsLayer{position:absolute;inset:0;z-index:90;background:var(--sheet);display:none;flex-direction:column}
+#fsLayer{position:absolute;inset:0;z-index:48;background:var(--sheet);display:none;flex-direction:column}
 #fsLayer.on{display:flex}
-.fsbar{display:flex;align-items:center;justify-content:space-between;padding:54px 10px 8px 16px;border-bottom:1px solid var(--tline)}
+.fsbar{position:relative;display:flex;align-items:center;justify-content:space-between;padding:54px 6px 0;min-height:98px;border-bottom:1px solid var(--tline)}
+.fsbar b{position:absolute;left:50%;bottom:0;height:44px;display:flex;align-items:center;transform:translateX(-50%);pointer-events:none}
 .fsbar b{font-size:16px}
 .fsbar>div{display:flex;gap:2px;align-items:center}
-.fsbar button{min-width:40px;min-height:40px;color:var(--accent);display:grid;place-items:center}
+.fsbar button{min-width:44px;min-height:44px;color:var(--accent);display:grid;place-items:center}
 .fsbar button.blue{font-weight:600;padding:0 8px;font-size:16px;width:auto}
 .fsbar svg{width:20px;height:20px}
 .fsbody{flex:1;overflow:auto;padding:16px;touch-action:none}
 .fscont{transform-origin:50% 0;transition:transform .15s}
 .fscont>svg{display:block;margin:0 auto}
+.fscont .dmath{font-size:30px;padding-top:24px}
 .fshint{position:absolute;bottom:44px;left:50%;transform:translateX(-50%);background:var(--toast);color:var(--toast-ink);border-radius:999px;padding:8px 14px;font-size:13px;white-space:nowrap}
 
 /* Compare screen */
@@ -498,6 +503,7 @@ Object.assign(ICON,{
  focus:'<path d="M3 6V3h3M12 3h3v3M15 12v3h-3M6 15H3v-3"/><circle cx="9" cy="9" r="1.6"/>',
  zin:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M8 6v4M6 8h4"/>',
  zout:'<circle cx="8" cy="8" r="4.75"/><path d="m11.5 11.5 3.5 3.5M6 8h4"/>',
+ share:'<path d="M9 2.5v9M6 5.5l3-3 3 3M6.5 8H5a1 1 0 0 0-1 1v5.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-1.5"/>',
  kbd:'<rect x="2" y="4.5" width="14" height="9" rx="2"/><path d="m6 8 3 3 3-3"/>'
 });
 
@@ -546,7 +552,9 @@ note("week",{title:"Week plan",folder:"Projects",age:"today",md:WEEK,
        {old:"- [ ] Links: see [Roadmap](Roadmap.md)",text:"- [ ] Links: picker writes relative links"}]});
 note("road",{title:"Roadmap",folder:"Projects",age:"2 d",md:ROADMAP});
 note("design",{title:"Design maths",folder:"Projects",age:"1 d",md:["# Design maths","Euler's identity $e^{i\\pi}+1=0$ sits in the line.","","$$\\int_0^1 x^2\\,dx = \\tfrac{1}{3}$$","","```mermaid","flowchart LR","  Draft --> Review --> Publish","  Review -->|changes| Draft","```","","```mermaid","sequenceDiagram","  Phone->>Vault: write note","  Vault-->>Desktop: sync","  Desktop->>Phone: pending change","```","","```mermaid","flowchart LR","  A -->","```","","$$\\frac{1}{$$"].join("\n")});
-note("conf",{title:"Week plan (conflict 2026-11-25).md",folder:"Projects",age:"today",conflict:true,md:["# Week plan","Ship the **Quiet theme** by Friday","- [ ] Spacing pass for the editor","- [ ] Links: picker writes relative links"].join("\n")});
+/* Conflict copy: both devices changed the same two lines of Week plan, so core merge_onto returns None and the sync keeps both files. */
+const CONF={target:"week",pairs:{"- [ ] Spacing pass":"- [ ] Spacing pass for the editor","- [ ] Links: see [Roadmap](Roadmap.md)":"- [ ] Links: picker writes relative links"}};
+note("conf",{title:"Week plan (conflict 2026-11-25).md",folder:"Projects",age:"today",conflict:true,md:WEEK.split("\n").map(l=>CONF.pairs[l]??l).join("\n")});
 note("launch",{title:"Launch checklist",folder:"Projects",age:"1 mo",md:["# Launch checklist","- [x] Installer notes","- [ ] Release page","- [ ] Changelog"].join("\n")});
 note("read",{title:"Reading list",age:"1 w",md:["# Reading list","- *The Elements of Typographic Style*","- [Practical Typography](https://practicaltypography.com)","- [ ] Re-read **Refactoring UI**","- [x] *Shape Up*"].join("\n")});
 note("ideas",{title:"Ideas",age:"3 d",md:["# Ideas","Small things worth trying later.","","- Typewriter scrolling","- Focus the current paragraph","","> [!WARNING]","> Nothing here may write syntax GitHub cannot show."].join("\n")});
@@ -669,7 +677,7 @@ function flowSVG(lines,maxW){
     if(isBack){const x1=A.x+nw/2,x2=B.x+nw/2,y1=A.y+NH,y2=B.y+NH,Y=Math.max(y1,y2)+26;d=`M${x1} ${y1} C${x1} ${Y} ${x2} ${Y} ${x2} ${y2}`;lx=(x1+x2)/2;ly=Y+10}
     else{const x1=A.x+nw,y1=A.y+NH/2,x2=B.x,y2=B.y+NH/2,m=(x1+x2)/2;d=`M${x1} ${y1} C${m} ${y1} ${m} ${y2} ${x2} ${y2}`;lx=m;ly=(y1+y2)/2-6}
     return `<path d="${d}" fill="none" style="stroke:var(--ink);stroke-width:1.2${dash}" marker-end="url(#${id})"/>`+(e.lab?`<text x="${lx}" y="${ly}" text-anchor="middle" style="fill:var(--soft);font:12px var(--sans)">${esc(e.lab)}</text>`:"")}).join("");
-  return svgWrap(W,H,"Flowchart",markerDef(id)+edges+nodes,maxW);
+  return svgWrap(W,H,esc("Flowchart: "+ids.map(i=>N.get(i).label).join(", ")),markerDef(id)+edges+nodes,maxW);
 }
 function seqSVG(lines,maxW){
   const P=[],M=[],re=/^\s*([A-Za-z_]\w*)\s*(-->>|->>|-->|->)\s*([A-Za-z_]\w*)\s*(?::(.*))?$/;
@@ -682,7 +690,7 @@ function seqSVG(lines,maxW){
   M.forEach((m,j)=>{const y=78+j*40,x1=X(m.a),x2=X(m.b),self=m.a===m.b,dash=m.dash?";stroke-dasharray:5 4":"";
     s+=self?`<path d="M${x1} ${y} h36 v14 h-36" fill="none" style="stroke:var(--ink);stroke-width:1.3${dash}" marker-end="url(#${id})"/>`:`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" style="stroke:var(--ink);stroke-width:1.3${dash}" marker-end="url(#${id})"/>`;
     if(m.t) s+=`<text x="${self?x1+18:(x1+x2)/2}" y="${y-8}" text-anchor="middle" style="fill:var(--ink);font:12px var(--sans)">${esc(m.t)}</text>`});
-  return svgWrap(W,H,"Sequence diagram",s,maxW);
+  return svgWrap(W,H,esc("Sequence diagram: "+P.join(", ")),s,maxW);
 }
 function mermaidSVG(src,maxW){
   const L=src.split("\n").filter(l=>l.trim()), head=(L[0]||"").trim();
@@ -731,10 +739,10 @@ function texHTML(src){
   };
   try{const out=run(false);return i===s.length?out:null}catch(e){return null}
 }
-const imathHTML=t=>{const h=S.v1?null:texHTML(t);return h==null?`<code class="ic">${esc("$"+t+"$")}</code>`:`<span class="imath">${h}</span>`};
+const imathHTML=t=>{const h=S.v1?null:texHTML(t);return h==null?`<code class="ic">${esc("$"+t+"$")}</code>`:`<span class="imath" role="img" aria-label="Formula: ${esc(t)}">${h}</span><span class="isrc">${esc("$"+t+"$")}</span>`};
 /* Returns {html,w} for a figure, or null when the source cannot be read. maxW (optional) fits the SVG for the viewer. */
 function renderFig(kind,src,maxW=0){
-  if(kind==="math"){const h=texHTML(src);return h==null?null:{html:`<div class="dmath">${h}</div>`}}
+  if(kind==="math"){const h=texHTML(src);return h==null?null:{html:`<div class="dmath" role="img" aria-label="Formula: ${esc(src)}">${h}</div>`}}
   const g=mermaidSVG(src,maxW);return g?{html:g.html,w:g.w}:null;
 }
 /* Sizes each figure to the note column: natural size if it fits, else down to 0.75, else 0.75 with a scroll and a fade. */
@@ -763,19 +771,29 @@ function isFigAt(id,at){const b=parse(composed(NOTES[id])).find(x=>x.at===at);re
 function figBlock(kind,b,id,live){
   const src=b.body.join("\n"), at=b.at, r=renderFig(kind,src);
   const body=r?`${live?"":'<span class="chip v4 fchip">v4</span>'}<button class="figmag" aria-label="View full screen">${ic("fs")}</button><div class="figscroll">${r.html}</div><div class="figind"><i></i></div>`
-    :`<div class="figerr">Unreadable ${kind==="math"?"formula":"figure"}<button class="showsrc">Show source</button></div>`;
+    :`<div class="figerr">Unreadable ${kind==="math"?"formula":"figure"}${live?"":'<button class="showsrc">Show source</button>'}</div>`;
   const fig=`<figure class="media fig${r?"":" err"}" data-fs="${kind}" data-src="${encodeURIComponent(src)}" data-at="${at}" data-lp="block:${id}:${at}">${body}</figure>`;
   if(!live) return fig;
   const fence=kind==="math"?["$$",...b.body,"$$"]:["```mermaid",...b.body,"```"];
   return `<div class="b live fgrp" data-at="${at}"><pre class="code">${esc(fence.join("\n"))}</pre><div class="prevlbl">Preview</div>${fig}</div>`;
 }
-function conflictHTML(){
-  const A=["Ship the Quiet theme by Friday","- [ ] Spacing pass for the editor","- [ ] Links: picker writes relative links"];
-  const B=["Ship the Quiet theme by Friday","- [ ] Spacing pass","- [ ] Links: see Roadmap"];
-  const card=(who,L,O,cls)=>`<div class="ccard"><div class="chead">${who}</div>${L.map((l,i)=>`<div class="cline${l!==O[i]?" "+cls:""}">${esc(l)}</div>`).join("")}</div>`;
-  return `<div class="sheetbody"><h3>Two versions of Week plan</h3><p class="soft small">The sync kept both copies. Changed lines are marked.</p>
-  ${card("This iPhone · 25 Nov 09:12",A,B,"hl")}${card("Mac · 25 Nov 09:14",B,A,"hl")}
-  <div class="confacts"><button class="cta" data-a="confKeep" data-w="both">Merge both</button><p class="soft small" style="margin:0;text-align:center">Adds lines from both; nothing is lost.</p><div class="pbtns"><button data-a="confKeep" data-w="iphone">Keep iPhone</button><button data-a="confKeep" data-w="mac">Keep Mac</button></div></div></div>`;
+/* What each choice writes into the note, line by line. "both": where the two sides differ, the Mac line then the iPhone line. */
+function confResult(w,L){return L.flatMap(l=>{const a=CONF.pairs[l];return a===undefined?[[l,""]]:w==="mac"?[[l,"hl"]]:w==="iphone"?[[a,"hl"]]:[[l,"hl"],[a,"hl"]]})}
+/* The changed part of the note with its headings, comments hidden, for the cards. */
+function confContext(){const L=NOTES[CONF.target].md.split("\n"),k=Object.keys(CONF.pairs),i=L.findIndex(l=>k.includes(l)),j=L.length-1-[...L].reverse().findIndex(l=>k.includes(l));
+  if(i<0)return[];let a=i;while(a>0&&!/^#/.test(L[a]))a--;return L.slice(a,j+1).map(l=>l.replace(/\s*<!--[\s\S]*?-->/g,"")).filter(l=>l.trim())}
+function conflictHTML(s){
+  const B=confContext(),A=B.map(l=>CONF.pairs[l]??l),w=s.w||"both";
+  const card=(who,L,O)=>`<div class="ccard"><div class="chead">${who}</div>${L.map((l,i)=>`<div class="cline${l!==O[i]?" hl":""}">${esc(l)}</div>`).join("")}</div>`;
+  const opts=[["both","Merge both"],["iphone","Keep iPhone"],["mac","Keep Mac"]];
+  const what={both:"Lines both sides changed appear twice, Mac first. Delete the one you do not want in the note.",iphone:"The Mac lines are replaced. The Mac text stays in Versions.",mac:"The iPhone lines are dropped. They stay in Versions."}[w];
+  return `<div class="fhead"><button data-a="closeSheet" style="color:var(--accent);min-height:44px">Not now</button><b>Sync conflict</b><span style="width:64px"></span></div>
+  <div class="sheetbody"><h3 style="margin-top:12px">Two versions of Week plan</h3><p class="soft small">Both devices changed the same lines, so the sync kept both files. Changed lines are marked.</p>
+  ${card("This iPhone · 25 Nov 09:12",A,B)}${card("Mac · 25 Nov 09:14",B,A)}
+  <div class="seg" role="radiogroup" aria-label="Result" style="margin:6px 0 10px">${opts.map(([k,l])=>`<button class="${k===w?"on":""}" role="radio" aria-checked="${k===w}" data-a="confPick" data-w="${k}">${l}</button>`).join("")}</div>
+  <div class="ccard"><div class="chead">Result in Week plan</div>${confResult(w,B).map(([l,c])=>`<div class="cline${c?" "+c:""}">${esc(l)}</div>`).join("")}</div>
+  <p class="soft small" style="margin:0 0 4px">${what}</p>
+  <div class="confacts"><button class="cta" data-a="confKeep" data-w="${w}">${opts.find(o=>o[0]===w)[1]}</button></div></div>`;
 }
 function blockHTML(b,id){
   const live=!!S.live&&S.live.id===id&&S.live.at===b.at, rv=live&&S.reveal;
@@ -849,7 +867,7 @@ function noteHTML(id,i){
   const n=NOTES[id], bs=parse(composed(n));
   const nav=S.focus
     ? `<div class="nav focusnav"><button class="navbtn" data-a="focusoff">Exit focus</button></div>`
-    : `<div class="nav">${i>0?`<button class="navbtn" data-a="back" aria-label="Back">${ic("back")}<span>${esc(labelOf(S.stack[i-1]))}</span></button>`:"<span></span>"}<div class="navr"><button class="navbtn" data-a="panel" aria-label="Outline, comments and versions">${ic("rpanel")}</button><button class="navbtn" data-a="more" aria-label="More">${ic("dots")}</button><div class="ntitle">${esc(n.title)}</div></div></div>`;
+    : `<div class="nav">${i>0?`<button class="navbtn" data-a="back" aria-label="Back">${ic("back")}<span>${esc(labelOf(S.stack[i-1]))}</span></button>`:"<span></span>"}<div class="navr">${S.live&&S.live.id===id&&!S.v1?`<button class="navbtn" data-a="liveDone" style="font-weight:600">Done</button>`:`<button class="navbtn" data-a="panel" aria-label="Outline, comments and versions">${ic("rpanel")}</button><button class="navbtn" data-a="more" aria-label="More">${ic("dots")}</button>`}<div class="ntitle">${esc(n.title)}</div></div></div>`;
   return `${nav}<div class="doc${S.reveal?" reveal":""}" data-note="${id}">${bs.map(b=>blockHTML(b,id)).join("")}</div><div class="endpad"></div>`;
 }
 function compareHTML(s,i){
@@ -909,7 +927,7 @@ function paint(anim){
     }
     const st=el.scrollTop; el.innerHTML=screenHTML(s,i); el.scrollTop=st;
   });
-  phone.classList.toggle("kb",!!(S.live&&top.k==="note"&&!S.sheet&&!S.liveFig));
+  phone.classList.toggle("kb",!!(S.live&&top.k==="note"&&!S.sheet));
   phone.dataset.width=S.width;
   phone.style.setProperty("--fs",S.size+"px");
   renderPill();
@@ -932,7 +950,14 @@ function back(){
   paint();
 }
 function openNote(id){go({k:"note",id})}
-function setLive(at){S.live=at==null?null:{id:cur().id,at};S.liveFig=at!=null&&isFigAt(cur().id,at);paint()}
+function setLive(at){S.live=at==null?null:{id:cur().id,at};S.liveFig=at!=null&&isFigAt(cur().id,at);paint();if(at!=null)revealLive()}
+/* Keeps the live block above the keyboard, as UIKit scrolls the caret into view. A figure's source goes to the top so its Preview stays visible. */
+function revealLive(){
+  const pg=topPg(),el=pg&&$(".doc > .b.live",pg); if(!el)return;
+  const vis=(phone.classList.contains("kb")?844-262:844)-12, top=el.offsetTop, bot=top+el.offsetHeight;
+  if(S.liveFig) pg.scrollTop=top-106;
+  else if(bot>pg.scrollTop+vis||top<pg.scrollTop+98) pg.scrollTop=top-Math.round(vis/3);
+}
 
 /* ---------- Sheets, menus, toast ---------- */
 let sheetFresh=false;
@@ -946,7 +971,7 @@ function sheetBody(s){
     case "slash": return `<div class="sheetscroll">${slashHTML()}</div>`;
     case "links": return `<div class="sheetscroll">${linksHTML(s)}</div>`;
     case "files": return `<div class="sheetscroll">${filesHTML()}</div>`;
-    case "conflict": return `<div class="sheetscroll">${conflictHTML()}</div>`;
+    case "conflict": return `<div class="sheetscroll">${conflictHTML(s)}</div>`;
     case "composer": return `<div class="sheetscroll">${composerHTML(s)}</div>`;
     case "cell": return `<div class="sheetscroll"><div class="sheetbody"><h3>Table cell</h3><input class="field" id="cellv" value="${esc(s.text)}" aria-label="Cell text"><p class="soft small">${chip("Deferred")} Cell edits are not saved in this prototype. Table cells can be edited as Markdown on the live line.</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="cellDone">Done</button></div></div></div>`;
     case "confirm": { const n=NOTES[s.id], v=n.vers[s.v]; return `<div class="sheetscroll"><div class="sheetbody"><h3>Restore “${esc(v.m)}”?</h3><p class="soft">The current text is saved as a version first, so nothing is lost.</p><div class="btns"><button data-a="closeSheet">Cancel</button><button class="cta sm" data-a="doRestore" data-id="${s.id}" data-v="${s.v}">Restore</button></div></div></div>`; }
@@ -1015,8 +1040,10 @@ function toast(msg,undo){
 function openFs(kind,src){
   const r=renderFig(kind,src,358), L=$("#fsLayer");
   S.z=1;
-  L.innerHTML=`<div class="fsbar"><b>${kind==="math"?"Formula":"Diagram"}</b><div><button class="blue" data-a="fsclose">Done</button><button class="blue" data-a="fscopy">Copy image</button><button class="blue" data-a="fsshare">Share</button></div></div><div class="fsbody" id="fsb"><div class="fscont" id="fsc">${r?r.html:""}</div></div><div class="fshint">Pinch to zoom</div>`;
+  L.setAttribute("role","dialog");L.setAttribute("aria-modal","true");L.setAttribute("aria-label",kind==="math"?"Formula":"Diagram");
+  L.innerHTML=`<div class="fsbar"><button class="blue" data-a="fsclose">Done</button><b>${kind==="math"?"Formula":"Diagram"}</b><div><button data-a="fscopy" aria-label="Copy image">${ic("copy")}</button><button data-a="fsshare" aria-label="Share">${ic("share")}</button></div></div><div class="fsbody" id="fsb"><div class="fscont" id="fsc">${r?r.html:""}</div></div><div class="fshint">Pinch to zoom</div>`;
   L.classList.add("on");
+  const dm=$("#fsc .dmath"); if(dm&&dm.offsetWidth>358) dm.style.fontSize=Math.max(19,30*358/dm.offsetWidth)+"px";
   const fb=$("#fsb"); const ps=new Map(); let d0=0,z0=1;
   fb.addEventListener("pointerdown",e=>{ps.set(e.pointerId,e);if(ps.size===2){const [a,b]=[...ps.values()];d0=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);z0=S.z}});
   fb.addEventListener("pointermove",e=>{if(!ps.has(e.pointerId))return;ps.set(e.pointerId,e);if(ps.size===2){const [a,b]=[...ps.values()];const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);S.z=Math.min(3,Math.max(.5,z0*d/d0));$("#fsc").style.transform=`scale(${S.z})`}});
@@ -1169,6 +1196,7 @@ const H={
       ...(S.v1?[]:[{t:"Focus",i:"focus",chip:"Deferred",fn:toggleFocus}])])},
   panel:()=>openPanel("outline"),
   focusoff:()=>toggleFocus(),
+  liveDone:()=>setLive(null),
   trash:()=>go({k:"trash"}),
   backup:()=>toast("Backup is deferred to later. Files already sync through iCloud"),
   restoreNote:el=>{NOTES[el.dataset.id].trashed=false;toast("Restored");paint()},
@@ -1206,7 +1234,14 @@ const H={
   fscopy:()=>toast("Copied image"),
   fsshare:()=>toast("Share sheet is not part of this prototype"),
   conflict:el=>openSheet({k:"conflict",id:el.dataset.id},"full"),
-  confKeep:el=>{const w=el.dataset.w,id=S.sheet.id;delete NOTES[id];S.sheet=null;toast(w==="both"?"Merged both versions into Week plan":w==="iphone"?"Kept This iPhone version":"Kept the Mac version");paint()},
+  confPick:el=>{S.sheet.w=el.dataset.w;paintSheet()},
+  confKeep:el=>{const w=el.dataset.w,id=S.sheet.id,c=NOTES[id],t=NOTES[CONF.target],was={md:t.md,pend:t.pend.slice(),vers:t.vers.slice()};
+    /* Writes the chosen lines over the Mac block, keeps the replaced text as a version, removes the conflict copy, then opens the note. */
+    const L=confResult(w,t.md.split("\n")).map(r=>r[0]);
+    t.vers.unshift({t:"Today, "+hhmm(),m:"Before conflict merge",md:t.md});t.md=L.join("\n");t.pend=t.pend.filter(p=>CONF.pairs[p.old]===undefined&&L.includes(p.old));
+    delete NOTES[id];S.sheet=null;
+    go({k:"note",id:CONF.target});
+    toast(w==="both"?"Merged. Lines both sides changed appear twice":w==="iphone"?"Kept the iPhone version":"Kept the Mac version",()=>{Object.assign(t,was);NOTES[id]=c;back()});},
   fsclose:()=>$("#fsLayer").classList.remove("on"),
   noop:()=>{}
 };

@@ -261,12 +261,12 @@ Built on v3-ios. The switch "Show built app (v1)" shows what ships today. v4 pro
 |--|--|--|--|
 | 1 | Mermaid | Drawn under the block, borderless, column width. Too wide: scale to 0.75, then scroll inside the column with a right fade. Never widens the note | Same container rule as the desktop (`markdown_renderer.md` §9.1) |
 | 2 | Math | Inline `$…$` drawn in the line (≤1.6 line heights). Display `$$` centred under the block | Desktop behaviour |
-| 3 | Edit | Tap a figure: the source shows, the figure stays below as Preview | Phone has no caret-line hover; keeps the result visible while editing |
-| 4 | Full screen | Magnifier (top-right, 36 px band reserved) opens a viewer: pinch zoom, Copy image, Share | Desktop magnifier |
+| 3 | Edit | Tap a figure: the source shows with the keyboard, the figure stays below as Preview; the note scrolls so both sit above the keyboard. Done in the nav bar (or the keyboard key) leaves | Phone has no caret-line hover; keeps the result visible while editing; Done is the iOS way out of editing |
+| 4 | Full screen | Magnifier (top-right, 36 px band reserved, 44 pt hit area) opens a viewer: Done on the left, Copy image and Share icons on the right, pinch zoom, formulas drawn larger | Desktop magnifier |
 | 5 | Errors | "Unreadable figure" / "Unreadable formula" + Show source. Invalid inline math stays as source | Desktop labels; phone adds the way back to the source |
 | 6 | Long-press | Block menu adds Copy image, View full screen | Native pattern |
 | 7 | Slash sheet | Math and Mermaid entries (hidden in v1 mode) | `ios.md` open item 6 |
-| 8 | Conflict copy | Tree row with warning dot; sheet "Two versions of …", neutral highlights, Merge both / Keep iPhone / Keep Mac | Core `merge_onto` exists (`inkuno-ffi` `merging.rs`); Swift never calls it |
+| 8 | Conflict copy | Tree row with warning dot; full sheet "Two versions of …" with Not now, neutral highlights, a Merge both / Keep iPhone / Keep Mac picker and a "Result in Week plan" preview. Merge both keeps both variants of each clashing line, Mac first. Applying saves a version, removes the copy, opens the note, and offers Undo | The sheet appears only when `merge_onto` (`inkuno-ffi` `merging.rs`) returns None (same lines changed), so a clean merge is impossible; the preview shows what is written. Swift never calls it yet |
 
 ### Fixed from v3
 
@@ -274,6 +274,15 @@ Built on v3-ios. The switch "Show built app (v1)" shows what ships today. v4 pro
 - Scratch is removed from the Files picker. It lives outside the vault.
 - The pull-down hint says Home or a note.
 - v1 mode hides Backup, Quiet theme, and slash Math and Mermaid.
+
+### Review fixes (v4)
+
+- Editing a figure source now shows the keyboard; the nav bar shows Done while a line is live.
+- The live line shows inline `$…$` as source, like other Markdown.
+- Magnifier and Show source hit areas are 44 pt; the live error preview drops its duplicate Show source.
+- The viewer sits under the status bar and toasts, so "Copied image" is visible.
+- Toast action colour has contrast in dark mode.
+- Formulas and diagrams carry their source as the accessibility label.
 
 ### Build prerequisite (critical)
 
