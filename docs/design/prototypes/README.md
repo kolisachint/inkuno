@@ -18,6 +18,7 @@ Ground rules for every version:
 | v2 | 2026-11-21 | `v2.html` | same link, artifact version 2 |
 | v3 | 2026-11-22 | `v3.html` | https://claude.ai/artifact/JM2rwBkZdjCzSuN3fhQTpM (the v1/v2 link keeps showing v2) |
 | v3-ios | 2026-11-23 | `v3-ios.html` | https://claude.ai/artifact/68n8SgCXhVCDZft9GCEbgh |
+| v4-ios | 2026-11-26 | `v4-ios.html` | https://claude.ai/artifact/6nNK2eL2oJ3vEFquVjaHPB |
 
 The artifact link always shows the newest version; older versions stay in this folder and in the
 artifact's own version history.
@@ -249,3 +250,50 @@ Clickable iPhone prototype for the planned SwiftUI app (`v3-ios.html`, one self-
 
 **Feedback (owner, 2026-11-24):** limited v1 scope approved as suggested above: every row marked
 Defer or Simplify stays out of v1. Next steps are in [`../ios.md`](../ios.md).
+
+---
+
+## v4-ios: Mermaid, math, conflict copies (2026-11-26)
+
+Built on v3-ios. The switch "Show built app (v1)" shows what ships today. v4 proposals carry a "v4" chip.
+
+| # | Area | iPhone design | Why |
+|--|--|--|--|
+| 1 | Mermaid | Drawn under the block, borderless, column width. Too wide: scale to 0.75, then scroll inside the column with a right fade. Never widens the note | Same container rule as the desktop (`markdown_renderer.md` §9.1) |
+| 2 | Math | Inline `$…$` drawn in the line (≤1.6 line heights). Display `$$` centred under the block | Desktop behaviour |
+| 3 | Edit | Tap a figure: the source shows, the figure stays below as Preview | Phone has no caret-line hover; keeps the result visible while editing |
+| 4 | Full screen | Magnifier (top-right, 36 px band reserved) opens a viewer: pinch zoom, Copy image, Share | Desktop magnifier |
+| 5 | Errors | "Unreadable figure" / "Unreadable formula" + Show source. Invalid inline math stays as source | Desktop labels; phone adds the way back to the source |
+| 6 | Long-press | Block menu adds Copy image, View full screen | Native pattern |
+| 7 | Slash sheet | Math and Mermaid entries (hidden in v1 mode) | `ios.md` open item 6 |
+| 8 | Conflict copy | Tree row with warning dot; sheet "Two versions of …", neutral highlights, Merge both / Keep iPhone / Keep Mac | Core `merge_onto` exists (`inkuno-ffi` `merging.rs`); Swift never calls it |
+
+### Fixed from v3
+
+- goto and outline jumps hit the top page only.
+- Scratch is removed from the Files picker. It lives outside the vault.
+- The pull-down hint says Home or a note.
+- v1 mode hides Backup, Quiet theme, and slash Math and Mermaid.
+
+### Build prerequisite (critical)
+
+- The figure engine (`crates/inkuno-ui/src/figure.rs`: mermaid-rs-renderer 0.3.1, latex-rust 2.1.0, resvg) imports gpui, so iOS cannot link it.
+- Move it to a gpui-free module. Export `figure_mermaid` and `figure_latex` (SVG or PNG at device scale) through `inkuno-ffi`.
+- Render off the main thread. Cache by source, theme and width.
+- Measure binary size (STIX Two Math font, renderer crates) before committing to it.
+
+### Still not designed
+
+- Dynamic Type (fixed 14–18 pt today).
+- VoiceOver per-block labels.
+- Images and attachments (the tree shows .md only).
+- Share and export.
+- Landscape.
+- Hardware keyboard shortcuts.
+- Review feed (`app-ui.md` §23).
+- Outline folding.
+- Footnote taps.
+
+### Stale docs found
+
+- `markdown_renderer.md` §4 says only class, sequence and state Mermaid kinds draw, and only the first formula per line. The code draws every kind and every formula.
