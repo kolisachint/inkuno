@@ -271,11 +271,10 @@ code,pre,.code,.pre,.cline,.pline,.cl,.cmp,.cmsrc,.dmath,.imath{font-variant-lig
 .pgscr>.nav{flex:none}
 .pgbody{flex:1;min-height:0;display:flex;flex-direction:column}
 .pgframe{flex:1;width:100%;min-height:0;border:0;display:block;background:#fff}
-.pstrip{flex:none;display:flex;align-items:center;gap:8px;padding:4px 6px 4px 16px;min-height:40px;font-size:13px;color:var(--soft);background:var(--ground);border-bottom:1px solid var(--tline)}
+.pstrip{flex:none;display:flex;align-items:center;gap:8px;padding:4px 6px 4px 16px;min-height:44px;font-size:13px;color:var(--soft);background:var(--ground);border-bottom:1px solid var(--tline)}
 .pstrip span{flex:1;line-height:1.35}
-.pstrip button{flex:none;min-width:44px;min-height:40px;display:grid;place-items:center;color:var(--soft)}
+.pstrip button{flex:none;min-width:44px;min-height:44px;display:grid;place-items:center;color:var(--soft)}
 .pstrip svg{width:16px;height:16px}
-.phone.pgtop .sbar{color:#1f2225}
 .phone.pgtop .hind{background:#1f2225}
 
 /* Pill, keyboard, toast */
@@ -535,7 +534,7 @@ function box(el){const p=phone.getBoundingClientRect(),r=el.getBoundingClientRec
 
 /* ---------- Seeded notes (adapted from v3) ---------- */
 const WEEK=["# Week plan","",
-"Ship the **Quiet theme** this week and keep the window calm.","","Numbers: [Launch metrics](Projects/launch-report.html)","",
+"Ship the **Quiet theme** this week and keep the window calm.","","Numbers: [Launch metrics](launch-report.html)","",
 "## Monday",
 "- [x] Tables",
 "- [ ] Spacing pass",
@@ -600,10 +599,12 @@ note("road",{title:"Roadmap",folder:"Projects",age:"2 d",md:ROADMAP});
 note("design",{title:"Design maths",folder:"Projects",age:"1 d",md:["# Design maths","Euler's identity $e^{i\\pi}+1=0$ sits in the line.","","$$\\int_0^1 x^2\\,dx = \\tfrac{1}{3}$$","","```mermaid","flowchart LR","  Draft --> Review --> Publish","  Review -->|changes| Draft","```","","```mermaid","sequenceDiagram","  Phone->>Vault: write note","  Vault-->>Desktop: sync","  Desktop->>Phone: pending change","```","","```mermaid","flowchart LR","  A -->","```","","$$\\frac{1}{$$"].join("\n")});
 /* Conflict copy: both devices changed the same two lines of Week plan, so core merge_onto returns None and the sync keeps both files. */
 const CONF={target:"week",pairs:{"- [ ] Spacing pass":"- [ ] Spacing pass for the editor","- [ ] Links: see [Roadmap](Roadmap.md)":"- [ ] Links: picker writes relative links"}};
-note("conf",{title:"Week plan (conflict 2026-11-25).md",folder:"Projects",age:"today",conflict:true,md:WEEK.split("\n").map(l=>CONF.pairs[l]??l).join("\n")});
+note("conf",{title:"Week plan (conflict 2026-11-25)",folder:"Projects",age:"today",conflict:true,md:WEEK.split("\n").map(l=>CONF.pairs[l]??l).join("\n")});
 note("launch",{title:"Launch checklist",folder:"Projects",age:"1 mo",md:["# Launch checklist","- [x] Installer notes","- [ ] Release page","- [ ] Changelog"].join("\n")});
-note("report",{title:"Launch metrics",folder:"Projects",age:"2 h",page:true,file:"launch-report.html",src:REPORT_SRC});
-note("pagenotes",{title:"notes.html",file:"notes.html",page:true,unlisted:true,src:NOTES_SRC});
+/* A page is named by its <title> (first 16 KB), else by its file name (app-ui.md §25). */
+const pageTitle=(src,file)=>{const m=/<title>([^<]*)<\/title>/i.exec(src.slice(0,16384));return m&&m[1].trim()||file};
+note("report",{title:pageTitle(REPORT_SRC,"launch-report.html"),folder:"Projects",age:"2 h",page:true,file:"launch-report.html",src:REPORT_SRC});
+note("pagenotes",{title:pageTitle(NOTES_SRC,"notes.html"),folder:"Projects",age:"2 h",page:true,file:"notes.html",src:NOTES_SRC});
 note("read",{title:"Reading list",age:"1 w",md:["# Reading list","- *The Elements of Typographic Style*","- [Practical Typography](https://practicaltypography.com)","- [ ] Re-read **Refactoring UI**","- [x] *Shape Up*"].join("\n")});
 note("ideas",{title:"Ideas",age:"3 d",md:["# Ideas","Small things worth trying later.","","- Typewriter scrolling","- Focus the current paragraph","","> [!WARNING]","> Nothing here may write syntax GitHub cannot show."].join("\n")});
 note("j1",{title:"Friday, 20 November",folder:"Journal",age:"1 d",md:["# Friday, 20 November","Quiet morning. Read the spacing notes twice.","- [x] Walk","- [ ] Reply to Ben"].join("\n")});
@@ -1137,11 +1138,12 @@ const pathOf=n=>(n.folder?n.folder+"/":"")+n.file;
 function pageByPath(href){
   if(S.v1) return null;
   let dec=href; try{dec=decodeURIComponent(href)}catch(e){}
-  return Object.values(NOTES).find(n=>n.page&&!n.trashed&&(pathOf(n)===dec||n.file===dec))||null;
+  return Object.values(NOTES).find(n=>n.page&&!n.trashed&&pathOf(n)===dec)||null;
 }
 function openLink(href){
   let dec=href; try{dec=decodeURIComponent(href)}catch(e){}
-  const pg=pageByPath(dec); if(pg) return openNote(pg.id);
+  const t=cur(), base=t.k==="note"&&NOTES[t.id]?NOTES[t.id].folder:"";
+  const pg=pageByPath((base?base+"/":"")+dec)||pageByPath(dec); if(pg) return openNote(pg.id);
   const n=liveNotes().find(x=>x.title+".md"===dec);
   if(n) return openNote(n.id);
   toast(/^https?:/.test(href)?"Opens in Safari (not in this prototype)":"No note called "+href);
@@ -1200,7 +1202,7 @@ function palListHTML(q){
   });
   return h||'<div class="empty">No matches</div>';
 }
-function backlinksOf(n){const keys=n.page?[n.file]:[n.title+".md",encodeURI(n.title)+".md"];return liveNotes().filter(x=>x.id!==n.id&&keys.some(k=>x.md.includes(k)))}
+function backlinksOf(n){const keys=n.page?[n.file]:[n.title+".md",encodeURI(n.title)+".md"];return liveNotes().filter(x=>x.id!==n.id&&keys.some(k=>x.md.includes(k)||(x.page&&n.page&&x.src.includes(`href="${k}"`))))}
 function blHTML(n){const bl=backlinksOf(n);return bl.length?`<div class="rows">${bl.map(x=>`<button class="row" data-a="note" data-id="${x.id}">${ic(x.page?"page":"note")}<span class="rt">${esc(x.title)}<small>Links to ${esc(n.title)}</small></span>${ic("right")}</button>`).join("")}</div>`:`<div class="empty">No notes link here yet.</div>`}
 function panelHTML(s){
   const n=NOTES[s.id], v=s.view;
@@ -1394,12 +1396,19 @@ phone.addEventListener("click",e=>{
   if(S.live&&cur().k==="note"&&!t.closest("#sheetLayer,#menuLayer,#pill,#fsLayer")) setLive(null);
 });
 phone.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches('[role="button"]')){e.preventDefault();e.target.click()}});
-/* Link taps from a page's iframe: only the window of a page on screen is heard. */
+/* Link taps from a page's iframe. Stands in for WKWebView's navigation-policy check: there is no script bridge on iOS.
+   Only the window of the page on top is heard; the app, not the page, decides whether a link is in the vault or outside. */
 addEventListener("message",e=>{
-  const f=$$("iframe.pgframe",pages).find(x=>x.contentWindow===e.source), d=e.data;
-  if(!f||!d||d.inkuno!=="link"||typeof d.href!=="string")return;
-  if(d.kind==="vault"){const pg=pageByPath(d.href);if(!pg){toast("No page called "+d.href);return}toast("Opens Notes in Inkuno");openNote(pg.id);return}
-  if(d.kind==="external"&&/^https:\/\//.test(d.href))openSheet({k:"ext",href:d.href,host:d.href.replace(/^https:\/\//,"").split("/")[0]},"half");
+  const t=cur(), f=t.k==="page"&&topPg()&&topPg().querySelector("iframe.pgframe"), d=e.data;
+  if(!f||e.source!==f.contentWindow||!d||typeof d!=="object"||d.inkuno!=="link"||typeof d.href!=="string"||d.href.length>2048)return;
+  const href=d.href.trim();
+  if(/^https?:\/\//i.test(href)){const host=href.replace(/^https?:\/\//i,"").split(/[\/?#]/)[0];if(host)openSheet({k:"ext",href,host},"half");return}
+  if(/^[a-z][a-z0-9+.-]*:/i.test(href)||href.startsWith("/")){toast("Pages open only files in their own folder");return}
+  const base=NOTES[t.id].folder, rel=href.split(/[?#]/)[0];
+  if(rel.includes("..")){toast("Pages open only files in their own folder");return}
+  const pg=pageByPath((base?base+"/":"")+rel);
+  if(pg&&pg.folder===base){openNote(pg.id);return}
+  toast("No page called "+rel);
 });
 const KBDROWS=["qwertyuiop","asdfghjkl","zxcvbnm"];
 $("#kbd").innerHTML=`<div class="acc">${[["slash","slash","/"],["hash","hash",""],["link","link","[["],["task","task",""],["indent","indent",""],["outdent","outdent",""],["undo","undo",""],["hide","kbd",""]].map(([k,i,l])=>`<button data-a="acc" data-k="${k}" aria-label="${k}">${l?`<span>${l}</span>`:ic(i)}</button>`).join("")}<span class="sp"></span></div>
@@ -1469,7 +1478,7 @@ function renderLog(){
   <ul>${V1_SUGGEST.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
   <p class="logfoot">Note text is read-only here. Actions that would write a file show a toast.</p>
   </div>`;
-  $("#v1").addEventListener("change",e=>{S.v1=e.target.checked;if(S.v1&&S.theme==="quiet")S.theme="light";S.live=null;S.liveFig=false;applyTheme();while(S.v1&&S.stack.length>1&&cur().k==="page")S.stack.pop();paint()});
+  $("#v1").addEventListener("change",e=>{S.v1=e.target.checked;if(S.v1&&S.theme==="quiet")S.theme="light";S.live=null;S.liveFig=false;applyTheme();if(S.v1){S.stack=S.stack.filter(x=>x.k!=="page");S.sheet=null;closeMenu()}paint()});
 }
 
 /* ---------- Init ---------- */
